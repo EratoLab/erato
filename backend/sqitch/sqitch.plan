@@ -1,0 +1,4 @@
+%syntax-version=1.0.0
+%project=llmchat
+
+0001_init_database 2025-01-19T18:21:18Z System Administrator <root@Maxs-Laptop.local> # Init database
