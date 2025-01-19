@@ -1,0 +1,8 @@
+default:
+    just --list
+
+install_clis:
+    cargo install sea-orm-cli@1.1.4
+
+generate_db_schema:
+    sea-orm-cli generate entity -u postgres://llmchatuser:llmchatpw@localhost:5432/llmchat -o src/db/entity
