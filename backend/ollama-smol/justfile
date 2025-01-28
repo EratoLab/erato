@@ -1,0 +1,16 @@
+# Build the Docker image for the current platform
+build:
+    docker build -t ollama-smollm .
+
+# Build the Docker image for multiple platforms
+build-multi:
+    docker buildx create --use
+    docker buildx build --platform linux/amd64,linux/arm64 -t ollama-smollm --push .
+
+# Run the Docker image
+run:
+    docker run --rm -d -p 11434:11434 ollama-smollm
+
+# Remove the Docker image
+clean:
+    docker rmi ollama-smollm || true 
