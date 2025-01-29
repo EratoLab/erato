@@ -1,9 +1,13 @@
+use utoipa::openapi::{Info, OpenApiBuilder};
 use utoipa::OpenApi;
 
 use server::router::MainRouterApiDoc;
 
-mod db;
-mod server;
+use crate::server::router::MAIN_ROUTER_DOC;
+
+pub mod config;
+pub mod db;
+pub mod server;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -12,3 +16,12 @@ mod server;
      )
  )]
 pub struct ApiDoc;
+
+impl ApiDoc {
+    pub fn build_openapi_full() -> utoipa::openapi::OpenApi {
+        let builder: OpenApiBuilder = Self::openapi().into();
+        builder
+            .info(Info::builder().description(Some(MAIN_ROUTER_DOC)))
+            .build()
+    }
+}

@@ -1,12 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "backend",
-    "description": "",
-    "license": {
-      "name": ""
-    },
-    "version": "0.1.0"
+    "title": "",
+    "description": "The main API structure\n\n- `/api/v1/` <- Most of the API is nested under here. All of the resources there are scoped to what is accessible by the authenticated identity.\n- `/api/v1/me` <- Everything under this path is scoped to the subject of the authenticated identity. E.g. the identity may be authorized to view more resources, but this is the default view for them.\n",
+    "version": ""
   },
   "paths": {
     "/api/v1/chats": {
