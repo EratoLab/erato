@@ -10,7 +10,7 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn new() -> Result<Self, ConfigError> {
         let s = Config::builder()
-            .set_default("address", "0.0.0.0")?
+            .set_default("address", "127.0.0.1")?
             .set_default("port", "3130")?
             .add_source(Environment::default())
             .build()?;

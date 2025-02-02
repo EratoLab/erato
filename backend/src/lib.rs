@@ -7,6 +7,7 @@ use crate::server::router::MAIN_ROUTER_DOC;
 
 pub mod config;
 pub mod db;
+pub mod policy;
 pub mod server;
 
 #[derive(OpenApi)]

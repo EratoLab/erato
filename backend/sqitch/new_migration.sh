@@ -1,8 +1,26 @@
 #!/bin/bash
 
-# Prompt for the deployment description
-echo "Enter deployment description:"
-read description
+description=""
+
+# Check for --description flag
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --description)
+            description="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown parameter: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# If no description was provided via flag, prompt for it
+if [ -z "$description" ]; then
+    echo "Enter deployment description:"
+    read description
+fi
 
 # Convert description to lowercase and replace spaces with underscores
 name=$(echo "$description" | tr '[:upper:]' '[:lower:]' | tr ' ' '_')

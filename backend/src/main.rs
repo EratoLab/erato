@@ -18,14 +18,24 @@ async fn main() {
 
     let (router, api) = server::router::router().split_for_parts();
 
-    let app = router.merge(Scalar::with_url("/scalar", ApiDoc::build_openapi_full()));
-
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", config.address, config.port))
         .await
         .unwrap();
+    let local_addr = listener.local_addr().unwrap();
+
+    // Create OpenAPI spec with server information
+    let mut spec = ApiDoc::build_openapi_full();
+    spec.servers = Some(vec![utoipa::openapi::Server::new(format!("http://{}", local_addr))]);
+
+    let app = router
+        .merge(Scalar::with_url("/scalar", spec.clone()))
+        .route("/openapi.json", axum::routing::get(move || async move { 
+            axum::Json(spec.clone()) 
+        }));
+
     println!();
-    println!("API docs: http://{}/scalar", listener.local_addr().unwrap());
-    println!("Listening on {}", listener.local_addr().unwrap());
+    println!("API docs: http://{}/scalar", local_addr);
+    println!("Listening on {}", local_addr);
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();

@@ -1,0 +1,7 @@
+---
+description: Describes how to secure API routes
+globs: backend/src/server/**/*
+---
+- API routes should run appropriate `authorize` checks with the `PolicyEngine`
+- The policy structure and actions are described via Open Policy Agent Rego in [backend.rego](mdc:backend/policy/backend/backend.rego)
+- If available resource kinds or actions need to be extended, this can be done in [types.rs](mdc:backend/src/policy/types.rs)

@@ -14,10 +14,15 @@ sea-orm = "1.1.4"
 serde = { version = "1.0.217", features = ["derive"] }
 tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
 tracing-subscriber = "0.3.19"
-
+synonym = "0.1.5"
+regorus = "0.2.8"
+eyre = "0.6.12"
+color-eyre = "0.6.3"
+# OpenAPI handling
 utoipa = { version = "5.3.1", features = ["axum_extras"] }
 utoipa-axum = "0.1.3"
 utoipa-swagger-ui = { version = "9.0.0", features = ["axum"] }
 utoipa-scalar = { version = "0.2.0", features = ["axum"] }
+
 dotenv-flow = "0.16.2"
 config = "0.15.6"
