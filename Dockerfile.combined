@@ -1,0 +1,15 @@
+ARG REGISTRY
+ARG BACKEND_IMAGE
+ARG FRONTEND_IMAGE
+
+# Get the frontend assets
+FROM ${REGISTRY}/${FRONTEND_IMAGE} as frontend
+
+# Use backend as base image
+FROM ${REGISTRY}/${BACKEND_IMAGE}
+
+# Copy frontend files to /app/public
+COPY --from=frontend /usr/share/nginx/html/ /app/public/
+
+# The backend will serve these files directly
+CMD ["./backend"]
