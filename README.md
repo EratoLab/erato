@@ -11,7 +11,9 @@ A simple to deploy chat UI for the interaction with LLM's paired with a monitori
 - [ ] chat UI nextJS + v0
     - [ ] basic chat
     - [ ] header forwarding for mocked server
-
+    - [ ] React/ TS core -> exposed itself as WebComponent/ Custom HTML element --> for embedding
+    - [ ] Auth handover if Typo3 is the auth system // API proxy server?
+    - [ ] Recat Components for unified UX
 
 
 ### potential building blocks
