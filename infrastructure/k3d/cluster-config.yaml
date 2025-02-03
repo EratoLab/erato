@@ -1,0 +1,29 @@
+apiVersion: k3d.io/v1alpha4
+kind: Simple
+metadata:
+  name: peknow-dev
+servers: 1
+agents: 0
+registries:
+  create:
+    name: k3d-registry.localhost
+    host: "0.0.0.0"
+    hostPort: "5000"
+  config: |
+    mirrors:
+      "k3d-registry.localhost:5000":
+        endpoint:
+          - http://k3d-registry.localhost:5000
+ports:
+  - port: 80:80
+    nodeFilters:
+      - loadbalancer
+  - port: 443:443
+    nodeFilters:
+      - loadbalancer
+options:
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:* 

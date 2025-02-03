@@ -1,0 +1,13 @@
+apiVersion: v2
+name: peknow
+description: Helm chart for the Peknow application
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Peknow Team
+dependencies:
+  - name: postgresql
+    version: "12.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled 

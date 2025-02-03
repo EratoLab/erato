@@ -6,3 +6,6 @@
 
 # macOS system files
 .DS_Store
+
+# Requirements directory (managed via git submodules)
+.requirements/

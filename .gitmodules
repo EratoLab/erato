@@ -1,0 +1,3 @@
+[submodule ".requirements"]
+	path = .requirements
+	url = git@github.com:peknow/requirements.git

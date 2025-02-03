@@ -1,6 +1,26 @@
 # CHAT & Message-Monitoring
 A simple to deploy chat UI for the interaction with LLM's paired with a monitoring for the incoming messages to understand what people are asking.
 
+## Development Setup
+
+### Requirements Repository
+This project uses a private requirements repository as a Git submodule. To properly clone and set up the project:
+
+```bash
+# Clone the repository with submodules
+git clone --recursive git@github.com:peknow/llmchat.git
+
+# If you've already cloned the repository without --recursive, run:
+git submodule update --init --recursive
+```
+
+The requirements repository is stored in `.requirements/` and is automatically ignored in both Git and Docker contexts.
+
+To update the requirements to their latest version:
+```bash
+git submodule update --remote .requirements
+```
+
 ### todos
 - [ ] deployment auth teil
     - [ ] forward auth
