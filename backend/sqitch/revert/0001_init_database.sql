@@ -1,4 +1,4 @@
--- Revert llmchat:0001_init_database from pg
+-- Revert erato:0001_init_database from pg
 
 BEGIN;
 

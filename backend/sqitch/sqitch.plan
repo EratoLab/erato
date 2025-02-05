@@ -1,5 +1,5 @@
 %syntax-version=1.0.0
-%project=llmchat
+%project=erato
 
 0001_init_database 2025-01-19T18:21:18Z System Administrator <root@Maxs-Laptop.local> # Init database
 0002_add_chat_and_messages_tables 2025-01-19T18:28:49Z System Administrator <root@Maxs-Laptop.local> # Add chat and messages tables

@@ -1,4 +1,4 @@
--- Revert llmchat:0002_add_chat_and_messages_tables from pg
+-- Revert erato:0002_add_chat_and_messages_tables from pg
 
 BEGIN;
 

@@ -1,4 +1,4 @@
--- Deploy llmchat:0002_add_chat_and_messages_tables to pg
+-- Deploy erato:0002_add_chat_and_messages_tables to pg
 
 BEGIN;
 

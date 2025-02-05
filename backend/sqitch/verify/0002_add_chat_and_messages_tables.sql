@@ -1,4 +1,4 @@
--- Verify llmchat:0002_add_chat_and_messages_tables on pg
+-- Verify erato:0002_add_chat_and_messages_tables on pg
 
 BEGIN;
 

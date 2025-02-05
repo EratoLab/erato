@@ -8,9 +8,9 @@ on:
 
 env:
   REGISTRY: harbor.imassage.me
-  BACKEND_IMAGE_NAME: llmchat/backend
-  FRONTEND_IMAGE_NAME: llmchat/frontend
-  COMBINED_IMAGE_NAME: llmchat/app
+  BACKEND_IMAGE_NAME: erato/backend
+  FRONTEND_IMAGE_NAME: erato/frontend
+  COMBINED_IMAGE_NAME: erato/app
   SHA_TAG: ${{ github.sha }}
 
 jobs:

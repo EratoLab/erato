@@ -1,4 +1,4 @@
--- Deploy llmchat:0001_init_database to pg
+-- Deploy erato:0001_init_database to pg
 
 BEGIN;
 

@@ -8,7 +8,7 @@ This project uses a private requirements repository as a Git submodule. To prope
 
 ```bash
 # Clone the repository with submodules
-git clone --recursive git@github.com:peknow/llmchat.git
+git clone --recursive git@github.com:peknow/erato.git
 
 # If you've already cloned the repository without --recursive, run:
 git submodule update --init --recursive

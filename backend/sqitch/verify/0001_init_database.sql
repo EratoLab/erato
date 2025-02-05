@@ -1,4 +1,4 @@
--- Verify llmchat:0001_init_database on pg
+-- Verify erato:0001_init_database on pg
 
 BEGIN;
 
