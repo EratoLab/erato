@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 // TODO: move later to types folder, that we can align with what we have from the backend programmaticaly
 /**
@@ -23,6 +23,7 @@ export interface ChatContextType {
   messageOrder: string[];  // Preserve message order
   sendMessage: (message: string) => void;
   updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void;
+  isLoading: boolean;
 }
 
 /**
@@ -30,12 +31,39 @@ export interface ChatContextType {
  */
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
+interface ChatProviderProps extends React.PropsWithChildren {
+  // For storybook/testing only
+  initialMessages?: MessageMap;
+  initialMessageOrder?: string[];
+  // For real API integration
+  loadMessages?: () => Promise<{messages: MessageMap; order: string[]}>;
+}
+
 /**
  * ChatProvider is responsible for managing and providing chat state logic.
  */
-export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
-  const [messages, setMessages] = useState<MessageMap>({});
-  const [messageOrder, setMessageOrder] = useState<string[]>([]);
+export const ChatProvider: React.FC<ChatProviderProps> = ({ 
+  children, 
+  initialMessages = {}, 
+  initialMessageOrder = [],
+  loadMessages 
+}) => {
+  const [messages, setMessages] = useState<MessageMap>(initialMessages);
+  const [messageOrder, setMessageOrder] = useState<string[]>(initialMessageOrder);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load messages from API if provided
+  useEffect(() => {
+    if (loadMessages) {
+      setIsLoading(true);
+      loadMessages()
+        .then(({messages: apiMessages, order}) => {
+          setMessages(apiMessages);
+          setMessageOrder(order);
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [loadMessages]);
 
   const updateMessage = useCallback((messageId: string, updates: Partial<ChatMessage>) => {
     setMessages(prev => ({
@@ -49,6 +77,7 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
    * Later on, we can integrate websocket functionality here to stream responses.
    */
   const sendMessage = (content: string) => {
+    setIsLoading(true);
     const id = new Date().toISOString();
     const newMessage: ChatMessage = {
       id,
@@ -63,7 +92,9 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     }));
     setMessageOrder(prev => [...prev, id]);
 
-    // TODO: Integrate websocket call to send the message and handle a streaming response.
+    // Simulate API delay
+    setTimeout(() => setIsLoading(false), 1000);
+    // TODO: Replace with real API call later
   };
 
   return (
@@ -71,7 +102,8 @@ export const ChatProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       messages, 
       messageOrder,
       sendMessage,
-      updateMessage 
+      updateMessage,
+      isLoading
     }}>
       {children}
     </ChatContext.Provider>
