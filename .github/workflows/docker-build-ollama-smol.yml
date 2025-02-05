@@ -1,0 +1,53 @@
+name: Build and Push Ollama-smol Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      specific_sha:
+        description: 'Specific commit SHA to build (defaults to latest commit on branch)'
+        required: false
+        type: string
+        default: ''
+
+env:
+  REGISTRY: harbor.imassage.me
+  OLLAMA_SMOL_IMAGE_NAME: erato/ollama-smol
+  SHA_TAG: ${{ inputs.specific_sha != '' && inputs.specific_sha || github.sha }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Get current time
+        id: current-time
+        run: echo "DATETIME=$(date +'%Y-%m-%d-%H-%M')" >> $GITHUB_OUTPUT
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v1
+        with:
+          registry: harbor.imassage.me
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Build and push Ollama-smol image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend/ollama-smol
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ env.SHA_TAG }}
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ steps.current-time.outputs.DATETIME }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max 
