@@ -1,0 +1,14 @@
+default:
+    just --list
+
+storybook:
+    npm run storybook
+
+dev:
+    npm run dev
+
+start:
+    npm run start
+
+lint:
+    npm run lint
