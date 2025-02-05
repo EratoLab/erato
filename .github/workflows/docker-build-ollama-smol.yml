@@ -38,14 +38,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
 
       - name: Build and push Ollama-smol image
         uses: docker/build-push-action@v5
         with:
           context: ./backend/ollama-smol
           push: ${{ github.event_name != 'pull_request' }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: |
             ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ env.SHA_TAG }}
             ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ steps.current-time.outputs.DATETIME }}
