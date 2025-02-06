@@ -1,20 +1,17 @@
-FROM rust:1.84.0 as planner
+# Bookworm = Debian 12 -> LTS support until 2028
+FROM lukemathwalker/cargo-chef:0.1.71-rust-1.84.0-bookworm AS chef
 WORKDIR /app
-RUN cargo install cargo-chef
+
+FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM rust:1.84.0 as cacher
-WORKDIR /app
-RUN cargo install cargo-chef
+FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
+# Build dependencies - this is the caching Docker layer!
 RUN cargo chef cook --release --recipe-path recipe.json
-
-FROM rust:1.84.0 as builder
-WORKDIR /app
+# Build application
 COPY . .
-COPY --from=cacher /app/target target
-COPY --from=cacher /usr/local/cargo /usr/local/cargo
 RUN cargo build --release
 
 FROM debian:bookworm-slim
@@ -22,11 +19,11 @@ FROM debian:bookworm-slim
 WORKDIR /app
 
 # Install runtime dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libssl3 \
-    && rm -rf /var/lib/apt/lists/*
+# RUN apt-get update && \
+#     apt-get install -y --no-install-recommends \
+#     ca-certificates \
+#     libssl3 \
+#     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder
 COPY --from=builder /app/target/release/backend /app/backend
