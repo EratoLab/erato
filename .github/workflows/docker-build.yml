@@ -4,12 +4,14 @@ on:
   push:
     branches: [ main ]
     paths:
+      - '.github/workflows/docker-build.yml' 
       - 'backend/**'
       - 'frontend/**'
       - 'Dockerfile.combined'
   pull_request:
     branches: [ main ]
     paths:
+      - '.github/workflows/docker-build.yml' 
       - 'backend/**'
       - 'frontend/**'
       - 'Dockerfile.combined'
@@ -22,7 +24,7 @@ env:
   SHA_TAG: ${{ github.sha }}
 
 jobs:
-  build-and-push:
+  build-and-push-amd64:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -46,9 +48,10 @@ jobs:
         with:
           context: ./backend
           push: true
+          platforms: linux/amd64
           tags: |
-            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -57,9 +60,10 @@ jobs:
         with:
           context: ./frontend
           push: true
+          platforms: linux/amd64
           tags: |
-            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -69,12 +73,113 @@ jobs:
           context: .
           file: ./Dockerfile.combined
           push: true
+          platforms: linux/amd64
           tags: |
-            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}
+            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-amd64
+            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
           build-args: |
             REGISTRY=${{ env.REGISTRY }}
-            BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}
-            FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}
+            BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
+            FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
           cache-from: type=gha
-          cache-to: type=gha,mode=max 
+          cache-to: type=gha,mode=max
+
+  build-and-push-arm64:
+    runs-on: ubuntu-22.04-arm64-custom-large
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v1
+        with:
+          registry: harbor.imassage.me
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Combined image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.combined
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-arm64
+            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          build-args: |
+            REGISTRY=${{ env.REGISTRY }}
+            BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+            FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  create-manifests:
+    needs: [build-and-push-amd64, build-and-push-arm64]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v1
+        with:
+          registry: harbor.imassage.me
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create and push manifests
+        run: |
+          # Backend manifest
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64 \
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }} \
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+
+          # Frontend manifest
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64 \
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }} \
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+
+          # Combined manifest
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-amd64 \
+            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-arm64
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }} \
+            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64 
