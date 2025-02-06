@@ -1,0 +1,37 @@
+global:
+  environment: development
+
+ingress:
+  enabled: true
+  host: app.erato.internal
+
+# Backend configuration
+backend:
+  image:
+    repository: harbor.imassage.me/erato/app
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  service:
+    type: ClusterIP
+    port: 8080
+
+postgresql:
+  # set postgresql.enabled to be false to disable deploy of a PostgreSQL database and use an
+  # existing external PostgreSQL database
+  enabled: false
+
+  # If postgresql.enabled is falsse, you can set the following values to connect to an existing
+  # external PostgreSQL database
+  external:
+    # TODO: Align to what e.g. bitnami/keycloak chart does to connect to an external database
+    # Can either be value or valueFrom
+    connectionString:
+      value: "postgresql://postgres:postgres@localhost:5432/postgres"

@@ -1,11 +1,11 @@
 apiVersion: v2
-name: peknow
-description: Helm chart for the Peknow application
+name: erato
+description: Helm chart for the Erato chat application
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
 maintainers:
-  - name: Peknow Team
+  - name: Erato Team
 dependencies:
   - name: postgresql
     version: "12.x.x"

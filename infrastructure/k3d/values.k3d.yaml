@@ -1,0 +1,12 @@
+postgresql:
+  # set postgresql.enabled to be false to disable deploy of a PostgreSQL database and use an
+  # existing external PostgreSQL database
+  enabled: false
+
+  # If postgresql.enabled is falsse, you can set the following values to connect to an existing
+  # external PostgreSQL database
+  external:
+    # TODO: Align to what e.g. bitnami/keycloak chart does to connect to an external database
+    # Can either be value or valueFrom
+    connectionString:
+      value: "postgresql://eratouser:eratopw@host.k3d.internal:5432/erato"

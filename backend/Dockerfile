@@ -28,6 +28,8 @@ WORKDIR /app
 # Copy the binary from builder
 COPY --from=builder /app/target/release/backend /app/backend
 
-EXPOSE 3000
+EXPOSE 3130
+
+ENV HTTP_HOST="0.0.0.0"
 
 CMD ["./backend"] 
