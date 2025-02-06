@@ -8,7 +8,7 @@ pub enum SubjectKind {
 }
 
 #[derive(Synonym)]
-pub struct SubjectId(String);
+pub struct SubjectId(pub String);
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum ResourceKind {
@@ -19,7 +19,7 @@ pub enum ResourceKind {
 }
 
 #[derive(Synonym)]
-pub struct ResourceId(String);
+pub struct ResourceId(pub String);
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum Action {

@@ -1,14 +1,20 @@
 default:
     just --list
 
+# Installs all CLI tools required for running the tests, and other just commands
 install_clis:
-    cargo install sea-orm-cli@1.1.4
+    #!/usr/bin/env sh
+    if ! command -v cargo-binstall >/dev/null 2>&1; then \
+        echo "cargo-binstall is not installed. Installing it first..."; \
+        curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash; \
+    fi
+    cargo binstall cargo-nextest@0.9.88 sea-orm-cli@1.1.4
 
 generate_db_schema:
     sea-orm-cli generate entity -u postgres://eratouser:eratopw@localhost:5432/erato -o src/db/entity
 
 test:
-    cargo test
+    cargo nextest run
 
 lint:
     echo "Linitng not implemented yet"

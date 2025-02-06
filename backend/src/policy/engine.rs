@@ -66,8 +66,9 @@ mod tests {
         let resource_id = ResourceId("chat1".to_string());
         let action = Action::Read;
 
+        let engine = PolicyEngine::new().unwrap();
         // This should work as Chat + Read is a valid combination
-        let result = authorize(
+        let result = engine.authorize(
             subject_kind,
             &subject_id,
             resource_kind,
@@ -87,7 +88,8 @@ mod tests {
         let action = Action::Create;
 
         // This should panic as Chat + Create is not a valid combination
-        authorize(
+        let engine = PolicyEngine::new().unwrap();
+        engine.authorize(
             subject_kind,
             &subject_id,
             resource_kind,
