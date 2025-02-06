@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# The pre-push hook receives the following arguments:
+# $1 - Name of the remote (e.g., "origin")
+# $2 - URL of the remote
+
+# It also receives through stdin a series of lines in the format:
+# <local_ref> <local_sha> <remote_ref> <remote_sha>
+
+# Check if fzf is installed
+if ! command -v fzf >/dev/null 2>&1; then
+    echo "fzf is required for interactive selection. Please install it first to get the hook working."
+    exit 0
+fi
+
+changed_files=()
+
+while read local_ref local_sha remote_ref remote_sha
+do
+    # Get all changed files between remote and local, removing duplicates
+    while IFS= read -r file; do
+        changed_files+=("$file")
+    done < <(git diff --name-only "$remote_sha..$local_sha")
+done
+
+# Remove duplicates from changed_files
+changed_files=($(printf "%s\n" "${changed_files[@]}" | sort -u))
+
+# Check if any files in backend directory were modified
+backend_files=()
+for file in "${changed_files[@]}"; do
+    if [[ $file == backend/* ]]; then
+        backend_files+=("$file")
+    fi
+done
+
+if [ ${#backend_files[@]} -eq 0 ]; then
+    echo "No backend files were modified. Proceeding with push..."
+    exit 0
+fi
+
+echo "The following backend files were modified:"
+printf '%s\n' "${backend_files[@]}"
+echo
+
+# Present interactive selection for tests/lint
+selected=$(printf "Run tests\nRun lint" | fzf --multi --header="Select actions to perform (use TAB to select multiple, ENTER to confirm):")
+
+if [ -n "$selected" ]; then
+    if echo "$selected" | grep -q "Run tests"; then
+        echo "Running tests..."
+        cd backend && just test
+    fi
+    if echo "$selected" | grep -q "Run lint"; then
+        echo "Running lint..."
+        cd backend && just lint
+    fi
+fi
+
+# If any of the commands failed, prevent the push
+if [ $? -ne 0 ]; then
+    echo "Checks failed. Push aborted."
+    exit 1
+fi
+
+exit 0
