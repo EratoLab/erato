@@ -6,3 +6,9 @@ install_clis:
 
 generate_db_schema:
     sea-orm-cli generate entity -u postgres://eratouser:eratopw@localhost:5432/erato -o src/db/entity
+
+test:
+    cargo test
+
+lint:
+    echo "Linitng not implemented yet"
