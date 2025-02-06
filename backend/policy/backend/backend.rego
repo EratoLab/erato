@@ -1,7 +1,5 @@
 package backend
 
-import rego.v1
-
 # In the general policy design we check for allow of the following 5-tuple:
 #
 # - `subject_kind` - The kind of the subject; Subject is the entity trying to execute the `action`. (e.g. `user`)
