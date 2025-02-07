@@ -1,11 +1,17 @@
-FROM nginx:alpine
+FROM node:22.10.0-bookworm-slim AS base
 
-# Copy the static frontend files
-COPY . /usr/share/nginx/html/
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+# Install a newer version of corepack to avoid keyId issue (see https://github.com/nodejs/corepack/issues/612)
+RUN npm install --global corepack@latest
+RUN corepack enable
+COPY . /app
+WORKDIR /app
 
-# Copy custom nginx config if needed
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
+FROM base AS build
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN pnpm run build
 
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"] 
+# Final stage - empty image with just the static files
+FROM scratch
+COPY --from=build /app/out /public 
