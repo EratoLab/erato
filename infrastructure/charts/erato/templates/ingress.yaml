@@ -5,6 +5,9 @@ metadata:
   name: {{ .Release.Name }}-ingress
 spec:
   ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
   rules:
     - host: {{ .Values.ingress.host | quote }}
       http:

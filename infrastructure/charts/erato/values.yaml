@@ -4,6 +4,7 @@ global:
 ingress:
   enabled: true
   host: app.erato.internal
+  className: nginx
 
 # Backend configuration
 backend:
