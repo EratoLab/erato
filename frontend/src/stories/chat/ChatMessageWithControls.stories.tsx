@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { ChatMessageWithControls } from '../../components/ui/ChatMessageWithControls';
 import { ChatMessageFactory } from './mockData';
+import { action } from '@storybook/addon-actions';
 
 const meta = {
   title: 'Chat/ChatMessageWithControls',
@@ -10,13 +11,13 @@ const meta = {
     docs: {
       description: {
         component: `
-Enhanced ChatMessage with configurable controls for message actions.
+Enhanced ChatMessage with configurable controls and loading states.
 
 ## Technical Notes
-- Composes ChatMessage with MessageControls
-- Controls visibility configurable (default visible in stories)
+- Supports streaming responses with different loading states
+- Shows contextual information during processing
+- Handles tool calling and reasoning states
 - Maintains all ChatMessage features
-- Handles user/assistant-specific actions
         `
       }
     }
@@ -37,11 +38,26 @@ Enhanced ChatMessage with configurable controls for message actions.
       description: 'Whether to show the timestamp',
       defaultValue: true,
     },
-    onCopy: { action: 'copied' },
-    onEdit: { action: 'edit clicked' },
-    onLike: { action: 'liked' },
-    onDislike: { action: 'disliked' },
-    onRerun: { action: 'rerun clicked' },
+    onCopy: { 
+      action: 'copied',
+      description: 'Callback when copy button is clicked',
+    },
+    onEdit: { 
+      action: 'edited',
+      description: 'Callback when edit button is clicked (user messages only)',
+    },
+    onLike: { 
+      action: 'liked',
+      description: 'Callback when like button is clicked (assistant messages only)',
+    },
+    onDislike: { 
+      action: 'disliked',
+      description: 'Callback when dislike button is clicked (assistant messages only)',
+    },
+    onRerun: { 
+      action: 'rerun',
+      description: 'Callback when regenerate button is clicked (assistant messages only)',
+    },
   },
   args: {
     showControlsOnHover: false,
@@ -57,12 +73,18 @@ type Story = StoryObj<typeof meta>;
 export const UserMessage: Story = {
   args: {
     message: ChatMessageFactory.samples.user,
+    onCopy: action('copy'),
+    onEdit: action('edit'),
   },
 };
 
 export const AssistantMessage: Story = {
   args: {
     message: ChatMessageFactory.samples.assistant,
+    onCopy: action('copy'),
+    onLike: action('like'),
+    onDislike: action('dislike'),
+    onRerun: action('rerun'),
   },
 };
 

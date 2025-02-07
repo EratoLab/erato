@@ -20,7 +20,6 @@ Message control buttons with configurable visibility.
       },
       story: {
         inline: true,
-        iframeHeight: 200,
       },
     }
   },
@@ -29,17 +28,40 @@ Message control buttons with configurable visibility.
       control: 'boolean',
       description: 'Whether controls should only show on hover',
       defaultValue: false,
-      table: {
-        defaultValue: { summary: 'false' },
-      }
+    },
+    isUser: {
+      control: 'boolean',
+      description: 'Whether the controls are for a user message',
+      defaultValue: false,
+    },
+    onCopy: { 
+      action: 'copied',
+      description: 'Callback when copy button is clicked',
+    },
+    onEdit: { 
+      action: 'edited',
+      description: 'Callback when edit button is clicked (user messages only)',
+    },
+    onLike: { 
+      action: 'liked',
+      description: 'Callback when like button is clicked (assistant messages only)',
+    },
+    onDislike: { 
+      action: 'disliked',
+      description: 'Callback when dislike button is clicked (assistant messages only)',
+    },
+    onRerun: { 
+      action: 'rerun',
+      description: 'Callback when rerun button is clicked (assistant messages only)',
     },
   },
   args: {
     showOnHover: false,
+    isUser: false,
   },
   decorators: [
     (Story) => (
-      <div className="relative group p-8 bg-theme-bg-secondary inline-block min-w-[300px] min-h-[100px] mb-20 rounded">
+      <div className="relative group p-8 rounded">
         <Story />
       </div>
     )
@@ -54,11 +76,6 @@ type Story = StoryObj<typeof meta>;
 export const AllControls: Story = {
   args: {
     isUser: false,
-    onCopy: () => console.log('copy'),
-    onEdit: () => console.log('edit'),
-    onLike: () => console.log('like'),
-    onDislike: () => console.log('dislike'),
-    onRerun: () => console.log('rerun'),
   },
 };
 
@@ -66,8 +83,6 @@ export const AllControls: Story = {
 export const UserControls: Story = {
   args: {
     isUser: true,
-    onCopy: () => console.log('copy'),
-    onEdit: () => console.log('edit'),
   },
 };
 
@@ -75,10 +90,6 @@ export const UserControls: Story = {
 export const AssistantControls: Story = {
   args: {
     isUser: false,
-    onCopy: () => console.log('copy'),
-    onLike: () => console.log('like'),
-    onDislike: () => console.log('dislike'),
-    onRerun: () => console.log('rerun'),
   },
 };
 
