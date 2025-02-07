@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { ChatMessage } from '../../components/ui/ChatMessage';
-import { mockMessages } from './mockData';
+import { ChatMessageFactory } from './mockData';
 
 const meta = {
   title: 'UI/ChatMessage/Variations',
@@ -34,7 +34,7 @@ type Story = StoryObj<typeof meta>;
 
 export const NoAvatar: Story = {
   args: {
-    message: mockMessages.user,
+    message: ChatMessageFactory.samples.user,
     showAvatar: false,
   },
   parameters: {
@@ -48,7 +48,7 @@ export const NoAvatar: Story = {
 
 export const NoTimestamp: Story = {
   args: {
-    message: mockMessages.user,
+    message: ChatMessageFactory.samples.user,
     showTimestamp: false,
   },
   parameters: {
@@ -62,7 +62,7 @@ export const NoTimestamp: Story = {
 
 export const NarrowContainer: Story = {
   args: {
-    message: mockMessages.longMessage,
+    message: ChatMessageFactory.samples.longMessage,
     maxWidth: 400,
   },
   parameters: {
@@ -76,7 +76,7 @@ export const NarrowContainer: Story = {
 
 export const MessageSequence: Story = {
   args: {
-    message: mockMessages.user,
+    message: ChatMessageFactory.samples.user,
   },
   parameters: {
     docs: {
@@ -94,9 +94,9 @@ export const MessageSequence: Story = {
   ],
   render: () => (
     <>
-      <ChatMessage message={mockMessages.user} />
-      <ChatMessage message={mockMessages.assistant} />
-      <ChatMessage message={mockMessages.longMessage} />
+      <ChatMessage message={ChatMessageFactory.samples.user} />
+      <ChatMessage message={ChatMessageFactory.samples.assistant} />
+      <ChatMessage message={ChatMessageFactory.samples.longMessage} />
     </>
   ),
 }; 

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { ChatMessage } from '../../components/ui/ChatMessage';
-import { mockMessages } from './mockData';
+import { ChatMessageFactory } from './mockData';
 import { expect } from '@storybook/jest';
 import { within } from '@storybook/testing-library';
 
@@ -28,13 +28,13 @@ type Story = StoryObj<typeof meta>;
 
 export const AccessibilityChecks: Story = {
   args: {
-    message: mockMessages.assistant,
+    message: ChatMessageFactory.samples.assistant,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     
     // Check if message content is visible
-    const messageContent = await canvas.findByText(mockMessages.assistant.content);
+    const messageContent = await canvas.findByText(ChatMessageFactory.samples.assistant.content);
     expect(messageContent).toBeInTheDocument();
     
     // Check if role attributes are present
@@ -42,14 +42,14 @@ export const AccessibilityChecks: Story = {
     expect(article).toBeInTheDocument();
     
     // Check if timestamp is accessible
-    const timestamp = canvas.getByTitle(mockMessages.assistant.createdAt.toLocaleString());
+    const timestamp = canvas.getByTitle(ChatMessageFactory.samples.assistant.createdAt.toLocaleString());
     expect(timestamp).toBeInTheDocument();
   }
 };
 
 export const InteractionTest: Story = {
   args: {
-    message: mockMessages.longMessage,
+    message: ChatMessageFactory.samples.longMessage,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -65,7 +65,7 @@ export const InteractionTest: Story = {
     expect(avatar).toBeInTheDocument();
     
     // Verify text wrapping
-    const messageText = canvas.getByText(mockMessages.longMessage.content);
+    const messageText = canvas.getByText(ChatMessageFactory.samples.longMessage.content);
     const textStyles = window.getComputedStyle(messageText);
     expect(textStyles.whiteSpace).toBe('pre-wrap');
   }
@@ -73,7 +73,7 @@ export const InteractionTest: Story = {
 
 export const ResponsiveTest: Story = {
   args: {
-    message: mockMessages.assistant,
+    message: ChatMessageFactory.samples.assistant,
   },
   parameters: {
     viewport: {
