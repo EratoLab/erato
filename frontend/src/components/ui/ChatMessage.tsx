@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { ChatMessage as ChatMessageType } from '../containers/ChatProvider';
 import clsx from 'clsx';
 
-interface ChatMessageProps {
+export interface ChatMessageProps {
   message: ChatMessageType;
   className?: string;
   /**
@@ -24,12 +24,12 @@ interface ChatMessageProps {
 
 const messageStyles = {
   container: {
-    user: 'bg-white',
-    assistant: 'bg-gray-50',
+    user: 'bg-theme-bg-primary',
+    assistant: 'bg-theme-bg-secondary',
   },
   avatar: {
-    user: 'bg-gray-300',
-    assistant: 'bg-teal-600 text-white',
+    user: 'bg-[var(--theme-avatar-user-bg)] text-[var(--theme-avatar-user-fg)]',
+    assistant: 'bg-[var(--theme-avatar-assistant-bg)] text-[var(--theme-avatar-assistant-fg)]',
   },
 } as const;
 
@@ -70,20 +70,20 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         <div className="min-w-0 flex-1">
-          <div className="font-semibold mb-1 text-sm">
+          <div className="font-semibold mb-1 text-sm text-theme-fg-primary">
             {isUser ? 'You' : 'Assistant'}
           </div>
           
           {/* Using article for semantic meaning of self-contained content */}
           <article className="prose prose-slate max-w-none">
-            <p className="whitespace-pre-wrap break-words text-gray-800">
+            <p className="whitespace-pre-wrap break-words text-theme-fg-secondary">
               {message.content}
             </p>
           </article>
           
           {showTimestamp && (
             <time 
-              className="text-xs text-gray-400 mt-2 block"
+              className="text-xs text-theme-fg-muted mt-2 block"
               dateTime={message.createdAt.toISOString()}
               title={message.createdAt.toLocaleString()}
             >

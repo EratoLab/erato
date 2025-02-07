@@ -7,11 +7,18 @@ const config: StorybookConfig = {
     "@storybook/addon-essentials",
     "@chromatic-com/storybook",
     "@storybook/addon-interactions",
+    "@storybook/addon-themes",
+    "@storybook/addon-a11y",
+    "@storybook/addon-storysource",
   ],
   framework: {
     name: "@storybook/nextjs",
     options: {},
   },
   staticDirs: ["../public"],
+  typescript: {
+    reactDocgen: 'react-docgen-typescript',
+    check: false,
+  },
 };
 export default config;
