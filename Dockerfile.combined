@@ -9,7 +9,7 @@ FROM ${REGISTRY}/${FRONTEND_IMAGE} as frontend
 FROM ${REGISTRY}/${BACKEND_IMAGE}
 
 # Copy frontend files to /app/public
-COPY --from=frontend /usr/share/nginx/html/ /app/public/
+COPY --from=frontend /public /app/public/
 
 # The backend will serve these files directly
 CMD ["./backend"]
