@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { StreamingContext } from '../../types/chat';
 
 // TODO: move later to types folder, that we can align with what we have from the backend programmaticaly
 /**
@@ -6,9 +7,10 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
  */
 export interface ChatMessage {
   id: string;
-  sender: 'user' | 'bot';
+  sender: 'user' | 'assistant';
   content: string;
   createdAt: Date;
+  loading?: StreamingContext;
 }
 
 interface MessageMap {

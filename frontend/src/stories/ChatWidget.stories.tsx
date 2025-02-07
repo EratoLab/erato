@@ -7,7 +7,7 @@ const mockMessages: Record<string, ChatMessage> = {
   '1': {
     id: '1',
     content: 'Hello! How can I help you today?',
-    sender: 'bot',
+    sender: 'assistant',
     createdAt: new Date(2024, 0, 1, 12, 0),
   },
   '2': {
@@ -19,7 +19,7 @@ const mockMessages: Record<string, ChatMessage> = {
   '3': {
     id: '3',
     content: 'Sure, I\'d be happy to help with any account-related questions.',
-    sender: 'bot',
+    sender: 'assistant',
     createdAt: new Date(2024, 0, 1, 12, 2),
   },
 };

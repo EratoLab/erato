@@ -99,4 +99,19 @@ export const MessageSequence: Story = {
       <ChatMessage message={ChatMessageFactory.samples.longMessage} />
     </>
   ),
+};
+
+export const MinimumWidth: Story = {
+  args: {
+    message: ChatMessageFactory.createBotMessage({
+      content: 'Short',
+    }),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Shows message with very short content to verify minimum width constraint'
+      }
+    }
+  }
 }; 

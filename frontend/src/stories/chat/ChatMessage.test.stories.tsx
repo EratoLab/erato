@@ -58,6 +58,9 @@ export const InteractionTest: Story = {
     const container = canvas.getByRole('log');
     const messageWrapper = container.querySelector('div');
     const styles = window.getComputedStyle(messageWrapper!);
+    
+    // Add minimum width check
+    expect(styles.minWidth).toBe('280px');
     expect(styles.maxWidth).toBe('768px');
     
     // Verify avatar presence using a more specific selector
