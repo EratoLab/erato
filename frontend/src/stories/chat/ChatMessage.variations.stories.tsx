@@ -3,7 +3,7 @@ import { ChatMessage } from '../../components/ui/ChatMessage';
 import { ChatMessageFactory } from './mockData';
 
 const meta = {
-  title: 'UI/ChatMessage/Variations',
+  title: 'CHAT/ChatMessage/Variations',
   component: ChatMessage,
   parameters: {
     layout: 'centered',

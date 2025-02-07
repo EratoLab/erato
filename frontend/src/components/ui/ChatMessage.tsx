@@ -1,6 +1,10 @@
 import React, { memo } from 'react';
 import { ChatMessage as ChatMessageType } from '../containers/ChatProvider';
 import clsx from 'clsx';
+import { messageStyles } from './styles/chatMessageStyles';
+import { Avatar } from './Avatar';
+import { MessageContent } from './MessageContent';
+import { MessageTimestamp } from './MessageTimestamp';
 
 export interface ChatMessageProps {
   message: ChatMessageType;
@@ -22,17 +26,6 @@ export interface ChatMessageProps {
   showAvatar?: boolean;
 }
 
-const messageStyles = {
-  container: {
-    user: 'bg-theme-bg-primary',
-    assistant: 'bg-theme-bg-secondary',
-  },
-  avatar: {
-    user: 'bg-[var(--theme-avatar-user-bg)] text-[var(--theme-avatar-user-fg)]',
-    assistant: 'bg-[var(--theme-avatar-assistant-bg)] text-[var(--theme-avatar-assistant-fg)]',
-  },
-} as const;
-
 export const ChatMessage = memo(function ChatMessage({ 
   message,
   className = '',
@@ -43,6 +36,11 @@ export const ChatMessage = memo(function ChatMessage({
   const isUser = message.sender === 'user';
   const role = isUser ? 'user' : 'assistant';
   
+  // Content validation
+  if (!message?.content) {
+    return null;
+  }
+
   return (
     <article 
       className={clsx(
@@ -51,6 +49,7 @@ export const ChatMessage = memo(function ChatMessage({
         className
       )}
       role="log"
+      aria-live="polite"
       aria-label={`${isUser ? 'Your' : 'Assistant'} message`}
     >
       <div 
@@ -58,15 +57,7 @@ export const ChatMessage = memo(function ChatMessage({
         style={{ maxWidth: `${maxWidth}px` }}
       >
         {showAvatar && (
-          <div 
-            className={clsx(
-              'w-8 h-8 rounded flex items-center justify-center shrink-0',
-              messageStyles.avatar[role]
-            )}
-            aria-hidden="true"
-          >
-            {isUser ? 'U' : 'A'}
-          </div>
+          <Avatar role={role} isUser={isUser} />
         )}
 
         <div className="min-w-0 flex-1">
@@ -74,21 +65,10 @@ export const ChatMessage = memo(function ChatMessage({
             {isUser ? 'You' : 'Assistant'}
           </div>
           
-          {/* Using article for semantic meaning of self-contained content */}
-          <article className="prose prose-slate max-w-none">
-            <p className="whitespace-pre-wrap break-words text-theme-fg-secondary">
-              {message.content}
-            </p>
-          </article>
+          <MessageContent content={message.content} />
           
           {showTimestamp && (
-            <time 
-              className="text-xs text-theme-fg-muted mt-2 block"
-              dateTime={message.createdAt.toISOString()}
-              title={message.createdAt.toLocaleString()}
-            >
-              {message.createdAt.toLocaleTimeString()}
-            </time>
+            <MessageTimestamp createdAt={message.createdAt} />
           )}
         </div>
       </div>

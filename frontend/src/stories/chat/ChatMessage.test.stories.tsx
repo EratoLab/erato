@@ -5,7 +5,7 @@ import { expect } from '@storybook/jest';
 import { within } from '@storybook/testing-library';
 
 const meta = {
-  title: 'UI/ChatMessage/Tests',
+  title: 'CHAT/ChatMessage/Tests',
   component: ChatMessage,
   parameters: {
     layout: 'centered',
