@@ -21,7 +21,7 @@ export interface ChatMessageProps {
   showTimestamp?: boolean;
   /**
    * Whether to show the avatar
-   * @default true
+   * @default false
    */
   showAvatar?: boolean;
 }
@@ -31,7 +31,7 @@ export const ChatMessage = memo(function ChatMessage({
   className = '',
   maxWidth = 768,
   showTimestamp = true,
-  showAvatar = true,
+  showAvatar = false,
 }: ChatMessageProps) {
   const isUser = message.sender === 'user';
   const role = isUser ? 'user' : 'assistant';

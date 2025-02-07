@@ -40,31 +40,29 @@ Component expects these CSS variables:
       description: 'The message object containing content, sender, and timestamp',
     },
     maxWidth: {
-      control: { type: 'number', min: 300, max: 1200, step: 50 },
+      control: 'number',
       description: 'Maximum width of the message container in pixels',
-      table: {
-        defaultValue: { summary: '768' }
-      }
+      defaultValue: 768,
     },
     showTimestamp: {
       control: 'boolean',
       description: 'Whether to show the timestamp',
-      table: {
-        defaultValue: { summary: 'true' }
-      }
+      defaultValue: true,
     },
     showAvatar: {
       control: 'boolean',
       description: 'Whether to show the avatar',
-      table: {
-        defaultValue: { summary: 'true' }
-      }
+      defaultValue: false,
     },
     className: {
       control: 'text',
-      description: 'Additional CSS classes to apply to the message container',
-      type: { name: 'string', required: false }
-    }
+      description: 'Additional CSS classes to apply',
+    },
+  },
+  args: {
+    showAvatar: false,
+    showTimestamp: true,
+    maxWidth: 768,
   },
   tags: ['autodocs'],
 } satisfies Meta<typeof ChatMessage>;
@@ -76,6 +74,7 @@ type Story = StoryObj<typeof meta>;
 export const UserMessage: Story = {
   args: {
     message: ChatMessageFactory.samples.user,
+    showAvatar: true,
   },
 };
 
