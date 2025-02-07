@@ -93,7 +93,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     setMessageOrder(prev => [...prev, id]);
 
     // Simulate API delay
-    setTimeout(() => setIsLoading(false), 1000);
+    // setTimeout(() => setIsLoading(false), 1000);
     // TODO: Replace with real API call later
   };
 

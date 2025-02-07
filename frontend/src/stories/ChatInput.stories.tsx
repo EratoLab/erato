@@ -2,6 +2,14 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ChatInput } from '../components/ui/ChatInput';
 import { action } from '@storybook/addon-actions';
 
+// export const WithCustomTheme: Story = {
+//   parameters: {
+//     themes: {
+//       theme: 'dark', // or 'light'
+//     },
+//   },
+// };
+
 const meta = {
   title: 'UI/ChatInput',
   component: ChatInput,

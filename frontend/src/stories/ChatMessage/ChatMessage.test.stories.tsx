@@ -1,0 +1,91 @@
+import type { Meta, StoryObj } from '@storybook/react';
+import { ChatMessage } from '../../components/ui/ChatMessage';
+import { mockMessages } from './mockData';
+import { expect } from '@storybook/jest';
+import { within } from '@storybook/testing-library';
+
+const meta = {
+  title: 'UI/ChatMessage/Tests',
+  component: ChatMessage,
+  parameters: {
+    layout: 'centered',
+    a11y: {
+      config: {
+        rules: [
+          {
+            // Ensure proper ARIA roles
+            id: 'aria-roles',
+            enabled: true
+          }
+        ]
+      }
+    }
+  },
+} satisfies Meta<typeof ChatMessage>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const AccessibilityChecks: Story = {
+  args: {
+    message: mockMessages.assistant,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    
+    // Check if message content is visible
+    const messageContent = await canvas.findByText(mockMessages.assistant.content);
+    expect(messageContent).toBeInTheDocument();
+    
+    // Check if role attributes are present
+    const article = canvas.getByRole('log');
+    expect(article).toBeInTheDocument();
+    
+    // Check if timestamp is accessible
+    const timestamp = canvas.getByTitle(mockMessages.assistant.createdAt.toLocaleString());
+    expect(timestamp).toBeInTheDocument();
+  }
+};
+
+export const InteractionTest: Story = {
+  args: {
+    message: mockMessages.longMessage,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    
+    // Verify message container is properly sized
+    const container = canvas.getByRole('log');
+    const messageWrapper = container.querySelector('div');
+    const styles = window.getComputedStyle(messageWrapper!);
+    expect(styles.maxWidth).toBe('768px');
+    
+    // Verify avatar presence using a more specific selector
+    const avatar = canvas.getByText('A', { selector: '[aria-hidden="true"]' });
+    expect(avatar).toBeInTheDocument();
+    
+    // Verify text wrapping
+    const messageText = canvas.getByText(mockMessages.longMessage.content);
+    const textStyles = window.getComputedStyle(messageText);
+    expect(textStyles.whiteSpace).toBe('pre-wrap');
+  }
+};
+
+export const ResponsiveTest: Story = {
+  args: {
+    message: mockMessages.assistant,
+  },
+  parameters: {
+    viewport: {
+      defaultViewport: 'mobile1',
+    },
+    chromatic: { viewports: [320, 768] }
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const container = canvas.getByRole('log');
+    
+    // Verify responsive behavior - container should be full width
+    expect(container.className).toContain('w-full');
+  }
+}; 
