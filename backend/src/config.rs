@@ -3,8 +3,8 @@ use serde::Deserialize;
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct AppConfig {
-    pub address: String,
-    pub port: i32,
+    pub http_host: String,
+    pub http_port: i32,
 }
 
 impl AppConfig {

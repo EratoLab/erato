@@ -18,7 +18,7 @@ async fn main() {
 
     let (router, api) = server::router::router().split_for_parts();
 
-    let listener = tokio::net::TcpListener::bind(format!("{}:{}", config.address, config.port))
+    let listener = tokio::net::TcpListener::bind(format!("{}:{}", config.http_host, config.http_port))
         .await
         .unwrap();
     let local_addr = listener.local_addr().unwrap();
