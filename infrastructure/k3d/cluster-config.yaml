@@ -1,7 +1,7 @@
 apiVersion: k3d.io/v1alpha4
 kind: Simple
 metadata:
-  name: peknow-dev
+  name: erato-dev
 servers: 1
 agents: 0
 registries:

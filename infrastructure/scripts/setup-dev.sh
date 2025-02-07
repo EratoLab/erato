@@ -25,13 +25,14 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update
 
 # Install local development chart
-echo "Installing Peknow chart..."
-helm upgrade --install peknow ./charts/peknow \
-  --namespace peknow --create-namespace \
-  --values ./charts/peknow/values.yaml
+echo "Installing Erato chart..."
+helm upgrade --install erato ./charts/erato \
+  --namespace erato --create-namespace \
+  --values ./charts/erato/values.yaml \
+  --values ./k3d/values.k3d.yaml
 
 # Add local DNS entry
-echo "127.0.0.1 peknow.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1 app.erato.internal" | sudo tee -a /etc/hosts
 
 echo "Setup complete! Your development environment is ready."
-echo "Access the application at http://peknow.local" 
+echo "Access the application at http://app.erato.internal" 
