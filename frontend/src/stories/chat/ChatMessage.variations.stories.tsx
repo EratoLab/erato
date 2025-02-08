@@ -114,4 +114,49 @@ export const MinimumWidth: Story = {
       }
     }
   }
+};
+
+export const Loading: Story = {
+  args: {
+    message: {
+      id: '1',
+      content: 'Initial content',
+      sender: 'assistant',
+      createdAt: new Date(),
+      loading: {
+        state: 'loading',
+        context: 'Processing request...',
+      }
+    }
+  }
+};
+
+export const ToolCalling: Story = {
+  args: {
+    message: {
+      id: '2',
+      content: 'Fetching weather data',
+      sender: 'assistant',
+      createdAt: new Date(),
+      loading: {
+        state: 'tool-calling',
+        context: 'Accessing weather API...',
+      }
+    }
+  }
+};
+
+export const Reasoning: Story = {
+  args: {
+    message: {
+      id: '3',
+      content: 'Analyzing data',
+      sender: 'assistant',
+      createdAt: new Date(),
+      loading: {
+        state: 'reasoning',
+        context: 'Processing results...',
+      }
+    }
+  }
 }; 

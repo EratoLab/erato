@@ -5,6 +5,7 @@ import { messageStyles } from './styles/chatMessageStyles';
 import { Avatar } from './Avatar';
 import { MessageContent } from './MessageContent';
 import { MessageTimestamp } from './MessageTimestamp';
+import { LoadingIndicator } from './LoadingIndicator';
 
 export interface ChatMessageProps {
   message: ChatMessageType;
@@ -37,7 +38,7 @@ export const ChatMessage = memo(function ChatMessage({
   const role = isUser ? 'user' : 'assistant';
   
   // Content validation
-  if (!message?.content) {
+  if (!message?.content && !message?.loading) {
     return null;
   }
 
@@ -68,6 +69,15 @@ export const ChatMessage = memo(function ChatMessage({
           </div>
           
           <MessageContent content={message.content} />
+          
+          {message.loading && (
+            <div className="mt-2">
+              <LoadingIndicator 
+                state={message.loading.state}
+                context={message.loading.context}
+              />
+            </div>
+          )}
           
           {showTimestamp && (
             <MessageTimestamp createdAt={message.createdAt} />

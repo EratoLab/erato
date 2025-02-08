@@ -91,4 +91,30 @@ export const ResponsiveTest: Story = {
     // Verify responsive behavior - container should be full width
     expect(container.className).toContain('w-full');
   }
+};
+
+export const LoadingStateTest: Story = {
+  args: {
+    message: {
+      id: '1',
+      content: 'Processing',
+      sender: 'assistant',
+      createdAt: new Date(),
+      loading: {
+        state: 'loading',
+        context: 'Test loading state',
+      }
+    }
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    
+    // Verify loading indicator is present
+    const loadingIndicator = canvas.getByText('Loading');
+    expect(loadingIndicator).toBeInTheDocument();
+    
+    // Verify loading context
+    const context = canvas.getByText('Test loading state');
+    expect(context).toBeInTheDocument();
+  }
 }; 
