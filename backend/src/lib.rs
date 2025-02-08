@@ -9,6 +9,7 @@ pub mod config;
 pub mod db;
 pub mod policy;
 pub mod server;
+pub mod frontend_environment;
 
 #[derive(OpenApi)]
 #[openapi(

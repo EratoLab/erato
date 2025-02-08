@@ -10,6 +10,7 @@ install_clis:
     fi
     cargo binstall cargo-nextest@0.9.88 sea-orm-cli@1.1.4
 
+# Generates the entity source files from a live DB connection
 generate_db_schema:
     sea-orm-cli generate entity -u postgres://eratouser:eratopw@localhost:5432/erato -o src/db/entity
 
@@ -18,3 +19,6 @@ test:
 
 lint:
     echo "Linitng not implemented yet"
+
+run $FRONTEND_BUNDLE_PATH="../frontend/out":
+     cargo run --bin backend
