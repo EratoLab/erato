@@ -6,6 +6,7 @@ import { Avatar } from './Avatar';
 import { MessageContent } from './MessageContent';
 import { MessageTimestamp } from './MessageTimestamp';
 import { LoadingIndicator } from './LoadingIndicator';
+import { MessageControls } from './MessageControls';
 
 export interface ChatMessageProps {
   message: ChatMessageType;
@@ -25,6 +26,11 @@ export interface ChatMessageProps {
    * @default false
    */
   showAvatar?: boolean;
+  showControlsOnHover?: boolean;
+  onCopy?: () => void;
+  onLike?: () => void;
+  onDislike?: () => void;
+  onRerun?: () => void;
 }
 
 export const ChatMessage = memo(function ChatMessage({ 
@@ -33,6 +39,11 @@ export const ChatMessage = memo(function ChatMessage({
   maxWidth = 768,
   showTimestamp = true,
   showAvatar = false,
+  showControlsOnHover = false,
+  onCopy,
+  onLike,
+  onDislike,
+  onRerun,
 }: ChatMessageProps) {
   const isUser = message.sender === 'user';
   const role = isUser ? 'user' : 'assistant';
@@ -45,8 +56,9 @@ export const ChatMessage = memo(function ChatMessage({
   return (
     <div 
       className={clsx(
-        'relative flex gap-4 p-4 rounded-lg',
+        'relative flex gap-4 p-4 rounded-lg group',
         'min-w-[280px] w-full shrink-0',
+        'hover:bg-theme-bg-secondary transition-colors',
         messageStyles.container[role],
         className
       )}
@@ -64,8 +76,21 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         <div className="min-w-0 flex-1 break-words">
-          <div className="font-semibold mb-1 text-sm text-theme-fg-primary">
-            {isUser ? 'You' : 'Assistant'}
+          <div className="flex justify-between items-start">
+            <div className="font-semibold mb-1 text-sm text-theme-fg-primary">
+              {isUser ? 'You' : 'Assistant'}
+            </div>
+            
+            {!isUser && (
+              <MessageControls
+                isUser={isUser}
+                onCopy={onCopy}
+                onLike={onLike}
+                onDislike={onDislike}
+                onRerun={onRerun}
+                className={showControlsOnHover ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}
+              />
+            )}
           </div>
           
           <MessageContent content={message.content} />

@@ -1,12 +1,12 @@
-import React, { memo } from 'react';
+import React from 'react';
 import clsx from 'clsx';
+import { Button } from './Button';
 import { 
-  CopyIcon, 
-  EditIcon, 
-  ThumbUpIcon, 
-  ThumbDownIcon, 
-  RerunIcon 
-} from './icons';
+  ClipboardDocumentIcon, 
+  HandThumbUpIcon, 
+  HandThumbDownIcon, 
+  ArrowPathIcon 
+} from '@heroicons/react/24/outline';
 
 interface MessageControlsProps {
   /** Whether the message is from the user */
@@ -27,97 +27,75 @@ interface MessageControlsProps {
   className?: string;
 }
 
-export const MessageControls = memo(function MessageControls({
+export const MessageControls = ({
   isUser,
-  showOnHover = true,
+  showOnHover = false,
   onCopy,
   onEdit,
   onLike,
   onDislike,
   onRerun,
   className
-}: MessageControlsProps) {
-  // Extract common styles to constants
-  const buttonClasses = clsx(
-    "p-1 hover:bg-theme-bg-accent rounded",
-    "text-theme-fg-secondary hover:text-theme-fg-primary",
-    "transition-colors",
-    "disabled:opacity-50 disabled:cursor-not-allowed"
-  );
-  
-  const iconClasses = "w-4 h-4";
-
-  // Helper to render a control button
-  const ControlButton = ({
-    onClick,
-    label,
-    icon: Icon,
-    disabled = !onClick,
-  }: {
-    onClick?: () => void,
-    label: string,
-    icon: React.ComponentType<{ className?: string }>,
-    disabled?: boolean,
-  }) => (
-    <button
-      onClick={onClick}
-      className={buttonClasses}
-      aria-label={label}
-      disabled={disabled}
-    >
-      <Icon className={iconClasses} />
-    </button>
-  );
-
+}: MessageControlsProps) => {
   return (
     <div 
       className={clsx(
-        showOnHover ? 'opacity-0 group-hover:opacity-100 transition-opacity' : 'opacity-100',
-        'absolute top-2 right-2 flex gap-2 rounded',
-        'bg-theme-bg-secondary px-2 py-1',
-        'shadow-sm',
+        'flex items-center gap-2',
+        showOnHover && 'opacity-0 group-hover:opacity-100 transition-opacity',
         className
       )}
-      role="toolbar"
-      aria-label="Message controls"
     >
-      <ControlButton
-        onClick={onCopy}
-        label="Copy message"
-        icon={CopyIcon}
-      />
-
-      {isUser && (
-        <ControlButton
-          onClick={onEdit}
-          label="Edit message"
-          icon={EditIcon}
+      {onCopy && (
+        <Button
+          onClick={onCopy}
+          icon={<ClipboardDocumentIcon />}
+          size="sm"
+          aria-label="Copy message"
+          title="Copy message"
         />
       )}
-
+      {isUser && (
+        <Button
+          onClick={onEdit}
+          icon={<ClipboardDocumentIcon />}
+          size="sm"
+          aria-label="Edit message"
+          title="Edit message"
+        />
+      )}
       {!isUser && (
         <>
-          <ControlButton
-            onClick={onLike}
-            label="Like response"
-            icon={ThumbUpIcon}
-          />
-          
-          <ControlButton
-            onClick={onDislike}
-            label="Dislike response"
-            icon={ThumbDownIcon}
-          />
-
-          <ControlButton
-            onClick={onRerun}
-            label="Regenerate response"
-            icon={RerunIcon}
-          />
+          {onLike && (
+            <Button
+              onClick={onLike}
+              icon={<HandThumbUpIcon />}
+              size="sm"
+              aria-label="Like message"
+              title="Like message"
+            />
+          )}
+          {onDislike && (
+            <Button
+              onClick={onDislike}
+              icon={<HandThumbDownIcon />}
+              size="sm"
+              aria-label="Dislike message"
+              title="Dislike message"
+            />
+          )}
+          {onRerun && (
+            <Button
+              onClick={onRerun}
+              icon={<ArrowPathIcon />}
+              size="sm"
+              aria-label="Regenerate response"
+              title="Regenerate response"
+            />
+          )}
         </>
       )}
     </div>
   );
-});
+};
 
 MessageControls.displayName = 'MessageControls'; 

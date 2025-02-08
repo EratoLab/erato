@@ -15,13 +15,28 @@ const meta = {
   component: ChatInput,
   parameters: {
     layout: 'centered',
+    docs: {
+      description: {
+        component: 'ChatGPT-style input with controls and responsive design'
+      }
+    }
   },
   tags: ['autodocs'],
   argTypes: {
     onSendMessage: { action: 'message sent' },
+    onNewChat: { action: 'new chat' },
+    onRegenerate: { action: 'regenerate' },
     isLoading: { control: 'boolean' },
     disabled: { control: 'boolean' },
+    showControls: { control: 'boolean' },
   },
+  decorators: [
+    (Story) => (
+      <div className="w-[768px] p-4 bg-theme-bg-primary">
+        <Story />
+      </div>
+    )
+  ],
 } satisfies Meta<typeof ChatInput>;
 
 export default meta;
@@ -33,14 +48,27 @@ const defaultArgs = {
 
 export const Default: Story = {
   args: {
-    ...defaultArgs,
+    onSendMessage: action('message sent'),
+    showControls: true,
+    onNewChat: action('new chat'),
+    onRegenerate: action('regenerate'),
   },
 };
 
 export const Loading: Story = {
   args: {
-    ...defaultArgs,
+    onSendMessage: action('message sent'),
     isLoading: true,
+    showControls: true,
+    onNewChat: action('new chat'),
+    onRegenerate: action('regenerate'),
+  },
+};
+
+export const WithoutControls: Story = {
+  args: {
+    onSendMessage: action('message sent'),
+    showControls: false,
   },
 };
 
