@@ -14,6 +14,10 @@ install_clis:
 generate_db_schema:
     sea-orm-cli generate entity -u postgres://eratouser:eratopw@localhost:5432/erato -o src/db/entity
 
+# Generates the OpenAPI spec based on the source
+generate_open_api:
+    cargo run --bin gen-openapi
+
 test:
     cargo nextest run
 

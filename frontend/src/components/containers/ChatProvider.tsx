@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { StreamingContext } from '../../types/chat';
+import { SSE } from 'sse.js';
+import { env } from '../../app/env';
 
 // TODO: move later to types folder, that we can align with what we have from the backend programmaticaly
 /**
@@ -66,6 +68,45 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         .finally(() => setIsLoading(false));
     }
   }, [loadMessages]);
+
+  // Example SSE integration; Should probably be adjusted or moved elsewhere
+  useEffect(() => {
+    const { apiRootUrl } = env();
+    const sseUrl = `${apiRootUrl}v1beta/messages/submitstream`;
+    
+    const source = new SSE(sseUrl, {
+      method: 'POST',
+      headers: {
+        'Accept': 'text/event-stream',
+      },
+    });
+
+    source.addEventListener('open', () => {
+      console.log('SSE connection opened');
+    });
+
+    source.addEventListener('error', (e: Event) => {
+      console.error('SSE error:', e);
+    });
+
+    // `message` is default message type. We don't normally send it, but might be good to have as a catch-all
+    source.addEventListener('message', (e: MessageEvent) => {
+      console.log('SSE message received:', e.data);
+    });
+
+    // TODO: register one event listener per message type, and in each of them convert to the appropriate variant of MessageSubmitStreamingResponseMessage
+    source.addEventListener('text_delta', (e: MessageEvent) => {
+      console.log('SSE message received:', e.data);
+    });
+
+    // Start the connection
+    source.stream();
+
+    // Cleanup on unmount
+    return () => {
+      source.close();
+    };
+  }, []);
 
   const updateMessage = useCallback((messageId: string, updates: Partial<ChatMessage>) => {
     setMessages(prev => ({

@@ -1,12 +1,15 @@
 use axum::handler::HandlerWithoutStateExt;
 use axum::Extension;
-use std::collections::HashMap;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use backend::config::AppConfig;
-use backend::frontend_environment::{serve_files_with_script, FrontedEnvironment, FrontendBundlePath};
+use backend::frontend_environment::{
+    serve_files_with_script, FrontedEnvironment, FrontendBundlePath,
+};
 use backend::{server, ApiDoc};
+use tower_http::cors::CorsLayer;
 
 #[tokio::main]
 async fn main() {
@@ -43,8 +46,11 @@ async fn main() {
             axum::routing::get(move || async move { axum::Json(spec.clone()) }),
         )
         .fallback_service(serve_files_with_script.into_service())
-        .layer(Extension(FrontendBundlePath(config.frontend_bundle_path.clone())))
-        .layer(Extension(build_frontend_environment()));
+        .layer(Extension(FrontendBundlePath(
+            config.frontend_bundle_path.clone(),
+        )))
+        .layer(Extension(build_frontend_environment()))
+        .layer(CorsLayer::very_permissive());
 
     println!();
     println!("API docs: http://{}/scalar", local_addr);
@@ -60,8 +66,12 @@ pub fn build_frontend_environment() -> FrontedEnvironment {
 
     let api_root_url = "/api/".to_string();
 
-    env.0.insert("API_ROOT_URL".to_owned(), Value::String(api_root_url.clone()));
-    env.0.insert("SOME_OBJECT".to_owned(), json!({ "foo": "bar" }));
+    env.0.insert(
+        "API_ROOT_URL".to_owned(),
+        Value::String(api_root_url.clone()),
+    );
+    env.0
+        .insert("SOME_OBJECT".to_owned(), json!({ "foo": "bar" }));
 
     env
 }
