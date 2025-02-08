@@ -24,6 +24,20 @@ env:
   SHA_TAG: ${{ github.sha }}
 
 jobs:
+  lint:
+    timeout-minutes: 10
+    name: "lint"
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install Rustfmt"
+        run: rustup component add rustfmt
+
+      - name: "rustfmt"
+        working-directory: ./backend
+        run: cargo fmt --all --check
+
   build-and-push-amd64:
     runs-on: ubuntu-22.04
     permissions:

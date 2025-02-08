@@ -1,17 +1,17 @@
-use std::convert::Infallible;
-use std::time::Duration;
-use axum::{Json, Router};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Sse};
 use axum::response::sse::Event;
+use axum::response::{IntoResponse, Sse};
 use axum::routing::{get, post};
+use axum::{Json, Router};
 use axum_extra::TypedHeader;
 use futures::stream::{self, Stream};
-use tokio_stream::StreamExt as _;
 use serde::Serialize;
+use serde_json;
+use std::convert::Infallible;
+use std::time::Duration;
+use tokio_stream::StreamExt as _;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
-use serde_json;
 
 pub fn router() -> OpenApiRouter {
     // build our application with a route
@@ -24,7 +24,10 @@ pub fn router() -> OpenApiRouter {
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(messages, chats, message_submit_sse), components(schemas(Message, Chat, MessageSubmitStreamingResponseMessage)))]
+#[openapi(
+    paths(messages, chats, message_submit_sse),
+    components(schemas(Message, Chat, MessageSubmitStreamingResponseMessage))
+)]
 pub struct ApiV1ApiDoc;
 
 #[derive(Serialize, ToSchema)]
@@ -33,9 +36,14 @@ struct NotFound {
 }
 
 pub async fn fallback() -> impl IntoResponse {
-    (StatusCode::NOT_FOUND, Json(NotFound {
-        error: "There is no API route under the path (or path + method combination) you provided.".to_string()
-    }))
+    (
+        StatusCode::NOT_FOUND,
+        Json(NotFound {
+            error:
+                "There is no API route under the path (or path + method combination) you provided."
+                    .to_string(),
+        }),
+    )
 }
 
 #[derive(Serialize, ToSchema)]
@@ -64,20 +72,20 @@ enum MessageSubmitStreamingResponseMessage {
     #[serde(rename = "text_delta")]
     TextDelta(MessageSubmitStreamingResponseMessageTextDelta),
     #[serde(rename = "example_other")]
-    ExampleOther(MessageSubmitStreamingResponseMessageOther)
+    ExampleOther(MessageSubmitStreamingResponseMessageOther),
 }
 
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 struct MessageSubmitStreamingResponseMessageTextDelta {
-    new_text: String
+    new_text: String,
 }
 
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 // TODO: This is just an example so that we have multiple variants to test agian
 struct MessageSubmitStreamingResponseMessageOther {
-    foo: String
+    foo: String,
 }
 
 #[utoipa::path(post, path = "/messages/submitstream", responses((status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage)))]
@@ -94,9 +102,7 @@ pub async fn message_submit_sse(
             };
             let message = MessageSubmitStreamingResponseMessage::TextDelta(delta);
             let json = serde_json::to_string(&message).unwrap();
-            Ok(Event::default()
-                .event("text_delta")
-                .data(json))
+            Ok(Event::default().event("text_delta").data(json))
         })
         .throttle(Duration::from_secs(1));
 
@@ -106,4 +112,3 @@ pub async fn message_submit_sse(
             .text("keep-alive-text"),
     )
 }
-

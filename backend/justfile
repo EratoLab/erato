@@ -22,7 +22,10 @@ test:
     cargo nextest run
 
 lint:
-    echo "Linitng not implemented yet"
+    cargo fmt --all --check
 
 run $FRONTEND_BUNDLE_PATH="../frontend/out":
-     cargo run --bin backend
+    cargo run --bin backend
+
+format:
+    cargo fmt --all
