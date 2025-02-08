@@ -4,7 +4,7 @@ use utoipa::openapi::OpenApiBuilder;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use super::api::v1::ApiV1ApiDoc;
+use super::api::v1beta::ApiV1ApiDoc;
 
 /// Get health of the API.
 #[utoipa::path(
@@ -22,7 +22,7 @@ pub fn router() -> OpenApiRouter {
     // build our application with a route
     let app = OpenApiRouter::new()
         .route("/health", get(health).head(health))
-        .nest("/api/v1", crate::server::api::v1::router());
+        .nest("/api/v1beta", crate::server::api::v1beta::router());
     app
 }
 
