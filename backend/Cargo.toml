@@ -10,8 +10,12 @@ path = "./src/gen_openapi.rs"
 
 [dependencies]
 axum = { version = "0.7.9", features = ["macros"] }
+axum-extra = { version = "0.9.6", features = ["typed-header"] }
+headers = "0.4.0"
+tower-http = { version = "0.6.2" , features = ["fs"]}
 sea-orm = "1.1.4"
 serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
 tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
 tracing-subscriber = "0.3.19"
 synonym = "0.1.5"
@@ -26,3 +30,7 @@ utoipa-scalar = { version = "0.2.0", features = ["axum"] }
 
 dotenv-flow = "0.16.2"
 config = "0.15.6"
+http-body = "1.0.1"
+http-body-util = "0.1.2"
+lol_html = "2.2.0"
+ordered-multimap = "0.7.3"

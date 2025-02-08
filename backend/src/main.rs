@@ -1,7 +1,12 @@
+use axum::handler::HandlerWithoutStateExt;
+use axum::Extension;
+use std::collections::HashMap;
+use serde_json::{json, Value};
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
-use backend::{ApiDoc, server};
 use backend::config::AppConfig;
+use backend::frontend_environment::{serve_files_with_script, FrontedEnvironment, FrontendBundlePath};
+use backend::{server, ApiDoc};
 
 #[tokio::main]
 async fn main() {
@@ -18,25 +23,45 @@ async fn main() {
 
     let (router, api) = server::router::router().split_for_parts();
 
-    let listener = tokio::net::TcpListener::bind(format!("{}:{}", config.http_host, config.http_port))
-        .await
-        .unwrap();
+    let listener =
+        tokio::net::TcpListener::bind(format!("{}:{}", config.http_host, config.http_port))
+            .await
+            .unwrap();
     let local_addr = listener.local_addr().unwrap();
 
     // Create OpenAPI spec with server information
     let mut spec = ApiDoc::build_openapi_full();
-    spec.servers = Some(vec![utoipa::openapi::Server::new(format!("http://{}", local_addr))]);
+    spec.servers = Some(vec![utoipa::openapi::Server::new(format!(
+        "http://{}",
+        local_addr
+    ))]);
 
     let app = router
         .merge(Scalar::with_url("/scalar", spec.clone()))
-        .route("/openapi.json", axum::routing::get(move || async move { 
-            axum::Json(spec.clone()) 
-        }));
+        .route(
+            "/openapi.json",
+            axum::routing::get(move || async move { axum::Json(spec.clone()) }),
+        )
+        .fallback_service(serve_files_with_script.into_service())
+        .layer(Extension(FrontendBundlePath(config.frontend_bundle_path.clone())))
+        .layer(Extension(build_frontend_environment()));
 
     println!();
     println!("API docs: http://{}/scalar", local_addr);
+    println!("Frontend at: http://{}", local_addr);
     println!("Listening on {}", local_addr);
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();
+}
+
+pub fn build_frontend_environment() -> FrontedEnvironment {
+    let mut env = FrontedEnvironment::default();
+
+    let api_root_url = "/api/".to_string();
+
+    env.0.insert("API_ROOT_URL".to_owned(), Value::String(api_root_url.clone()));
+    env.0.insert("SOME_OBJECT".to_owned(), json!({ "foo": "bar" }));
+
+    env
 }
