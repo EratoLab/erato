@@ -49,10 +49,10 @@ export const ChatInput = ({
   return (
     <form onSubmit={handleSubmit}>
       <div className={clsx(
-        'w-full rounded-2xl bg-white',
+        'w-full rounded-2xl bg-theme-bg-primary',
         'p-3',
         'shadow-[0_0_15px_rgba(0,0,0,0.1)]',
-        'border border-gray-200',
+        'border border-theme-border',
         'flex flex-col gap-3',
         className
       )}>

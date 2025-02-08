@@ -11,10 +11,11 @@ export const Avatar = memo(function Avatar({ role, isUser }: AvatarProps) {
   return (
     <div 
       className={clsx(
-        'w-8 h-8 rounded flex items-center justify-center shrink-0',
+        'w-8 h-8 rounded-full flex items-center justify-center',
         messageStyles.avatar[role]
       )}
-      aria-hidden="true"
+      aria-label={`${isUser ? 'User' : 'Assistant'} avatar`}
+      role="img"
     >
       {isUser ? 'U' : 'A'}
     </div>

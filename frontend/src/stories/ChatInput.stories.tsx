@@ -32,7 +32,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className="w-[768px] p-4 bg-theme-bg-primary">
+      <div className="w-[768px] bg-white rounded-2xl p-8">
         <Story />
       </div>
     )

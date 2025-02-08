@@ -42,15 +42,15 @@ export const defaultTheme: Theme = {
     foreground: {
       primary: '#111827',
       secondary: '#374151',
-      muted: '#6b7280',
+      muted: '#4b5563',
     },
     avatar: {
       user: {
-        background: '#d1d5db',
-        foreground: '#111827',
+        background: '#4b5563',
+        foreground: '#ffffff',
       },
       assistant: {
-        background: '#0d9488',
+        background: '#0d766d',
         foreground: '#ffffff',
       },
     },

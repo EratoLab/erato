@@ -21,8 +21,8 @@ export const Button = ({
       className={clsx(
         'flex items-center gap-2 rounded transition-colors',
         {
-          'bg-gray-800 text-white hover:bg-gray-700': variant === 'primary',
-          'bg-white hover:bg-gray-100 text-gray-700': variant === 'secondary',
+          'bg-theme-fg-primary text-theme-bg-primary hover:bg-theme-fg-secondary': variant === 'primary',
+          'bg-theme-bg-primary hover:bg-theme-bg-secondary text-theme-fg-secondary': variant === 'secondary',
         },
         {
           'p-2 text-sm': size === 'sm',
