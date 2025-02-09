@@ -1,0 +1,6 @@
+default:
+    just --list
+
+deploy_local:
+    sqitch deploy local_dev
+    ./generate_summary.sh
