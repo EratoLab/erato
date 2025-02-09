@@ -1,11 +1,11 @@
-use std::path::PathBuf;
-use sqlx::Pool;
-use test_log::test;
-use sqlx::pool::PoolConnection;
-use sqlx::postgres::Postgres;
+use crate::migrations::SqitchMigrationSource;
 use ctor::ctor;
 use sqlx::migrate::Migrator;
-use crate::migrations::SqitchMigrationSource;
+use sqlx::pool::PoolConnection;
+use sqlx::postgres::Postgres;
+use sqlx::Pool;
+use std::path::PathBuf;
+use test_log::test;
 
 mod db;
 mod migrations;
@@ -13,7 +13,10 @@ mod migrations;
 // Using a (possibly brittle?) life-before-main method to set the DATABASE_URL before any tests run.
 #[ctor]
 fn set_test_db_url() {
-    std::env::set_var("DATABASE_URL", "postgres://eratouser:eratopw@127.0.0.1:5432/erato")
+    std::env::set_var(
+        "DATABASE_URL",
+        "postgres://eratouser:eratopw@127.0.0.1:5432/erato",
+    )
 }
 
 // TODO: More proper way would be via SqitchMigration but we can't build them in a static way yet.

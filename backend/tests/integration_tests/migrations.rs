@@ -1,11 +1,11 @@
-use std::path::{Path, PathBuf};
-use sqlx::migrate::{MigrationSource, Migration, MigrationType};
-use serde::Deserialize;
-use std::fs;
-use std::borrow::Cow;
-use std::pin::{Pin, pin};
 use futures::future::BoxFuture;
 use serde::de::StdError;
+use serde::Deserialize;
+use sqlx::migrate::{Migration, MigrationSource, MigrationType};
+use std::borrow::Cow;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::pin::{pin, Pin};
 
 #[derive(Debug, Deserialize)]
 struct SqitchSummary {
@@ -26,40 +26,64 @@ impl SqitchMigrationSource {
 }
 
 impl<'a> MigrationSource<'a> for SqitchMigrationSource {
-
-    fn resolve(self) -> BoxFuture<'a, Result<Vec<Migration>, Box<(dyn StdError + std::marker::Send + Sync + 'static)>>> {
+    fn resolve(
+        self,
+    ) -> BoxFuture<
+        'a,
+        Result<Vec<Migration>, Box<(dyn StdError + std::marker::Send + Sync + 'static)>>,
+    > {
         // Read and parse the summary file
         let summary_content = fs::read_to_string(&self.summary_path)
-            .map_err(|e| sqlx::Error::Configuration(format!("Failed to read summary file: {}", e).into())).unwrap();
-        
+            .map_err(|e| {
+                sqlx::Error::Configuration(format!("Failed to read summary file: {}", e).into())
+            })
+            .unwrap();
+
         let summary: SqitchSummary = serde_json::from_str(&summary_content)
-            .map_err(|e| sqlx::Error::Configuration(format!("Failed to parse summary file: {}", e).into())).unwrap();
-        
+            .map_err(|e| {
+                sqlx::Error::Configuration(format!("Failed to parse summary file: {}", e).into())
+            })
+            .unwrap();
+
         // Get the directory containing the summary file
-        let base_dir = self.summary_path.parent()
-            .ok_or_else(|| sqlx::Error::Configuration("Summary file has no parent directory".into())).unwrap();
-        
+        let base_dir = self
+            .summary_path
+            .parent()
+            .ok_or_else(|| {
+                sqlx::Error::Configuration("Summary file has no parent directory".into())
+            })
+            .unwrap();
+
         // Process each migration
         let mut migrations = Vec::new();
         for (idx, migration_path) in summary.migrations.iter().enumerate() {
             let full_path = base_dir.join(migration_path);
-            
+
             // Extract description from the filename
-            let file_name = full_path.file_name()
+            let file_name = full_path
+                .file_name()
                 .and_then(|f| f.to_str())
-                .ok_or_else(|| sqlx::Error::Configuration(format!("Invalid migration filename: {}", migration_path).into())).unwrap();
-            
-            let description = file_name
-                .trim_end_matches(".sql")
-                .replace('_', " ");
-            
+                .ok_or_else(|| {
+                    sqlx::Error::Configuration(
+                        format!("Invalid migration filename: {}", migration_path).into(),
+                    )
+                })
+                .unwrap();
+
+            let description = file_name.trim_end_matches(".sql").replace('_', " ");
+
             // Read the migration content
             let sql = fs::read_to_string(&full_path)
-                .map_err(|e| sqlx::Error::Configuration(format!("Failed to read migration file {}: {}", migration_path, e).into())).unwrap();
+                .map_err(|e| {
+                    sqlx::Error::Configuration(
+                        format!("Failed to read migration file {}: {}", migration_path, e).into(),
+                    )
+                })
+                .unwrap();
 
             // Create a checksum of the SQL content
             // let checksum = blake3::hash(sql.as_bytes()).as_bytes().to_vec();
-            
+
             migrations.push(Migration::new(
                 idx as i64,
                 Cow::Owned(description),
@@ -68,7 +92,7 @@ impl<'a> MigrationSource<'a> for SqitchMigrationSource {
                 false, // no_tx
             ));
         }
-        
+
         Box::pin(futures::future::ok(migrations))
     }
 }
