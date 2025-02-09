@@ -1,0 +1,6 @@
+{
+  "migrations": [
+    "deploy/0001_init_database.sql",
+    "deploy/0002_add_chat_and_messages_tables.sql"
+  ]
+}
