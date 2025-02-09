@@ -1,6 +1,6 @@
 use axum::routing::{get, head};
-use utoipa::OpenApi;
 use utoipa::openapi::OpenApiBuilder;
+use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 

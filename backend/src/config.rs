@@ -11,7 +11,7 @@ pub struct AppConfig {
     pub http_port: i32,
     // Where to find the static frontend files to serve.
     // Defaults to `./public`
-    pub frontend_bundle_path: String
+    pub frontend_bundle_path: String,
 }
 
 impl AppConfig {
