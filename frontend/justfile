@@ -2,13 +2,16 @@ default:
     just --list
 
 storybook:
-    npm run storybook
+    pnpm run storybook
+
+install:
+    pnpm install
 
 dev:
-    npm run dev
+    pnpm run dev
 
 start:
-    npm run start
+    pnpm run start
 
 lint:
-    npm run lint
+    pnpm run lint
