@@ -13,5 +13,8 @@ dev:
 start:
     pnpm run start
 
+format:
+    pnpm exec prettier . --write
+
 lint:
     pnpm run lint
