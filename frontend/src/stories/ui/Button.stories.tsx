@@ -1,48 +1,49 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { Button } from '../../components/ui/Button';
-import { 
-  ArrowUpIcon, 
-  PlusIcon, 
+import type { Meta, StoryObj } from "@storybook/react";
+import { Button } from "../../components/ui/Button";
+import {
+  ArrowUpIcon,
+  PlusIcon,
   ArrowPathIcon,
   ClipboardDocumentIcon,
   HandThumbUpIcon,
   HandThumbDownIcon,
-} from '@heroicons/react/24/outline';
+} from "@heroicons/react/24/outline";
 
 const meta = {
-  title: 'UI/Button',
+  title: "UI/Button",
   component: Button,
   parameters: {
-    layout: 'centered',
+    layout: "centered",
     docs: {
       description: {
-        component: 'A flexible button component supporting different variants, sizes, and icon integration.'
-      }
-    }
+        component:
+          "A flexible button component supporting different variants, sizes, and icon integration.",
+      },
+    },
   },
-  tags: ['autodocs'],
+  tags: ["autodocs"],
   argTypes: {
     variant: {
-      control: 'select',
-      options: ['primary', 'secondary'],
-      description: 'Visual style variant'
+      control: "select",
+      options: ["primary", "secondary"],
+      description: "Visual style variant",
     },
     size: {
-      control: 'select',
-      options: ['sm', 'md', 'lg'],
-      description: 'Size variant'
+      control: "select",
+      options: ["sm", "md", "lg"],
+      description: "Size variant",
     },
     disabled: {
-      control: 'boolean',
-      description: 'Disabled state'
-    }
+      control: "boolean",
+      description: "Disabled state",
+    },
   },
   decorators: [
     (Story) => (
       <div className="p-8 bg-theme-bg-primary">
         <Story />
       </div>
-    )
+    ),
   ],
 } satisfies Meta<typeof Button>;
 
@@ -51,38 +52,38 @@ type Story = StoryObj<typeof meta>;
 
 export const Primary: Story = {
   args: {
-    variant: 'primary',
-    children: 'Button',
+    variant: "primary",
+    children: "Button",
   },
 };
 
 export const Secondary: Story = {
   args: {
-    variant: 'secondary',
-    children: 'Button',
+    variant: "secondary",
+    children: "Button",
   },
 };
 
 export const WithIcon: Story = {
   args: {
-    variant: 'secondary',
+    variant: "secondary",
     icon: <PlusIcon />,
-    children: 'New Chat',
+    children: "New Chat",
   },
 };
 
 export const IconOnly: Story = {
   args: {
-    variant: 'secondary',
+    variant: "secondary",
     icon: <ArrowUpIcon />,
-    'aria-label': 'Send message',
+    "aria-label": "Send message",
   },
 };
 
 export const Disabled: Story = {
   args: {
-    variant: 'primary',
-    children: 'Button',
+    variant: "primary",
+    children: "Button",
     disabled: true,
   },
 };
@@ -111,8 +112,12 @@ export const MessageControls: Story = {
 export const ChatControls: Story = {
   render: () => (
     <div className="flex items-center gap-2">
-      <Button size="sm" icon={<PlusIcon />}>New Chat</Button>
-      <Button size="sm" icon={<ArrowPathIcon />}>Regenerate</Button>
+      <Button size="sm" icon={<PlusIcon />}>
+        New Chat
+      </Button>
+      <Button size="sm" icon={<ArrowPathIcon />}>
+        Regenerate
+      </Button>
     </div>
   ),
-}; 
+};

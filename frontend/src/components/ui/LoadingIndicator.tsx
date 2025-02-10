@@ -1,6 +1,6 @@
-import React from 'react';
-import { LoadingState } from '../../types/chat';
-import clsx from 'clsx';
+import React from "react";
+import { LoadingState } from "../../types/chat";
+import clsx from "clsx";
 
 interface LoadingIndicatorProps {
   state: LoadingState;
@@ -8,44 +8,46 @@ interface LoadingIndicatorProps {
   className?: string;
 }
 
-export const LoadingIndicator = ({ state, context, className }: LoadingIndicatorProps) => {
+export const LoadingIndicator = ({
+  state,
+  context,
+  className,
+}: LoadingIndicatorProps) => {
   const getStateIcon = () => {
     switch (state) {
-      case 'tool-calling':
-        return '🔧';
-      case 'reasoning':
-        return '💭';
+      case "tool-calling":
+        return "🔧";
+      case "reasoning":
+        return "💭";
       default:
-        return '⏳';
+        return "⏳";
     }
   };
 
   const getStateLabel = () => {
     switch (state) {
-      case 'tool-calling':
-        return 'Using tools';
-      case 'reasoning':
-        return 'Thinking';
+      case "tool-calling":
+        return "Using tools";
+      case "reasoning":
+        return "Thinking";
       default:
-        return 'Loading';
+        return "Loading";
     }
   };
 
   return (
-    <div 
+    <div
       className={clsx(
-        'flex items-center gap-2 text-sm text-theme-fg-secondary',
-        'animate-pulse',
-        className
+        "flex items-center gap-2 text-sm text-theme-fg-secondary",
+        "animate-pulse",
+        className,
       )}
     >
-      <span role="img" aria-hidden="true">{getStateIcon()}</span>
+      <span role="img" aria-hidden="true">
+        {getStateIcon()}
+      </span>
       <span>{getStateLabel()}</span>
-      {context && (
-        <span className="text-theme-fg-muted">
-          {context}
-        </span>
-      )}
+      {context && <span className="text-theme-fg-muted">{context}</span>}
     </div>
   );
-}; 
+};

@@ -1,9 +1,9 @@
-export type LoadingState = 
-  | 'idle'
-  | 'loading'
-  | 'tool-calling'
-  | 'reasoning'
-  | 'error';
+export type LoadingState =
+  | "idle"
+  | "loading"
+  | "tool-calling"
+  | "reasoning"
+  | "error";
 
 export interface StreamingContext {
   state: LoadingState;
@@ -14,7 +14,7 @@ export interface StreamingContext {
 export interface ChatMessage {
   id: string;
   content: string;
-  sender: 'user' | 'assistant';
+  sender: "user" | "assistant";
   createdAt: Date;
   loading?: StreamingContext;
-} 
+}

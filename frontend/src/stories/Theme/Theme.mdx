@@ -1,6 +1,6 @@
-import { Meta, ColorPalette, ColorItem } from '@storybook/blocks';
-import * as ThemeStories from './Theme.stories';
-import { defaultTheme, darkTheme } from '../../config/theme';
+import { Meta, ColorPalette, ColorItem } from "@storybook/blocks";
+import * as ThemeStories from "./Theme.stories";
+import { defaultTheme, darkTheme } from "../../config/theme";
 
 <Meta title="Theme/Documentation" />
 
@@ -13,73 +13,67 @@ Our application uses a theme system to maintain consistent styling across compon
 ### Light Theme
 
 <ColorPalette>
-  <ColorItem 
-    title="Background Colors" 
-    colors={defaultTheme.colors.background} 
+  <ColorItem
+    title="Background Colors"
+    colors={defaultTheme.colors.background}
   />
-  <ColorItem 
-    title="Foreground Colors" 
+  <ColorItem
+    title="Foreground Colors"
     colors={defaultTheme.colors.foreground}
   />
-  <ColorItem 
-    title="Avatar Colors" 
+  <ColorItem
+    title="Avatar Colors"
     colors={{
-      'User Background': defaultTheme.colors.avatar.user.background,
-      'User Foreground': defaultTheme.colors.avatar.user.foreground,
-      'Assistant Background': defaultTheme.colors.avatar.assistant.background,
-      'Assistant Foreground': defaultTheme.colors.avatar.assistant.foreground,
-    }} 
+      "User Background": defaultTheme.colors.avatar.user.background,
+      "User Foreground": defaultTheme.colors.avatar.user.foreground,
+      "Assistant Background": defaultTheme.colors.avatar.assistant.background,
+      "Assistant Foreground": defaultTheme.colors.avatar.assistant.foreground,
+    }}
   />
 </ColorPalette>
 
 ### Dark Theme
 
 <ColorPalette>
-  <ColorItem 
-    title="Background Colors" 
-    colors={darkTheme.colors.background} 
-  />
-  <ColorItem 
-    title="Foreground Colors" 
-    colors={darkTheme.colors.foreground}
-  />
-  <ColorItem 
-    title="Avatar Colors" 
+  <ColorItem title="Background Colors" colors={darkTheme.colors.background} />
+  <ColorItem title="Foreground Colors" colors={darkTheme.colors.foreground} />
+  <ColorItem
+    title="Avatar Colors"
     colors={{
-      'User Background': darkTheme.colors.avatar.user.background,
-      'User Foreground': darkTheme.colors.avatar.user.foreground,
-      'Assistant Background': darkTheme.colors.avatar.assistant.background,
-      'Assistant Foreground': darkTheme.colors.avatar.assistant.foreground,
-    }} 
+      "User Background": darkTheme.colors.avatar.user.background,
+      "User Foreground": darkTheme.colors.avatar.user.foreground,
+      "Assistant Background": darkTheme.colors.avatar.assistant.background,
+      "Assistant Foreground": darkTheme.colors.avatar.assistant.foreground,
+    }}
   />
 </ColorPalette>
 
 ### Branded Theme Example
 
 <ColorPalette>
-  <ColorItem 
-    title="Background Colors" 
+  <ColorItem
+    title="Background Colors"
     colors={{
-      primary: '#fdf2f8',
-      secondary: '#fce7f3',
-      accent: '#fbcfe8',
-    }} 
-  />
-  <ColorItem 
-    title="Foreground Colors" 
-    colors={{
-      primary: '#831843',
-      secondary: '#9d174d',
-      muted: '#be185d',
+      primary: "#fdf2f8",
+      secondary: "#fce7f3",
+      accent: "#fbcfe8",
     }}
   />
-  <ColorItem 
-    title="Avatar Colors" 
+  <ColorItem
+    title="Foreground Colors"
     colors={{
-      'User Background': '#db2777',
-      'User Foreground': '#ffffff',
-      'Assistant Background': '#be185d',
-      'Assistant Foreground': '#ffffff',
-    }} 
+      primary: "#831843",
+      secondary: "#9d174d",
+      muted: "#be185d",
+    }}
   />
-</ColorPalette> 
+  <ColorItem
+    title="Avatar Colors"
+    colors={{
+      "User Background": "#db2777",
+      "User Foreground": "#ffffff",
+      "Assistant Background": "#be185d",
+      "Assistant Foreground": "#ffffff",
+    }}
+  />
+</ColorPalette>

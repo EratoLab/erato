@@ -1,12 +1,12 @@
-import React, { memo } from 'react';
-import { ChatMessage as ChatMessageType } from '../containers/ChatProvider';
-import clsx from 'clsx';
-import { messageStyles } from './styles/chatMessageStyles';
-import { Avatar } from './Avatar';
-import { MessageContent } from './MessageContent';
-import { MessageTimestamp } from './MessageTimestamp';
-import { LoadingIndicator } from './LoadingIndicator';
-import { MessageControls } from './MessageControls';
+import React, { memo } from "react";
+import { ChatMessage as ChatMessageType } from "../containers/ChatProvider";
+import clsx from "clsx";
+import { messageStyles } from "./styles/chatMessageStyles";
+import { Avatar } from "./Avatar";
+import { MessageContent } from "./MessageContent";
+import { MessageTimestamp } from "./MessageTimestamp";
+import { LoadingIndicator } from "./LoadingIndicator";
+import { MessageControls } from "./MessageControls";
 
 export interface ChatMessageProps {
   message: ChatMessageType;
@@ -33,9 +33,9 @@ export interface ChatMessageProps {
   onRerun?: () => void;
 }
 
-export const ChatMessage = memo(function ChatMessage({ 
+export const ChatMessage = memo(function ChatMessage({
   message,
-  className = '',
+  className = "",
   maxWidth = 768,
   showTimestamp = true,
   showAvatar = false,
@@ -45,42 +45,40 @@ export const ChatMessage = memo(function ChatMessage({
   onDislike,
   onRerun,
 }: ChatMessageProps) {
-  const isUser = message.sender === 'user';
-  const role = isUser ? 'user' : 'assistant';
-  
+  const isUser = message.sender === "user";
+  const role = isUser ? "user" : "assistant";
+
   // Content validation
   if (!message?.content && !message?.loading) {
     return null;
   }
 
   return (
-    <div 
+    <div
       className={clsx(
-        'relative flex gap-4 p-4 rounded-lg group',
-        'min-w-[280px] w-full shrink-0',
-        'hover:bg-theme-bg-accent',
+        "relative flex gap-4 p-4 rounded-lg group",
+        "min-w-[280px] w-full shrink-0",
+        "hover:bg-theme-bg-accent",
         messageStyles.container[role],
-        className
+        className,
       )}
-      style={{ 
+      style={{
         maxWidth: maxWidth ? `${maxWidth}px` : undefined,
-        width: maxWidth ? `${maxWidth}px` : undefined
+        width: maxWidth ? `${maxWidth}px` : undefined,
       }}
       role="log"
       aria-live="polite"
-      aria-label={`${isUser ? 'Your' : 'Assistant'} message`}
+      aria-label={`${isUser ? "Your" : "Assistant"} message`}
     >
       <div className="w-full flex gap-6">
-        {showAvatar && (
-          <Avatar role={role} isUser={isUser} />
-        )}
+        {showAvatar && <Avatar role={role} isUser={isUser} />}
 
         <div className="min-w-0 flex-1 break-words">
           <div className="flex justify-between items-start">
             <div className="font-semibold mb-1 text-sm text-theme-fg-primary">
-              {isUser ? 'You' : 'Assistant'}
+              {isUser ? "You" : "Assistant"}
             </div>
-            
+
             {!isUser && (
               <MessageControls
                 isUser={isUser}
@@ -88,25 +86,27 @@ export const ChatMessage = memo(function ChatMessage({
                 onLike={onLike}
                 onDislike={onDislike}
                 onRerun={onRerun}
-                className={showControlsOnHover ? 'opacity-0 group-hover:opacity-100 transition-opacity' : ''}
+                className={
+                  showControlsOnHover
+                    ? "opacity-0 group-hover:opacity-100 transition-opacity"
+                    : ""
+                }
               />
             )}
           </div>
-          
+
           <MessageContent content={message.content} />
-          
+
           {message.loading && (
             <div className="mt-2">
-              <LoadingIndicator 
+              <LoadingIndicator
                 state={message.loading.state}
                 context={message.loading.context}
               />
             </div>
           )}
-          
-          {showTimestamp && (
-            <MessageTimestamp createdAt={message.createdAt} />
-          )}
+
+          {showTimestamp && <MessageTimestamp createdAt={message.createdAt} />}
         </div>
       </div>
     </div>
@@ -114,4 +114,4 @@ export const ChatMessage = memo(function ChatMessage({
 });
 
 // Add display name for better debugging
-ChatMessage.displayName = 'ChatMessage'; 
+ChatMessage.displayName = "ChatMessage";

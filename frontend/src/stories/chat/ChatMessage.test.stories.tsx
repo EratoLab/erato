@@ -1,25 +1,25 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { ChatMessage } from '../../components/ui/ChatMessage';
-import { ChatMessageFactory } from './mockData';
-import { expect } from '@storybook/jest';
-import { within } from '@storybook/testing-library';
+import type { Meta, StoryObj } from "@storybook/react";
+import { ChatMessage } from "../../components/ui/ChatMessage";
+import { ChatMessageFactory } from "./mockData";
+import { expect } from "@storybook/jest";
+import { within } from "@storybook/testing-library";
 
 const meta = {
-  title: 'CHAT/ChatMessage/Tests',
+  title: "CHAT/ChatMessage/Tests",
   component: ChatMessage,
   parameters: {
-    layout: 'centered',
+    layout: "centered",
     a11y: {
       config: {
         rules: [
           {
             // Ensure proper ARIA roles
-            id: 'aria-roles',
-            enabled: true
-          }
-        ]
-      }
-    }
+            id: "aria-roles",
+            enabled: true,
+          },
+        ],
+      },
+    },
   },
 } satisfies Meta<typeof ChatMessage>;
 
@@ -32,19 +32,23 @@ export const AccessibilityChecks: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    
+
     // Check if message content is visible
-    const messageContent = await canvas.findByText(ChatMessageFactory.samples.assistant.content);
+    const messageContent = await canvas.findByText(
+      ChatMessageFactory.samples.assistant.content,
+    );
     expect(messageContent).toBeInTheDocument();
-    
+
     // Check if role attributes are present
-    const article = canvas.getByRole('log');
+    const article = canvas.getByRole("log");
     expect(article).toBeInTheDocument();
-    
+
     // Check if timestamp is accessible
-    const timestamp = canvas.getByTitle(ChatMessageFactory.samples.assistant.createdAt.toLocaleString());
+    const timestamp = canvas.getByTitle(
+      ChatMessageFactory.samples.assistant.createdAt.toLocaleString(),
+    );
     expect(timestamp).toBeInTheDocument();
-  }
+  },
 };
 
 export const InteractionTest: Story = {
@@ -53,25 +57,27 @@ export const InteractionTest: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    
+
     // Verify message container is properly sized
-    const container = canvas.getByRole('log');
-    const messageWrapper = container.querySelector('div');
+    const container = canvas.getByRole("log");
+    const messageWrapper = container.querySelector("div");
     const styles = window.getComputedStyle(messageWrapper!);
-    
+
     // Add minimum width check
-    expect(styles.minWidth).toBe('280px');
-    expect(styles.maxWidth).toBe('768px');
-    
+    expect(styles.minWidth).toBe("280px");
+    expect(styles.maxWidth).toBe("768px");
+
     // Verify avatar presence using a more specific selector
-    const avatar = canvas.getByText('A', { selector: '[aria-hidden="true"]' });
+    const avatar = canvas.getByText("A", { selector: '[aria-hidden="true"]' });
     expect(avatar).toBeInTheDocument();
-    
+
     // Verify text wrapping
-    const messageText = canvas.getByText(ChatMessageFactory.samples.longMessage.content);
+    const messageText = canvas.getByText(
+      ChatMessageFactory.samples.longMessage.content,
+    );
     const textStyles = window.getComputedStyle(messageText);
-    expect(textStyles.whiteSpace).toBe('pre-wrap');
-  }
+    expect(textStyles.whiteSpace).toBe("pre-wrap");
+  },
 };
 
 export const ResponsiveTest: Story = {
@@ -80,41 +86,41 @@ export const ResponsiveTest: Story = {
   },
   parameters: {
     viewport: {
-      defaultViewport: 'mobile1',
+      defaultViewport: "mobile1",
     },
-    chromatic: { viewports: [320, 768] }
+    chromatic: { viewports: [320, 768] },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const container = canvas.getByRole('log');
-    
+    const container = canvas.getByRole("log");
+
     // Verify responsive behavior - container should be full width
-    expect(container.className).toContain('w-full');
-  }
+    expect(container.className).toContain("w-full");
+  },
 };
 
 export const LoadingStateTest: Story = {
   args: {
     message: {
-      id: '1',
-      content: 'Processing',
-      sender: 'assistant',
+      id: "1",
+      content: "Processing",
+      sender: "assistant",
       createdAt: new Date(),
       loading: {
-        state: 'loading',
-        context: 'Test loading state',
-      }
-    }
+        state: "loading",
+        context: "Test loading state",
+      },
+    },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    
+
     // Verify loading indicator is present
-    const loadingIndicator = canvas.getByText('Loading');
+    const loadingIndicator = canvas.getByText("Loading");
     expect(loadingIndicator).toBeInTheDocument();
-    
+
     // Verify loading context
-    const context = canvas.getByText('Test loading state');
+    const context = canvas.getByText("Test loading state");
     expect(context).toBeInTheDocument();
-  }
-}; 
+  },
+};

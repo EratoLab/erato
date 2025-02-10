@@ -1,18 +1,18 @@
-import React, { useEffect, useRef } from 'react';
-import { ChatMessage } from './ChatMessage';
-import { ChatInput } from './ChatInput';
-import { useChat } from '../containers/ChatProvider';
+import React, { useEffect, useRef } from "react";
+import { ChatMessage } from "./ChatMessage";
+import { ChatInput } from "./ChatInput";
+import { useChat } from "../containers/ChatProvider";
 
 interface ChatWidgetProps {
   className?: string;
 }
 
-export const ChatWidget: React.FC<ChatWidgetProps> = ({ className = '' }) => {
+export const ChatWidget: React.FC<ChatWidgetProps> = ({ className = "" }) => {
   const { messages, messageOrder, sendMessage, isLoading } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -20,7 +20,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ className = '' }) => {
   }, [messageOrder]);
 
   return (
-    <div 
+    <div
       className={`flex flex-col h-full ${className}`}
       role="region"
       aria-label="Chat messages"
@@ -35,7 +35,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ className = '' }) => {
         ))}
         <div ref={messagesEndRef} />
       </div>
-      
+
       <ChatInput
         onSendMessage={sendMessage}
         className="border-t bg-white"
@@ -43,4 +43,4 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ className = '' }) => {
       />
     </div>
   );
-}; 
+};

@@ -1,18 +1,18 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { MessageControls } from '../../components/ui/MessageControls';
+import type { Meta, StoryObj } from "@storybook/react";
+import { MessageControls } from "../../components/ui/MessageControls";
 
 const meta = {
-  title: 'CHAT/MessageControls/Variations',
+  title: "CHAT/MessageControls/Variations",
   component: MessageControls,
   parameters: {
-    layout: 'centered',
+    layout: "centered",
   },
   decorators: [
     (Story) => (
       <div className="relative group p-8 bg-theme-bg-secondary min-w-[200px]">
         <Story />
       </div>
-    )
+    ),
   ],
 } satisfies Meta<typeof MessageControls>;
 
@@ -34,7 +34,7 @@ export const DisabledControls: Story = {
 export const PartialUserControls: Story = {
   args: {
     isUser: true,
-    onCopy: () => console.log('copy'),
+    onCopy: () => console.log("copy"),
     // onEdit intentionally omitted
   },
 };
@@ -43,10 +43,10 @@ export const PartialUserControls: Story = {
 export const CustomPosition: Story = {
   args: {
     isUser: false,
-    onCopy: () => console.log('copy'),
-    onLike: () => console.log('like'),
-    onDislike: () => console.log('dislike'),
-    className: 'top-auto bottom-2 left-2 right-auto',
+    onCopy: () => console.log("copy"),
+    onLike: () => console.log("like"),
+    onDislike: () => console.log("dislike"),
+    className: "top-auto bottom-2 left-2 right-auto",
   },
 };
 
@@ -54,15 +54,16 @@ export const CustomPosition: Story = {
 export const AlwaysVisible: Story = {
   args: {
     isUser: false,
-    onCopy: () => console.log('copy'),
-    onLike: () => console.log('like'),
-    onDislike: () => console.log('dislike'),
-    className: 'opacity-100',
+    onCopy: () => console.log("copy"),
+    onLike: () => console.log("like"),
+    onDislike: () => console.log("dislike"),
+    className: "opacity-100",
   },
   parameters: {
     docs: {
       description: {
-        story: 'Controls that are always visible instead of only on hover. Useful for touch devices or specific UI requirements.',
+        story:
+          "Controls that are always visible instead of only on hover. Useful for touch devices or specific UI requirements.",
       },
     },
   },
@@ -72,13 +73,14 @@ export const AlwaysVisible: Story = {
 export const LoadingState: Story = {
   args: {
     isUser: false,
-    onCopy: () => new Promise(resolve => setTimeout(resolve, 1000)),
-    onRerun: () => new Promise(resolve => setTimeout(resolve, 2000)),
+    onCopy: () => new Promise((resolve) => setTimeout(resolve, 1000)),
+    onRerun: () => new Promise((resolve) => setTimeout(resolve, 2000)),
   },
   parameters: {
     docs: {
       description: {
-        story: 'Shows how controls handle async operations with loading states.',
+        story:
+          "Shows how controls handle async operations with loading states.",
       },
     },
   },
@@ -88,14 +90,14 @@ export const LoadingState: Story = {
 export const WithErrorHandling: Story = {
   args: {
     isUser: false,
-    onCopy: () => Promise.reject(new Error('Failed to copy')),
-    onRerun: () => Promise.reject(new Error('Failed to rerun')),
+    onCopy: () => Promise.reject(new Error("Failed to copy")),
+    onRerun: () => Promise.reject(new Error("Failed to rerun")),
   },
   parameters: {
     docs: {
       description: {
-        story: 'Demonstrates error handling in control actions.',
+        story: "Demonstrates error handling in control actions.",
       },
     },
   },
-}; 
+};

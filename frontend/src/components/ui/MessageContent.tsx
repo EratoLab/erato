@@ -1,10 +1,12 @@
-import React, { memo } from 'react';
+import React, { memo } from "react";
 
 interface MessageContentProps {
   content: string;
 }
 
-export const MessageContent = memo(function MessageContent({ content }: MessageContentProps) {
+export const MessageContent = memo(function MessageContent({
+  content,
+}: MessageContentProps) {
   return (
     <article className="prose prose-slate max-w-none">
       <p className="whitespace-pre-wrap break-words text-theme-fg-secondary">
@@ -12,4 +14,4 @@ export const MessageContent = memo(function MessageContent({ content }: MessageC
       </p>
     </article>
   );
-}); 
+});

@@ -1,16 +1,16 @@
-import React from 'react';
-import { ChatMessage } from './ChatMessage';
-import { ChatInput } from './ChatInput';
-import { useChat } from '../containers/ChatProvider';
-import { useRef, useEffect } from 'react';
-import clsx from 'clsx';
+import React from "react";
+import { ChatMessage } from "./ChatMessage";
+import { ChatInput } from "./ChatInput";
+import { useChat } from "../containers/ChatProvider";
+import { useRef, useEffect } from "react";
+import clsx from "clsx";
 
 export interface ChatProps {
   className?: string;
   /**
    * Layout configuration
    */
-  layout?: 'default' | 'compact' | 'comfortable';
+  layout?: "default" | "compact" | "comfortable";
   /**
    * Maximum width of messages
    */
@@ -33,7 +33,7 @@ export interface ChatProps {
 
 export const Chat = ({
   className,
-  layout = 'default',
+  layout = "default",
   maxWidth = 768,
   showAvatars = false,
   showTimestamps = true,
@@ -48,31 +48,30 @@ export const Chat = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const layoutStyles = {
-    default: 'space-y-4 p-4',
-    compact: 'space-y-2 p-2',
-    comfortable: 'space-y-6 p-6',
+    default: "space-y-4 p-4",
+    compact: "space-y-2 p-2",
+    comfortable: "space-y-6 p-6",
   };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageOrder]);
 
   return (
-    <div 
-      className={clsx(
-        'flex flex-col h-full bg-theme-bg-primary',
-        className
-      )}
+    <div
+      className={clsx("flex flex-col h-full bg-theme-bg-primary", className)}
       role="region"
       aria-label="Chat conversation"
     >
-      <div className={clsx(
-        'flex-1 overflow-y-auto',
-        'bg-theme-bg-secondary',
-        layoutStyles[layout]
-      )}>
+      <div
+        className={clsx(
+          "flex-1 overflow-y-auto",
+          "bg-theme-bg-secondary",
+          layoutStyles[layout],
+        )}
+      >
         {messageOrder.map((messageId) => (
-          <div 
+          <div
             key={messageId}
             className="group hover:bg-theme-bg-secondary transition-colors rounded-lg"
           >
@@ -91,7 +90,7 @@ export const Chat = ({
         ))}
         <div ref={messagesEndRef} />
       </div>
-      
+
       <ChatInput
         onSendMessage={sendMessage}
         className="border-t border-theme-border bg-theme-bg-primary p-4"
@@ -102,4 +101,4 @@ export const Chat = ({
       />
     </div>
   );
-}; 
+};

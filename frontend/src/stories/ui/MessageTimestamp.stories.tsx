@@ -1,11 +1,11 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { MessageTimestamp } from '../../components/ui/MessageTimestamp';
+import type { Meta, StoryObj } from "@storybook/react";
+import { MessageTimestamp } from "../../components/ui/MessageTimestamp";
 
 const meta = {
-  title: 'UI/MessageTimestamp',
+  title: "UI/MessageTimestamp",
   component: MessageTimestamp,
   parameters: {
-    layout: 'centered',
+    layout: "centered",
     docs: {
       description: {
         component: `
@@ -21,17 +21,17 @@ Locale-aware timestamp component for chat messages.
 - Stores dates in UTC internally
 - Displays in user's local timezone
 - Supports both 12h/24h formats based on locale
-        `
-      }
-    }
+        `,
+      },
+    },
   },
   argTypes: {
     createdAt: {
-      control: 'date',
-      description: 'The timestamp to display',
+      control: "date",
+      description: "The timestamp to display",
     },
   },
-  tags: ['autodocs'],
+  tags: ["autodocs"],
 } satisfies Meta<typeof MessageTimestamp>;
 
 export default meta;
@@ -45,12 +45,12 @@ export const Current: Story = {
 
 export const SpecificTime: Story = {
   args: {
-    createdAt: new Date('2024-03-20T15:30:00'),
+    createdAt: new Date("2024-03-20T15:30:00"),
   },
 };
 
 export const PastDate: Story = {
   args: {
-    createdAt: new Date('2024-01-01T12:00:00'),
+    createdAt: new Date("2024-01-01T12:00:00"),
   },
-}; 
+};

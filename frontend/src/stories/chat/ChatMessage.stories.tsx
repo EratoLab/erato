@@ -1,12 +1,12 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { ChatMessage } from '../../components/ui/ChatMessage';
-import { ChatMessageFactory } from './mockData';
+import type { Meta, StoryObj } from "@storybook/react";
+import { ChatMessage } from "../../components/ui/ChatMessage";
+import { ChatMessageFactory } from "./mockData";
 
 const meta = {
-  title: 'Chat/ChatMessage',
+  title: "Chat/ChatMessage",
   component: ChatMessage,
   parameters: {
-    layout: 'centered',
+    layout: "centered",
     docs: {
       description: {
         component: `
@@ -30,33 +30,34 @@ Component expects these CSS variables:
 ## Caveats
 - Large message lists may require virtualization
 - Custom styling should maintain WCAG 2.1 AA contrast ratios
-        `
-      }
-    }
+        `,
+      },
+    },
   },
   argTypes: {
     message: {
-      control: 'object',
-      description: 'The message object containing content, sender, and timestamp',
+      control: "object",
+      description:
+        "The message object containing content, sender, and timestamp",
     },
     maxWidth: {
-      control: 'number',
-      description: 'Maximum width of the message container in pixels',
+      control: "number",
+      description: "Maximum width of the message container in pixels",
       defaultValue: 768,
     },
     showTimestamp: {
-      control: 'boolean',
-      description: 'Whether to show the timestamp',
+      control: "boolean",
+      description: "Whether to show the timestamp",
       defaultValue: true,
     },
     showAvatar: {
-      control: 'boolean',
-      description: 'Whether to show the avatar',
+      control: "boolean",
+      description: "Whether to show the avatar",
       defaultValue: false,
     },
     className: {
-      control: 'text',
-      description: 'Additional CSS classes to apply',
+      control: "text",
+      description: "Additional CSS classes to apply",
     },
   },
   args: {
@@ -64,7 +65,7 @@ Component expects these CSS variables:
     showTimestamp: true,
     maxWidth: 768,
   },
-  tags: ['autodocs'],
+  tags: ["autodocs"],
 } satisfies Meta<typeof ChatMessage>;
 
 export default meta;

@@ -1,11 +1,11 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { Avatar } from '../../components/ui/Avatar';
+import type { Meta, StoryObj } from "@storybook/react";
+import { Avatar } from "../../components/ui/Avatar";
 
 const meta = {
-  title: 'UI/Avatar',
+  title: "UI/Avatar",
   component: Avatar,
   parameters: {
-    layout: 'centered',
+    layout: "centered",
     docs: {
       description: {
         component: `
@@ -23,22 +23,22 @@ Requires role-specific color variables:
 --theme-avatar-{role}-bg
 --theme-avatar-{role}-fg
 \`\`\`
-        `
-      }
-    }
+        `,
+      },
+    },
   },
   argTypes: {
     role: {
-      control: 'radio',
-      options: ['user', 'assistant'],
-      description: 'The role determines the avatar styling',
+      control: "radio",
+      options: ["user", "assistant"],
+      description: "The role determines the avatar styling",
     },
     isUser: {
-      control: 'boolean',
-      description: 'Whether the avatar represents a user',
+      control: "boolean",
+      description: "Whether the avatar represents a user",
     },
   },
-  tags: ['autodocs'],
+  tags: ["autodocs"],
 } satisfies Meta<typeof Avatar>;
 
 export default meta;
@@ -46,14 +46,14 @@ type Story = StoryObj<typeof meta>;
 
 export const UserAvatar: Story = {
   args: {
-    role: 'user',
+    role: "user",
     isUser: true,
   },
 };
 
 export const AssistantAvatar: Story = {
   args: {
-    role: 'assistant',
+    role: "assistant",
     isUser: false,
   },
-}; 
+};

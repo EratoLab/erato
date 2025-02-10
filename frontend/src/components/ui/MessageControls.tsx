@@ -1,12 +1,12 @@
-import React from 'react';
-import clsx from 'clsx';
-import { Button } from './Button';
-import { 
-  ClipboardDocumentIcon, 
-  HandThumbUpIcon, 
-  HandThumbDownIcon, 
-  ArrowPathIcon 
-} from '@heroicons/react/24/outline';
+import React from "react";
+import clsx from "clsx";
+import { Button } from "./Button";
+import {
+  ClipboardDocumentIcon,
+  HandThumbUpIcon,
+  HandThumbDownIcon,
+  ArrowPathIcon,
+} from "@heroicons/react/24/outline";
 
 interface MessageControlsProps {
   /** Whether the message is from the user */
@@ -35,14 +35,14 @@ export const MessageControls = ({
   onLike,
   onDislike,
   onRerun,
-  className
+  className,
 }: MessageControlsProps) => {
   return (
-    <div 
+    <div
       className={clsx(
-        'flex items-center gap-2',
-        showOnHover && 'opacity-0 group-hover:opacity-100 transition-opacity',
-        className
+        "flex items-center gap-2",
+        showOnHover && "opacity-0 group-hover:opacity-100 transition-opacity",
+        className,
       )}
     >
       {onCopy && (
@@ -98,4 +98,4 @@ export const MessageControls = ({
   );
 };
 
-MessageControls.displayName = 'MessageControls'; 
+MessageControls.displayName = "MessageControls";

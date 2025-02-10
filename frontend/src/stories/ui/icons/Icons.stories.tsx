@@ -1,18 +1,18 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { 
-  CopyIcon, 
-  EditIcon, 
-  ThumbUpIcon, 
-  ThumbDownIcon, 
-  RerunIcon 
-} from '../../../components/ui/icons';
+import type { Meta, StoryObj } from "@storybook/react";
+import {
+  CopyIcon,
+  EditIcon,
+  ThumbUpIcon,
+  ThumbDownIcon,
+  RerunIcon,
+} from "../../../components/ui/icons";
 
 const meta = {
-  title: 'UI/Icons',
+  title: "UI/Icons",
   parameters: {
-    layout: 'centered',
+    layout: "centered",
     backgrounds: {
-      default: 'light',
+      default: "light",
     },
     docs: {
       description: {
@@ -24,9 +24,9 @@ Feather-based SVG icons used throughout the chat interface.
 - Inherits current text color via currentColor
 - Configurable stroke width and size via className
 - Optimized for crisp rendering at small sizes
-        `
-      }
-    }
+        `,
+      },
+    },
   },
   decorators: [
     (Story) => (
@@ -35,16 +35,14 @@ Feather-based SVG icons used throughout the chat interface.
           <Story />
         </div>
       </div>
-    )
+    ),
   ],
 } satisfies Meta;
 
 export default meta;
 
 const IconWrapper = ({ children }: { children: React.ReactNode }) => (
-  <div className="p-4 bg-theme-bg-secondary rounded">
-    {children}
-  </div>
+  <div className="p-4 bg-theme-bg-secondary rounded">{children}</div>
 );
 
 // Base story type for all icons
@@ -130,4 +128,4 @@ export const AllIcons: IconStory = {
       </div>
     </IconWrapper>
   ),
-}; 
+};

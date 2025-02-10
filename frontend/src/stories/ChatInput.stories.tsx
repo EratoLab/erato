@@ -1,6 +1,6 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { ChatInput } from '../components/ui/ChatInput';
-import { action } from '@storybook/addon-actions';
+import type { Meta, StoryObj } from "@storybook/react";
+import { ChatInput } from "../components/ui/ChatInput";
+import { action } from "@storybook/addon-actions";
 
 // export const WithCustomTheme: Story = {
 //   parameters: {
@@ -11,31 +11,31 @@ import { action } from '@storybook/addon-actions';
 // };
 
 const meta = {
-  title: 'UI/ChatInput',
+  title: "UI/ChatInput",
   component: ChatInput,
   parameters: {
-    layout: 'centered',
+    layout: "centered",
     docs: {
       description: {
-        component: 'ChatGPT-style input with controls and responsive design'
-      }
-    }
+        component: "ChatGPT-style input with controls and responsive design",
+      },
+    },
   },
-  tags: ['autodocs'],
+  tags: ["autodocs"],
   argTypes: {
-    onSendMessage: { action: 'message sent' },
-    onNewChat: { action: 'new chat' },
-    onRegenerate: { action: 'regenerate' },
-    isLoading: { control: 'boolean' },
-    disabled: { control: 'boolean' },
-    showControls: { control: 'boolean' },
+    onSendMessage: { action: "message sent" },
+    onNewChat: { action: "new chat" },
+    onRegenerate: { action: "regenerate" },
+    isLoading: { control: "boolean" },
+    disabled: { control: "boolean" },
+    showControls: { control: "boolean" },
   },
   decorators: [
     (Story) => (
       <div className="w-[768px] bg-white rounded-2xl p-8">
         <Story />
       </div>
-    )
+    ),
   ],
 } satisfies Meta<typeof ChatInput>;
 
@@ -43,38 +43,38 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const defaultArgs = {
-  onSendMessage: action('onSendMessage'),
+  onSendMessage: action("onSendMessage"),
 };
 
 export const Default: Story = {
   args: {
-    onSendMessage: action('message sent'),
+    onSendMessage: action("message sent"),
     showControls: true,
-    onNewChat: action('new chat'),
-    onRegenerate: action('regenerate'),
+    onNewChat: action("new chat"),
+    onRegenerate: action("regenerate"),
   },
 };
 
 export const Loading: Story = {
   args: {
-    onSendMessage: action('message sent'),
+    onSendMessage: action("message sent"),
     isLoading: true,
     showControls: true,
-    onNewChat: action('new chat'),
-    onRegenerate: action('regenerate'),
+    onNewChat: action("new chat"),
+    onRegenerate: action("regenerate"),
   },
 };
 
 export const WithoutControls: Story = {
   args: {
-    onSendMessage: action('message sent'),
+    onSendMessage: action("message sent"),
     showControls: false,
   },
 };
 
 export const WithCustomPlaceholder: Story = {
   args: {
-    placeholder: 'Ask me anything...',
+    placeholder: "Ask me anything...",
     ...defaultArgs,
   },
 };
@@ -88,7 +88,7 @@ export const Disabled: Story = {
 
 export const WithCustomClassName: Story = {
   args: {
-    className: 'bg-gray-100',
+    className: "bg-gray-100",
     ...defaultArgs,
   },
-}; 
+};

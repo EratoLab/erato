@@ -1,23 +1,23 @@
-import React, { memo } from 'react';
-import clsx from 'clsx';
-import { messageStyles } from './styles/chatMessageStyles';
+import React, { memo } from "react";
+import clsx from "clsx";
+import { messageStyles } from "./styles/chatMessageStyles";
 
 interface AvatarProps {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   isUser: boolean;
 }
 
 export const Avatar = memo(function Avatar({ role, isUser }: AvatarProps) {
   return (
-    <div 
+    <div
       className={clsx(
-        'w-8 h-8 rounded-full flex items-center justify-center',
-        messageStyles.avatar[role]
+        "w-8 h-8 rounded-full flex items-center justify-center",
+        messageStyles.avatar[role],
       )}
-      aria-label={`${isUser ? 'User' : 'Assistant'} avatar`}
+      aria-label={`${isUser ? "User" : "Assistant"} avatar`}
       role="img"
     >
-      {isUser ? 'U' : 'A'}
+      {isUser ? "U" : "A"}
     </div>
   );
-}); 
+});

@@ -1,11 +1,11 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { MessageControls } from '../../components/ui/MessageControls';
+import type { Meta, StoryObj } from "@storybook/react";
+import { MessageControls } from "../../components/ui/MessageControls";
 
 const meta = {
-  title: 'CHAT/MessageControls',
+  title: "CHAT/MessageControls",
   component: MessageControls,
   parameters: {
-    layout: 'centered',
+    layout: "centered",
     docs: {
       description: {
         component: `
@@ -16,43 +16,46 @@ Message control buttons with configurable visibility.
 - Different controls for user/assistant messages
 - Positioned absolutely within parent container
 - Supports hover mode for production use
-        `
+        `,
       },
       story: {
         inline: true,
       },
-    }
+    },
   },
   argTypes: {
     showOnHover: {
-      control: 'boolean',
-      description: 'Whether controls should only show on hover',
+      control: "boolean",
+      description: "Whether controls should only show on hover",
       defaultValue: false,
     },
     isUser: {
-      control: 'boolean',
-      description: 'Whether the controls are for a user message',
+      control: "boolean",
+      description: "Whether the controls are for a user message",
       defaultValue: false,
     },
-    onCopy: { 
-      action: 'copied',
-      description: 'Callback when copy button is clicked',
+    onCopy: {
+      action: "copied",
+      description: "Callback when copy button is clicked",
     },
-    onEdit: { 
-      action: 'edited',
-      description: 'Callback when edit button is clicked (user messages only)',
+    onEdit: {
+      action: "edited",
+      description: "Callback when edit button is clicked (user messages only)",
     },
-    onLike: { 
-      action: 'liked',
-      description: 'Callback when like button is clicked (assistant messages only)',
+    onLike: {
+      action: "liked",
+      description:
+        "Callback when like button is clicked (assistant messages only)",
     },
-    onDislike: { 
-      action: 'disliked',
-      description: 'Callback when dislike button is clicked (assistant messages only)',
+    onDislike: {
+      action: "disliked",
+      description:
+        "Callback when dislike button is clicked (assistant messages only)",
     },
-    onRerun: { 
-      action: 'rerun',
-      description: 'Callback when rerun button is clicked (assistant messages only)',
+    onRerun: {
+      action: "rerun",
+      description:
+        "Callback when rerun button is clicked (assistant messages only)",
     },
   },
   args: {
@@ -64,9 +67,9 @@ Message control buttons with configurable visibility.
       <div className="relative group p-8 rounded">
         <Story />
       </div>
-    )
+    ),
   ],
-  tags: ['autodocs'],
+  tags: ["autodocs"],
 } satisfies Meta<typeof MessageControls>;
 
 export default meta;
@@ -111,4 +114,4 @@ export const DisabledControls: Story = {
     onDislike: undefined,
     onRerun: undefined,
   },
-}; 
+};

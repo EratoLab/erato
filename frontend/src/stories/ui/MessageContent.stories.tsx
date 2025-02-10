@@ -1,11 +1,11 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { MessageContent } from '../../components/ui/MessageContent';
+import type { Meta, StoryObj } from "@storybook/react";
+import { MessageContent } from "../../components/ui/MessageContent";
 
 const meta = {
-  title: 'UI/MessageContent',
+  title: "UI/MessageContent",
   component: MessageContent,
   parameters: {
-    layout: 'centered',
+    layout: "centered",
     docs: {
       description: {
         component: `
@@ -21,17 +21,17 @@ Text content renderer with whitespace handling and word breaking.
 - Inherits theme text colors via CSS variables
 - Maintains readable line length via max-width
 - Preserves markdown-like whitespace
-        `
-      }
-    }
+        `,
+      },
+    },
   },
   argTypes: {
     content: {
-      control: 'text',
-      description: 'The message text content',
+      control: "text",
+      description: "The message text content",
     },
   },
-  tags: ['autodocs'],
+  tags: ["autodocs"],
 } satisfies Meta<typeof MessageContent>;
 
 export default meta;
@@ -45,12 +45,14 @@ export const ShortMessage: Story = {
 
 export const LongMessage: Story = {
   args: {
-    content: "This is a longer message that should wrap to multiple lines. ".repeat(5),
+    content:
+      "This is a longer message that should wrap to multiple lines. ".repeat(5),
   },
 };
 
 export const WithMarkdown: Story = {
   args: {
-    content: "This message has **bold** and *italic* text.\n\n- List item 1\n- List item 2",
+    content:
+      "This message has **bold** and *italic* text.\n\n- List item 1\n- List item 2",
   },
-}; 
+};

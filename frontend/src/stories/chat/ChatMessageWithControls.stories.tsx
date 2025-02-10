@@ -1,13 +1,13 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import { ChatMessageWithControls } from '../../components/ui/ChatMessageWithControls';
-import { ChatMessageFactory } from './mockData';
-import { action } from '@storybook/addon-actions';
+import type { Meta, StoryObj } from "@storybook/react";
+import { ChatMessageWithControls } from "../../components/ui/ChatMessageWithControls";
+import { ChatMessageFactory } from "./mockData";
+import { action } from "@storybook/addon-actions";
 
 const meta = {
-  title: 'Chat/ChatMessageWithControls',
+  title: "Chat/ChatMessageWithControls",
   component: ChatMessageWithControls,
   parameters: {
-    layout: 'centered',
+    layout: "centered",
     docs: {
       description: {
         component: `
@@ -18,45 +18,48 @@ Enhanced ChatMessage with configurable controls and loading states.
 - Shows contextual information during processing
 - Handles tool calling and reasoning states
 - Maintains all ChatMessage features
-        `
-      }
-    }
+        `,
+      },
+    },
   },
   argTypes: {
     showControlsOnHover: {
-      control: 'boolean',
-      description: 'Whether controls should only show on hover',
+      control: "boolean",
+      description: "Whether controls should only show on hover",
       defaultValue: false,
     },
     showAvatar: {
-      control: 'boolean',
-      description: 'Whether to show the avatar',
+      control: "boolean",
+      description: "Whether to show the avatar",
       defaultValue: false,
     },
     showTimestamp: {
-      control: 'boolean',
-      description: 'Whether to show the timestamp',
+      control: "boolean",
+      description: "Whether to show the timestamp",
       defaultValue: true,
     },
-    onCopy: { 
-      action: 'copied',
-      description: 'Callback when copy button is clicked',
+    onCopy: {
+      action: "copied",
+      description: "Callback when copy button is clicked",
     },
-    onEdit: { 
-      action: 'edited',
-      description: 'Callback when edit button is clicked (user messages only)',
+    onEdit: {
+      action: "edited",
+      description: "Callback when edit button is clicked (user messages only)",
     },
-    onLike: { 
-      action: 'liked',
-      description: 'Callback when like button is clicked (assistant messages only)',
+    onLike: {
+      action: "liked",
+      description:
+        "Callback when like button is clicked (assistant messages only)",
     },
-    onDislike: { 
-      action: 'disliked',
-      description: 'Callback when dislike button is clicked (assistant messages only)',
+    onDislike: {
+      action: "disliked",
+      description:
+        "Callback when dislike button is clicked (assistant messages only)",
     },
-    onRerun: { 
-      action: 'rerun',
-      description: 'Callback when regenerate button is clicked (assistant messages only)',
+    onRerun: {
+      action: "rerun",
+      description:
+        "Callback when regenerate button is clicked (assistant messages only)",
     },
   },
   args: {
@@ -64,7 +67,7 @@ Enhanced ChatMessage with configurable controls and loading states.
     showAvatar: false,
     showTimestamp: true,
   },
-  tags: ['autodocs'],
+  tags: ["autodocs"],
 } satisfies Meta<typeof ChatMessageWithControls>;
 
 export default meta;
@@ -73,18 +76,18 @@ type Story = StoryObj<typeof meta>;
 export const UserMessage: Story = {
   args: {
     message: ChatMessageFactory.samples.user,
-    onCopy: action('copy'),
-    onEdit: action('edit'),
+    onCopy: action("copy"),
+    onEdit: action("edit"),
   },
 };
 
 export const AssistantMessage: Story = {
   args: {
     message: ChatMessageFactory.samples.assistant,
-    onCopy: action('copy'),
-    onLike: action('like'),
-    onDislike: action('dislike'),
-    onRerun: action('rerun'),
+    onCopy: action("copy"),
+    onLike: action("like"),
+    onDislike: action("dislike"),
+    onRerun: action("rerun"),
   },
 };
 
@@ -106,4 +109,4 @@ export const HoverControls: Story = {
     message: ChatMessageFactory.samples.assistant,
     showControlsOnHover: true,
   },
-}; 
+};

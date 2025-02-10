@@ -1,8 +1,8 @@
-import React, { memo } from 'react';
-import { ChatMessage } from './ChatMessage';
-import { MessageControls } from './MessageControls';
-import { ChatMessage as ChatMessageType } from '../containers/ChatProvider';
-import clsx from 'clsx';
+import React, { memo } from "react";
+import { ChatMessage } from "./ChatMessage";
+import { MessageControls } from "./MessageControls";
+import { ChatMessage as ChatMessageType } from "../containers/ChatProvider";
+import clsx from "clsx";
 
 interface ChatMessageWithControlsProps {
   message: ChatMessageType;
@@ -31,17 +31,17 @@ export const ChatMessageWithControls = memo(function ChatMessageWithControls({
   onDislike,
   onRerun,
 }: ChatMessageWithControlsProps) {
-  const isUser = message.sender === 'user';
+  const isUser = message.sender === "user";
 
   return (
-    <div className={clsx('relative group', className)}>
+    <div className={clsx("relative group", className)}>
       <ChatMessage
         message={message}
         maxWidth={maxWidth}
         showTimestamp={showTimestamp}
         showAvatar={showAvatar}
       />
-      
+
       <MessageControls
         isUser={isUser}
         showOnHover={showControlsOnHover}
@@ -54,4 +54,4 @@ export const ChatMessageWithControls = memo(function ChatMessageWithControls({
       />
     </div>
   );
-}); 
+});
