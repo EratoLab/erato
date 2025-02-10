@@ -1,3 +1,5 @@
+"use client";
+
 import React, { createContext, useContext, useEffect } from "react";
 import { Theme, defaultTheme } from "@/config/theme";
 
