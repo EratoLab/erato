@@ -2,8 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { useState, useEffect, useCallback } from "react";
 import { ChatMessageWithControls } from "../../components/ui/ChatMessageWithControls";
 import { ChatMessage, LoadingState } from "../../types/chat";
-import { within, waitFor } from "@storybook/testing-library";
-import { userEvent } from "@storybook/testing-library";
+import { within, waitFor, userEvent } from "@storybook/test";
 
 interface PlaygroundProps {
   streamingSpeed?: number;
