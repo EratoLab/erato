@@ -16,5 +16,8 @@ start:
 format:
     pnpm exec prettier . --write
 
+check-format:
+    pnpm exec prettier . --check
+
 lint:
     pnpm run lint
