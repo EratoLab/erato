@@ -33,10 +33,18 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const defaultControlsContext = {
+  currentUserId: "user_1",
+  dialogOwnerId: "user_1",
+  isSharedDialog: false,
+};
+
 export const NoAvatar: Story = {
   args: {
     message: ChatMessageFactory.samples.user,
     showAvatar: false,
+    controlsContext: defaultControlsContext,
+    onMessageAction: () => {},
   },
   parameters: {
     docs: {
@@ -51,6 +59,8 @@ export const NoTimestamp: Story = {
   args: {
     message: ChatMessageFactory.samples.user,
     showTimestamp: false,
+    controlsContext: defaultControlsContext,
+    onMessageAction: () => {},
   },
   parameters: {
     docs: {
@@ -65,6 +75,8 @@ export const NarrowContainer: Story = {
   args: {
     message: ChatMessageFactory.samples.longMessage,
     maxWidth: 400,
+    controlsContext: defaultControlsContext,
+    onMessageAction: () => {},
   },
   parameters: {
     docs: {
@@ -79,6 +91,8 @@ export const NarrowContainer: Story = {
 export const MessageSequence: Story = {
   args: {
     message: ChatMessageFactory.samples.user,
+    controlsContext: defaultControlsContext,
+    onMessageAction: () => {},
   },
   parameters: {
     docs: {
@@ -96,9 +110,21 @@ export const MessageSequence: Story = {
   ],
   render: () => (
     <>
-      <ChatMessage message={ChatMessageFactory.samples.user} />
-      <ChatMessage message={ChatMessageFactory.samples.assistant} />
-      <ChatMessage message={ChatMessageFactory.samples.longMessage} />
+      <ChatMessage
+        message={ChatMessageFactory.samples.user}
+        controlsContext={defaultControlsContext}
+        onMessageAction={() => {}}
+      />
+      <ChatMessage
+        message={ChatMessageFactory.samples.assistant}
+        controlsContext={defaultControlsContext}
+        onMessageAction={() => {}}
+      />
+      <ChatMessage
+        message={ChatMessageFactory.samples.longMessage}
+        controlsContext={defaultControlsContext}
+        onMessageAction={() => {}}
+      />
     </>
   ),
 };
@@ -108,6 +134,8 @@ export const MinimumWidth: Story = {
     message: ChatMessageFactory.createBotMessage({
       content: "Short",
     }),
+    controlsContext: defaultControlsContext,
+    onMessageAction: () => {},
   },
   parameters: {
     docs: {
@@ -125,12 +153,15 @@ export const Loading: Story = {
       id: "1",
       content: "Initial content",
       sender: "assistant",
+      authorId: "assistant_1",
       createdAt: new Date(),
       loading: {
         state: "loading",
         context: "Processing request...",
       },
     },
+    controlsContext: defaultControlsContext,
+    onMessageAction: () => {},
   },
 };
 
@@ -140,12 +171,15 @@ export const ToolCalling: Story = {
       id: "2",
       content: "Fetching weather data",
       sender: "assistant",
+      authorId: "assistant_1",
       createdAt: new Date(),
       loading: {
         state: "tool-calling",
         context: "Accessing weather API...",
       },
     },
+    controlsContext: defaultControlsContext,
+    onMessageAction: () => {},
   },
 };
 
@@ -155,11 +189,14 @@ export const Reasoning: Story = {
       id: "3",
       content: "Analyzing data",
       sender: "assistant",
+      authorId: "assistant_1",
       createdAt: new Date(),
       loading: {
         state: "reasoning",
         context: "Processing results...",
       },
     },
+    controlsContext: defaultControlsContext,
+    onMessageAction: () => {},
   },
 };

@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState, useEffect, useCallback } from "react";
-import { ChatMessageWithControls } from "../../components/ui/ChatMessageWithControls";
+import { ChatMessage as ChatMessageComponent } from "../../components/ui/ChatMessage";
 import { ChatMessage, LoadingState } from "../../types/chat";
-import { within, waitFor, userEvent } from "@storybook/test";
+import { within, waitFor, userEvent, expect } from "@storybook/test";
 
 interface PlaygroundProps {
   streamingSpeed?: number;
@@ -18,6 +18,7 @@ const StreamingPlayground = ({
     content: "",
     sender: "assistant",
     createdAt: new Date(),
+    authorId: "assistant_1",
     loading: {
       state: "loading",
       context: "Initializing...",
@@ -79,23 +80,38 @@ const StreamingPlayground = ({
   }, [startStreaming]);
 
   return (
-    <ChatMessageWithControls
+    <ChatMessageComponent
       message={message}
-      onCopy={() => console.log("copied")}
-      onLike={() => console.log("liked")}
-      onDislike={() => console.log("disliked")}
-      onRerun={() => {
-        // Reset message and restart streaming
-        setMessage({
-          id: "1",
-          content: "",
-          sender: "assistant",
-          createdAt: new Date(),
-          loading: {
-            state: "loading",
-            context: "Initializing...",
-          },
-        });
+      controlsContext={{
+        currentUserId: "user_1",
+        dialogOwnerId: "user_1",
+        isSharedDialog: false,
+      }}
+      onMessageAction={(action) => {
+        switch (action.type) {
+          case "copy":
+            console.log("copied");
+            break;
+          case "like":
+            console.log("liked");
+            break;
+          case "dislike":
+            console.log("disliked");
+            break;
+          case "rerun":
+            setMessage({
+              id: "1",
+              content: "",
+              sender: "assistant",
+              createdAt: new Date(),
+              authorId: "assistant_1",
+              loading: {
+                state: "loading",
+                context: "Initializing...",
+              },
+            });
+            break;
+        }
       }}
     />
   );

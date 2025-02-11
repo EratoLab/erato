@@ -46,17 +46,19 @@ const meta = {
 } satisfies Meta<typeof Chat>;
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj<typeof Chat>;
 
 export const Default: Story = {
   args: {
     layout: "default",
     showAvatars: true,
     showTimestamps: true,
-    onCopyMessage: action("copy message"),
-    onLikeMessage: action("like message"),
-    onDislikeMessage: action("dislike message"),
-    onRerunMessage: action("rerun message"),
+    controlsContext: {
+      currentUserId: "user_1",
+      dialogOwnerId: "user_1",
+      isSharedDialog: false,
+    },
+    onMessageAction: action("message action"),
     onNewChat: action("new chat"),
     onRegenerate: action("regenerate"),
   },

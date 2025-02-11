@@ -1,9 +1,14 @@
 import React from "react";
-import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { useChat } from "../containers/ChatProvider";
 import { useRef, useEffect } from "react";
 import clsx from "clsx";
+import { ChatMessage } from "./ChatMessage";
+import {
+  MessageAction,
+  MessageControlsComponent,
+  MessageControlsContext,
+} from "../../types/message-controls";
 
 export interface ChatProps {
   className?: string;
@@ -23,10 +28,12 @@ export interface ChatProps {
    * Whether to show timestamps
    */
   showTimestamps?: boolean;
-  onCopyMessage?: (messageId: string) => void;
-  onLikeMessage?: (messageId: string) => void;
-  onDislikeMessage?: (messageId: string) => void;
-  onRerunMessage?: (messageId: string) => void;
+  // New unified handler
+  onMessageAction?: (action: MessageAction) => void | Promise<void>;
+  // Context for controls
+  controlsContext: MessageControlsContext;
+  // Optional custom controls component
+  messageControls?: MessageControlsComponent;
   onNewChat?: () => void;
   onRegenerate?: () => void;
 }
@@ -37,10 +44,9 @@ export const Chat = ({
   maxWidth = 768,
   showAvatars = false,
   showTimestamps = true,
-  onCopyMessage,
-  onLikeMessage,
-  onDislikeMessage,
-  onRerunMessage,
+  onMessageAction,
+  controlsContext,
+  messageControls,
   onNewChat,
   onRegenerate,
 }: ChatProps) => {
@@ -57,6 +63,12 @@ export const Chat = ({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messageOrder]);
 
+  const handleMessageAction = async (action: MessageAction) => {
+    if (onMessageAction) {
+      await onMessageAction(action);
+    }
+  };
+
   return (
     <div
       className={clsx("flex flex-col h-full bg-theme-bg-primary", className)}
@@ -70,24 +82,26 @@ export const Chat = ({
           layoutStyles[layout],
         )}
       >
-        {messageOrder.map((messageId) => (
-          <div
-            key={messageId}
-            className="group hover:bg-theme-bg-secondary transition-colors rounded-lg"
-          >
+        {messageOrder.map((messageId) => {
+          const message = messages[messageId];
+          return (
             <ChatMessage
-              message={messages[messageId]}
+              key={messageId}
+              message={message}
               maxWidth={maxWidth}
-              showAvatar={showAvatars}
               showTimestamp={showTimestamps}
-              showControlsOnHover
-              onCopy={() => onCopyMessage?.(messageId)}
-              onLike={() => onLikeMessage?.(messageId)}
-              onDislike={() => onDislikeMessage?.(messageId)}
-              onRerun={() => onRerunMessage?.(messageId)}
+              showAvatar={showAvatars}
+              controls={messageControls}
+              controlsContext={controlsContext}
+              onMessageAction={handleMessageAction}
+              className={clsx(
+                "mx-auto",
+                layout === "compact" && "py-2",
+                layout === "comfortable" && "py-6",
+              )}
             />
-          </div>
-        ))}
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
 

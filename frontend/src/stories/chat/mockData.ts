@@ -7,6 +7,7 @@ const createChatMessage = (overrides?: Partial<ChatMessage>): ChatMessage => ({
   content: faker.lorem.paragraph(),
   sender: "assistant",
   createdAt: faker.date.recent(),
+  authorId: overrides?.sender === "user" ? "user_1" : "assistant_1",
   ...overrides,
 });
 

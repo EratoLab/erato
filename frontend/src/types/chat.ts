@@ -16,5 +16,6 @@ export interface ChatMessage {
   content: string;
   sender: "user" | "assistant";
   createdAt: Date;
+  authorId: string;
   loading?: StreamingContext;
 }
