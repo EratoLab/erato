@@ -26,3 +26,7 @@ export type MessageSubmitStreamingResponseMessageOther = {
 export type MessageSubmitStreamingResponseMessageTextDelta = {
   new_text: string;
 };
+
+export type UserProfile = {
+  email: string;
+};

@@ -88,6 +88,81 @@ export const useChats = <TData = ChatsResponse,>(
   });
 };
 
+export type ProfileError = Fetcher.ErrorWrapper<undefined>;
+
+export type ProfileVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchProfile = (
+  variables: ProfileVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<Schemas.UserProfile, ProfileError, undefined, {}, {}, {}>({
+    url: "/api/v1/me/profile",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function profileQuery(variables: ProfileVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.UserProfile>;
+};
+
+export function profileQuery(
+  variables: ProfileVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.UserProfile>)
+    | reactQuery.SkipToken;
+};
+
+export function profileQuery(
+  variables: ProfileVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1/me/profile",
+      operationId: "profile",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchProfile(variables, signal),
+  };
+}
+
+export const useSuspenseProfile = <TData = Schemas.UserProfile,>(
+  variables: ProfileVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<Schemas.UserProfile, ProfileError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<Schemas.UserProfile, ProfileError, TData>({
+    ...profileQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useProfile = <TData = Schemas.UserProfile,>(
+  variables: ProfileVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<Schemas.UserProfile, ProfileError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<Schemas.UserProfile, ProfileError, TData>({
+    ...profileQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type MessagesError = Fetcher.ErrorWrapper<undefined>;
 
 export type MessagesResponse = Schemas.Message[];
@@ -277,6 +352,11 @@ export type QueryOperation =
       path: "/api/v1/chats";
       operationId: "chats";
       variables: ChatsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1/me/profile";
+      operationId: "profile";
+      variables: ProfileVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1/messages";

@@ -27,6 +27,32 @@
         }
       }
     },
+    "/api/v1/me/profile": {
+      "get": {
+        "tags": [],
+        "operationId": "profile",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1/messages": {
       "get": {
         "tags": [],
@@ -191,6 +217,17 @@
         ],
         "properties": {
           "new_text": {
+            "type": "string"
+          }
+        }
+      },
+      "UserProfile": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
             "type": "string"
           }
         }

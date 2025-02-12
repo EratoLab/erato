@@ -24,6 +24,7 @@ regorus = "0.2.8"
 eyre = "0.6.12"
 color-eyre = "0.6.3"
 async-trait = "0.1.77"
+jsonwebtoken = "9.2.0"
 # OpenAPI handling
 utoipa = { version = "5.3.1", features = ["axum_extras"] }
 utoipa-axum = "0.1.3"
