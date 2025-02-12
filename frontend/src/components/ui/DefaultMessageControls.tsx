@@ -40,8 +40,6 @@ export const DefaultMessageControls = ({
         className,
       )}
     >
-      <MessageTimestamp createdAt={createdAt} />
-
       <div className="flex items-center gap-2">
         <Button
           onClick={() => handleAction("copy")}
@@ -89,6 +87,7 @@ export const DefaultMessageControls = ({
           </>
         )}
       </div>
+      <MessageTimestamp createdAt={createdAt} />
     </div>
   );
 };
