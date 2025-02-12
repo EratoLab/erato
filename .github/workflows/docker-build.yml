@@ -30,13 +30,46 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      # Setup section
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Source of truth is at /frontend/package.json -> "packageManager" field.
+          version: 9.15.5
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          # Source of truth is at /frontend/.node-version
+          node-version: '22.10.0'
+          cache: 'pnpm'
+          cache-dependency-path: './frontend/pnpm-lock.yaml'
+
+      - name: "Install frontend packages"
+        working-directory: ./frontend
+        run: pnpm install
 
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
 
+      # Lint run section
+      # Every step here should be conditional on "success() || failure()",
+      # in order to prevent failing fast, so that we can run all linting steps in one run.
+
       - name: "rustfmt"
         working-directory: ./backend
+        if: success() || failure()
         run: cargo fmt --all --check
+      
+      - name: "prettier"
+        working-directory: ./frontend
+        if: success() || failure()
+        run: pnpm exec prettier . --check
+
+      - name: "next.js lint"
+        working-directory: ./frontend
+        if: success() || failure()
+        run: pnpm run lint
 
   build-and-push-amd64:
     runs-on: ubuntu-22.04
