@@ -19,9 +19,11 @@
     "@heroicons/react": "^2.2.0",
     "@tanstack/react-query": "5.66.0",
     "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
     "next": "15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-use": "^17.6.0",
     "sse.js": "^2.5.0"
   },
   "devDependencies": {
@@ -40,6 +42,7 @@
     "@storybook/nextjs": "^8.5.3",
     "@storybook/react": "^8.5.3",
     "@storybook/test": "^8.5.3",
+    "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^20",

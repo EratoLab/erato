@@ -14,6 +14,8 @@ Locale-aware timestamp component for chat messages.
 ## Technical Notes
 - Uses semantic \`time\` element with machine-readable \`datetime\` attribute
 - Provides both tooltip (full date) and visible time format
+- Supports relative time display ("2 minutes ago") and exact time display
+- Auto-updates relative timestamps with smart intervals
 - Memoized to prevent unnecessary re-renders
 - Implements i18n requirements from CREQ-0003
 
@@ -21,6 +23,7 @@ Locale-aware timestamp component for chat messages.
 - Stores dates in UTC internally
 - Displays in user's local timezone
 - Supports both 12h/24h formats based on locale
+- Relative time updates automatically based on age
         `,
       },
     },
@@ -30,6 +33,15 @@ Locale-aware timestamp component for chat messages.
       control: "date",
       description: "The timestamp to display",
     },
+    displayStyle: {
+      control: "radio",
+      options: ["relative", "time"],
+      description: "Display style for the timestamp",
+    },
+    autoUpdate: {
+      control: "boolean",
+      description: "Enable auto-updates for relative timestamps",
+    },
   },
   tags: ["autodocs"],
 } satisfies Meta<typeof MessageTimestamp>;
@@ -37,20 +49,50 @@ Locale-aware timestamp component for chat messages.
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Current: Story = {
+export const RelativeTime: Story = {
   args: {
     createdAt: new Date(),
+    displayStyle: "relative",
+    autoUpdate: false,
   },
 };
 
-export const SpecificTime: Story = {
+export const ExactTime: Story = {
   args: {
-    createdAt: new Date("2024-03-20T15:30:00"),
+    createdAt: new Date(),
+    displayStyle: "time",
   },
 };
 
-export const PastDate: Story = {
+export const RelativeTimeNoAutoUpdate: Story = {
   args: {
-    createdAt: new Date("2024-01-01T12:00:00"),
+    createdAt: new Date(Date.now() - 5 * 60 * 1000), // 5 minutes ago
+    displayStyle: "relative",
+    autoUpdate: false,
+  },
+};
+
+// Different time ranges for relative display
+export const MinutesAgo: Story = {
+  args: {
+    createdAt: new Date(Date.now() - 5 * 60 * 1000), // 5 minutes ago
+  },
+};
+
+export const HoursAgo: Story = {
+  args: {
+    createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000), // 3 hours ago
+  },
+};
+
+export const DaysAgo: Story = {
+  args: {
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+  },
+};
+
+export const MonthsAgo: Story = {
+  args: {
+    createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), // ~2 months ago
   },
 };
