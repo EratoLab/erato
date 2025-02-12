@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "codegen": "openapi-codegen gen v1betaApi"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -23,6 +24,8 @@
     "@chromatic-com/storybook": "^3.2.4",
     "@eslint/eslintrc": "^3",
     "@faker-js/faker": "^9.4.0",
+    "@openapi-codegen/cli": "^3.0.0",
+    "@openapi-codegen/typescript": "^11.0.0",
     "@storybook/addon-a11y": "^8.5.3",
     "@storybook/addon-essentials": "^8.5.3",
     "@storybook/addon-interactions": "^8.5.3",

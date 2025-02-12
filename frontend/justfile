@@ -4,6 +4,10 @@ default:
 storybook:
     pnpm run storybook
 
+# Generate the OpenAPI client based on the OpenAPI spec in the backend.
+codegen:
+    pnpm run codegen
+
 install:
     pnpm install
 
