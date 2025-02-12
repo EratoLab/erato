@@ -15,9 +15,10 @@ import { env } from "../../app/env";
  */
 export interface ChatMessage {
   id: string;
-  sender: "user" | "assistant";
   content: string;
+  sender: "user" | "assistant";
   createdAt: Date;
+  authorId: string;
   loading?: StreamingContext;
 }
 
@@ -137,6 +138,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       sender: "user",
       content,
       createdAt: new Date(),
+      authorId: "",
     };
 
     setMessages((prev) => ({

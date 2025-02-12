@@ -2,12 +2,35 @@ import React, { useEffect, useRef } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { useChat } from "../containers/ChatProvider";
+import {
+  MessageAction,
+  MessageControlsComponent,
+  MessageControlsContext,
+} from "../../types/message-controls";
 
 interface ChatWidgetProps {
   className?: string;
+  showControlsOnHover?: boolean;
+  showAvatars?: boolean;
+  showTimestamps?: boolean;
+  controls?: MessageControlsComponent;
+  controlsContext: MessageControlsContext;
+  onMessageAction?: (action: MessageAction) => void | Promise<void>;
+  onNewChat?: () => void;
+  onRegenerate?: () => void;
 }
 
-export const ChatWidget: React.FC<ChatWidgetProps> = ({ className = "" }) => {
+export const ChatWidget: React.FC<ChatWidgetProps> = ({
+  className = "",
+  showControlsOnHover = true,
+  showAvatars = false,
+  showTimestamps = true,
+  controls,
+  controlsContext,
+  onMessageAction,
+  onNewChat,
+  onRegenerate,
+}) => {
   const { messages, messageOrder, sendMessage, isLoading } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -31,6 +54,12 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ className = "" }) => {
             key={messageId}
             message={messages[messageId]}
             className="mb-4"
+            showAvatar={showAvatars}
+            showTimestamp={showTimestamps}
+            controls={controls}
+            controlsContext={controlsContext}
+            onMessageAction={onMessageAction ?? (() => {})}
+            showControlsOnHover={showControlsOnHover}
           />
         ))}
         <div ref={messagesEndRef} />
@@ -38,6 +67,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ className = "" }) => {
 
       <ChatInput
         onSendMessage={sendMessage}
+        onNewChat={onNewChat}
+        onRegenerate={onRegenerate}
         className="border-t bg-white"
         isLoading={isLoading}
       />

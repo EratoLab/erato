@@ -4,9 +4,11 @@ import clsx from "clsx";
 import { messageStyles } from "./styles/chatMessageStyles";
 import { Avatar } from "./Avatar";
 import { MessageContent } from "./MessageContent";
-import { MessageTimestamp } from "./MessageTimestamp";
 import { LoadingIndicator } from "./LoadingIndicator";
-import { MessageControls } from "./MessageControls";
+import { MessageControlsComponent } from "../../types/message-controls";
+import { MessageControlsContext } from "../../types/message-controls";
+import { MessageAction } from "../../types/message-controls";
+import { DefaultMessageControls } from "./DefaultMessageControls";
 
 export interface ChatMessageProps {
   message: ChatMessageType;
@@ -27,10 +29,11 @@ export interface ChatMessageProps {
    */
   showAvatar?: boolean;
   showControlsOnHover?: boolean;
-  onCopy?: () => void;
-  onLike?: () => void;
-  onDislike?: () => void;
-  onRerun?: () => void;
+
+  // New props
+  controls?: MessageControlsComponent;
+  controlsContext: MessageControlsContext;
+  onMessageAction: (action: MessageAction) => void | Promise<void>;
 }
 
 export const ChatMessage = memo(function ChatMessage({
@@ -39,11 +42,10 @@ export const ChatMessage = memo(function ChatMessage({
   maxWidth = 768,
   showTimestamp = true,
   showAvatar = false,
-  showControlsOnHover = false,
-  onCopy,
-  onLike,
-  onDislike,
-  onRerun,
+  showControlsOnHover = true,
+  controls: Controls = DefaultMessageControls,
+  controlsContext,
+  onMessageAction,
 }: ChatMessageProps) {
   const isUser = message.sender === "user";
   const role = isUser ? "user" : "assistant";
@@ -78,21 +80,6 @@ export const ChatMessage = memo(function ChatMessage({
             <div className="font-semibold mb-1 text-sm text-theme-fg-primary">
               {isUser ? "You" : "Assistant"}
             </div>
-
-            {!isUser && (
-              <MessageControls
-                isUser={isUser}
-                onCopy={onCopy}
-                onLike={onLike}
-                onDislike={onDislike}
-                onRerun={onRerun}
-                className={
-                  showControlsOnHover
-                    ? "opacity-0 group-hover:opacity-100 transition-opacity"
-                    : ""
-                }
-              />
-            )}
           </div>
 
           <MessageContent content={message.content} />
@@ -105,8 +92,18 @@ export const ChatMessage = memo(function ChatMessage({
               />
             </div>
           )}
-
-          {showTimestamp && <MessageTimestamp createdAt={message.createdAt} />}
+          {Controls && showTimestamp && (
+            <Controls
+              messageId={message.id}
+              messageType={message.sender}
+              authorId={message.authorId}
+              createdAt={message.createdAt}
+              context={controlsContext}
+              showOnHover={showControlsOnHover}
+              onAction={onMessageAction}
+              className="z-10"
+            />
+          )}
         </div>
       </div>
     </div>

@@ -2,8 +2,29 @@
 
 import { Chat } from "../components/ui/Chat";
 import { ChatProvider } from "../components/containers/ChatProvider";
+import { MessageAction } from "../types/message-controls";
 
 export default function Home() {
+  const handleMessageAction = async (action: MessageAction) => {
+    switch (action.type) {
+      case "copy":
+        console.log("Copy message:", action.messageId);
+        break;
+      case "edit":
+        console.log("Edit message:", action.messageId);
+        break;
+      case "like":
+        console.log("Like message:", action.messageId);
+        break;
+      case "dislike":
+        console.log("Dislike message:", action.messageId);
+        break;
+      case "rerun":
+        console.log("Rerun message:", action.messageId);
+        break;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-theme-bg-primary">
       <ChatProvider>
@@ -12,18 +33,12 @@ export default function Home() {
             layout="default"
             showAvatars={true}
             showTimestamps={true}
-            onCopyMessage={(messageId) =>
-              console.log("Copy message:", messageId)
-            }
-            onLikeMessage={(messageId) =>
-              console.log("Like message:", messageId)
-            }
-            onDislikeMessage={(messageId) =>
-              console.log("Dislike message:", messageId)
-            }
-            onRerunMessage={(messageId) =>
-              console.log("Rerun message:", messageId)
-            }
+            onMessageAction={handleMessageAction}
+            controlsContext={{
+              currentUserId: "user_1", // This would come from your auth system
+              dialogOwnerId: "user_1",
+              isSharedDialog: false,
+            }}
             onNewChat={() => console.log("New chat")}
             onRegenerate={() => console.log("Regenerate")}
           />

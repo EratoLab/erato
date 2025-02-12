@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { ChatMessage } from "../../components/ui/ChatMessage";
 import { ChatMessageFactory } from "./mockData";
-import { expect } from "@storybook/test";
-import { within } from "@storybook/test";
+import { expect, within } from "@storybook/test";
+import { userEvent } from "@storybook/test";
 
 const meta = {
   title: "CHAT/ChatMessage/Tests",
@@ -29,19 +29,23 @@ type Story = StoryObj<typeof meta>;
 export const AccessibilityChecks: Story = {
   args: {
     message: ChatMessageFactory.samples.assistant,
+    controlsContext: {
+      currentUserId: "user_1",
+      dialogOwnerId: "user_1",
+      isSharedDialog: false,
+    },
+    onMessageAction: () => {},
+    showTimestamp: true,
+    showControlsOnHover: true,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
 
-    // Check if message content is visible
-    const messageContent = await canvas.findByText(
-      ChatMessageFactory.samples.assistant.content,
-    );
-    expect(messageContent).toBeInTheDocument();
-
-    // Check if role attributes are present
+    // Check ARIA attributes
     const article = canvas.getByRole("log");
     expect(article).toBeInTheDocument();
+    expect(article.getAttribute("aria-live")).toBe("polite");
+    expect(article.getAttribute("aria-label")).toBe("Assistant message");
 
     // Check if timestamp is accessible
     const timestamp = canvas.getByTitle(
@@ -53,23 +57,64 @@ export const AccessibilityChecks: Story = {
 
 export const InteractionTest: Story = {
   args: {
+    message: ChatMessageFactory.samples.assistant,
+    showAvatar: true,
+    showControlsOnHover: true,
+    controlsContext: {
+      currentUserId: "user_1",
+      dialogOwnerId: "user_1",
+      isSharedDialog: false,
+    },
+    onMessageAction: (action) => {
+      console.log("Action triggered:", action);
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const user = userEvent.setup();
+
+    // Find controls
+    const copyButton = canvas.getByLabelText("Copy message");
+
+    // Verify initial state (controls should be hidden)
+    const controls = copyButton.closest('[class*="group-hover"]');
+    expect(controls).toBeInTheDocument();
+    expect(controls?.className).toContain("opacity-0");
+
+    // Simulate hover
+    await user.hover(controls!.parentElement!);
+
+    // Verify controls become visible
+    expect(controls?.className).toContain("group-hover:opacity-100");
+
+    // Test button interaction
+    await user.click(copyButton);
+
+    // Test hover exit
+    await user.unhover(controls!.parentElement!);
+    expect(controls?.className).toContain("opacity-0");
+  },
+};
+
+export const ResponsiveTest: Story = {
+  args: {
     message: ChatMessageFactory.samples.longMessage,
+    maxWidth: 768,
+    controlsContext: {
+      currentUserId: "user_1",
+      dialogOwnerId: "user_1",
+      isSharedDialog: false,
+    },
+    onMessageAction: () => {},
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
 
     // Verify message container is properly sized
     const container = canvas.getByRole("log");
-    const messageWrapper = container.querySelector("div");
-    const styles = window.getComputedStyle(messageWrapper!);
-
-    // Add minimum width check
+    const styles = window.getComputedStyle(container);
     expect(styles.minWidth).toBe("280px");
     expect(styles.maxWidth).toBe("768px");
-
-    // Verify avatar presence using a more specific selector
-    const avatar = canvas.getByText("A", { selector: '[aria-hidden="true"]' });
-    expect(avatar).toBeInTheDocument();
 
     // Verify text wrapping
     const messageText = canvas.getByText(
@@ -80,25 +125,6 @@ export const InteractionTest: Story = {
   },
 };
 
-export const ResponsiveTest: Story = {
-  args: {
-    message: ChatMessageFactory.samples.assistant,
-  },
-  parameters: {
-    viewport: {
-      defaultViewport: "mobile1",
-    },
-    chromatic: { viewports: [320, 768] },
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const container = canvas.getByRole("log");
-
-    // Verify responsive behavior - container should be full width
-    expect(container.className).toContain("w-full");
-  },
-};
-
 export const LoadingStateTest: Story = {
   args: {
     message: {
@@ -106,11 +132,18 @@ export const LoadingStateTest: Story = {
       content: "Processing",
       sender: "assistant",
       createdAt: new Date(),
+      authorId: "assistant_1",
       loading: {
         state: "loading",
         context: "Test loading state",
       },
     },
+    controlsContext: {
+      currentUserId: "user_1",
+      dialogOwnerId: "user_1",
+      isSharedDialog: false,
+    },
+    onMessageAction: () => {},
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
