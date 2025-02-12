@@ -3,9 +3,11 @@ use axum::response::sse::Event;
 use axum::response::{IntoResponse, Sse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use axum_extra::headers::{authorization::Bearer, Authorization};
 use axum_extra::TypedHeader;
 use futures::stream::{self, Stream};
-use serde::Serialize;
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
 use serde_json;
 use std::convert::Infallible;
 use std::time::Duration;
@@ -19,14 +21,15 @@ pub fn router() -> OpenApiRouter {
         .route("/messages", get(messages))
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/chats", get(chats))
+        .route("/me/profile", get(profile))
         .fallback(fallback);
     app.into()
 }
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(messages, chats, message_submit_sse),
-    components(schemas(Message, Chat, MessageSubmitStreamingResponseMessage))
+    paths(messages, chats, message_submit_sse, profile),
+    components(schemas(Message, Chat, MessageSubmitStreamingResponseMessage, UserProfile))
 )]
 pub struct ApiV1ApiDoc;
 
@@ -44,6 +47,56 @@ pub async fn fallback() -> impl IntoResponse {
                     .to_string(),
         }),
     )
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+struct UserProfile {
+    email: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct Claims {
+    email: String,
+    exp: usize,
+    // Add other claims as needed
+}
+
+#[utoipa::path(
+    get,
+    path = "/me/profile",
+    responses(
+        (status = OK, body = UserProfile),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn profile(
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+) -> Result<Json<UserProfile>, StatusCode> {
+    // Get the JWT token from the Authorization header
+    let token = auth.token();
+
+    // TODO: In production, this should be a proper secret key from configuration
+    let secret = b"placeholder";
+
+    // We don't validate anything, as we always run behind oauth2-proxy which handles verification
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.insecure_disable_signature_validation();
+    validation.validate_exp = false;
+    validation.validate_aud = false;
+    validation.validate_nbf = false;
+
+    // Decode and validate the token
+    let token_data = match decode::<Claims>(token, &DecodingKey::from_secret(secret), &validation) {
+        Ok(data) => data,
+        Err(_) => return Err(StatusCode::UNAUTHORIZED),
+    };
+
+    Ok(Json(UserProfile {
+        email: token_data.claims.email,
+    }))
 }
 
 #[derive(Serialize, ToSchema)]

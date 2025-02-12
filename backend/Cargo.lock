@@ -365,6 +365,7 @@ dependencies = [
  "headers",
  "http-body",
  "http-body-util",
+ "jsonwebtoken",
  "lol_html",
  "ordered-multimap",
  "pretty_assertions",
