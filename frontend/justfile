@@ -12,6 +12,8 @@ install:
     pnpm install
 
 dev:
+    cd local-auth && docker compose up --force-recreate --detach
+    echo "Proxied local server with auth will be available at http://localhost:4180"
     pnpm run dev
 
 start:
