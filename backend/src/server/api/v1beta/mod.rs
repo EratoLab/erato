@@ -91,7 +91,16 @@ struct MessageSubmitStreamingResponseMessageOther {
 #[utoipa::path(post, path = "/messages/submitstream", responses((status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage)))]
 pub async fn message_submit_sse(
     TypedHeader(user_agent): TypedHeader<headers::UserAgent>,
+    headers: axum::http::HeaderMap,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    // Log all headers for debugging
+    dbg!("Received headers:");
+    for (name, value) in headers.iter() {
+        if let Ok(value_str) = value.to_str() {
+            dbg!("  {}: {}", name, value_str);
+        }
+    }
+
     let message = "Hey there this is the full message";
     let words: Vec<&str> = message.split_whitespace().collect();
 
