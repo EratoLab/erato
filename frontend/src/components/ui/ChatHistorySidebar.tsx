@@ -4,6 +4,8 @@ import { ErrorBoundary } from "react-error-boundary";
 import useResizeObserver from "@react-hook/resize-observer";
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { useChatHistory } from "../containers/ChatHistoryProvider";
+import { SidebarToggleIcon, EditIcon } from "./icons";
+import { Button } from "./Button";
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -18,21 +20,54 @@ export interface ChatHistorySidebarProps {
    */
   minWidth?: number;
   onNewChat?: () => void;
+  onToggleCollapse?: () => void;
+  showTitle?: boolean;
 }
 
-const ChatHistoryHeader = memo<{ onNewChat?: () => void }>(({ onNewChat }) => (
-  <div className="flex items-center justify-between p-4 border-b border-theme-border">
-    <h2 className="font-semibold text-theme-fg-primary">Chat History</h2>
-    <button
-      onClick={onNewChat}
-      className={clsx(
-        "p-2 rounded-lg text-sm font-medium",
-        "bg-theme-bg-accent hover:bg-theme-bg-hover",
-        "text-theme-fg-primary transition-colors"
-      )}
-    >
-      New Chat
-    </button>
+const ChatHistoryHeader = memo<{
+  onNewChat?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+  showTitle?: boolean;
+}>(({ onNewChat, collapsed, onToggleCollapse, showTitle = false }) => (
+  <div
+    className={clsx(
+      "grid h-14 border-b border-theme-border",
+      // Adjust grid to ensure right alignment of new chat button
+      collapsed ? "grid-cols-[48px]" : "grid-cols-[48px_1fr_48px] items-center",
+    )}
+  >
+    <div className="flex justify-center">
+      <Button
+        onClick={onToggleCollapse}
+        variant="sidebar-icon"
+        icon={<SidebarToggleIcon />}
+        className={!collapsed ? "rotate-180" : ""}
+        aria-label={collapsed ? "expand sidebar" : "collapse sidebar"}
+        aria-expanded={collapsed ? "false" : "true"}
+      />
+    </div>
+    {!collapsed && (
+      <>
+        <div>
+          {" "}
+          {/* Middle column always present */}
+          {showTitle && (
+            <h2 className="font-semibold text-theme-fg-primary">
+              Chat History
+            </h2>
+          )}
+        </div>
+        <div className="flex justify-end">
+          <Button
+            onClick={onNewChat}
+            variant="sidebar-icon"
+            icon={<EditIcon />}
+            aria-label="New Chat"
+          />
+        </div>
+      </>
+    )}
   </div>
 ));
 
@@ -45,60 +80,72 @@ const ErrorDisplay = ({ error }: { error: Error }) => (
   </div>
 );
 
-export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(({
-  className,
-  collapsed = false,
-  minWidth = 280,
-  onNewChat,
-}) => {
-  const ref = useRef<HTMLElement>(null);
-  const [width, setWidth] = useState(minWidth);
-  
-  const {
-    sessions,
-    currentSessionId,
-    switchSession,
-    deleteSession,
-    isLoading,
-    error
-  } = useChatHistory();
+export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
+  ({
+    className,
+    collapsed = false,
+    minWidth = 280,
+    onNewChat,
+    onToggleCollapse,
+    showTitle = false,
+  }) => {
+    const ref = useRef<HTMLElement>(null);
+    const [width, setWidth] = useState(minWidth);
 
-  useResizeObserver(ref, (entry) => {
-    setWidth(entry.contentRect.width);
-  });
-  
-  const sidebarWidth = collapsed ? 0 : Math.max(width, minWidth);
+    const {
+      sessions,
+      currentSessionId,
+      switchSession,
+      deleteSession,
+      isLoading,
+      error,
+    } = useChatHistory();
 
-  return (
-    <ErrorBoundary FallbackComponent={ErrorDisplay}>
-      <aside
-        ref={ref}
-        style={{ width: sidebarWidth }}
-        className={clsx(
-          "flex flex-col h-full border-r border-theme-border",
-          "bg-theme-bg-secondary transition-all duration-200",
-          collapsed && "overflow-hidden",
-          className
-        )}
-      >
-        <ChatHistoryHeader onNewChat={onNewChat} />
-        
-        {error ? (
-          <ErrorDisplay error={error} />
-        ) : isLoading ? (
-          <ChatHistoryListSkeleton />
-        ) : (
-          <ChatHistoryList
-            sessions={sessions}
-            currentSessionId={currentSessionId}
-            onSessionSelect={switchSession}
-            onSessionDelete={deleteSession}
-            className="flex-1 p-2"
+    useResizeObserver(ref, (entry) => {
+      setWidth(entry.contentRect.width);
+    });
+
+    const sidebarWidth = collapsed ? 56 : Math.max(width, minWidth);
+
+    return (
+      <ErrorBoundary FallbackComponent={ErrorDisplay}>
+        <aside
+          ref={ref}
+          style={{ width: sidebarWidth }}
+          className={clsx(
+            "flex flex-col h-full border-r border-theme-border",
+            "bg-theme-bg-secondary transition-all duration-200",
+            collapsed && "overflow-hidden",
+            className,
+          )}
+        >
+          <ChatHistoryHeader
+            onNewChat={onNewChat}
+            collapsed={collapsed}
+            onToggleCollapse={onToggleCollapse}
+            showTitle={showTitle}
           />
-        )}
-      </aside>
-    </ErrorBoundary>
-  );
-});
+          {!collapsed && (
+            <>
+              {error ? (
+                <ErrorDisplay error={error} />
+              ) : isLoading ? (
+                <ChatHistoryListSkeleton />
+              ) : (
+                <ChatHistoryList
+                  sessions={sessions}
+                  currentSessionId={currentSessionId}
+                  onSessionSelect={switchSession}
+                  onSessionDelete={deleteSession}
+                  className="flex-1 p-2"
+                />
+              )}
+            </>
+          )}
+        </aside>
+      </ErrorBoundary>
+    );
+  },
+);
 
 ChatHistorySidebar.displayName = "ChatHistorySidebar";

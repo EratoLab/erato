@@ -25,17 +25,13 @@ const meta = {
   argTypes: {
     variant: {
       control: "select",
-      options: ["primary", "secondary"],
+      options: ["primary", "secondary", "ghost"],
       description: "Visual style variant",
     },
     size: {
       control: "select",
       options: ["sm", "md", "lg"],
-      description: "Size variant",
-    },
-    disabled: {
-      control: "boolean",
-      description: "Disabled state",
+      description: "Button size",
     },
   },
   decorators: [
@@ -101,10 +97,30 @@ export const Sizes: Story = {
 export const MessageControls: Story = {
   render: () => (
     <div className="flex items-center gap-2">
-      <Button size="sm" icon={<ClipboardDocumentIcon />} aria-label="Copy" />
-      <Button size="sm" icon={<HandThumbUpIcon />} aria-label="Like" />
-      <Button size="sm" icon={<HandThumbDownIcon />} aria-label="Dislike" />
-      <Button size="sm" icon={<ArrowPathIcon />} aria-label="Regenerate" />
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={<ClipboardDocumentIcon />}
+        aria-label="Copy"
+      />
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={<HandThumbUpIcon />}
+        aria-label="Like"
+      />
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={<HandThumbDownIcon />}
+        aria-label="Dislike"
+      />
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={<ArrowPathIcon />}
+        aria-label="Regenerate"
+      />
     </div>
   ),
 };
@@ -112,10 +128,10 @@ export const MessageControls: Story = {
 export const ChatControls: Story = {
   render: () => (
     <div className="flex items-center gap-2">
-      <Button size="sm" icon={<PlusIcon />}>
+      <Button size="sm" variant="secondary" icon={<PlusIcon />}>
         New Chat
       </Button>
-      <Button size="sm" icon={<ArrowPathIcon />}>
+      <Button size="sm" variant="secondary" icon={<ArrowPathIcon />}>
         Regenerate
       </Button>
     </div>

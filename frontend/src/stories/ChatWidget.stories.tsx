@@ -9,18 +9,21 @@ const mockMessages: Record<string, ChatMessage> = {
     content: "Hello! How can I help you today?",
     sender: "assistant",
     createdAt: new Date(2024, 0, 1, 12, 0),
+    authorId: "assistant_1",
   },
   "2": {
     id: "2",
     content: "I have a question about my account",
     sender: "user",
     createdAt: new Date(2024, 0, 1, 12, 1),
+    authorId: "user_1",
   },
   "3": {
     id: "3",
     content: "Sure, I'd be happy to help with any account-related questions.",
     sender: "assistant",
     createdAt: new Date(2024, 0, 1, 12, 2),
+    authorId: "assistant_1",
   },
 };
 

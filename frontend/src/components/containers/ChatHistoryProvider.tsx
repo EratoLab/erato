@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useMemo } from "react";
+import React, { useContext, useCallback, useMemo } from "react";
 import {
   useChats,
   useMessages,
@@ -6,22 +6,8 @@ import {
 import * as reactQuery from "@tanstack/react-query";
 import { useMap } from "react-use";
 import type { ChatSession } from "../../types/chat";
-
-interface ChatHistoryContextType {
-  sessions: ChatSession[];
-  currentSessionId: string | null;
-  createSession: () => string;
-  updateSession: (sessionId: string, updates: Partial<ChatSession>) => void;
-  deleteSession: (sessionId: string) => void;
-  switchSession: (sessionId: string) => void;
-  getCurrentSession: () => ChatSession | null;
-  isLoading: boolean;
-  error?: Error;
-}
-
-const ChatHistoryContext = createContext<ChatHistoryContextType | undefined>(
-  undefined,
-);
+import type { ChatHistoryContextType } from "../../types/chat-history";
+import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
 
 interface ChatHistoryProviderProps extends React.PropsWithChildren {
   initialSessions?: ChatSession[];

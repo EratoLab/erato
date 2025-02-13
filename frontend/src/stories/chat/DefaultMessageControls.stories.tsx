@@ -17,6 +17,7 @@ Default implementation of message controls with permission-based visibility.
 - Supports hover mode for production use
 - Unified action handling
 - Context-aware rendering
+- Interactive button states for better UX
         `,
       },
       story: {
