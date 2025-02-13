@@ -13,16 +13,15 @@ type ButtonVariant =
 
 type ButtonSize = "sm" | "md" | "lg";
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'aria-checked'> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   icon?: React.ReactNode;
   children?: React.ReactNode;
   showOnHover?: boolean;
-  // Add aria-label for icon-only buttons
   "aria-label"?: string;
   "aria-pressed"?: boolean;
-  "aria-checked"?: boolean;
+  "aria-checked"?: boolean | 'true' | 'false' | 'mixed';
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   role?: string;
 }
@@ -57,7 +56,7 @@ const validateProps = (props: ButtonProps) => {
   }
 };
 
-export const Button = ({
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
   variant = "secondary",
   size = "md",
   icon,
@@ -71,7 +70,7 @@ export const Button = ({
   "aria-label": ariaLabel,
   role: explicitRole,
   ...props
-}: ButtonProps) => {
+}, ref) => {
   const [isPressed, setIsPressed] = React.useState(false);
 
   // Memoize the click handler
@@ -84,10 +83,10 @@ export const Button = ({
   // Update aria state memoization to handle both pressed and checked
   const ariaState = useMemo(() => {
     if (explicitRole === 'switch' && ariaChecked !== undefined) {
-      return { 'aria-checked': ariaChecked ? 'true' : 'false' };
+      return { 'aria-checked': ariaChecked };
     }
     if (ariaPressed !== undefined) {
-      return { 'aria-pressed': ariaPressed ? 'true' : 'false' };
+      return { 'aria-pressed': ariaPressed };
     }
     return {};
   }, [explicitRole, ariaChecked, ariaPressed]);
@@ -130,6 +129,7 @@ export const Button = ({
 
   return (
     <button
+      ref={ref}
       type={type}
       onClick={handleClick}
       data-pressed={isPressed}
@@ -150,4 +150,6 @@ export const Button = ({
       {children}
     </button>
   );
-};
+});
+
+Button.displayName = 'Button';
