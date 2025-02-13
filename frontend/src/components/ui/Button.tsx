@@ -1,20 +1,61 @@
-import React from "react";
+import React, { useCallback, useMemo } from "react";
 import clsx from "clsx";
 
+// Create a type for variants to improve type safety
+type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "icon-only"
+  | "sidebar-icon"
+  | "list-item"
+  | "danger";
+
+type ButtonSize = "sm" | "md" | "lg";
+
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?:
-    | "primary"
-    | "secondary"
-    | "ghost"
-    | "icon-only"
-    | "sidebar-icon"
-    | "list-item"
-    | "danger";
-  size?: "sm" | "md" | "lg";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   icon?: React.ReactNode;
   children?: React.ReactNode;
   showOnHover?: boolean;
+  // Add aria-label for icon-only buttons
+  "aria-label"?: string;
+  "aria-pressed"?: boolean;
+  "aria-checked"?: boolean;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  role?: string;
 }
+
+// Extract variant styles to a constant
+const VARIANT_STYLES = {
+  primary: "bg-theme-fg-primary text-theme-bg-primary hover:bg-theme-fg-secondary",
+  secondary: "bg-theme-bg-primary hover:bg-theme-bg-secondary text-theme-fg-secondary",
+  ghost: "hover:bg-theme-bg-secondary text-theme-fg-secondary",
+  danger: "text-theme-danger hover:text-theme-danger-hover hover:bg-theme-danger-bg",
+  "sidebar-icon": "p-2 rounded-lg text-theme-fg-secondary hover:text-theme-fg-primary",
+  "list-item": "w-full px-4 py-2 text-sm text-left hover:bg-theme-bg-accent",
+  "icon-only": "p-2 rounded-lg",
+} as const;
+
+const SIZE_STYLES = {
+  sm: "p-2 text-sm",
+  md: "px-3 py-2",
+  lg: "px-4 py-3",
+} as const;
+
+const validateProps = (props: ButtonProps) => {
+  if (process.env.NODE_ENV === 'development') {
+    if (props.variant === 'icon-only' && !props.icon) {
+      console.warn('Icon-only button variant requires an icon prop');
+    }
+    if ((props.variant === 'icon-only' || props.variant === 'sidebar-icon') && 
+        !props['aria-label'] && 
+        !props.children) {
+      console.warn('Icon-only buttons should have an aria-label for accessibility');
+    }
+  }
+};
 
 export const Button = ({
   variant = "secondary",
@@ -23,49 +64,85 @@ export const Button = ({
   children,
   className,
   showOnHover,
+  type = "button", // Default to "button" to prevent accidental form submissions
+  onClick,
+  "aria-pressed": ariaPressed,
+  "aria-checked": ariaChecked,
+  "aria-label": ariaLabel,
+  role: explicitRole,
   ...props
 }: ButtonProps) => {
+  const [isPressed, setIsPressed] = React.useState(false);
+
+  // Memoize the click handler
+  const handleClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    setIsPressed(true);
+    setTimeout(() => setIsPressed(false), 200);
+    onClick?.(e);
+  }, [onClick]);
+
+  // Update aria state memoization to handle both pressed and checked
+  const ariaState = useMemo(() => {
+    if (explicitRole === 'switch' && ariaChecked !== undefined) {
+      return { 'aria-checked': ariaChecked ? 'true' : 'false' };
+    }
+    if (ariaPressed !== undefined) {
+      return { 'aria-pressed': ariaPressed ? 'true' : 'false' };
+    }
+    return {};
+  }, [explicitRole, ariaChecked, ariaPressed]);
+
+  // Memoize role determination
+  const role = useMemo(() => 
+    explicitRole || (variant === "list-item" ? "menuitem" : undefined),
+    [explicitRole, variant]
+  );
+
+  // Validate props in development
+  React.useEffect(() => {
+    validateProps(props);
+  }, [props]);
+
+  const buttonClasses = useMemo(() => 
+    clsx(
+      "flex items-center gap-2 rounded transition-colors",
+      "focus:outline-none focus:ring-2 focus:ring-theme-focus ring-offset-2",
+      VARIANT_STYLES[variant],
+      SIZE_STYLES[size],
+      {
+        "bg-theme-bg-secondary": ariaPressed === true,
+      },
+      showOnHover && "opacity-0 group-hover:opacity-100 transition-opacity",
+      "disabled:opacity-50 disabled:cursor-not-allowed",
+      "focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2",
+      className,
+    ),
+    [variant, size, ariaPressed, showOnHover, className]
+  );
+
+  const iconClasses = useMemo(() => 
+    clsx(
+      "flex items-center justify-center",
+      variant === "icon-only" || variant === "sidebar-icon" ? "w-5 h-5" : "w-4 h-4",
+    ),
+    [variant]
+  );
+
   return (
     <button
-      className={clsx(
-        "flex items-center gap-2 rounded transition-colors",
-        {
-          // Base variants
-          "bg-theme-fg-primary text-theme-bg-primary hover:bg-theme-fg-secondary":
-            variant === "primary",
-          "bg-theme-bg-primary hover:bg-theme-bg-secondary text-theme-fg-secondary":
-            variant === "secondary",
-          "hover:bg-theme-bg-secondary text-theme-fg-secondary":
-            variant === "ghost",
-          "text-theme-danger hover:text-theme-danger-hover hover:bg-theme-danger-bg":
-            variant === "danger",
-
-          // Special variants
-          "p-2 rounded-lg text-theme-fg-secondary hover:text-theme-fg-primary":
-            variant === "sidebar-icon",
-          "w-full px-4 py-2 text-sm text-left hover:bg-theme-bg-accent":
-            variant === "list-item",
-          "p-2 rounded-lg": variant === "icon-only",
-        },
-        {
-          "p-2 text-sm": size === "sm",
-          "px-3 py-2": size === "md",
-          "px-4 py-3": size === "lg",
-        },
-        showOnHover && "opacity-0 group-hover:opacity-100 transition-opacity",
-        "disabled:opacity-50 disabled:cursor-not-allowed",
-        className,
-      )}
+      type={type}
+      onClick={handleClick}
+      data-pressed={isPressed}
+      {...ariaState}
+      aria-label={ariaLabel}
+      className={buttonClasses}
+      role={role}
       {...props}
     >
       {icon && (
         <span
-          className={clsx(
-            "flex items-center justify-center",
-            variant === "icon-only" || variant === "sidebar-icon"
-              ? "w-5 h-5"
-              : "w-4 h-4",
-          )}
+          className={iconClasses}
+          aria-hidden="true"
         >
           {icon}
         </span>
