@@ -16,6 +16,16 @@ dev:
     echo "Proxied local server with auth will be available at http://localhost:4180"
     pnpm run dev
 
+dev_entra_id:
+    #!/usr/bin/env sh
+    cd local-auth
+    if [ ! -f "oauth2-proxy-entra-id.cfg" ]; then
+        ./generate_entra_id_config.sh
+    fi
+    docker compose -f docker-compose.entra-id.yml up --force-recreate --detach
+    echo "Proxied local server with Entra ID auth will be available at http://localhost:4180"
+    cd .. && pnpm run dev
+
 start:
     pnpm run start
 

@@ -9,6 +9,7 @@ use futures::stream::{self, Stream};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json;
+use serde_json::Value;
 use std::convert::Infallible;
 use std::time::Duration;
 use tokio_stream::StreamExt as _;
@@ -89,13 +90,15 @@ pub async fn profile(
     validation.validate_nbf = false;
 
     // Decode and validate the token
-    let token_data = match decode::<Claims>(token, &DecodingKey::from_secret(secret), &validation) {
+    let token_data = match decode::<Value>(token, &DecodingKey::from_secret(secret), &validation) {
         Ok(data) => data,
         Err(_) => return Err(StatusCode::UNAUTHORIZED),
     };
 
+    dbg!(&token_data.claims);
+
     Ok(Json(UserProfile {
-        email: token_data.claims.email,
+        email: String::new(),
     }))
 }
 
