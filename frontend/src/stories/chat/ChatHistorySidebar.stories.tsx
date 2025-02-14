@@ -3,7 +3,6 @@ import { useState } from "react";
 import { action } from "@storybook/addon-actions";
 import { ChatHistorySidebar } from "../../components/ui/ChatHistorySidebar";
 import type { ChatSession } from "../../types/chat";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
 
 const meta = {
@@ -78,66 +77,38 @@ const mockSessions: ChatSession[] = [
   },
 ];
 
-// Create a new QueryClient instance
-const queryClient = new QueryClient();
-
-// Create a simplified mock provider for Storybook
-const MockChatHistoryProvider: React.FC<{
-  children: React.ReactNode;
-  initialSessions: ChatSession[];
-  initialSessionId: string | undefined;
-  isLoading?: boolean;
-}> = ({ children, initialSessions, initialSessionId, isLoading }) => {
-  const contextValue = {
-    sessions: initialSessions,
-    currentSessionId: initialSessionId,
-    createSession: () => "new-id",
-    updateSession: () => {},
-    deleteSession: () => {},
-    switchSession: () => {},
-    getCurrentSession: () =>
-      initialSessions.find((s) => s.id === initialSessionId) || null,
-    isLoading: isLoading || false,
-  };
-
-  return (
-    <ChatHistoryContext.Provider value={contextValue}>
-      {children}
-    </ChatHistoryContext.Provider>
-  );
-};
-
-// Update the decorator to use the mock provider
-const ChatHistoryProviderDecorator = (Story: React.ComponentType) => (
-  <MockChatHistoryProvider initialSessions={mockSessions} initialSessionId="1">
-    <Story />
-  </MockChatHistoryProvider>
-);
-
 // Interactive story with state management
-const InteractiveTemplate: React.FC<typeof ChatHistorySidebar> = (args) => {
+const InteractiveTemplate = (args: React.ComponentProps<typeof ChatHistorySidebar>) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <MockChatHistoryProvider
-      initialSessions={mockSessions}
-      initialSessionId="1"
-    >
-      <ChatHistorySidebar
-        {...args}
-        collapsed={isCollapsed}
-        onToggleCollapse={() => {
-          setIsCollapsed(!isCollapsed);
-          action("Sidebar toggled")(isCollapsed ? "expanded" : "collapsed");
-        }}
-        onNewChat={() => action("New chat clicked")()}
-      />
-    </MockChatHistoryProvider>
+    <ChatHistorySidebar
+      {...args}
+      collapsed={isCollapsed}
+      onToggleCollapse={() => {
+        setIsCollapsed(!isCollapsed);
+        action("Sidebar toggled")(isCollapsed ? "expanded" : "collapsed");
+      }}
+      onNewChat={() => action("New chat clicked")()}
+      sessions={mockSessions}
+      currentSessionId="1"
+      onSessionSelect={(id) => action("Session selected")(id)}
+      onSessionDelete={(id) => action("Session deleted")(id)}
+      isLoading={false}
+    />
   );
 };
 
 export const Interactive: Story = {
   render: InteractiveTemplate,
+  args: {
+    sessions: mockSessions,
+    currentSessionId: "1",
+    onSessionSelect: action("Session selected"),
+    onSessionDelete: action("Session deleted"),
+    isLoading: false,
+    showTitle: false,
+  },
   parameters: {
     docs: {
       description: {
@@ -148,14 +119,16 @@ export const Interactive: Story = {
   },
 };
 
-// Static stories for specific states
+// Update the stories to pass required props directly
 export const Default: Story = {
   args: {
-    onNewChat: action("New chat clicked"),
-    onToggleCollapse: action("Sidebar toggled"),
+    sessions: mockSessions,
+    currentSessionId: "1",
+    onSessionSelect: action("Session selected"),
+    onSessionDelete: action("Session deleted"),
+    isLoading: false,
     showTitle: false,
   },
-  decorators: [ChatHistoryProviderDecorator],
 };
 
 export const Collapsed: Story = {
@@ -164,8 +137,12 @@ export const Collapsed: Story = {
     onNewChat: action("New chat clicked"),
     onToggleCollapse: action("Sidebar toggled"),
     showTitle: false,
+    sessions: mockSessions,
+    currentSessionId: "1",
+    onSessionSelect: action("Session selected"),
+    onSessionDelete: action("Session deleted"),
+    isLoading: false,
   },
-  decorators: [ChatHistoryProviderDecorator],
 };
 
 export const WithTitle: Story = {
@@ -173,24 +150,22 @@ export const WithTitle: Story = {
     showTitle: true,
     onNewChat: action("New chat clicked"),
     onToggleCollapse: action("Sidebar toggled"),
+    sessions: mockSessions,
+    currentSessionId: "1",
+    onSessionSelect: action("Session selected"),
+    onSessionDelete: action("Session deleted"),
+    isLoading: false,
   },
-  decorators: [ChatHistoryProviderDecorator],
 };
 
 export const Loading: Story = {
   args: {
     onNewChat: action("New chat clicked"),
     onToggleCollapse: action("Sidebar toggled"),
+    sessions: [],
+    currentSessionId: null,
+    onSessionSelect: action("Session selected"),
+    onSessionDelete: action("Session deleted"),
+    isLoading: true,
   },
-  decorators: [
-    (Story) => (
-      <MockChatHistoryProvider
-        initialSessions={[]}
-        initialSessionId={undefined}
-        isLoading={true}
-      >
-        <Story />
-      </MockChatHistoryProvider>
-    ),
-  ],
 };

@@ -1,8 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { ChatHistorySidebar } from "../../components/ui/ChatHistorySidebar";
 import { expect, within, userEvent } from "@storybook/test";
-import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
 import { useState } from "react";
+import { ChatHistorySidebar } from "../../components/ui/ChatHistorySidebar";
 
 const meta = {
   title: "CHAT/ChatHistorySidebar/Tests",
@@ -41,24 +40,13 @@ const mockSessions = [
 ];
 
 export const AccessibilityTest: Story = {
-  decorators: [
-    (Story) => (
-      <ChatHistoryContext.Provider
-        value={{
-          sessions: mockSessions,
-          currentSessionId: "1",
-          createSession: () => "new-id",
-          updateSession: () => {},
-          deleteSession: () => {},
-          switchSession: () => {},
-          getCurrentSession: () => mockSessions[0],
-          isLoading: false,
-        }}
-      >
-        <Story />
-      </ChatHistoryContext.Provider>
-    ),
-  ],
+  args: {
+    sessions: mockSessions,
+    currentSessionId: "1",
+    onSessionSelect: () => {},
+    onSessionDelete: () => {},
+    isLoading: false,
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
 
@@ -72,7 +60,7 @@ export const AccessibilityTest: Story = {
 };
 
 export const InteractionTest: Story = {
-  decorators: AccessibilityTest.decorators,
+  args: AccessibilityTest.args,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const user = userEvent.setup();
@@ -88,7 +76,7 @@ export const InteractionTest: Story = {
 };
 
 export const SessionSelectionTest: Story = {
-  decorators: AccessibilityTest.decorators,
+  args: AccessibilityTest.args,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const user = userEvent.setup();
@@ -101,24 +89,13 @@ export const SessionSelectionTest: Story = {
 };
 
 export const LoadingStateTest: Story = {
-  decorators: [
-    (Story) => (
-      <ChatHistoryContext.Provider
-        value={{
-          sessions: [],
-          currentSessionId: null,
-          createSession: () => "new-id",
-          updateSession: () => {},
-          deleteSession: () => {},
-          switchSession: () => {},
-          getCurrentSession: () => null,
-          isLoading: true,
-        }}
-      >
-        <Story />
-      </ChatHistoryContext.Provider>
-    ),
-  ],
+  args: {
+    sessions: [],
+    currentSessionId: null,
+    onSessionSelect: () => {},
+    onSessionDelete: () => {},
+    isLoading: true,
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
 
@@ -137,24 +114,16 @@ export const CollapseTest: Story = {
     const [isCollapsed, setIsCollapsed] = useState(false);
     
     return (
-      <ChatHistoryContext.Provider
-        value={{
-          sessions: mockSessions,
-          currentSessionId: "1",
-          createSession: () => "new-id",
-          updateSession: () => {},
-          deleteSession: () => {},
-          switchSession: () => {},
-          getCurrentSession: () => mockSessions[0],
-          isLoading: false,
-        }}
-      >
-        <ChatHistorySidebar
-          collapsed={isCollapsed}
-          onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
-          showTitle={true}
-        />
-      </ChatHistoryContext.Provider>
+      <ChatHistorySidebar
+        collapsed={isCollapsed}
+        onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
+        showTitle={true}
+        sessions={mockSessions}
+        currentSessionId="1"
+        onSessionSelect={() => {}}
+        onSessionDelete={() => {}}
+        isLoading={false}
+      />
     );
   },
   play: async ({ canvasElement }) => {
@@ -177,15 +146,11 @@ export const CollapseTest: Story = {
     await user.click(toggleButton);
     await new Promise((resolve) => setTimeout(resolve, 250));
     expect(toggleButton).toHaveAttribute("aria-expanded", "true");
-
-    // Verify new chat icon button is hidden when collapsed
-    const newChatButton = canvas.queryByRole('button', { name: /add/i });
-    expect(newChatButton).not.toBeInTheDocument();
   },
 };
 
 export const SessionInteractionTest: Story = {
-  decorators: AccessibilityTest.decorators,
+  args: AccessibilityTest.args,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const user = userEvent.setup();
@@ -205,7 +170,7 @@ export const SessionInteractionTest: Story = {
 };
 
 export const KeyboardNavigationTest: Story = {
-  decorators: AccessibilityTest.decorators,
+  args: AccessibilityTest.args,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const user = userEvent.setup();

@@ -9,33 +9,30 @@ const meta = {
     docs: {
       description: {
         component: `
-A role-based avatar component optimized for chat interfaces.
+Avatar component that displays user profile images with intelligent fallbacks:
+- Uses avatar URL if provided
+- Falls back to initials from first and last name if available
+- Falls back to first letter of username if available
+- Defaults to 'E' for Erato if no user data is present
 
-## Technical Notes
-- Implements CSS-based theming for runtime color updates
-- Memoized to prevent re-renders in message lists
+## Features
+- Next.js Image optimization
+- Responsive sizing (sm, md, lg)
+- Memoized to prevent unnecessary re-renders
 - Maintains consistent dimensions to prevent CLS
-- Uses \`aria-hidden\` as it's decorative content
-
-## Theme Variables
-Requires role-specific color variables:
-\`\`\`css
---theme-avatar-{role}-bg
---theme-avatar-{role}-fg
-\`\`\`
-        `,
+`,
       },
     },
   },
   argTypes: {
-    role: {
+    size: {
       control: "radio",
-      options: ["user", "assistant"],
-      description: "The role determines the avatar styling",
+      options: ["sm", "md", "lg"],
+      description: "Size variant of the avatar",
     },
-    isUser: {
-      control: "boolean",
-      description: "Whether the avatar represents a user",
+    userProfile: {
+      control: "object",
+      description: "User profile data for avatar display",
     },
   },
   tags: ["autodocs"],
@@ -44,16 +41,60 @@ Requires role-specific color variables:
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const UserAvatar: Story = {
+export const WithImage: Story = {
   args: {
-    role: "user",
-    isUser: true,
+    userProfile: {
+      username: "johndoe",
+      firstName: "John",
+      lastName: "Doe",
+      avatarUrl: "https://i.pravatar.cc/300",
+    },
+    size: "md",
   },
 };
 
-export const AssistantAvatar: Story = {
+export const WithNameInitials: Story = {
   args: {
-    role: "assistant",
-    isUser: false,
+    userProfile: {
+      username: "johndoe",
+      firstName: "John",
+      lastName: "Doe",
+    },
+    size: "md",
+  },
+};
+
+export const WithUsername: Story = {
+  args: {
+    userProfile: {
+      username: "johndoe",
+    },
+    size: "md",
+  },
+};
+
+export const DefaultFallback: Story = {
+  args: {
+    size: "md",
+  },
+};
+
+export const Small: Story = {
+  args: {
+    userProfile: {
+      firstName: "John",
+      lastName: "Doe",
+    },
+    size: "sm",
+  },
+};
+
+export const Large: Story = {
+  args: {
+    userProfile: {
+      firstName: "John",
+      lastName: "Doe",
+    },
+    size: "lg",
   },
 };

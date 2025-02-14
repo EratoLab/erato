@@ -33,6 +33,17 @@ export interface ChatSession extends Chat {
   metadata?: ChatMetadata;
 }
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface ChatMetadata {
   isShared?: boolean;
   ownerId: string;
@@ -45,6 +56,7 @@ export interface ChatMetadata {
     createdAt: Date;
     sender: "user" | "assistant";
   };
+  userProfile?: UserProfile;
 }
 
 export interface ChatPermissions {

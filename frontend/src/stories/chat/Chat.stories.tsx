@@ -1,8 +1,19 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { Chat } from "../../components/ui/Chat";
 import { ChatProvider } from "../../components/containers/ChatProvider";
+import { ChatHistoryProvider } from "../../components/containers/ChatHistoryProvider";
 import { ChatMessageFactory } from "./mockData";
 import { action } from "@storybook/addon-actions";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// Create a new client for Storybook
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
+});
 
 const mockMessages = {
   "1": ChatMessageFactory.samples.assistant,
@@ -25,14 +36,18 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <ChatProvider
-        initialMessages={mockMessages}
-        initialMessageOrder={mockOrder}
-      >
-        <div className="h-[600px] w-full max-w-4xl mx-auto">
-          <Story />
-        </div>
-      </ChatProvider>
+      <QueryClientProvider client={queryClient}>
+        <ChatHistoryProvider>
+          <ChatProvider
+            initialMessages={mockMessages}
+            initialMessageOrder={mockOrder}
+          >
+            <div className="h-[600px] w-full max-w-4xl mx-auto">
+              <Story />
+            </div>
+          </ChatProvider>
+        </ChatHistoryProvider>
+      </QueryClientProvider>
     ),
   ],
   argTypes: {
@@ -61,6 +76,8 @@ export const Default: Story = {
     onMessageAction: action("message action"),
     onNewChat: action("new chat"),
     onRegenerate: action("regenerate"),
+    sidebarCollapsed: false,
+    onToggleCollapse: action("toggle collapse"),
   },
 };
 

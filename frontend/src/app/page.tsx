@@ -2,9 +2,13 @@
 
 import { Chat } from "../components/ui/Chat";
 import { ChatProvider } from "../components/containers/ChatProvider";
+import { ChatHistoryProvider } from "../components/containers/ChatHistoryProvider";
 import { MessageAction } from "../types/message-controls";
+import { useState } from "react";
 
 export default function Home() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   const handleMessageAction = async (action: MessageAction) => {
     switch (action.type) {
       case "copy":
@@ -27,23 +31,27 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-theme-bg-primary">
-      <ChatProvider>
-        <main className="container mx-auto h-screen p-4">
-          <Chat
-            layout="default"
-            showAvatars={true}
-            showTimestamps={true}
-            onMessageAction={handleMessageAction}
-            controlsContext={{
-              currentUserId: "user_1", // This would come from your auth system
-              dialogOwnerId: "user_1",
-              isSharedDialog: false,
-            }}
-            onNewChat={() => console.log("New chat")}
-            onRegenerate={() => console.log("Regenerate")}
-          />
-        </main>
-      </ChatProvider>
+      <ChatHistoryProvider>
+        <ChatProvider>
+          <main className="container mx-auto h-screen p-4">
+            <Chat
+              layout="default"
+              showAvatars={true}
+              showTimestamps={true}
+              onMessageAction={handleMessageAction}
+              controlsContext={{
+                currentUserId: "user_1", // This would come from your auth system
+                dialogOwnerId: "user_1",
+                isSharedDialog: false,
+              }}
+              onNewChat={() => console.log("New chat")}
+              onRegenerate={() => console.log("Regenerate")}
+              sidebarCollapsed={sidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            />
+          </main>
+        </ChatProvider>
+      </ChatHistoryProvider>
     </div>
   );
 }

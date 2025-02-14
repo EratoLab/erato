@@ -3,9 +3,10 @@ import clsx from "clsx";
 import { ErrorBoundary } from "react-error-boundary";
 import useResizeObserver from "@react-hook/resize-observer";
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
-import { useChatHistory } from "../containers/ChatHistoryProvider";
 import { SidebarToggleIcon, EditIcon } from "./icons";
 import { Button } from "./Button";
+import { UserProfileDropdown } from './UserProfileDropdown';
+import type { ChatSession } from "../../types/chat";
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -22,6 +23,12 @@ export interface ChatHistorySidebarProps {
   onNewChat?: () => void;
   onToggleCollapse?: () => void;
   showTitle?: boolean;
+  sessions: ChatSession[];
+  currentSessionId: string | null;
+  onSessionSelect: (sessionId: string) => void;
+  onSessionDelete: (sessionId: string) => void;
+  isLoading: boolean;
+  error?: Error;
 }
 
 const ChatHistoryHeader = memo<{
@@ -32,12 +39,12 @@ const ChatHistoryHeader = memo<{
 }>(({ onNewChat, collapsed, onToggleCollapse, showTitle = false }) => (
   <div
     className={clsx(
-      "grid h-14 border-b border-theme-border",
-      // Adjust grid to ensure right alignment of new chat button
-      collapsed ? "grid-cols-[48px]" : "grid-cols-[48px_1fr_48px] items-center",
+      "flex h-14 border-b border-theme-border",
+      // Replace grid with flex layout for better control
+      collapsed ? "justify-center" : "justify-between",
     )}
   >
-    <div className="flex justify-center">
+    <div className="w-12 flex justify-center">
       <Button
         onClick={onToggleCollapse}
         variant="sidebar-icon"
@@ -49,16 +56,14 @@ const ChatHistoryHeader = memo<{
     </div>
     {!collapsed && (
       <>
-        <div>
-          {" "}
-          {/* Middle column always present */}
+        <div className="flex-1 flex items-center">
           {showTitle && (
             <h2 className="font-semibold text-theme-fg-primary">
               Chat History
             </h2>
           )}
         </div>
-        <div className="flex justify-end">
+        <div className="w-12 flex justify-center">
           <Button
             onClick={onNewChat}
             variant="sidebar-icon"
@@ -88,18 +93,15 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     onNewChat,
     onToggleCollapse,
     showTitle = false,
+    sessions,
+    currentSessionId,
+    onSessionSelect,
+    onSessionDelete,
+    isLoading,
+    error,
   }) => {
     const ref = useRef<HTMLElement>(null);
     const [width, setWidth] = useState(minWidth);
-
-    const {
-      sessions,
-      currentSessionId,
-      switchSession,
-      deleteSession,
-      isLoading,
-      error,
-    } = useChatHistory();
 
     useResizeObserver(ref, (entry) => {
       setWidth(entry.contentRect.width);
@@ -135,11 +137,21 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 <ChatHistoryList
                   sessions={sessions}
                   currentSessionId={currentSessionId}
-                  onSessionSelect={switchSession}
-                  onSessionDelete={deleteSession}
+                  onSessionSelect={onSessionSelect}
+                  onSessionDelete={onSessionDelete}
                   className="flex-1 p-2"
                 />
               )}
+              <div className="p-2 border-t border-theme-border">
+                <UserProfileDropdown
+                  userProfile={sessions[0]?.metadata?.userProfile}
+                  onSignOut={() => {
+                    // TODO: Implement sign out logic
+                    console.log('Sign out clicked');
+                  }}
+                  className="w-full flex items-center justify-start"
+                />
+              </div>
             </>
           )}
         </aside>

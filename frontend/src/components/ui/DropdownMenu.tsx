@@ -1,9 +1,10 @@
-import React, { useState, useRef, useCallback, memo } from "react";
+import React, { useState, useRef, useCallback, memo, useEffect } from "react";
 import clsx from "clsx";
 import { Button } from "./Button";
 import { MoreVertical } from "./icons";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import { useKeyboard } from "../../hooks/useKeyboard";
+import { createPortal } from 'react-dom';
 
 export interface DropdownMenuItem {
   label: string;
@@ -20,6 +21,14 @@ export interface DropdownMenuProps {
   align?: "left" | "right";
   triggerIcon?: React.ReactNode;
   id?: string; // For ARIA relationships
+  /**
+   * Preferred orientation for the dropdown
+   * Will still flip if there's not enough space
+   */
+  preferredOrientation?: {
+    vertical: 'top' | 'bottom';
+    horizontal: 'left' | 'right';
+  };
 }
 
 const MenuItem = memo(({ 
@@ -65,17 +74,93 @@ const MenuItem = memo(({
 
 MenuItem.displayName = 'MenuItem';
 
+type Position = {
+  vertical: 'top' | 'bottom';
+  horizontal: 'left' | 'right';
+};
+
 export const DropdownMenu = memo(({
   items,
   className,
   align = "right",
   triggerIcon = <MoreVertical className="w-4 h-4" />,
   id,
+  preferredOrientation,
 }: DropdownMenuProps) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState<Position>({ 
+    vertical: preferredOrientation?.vertical || 'bottom', 
+    horizontal: preferredOrientation?.horizontal || align 
+  });
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuId = id || `dropdown-${Math.random().toString(36).slice(2)}`;
+
+  const updatePosition = useCallback(() => {
+    if (!isOpen || !menuRef.current || !buttonRef.current) return;
+
+    const menu = menuRef.current.getBoundingClientRect();
+    const trigger = buttonRef.current.getBoundingClientRect();
+    const viewport = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      padding: 8,
+    };
+
+    // Calculate required space for the menu
+    const requiredSpace = {
+      vertical: menu.height + viewport.padding,
+      horizontal: menu.width + viewport.padding,
+    };
+
+    // Calculate available space in each direction
+    const space = {
+      top: trigger.top - viewport.padding,
+      bottom: viewport.height - trigger.bottom - viewport.padding,
+      left: trigger.left - viewport.padding,
+      right: viewport.width - trigger.right - viewport.padding,
+    };
+
+    // Determine if each position has enough space
+    const hasSpace = {
+      top: space.top >= requiredSpace.vertical,
+      bottom: space.bottom >= requiredSpace.vertical,
+      left: space.left >= requiredSpace.horizontal,
+      right: space.right >= requiredSpace.horizontal,
+    };
+
+    // If preferred orientation is specified, use it unless there's not enough space
+    // Then use the direction with more available space
+    // TODO: this could be improved if we use the actual size of our dropdown
+    const newPosition: Position = {
+      vertical: preferredOrientation?.vertical 
+        ? (hasSpace[preferredOrientation.vertical]
+            ? preferredOrientation.vertical 
+            : space.top > space.bottom ? 'top' : 'bottom')
+        : (space.bottom > space.top ? 'bottom' : 'top'),
+      horizontal: preferredOrientation?.horizontal
+        ? (hasSpace[preferredOrientation.horizontal]
+            ? preferredOrientation.horizontal
+            : space.left > space.right ? 'right' : 'left')
+        : (space.right > space.left ? 'left' : 'right'),
+    };
+
+    setPosition(newPosition);
+  }, [isOpen, preferredOrientation]);
+
+  // Update position when menu opens or window resizes
+  useEffect(() => {
+    updatePosition();
+    
+    const handleResize = () => {
+      requestAnimationFrame(updatePosition);
+    };
+
+    if (isOpen) {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, [isOpen, updatePosition]);
 
   // Close menu and restore focus
   const closeMenu = useCallback(() => {
@@ -118,6 +203,56 @@ export const DropdownMenu = memo(({
     }
   }, [isOpen]);
 
+  const renderDropdown = () => {
+    if (!isOpen) return null;
+
+    const content = (
+      <div
+        id={menuId}
+        className={clsx(
+          "fixed w-48 rounded-md shadow-lg", // Changed from absolute to fixed
+          "bg-theme-bg-primary border border-theme-border",
+          "z-[9999]", // Highest z-index to ensure it's above everything
+          "transition-all duration-200"
+        )}
+        style={{
+          top: position.vertical === 'bottom' 
+            ? `${buttonRef.current?.getBoundingClientRect().bottom}px`
+            : 'auto',
+          bottom: position.vertical === 'top' 
+            ? `${window.innerHeight - buttonRef.current?.getBoundingClientRect().top}px`
+            : 'auto',
+          left: position.horizontal === 'left'
+            ? `${buttonRef.current?.getBoundingClientRect().left}px`
+            : 'auto',
+          right: position.horizontal === 'right'
+            ? `${window.innerWidth - buttonRef.current?.getBoundingClientRect().right}px`
+            : 'auto',
+          maxHeight: `calc(${
+            position.vertical === 'bottom' 
+              ? window.innerHeight - buttonRef.current?.getBoundingClientRect().bottom 
+              : buttonRef.current?.getBoundingClientRect().top
+          }px - 16px)`
+        }}
+        role="menu"
+        aria-orientation="vertical"
+        aria-labelledby={buttonRef.current?.id}
+      >
+        <div className="py-1 overflow-y-auto" role="none">
+          {items.map((item, index) => (
+            <MenuItem
+              key={`${item.label}-${index}`}
+              item={item}
+              onSelect={closeMenu}
+            />
+          ))}
+        </div>
+      </div>
+    );
+
+    return createPortal(content, document.body);
+  };
+
   return (
     <div 
       className={clsx("relative inline-block", className)} 
@@ -137,31 +272,7 @@ export const DropdownMenu = memo(({
         aria-haspopup="true"
         aria-controls={menuId}
       />
-
-      {isOpen && (
-        <div
-          id={menuId}
-          className={clsx(
-            "absolute mt-1 w-48 rounded-md shadow-lg",
-            "bg-theme-bg-primary border border-theme-border",
-            "z-50",
-            align === "right" ? "right-0" : "left-0",
-          )}
-          role="menu"
-          aria-orientation="vertical"
-          aria-labelledby={buttonRef.current?.id}
-        >
-          <div className="py-1" role="none">
-            {items.map((item, index) => (
-              <MenuItem
-                key={`${item.label}-${index}`}
-                item={item}
-                onSelect={closeMenu}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {renderDropdown()}
     </div>
   );
 });
