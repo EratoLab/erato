@@ -26,7 +26,7 @@ export const TestFallbackMechanics: Story = {
     const canvas = within(canvasElement);
 
     // Test default fallback
-    const defaultAvatar = canvas.getByText('E');
+    const defaultAvatar = canvas.getByText("E");
     await expect(defaultAvatar).toBeInTheDocument();
   },
 };
@@ -39,7 +39,7 @@ export const TestUsernameInitial: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const initial = canvas.getByText('J');
+    const initial = canvas.getByText("J");
     await expect(initial).toBeInTheDocument();
   },
 };
@@ -54,7 +54,7 @@ export const TestNameInitials: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const initials = canvas.getByText('JD');
+    const initials = canvas.getByText("JD");
     await expect(initials).toBeInTheDocument();
   },
 };
@@ -70,10 +70,10 @@ export const TestImageAvatar: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const image = canvas.getByRole('img');
+    const image = canvas.getByRole("img");
     await expect(image).toBeInTheDocument();
-    await expect(image).toHaveAttribute('alt', 'User avatar');
-    await expect(image).toHaveAttribute('src');
+    await expect(image).toHaveAttribute("alt", "User avatar");
+    await expect(image).toHaveAttribute("src");
   },
 };
 
@@ -86,9 +86,9 @@ export const TestSizeVariants: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const avatar = canvas.getByText('JD');
+    const avatar = canvas.getByText("JD");
     const container = avatar.parentElement;
-    
-    await expect(container).toHaveClass('w-10', 'h-10'); // Default md size
+
+    await expect(container).toHaveClass("w-10", "h-10"); // Default md size
   },
-}; 
+};

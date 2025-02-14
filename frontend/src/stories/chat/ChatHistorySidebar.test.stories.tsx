@@ -112,7 +112,7 @@ export const LoadingStateTest: Story = {
 export const CollapseTest: Story = {
   render: () => {
     const [isCollapsed, setIsCollapsed] = useState(false);
-    
+
     return (
       <ChatHistorySidebar
         collapsed={isCollapsed}
@@ -157,9 +157,11 @@ export const SessionInteractionTest: Story = {
 
     // Test session selection
     const sessionTitle = canvas.getByText("Chat about React Performance");
-    const sessionContainer = sessionTitle.closest('[class*="flex flex-col text-left"]');
+    const sessionContainer = sessionTitle.closest(
+      '[class*="flex flex-col text-left"]',
+    );
     await user.click(sessionContainer!);
-    
+
     // Verify the selected state
     expect(sessionContainer).toHaveClass("bg-theme-bg-selected");
 
@@ -186,7 +188,9 @@ export const KeyboardNavigationTest: Story = {
 
     await user.tab(); // Move to first session
     const sessionTitle = canvas.getByText("Chat about React Performance");
-    const sessionContainer = sessionTitle.closest('[role="button"]') || sessionTitle.closest('[class*="flex flex-col text-left"]');
+    const sessionContainer =
+      sessionTitle.closest('[role="button"]') ||
+      sessionTitle.closest('[class*="flex flex-col text-left"]');
     expect(sessionContainer).toHaveFocus();
   },
 };

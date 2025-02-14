@@ -11,7 +11,8 @@ const meta = {
     layout: "centered",
     docs: {
       description: {
-        component: "Accessibility and keyboard interaction tests for Button component",
+        component:
+          "Accessibility and keyboard interaction tests for Button component",
       },
     },
   },
@@ -113,14 +114,14 @@ export const ToggleButtonInteraction: Story = {
     // Click to toggle
     await userEvent.click(button);
     // Wait for state update
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await expect(button).toHaveAttribute("aria-checked", "true");
 
     // Space key to toggle
     await userEvent.tab();
     await userEvent.keyboard(" ");
     // Wait for state update
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await expect(button).toHaveAttribute("aria-checked", "true");
   },
 };
@@ -130,7 +131,8 @@ export const FocusVisibleStyles: Story = {
   parameters: {
     docs: {
       description: {
-        story: "Verify focus visible styles are applied when using keyboard navigation",
+        story:
+          "Verify focus visible styles are applied when using keyboard navigation",
       },
     },
   },
@@ -185,4 +187,4 @@ export const KeyboardNavigation: Story = {
       <Button>Third</Button>
     </div>
   ),
-}; 
+};

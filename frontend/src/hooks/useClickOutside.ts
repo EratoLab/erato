@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect } from "react";
 
 export const useClickOutside = (
   ref: React.RefObject<HTMLElement | null>,
   handler: () => void,
-  enabled = true
+  enabled = true,
 ) => {
   useEffect(() => {
     if (!enabled) return;
@@ -14,7 +14,7 @@ export const useClickOutside = (
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [ref, handler, enabled]);
-}; 
+};

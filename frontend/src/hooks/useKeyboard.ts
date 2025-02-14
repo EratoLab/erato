@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect } from "react";
 
 interface UseKeyboardProps {
   target: React.RefObject<HTMLElement | null>;
@@ -20,20 +20,20 @@ export const useKeyboard = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
-        case 'Escape':
+        case "Escape":
           onEscape?.(e);
           break;
-        case 'Tab':
+        case "Tab":
           onTab?.(e);
           break;
-        case 'Enter':
+        case "Enter":
           onEnter?.(e);
           break;
       }
     };
 
     const element = target.current || document;
-    element.addEventListener('keydown', handleKeyDown);
-    return () => element.removeEventListener('keydown', handleKeyDown);
+    element.addEventListener("keydown", handleKeyDown);
+    return () => element.removeEventListener("keydown", handleKeyDown);
   }, [target, enabled, onEscape, onTab, onEnter]);
-}; 
+};

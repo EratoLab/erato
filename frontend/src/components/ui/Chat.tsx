@@ -65,7 +65,7 @@ export const Chat = ({
     switchSession,
     deleteSession,
     isLoading: chatHistoryLoading,
-    error: chatHistoryError
+    error: chatHistoryError,
   } = useChatHistory();
 
   const layoutStyles = {
@@ -100,7 +100,7 @@ export const Chat = ({
       <div
         className={clsx(
           "flex flex-col h-full bg-theme-bg-primary flex-1",
-          className
+          className,
         )}
         role="region"
         aria-label="Chat conversation"
@@ -109,7 +109,7 @@ export const Chat = ({
           className={clsx(
             "flex-1 overflow-y-auto",
             "bg-theme-bg-secondary",
-            layoutStyles[layout]
+            layoutStyles[layout],
           )}
         >
           {messageOrder.map((messageId) => {

@@ -145,4 +145,4 @@ export const KeyboardNavigationTest: Story = {
     expect(canvas.queryByRole("menu")).not.toBeInTheDocument();
     expect(menuButton).toHaveFocus(); // Focus should return to trigger button
   },
-}; 
+};

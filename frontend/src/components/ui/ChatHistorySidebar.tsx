@@ -5,7 +5,7 @@ import useResizeObserver from "@react-hook/resize-observer";
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { SidebarToggleIcon, EditIcon } from "./icons";
 import { Button } from "./Button";
-import { UserProfileDropdown } from './UserProfileDropdown';
+import { UserProfileDropdown } from "./UserProfileDropdown";
 import type { ChatSession } from "../../types/chat";
 
 export interface ChatHistorySidebarProps {
@@ -147,7 +147,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   userProfile={sessions[0]?.metadata?.userProfile}
                   onSignOut={() => {
                     // TODO: Implement sign out logic
-                    console.log('Sign out clicked');
+                    console.log("Sign out clicked");
                   }}
                   className="w-full flex items-center justify-start"
                 />

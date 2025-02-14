@@ -13,7 +13,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div 
+      <div
         style={{ minHeight: "400px", paddingTop: "100px" }}
         className="bg-theme-bg-primary"
         data-theme={defaultTheme}
@@ -46,7 +46,7 @@ export const Default: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const button = canvas.getByRole('button', { name: /open menu/i });
+    const button = canvas.getByRole("button", { name: /open menu/i });
     await userEvent.click(button);
   },
 };
@@ -75,4 +75,4 @@ export const WithDisabledItem: Story = {
       },
     ],
   },
-}; 
+};
