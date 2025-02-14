@@ -10,6 +10,7 @@
 check_backend_changes() {
     local changed_files=("$@")
     local backend_files=()
+    local initial_dir=$(pwd)
 
     # Check if any files in backend directory were modified
     for file in "${changed_files[@]}"; do
@@ -47,10 +48,12 @@ check_backend_changes() {
         if echo "$selected" | grep -q "Run tests"; then
             echo "Running tests..."
             cd backend && just test
+            cd "$initial_dir"
         fi
         if echo "$selected" | grep -q "Run lint"; then
             echo "Running lint..."
             cd backend && just lint
+            cd "$initial_dir"
         fi
     fi
 
@@ -60,6 +63,7 @@ check_backend_changes() {
 check_frontend_changes() {
     local changed_files=("$@")
     local frontend_files=()
+    local initial_dir=$(pwd)
 
     # Check if any files in frontend directory were modified
     for file in "${changed_files[@]}"; do
@@ -95,6 +99,7 @@ check_frontend_changes() {
     if [ -n "$selected" ]; then
         echo "Running format check..."
         cd frontend && just check-format
+        cd "$initial_dir"
     fi
 
     return $?
