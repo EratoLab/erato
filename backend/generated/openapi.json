@@ -224,11 +224,37 @@
       "UserProfile": {
         "type": "object",
         "required": [
-          "email"
+          "id",
+          "preferred_language"
         ],
         "properties": {
           "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user's email address. Should't be used as a unique identifier, as it may change."
+          },
+          "id": {
             "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user's display name."
+          },
+          "picture": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user's profile picture URL."
+          },
+          "preferred_language": {
+            "type": "string",
+            "description": "The user's preferred language.\n\nThe final determined language is intersected with our supported languages, to determine the final language.\n\nWill be a BCP 47 language tag (e.g. \"en\" or \"en-US\").\n\nThis is derived in the following order (highest priority first):\n- ID token claims\n- Browser Accept-Language header\n- Default to \"en\""
           }
         }
       }

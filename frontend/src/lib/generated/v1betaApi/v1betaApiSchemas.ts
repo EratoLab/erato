@@ -28,5 +28,30 @@ export type MessageSubmitStreamingResponseMessageTextDelta = {
 };
 
 export type UserProfile = {
-  email: string;
+  /**
+   * The user's email address. Should't be used as a unique identifier, as it may change.
+   */
+  email?: void;
+  id: string;
+  /**
+   * The user's display name.
+   */
+  name?: void;
+  /**
+   * The user's profile picture URL.
+   */
+  picture?: void;
+  /**
+   * The user's preferred language.
+   *
+   * The final determined language is intersected with our supported languages, to determine the final language.
+   *
+   * Will be a BCP 47 language tag (e.g. "en" or "en-US").
+   *
+   * This is derived in the following order (highest priority first):
+   * - ID token claims
+   * - Browser Accept-Language header
+   * - Default to "en"
+   */
+  preferred_language: string;
 };
