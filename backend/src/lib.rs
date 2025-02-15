@@ -8,9 +8,11 @@ use crate::server::router::MAIN_ROUTER_DOC;
 pub mod config;
 pub mod db;
 pub mod frontend_environment;
+pub mod models;
 pub mod normalize_profile;
 pub mod policy;
 pub mod server;
+pub mod state;
 
 #[derive(OpenApi)]
 #[openapi(

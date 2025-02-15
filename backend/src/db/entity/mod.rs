@@ -4,3 +4,4 @@ pub mod prelude;
 
 pub mod chats;
 pub mod messages;
+pub mod users;

@@ -2,3 +2,4 @@
 
 pub use super::chats::Entity as Chats;
 pub use super::messages::Entity as Messages;
+pub use super::users::Entity as Users;

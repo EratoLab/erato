@@ -12,7 +12,10 @@ install_clis:
 
 # Generates the entity source files from a live DB connection
 generate_db_schema:
-    sea-orm-cli generate entity -u postgres://eratouser:eratopw@localhost:5432/erato -o src/db/entity
+    sea-orm-cli generate entity \
+      -u postgres://eratouser:eratopw@localhost:5432/erato \
+      -o src/db/entity \
+      --ignore-tables changes,dependencies,events,projects,releases,tags
 
 # Generates the OpenAPI spec based on the source
 generate_open_api:
@@ -25,7 +28,7 @@ lint:
     cargo fmt --all --check
 
 run $FRONTEND_BUNDLE_PATH="../frontend/out":
-    cargo run --bin backend
+    cargo run --bin erato
 
 format:
     cargo fmt --all
