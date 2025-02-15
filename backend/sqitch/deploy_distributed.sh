@@ -59,12 +59,14 @@ cd "$SCRIPT_DIR"
 # - postgresql://user:pass@host:5432/dbname
 # - db:pg://user:pass@host:5432/dbname?sslmode=disable
 DB_NAME=$(echo "$DB_URI" | sed -E 's/.*\/([^?]+).*/\1/')
+# Schema public
+DB_NAME="public"
 
 echo "Extracted database name (will be used as registry): $DB_NAME"
 
 # Deploy using the distributed target, overriding URI and registry
 sqitch deploy "distributed" \
     --registry "$DB_NAME" \
-    --uri "$DB_URI"
+    --target "$DB_URI"
 
 echo "Deployment completed successfully" 

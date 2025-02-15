@@ -1,7 +1,7 @@
 use config::{Config, ConfigError, Environment};
 use serde::Deserialize;
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
 pub struct AppConfig {
     // The HTTP host to listen on.
     // Defaults to `127.0.0.1`.
@@ -12,6 +12,7 @@ pub struct AppConfig {
     // Where to find the static frontend files to serve.
     // Defaults to `./public`
     pub frontend_bundle_path: String,
+    pub database_url: String,
 }
 
 impl AppConfig {

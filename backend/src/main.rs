@@ -1,18 +1,19 @@
 use axum::handler::HandlerWithoutStateExt;
-use axum::Extension;
+use axum::{Extension, Router};
+use eyre::Report;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use erato::config::AppConfig;
 use erato::frontend_environment::{
     serve_files_with_script, FrontedEnvironment, FrontendBundlePath,
 };
+use erato::state::AppState;
 use erato::{server, ApiDoc};
 use tower_http::cors::CorsLayer;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Report> {
     // initialize tracing
     tracing_subscriber::fmt::init();
     let loaded_dotenv_files = dotenv_flow::dotenv_flow().ok();
@@ -39,6 +40,8 @@ async fn main() {
         local_addr
     ))]);
 
+    let state = AppState::new(config.clone()).await?;
+
     let app = router
         .merge(Scalar::with_url("/scalar", spec.clone()))
         .route(
@@ -50,7 +53,8 @@ async fn main() {
             config.frontend_bundle_path.clone(),
         )))
         .layer(Extension(build_frontend_environment()))
-        .layer(CorsLayer::very_permissive());
+        .layer(CorsLayer::very_permissive())
+        .with_state(state);
 
     println!();
     println!("API docs: http://{}/scalar", local_addr);
@@ -59,6 +63,8 @@ async fn main() {
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();
+
+    Ok(())
 }
 
 pub fn build_frontend_environment() -> FrontedEnvironment {

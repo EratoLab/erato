@@ -1,4 +1,7 @@
+use crate::models::user::get_or_create_user;
 use crate::normalize_profile::{normalize_profile, IdTokenProfile};
+use crate::state::AppState;
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::sse::Event;
 use axum::response::{IntoResponse, Sse};
@@ -17,7 +20,7 @@ use tokio_stream::StreamExt as _;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 
-pub fn router() -> OpenApiRouter {
+pub fn router() -> OpenApiRouter<AppState> {
     // build our application with a route
     let app = Router::new()
         .route("/messages", get(messages))
@@ -104,6 +107,7 @@ impl UserProfile {
     )
 )]
 pub async fn profile(
+    State(app_state): State<AppState>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
 ) -> Result<Json<UserProfile>, StatusCode> {
     // Get the JWT token from the Authorization header
@@ -128,8 +132,17 @@ pub async fn profile(
     let normalized_profile = normalize_profile(token_data.claims);
     let normalized_profile = normalized_profile.map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // TODO: Create user on first encounter.
-    let user_id = "123".to_string();
+    // TODO: Move this to some kind of middleware for the /me routes
+    let user = get_or_create_user(
+        &app_state.db,
+        &normalized_profile.iss,
+        &normalized_profile.sub,
+        normalized_profile.email.as_deref(),
+    )
+    .await
+    .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let user_id = user.id.to_string();
     let mut user_profile = UserProfile::from_id_token_profile(normalized_profile, user_id);
     user_profile.determine_final_language();
 

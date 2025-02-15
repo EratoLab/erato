@@ -1,10 +1,10 @@
+use super::api::v1beta::ApiV1ApiDoc;
+use crate::state::AppState;
 use axum::routing::{get, head};
 use utoipa::openapi::OpenApiBuilder;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
-
-use super::api::v1beta::ApiV1ApiDoc;
 
 /// Get health of the API.
 #[utoipa::path(
@@ -18,7 +18,7 @@ async fn health() -> &'static str {
     "OK"
 }
 
-pub fn router() -> OpenApiRouter {
+pub fn router() -> OpenApiRouter<AppState> {
     // build our application with a route
     let app = OpenApiRouter::new()
         .route("/health", get(health).head(health))

@@ -1,4 +1,4 @@
-// Inlined version of the frontend-environment crate (to simplify dependency version alignment)
+//! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
 pub use self::axum::serve_files_with_script;
 use lol_html::html_content::ContentType;
 use lol_html::{element, HtmlRewriter, Settings};
