@@ -12,4 +12,4 @@ FROM ${REGISTRY}/${BACKEND_IMAGE}
 COPY --from=frontend /public /app/public/
 
 # The backend will serve these files directly
-CMD ["./backend"]
+CMD ["./erato"]

@@ -26,10 +26,10 @@ WORKDIR /app
 #     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder
-COPY --from=builder /app/target/release/backend /app/backend
+COPY --from=builder /app/target/release/erato /app/erato
 
 EXPOSE 3130
 
 ENV HTTP_HOST="0.0.0.0"
 
-CMD ["./backend"] 
+CMD ["./erato"]

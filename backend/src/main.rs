@@ -4,11 +4,11 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
-use backend::config::AppConfig;
-use backend::frontend_environment::{
+use erato::config::AppConfig;
+use erato::frontend_environment::{
     serve_files_with_script, FrontedEnvironment, FrontendBundlePath,
 };
-use backend::{server, ApiDoc};
+use erato::{server, ApiDoc};
 use tower_http::cors::CorsLayer;
 
 #[tokio::main]

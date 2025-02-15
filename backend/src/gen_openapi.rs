@@ -1,6 +1,6 @@
 use std::fs;
 
-use backend::ApiDoc;
+use erato::ApiDoc;
 
 fn main() {
     let doc = ApiDoc::build_openapi_full().to_pretty_json().unwrap();
