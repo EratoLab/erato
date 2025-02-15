@@ -171,3 +171,22 @@ export const Loading: Story = {
     isLoading: true,
   },
 };
+
+export const Empty: Story = {
+  args: {
+    sessions: [],
+    currentSessionId: null,
+    onSessionSelect: action("Session selected"),
+    onSessionDelete: action("Session deleted"),
+    isLoading: false,
+    showTitle: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Empty state when there are no chat sessions and loading is complete.",
+      },
+    },
+  },
+};

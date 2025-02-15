@@ -39,7 +39,6 @@ export interface ChatMessageProps {
 export const ChatMessage = memo(function ChatMessage({
   message,
   className = "",
-  maxWidth = 768,
   showTimestamp = true,
   showAvatar = false,
   showControlsOnHover = true,
@@ -64,16 +63,14 @@ export const ChatMessage = memo(function ChatMessage({
         messageStyles.container[role],
         className,
       )}
-      style={{
-        maxWidth: maxWidth ? `${maxWidth}px` : undefined,
-        width: maxWidth ? `${maxWidth}px` : undefined,
-      }}
       role="log"
       aria-live="polite"
       aria-label={`${isUser ? "Your" : "Assistant"} message`}
     >
       <div className="w-full flex gap-6">
-        {showAvatar && <Avatar role={role} isUser={isUser} />}
+        {showAvatar && (
+          <Avatar userProfile={{ username: isUser ? "You" : "Assistant" }} />
+        )}
 
         <div className="min-w-0 flex-1 break-words">
           <div className="flex justify-between items-start">

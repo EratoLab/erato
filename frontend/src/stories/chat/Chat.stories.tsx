@@ -5,6 +5,7 @@ import { ChatHistoryProvider } from "../../components/containers/ChatHistoryProv
 import { ChatMessageFactory } from "./mockData";
 import { action } from "@storybook/addon-actions";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 
 // Create a new client for Storybook
 const queryClient = new QueryClient({
@@ -27,7 +28,7 @@ const meta = {
   title: "Chat/Chat",
   component: Chat,
   parameters: {
-    layout: "padded",
+    layout: "fullscreen",
     docs: {
       description: {
         component: "Complete chat interface with messages and controls",
@@ -42,7 +43,7 @@ const meta = {
             initialMessages={mockMessages}
             initialMessageOrder={mockOrder}
           >
-            <div className="h-[600px] w-full max-w-4xl mx-auto">
+            <div className="h-screen w-full max-w-6xl mx-auto">
               <Story />
             </div>
           </ChatProvider>
@@ -76,8 +77,16 @@ export const Default: Story = {
     onMessageAction: action("message action"),
     onNewChat: action("new chat"),
     onRegenerate: action("regenerate"),
-    sidebarCollapsed: false,
-    onToggleCollapse: action("toggle collapse"),
+  },
+  render: function Wrapper(args) {
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    return (
+      <Chat
+        {...args}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+      />
+    );
   },
 };
 

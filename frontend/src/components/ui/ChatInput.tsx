@@ -51,7 +51,7 @@ export const ChatInput = ({
   }, [message]);
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form className={clsx("w-2/3 mx-auto mb-4")} onSubmit={handleSubmit}>
       <div
         className={clsx(
           "w-full rounded-2xl bg-theme-bg-primary",

@@ -85,7 +85,7 @@ export const Chat = ({
   };
 
   return (
-    <div className="flex h-full w-full">
+    <div className="flex h-full w-full flex-col sm:flex-row">
       <ChatHistorySidebar
         collapsed={sidebarCollapsed}
         onNewChat={onNewChat}
@@ -96,10 +96,12 @@ export const Chat = ({
         onSessionDelete={deleteSession}
         isLoading={chatHistoryLoading}
         error={chatHistoryError}
+        className="fixed inset-0 z-50 sm:relative sm:z-auto"
       />
       <div
         className={clsx(
-          "flex flex-col h-full bg-theme-bg-primary flex-1",
+          "flex-1 flex flex-col h-full bg-theme-bg-secondary min-w-0",
+          "mt-14 sm:mt-0",
           className,
         )}
         role="region"
@@ -109,6 +111,7 @@ export const Chat = ({
           className={clsx(
             "flex-1 overflow-y-auto",
             "bg-theme-bg-secondary",
+            "px-2 sm:px-4",
             layoutStyles[layout],
           )}
         >
@@ -125,7 +128,7 @@ export const Chat = ({
                 controlsContext={controlsContext}
                 onMessageAction={handleMessageAction}
                 className={clsx(
-                  "mx-auto",
+                  "mx-auto w-full sm:w-[85%]",
                   layout === "compact" && "py-2",
                   layout === "comfortable" && "py-6",
                 )}
@@ -137,7 +140,7 @@ export const Chat = ({
 
         <ChatInput
           onSendMessage={sendMessage}
-          className="border-t border-theme-border bg-theme-bg-primary p-4"
+          className="border-t border-theme-border bg-theme-bg-primary p-2 sm:p-4"
           isLoading={isLoading}
           showControls
           onNewChat={onNewChat}

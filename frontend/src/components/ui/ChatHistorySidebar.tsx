@@ -6,7 +6,7 @@ import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { SidebarToggleIcon, EditIcon } from "./icons";
 import { Button } from "./Button";
 import { UserProfileDropdown } from "./UserProfileDropdown";
-import type { ChatSession } from "../../types/chat";
+import type { ChatSession, UserProfile } from "../../types/chat";
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -78,6 +78,21 @@ const ChatHistoryHeader = memo<{
 
 ChatHistoryHeader.displayName = "ChatHistoryHeader";
 
+const ChatHistoryFooter = memo<{
+  userProfile?: UserProfile;
+  onSignOut: () => void;
+}>(({ userProfile, onSignOut }) => (
+  <div className="p-2 border-t border-theme-border">
+    <UserProfileDropdown
+      userProfile={userProfile}
+      onSignOut={onSignOut}
+      className="w-full flex items-center justify-start"
+    />
+  </div>
+));
+
+ChatHistoryFooter.displayName = "ChatHistoryFooter";
+
 const ErrorDisplay = ({ error }: { error: Error }) => (
   <div className="flex flex-col items-center justify-center p-4 text-theme-fg-error">
     <p className="font-medium">Something went wrong</p>
@@ -129,29 +144,28 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           />
           {!collapsed && (
             <>
-              {error ? (
-                <ErrorDisplay error={error} />
-              ) : isLoading ? (
-                <ChatHistoryListSkeleton />
-              ) : (
-                <ChatHistoryList
-                  sessions={sessions}
-                  currentSessionId={currentSessionId}
-                  onSessionSelect={onSessionSelect}
-                  onSessionDelete={onSessionDelete}
-                  className="flex-1 p-2"
-                />
-              )}
-              <div className="p-2 border-t border-theme-border">
-                <UserProfileDropdown
-                  userProfile={sessions[0]?.metadata?.userProfile}
-                  onSignOut={() => {
-                    // TODO: Implement sign out logic
-                    console.log("Sign out clicked");
-                  }}
-                  className="w-full flex items-center justify-start"
-                />
+              <div className="flex-1 flex flex-col min-h-0">
+                {error ? (
+                  <ErrorDisplay error={error} />
+                ) : isLoading ? (
+                  <ChatHistoryListSkeleton />
+                ) : (
+                  <ChatHistoryList
+                    sessions={sessions}
+                    currentSessionId={currentSessionId}
+                    onSessionSelect={onSessionSelect}
+                    onSessionDelete={onSessionDelete}
+                    className="flex-1 p-2"
+                  />
+                )}
               </div>
+              <ChatHistoryFooter
+                userProfile={sessions[0]?.metadata?.userProfile}
+                onSignOut={() => {
+                  // TODO: Implement sign out logic
+                  console.log("Sign out clicked");
+                }}
+              />
             </>
           )}
         </aside>
