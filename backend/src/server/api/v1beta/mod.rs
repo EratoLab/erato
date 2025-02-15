@@ -1,3 +1,4 @@
+use crate::normalize_profile::{normalize_profile, IdTokenProfile};
 use axum::http::StatusCode;
 use axum::response::sse::Event;
 use axum::response::{IntoResponse, Sse};
@@ -51,15 +52,44 @@ pub async fn fallback() -> impl IntoResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-struct UserProfile {
-    email: String,
+pub struct UserProfile {
+    pub id: String,
+    /// The user's email address. Should't be used as a unique identifier, as it may change.
+    pub email: Option<String>,
+    /// The user's display name.
+    pub name: Option<String>,
+    /// The user's profile picture URL.
+    pub picture: Option<String>,
+    /// The user's preferred language.
+    ///
+    /// The final determined language is intersected with our supported languages, to determine the final language.
+    ///
+    /// Will be a BCP 47 language tag (e.g. "en" or "en-US").
+    ///
+    /// This is derived in the following order (highest priority first):
+    /// - ID token claims
+    /// - Browser Accept-Language header
+    /// - Default to "en"
+    pub preferred_language: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct Claims {
-    email: String,
-    exp: usize,
-    // Add other claims as needed
+impl UserProfile {
+    pub fn from_id_token_profile(profile: IdTokenProfile, user_id: String) -> Self {
+        let preferred_language = profile.preferred_language.unwrap_or("en".to_string());
+        Self {
+            id: user_id,
+            email: profile.email,
+            name: profile.name,
+            picture: profile.picture,
+            preferred_language,
+        }
+    }
+
+    pub fn determine_final_language(&mut self) {
+        // TODO: Include https://docs.rs/accept-language crate, and support at least a second language.
+        let _supported_languages = vec!["en"];
+        self.preferred_language = "en".to_string()
+    }
 }
 
 #[utoipa::path(
@@ -79,10 +109,10 @@ pub async fn profile(
     // Get the JWT token from the Authorization header
     let token = auth.token();
 
-    // TODO: In production, this should be a proper secret key from configuration
+    /// Placeholder secret, as we don't validate signature anyway
     let secret = b"placeholder";
 
-    // We don't validate anything, as we always run behind oauth2-proxy which handles verification
+    /// We don't validate anything, as we always run behind oauth2-proxy which handles verification
     let mut validation = Validation::new(Algorithm::HS256);
     validation.insecure_disable_signature_validation();
     validation.validate_exp = false;
@@ -95,11 +125,15 @@ pub async fn profile(
         Err(_) => return Err(StatusCode::UNAUTHORIZED),
     };
 
-    dbg!(&token_data.claims);
+    let normalized_profile = normalize_profile(token_data.claims);
+    let normalized_profile = normalized_profile.map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(UserProfile {
-        email: String::new(),
-    }))
+    // TODO: Create user on first encounter.
+    let user_id = "123".to_string();
+    let mut user_profile = UserProfile::from_id_token_profile(normalized_profile, user_id);
+    user_profile.determine_final_language();
+
+    Ok(Json(user_profile))
 }
 
 #[derive(Serialize, ToSchema)]
