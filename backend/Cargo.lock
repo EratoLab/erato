@@ -348,45 +348,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "backend"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "axum 0.7.9",
- "axum-extra",
- "color-eyre",
- "config",
- "ctor",
- "dotenv-flow",
- "env_logger",
- "eyre",
- "futures",
- "futures-macro",
- "headers",
- "http-body",
- "http-body-util",
- "jsonwebtoken",
- "lol_html",
- "ordered-multimap",
- "pretty_assertions",
- "regorus",
- "sea-orm",
- "serde",
- "serde_json",
- "sqlx",
- "synonym",
- "test-log",
- "tokio",
- "tokio-stream",
- "tower-http",
- "tracing-subscriber",
- "utoipa",
- "utoipa-axum",
- "utoipa-scalar",
- "utoipa-swagger-ui",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1057,6 +1018,45 @@ name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
+
+[[package]]
+name = "erato"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum 0.7.9",
+ "axum-extra",
+ "color-eyre",
+ "config",
+ "ctor",
+ "dotenv-flow",
+ "env_logger",
+ "eyre",
+ "futures",
+ "futures-macro",
+ "headers",
+ "http-body",
+ "http-body-util",
+ "jsonwebtoken",
+ "lol_html",
+ "ordered-multimap",
+ "pretty_assertions",
+ "regorus",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "synonym",
+ "test-log",
+ "tokio",
+ "tokio-stream",
+ "tower-http",
+ "tracing-subscriber",
+ "utoipa",
+ "utoipa-axum",
+ "utoipa-scalar",
+ "utoipa-swagger-ui",
+]
 
 [[package]]
 name = "errno"
