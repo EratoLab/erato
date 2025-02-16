@@ -8,6 +8,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     include: ["**/*.test.{ts,tsx}"],
+    // include: ["**/*.test.{ts,tsx}", "**/*.test.stories.{ts,tsx}"],
     deps: {
       inline: ["@storybook/test"],
     },

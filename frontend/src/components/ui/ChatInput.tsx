@@ -51,7 +51,7 @@ export const ChatInput = ({
   }, [message]);
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form className={clsx("w-2/3 mx-auto mb-4")} onSubmit={handleSubmit}>
       <div
         className={clsx(
           "w-full rounded-2xl bg-theme-bg-primary",
@@ -93,12 +93,14 @@ export const ChatInput = ({
               <>
                 <Button
                   onClick={onNewChat}
+                  variant="icon-only"
                   icon={<PlusIcon />}
                   size="sm"
                   aria-label="New chat"
                 />
                 <Button
                   onClick={onRegenerate}
+                  variant="icon-only"
                   icon={<ArrowPathIcon />}
                   size="sm"
                   aria-label="Regenerate response"
@@ -109,6 +111,7 @@ export const ChatInput = ({
 
           <Button
             type="submit"
+            variant="icon-only"
             disabled={!message.trim() || isLoading || disabled}
             icon={<ArrowUpIcon />}
             size="sm"

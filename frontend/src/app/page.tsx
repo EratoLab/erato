@@ -1,49 +1,45 @@
 "use client";
 
-import { Chat } from "../components/ui/Chat";
+import dynamic from "next/dynamic";
 import { ChatProvider } from "../components/containers/ChatProvider";
-import { MessageAction } from "../types/message-controls";
+import { ChatHistoryProvider } from "../components/containers/ChatHistoryProvider";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// Dynamically import Chat with ssr disabled
+const Chat = dynamic(
+  () => import("../components/ui/Chat").then((mod) => mod.Chat),
+  {
+    ssr: false,
+  },
+);
+
+const queryClient = new QueryClient();
 
 export default function Home() {
-  const handleMessageAction = async (action: MessageAction) => {
-    switch (action.type) {
-      case "copy":
-        console.log("Copy message:", action.messageId);
-        break;
-      case "edit":
-        console.log("Edit message:", action.messageId);
-        break;
-      case "like":
-        console.log("Like message:", action.messageId);
-        break;
-      case "dislike":
-        console.log("Dislike message:", action.messageId);
-        break;
-      case "rerun":
-        console.log("Rerun message:", action.messageId);
-        break;
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-theme-bg-primary">
-      <ChatProvider>
-        <main className="container mx-auto h-screen p-4">
-          <Chat
-            layout="default"
-            showAvatars={true}
-            showTimestamps={true}
-            onMessageAction={handleMessageAction}
-            controlsContext={{
-              currentUserId: "user_1", // This would come from your auth system
-              dialogOwnerId: "user_1",
-              isSharedDialog: false,
-            }}
-            onNewChat={() => console.log("New chat")}
-            onRegenerate={() => console.log("Regenerate")}
-          />
-        </main>
-      </ChatProvider>
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <div className="flex h-screen min-h-screen bg-theme-bg-primary">
+        <ChatHistoryProvider>
+          <ChatProvider>
+            <Chat
+              layout="default"
+              showAvatars={true}
+              showTimestamps={true}
+              onMessageAction={(action) =>
+                console.log("Message action:", action)
+              }
+              controlsContext={{
+                currentUserId: "user_1",
+                dialogOwnerId: "user_1",
+                isSharedDialog: false,
+              }}
+              onNewChat={() => console.log("New chat")}
+              onRegenerate={() => console.log("Regenerate")}
+              onToggleCollapse={() => console.log("Toggle collapse")}
+            />
+          </ChatProvider>
+        </ChatHistoryProvider>
+      </div>
+    </QueryClientProvider>
   );
 }

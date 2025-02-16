@@ -43,8 +43,10 @@ export const DefaultMessageControls = ({
       <div className="flex items-center gap-2">
         <Button
           onClick={() => handleAction("copy")}
+          variant="icon-only"
           icon={<ClipboardDocumentIcon />}
           size="sm"
+          showOnHover={showOnHover}
           aria-label="Copy message"
           title="Copy message"
         />
@@ -52,8 +54,10 @@ export const DefaultMessageControls = ({
         {isUser && isOwnMessage && !context.isSharedDialog && (
           <Button
             onClick={() => handleAction("edit")}
+            variant="icon-only"
             icon={<PencilSquareIcon />}
             size="sm"
+            showOnHover={showOnHover}
             aria-label="Edit message"
             title="Edit message"
           />
@@ -63,23 +67,29 @@ export const DefaultMessageControls = ({
           <>
             <Button
               onClick={() => handleAction("like")}
+              variant="icon-only"
               icon={<HandThumbUpIcon />}
               size="sm"
+              showOnHover={showOnHover}
               aria-label="Like message"
               title="Like message"
             />
             <Button
               onClick={() => handleAction("dislike")}
+              variant="icon-only"
               icon={<HandThumbDownIcon />}
               size="sm"
+              showOnHover={showOnHover}
               aria-label="Dislike message"
               title="Dislike message"
             />
             {(isOwnMessage || isDialogOwner) && (
               <Button
                 onClick={() => handleAction("rerun")}
+                variant="icon-only"
                 icon={<ArrowPathIcon />}
                 size="sm"
+                showOnHover={showOnHover}
                 aria-label="Regenerate response"
                 title="Regenerate response"
               />
