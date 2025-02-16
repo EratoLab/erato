@@ -84,9 +84,10 @@ check_frontend_changes() {
     # Store the modified files for preview
     local modified_files=$(printf '%s\n' "${frontend_files[@]}")
 
-    # Present interactive selection for format check
-    local selected=$(printf "Run check-format" | fzf \
-        --header="Select actions to perform (ENTER to confirm, ESC to skip)" \
+    # Present interactive selection for format check and type/lint check
+    local selected=$(printf "Run check-format\nRun type/lint check" | fzf \
+        --multi \
+        --header="Select actions to perform (use TAB to select multiple, ENTER to confirm, ESC to skip)" \
         --preview "echo 'Modified frontend files:'; echo '$modified_files'" \
         --preview-window=right:50%:wrap)
 
@@ -97,12 +98,23 @@ check_frontend_changes() {
     fi
 
     if [ -n "$selected" ]; then
-        echo "Running format check..."
-        cd frontend && just check-format
-        cd "$initial_dir"
+        if echo "$selected" | grep -q "Run check-format"; then
+            echo "Running format check..."
+            cd frontend && just check-format
+            local format_status=$?
+            cd "$initial_dir"
+            [ $format_status -ne 0 ] && return 1
+        fi
+        if echo "$selected" | grep -q "Run type/lint check"; then
+            echo "Running type and lint checks..."
+            cd frontend && pnpm run check
+            local check_status=$?
+            cd "$initial_dir"
+            [ $check_status -ne 0 ] && return 1
+        fi
     fi
 
-    return $?
+    return 0
 }
 
 # Check if fzf is installed
