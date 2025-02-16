@@ -1,3 +1,9 @@
+import type {
+  Message,
+  Chat,
+  UserProfile as ApiUserProfile,
+} from "../lib/generated/v1betaApi/v1betaApiSchemas";
+
 export type LoadingState =
   | "idle"
   | "loading"
@@ -11,9 +17,7 @@ export interface StreamingContext {
   partialContent?: string;
 }
 
-// Base message type that extends the API Message
-import type { Message } from "../lib/generated/v1betaApi/v1betaApiSchemas";
-
+// Extend the API Message with frontend-specific fields
 export interface ChatMessage extends Message {
   content: string;
   sender: "user" | "assistant";
@@ -22,9 +26,7 @@ export interface ChatMessage extends Message {
   loading?: StreamingContext;
 }
 
-// Base chat type that extends the API Chat
-import type { Chat } from "../lib/generated/v1betaApi/v1betaApiSchemas";
-
+// Extend the API Chat with frontend-specific fields
 export interface ChatSession extends Chat {
   title: string;
   messages: ChatMessage[];
@@ -33,9 +35,8 @@ export interface ChatSession extends Chat {
   metadata?: ChatMetadata;
 }
 
-export interface UserProfile {
-  id: string;
-  email: string;
+// Extend the API UserProfile with frontend-specific fields
+export interface UserProfile extends ApiUserProfile {
   username?: string;
   firstName?: string;
   lastName?: string;
