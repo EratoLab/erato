@@ -234,7 +234,7 @@ export const DropdownMenu = memo(
                 : "auto",
             bottom:
               position.vertical === "top"
-                ? `${window.innerHeight - buttonRef.current?.getBoundingClientRect().top}px`
+                ? `${window.innerHeight - (buttonRef.current?.getBoundingClientRect().top ?? 0)}px`
                 : "auto",
             left:
               position.horizontal === "left"
@@ -242,13 +242,13 @@ export const DropdownMenu = memo(
                 : "auto",
             right:
               position.horizontal === "right"
-                ? `${window.innerWidth - buttonRef.current?.getBoundingClientRect().right}px`
+                ? `${window.innerWidth - (buttonRef.current?.getBoundingClientRect().right ?? 0)}px`
                 : "auto",
             maxHeight: `calc(${
               position.vertical === "bottom"
                 ? window.innerHeight -
-                  buttonRef.current?.getBoundingClientRect().bottom
-                : buttonRef.current?.getBoundingClientRect().top
+                  (buttonRef.current?.getBoundingClientRect().bottom ?? 0)
+                : (buttonRef.current?.getBoundingClientRect().top ?? 0)
             }px - 16px)`,
           }}
           role="menu"

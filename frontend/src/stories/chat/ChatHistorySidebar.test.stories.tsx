@@ -110,6 +110,14 @@ export const LoadingStateTest: Story = {
 };
 
 export const CollapseTest: Story = {
+  args: {
+    sessions: mockSessions,
+    currentSessionId: "1",
+    onSessionSelect: () => {},
+    onSessionDelete: () => {},
+    isLoading: false,
+    showTitle: true,
+  },
   render: () => {
     const [isCollapsed, setIsCollapsed] = useState(false);
 

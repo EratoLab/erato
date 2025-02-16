@@ -37,3 +37,6 @@ check-format:
 
 lint:
     pnpm run lint
+
+check:
+    pnpm run check

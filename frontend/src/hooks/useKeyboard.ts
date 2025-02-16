@@ -18,16 +18,17 @@ export const useKeyboard = ({
   useEffect(() => {
     if (!enabled) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
+    const handleKeyDown = (e: Event) => {
+      const keyEvent = e as KeyboardEvent;
+      switch (keyEvent.key) {
         case "Escape":
-          onEscape?.(e);
+          onEscape?.(keyEvent);
           break;
         case "Tab":
-          onTab?.(e);
+          onTab?.(keyEvent);
           break;
         case "Enter":
-          onEnter?.(e);
+          onEnter?.(keyEvent);
           break;
       }
     };

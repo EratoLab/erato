@@ -87,11 +87,19 @@ export const Branded: Story = {
           primary: "#fdf2f8",
           secondary: "#fce7f3",
           accent: "#fbcfe8",
+          selected: "#f9a8d4",
+          hover: "#f472b6",
         },
         foreground: {
           primary: "#831843",
           secondary: "#9d174d",
           muted: "#be185d",
+        },
+        border: "#f0abfc",
+        danger: {
+          text: "#be123c",
+          hover: "#e11d48",
+          bg: "#fecdd3",
         },
         avatar: {
           user: {
