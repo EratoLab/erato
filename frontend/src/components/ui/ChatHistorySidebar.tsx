@@ -124,6 +124,24 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     const sidebarWidth = collapsed ? 56 : Math.max(width, minWidth);
 
+    const handleSignOut = () => {
+      console.log("ChatHistorySidebar handleSignOut called");
+      try {
+        const signOutUrl = "/oauth2/sign_out";
+        console.log("Attempting to redirect to:", signOutUrl);
+        window.location.href = signOutUrl;
+
+        setTimeout(() => {
+          console.log("Fallback timeout triggered");
+          const fullUrl = `${process.env.NEXT_PUBLIC_API_ROOT_URL}${signOutUrl}`;
+          console.log("Attempting fallback redirect to:", fullUrl);
+          window.location.href = fullUrl;
+        }, 1000);
+      } catch (error) {
+        console.error("Failed to sign out:", error);
+      }
+    };
+
     return (
       <ErrorBoundary FallbackComponent={ErrorDisplay}>
         <aside
@@ -161,10 +179,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               </div>
               <ChatHistoryFooter
                 userProfile={sessions[0]?.metadata?.userProfile}
-                onSignOut={() => {
-                  // TODO: Implement sign out logic
-                  console.log("Sign out clicked");
-                }}
+                onSignOut={handleSignOut}
               />
             </>
           )}

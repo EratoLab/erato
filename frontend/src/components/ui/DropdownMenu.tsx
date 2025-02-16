@@ -12,7 +12,7 @@ export interface DropdownMenuItem {
   onClick: () => void;
   variant?: "default" | "danger";
   disabled?: boolean;
-  shortcut?: string; // For keyboard shortcuts display
+  shortcut?: string;
 }
 
 export interface DropdownMenuProps {
@@ -20,19 +20,26 @@ export interface DropdownMenuProps {
   className?: string;
   align?: "left" | "right";
   triggerIcon?: React.ReactNode;
-  id?: string; // For ARIA relationships
-  /**
-   * Preferred orientation for the dropdown
-   * Will still flip if there's not enough space
-   */
+  id?: string;
   preferredOrientation?: {
     vertical: "top" | "bottom";
     horizontal: "left" | "right";
   };
 }
 
+type Position = {
+  vertical: "top" | "bottom";
+  horizontal: "left" | "right";
+};
+
 const MenuItem = memo(
-  ({ item, onSelect }: { item: DropdownMenuItem; onSelect: () => void }) => (
+  ({
+    item,
+    onSelect,
+  }: {
+    item: DropdownMenuItem;
+    onSelect: (e: React.MouseEvent) => void;
+  }) => (
     <button
       className={clsx(
         "w-full px-4 py-2 text-sm text-left",
@@ -44,14 +51,11 @@ const MenuItem = memo(
           ? "text-theme-danger hover:text-theme-danger-hover hover:bg-theme-danger-bg"
           : "hover:bg-theme-bg-accent text-theme-fg-primary",
       )}
-      onClick={(e) => {
-        e.stopPropagation();
-        item.onClick();
-        onSelect();
-      }}
+      onClick={onSelect}
       disabled={item.disabled}
       role="menuitem"
-      tabIndex={-1} // Handle focus management manually
+      tabIndex={-1}
+      type="button"
     >
       {item.icon && (
         <span className="w-4 h-4 flex-shrink-0" aria-hidden="true">
@@ -70,11 +74,6 @@ const MenuItem = memo(
 
 MenuItem.displayName = "MenuItem";
 
-type Position = {
-  vertical: "top" | "bottom";
-  horizontal: "left" | "right";
-};
-
 export const DropdownMenu = memo(
   ({
     items,
@@ -85,6 +84,8 @@ export const DropdownMenu = memo(
     preferredOrientation,
   }: DropdownMenuProps) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [isProcessingClick, setIsProcessingClick] = useState(false);
+    const clickTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
     const [position, setPosition] = useState<Position>({
       vertical: preferredOrientation?.vertical || "bottom",
       horizontal: preferredOrientation?.horizontal || align,
@@ -104,13 +105,11 @@ export const DropdownMenu = memo(
         padding: 8,
       };
 
-      // Calculate required space for the menu
       const requiredSpace = {
         vertical: menu.height + viewport.padding,
         horizontal: menu.width + viewport.padding,
       };
 
-      // Calculate available space in each direction
       const space = {
         top: trigger.top - viewport.padding,
         bottom: viewport.height - trigger.bottom - viewport.padding,
@@ -118,7 +117,6 @@ export const DropdownMenu = memo(
         right: viewport.width - trigger.right - viewport.padding,
       };
 
-      // Determine if each position has enough space
       const hasSpace = {
         top: space.top >= requiredSpace.vertical,
         bottom: space.bottom >= requiredSpace.vertical,
@@ -126,9 +124,6 @@ export const DropdownMenu = memo(
         right: space.right >= requiredSpace.horizontal,
       };
 
-      // If preferred orientation is specified, use it unless there's not enough space
-      // Then use the direction with more available space
-      // TODO: this could be improved if we use the actual size of our dropdown
       const newPosition: Position = {
         vertical: preferredOrientation?.vertical
           ? hasSpace[preferredOrientation.vertical]
@@ -153,33 +148,42 @@ export const DropdownMenu = memo(
       setPosition(newPosition);
     }, [isOpen, preferredOrientation]);
 
-    // Update position when menu opens or window resizes
-    useEffect(() => {
-      updatePosition();
-
-      const handleResize = () => {
-        requestAnimationFrame(updatePosition);
-      };
-
-      if (isOpen) {
-        window.addEventListener("resize", handleResize);
-        return () => window.removeEventListener("resize", handleResize);
-      }
-    }, [isOpen, updatePosition]);
-
-    // Close menu and restore focus
     const closeMenu = useCallback(() => {
+      if (isProcessingClick) return;
       setIsOpen(false);
       buttonRef.current?.focus();
-    }, []);
+    }, [isProcessingClick]);
 
-    // Handle keyboard navigation
+    const handleMenuItemClick = useCallback(
+      (item: DropdownMenuItem, e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        setIsProcessingClick(true);
+
+        if (clickTimeoutRef.current) {
+          clearTimeout(clickTimeoutRef.current);
+        }
+
+        try {
+          item.onClick();
+        } finally {
+          clickTimeoutRef.current = setTimeout(() => {
+            setIsProcessingClick(false);
+            setIsOpen(false);
+          }, 100);
+        }
+      },
+      [],
+    );
+
+    useClickOutside(menuRef, closeMenu, isOpen);
     useKeyboard({
       target: menuRef,
       enabled: isOpen,
       onEscape: closeMenu,
       onTab: (e) => {
-        e.preventDefault(); // Always prevent default Tab behavior
+        e.preventDefault();
         const menuItems =
           menuRef.current?.querySelectorAll('[role="menuitem"]');
         if (!menuItems?.length) return;
@@ -200,11 +204,17 @@ export const DropdownMenu = memo(
       },
     });
 
-    // Handle click outside
-    useClickOutside(menuRef, closeMenu, isOpen);
+    useEffect(() => {
+      updatePosition();
+      const handleResize = () => requestAnimationFrame(updatePosition);
 
-    // Focus first menu item when opening
-    React.useEffect(() => {
+      if (isOpen) {
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+      }
+    }, [isOpen, updatePosition]);
+
+    useEffect(() => {
       if (isOpen) {
         requestAnimationFrame(() => {
           const firstItem = menuRef.current?.querySelector(
@@ -215,6 +225,14 @@ export const DropdownMenu = memo(
       }
     }, [isOpen]);
 
+    useEffect(() => {
+      return () => {
+        if (clickTimeoutRef.current) {
+          clearTimeout(clickTimeoutRef.current);
+        }
+      };
+    }, []);
+
     const renderDropdown = () => {
       if (!isOpen) return null;
 
@@ -222,9 +240,9 @@ export const DropdownMenu = memo(
         <div
           id={menuId}
           className={clsx(
-            "fixed w-48 rounded-md shadow-lg", // Changed from absolute to fixed
+            "fixed w-48 rounded-md shadow-lg",
             "bg-theme-bg-primary border border-theme-border",
-            "z-[9999]", // Highest z-index to ensure it's above everything
+            "z-[9999]",
             "transition-all duration-200",
           )}
           style={{
@@ -260,7 +278,7 @@ export const DropdownMenu = memo(
               <MenuItem
                 key={`${item.label}-${index}`}
                 item={item}
-                onSelect={closeMenu}
+                onSelect={(e: React.MouseEvent) => handleMenuItemClick(item, e)}
               />
             ))}
           </div>

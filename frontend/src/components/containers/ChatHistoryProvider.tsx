@@ -1,4 +1,4 @@
-import React, { useContext, useCallback, useMemo } from "react";
+import React, { useContext, useCallback, useMemo, useState } from "react";
 import {
   useChats,
   useMessages,
@@ -76,18 +76,26 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     },
   );
 
-  // TODO: @backend - Add API mutation for creating sessions
+  // Change error state to match the context type (undefined instead of null)
+  const [error, setError] = useState<Error | undefined>(undefined);
+
+  // Add error handling to existing operations
   const createSession = useCallback(() => {
-    const newSession: ChatSession = {
-      id: new Date().toISOString(),
-      title: "New Chat",
-      messages: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    set(newSession.id, newSession);
-    setCurrentSessionId(newSession.id);
-    return newSession.id;
+    try {
+      const newSession: ChatSession = {
+        id: new Date().toISOString(),
+        title: "New Chat",
+        messages: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      set(newSession.id, newSession);
+      setCurrentSessionId(newSession.id);
+      return newSession.id;
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error("Failed to create session"));
+      return "";
+    }
   }, [set, setCurrentSessionId]);
 
   // TODO: @backend - Add API mutation for updating sessions
@@ -127,6 +135,9 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     return currentSessionId ? (sessions[currentSessionId] ?? null) : null;
   }, [sessions, currentSessionId]);
 
+  // Combine loading states for simpler consumption
+  const isLoading = isLoadingChats || isLoadingMessages;
+
   const contextValue = useMemo(
     () => ({
       sessions: sortedSessions,
@@ -136,7 +147,8 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
       deleteSession,
       switchSession,
       getCurrentSession,
-      isLoading: isLoadingChats || isLoadingMessages,
+      isLoading,
+      error,
     }),
     [
       sortedSessions,
@@ -146,8 +158,8 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
       deleteSession,
       switchSession,
       getCurrentSession,
-      isLoadingChats,
-      isLoadingMessages,
+      isLoading,
+      error,
     ],
   );
 
