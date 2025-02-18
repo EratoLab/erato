@@ -2,11 +2,11 @@
   "openapi": "3.1.0",
   "info": {
     "title": "",
-    "description": "The main API structure\n\n- `/api/v1/` <- Most of the API is nested under here. All of the resources there are scoped to what is accessible by the authenticated identity.\n- `/api/v1/me` <- Everything under this path is scoped to the subject of the authenticated identity.\nThis means that the identity may be authorized to view more resources, but this is the default view for them.\nE.g. the chats route scoped under there will only list the chats created by the user, but the user may be authorized to also view chats shared by other users.\n",
+    "description": "The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under here. All of the resources there are scoped to what is accessible by the authenticated identity.\n- `/api/v1beta/me` <- Everything under this path is scoped to the subject of the authenticated identity.\nThis means that the identity may be authorized to view more resources, but this is the default view for them.\nE.g. the chats route scoped under there will only list the chats created by the user, but the user may be authorized to also view chats shared by other users.\n",
     "version": ""
   },
   "paths": {
-    "/api/v1/chats": {
+    "/api/v1beta/chats": {
       "get": {
         "tags": [],
         "operationId": "chats",
@@ -27,7 +27,7 @@
         }
       }
     },
-    "/api/v1/me/profile": {
+    "/api/v1beta/me/profile": {
       "get": {
         "tags": [],
         "operationId": "profile",
@@ -53,7 +53,7 @@
         ]
       }
     },
-    "/api/v1/messages": {
+    "/api/v1beta/messages": {
       "get": {
         "tags": [],
         "operationId": "messages",
@@ -74,7 +74,7 @@
         }
       }
     },
-    "/api/v1/messages/submitstream": {
+    "/api/v1beta/messages/submitstream": {
       "post": {
         "tags": [],
         "operationId": "message_submit_sse",
