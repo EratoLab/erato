@@ -26,7 +26,7 @@ export type ChatsVariables = V1betaApiContext["fetcherOptions"];
 
 export const fetchChats = (variables: ChatsVariables, signal?: AbortSignal) =>
   v1betaApiFetch<ChatsResponse, ChatsError, undefined, {}, {}, {}>({
-    url: "/api/v1/chats",
+    url: "/api/v1beta/chats",
     method: "get",
     ...variables,
     signal,
@@ -47,7 +47,7 @@ export function chatsQuery(variables: ChatsVariables | reactQuery.SkipToken): {
 export function chatsQuery(variables: ChatsVariables | reactQuery.SkipToken) {
   return {
     queryKey: queryKeyFn({
-      path: "/api/v1/chats",
+      path: "/api/v1beta/chats",
       operationId: "chats",
       variables,
     }),
@@ -97,7 +97,7 @@ export const fetchProfile = (
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<Schemas.UserProfile, ProfileError, undefined, {}, {}, {}>({
-    url: "/api/v1/me/profile",
+    url: "/api/v1beta/me/profile",
     method: "get",
     ...variables,
     signal,
@@ -122,7 +122,7 @@ export function profileQuery(
 ) {
   return {
     queryKey: queryKeyFn({
-      path: "/api/v1/me/profile",
+      path: "/api/v1beta/me/profile",
       operationId: "profile",
       variables,
     }),
@@ -174,7 +174,7 @@ export const fetchMessages = (
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<MessagesResponse, MessagesError, undefined, {}, {}, {}>({
-    url: "/api/v1/messages",
+    url: "/api/v1beta/messages",
     method: "get",
     ...variables,
     signal,
@@ -199,7 +199,7 @@ export function messagesQuery(
 ) {
   return {
     queryKey: queryKeyFn({
-      path: "/api/v1/messages",
+      path: "/api/v1beta/messages",
       operationId: "messages",
       variables,
     }),
@@ -249,7 +249,7 @@ export const fetchMessageSubmitSse = (
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<undefined, MessageSubmitSseError, undefined, {}, {}, {}>({
-    url: "/api/v1/messages/submitstream",
+    url: "/api/v1beta/messages/submitstream",
     method: "post",
     ...variables,
     signal,
@@ -349,17 +349,17 @@ export const useHealth = <TData = undefined,>(
 
 export type QueryOperation =
   | {
-      path: "/api/v1/chats";
+      path: "/api/v1beta/chats";
       operationId: "chats";
       variables: ChatsVariables | reactQuery.SkipToken;
     }
   | {
-      path: "/api/v1/me/profile";
+      path: "/api/v1beta/me/profile";
       operationId: "profile";
       variables: ProfileVariables | reactQuery.SkipToken;
     }
   | {
-      path: "/api/v1/messages";
+      path: "/api/v1beta/messages";
       operationId: "messages";
       variables: MessagesVariables | reactQuery.SkipToken;
     }
