@@ -8,6 +8,8 @@ import React, {
 import { StreamingContext } from "../../types/chat";
 import { SSE } from "sse.js";
 import { env } from "../../app/env";
+import { useChatHistory } from "./ChatHistoryProvider";
+import { useMessageStream } from "./MessageStreamProvider";
 
 // TODO: move later to types folder, that we can align with what we have from the backend programmaticaly
 /**
@@ -20,6 +22,7 @@ export interface ChatMessage {
   createdAt: Date;
   authorId: string;
   loading?: StreamingContext;
+  error?: Error;
 }
 
 interface MessageMap {
@@ -59,6 +62,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   initialMessageOrder = [],
   loadMessages,
 }) => {
+  const { currentSessionId } = useChatHistory();
+  const { currentStreamingMessage, streamMessage } = useMessageStream();
   const [messages, setMessages] = useState<MessageMap>(initialMessages);
   const [messageOrder, setMessageOrder] =
     useState<string[]>(initialMessageOrder);
@@ -130,26 +135,66 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
    * sendMessage adds the user's new message to the state.
    * Later on, we can integrate websocket functionality here to stream responses.
    */
-  const sendMessage = (content: string) => {
-    setIsLoading(true);
-    const id = new Date().toISOString();
-    const newMessage: ChatMessage = {
-      id,
-      sender: "user",
-      content,
-      createdAt: new Date(),
-      authorId: "",
-    };
+  const sendMessage = useCallback(
+    async (content: string) => {
+      if (!currentSessionId) return;
 
-    setMessages((prev) => ({
-      ...prev,
-      [id]: newMessage,
-    }));
-    setMessageOrder((prev) => [...prev, id]);
+      // Add user message
+      const userMessage: ChatMessage = {
+        id: generateMessageId(),
+        content,
+        sender: "user",
+        createdAt: new Date(),
+        authorId: "",
+      };
+      addMessage(userMessage);
 
-    // Simulate API delay
-    // setTimeout(() => setIsLoading(false), 1000);
-    // TODO: Replace with real API call later
+      // Create placeholder for assistant message
+      const assistantMessageId = generateMessageId();
+      const assistantMessage: ChatMessage = {
+        id: assistantMessageId,
+        content: "",
+        sender: "assistant",
+        createdAt: new Date(),
+        loading: { state: "loading" },
+        authorId: "",
+      };
+      addMessage(assistantMessage);
+
+      // Start streaming
+      await streamMessage(currentSessionId, content);
+    },
+    [currentSessionId, streamMessage],
+  );
+
+  // Update streaming message content
+  useEffect(() => {
+    if (currentStreamingMessage && currentSessionId) {
+      const lastMessageId = messageOrder[messageOrder.length - 1];
+      const lastMessage = messages[lastMessageId];
+      if (lastMessage && lastMessage.sender === "assistant") {
+        updateMessage(lastMessage.id, {
+          content: currentStreamingMessage.content,
+          loading: currentStreamingMessage.isComplete
+            ? undefined
+            : { state: "loading" },
+          error: currentStreamingMessage.error,
+        });
+      }
+    }
+  }, [
+    currentStreamingMessage,
+    currentSessionId,
+    messages,
+    messageOrder,
+    updateMessage,
+  ]);
+
+  const generateMessageId = () => crypto.randomUUID();
+
+  const addMessage = (message: ChatMessage) => {
+    setMessages((prev) => ({ ...prev, [message.id]: message }));
+    setMessageOrder((prev) => [...prev, message.id]);
   };
 
   return (

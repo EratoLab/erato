@@ -41,8 +41,8 @@ export interface UserProfile extends ApiUserProfile {
   firstName?: string;
   lastName?: string;
   avatarUrl?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ChatMetadata {
