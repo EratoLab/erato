@@ -10,6 +10,9 @@ install_clis:
     fi
     cargo binstall cargo-nextest@0.9.88 sea-orm-cli@1.1.4
 
+deploy_db:
+    cd sqitch && ./deploy_distributed.sh --db-uri postgresql://eratouser:eratopw@localhost:5432/erato
+
 # Generates the entity source files from a live DB connection
 generate_db_schema:
     sea-orm-cli generate entity \
