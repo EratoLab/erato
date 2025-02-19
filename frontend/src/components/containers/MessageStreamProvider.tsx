@@ -84,7 +84,7 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
           setCurrentSource(null);
         });
 
-        source.addEventListener("error", (e: Event) => {
+        source.addEventListener("error", () => {
           setCurrentStreamingMessage((prev) =>
             prev
               ? {
