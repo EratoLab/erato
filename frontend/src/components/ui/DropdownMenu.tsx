@@ -2,8 +2,8 @@ import React, { useState, useRef, useCallback, memo, useEffect } from "react";
 import clsx from "clsx";
 import { Button } from "./Button";
 import { MoreVertical } from "./icons";
-import { useClickOutside } from "../../hooks/useClickOutside";
-import { useKeyboard } from "../../hooks/useKeyboard";
+import { useClickOutside } from "@/hooks/useClickOutside";
+import { useKeyboard } from "@/hooks/useKeyboard";
 import { createPortal } from "react-dom";
 
 export interface DropdownMenuItem {

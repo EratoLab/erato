@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useEffect,
 } from "react";
-import { StreamingContext } from "../../types/chat";
+import { StreamingContext } from "@/types/chat";
 import { SSE } from "sse.js";
 import { env } from "../../app/env";
 import { useChatHistory } from "./ChatHistoryProvider";

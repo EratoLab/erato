@@ -34,7 +34,9 @@ export const TestFallbackMechanics: Story = {
 export const TestUsernameInitial: Story = {
   args: {
     userProfile: {
+      id: "1",
       username: "johndoe",
+      preferred_language: "en",
     },
   },
   play: async ({ canvasElement }) => {
@@ -47,9 +49,11 @@ export const TestUsernameInitial: Story = {
 export const TestNameInitials: Story = {
   args: {
     userProfile: {
+      id: "2",
       username: "johndoe",
       firstName: "John",
       lastName: "Doe",
+      preferred_language: "en",
     },
   },
   play: async ({ canvasElement }) => {
@@ -62,10 +66,12 @@ export const TestNameInitials: Story = {
 export const TestImageAvatar: Story = {
   args: {
     userProfile: {
+      id: "3",
       username: "johndoe",
       firstName: "John",
       lastName: "Doe",
       avatarUrl: "https://i.pravatar.cc/300",
+      preferred_language: "en",
     },
   },
   play: async ({ canvasElement }) => {
@@ -80,8 +86,10 @@ export const TestImageAvatar: Story = {
 export const TestSizeVariants: Story = {
   args: {
     userProfile: {
+      id: "4",
       firstName: "John",
       lastName: "Doe",
+      preferred_language: "en",
     },
   },
   play: async ({ canvasElement }) => {
