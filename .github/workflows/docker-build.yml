@@ -8,6 +8,9 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'Dockerfile.combined'
+      - '.hadolint.yaml'
+      - '**/Dockerfile'
+      - '**/Dockerfile.*'
   pull_request:
     branches: [ main ]
     paths:
@@ -15,6 +18,9 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'Dockerfile.combined'
+      - '.hadolint.yaml'
+      - '**/Dockerfile'
+      - '**/Dockerfile.*'
 
 env:
   REGISTRY: harbor.imassage.me
@@ -55,6 +61,13 @@ jobs:
       # Lint run section
       # Every step here should be conditional on "success() || failure()",
       # in order to prevent failing fast, so that we can run all linting steps in one run.
+
+      - name: "Lint Dockerfiles"
+        uses: jbergstroem/hadolint-gh-action@v1.12.2
+        if: success() || failure()
+        with:
+          dockerfile: Dockerfile.combined backend/Dockerfile backend/ollama-smol/Dockerfile frontend/Dockerfile
+          config_file: .hadolint.yaml
 
       - name: "rustfmt"
         working-directory: ./backend
