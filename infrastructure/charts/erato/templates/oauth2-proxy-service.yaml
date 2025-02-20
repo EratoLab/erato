@@ -1,0 +1,19 @@
+{{- if .Values.oauth2Proxy.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-oauth2-proxy
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-oauth2-proxy
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4180
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ .Release.Name }}-oauth2-proxy
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

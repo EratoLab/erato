@@ -1,0 +1,22 @@
+{{- if and .Values.dex.enabled .Values.dex.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-dex
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-dex
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  ingressClassName: {{ .Values.dex.ingress.className }}
+  rules:
+    - host: {{ .Values.dex.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-dex
+                port:
+                  name: http
+{{- end }} 

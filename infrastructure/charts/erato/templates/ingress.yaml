@@ -16,7 +16,11 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: erato-backend
+                {{- if .Values.oauth2Proxy.enabled }}
+                name: {{ .Release.Name }}-oauth2-proxy
+                {{- else }}
+                name: {{ .Release.Name }}-backend
+                {{- end }}
                 port:
                   name: http
 {{- end }}
