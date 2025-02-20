@@ -1,21 +1,25 @@
 import React from "react";
 import clsx from "clsx";
 import Image from "next/image";
+import { UserProfile } from "@/types/chat";
 
 export interface AvatarProps {
-  userProfile?: {
-    username?: string;
-    firstName?: string;
-    lastName?: string;
-    avatarUrl?: string;
-  };
+  userProfile?: UserProfile;
+  userOrAssistant?: boolean;
   size?: "sm" | "md" | "lg";
   className?: string;
 }
 
 export const Avatar = React.memo<AvatarProps>(
-  ({ userProfile, size = "md", className }) => {
+  ({ userProfile, userOrAssistant = false, size = "md", className }) => {
     const getInitials = () => {
+      if (userOrAssistant) {
+        return "A"; // 'A' for Assistant
+      }
+      if (userProfile?.name) {
+        const nameParts = userProfile.name.split(' ');
+        return `${nameParts[0][0]}${nameParts[1] ? nameParts[1][0] : ''}`.toUpperCase();
+      }
       if (userProfile?.firstName && userProfile?.lastName) {
         return `${userProfile.firstName[0]}${userProfile.lastName[0]}`.toUpperCase();
       }
@@ -40,7 +44,7 @@ export const Avatar = React.memo<AvatarProps>(
           className,
         )}
       >
-        {userProfile?.avatarUrl ? (
+        {userProfile?.avatarUrl && !userOrAssistant ? (
           <Image
             src={userProfile.avatarUrl}
             alt="User avatar"

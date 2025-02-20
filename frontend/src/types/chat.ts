@@ -4,6 +4,12 @@ import type {
   UserProfile as ApiUserProfile,
 } from "../lib/generated/v1betaApi/v1betaApiSchemas";
 
+// Convert void properties to string in a type
+// TODO: remove this once #53 is resolved
+export type VoidToString<T> = {
+  [K in keyof T]: T[K] extends void ? string : T[K]
+};
+
 export type LoadingState =
   | "idle"
   | "loading"
@@ -18,7 +24,7 @@ export interface StreamingContext {
 }
 
 // Extend the API Message with frontend-specific fields
-export interface ChatMessage extends Message {
+export interface ChatMessage extends VoidToString<Message> {
   content: string;
   sender: "user" | "assistant";
   createdAt: Date;
@@ -27,7 +33,7 @@ export interface ChatMessage extends Message {
 }
 
 // Extend the API Chat with frontend-specific fields
-export interface ChatSession extends Chat {
+export interface ChatSession extends VoidToString<Chat> {
   title: string;
   messages: ChatMessage[];
   createdAt: Date;
@@ -36,13 +42,13 @@ export interface ChatSession extends Chat {
 }
 
 // Extend the API UserProfile with frontend-specific fields
-export interface UserProfile extends ApiUserProfile {
+export interface UserProfile extends VoidToString<ApiUserProfile> {
   username?: string;
   firstName?: string;
   lastName?: string;
   avatarUrl?: string;
-  createdAt: string;
-  updatedAt: string;
+  // createdAt: string;
+  // updatedAt: string;
 }
 
 export interface ChatMetadata {

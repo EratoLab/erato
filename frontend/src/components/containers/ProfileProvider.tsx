@@ -2,11 +2,16 @@
 
 import React, { createContext } from "react";
 import { useProfile } from "../../lib/generated/v1betaApi/v1betaApiComponents";
-import type { UserProfile } from "../../types/chat";
+import type { UserProfile } from "@/types/chat";
+import { createTransformedQueryHook } from "@/hooks/useTransformedQuery";
+
+// Create a utility hook that transforms void to string
+// TODO: remove this once #53 is resolved
+const useTransformedProfile = createTransformedQueryHook(useProfile);
 
 // Add this context definition
 export const ProfileContext = createContext<{
-  profile: UserProfile | null;
+  profile?: UserProfile;
   isLoading: boolean;
   error: unknown;
 } | null>(null);
@@ -14,19 +19,11 @@ export const ProfileContext = createContext<{
 export const ProfileProvider: React.FC<React.PropsWithChildren> = ({
   children,
 }) => {
-  const { data: profile, isLoading, error } = useProfile({});
-
-  const transformedProfile = profile
-    ? {
-        ...profile,
-        createdAt: new Date().toISOString(), // Default value
-        updatedAt: new Date().toISOString(), // Default value
-      }
-    : null;
+  const { data: profile, isLoading, error } = useTransformedProfile({});
 
   return (
     <ProfileContext.Provider
-      value={{ profile: transformedProfile, isLoading, error }}
+      value={{ profile, isLoading, error }}
     >
       {children}
     </ProfileContext.Provider>
