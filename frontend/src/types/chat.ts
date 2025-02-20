@@ -7,7 +7,7 @@ import type {
 // Convert void properties to string in a type
 // TODO: remove this once #53 is resolved
 export type VoidToString<T> = {
-  [K in keyof T]: T[K] extends void ? string : T[K]
+  [K in keyof T]: T[K] extends void ? string : T[K];
 };
 
 export type LoadingState =

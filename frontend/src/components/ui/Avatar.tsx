@@ -17,8 +17,8 @@ export const Avatar = React.memo<AvatarProps>(
         return "A"; // 'A' for Assistant
       }
       if (userProfile?.name) {
-        const nameParts = userProfile.name.split(' ');
-        return `${nameParts[0][0]}${nameParts[1] ? nameParts[1][0] : ''}`.toUpperCase();
+        const nameParts = userProfile.name.split(" ");
+        return `${nameParts[0][0]}${nameParts[1] ? nameParts[1][0] : ""}`.toUpperCase();
       }
       if (userProfile?.firstName && userProfile?.lastName) {
         return `${userProfile.firstName[0]}${userProfile.lastName[0]}`.toUpperCase();

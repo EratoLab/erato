@@ -72,10 +72,7 @@ export const ChatMessage = memo(function ChatMessage({
     >
       <div className="w-full flex gap-6">
         {showAvatar && (
-          <Avatar 
-            userProfile={userProfile} 
-            userOrAssistant={!!isUser}
-          />
+          <Avatar userProfile={userProfile} userOrAssistant={!!isUser} />
         )}
 
         <div className="min-w-0 flex-1 break-words">

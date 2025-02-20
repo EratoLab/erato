@@ -3,11 +3,15 @@
 import { VoidToString } from "@/types/chat";
 
 export function createTransformedQueryHook<T, Args extends unknown[]>(
-  useQueryHook: (...args: Args) => { data: T | undefined; isLoading: boolean; error: unknown }
+  useQueryHook: (...args: Args) => {
+    data: T | undefined;
+    isLoading: boolean;
+    error: unknown;
+  },
 ) {
   return (...args: Args) => {
     const { data, isLoading, error } = useQueryHook(...args);
-    const transformedData = data ? data as VoidToString<T> : undefined;
+    const transformedData = data ? (data as VoidToString<T>) : undefined;
     return { data: transformedData, isLoading, error };
   };
-} 
+}

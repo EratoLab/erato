@@ -22,9 +22,7 @@ export const ProfileProvider: React.FC<React.PropsWithChildren> = ({
   const { data: profile, isLoading, error } = useTransformedProfile({});
 
   return (
-    <ProfileContext.Provider
-      value={{ profile, isLoading, error }}
-    >
+    <ProfileContext.Provider value={{ profile, isLoading, error }}>
       {children}
     </ProfileContext.Provider>
   );

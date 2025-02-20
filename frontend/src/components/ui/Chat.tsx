@@ -11,7 +11,7 @@ import {
 } from "../../types/message-controls";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { useChatHistory } from "../containers/ChatHistoryProvider";
-import { useProfile } from '@/hooks/useProfile';
+import { useProfile } from "@/hooks/useProfile";
 
 export interface ChatProps {
   className?: string;
