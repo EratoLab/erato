@@ -1,0 +1,16 @@
+# Hadolint configuration file
+# See all rules: https://github.com/hadolint/hadolint#rules
+
+# Ignore specific rules globally
+ignored:
+  # - DL3008 # Pin versions in apt-get install (warning)
+  # - DL3013 # Pin versions in pip install (warning)
+  # - DL3016 # Pin versions in npm install (warning)
+
+# Override specific rule severities
+failure-threshold: error # only fail on error-level rules
+
+# Trusted registries
+trustedRegistries:
+  - docker.io
+  - gcr.io 
