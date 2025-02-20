@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState, useEffect, useCallback } from "react";
 import { ChatMessage as ChatMessageComponent } from "../../components/ui/ChatMessage";
-import { ChatMessage, LoadingState } from "../../types/chat";
+import { ChatMessage, LoadingState } from "@/types/chat";
 import { within, waitFor, userEvent, expect } from "@storybook/test";
 
 interface PlaygroundProps {

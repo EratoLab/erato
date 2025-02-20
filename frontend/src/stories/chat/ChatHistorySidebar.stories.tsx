@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
 import { action } from "@storybook/addon-actions";
 import { ChatHistorySidebar } from "../../components/ui/ChatHistorySidebar";
-import type { ChatSession } from "../../types/chat";
+import type { ChatSession } from "@/types/chat";
 import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
 
 const meta = {

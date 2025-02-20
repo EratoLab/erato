@@ -5,7 +5,7 @@ import {
 } from "../../lib/generated/v1betaApi/v1betaApiComponents";
 import * as reactQuery from "@tanstack/react-query";
 import { useMap } from "react-use";
-import type { ChatSession } from "../../types/chat";
+import type { ChatSession } from "@/types/chat";
 import type { ChatHistoryContextType } from "../../types/chat-history";
 import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
 

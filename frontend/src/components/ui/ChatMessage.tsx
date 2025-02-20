@@ -9,6 +9,7 @@ import { MessageControlsComponent } from "../../types/message-controls";
 import { MessageControlsContext } from "../../types/message-controls";
 import { MessageAction } from "../../types/message-controls";
 import { DefaultMessageControls } from "./DefaultMessageControls";
+import { UserProfile } from "@/types/chat";
 
 export interface ChatMessageProps {
   message: ChatMessageType;
@@ -34,6 +35,7 @@ export interface ChatMessageProps {
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
   onMessageAction: (action: MessageAction) => void | Promise<void>;
+  userProfile?: UserProfile;
 }
 
 export const ChatMessage = memo(function ChatMessage({
@@ -41,6 +43,7 @@ export const ChatMessage = memo(function ChatMessage({
   className = "",
   showTimestamp = true,
   showAvatar = false,
+  userProfile,
   showControlsOnHover = true,
   controls: Controls = DefaultMessageControls,
   controlsContext,
@@ -69,7 +72,10 @@ export const ChatMessage = memo(function ChatMessage({
     >
       <div className="w-full flex gap-6">
         {showAvatar && (
-          <Avatar userProfile={{ username: isUser ? "You" : "Assistant" }} />
+          <Avatar 
+            userProfile={userProfile} 
+            userOrAssistant={!!isUser}
+          />
         )}
 
         <div className="min-w-0 flex-1 break-words">

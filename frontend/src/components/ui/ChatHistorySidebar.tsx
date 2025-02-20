@@ -6,7 +6,7 @@ import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { SidebarToggleIcon, EditIcon } from "./icons";
 import { Button } from "./Button";
 import { UserProfileDropdown } from "./UserProfileDropdown";
-import type { ChatSession, UserProfile } from "../../types/chat";
+import type { ChatSession, UserProfile } from "@/types/chat";
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -29,6 +29,7 @@ export interface ChatHistorySidebarProps {
   onSessionDelete: (sessionId: string) => void;
   isLoading: boolean;
   error?: Error;
+  userProfile?: UserProfile;
 }
 
 const ChatHistoryHeader = memo<{
@@ -114,6 +115,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     onSessionDelete,
     isLoading,
     error,
+    userProfile,
   }) => {
     const ref = useRef<HTMLElement>(null);
     const [width, setWidth] = useState(minWidth);
@@ -178,7 +180,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 )}
               </div>
               <ChatHistoryFooter
-                userProfile={sessions[0]?.metadata?.userProfile}
+                userProfile={userProfile}
                 onSignOut={handleSignOut}
               />
             </>

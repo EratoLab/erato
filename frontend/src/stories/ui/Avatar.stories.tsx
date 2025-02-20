@@ -44,10 +44,12 @@ type Story = StoryObj<typeof meta>;
 export const WithImage: Story = {
   args: {
     userProfile: {
+      id: "1",
       username: "johndoe",
       firstName: "John",
       lastName: "Doe",
       avatarUrl: "https://i.pravatar.cc/300",
+      preferred_language: "en",
     },
     size: "md",
   },
@@ -56,9 +58,11 @@ export const WithImage: Story = {
 export const WithNameInitials: Story = {
   args: {
     userProfile: {
+      id: "2",
       username: "johndoe",
       firstName: "John",
       lastName: "Doe",
+      preferred_language: "en",
     },
     size: "md",
   },
@@ -67,7 +71,9 @@ export const WithNameInitials: Story = {
 export const WithUsername: Story = {
   args: {
     userProfile: {
+      id: "3",
       username: "johndoe",
+      preferred_language: "en",
     },
     size: "md",
   },
@@ -82,8 +88,10 @@ export const DefaultFallback: Story = {
 export const Small: Story = {
   args: {
     userProfile: {
+      id: "4",
       firstName: "John",
       lastName: "Doe",
+      preferred_language: "en",
     },
     size: "sm",
   },
@@ -92,8 +100,10 @@ export const Small: Story = {
 export const Large: Story = {
   args: {
     userProfile: {
+      id: "5",
       firstName: "John",
       lastName: "Doe",
+      preferred_language: "en",
     },
     size: "lg",
   },

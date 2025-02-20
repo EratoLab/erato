@@ -3,7 +3,7 @@ import {
   ChatHistoryList,
   ChatHistoryListSkeleton,
 } from "../../components/ui/ChatHistoryList";
-import type { ChatSession } from "../../types/chat";
+import type { ChatSession } from "@/types/chat";
 
 const meta = {
   title: "CHAT/ChatHistoryList",

@@ -2,7 +2,7 @@ import React, { memo } from "react";
 import { Avatar } from "./Avatar";
 import { DropdownMenu } from "./DropdownMenu";
 import { LogOutIcon } from "./icons";
-import type { UserProfile } from "../../types/chat";
+import type { UserProfile } from "@/types/chat";
 import { clsx } from "clsx";
 
 interface UserProfileDropdownProps {

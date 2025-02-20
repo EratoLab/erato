@@ -11,6 +11,7 @@ import {
 } from "../../types/message-controls";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { useChatHistory } from "../containers/ChatHistoryProvider";
+import { useProfile } from '@/hooks/useProfile';
 
 export interface ChatProps {
   className?: string;
@@ -58,6 +59,7 @@ export const Chat = ({
   onToggleCollapse,
 }: ChatProps) => {
   const { messages, messageOrder, sendMessage, isLoading } = useChat();
+  const { profile } = useProfile();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const {
     sessions,
@@ -97,6 +99,7 @@ export const Chat = ({
         isLoading={chatHistoryLoading}
         error={chatHistoryError}
         className="fixed inset-0 z-50 sm:relative sm:z-auto"
+        userProfile={profile}
       />
       <div
         className={clsx(
@@ -124,6 +127,7 @@ export const Chat = ({
                 maxWidth={maxWidth}
                 showTimestamp={showTimestamps}
                 showAvatar={showAvatars}
+                userProfile={profile}
                 controls={messageControls}
                 controlsContext={controlsContext}
                 onMessageAction={handleMessageAction}

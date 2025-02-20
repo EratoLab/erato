@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import clsx from "clsx";
-import { ChatSession } from "../../types/chat";
+import { ChatSession } from "@/types/chat";
 import { DropdownMenu } from "./DropdownMenu";
 import { Info, Trash } from "./icons";
 import { InteractiveContainer } from "./InteractiveContainer";
