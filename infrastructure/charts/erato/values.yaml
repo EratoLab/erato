@@ -7,7 +7,7 @@ ingress:
   className: nginx
 
 oauth2Proxy:
-  enabled: false
+  enabled: true
   image:
     repository: quay.io/oauth2-proxy/oauth2-proxy
     tag: v7.8.1
