@@ -9,7 +9,7 @@ erato:
     config: |
       http_address = "0.0.0.0:4180"
 
-      upstreams = ["http://erato-backend.erato.svc.cluster.local:3130"]
+      upstreams = ["http://erato-backend:3130"]
       email_domains = ["*"]
       cookie_secret = "0123456789abcdef0123456789abcdef"  # Replace in production
       cookie_secure = false
@@ -56,6 +56,8 @@ dex:
     issuer: http://dex.erato.internal
     storage:
       type: memory
+    oauth2:
+      skipApprovalScreen: true
     web:
       http: 0.0.0.0:5556
     staticClients:
