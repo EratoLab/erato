@@ -1,0 +1,72 @@
+erato:
+  ingress:
+    enabled: true
+    host: app.erato.internal
+    className: nginx
+  
+  oauth2Proxy:
+    enabled: true
+    config: |
+      http_address = "0.0.0.0:4180"
+
+      upstreams = ["http://erato-backend.erato.svc.cluster.local:3130"]
+      email_domains = ["*"]
+      cookie_secret = "0123456789abcdef0123456789abcdef"  # Replace in production
+      cookie_secure = false
+      provider = "oidc"
+      client_id = "erato-app"
+      client_secret = "ZXJhdG8tc2VjcmV0"  # Replace in production
+      skip_oidc_discovery = true
+      oidc_issuer_url = "http://erato-dex.erato.svc.cluster.local:5556"
+      login_url = "http://dex.erato.internal/auth"
+      redeem_url = "http://erato-dex.erato.svc.cluster.local:5556/token"
+      oidc_jwks_url = "http://erato-dex.erato.svc.cluster.local:5556/keys"
+      redirect_url = "http://app.erato.internal/oauth2/callback"
+      skip_auth_regex = ["^/health", "^/metrics"]
+      pass_authorization_header = true
+      pass_access_token = true
+      pass_user_headers = true
+
+      insecure_oidc_skip_issuer_verification = true
+
+  postgresql:
+    # set postgresql.enabled to be false to disable deploy of a PostgreSQL database and use an
+    # existing external PostgreSQL database
+    enabled: false
+
+    # If postgresql.enabled is falsse, you can set the following values to connect to an existing
+    # external PostgreSQL database
+    external:
+      connectionString:
+        value: "postgresql://eratouser:eratopw@host.k3d.internal:5432/erato"
+
+dex:
+  enabled: true
+  image:
+    repository: dexidp/dex
+    tag: v2.41.1
+    pullPolicy: IfNotPresent
+  
+  ingress:
+    enabled: true
+    host: dex.erato.internal
+    className: nginx
+  
+  config: |
+    issuer: http://dex.erato.internal
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:5556
+    staticClients:
+    - id: erato-app
+      redirectURIs:
+      - 'http://app.erato.internal/oauth2/callback'
+      name: 'Erato App'
+      secret: ZXJhdG8tc2VjcmV0
+    enablePasswordDB: true
+    staticPasswords:
+    - email: "admin@example.com"
+      hash: "$2y$10$EI3YbB3STkWvAzAyZ/fU/ehRT6M5ActxvZS9rZ1fXmTV2zxYNgUaK" # password: admin
+      username: "admin"
+      userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"

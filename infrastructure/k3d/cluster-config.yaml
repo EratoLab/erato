@@ -14,6 +14,9 @@ registries:
       "k3d-registry.localhost:5000":
         endpoint:
           - http://k3d-registry.localhost:5000
+      "docker.io":
+        endpoint:
+          - http://k3d-registry.localhost:5000
 ports:
   - port: 80:80
     nodeFilters:

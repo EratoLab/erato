@@ -1,0 +1,12 @@
+{{- if .Values.dex.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-dex
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-dex
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  config.yaml: |-
+{{ .Values.dex.config | indent 4 }}
+{{- end }} 

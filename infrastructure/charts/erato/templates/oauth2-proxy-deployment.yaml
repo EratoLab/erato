@@ -1,0 +1,52 @@
+{{- if .Values.oauth2Proxy.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-oauth2-proxy
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-oauth2-proxy
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Release.Name }}-oauth2-proxy
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Release.Name }}-oauth2-proxy
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: "{{ .Values.oauth2Proxy.image.repository }}:{{ .Values.oauth2Proxy.image.tag }}"
+          imagePullPolicy: {{ .Values.oauth2Proxy.image.pullPolicy }}
+          args:
+            - --config=/etc/oauth2-proxy/oauth2-proxy.cfg
+          ports:
+            - name: http
+              containerPort: 4180
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.oauth2Proxy.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/oauth2-proxy
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-oauth2-proxy
+{{- end }}
