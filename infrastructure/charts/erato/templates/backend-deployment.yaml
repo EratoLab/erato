@@ -14,6 +14,16 @@ spec:
       labels:
         app: erato
     spec:
+      initContainers:
+        - name: run-migrations
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          command: ["/bin/bash"]
+          args:
+            - "-c"
+            - "cd /app/sqitch && ./deploy_distributed.sh --db-uri $DATABASE_URL"
+          env:
+            - name: DATABASE_URL
+              {{- include "erato.postgresValueOrValueFrom" . | nindent 14 }}
       containers:
         - name: erato-backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
