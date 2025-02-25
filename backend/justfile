@@ -28,6 +28,7 @@ test:
     cargo nextest run
 
 lint:
+    cargo clippy --all-targets --all-features
     cargo fmt --all --check
 
 run $FRONTEND_BUNDLE_PATH="../frontend/out":
