@@ -3,6 +3,12 @@ erato:
     enabled: true
     host: app.erato.internal
     className: nginx
+
+  backend:
+    image:
+      repository: harbor.imassage.me/erato/app
+      tag: "latest"
+      pullPolicy: Always
   
   oauth2Proxy:
     enabled: true
