@@ -25,7 +25,8 @@ async fn main() -> Result<(), Report> {
 
     let config = AppConfig::new()?;
 
-    let (router, _api) = server::router::router().split_for_parts();
+    let state = AppState::new(config.clone()).await?;
+    let (router, _api) = server::router::router(state.clone()).split_for_parts();
 
     let listener =
         tokio::net::TcpListener::bind(format!("{}:{}", config.http_host, config.http_port)).await?;
@@ -37,8 +38,6 @@ async fn main() -> Result<(), Report> {
         "http://{}",
         local_addr
     ))]);
-
-    let state = AppState::new(config.clone()).await?;
 
     let app = router
         .merge(Scalar::with_url("/scalar", spec.clone()))

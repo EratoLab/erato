@@ -1,4 +1,10 @@
+use axum::{http, Router};
+use axum_test::TestServer;
 use ctor::ctor;
+use erato::models::user::get_or_create_user;
+use erato::server::router::router;
+use erato::state::AppState;
+use serde_json::Value;
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 use test_log::test;
@@ -38,4 +44,83 @@ async fn test_db_connection(pool: Pool<Postgres>) {
         .expect("Failed to execute test query");
 
     assert_eq!(result, Vec::<i32>::new());
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_user_without_email(pool: Pool<Postgres>) {
+    // Convert the sqlx pool to a sea-orm DatabaseConnection
+    let conn = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+
+    // Test data
+    let issuer = "test-issuer";
+    let subject = "test-subject";
+
+    // First call - create a user without an email
+    let user1 = get_or_create_user(&conn, issuer, subject, None)
+        .await
+        .expect("Failed to create user without email");
+
+    // Verify the user was created with the correct data
+    assert_eq!(user1.issuer, issuer);
+    assert_eq!(user1.subject, subject);
+    assert_eq!(user1.email, None);
+
+    // Second call - should return the same user
+    let user2 = get_or_create_user(&conn, issuer, subject, None)
+        .await
+        .expect("Failed to get existing user");
+
+    // Verify the user has the same ID (i.e., it's the same user)
+    assert_eq!(user1.id, user2.id);
+    assert_eq!(user2.issuer, issuer);
+    assert_eq!(user2.subject, subject);
+    assert_eq!(user2.email, None);
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_profile_endpoint(pool: Pool<Postgres>) {
+    // Convert the sqlx pool to a sea-orm DatabaseConnection
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+
+    // Create a test user
+    let issuer = "http://0.0.0.0:5556";
+    let subject = "CiQwOGE4Njg0Yi1kYjg4LTRiNzMtOTBhOS0zY2QxNjYxZjU0NjYSBWxvY2Fs";
+    let user = get_or_create_user(&db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    // Create app state with the database connection
+    let app_state = AppState { db };
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a mock JWT token
+    // In a real scenario, this would be a properly signed JWT
+    // For testing, we just need a token that contains the necessary claims
+    let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
+
+    // Make a request to the profile endpoint with the mock JWT
+    let response = server
+        .get("/api/v1beta/me/profile")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response body as a JSON Value instead of UserProfile
+    let profile: Value = response.json();
+
+    // Verify the profile contains the expected data
+    assert_eq!(profile["id"].as_str().unwrap(), user.id.to_string());
+    assert_eq!(
+        profile["email"],
+        Value::String("admin@example.com".to_string())
+    );
+    assert_eq!(profile["preferred_language"].as_str().unwrap(), "en");
 }
