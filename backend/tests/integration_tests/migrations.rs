@@ -5,7 +5,6 @@ use sqlx::migrate::{Migration, MigrationSource, MigrationType};
 use std::borrow::Cow;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::pin::{pin, Pin};
 
 #[derive(Debug, Deserialize)]
 struct SqitchSummary {
@@ -18,6 +17,7 @@ pub struct SqitchMigrationSource {
 }
 
 impl SqitchMigrationSource {
+    #[allow(dead_code)]
     pub fn new<P: AsRef<Path>>(summary_path: P) -> Self {
         Self {
             summary_path: summary_path.as_ref().to_path_buf(),

@@ -1,5 +1,5 @@
 use axum::handler::HandlerWithoutStateExt;
-use axum::{Extension, Router};
+use axum::Extension;
 use eyre::Report;
 use serde_json::{json, Value};
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
@@ -23,15 +23,13 @@ async fn main() -> Result<(), Report> {
         }
     }
 
-    let config = AppConfig::new().unwrap();
+    let config = AppConfig::new()?;
 
-    let (router, api) = server::router::router().split_for_parts();
+    let (router, _api) = server::router::router().split_for_parts();
 
     let listener =
-        tokio::net::TcpListener::bind(format!("{}:{}", config.http_host, config.http_port))
-            .await
-            .unwrap();
-    let local_addr = listener.local_addr().unwrap();
+        tokio::net::TcpListener::bind(format!("{}:{}", config.http_host, config.http_port)).await?;
+    let local_addr = listener.local_addr()?;
 
     // Create OpenAPI spec with server information
     let mut spec = ApiDoc::build_openapi_full();
@@ -60,9 +58,7 @@ async fn main() -> Result<(), Report> {
     println!("API docs: http://{}/scalar", local_addr);
     println!("Frontend at: http://{}", local_addr);
     println!("Listening on {}", local_addr);
-    axum::serve(listener, app.into_make_service())
-        .await
-        .unwrap();
+    axum::serve(listener, app.into_make_service()).await?;
 
     Ok(())
 }

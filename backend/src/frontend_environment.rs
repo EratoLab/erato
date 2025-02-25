@@ -4,7 +4,6 @@ use lol_html::html_content::ContentType;
 use lol_html::{element, HtmlRewriter, Settings};
 use ordered_multimap::ListOrderedMultimap;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::fmt::Write;
 use std::io;
 
@@ -27,7 +26,7 @@ pub fn inject_environment_script_tag(
     // Writes a line with the content `window.KEY = "VALUE";` for every entry
     for (key, value) in &frontend_env.0 {
         script_tag.write_str("window.").unwrap();
-        script_tag.write_str(&key).unwrap();
+        script_tag.write_str(key).unwrap();
         script_tag.write_str(" = ").unwrap();
         script_tag
             .write_str(&serde_json::to_string(&value)?)
@@ -54,7 +53,7 @@ pub fn inject_environment_script_tag(
 
 pub mod axum {
     use super::*;
-    use ::axum::body::{Body, Bytes, HttpBody};
+    use ::axum::body::{Body, Bytes};
     use ::axum::http::{HeaderValue, Request};
     use ::axum::response::Response;
     use ::axum::{http, BoxError, Extension};
@@ -62,7 +61,7 @@ pub mod axum {
     use http_body_util::combinators::UnsyncBoxBody;
     use http_body_util::BodyExt;
     use std::convert::Infallible;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use tower_http::services::{ServeDir, ServeFile};
 
     /// Static file handler that injects a script tag with environment variables into HTML files.
@@ -94,7 +93,7 @@ pub mod axum {
                             let value = frontend_environment.clone();
                             move |bytes| {
                                 let mut output = Vec::with_capacity(bytes.len() * 2);
-                                inject_environment_script_tag(&bytes.as_ref(), &mut output, &value)
+                                inject_environment_script_tag(bytes.as_ref(), &mut output, &value)
                                     .unwrap();
                                 output.into()
                             }

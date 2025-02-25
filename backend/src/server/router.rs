@@ -1,6 +1,6 @@
 use super::api::v1beta::ApiV1ApiDoc;
 use crate::state::AppState;
-use axum::routing::{get, head};
+use axum::routing::get;
 // use utoipa::openapi::OpenApiBuilder;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
@@ -20,10 +20,10 @@ async fn health() -> &'static str {
 
 pub fn router() -> OpenApiRouter<AppState> {
     // build our application with a route
-    let app = OpenApiRouter::new()
+
+    OpenApiRouter::new()
         .route("/health", get(health).head(health))
-        .nest("/api/v1beta", crate::server::api::v1beta::router());
-    app
+        .nest("/api/v1beta", crate::server::api::v1beta::router())
 }
 
 #[derive(OpenApi)]
@@ -35,7 +35,7 @@ pub fn router() -> OpenApiRouter<AppState> {
 )]
 pub struct MainRouterApiDoc;
 
-pub const MAIN_ROUTER_DOC: &'static str = r#"The main API structure
+pub const MAIN_ROUTER_DOC: &str = r#"The main API structure
 
 - `/api/v1beta/` <- Most of the API is nested under here. All of the resources there are scoped to what is accessible by the authenticated identity.
 - `/api/v1beta/me` <- Everything under this path is scoped to the subject of the authenticated identity.

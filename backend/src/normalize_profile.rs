@@ -31,25 +31,20 @@ pub fn normalize_profile(claims: Value) -> Result<IdTokenProfile, Report> {
     // Optional standard claims across providers
     let email = claims
         .get("email")
-        .map(|v| v.as_str().map(String::from))
-        .flatten();
+        .and_then(|v| v.as_str().map(String::from));
     let name = claims
         .get("name")
-        .map(|v| v.as_str().map(String::from))
-        .flatten();
+        .and_then(|v| v.as_str().map(String::from));
     let picture = claims
         .get("picture")
-        .map(|v| v.as_str().map(String::from))
-        .flatten();
+        .and_then(|v| v.as_str().map(String::from));
     // xms_pl and xms_tpl; Entra ID specific
     let user_preferred_language = claims
         .get("xms_pl")
-        .map(|v| v.as_str().map(String::from))
-        .flatten();
+        .and_then(|v| v.as_str().map(String::from));
     let tenant_preferred_language = claims
         .get("xms_tpl")
-        .map(|v| v.as_str().map(String::from))
-        .flatten();
+        .and_then(|v| v.as_str().map(String::from));
 
     let preferred_language = user_preferred_language.or(tenant_preferred_language);
 
@@ -99,7 +94,7 @@ mod tests {
     #[ignore]
     // TODO: Need to setup entra id app with no additional claims and dump ID token claims.
     pub fn test_normalize_entra_id_minimal_profile() {
-        let claims = serde_json::json!({
+        let _claims = serde_json::json!({
             "iss": "https://login.microsoftonline.com/1234567890/v2.0",
             "sub": "1234567890",
             "email": "test@example.com",
