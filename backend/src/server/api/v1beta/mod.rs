@@ -1,32 +1,37 @@
-use crate::models::user::get_or_create_user;
-use crate::normalize_profile::{normalize_profile, IdTokenProfile};
+pub mod me_profile_middleware;
+
+use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::state::AppState;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::sse::Event;
 use axum::response::{IntoResponse, Sse};
 use axum::routing::{get, post};
-use axum::{Json, Router};
-use axum_extra::headers::{authorization::Bearer, Authorization};
-use axum_extra::TypedHeader;
+use axum::{middleware, Extension, Json, Router};
 use futures::stream::{self, Stream};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json;
-use serde_json::Value;
 use std::convert::Infallible;
 use std::time::Duration;
 use tokio_stream::StreamExt as _;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 
-pub fn router() -> OpenApiRouter<AppState> {
+pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // build our application with a route
+    let me_routes =
+        Router::new()
+            .route("/profile", get(profile))
+            .route_layer(middleware::from_fn_with_state(
+                app_state,
+                me_profile_middleware::user_profile_middleware,
+            ));
+
     let app = Router::new()
         .route("/messages", get(messages))
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/chats", get(chats))
-        .route("/me/profile", get(profile))
+        .nest("/me", me_routes)
         .fallback(fallback);
     app.into()
 }
@@ -54,47 +59,6 @@ pub async fn fallback() -> impl IntoResponse {
     )
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct UserProfile {
-    pub id: String,
-    /// The user's email address. Shouldn't be used as a unique identifier, as it may change.
-    pub email: Option<String>,
-    /// The user's display name.
-    pub name: Option<String>,
-    /// The user's profile picture URL.
-    pub picture: Option<String>,
-    /// The user's preferred language.
-    ///
-    /// The final determined language is intersected with our supported languages, to determine the final language.
-    ///
-    /// Will be a BCP 47 language tag (e.g. "en" or "en-US").
-    ///
-    /// This is derived in the following order (highest priority first):
-    /// - ID token claims
-    /// - Browser Accept-Language header
-    /// - Default to "en"
-    pub preferred_language: String,
-}
-
-impl UserProfile {
-    pub fn from_id_token_profile(profile: IdTokenProfile, user_id: String) -> Self {
-        let preferred_language = profile.preferred_language.unwrap_or("en".to_string());
-        Self {
-            id: user_id,
-            email: profile.email,
-            name: profile.name,
-            picture: profile.picture,
-            preferred_language,
-        }
-    }
-
-    pub fn determine_final_language(&mut self) {
-        // TODO: Include https://docs.rs/accept-language crate, and support at least a second language.
-        let _supported_languages = ["en"];
-        self.preferred_language = "en".to_string()
-    }
-}
-
 #[utoipa::path(
     get,
     path = "/me/profile",
@@ -107,46 +71,10 @@ impl UserProfile {
     )
 )]
 pub async fn profile(
-    State(app_state): State<AppState>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    State(_app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<UserProfile>, StatusCode> {
-    // Get the JWT token from the Authorization header
-    let token = auth.token();
-
-    // Placeholder secret, as we don't validate signature anyway
-    let secret = b"placeholder";
-
-    // We don't validate anything, as we always run behind oauth2-proxy which handles verification
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.insecure_disable_signature_validation();
-    validation.validate_exp = false;
-    validation.validate_aud = false;
-    validation.validate_nbf = false;
-
-    // Decode and validate the token
-    let token_data = match decode::<Value>(token, &DecodingKey::from_secret(secret), &validation) {
-        Ok(data) => data,
-        Err(_) => return Err(StatusCode::UNAUTHORIZED),
-    };
-
-    let normalized_profile = normalize_profile(token_data.claims);
-    let normalized_profile = normalized_profile.map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // TODO: Move this to some kind of middleware for the /me routes
-    let user = get_or_create_user(
-        &app_state.db,
-        &normalized_profile.iss,
-        &normalized_profile.sub,
-        normalized_profile.email.as_deref(),
-    )
-    .await
-    .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let user_id = user.id.to_string();
-    let mut user_profile = UserProfile::from_id_token_profile(normalized_profile, user_id);
-    user_profile.determine_final_language();
-
-    Ok(Json(user_profile))
+    Ok(Json(me_user.0))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -187,7 +115,7 @@ struct MessageSubmitStreamingResponseMessageTextDelta {
 
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-// TODO: This is just an example so that we have multiple variants to test again
+// TODO: This is just an example so that we have multiple variants to test against
 struct MessageSubmitStreamingResponseMessageOther {
     foo: String,
 }

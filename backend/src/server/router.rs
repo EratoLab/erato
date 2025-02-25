@@ -18,12 +18,12 @@ async fn health() -> &'static str {
     "OK"
 }
 
-pub fn router() -> OpenApiRouter<AppState> {
+pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // build our application with a route
 
     OpenApiRouter::new()
         .route("/health", get(health).head(health))
-        .nest("/api/v1beta", crate::server::api::v1beta::router())
+        .nest("/api/v1beta", crate::server::api::v1beta::router(app_state))
 }
 
 #[derive(OpenApi)]
