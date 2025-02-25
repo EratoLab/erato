@@ -84,6 +84,20 @@ jobs:
         if: success() || failure()
         run: pnpm run lint
 
+  cargo-clippy:
+    runs-on: ubuntu-22.04
+    name: "cargo clippy"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Install Rust toolchain"
+        run: rustup component add clippy
+      - name: "Clippy"
+        working-directory: backend
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+
   build-and-push-amd64:
     runs-on: ubuntu-22.04
     permissions:

@@ -57,7 +57,7 @@ pub async fn fallback() -> impl IntoResponse {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UserProfile {
     pub id: String,
-    /// The user's email address. Should't be used as a unique identifier, as it may change.
+    /// The user's email address. Shouldn't be used as a unique identifier, as it may change.
     pub email: Option<String>,
     /// The user's display name.
     pub name: Option<String>,
@@ -90,7 +90,7 @@ impl UserProfile {
 
     pub fn determine_final_language(&mut self) {
         // TODO: Include https://docs.rs/accept-language crate, and support at least a second language.
-        let _supported_languages = vec!["en"];
+        let _supported_languages = ["en"];
         self.preferred_language = "en".to_string()
     }
 }
@@ -113,10 +113,10 @@ pub async fn profile(
     // Get the JWT token from the Authorization header
     let token = auth.token();
 
-    /// Placeholder secret, as we don't validate signature anyway
+    // Placeholder secret, as we don't validate signature anyway
     let secret = b"placeholder";
 
-    /// We don't validate anything, as we always run behind oauth2-proxy which handles verification
+    // We don't validate anything, as we always run behind oauth2-proxy which handles verification
     let mut validation = Validation::new(Algorithm::HS256);
     validation.insecure_disable_signature_validation();
     validation.validate_exp = false;
@@ -130,7 +130,7 @@ pub async fn profile(
     };
 
     let normalized_profile = normalize_profile(token_data.claims);
-    let normalized_profile = normalized_profile.map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let normalized_profile = normalized_profile.map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // TODO: Move this to some kind of middleware for the /me routes
     let user = get_or_create_user(
@@ -140,7 +140,7 @@ pub async fn profile(
         normalized_profile.email.as_deref(),
     )
     .await
-    .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let user_id = user.id.to_string();
     let mut user_profile = UserProfile::from_id_token_profile(normalized_profile, user_id);
@@ -150,12 +150,12 @@ pub async fn profile(
 }
 
 #[derive(Serialize, ToSchema)]
-struct Message {
+pub struct Message {
     id: String,
 }
 
 #[derive(Serialize, ToSchema)]
-struct Chat {
+pub struct Chat {
     id: String,
 }
 
@@ -175,6 +175,7 @@ enum MessageSubmitStreamingResponseMessage {
     #[serde(rename = "text_delta")]
     TextDelta(MessageSubmitStreamingResponseMessageTextDelta),
     #[serde(rename = "example_other")]
+    #[allow(unused)]
     ExampleOther(MessageSubmitStreamingResponseMessageOther),
 }
 
@@ -186,14 +187,13 @@ struct MessageSubmitStreamingResponseMessageTextDelta {
 
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-// TODO: This is just an example so that we have multiple variants to test agian
+// TODO: This is just an example so that we have multiple variants to test again
 struct MessageSubmitStreamingResponseMessageOther {
     foo: String,
 }
 
 #[utoipa::path(post, path = "/messages/submitstream", responses((status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage)))]
 pub async fn message_submit_sse(
-    TypedHeader(user_agent): TypedHeader<headers::UserAgent>,
     headers: axum::http::HeaderMap,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     // Log all headers for debugging

@@ -16,7 +16,9 @@ pub async fn get_or_create_user(
         .one(conn)
         .await?;
 
-    if let None = user {
+    if let Some(user) = user {
+        Ok(user)
+    } else {
         let new_user = users::ActiveModel {
             issuer: ActiveValue::Set(issuer.to_owned()),
             subject: ActiveValue::Set(subject.to_owned()),
@@ -28,7 +30,5 @@ pub async fn get_or_create_user(
             .await?;
         // let created_user = unimplemented!();
         Ok(created_user)
-    } else {
-        Ok(user.unwrap())
     }
 }

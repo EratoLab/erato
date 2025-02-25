@@ -127,6 +127,12 @@ changed_files=()
 
 while read local_ref local_sha remote_ref remote_sha
 do
+    # For new branches where remote_sha is all zeros, use main branch as base
+    if [[ "$remote_sha" =~ ^0+$ ]]; then
+        echo "New branch detected. Using main branch as comparison base..."
+        remote_sha=$(git rev-parse main)
+    fi
+
     # Get all changed files between remote and local, removing duplicates
     while IFS= read -r file; do
         changed_files+=("$file")

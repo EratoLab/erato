@@ -3,14 +3,16 @@ use regorus::Engine;
 
 use crate::policy::types::{Action, ResourceId, ResourceKind, SubjectId, SubjectKind};
 
-const BACKEND_POLICY: &'static str = include_str!("../../policy/backend/backend.rego");
+const BACKEND_POLICY: &str = include_str!("../../policy/backend/backend.rego");
 
 #[derive(Debug)]
 pub struct PolicyEngine {
+    #[allow(unused)]
     engine: Engine,
 }
 
 impl PolicyEngine {
+    #[allow(unused)]
     pub fn new() -> Result<Self, Report> {
         let mut engine = Engine::new();
         engine.set_rego_v1(true);
@@ -21,12 +23,13 @@ impl PolicyEngine {
         Ok(Self { engine })
     }
 
+    #[allow(unused)]
     pub fn authorize(
         &self,
-        subject_kind: SubjectKind,
-        subject_id: &SubjectId,
+        _subject_kind: SubjectKind,
+        _subject_id: &SubjectId,
         resource_kind: ResourceKind,
-        resource_id: &ResourceId,
+        _resource_id: &ResourceId,
         action: Action,
     ) -> Result<(), Report> {
         // First validate the resource_kind-action combination as an assertion
@@ -40,6 +43,7 @@ impl PolicyEngine {
 
 // Compile-time validation of resource-action combinations
 pub const fn is_valid_resource_action(resource: ResourceKind, action: Action) -> bool {
+    #[allow(clippy::match_like_matches_macro)]
     match (resource, action) {
         (ResourceKind::Chat, Action::Read) => true,
         (ResourceKind::ChatSingleton, Action::Create) => true,
@@ -89,12 +93,14 @@ mod tests {
 
         // This should panic as Chat + Create is not a valid combination
         let engine = PolicyEngine::new().unwrap();
-        engine.authorize(
-            subject_kind,
-            &subject_id,
-            resource_kind,
-            &resource_id,
-            action,
-        );
+        engine
+            .authorize(
+                subject_kind,
+                &subject_id,
+                resource_kind,
+                &resource_id,
+                action,
+            )
+            .unwrap();
     }
 }

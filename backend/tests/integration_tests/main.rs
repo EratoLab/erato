@@ -1,10 +1,6 @@
-use crate::migrations::SqitchMigrationSource;
 use ctor::ctor;
-use sqlx::migrate::Migrator;
-use sqlx::pool::PoolConnection;
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
-use std::path::PathBuf;
 use test_log::test;
 
 mod db;
@@ -29,7 +25,7 @@ pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./sqitch/deploy")
 fn dummy() {
     // This test exists to make sure the test binary is built
     // Individual tests should go in their respective modules
-    assert!(true);
+    // assert!(true);
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
