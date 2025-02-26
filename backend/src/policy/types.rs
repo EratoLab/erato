@@ -35,6 +35,8 @@ pub enum ResourceKind {
     Chat,
     #[serde(rename = "chat_singleton")]
     ChatSingleton,
+    #[serde(rename = "message")]
+    Message,
 }
 
 #[derive(Synonym)]
@@ -50,6 +52,7 @@ impl ResourceId {
 pub enum Resource {
     Chat(String),
     ChatSingleton,
+    Message(String),
 }
 
 impl From<&Resource> for Resource {
@@ -63,6 +66,7 @@ impl Resource {
         match self {
             Resource::Chat(id) => (ResourceKind::Chat, ResourceId(id)),
             Resource::ChatSingleton => (ResourceKind::ChatSingleton, ResourceId::singleton()),
+            Resource::Message(id) => (ResourceKind::Message, ResourceId(id)),
         }
     }
 }
@@ -73,4 +77,6 @@ pub enum Action {
     Read,
     #[serde(rename = "create")]
     Create,
+    #[serde(rename = "submit_message")]
+    SubmitMessage,
 }
