@@ -11,6 +11,22 @@ export type Message = {
   id: string;
 };
 
+export type MessageSubmitRequest = {
+  /**
+   * The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  previous_message_id?: void;
+  /**
+   * The text of the message.
+   *
+   * @example Hello, world!
+   */
+  user_message: string;
+};
+
 export type MessageSubmitStreamingResponseMessage =
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
@@ -29,7 +45,7 @@ export type MessageSubmitStreamingResponseMessageTextDelta = {
 
 export type UserProfile = {
   /**
-   * The user's email address. Should't be used as a unique identifier, as it may change.
+   * The user's email address. Shouldn't be used as a unique identifier, as it may change.
    */
   email?: void;
   id: string;

@@ -2,6 +2,7 @@ use axum::{http, Router};
 use axum_test::TestServer;
 use ctor::ctor;
 use erato::models::user::get_or_create_user;
+use erato::policy::engine::PolicyEngine;
 use erato::server::router::router;
 use erato::state::AppState;
 use serde_json::Value;
@@ -90,7 +91,10 @@ async fn test_profile_endpoint(pool: Pool<Postgres>) {
         .expect("Failed to create user");
 
     // Create app state with the database connection
-    let app_state = AppState { db };
+    let app_state = AppState {
+        db,
+        policy: PolicyEngine::new().unwrap(),
+    };
 
     let app: Router = router(app_state.clone())
         .split_for_parts()

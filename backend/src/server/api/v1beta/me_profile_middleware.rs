@@ -1,5 +1,6 @@
 use crate::models::user::get_or_create_user;
 use crate::normalize_profile::{normalize_profile, IdTokenProfile};
+use crate::policy::prelude::Subject;
 use crate::state::AppState;
 use axum::extract::{Request, State};
 use axum::http;
@@ -55,6 +56,12 @@ impl UserProfile {
 
 #[derive(Debug, Clone)]
 pub struct MeProfile(pub UserProfile);
+
+impl MeProfile {
+    pub fn to_subject(&self) -> Subject {
+        Subject::User(self.0.id.clone())
+    }
+}
 
 pub async fn user_profile_from_token(
     app_state: &AppState,

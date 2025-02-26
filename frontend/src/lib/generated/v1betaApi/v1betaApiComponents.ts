@@ -88,6 +88,52 @@ export const useChats = <TData = ChatsResponse,>(
   });
 };
 
+export type MessageSubmitSseError = Fetcher.ErrorWrapper<undefined>;
+
+export type MessageSubmitSseVariables = {
+  body: Schemas.MessageSubmitRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchMessageSubmitSse = (
+  variables: MessageSubmitSseVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    MessageSubmitSseError,
+    Schemas.MessageSubmitRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/messages/submitstream",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useMessageSubmitSse = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      MessageSubmitSseError,
+      MessageSubmitSseVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    MessageSubmitSseError,
+    MessageSubmitSseVariables
+  >({
+    mutationFn: (variables: MessageSubmitSseVariables) =>
+      fetchMessageSubmitSse(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ProfileError = Fetcher.ErrorWrapper<undefined>;
 
 export type ProfileVariables = V1betaApiContext["fetcherOptions"];
@@ -237,43 +283,6 @@ export const useMessages = <TData = MessagesResponse,>(
     ...messagesQuery(deepMerge(fetcherOptions, variables)),
     ...options,
     ...queryOptions,
-  });
-};
-
-export type MessageSubmitSseError = Fetcher.ErrorWrapper<undefined>;
-
-export type MessageSubmitSseVariables = V1betaApiContext["fetcherOptions"];
-
-export const fetchMessageSubmitSse = (
-  variables: MessageSubmitSseVariables,
-  signal?: AbortSignal,
-) =>
-  v1betaApiFetch<undefined, MessageSubmitSseError, undefined, {}, {}, {}>({
-    url: "/api/v1beta/messages/submitstream",
-    method: "post",
-    ...variables,
-    signal,
-  });
-
-export const useMessageSubmitSse = (
-  options?: Omit<
-    reactQuery.UseMutationOptions<
-      undefined,
-      MessageSubmitSseError,
-      MessageSubmitSseVariables
-    >,
-    "mutationFn"
-  >,
-) => {
-  const { fetcherOptions } = useV1betaApiContext();
-  return reactQuery.useMutation<
-    undefined,
-    MessageSubmitSseError,
-    MessageSubmitSseVariables
-  >({
-    mutationFn: (variables: MessageSubmitSseVariables) =>
-      fetchMessageSubmitSse(deepMerge(fetcherOptions, variables)),
-    ...options,
   });
 };
 

@@ -27,6 +27,42 @@
         }
       }
     },
+    "/api/v1beta/me/messages/submitstream": {
+      "post": {
+        "tags": [],
+        "operationId": "message_submit_sse",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/profile": {
       "get": {
         "tags": [],
@@ -67,24 +103,6 @@
                   "items": {
                     "$ref": "#/components/schemas/Message"
                   }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1beta/messages/submitstream": {
-      "post": {
-        "tags": [],
-        "operationId": "message_submit_sse",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessage"
                 }
               }
             }
@@ -150,6 +168,28 @@
         "properties": {
           "id": {
             "type": "string"
+          }
+        }
+      },
+      "MessageSubmitRequest": {
+        "type": "object",
+        "required": [
+          "user_message"
+        ],
+        "properties": {
+          "previous_message_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          },
+          "user_message": {
+            "type": "string",
+            "description": "The text of the message.",
+            "example": "Hello, world!"
           }
         }
       },
@@ -233,7 +273,7 @@
               "string",
               "null"
             ],
-            "description": "The user's email address. Should't be used as a unique identifier, as it may change."
+            "description": "The user's email address. Shouldn't be used as a unique identifier, as it may change."
           },
           "id": {
             "type": "string"
