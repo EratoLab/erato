@@ -1,5 +1,6 @@
 pub mod me_profile_middleware;
 
+use crate::models::chat::get_or_create_chat;
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::state::AppState;
 use axum::extract::State;
@@ -11,6 +12,7 @@ use axum::{middleware, Extension, Json, Router};
 use futures::stream::{self, Stream};
 use serde::Serialize;
 use serde_json;
+use sqlx::types::Uuid;
 use std::convert::Infallible;
 use std::time::Duration;
 use tokio_stream::StreamExt as _;
@@ -19,17 +21,16 @@ use utoipa_axum::router::OpenApiRouter;
 
 pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // build our application with a route
-    let me_routes =
-        Router::new()
-            .route("/profile", get(profile))
-            .route_layer(middleware::from_fn_with_state(
-                app_state,
-                me_profile_middleware::user_profile_middleware,
-            ));
+    let me_routes = Router::new()
+        .route("/profile", get(profile))
+        .route("/messages/submitstream", post(message_submit_sse))
+        .route_layer(middleware::from_fn_with_state(
+            app_state,
+            me_profile_middleware::user_profile_middleware,
+        ));
 
     let app = Router::new()
         .route("/messages", get(messages))
-        .route("/messages/submitstream", post(message_submit_sse))
         .route("/chats", get(chats))
         .nest("/me", me_routes)
         .fallback(fallback);
@@ -39,7 +40,13 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
 #[derive(OpenApi)]
 #[openapi(
     paths(messages, chats, message_submit_sse, profile),
-    components(schemas(Message, Chat, MessageSubmitStreamingResponseMessage, UserProfile))
+    components(schemas(
+        Message,
+        Chat,
+        MessageSubmitStreamingResponseMessage,
+        UserProfile,
+        MessageSubmitRequest
+    ))
 )]
 pub struct ApiV1ApiDoc;
 
@@ -120,16 +127,52 @@ struct MessageSubmitStreamingResponseMessageOther {
     foo: String,
 }
 
-#[utoipa::path(post, path = "/messages/submitstream", responses((status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage)))]
+#[derive(serde::Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct MessageSubmitRequest {
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.
+    previous_message_id: Option<Uuid>,
+    #[schema(example = "Hello, world!")]
+    /// The text of the message.
+    #[allow(dead_code)]
+    user_message: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/me/messages/submitstream", 
+    request_body = MessageSubmitRequest,
+    responses(
+        (status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn message_submit_sse(
-    headers: axum::http::HeaderMap,
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Json(request): Json<MessageSubmitRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    // Log all headers for debugging
-    dbg!("Received headers:");
-    for (name, value) in headers.iter() {
-        if let Ok(value_str) = value.to_str() {
-            dbg!("  {}: {}", name, value_str);
-        }
+    let _chat = get_or_create_chat(
+        &app_state.db,
+        app_state.policy(),
+        &me_user.to_subject(),
+        request.previous_message_id.as_ref(),
+        &me_user.0.id,
+    )
+    .await;
+
+    // Log the authenticated user ID
+    dbg!(format!("Authenticated user ID: {}", me_user.0.id));
+
+    // Log the previous_message_id if provided
+    if let Some(prev_id) = &request.previous_message_id {
+        dbg!(format!("Previous message ID: {}", prev_id));
+    } else {
+        dbg!("No previous message ID provided");
     }
 
     let message = "Hey there this is the full message";
