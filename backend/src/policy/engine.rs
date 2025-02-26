@@ -118,6 +118,7 @@ pub const fn is_valid_resource_action(resource: ResourceKind, action: Action) ->
     #[allow(clippy::match_like_matches_macro)]
     match (resource, action) {
         (ResourceKind::Chat, Action::Read) => true,
+        (ResourceKind::Chat, Action::SubmitMessage) => true,
         (ResourceKind::ChatSingleton, Action::Create) => true,
         _ => false,
     }

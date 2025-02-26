@@ -27,7 +27,23 @@ export type MessageSubmitRequest = {
   user_message: string;
 };
 
+export type MessageSubmitStreamingResponseChatCreated = {
+  /**
+   * @format uuid
+   */
+  chat_id: string;
+};
+
 export type MessageSubmitStreamingResponseMessage =
+  | (MessageSubmitStreamingResponseChatCreated & {
+      message_type: "chat_created";
+    })
+  | (MessageSubmitStreamingResponseUserMessageSaved & {
+      message_type: "user_message_saved";
+    })
+  | (MessageSubmitStreamingResponseMessageComplete & {
+      message_type: "message_complete";
+    })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
     })
@@ -35,12 +51,27 @@ export type MessageSubmitStreamingResponseMessage =
       message_type: "example_other";
     });
 
+export type MessageSubmitStreamingResponseMessageComplete = {
+  full_text: string;
+  /**
+   * @format uuid
+   */
+  message_id: string;
+};
+
 export type MessageSubmitStreamingResponseMessageOther = {
   foo: string;
 };
 
 export type MessageSubmitStreamingResponseMessageTextDelta = {
   new_text: string;
+};
+
+export type MessageSubmitStreamingResponseUserMessageSaved = {
+  /**
+   * @format uuid
+   */
+  message_id: string;
 };
 
 export type UserProfile = {
