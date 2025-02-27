@@ -1,4 +1,4 @@
-FROM ollama/ollama:0.5.8-rc6
+FROM ollama/ollama:0.5.12
 
 # Pull the image
 RUN ollama serve & \
