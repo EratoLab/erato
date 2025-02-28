@@ -15,7 +15,7 @@ env:
   SHA_TAG: ${{ inputs.specific_sha != '' && inputs.specific_sha || github.sha }}
 
 jobs:
-  build-and-push:
+  build-and-push-amd64:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -37,17 +37,82 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          platforms: linux/amd64
 
-      - name: Build and push Ollama-smol image
+      - name: Build and push Ollama-smol image for AMD64
         uses: docker/build-push-action@v5
         with:
           context: ./backend/ollama-smol
           push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64
           tags: |
-            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ env.SHA_TAG }}
-            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ steps.current-time.outputs.DATETIME }}
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:latest-amd64
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ steps.current-time.outputs.DATETIME }}-amd64
           cache-from: type=gha
-          cache-to: type=gha,mode=max 
+          cache-to: type=gha,mode=max
+
+  build-and-push-arm64:
+    runs-on: ubuntu-22.04-arm64-custom-large
+    permissions:
+      contents: read
+
+    steps:
+      - name: Get current time
+        id: current-time
+        run: echo "DATETIME=$(date +'%Y-%m-%d-%H-%M')" >> $GITHUB_OUTPUT
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v1
+        with:
+          registry: harbor.imassage.me
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Ollama-smol image for ARM64
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend/ollama-smol
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:latest-arm64
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ steps.current-time.outputs.DATETIME }}-arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  create-manifests:
+    needs: [build-and-push-amd64, build-and-push-arm64]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Get current time
+        id: current-time
+        run: echo "DATETIME=$(date +'%Y-%m-%d-%H-%M')" >> $GITHUB_OUTPUT
+
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v1
+        with:
+          registry: harbor.imassage.me
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create and push manifests
+        run: |
+          # Merge sha-tagged manifest to sha-tagged Ollama-smol manifest
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ env.SHA_TAG }} \
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          # Tag sha-tagged manifest to latest manifest
+          # (not merging the latest-tagged manifest, as that might be affected by race-conditions)
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.OLLAMA_SMOL_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
