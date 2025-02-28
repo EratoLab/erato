@@ -1,8 +1,8 @@
 use axum::{http, Router};
 use axum_test::TestServer;
 use ctor::ctor;
+use erato::config::AppConfig;
 use erato::models::user::get_or_create_user;
-use erato::policy::engine::PolicyEngine;
 use erato::server::router::router;
 use erato::state::AppState;
 use serde_json::Value;
@@ -26,6 +26,30 @@ fn set_test_db_url() {
 // pub static MIGRATOR: sqlx::migrate::Migrator = Migrator::new(SqitchMigrationSource::new(PathBuf::from("./sqitch/sqitch_summary.json")));
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./sqitch/deploy");
 
+pub fn test_app_config() -> AppConfig {
+    let mut builder = AppConfig::config_schema_builder().unwrap();
+    builder = builder
+        .set_override("chat_provider.provider_kind", "ollama")
+        .unwrap();
+    builder = builder
+        .set_override("chat_provider.model_name", "smollm2:135m")
+        .unwrap();
+    builder = builder
+        .set_override("chat_provider.base_url", "http://localhost:12434/v1/")
+        .unwrap();
+
+    let config_schema = builder.build().unwrap();
+    config_schema.try_deserialize().unwrap()
+}
+
+pub fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppState {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    AppState {
+        db,
+        policy: AppState::build_policy().unwrap(),
+        genai_client: AppState::build_genai_client(app_config.chat_provider).unwrap(),
+    }
+}
 // This is the main entry point for integration tests
 // Add more test modules here as needed
 #[test]
@@ -80,21 +104,15 @@ async fn test_user_without_email(pool: Pool<Postgres>) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_profile_endpoint(pool: Pool<Postgres>) {
-    // Convert the sqlx pool to a sea-orm DatabaseConnection
-    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    // Create app state with the database connection
+    let app_state = test_app_state(test_app_config(), pool);
 
     // Create a test user
     let issuer = "http://0.0.0.0:5556";
     let subject = "CiQwOGE4Njg0Yi1kYjg4LTRiNzMtOTBhOS0zY2QxNjYxZjU0NjYSBWxvY2Fs";
-    let user = get_or_create_user(&db, issuer, subject, None)
+    let user = get_or_create_user(&app_state.db, issuer, subject, None)
         .await
         .expect("Failed to create user");
-
-    // Create app state with the database connection
-    let app_state = AppState {
-        db,
-        policy: PolicyEngine::new().unwrap(),
-    };
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -131,21 +149,15 @@ async fn test_profile_endpoint(pool: Pool<Postgres>) {
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_message_submit_stream(pool: Pool<Postgres>) {
-    // Convert the sqlx pool to a sea-orm DatabaseConnection
-    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    // Create app state with the database connection
+    let app_state = test_app_state(test_app_config(), pool);
 
     // Create a test user
     let issuer = "http://0.0.0.0:5556";
     let subject = "CiQwOGE4Njg0Yi1kYjg4LTRiNzMtOTBhOS0zY2QxNjYxZjU0NjYSBWxvY2Fs";
-    let _user = get_or_create_user(&db, issuer, subject, None)
+    let _user = get_or_create_user(&app_state.db, issuer, subject, None)
         .await
         .expect("Failed to create user");
-
-    // Create app state with the database connection
-    let app_state = AppState {
-        db,
-        policy: PolicyEngine::new().unwrap(),
-    };
 
     let app: Router = router(app_state.clone())
         .split_for_parts()

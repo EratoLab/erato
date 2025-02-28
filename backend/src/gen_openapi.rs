@@ -1,3 +1,4 @@
+//! Binary to generate the OpenAPI spec
 use std::fs;
 
 use erato::ApiDoc;
