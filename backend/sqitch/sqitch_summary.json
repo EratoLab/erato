@@ -1,6 +1,8 @@
 {
   "migrations": [
     "deploy/0001_init_database.sql",
-    "deploy/0002_add_chat_and_messages_tables.sql"
-  ]
+    "deploy/0002_add_chat_and_messages_tables.sql",
+    "deploy/0003_add_users_table.sql"
+  ],
+  "latest_change": "a8133df0ff604040656d48db63c5d932adf722fd"
 }
