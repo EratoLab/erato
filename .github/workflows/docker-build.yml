@@ -98,6 +98,27 @@ jobs:
         working-directory: backend
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
+  test-backend:
+    runs-on: ubuntu-22.04
+    name: "test backend"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Setup test environment"
+        working-directory: backend
+        run: |
+          ./run_postgres.sh
+          ./run_ollama_smol.sh
+      # Should be kept in sync with `justfile` -> `install_clis`
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.88,sea-orm-cli@1.1.4
+      - name: "Run tests"
+        working-directory: backend
+        run: cargo nextest run
+
   build-and-push-amd64:
     runs-on: ubuntu-22.04
     permissions:
