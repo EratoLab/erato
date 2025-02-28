@@ -11,6 +11,7 @@ use axum::response::{IntoResponse, Sse};
 use axum::routing::{get, post};
 use axum::{middleware, Extension, Json, Router};
 use futures::stream::Stream;
+use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ChatStreamEvent};
 use serde::Serialize;
 use serde_json::{self, json};
 use sqlx::types::Uuid;
@@ -217,7 +218,7 @@ pub async fn message_submit_sse(
             // Create and save the user's message
             let user_message = json!({
                 "role": "user",
-                "content": request.user_message,
+                "content": request.user_message.clone(),
                 "name": me_user.0.id
             });
 
@@ -243,55 +244,67 @@ pub async fn message_submit_sse(
                         .await;
                 }
 
-                // Create and save the dummy assistant response
-                let assistant_message = json!({
-                    "role": "assistant",
-                    "content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\nDuis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
-                });
+                let mut chat_request: ChatRequest = Default::default();
+                // TODO: Initial system message?
+                // TODO: Full previous message history
+                chat_request = chat_request.append_message(ChatMessage::user(request.user_message));
+                let chat_options = ChatOptions::default().with_capture_content(true);
 
-                if let Ok(saved_assistant_message) = submit_message(
-                    &app_state.db,
-                    app_state.policy(),
-                    &me_user.to_subject(),
-                    &chat.id,
-                    assistant_message.clone(),
-                    Some(&saved_user_message.id),
-                )
-                .await
-                {
-                    // Get the message content
-                    if let Some(content) = assistant_message["content"].as_str() {
-                        let message = content.to_owned();
-                        let words: Vec<&str> = message.split_whitespace().collect();
-
-                        // Send text delta events
-                        for word in words {
+                let chat_stream = app_state
+                    .genai()
+                    .exec_chat_stream("foo_model", chat_request, Some(&chat_options))
+                    .await
+                    .unwrap();
+                let mut inner_stream = chat_stream.stream;
+                // Await until stream end
+                while let Some(Ok(message)) = inner_stream.next().await {
+                    match message {
+                        ChatStreamEvent::Chunk(chunk) => {
                             let delta = MessageSubmitStreamingResponseMessageTextDelta {
-                                new_text: word.to_string(),
+                                new_text: chunk.content,
                             };
                             let message = MessageSubmitStreamingResponseMessage::TextDelta(delta);
                             if let Ok(json) = serde_json::to_string(&message) {
                                 let _ = tx
                                     .send(Event::default().event("text_delta").data(json))
                                     .await;
-                                // Add a small delay between words
-                                tokio::time::sleep(Duration::from_millis(100)).await;
                             }
                         }
+                        ChatStreamEvent::End(end) => {
+                            let final_content = end
+                                .captured_content
+                                .unwrap()
+                                .text_into_string()
+                                .expect("Expected text response");
 
-                        // Send message complete event
-                        let message_complete =
-                            MessageSubmitStreamingResponseMessage::MessageComplete(
-                                MessageSubmitStreamingResponseMessageComplete {
-                                    message_id: saved_assistant_message.id,
-                                    full_text: message,
-                                },
-                            );
-                        if let Ok(json) = serde_json::to_string(&message_complete) {
-                            let _ = tx
-                                .send(Event::default().event("message_complete").data(json))
-                                .await;
+                            let assistant_message = json!({
+                                "role": "assistant",
+                                "content": final_content.clone(),
+                            });
+                            let saved_assistant_message = submit_message(
+                                &app_state.db,
+                                app_state.policy(),
+                                &me_user.to_subject(),
+                                &chat.id,
+                                assistant_message.clone(),
+                                Some(&saved_user_message.id),
+                            )
+                            .await
+                            .unwrap();
+                            let message_complete =
+                                MessageSubmitStreamingResponseMessage::MessageComplete(
+                                    MessageSubmitStreamingResponseMessageComplete {
+                                        message_id: saved_assistant_message.id,
+                                        full_text: final_content.clone(),
+                                    },
+                                );
+                            if let Ok(json) = serde_json::to_string(&message_complete) {
+                                let _ = tx
+                                    .send(Event::default().event("message_complete").data(json))
+                                    .await;
+                            }
                         }
+                        _ => {}
                     }
                 }
             }

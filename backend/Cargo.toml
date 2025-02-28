@@ -40,6 +40,7 @@ ordered-multimap = "0.7.3"
 futures = "0.3"
 futures-macro = "0.3"
 tokio-stream = "0.1.17"
+genai = "0.1.23"
 
 [dev-dependencies]
 test-log = "0.2.14"

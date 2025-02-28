@@ -12,6 +12,7 @@ pub mod models;
 pub mod normalize_profile;
 pub mod policy;
 pub mod server;
+pub mod services;
 pub mod state;
 
 #[derive(OpenApi)]

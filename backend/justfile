@@ -32,7 +32,7 @@ lint:
     cargo clippy --all-targets --all-features
     cargo fmt --all --check
 
-run $FRONTEND_BUNDLE_PATH="../frontend/out":
+run:
     cargo run --bin erato
 
 # Run the local services required for running app (Postgres and Ollama-smol)
