@@ -34,5 +34,10 @@ lint:
 run $FRONTEND_BUNDLE_PATH="../frontend/out":
     cargo run --bin erato
 
+# Run the local services required for running app (Postgres and Ollama-smol)
+run_local_services:
+    ./run_postgres.sh
+    ./run_ollama_smol.sh
+
 format:
     cargo fmt --all
