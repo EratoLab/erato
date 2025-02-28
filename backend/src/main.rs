@@ -8,6 +8,7 @@ use erato::config::AppConfig;
 use erato::frontend_environment::{
     serve_files_with_script, FrontedEnvironment, FrontendBundlePath,
 };
+use erato::models;
 use erato::state::AppState;
 use erato::{server, ApiDoc};
 use tower_http::cors::CorsLayer;
@@ -26,6 +27,10 @@ async fn main() -> Result<(), Report> {
     let config = AppConfig::new()?;
 
     let state = AppState::new(config.clone()).await?;
+
+    // Verify that the database has been migrated to the latest version
+    models::ensure_latest_migration(&state.db).await?;
+
     let (router, _api) = server::router::router(state.clone()).split_for_parts();
 
     let listener =
