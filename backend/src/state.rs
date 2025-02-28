@@ -4,7 +4,10 @@ use eyre::Report;
 use genai::adapter::AdapterKind;
 use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
 use genai::{Client as GenaiClient, ModelIden, ServiceTarget};
+use reqwest;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use sea_orm::{Database, DatabaseConnection};
+use std::str::FromStr;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
@@ -40,24 +43,62 @@ impl AppState {
 
     pub fn build_genai_client(config: ChatProviderConfig) -> Result<GenaiClient, Report> {
         let base_url = config.base_url.clone();
-        let genai_client = genai::ClientBuilder::default().with_service_target_resolver(ServiceTargetResolver::from_resolver_fn(move |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
-            let ServiceTarget { mut endpoint, .. } = service_target;
+        let request_params = config.additional_request_parameters_map();
+        let request_headers = config.additional_request_headers_map();
 
-            if let Some(base_url) = base_url {
-                endpoint = Endpoint::from_owned(base_url);
-            }
+        // Create a custom reqwest client with the additional headers
+        let mut client_builder = reqwest::ClientBuilder::new();
 
-            // TODO: Allow specifying auth in config
-            let auth = AuthData::from_single("PLACEHOLDER");
+        // Add default headers if specified
+        let mut header_map = HeaderMap::new();
+        for (key, value) in request_headers {
+            header_map.insert(HeaderName::from_str(&key)?, HeaderValue::from_str(&value)?);
+        }
 
-            let adapter_kind = match config.provider_kind.as_str() {
-                "ollama" => Ok(AdapterKind::Ollama),
-                "openai" => Ok(AdapterKind::OpenAI),
-                _ => Err(genai::resolver::Error::Custom("Unknown provider kind".to_string()))
-            }?;
-            let model = ModelIden::new(adapter_kind, config.model_name.clone());
-            Ok(ServiceTarget { endpoint, auth, model })
-        },
+        client_builder = client_builder.default_headers(header_map);
+
+        let custom_client = client_builder.build()?;
+
+        let genai_client = genai::ClientBuilder::default()
+            .with_reqwest(custom_client)
+            .with_service_target_resolver(ServiceTargetResolver::from_resolver_fn(move |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
+                let ServiceTarget { mut endpoint, .. } = service_target;
+
+                if let Some(base_url) = base_url.clone() {
+                    let mut url_str = base_url;
+                    // Add additional request parameters if specified
+                    if !request_params.is_empty() {
+                        let mut first_param = true;
+                        for (key, value) in &request_params {
+                            if first_param {
+                                // First parameter needs ? or & depending on whether the URL already has parameters
+                                if url_str.contains('?') {
+                                    url_str.push('&');
+                                } else {
+                                    url_str.push('?');
+                                }
+                                first_param = false;
+                            } else {
+                                // Subsequent parameters always use &
+                                url_str.push('&');
+                            }
+                            url_str.push_str(&format!("{}={}", key, value));
+                        }
+                    }
+                    endpoint = Endpoint::from_owned(url_str);
+                }
+
+                // TODO: Allow specifying auth in config
+                let auth = AuthData::from_single("PLACEHOLDER");
+
+                let adapter_kind = match config.provider_kind.as_str() {
+                    "ollama" => Ok(AdapterKind::Ollama),
+                    "openai" => Ok(AdapterKind::OpenAI),
+                    _ => Err(genai::resolver::Error::Custom("Unknown provider kind".to_string()))
+                }?;
+                let model = ModelIden::new(adapter_kind, config.model_name.clone());
+                Ok(ServiceTarget { endpoint, auth, model })
+            },
         )).build();
         Ok(genai_client)
     }
