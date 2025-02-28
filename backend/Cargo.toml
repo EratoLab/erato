@@ -40,7 +40,8 @@ ordered-multimap = "0.7.3"
 futures = "0.3"
 futures-macro = "0.3"
 tokio-stream = "0.1.17"
-genai = "0.1.23"
+genai = { version = "0.1.24-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "ad7c3a1b70b7629e76719843427652192520a281" }
+reqwest = { version = "0.12.12" }
 
 [dev-dependencies]
 test-log = "0.2.14"
