@@ -50,6 +50,8 @@ backend:
   service:
     type: ClusterIP
     port: 8080
+  env: []
+  envSecrets: []
 
 postgresql:
   # set postgresql.enabled to be false to disable deploy of a PostgreSQL database and use an

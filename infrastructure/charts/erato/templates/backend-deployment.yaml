@@ -51,3 +51,8 @@ spec:
               {{- include "erato.postgresValueOrValueFrom" . | nindent 14 }}
             - name: ENVIRONMENT
               value: {{ .Values.global.environment }}
+            {{- toYaml .Values.backend.env | nindent 12 }}
+          envFrom:
+            {{- range $envSecret := .Values.backend.envSecrets }}
+            - secretRef: {{- $envSecret | toYaml | nindent 16 }}
+            {{- end }}
