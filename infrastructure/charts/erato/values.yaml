@@ -5,6 +5,10 @@ ingress:
   enabled: true
   host: app.erato.internal
   className: nginx
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: ""
 
 oauth2Proxy:
   enabled: true
