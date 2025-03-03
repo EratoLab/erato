@@ -45,6 +45,10 @@ export const MessageTimestamp = memo(function MessageTimestamp({
         }),
   );
 
+  // Fix: Properly manage the dependencies to prevent infinite rerenders
+  // by memoizing the condition outside of the dependency array
+  const shouldUpdateOnNowChange = displayStyle === "relative";
+
   useUpdateEffect(() => {
     setTimeString(
       displayStyle === "time"
@@ -57,7 +61,7 @@ export const MessageTimestamp = memo(function MessageTimestamp({
             includeSeconds: true,
           }),
     );
-  }, [createdAt, displayStyle, displayStyle === "relative" && now]);
+  }, [createdAt, displayStyle, shouldUpdateOnNowChange && now]);
 
   useEffect(() => {
     if (!autoUpdate || displayStyle === "time") return;

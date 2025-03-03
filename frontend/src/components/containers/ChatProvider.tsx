@@ -6,8 +6,6 @@ import React, {
   useEffect,
 } from "react";
 import { StreamingContext } from "@/types/chat";
-import { SSE } from "sse.js";
-import { env } from "../../app/env";
 import { useChatHistory } from "./ChatHistoryProvider";
 import { useMessageStream } from "./MessageStreamProvider";
 
@@ -25,6 +23,7 @@ export interface ChatMessage {
   error?: Error;
 }
 
+// Mapping of message IDs to message objects
 interface MessageMap {
   [messageId: string]: ChatMessage;
 }
@@ -40,9 +39,6 @@ export interface ChatContextType {
   isLoading: boolean;
 }
 
-/**
- * Create the ChatContext with no default value, forcing consumers to wrap in ChatProvider.
- */
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 interface ChatProviderProps extends React.PropsWithChildren {
@@ -82,45 +78,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     }
   }, [loadMessages]);
 
-  // Example SSE integration; Should probably be adjusted or moved elsewhere
-  useEffect(() => {
-    const { apiRootUrl } = env();
-    const sseUrl = `${apiRootUrl}v1beta/messages/submitstream`;
-
-    const source = new SSE(sseUrl, {
-      method: "POST",
-      headers: {
-        Accept: "text/event-stream",
-      },
-    });
-
-    source.addEventListener("open", () => {
-      console.log("SSE connection opened");
-    });
-
-    source.addEventListener("error", (e: Event) => {
-      console.error("SSE error:", e);
-    });
-
-    // `message` is default message type. We don't normally send it, but might be good to have as a catch-all
-    source.addEventListener("message", (e: MessageEvent) => {
-      console.log("SSE message received:", e.data);
-    });
-
-    // TODO: register one event listener per message type, and in each of them convert to the appropriate variant of MessageSubmitStreamingResponseMessage
-    source.addEventListener("text_delta", (e: MessageEvent) => {
-      console.log("SSE message received:", e.data);
-    });
-
-    // Start the connection
-    source.stream();
-
-    // Cleanup on unmount
-    return () => {
-      source.close();
-    };
-  }, []);
-
   const updateMessage = useCallback(
     (messageId: string, updates: Partial<ChatMessage>) => {
       setMessages((prev) => ({
@@ -132,53 +89,95 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   );
 
   /**
-   * sendMessage adds the user's new message to the state.
-   * Later on, we can integrate websocket functionality here to stream responses.
+   * sendMessage adds the user's new message to the state and triggers streaming.
    */
   const sendMessage = useCallback(
     async (content: string) => {
       if (!currentSessionId) return;
 
-      // Add user message
-      const userMessage: ChatMessage = {
-        id: generateMessageId(),
-        content,
-        sender: "user",
-        createdAt: new Date(),
-        authorId: "",
-      };
-      addMessage(userMessage);
+      setIsLoading(true);
 
-      // Create placeholder for assistant message
-      const assistantMessageId = generateMessageId();
-      const assistantMessage: ChatMessage = {
-        id: assistantMessageId,
-        content: "",
-        sender: "assistant",
-        createdAt: new Date(),
-        loading: { state: "loading" },
-        authorId: "",
-      };
-      addMessage(assistantMessage);
+      try {
+        // Add user message
+        const userMessage: ChatMessage = {
+          id: generateMessageId(),
+          content,
+          sender: "user",
+          createdAt: new Date(),
+          authorId: "user_1", // Match the controlsContext.currentUserId from page.tsx
+        };
+        addMessage(userMessage);
 
-      // Start streaming
-      await streamMessage(currentSessionId, content);
+        // Create placeholder for assistant message
+        const assistantMessageId = generateMessageId();
+        const assistantMessage: ChatMessage = {
+          id: assistantMessageId,
+          content: "",
+          sender: "assistant",
+          createdAt: new Date(),
+          loading: { state: "loading" },
+          authorId: "assistant",
+        };
+        addMessage(assistantMessage);
+
+        // Start streaming - pass the current session ID
+        await streamMessage(currentSessionId, content);
+      } catch (error) {
+        console.error("Error sending message:", error);
+        // Update the last message to show the error
+        const lastMessageId = messageOrder[messageOrder.length - 1];
+        if (lastMessageId) {
+          updateMessage(lastMessageId, {
+            error:
+              error instanceof Error
+                ? error
+                : new Error("Failed to send message"),
+            loading: undefined,
+          });
+        }
+      } finally {
+        setIsLoading(false);
+      }
     },
-    [currentSessionId, streamMessage],
+    [currentSessionId, streamMessage, messageOrder, updateMessage],
   );
 
   // Update streaming message content
   useEffect(() => {
-    if (currentStreamingMessage && currentSessionId) {
-      const lastMessageId = messageOrder[messageOrder.length - 1];
-      const lastMessage = messages[lastMessageId];
-      if (lastMessage && lastMessage.sender === "assistant") {
-        updateMessage(lastMessage.id, {
-          content: currentStreamingMessage.content,
+    if (!currentStreamingMessage || !currentSessionId) return;
+
+    // Find the last assistant message to update with streaming content
+    const assistantMessages = messageOrder
+      .map((id) => messages[id])
+      .filter((msg) => msg.sender === "assistant");
+
+    const lastAssistantMessage =
+      assistantMessages[assistantMessages.length - 1];
+
+    if (lastAssistantMessage) {
+      // Store the current message ID and content to avoid updating unnecessarily
+      const messageId = lastAssistantMessage.id;
+      const currentContent = messages[messageId]?.content;
+      const newContent = currentStreamingMessage.content;
+
+      // Only update if the content has actually changed
+      if (
+        currentContent !== newContent ||
+        !!messages[messageId]?.loading !==
+          !currentStreamingMessage.isComplete ||
+        !!messages[messageId]?.error !== !!currentStreamingMessage.error
+      ) {
+        updateMessage(messageId, {
+          content: newContent,
           loading: currentStreamingMessage.isComplete
             ? undefined
             : { state: "loading" },
-          error: currentStreamingMessage.error,
+          error:
+            currentStreamingMessage.error instanceof Error
+              ? currentStreamingMessage.error
+              : currentStreamingMessage.error
+                ? new Error(currentStreamingMessage.error)
+                : undefined,
         });
       }
     }
@@ -212,10 +211,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   );
 };
 
-/**
- * useChat is a custom hook that provides easy access to the ChatContext.
- * Ensure that you call this hook within a component wrapped by <ChatProvider>.
- */
 export const useChat = (): ChatContextType => {
   const context = useContext(ChatContext);
   if (!context) {

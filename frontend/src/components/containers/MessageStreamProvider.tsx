@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useCallback, useState } from "react";
 import { SSE } from "sse.js";
 import { env } from "../../app/env";
+import { MessageSubmitStreamingResponseMessage } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
 // import type { ChatMessage } from '../../types/chat';
 
 interface StreamingState {
@@ -40,7 +41,11 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
       cancelStreaming();
 
       const { apiRootUrl } = env();
-      const sseUrl = `${apiRootUrl}/v1beta/messages/submitstream`;
+      // Fix: Ensure no double slashes by normalizing the URL
+      const baseUrl = apiRootUrl.endsWith("/")
+        ? apiRootUrl.slice(0, -1)
+        : apiRootUrl;
+      const sseUrl = `${baseUrl}/v1beta/me/messages/submitstream`;
 
       try {
         const source = new SSE(sseUrl, {
@@ -50,24 +55,63 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
             Accept: "text/event-stream",
           },
           payload: JSON.stringify({
-            chatId,
-            content: userMessageContent,
-            role: "user",
+            // Format according to MessageSubmitRequest schema
+            user_message: userMessageContent,
+            previous_message_id: chatId !== "new" ? undefined : null,
           }),
         });
 
         setCurrentSource(source);
         setCurrentStreamingMessage({ content: "", isComplete: false });
 
+        // Handle different event types from the API
+        source.addEventListener("text_delta", (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(
+              e.data,
+            ) as MessageSubmitStreamingResponseMessage;
+            if (data.message_type === "text_delta") {
+              setCurrentStreamingMessage((prev) => ({
+                content: prev?.content + data.new_text,
+                isComplete: false,
+              }));
+            }
+          } catch (error) {
+            console.error("Error parsing SSE text_delta event:", error);
+          }
+        });
+
+        source.addEventListener("message_complete", (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(
+              e.data,
+            ) as MessageSubmitStreamingResponseMessage;
+            if (data.message_type === "message_complete") {
+              setCurrentStreamingMessage(() => ({
+                content: data.full_text,
+                isComplete: true,
+              }));
+            }
+          } catch (error) {
+            console.error("Error parsing SSE message_complete event:", error);
+          }
+        });
+
+        // Default message handler as fallback
         source.addEventListener("message", (e: MessageEvent) => {
           try {
             const data = JSON.parse(e.data);
-            setCurrentStreamingMessage((prev) => ({
-              content: prev?.content + data.content,
-              isComplete: false,
-            }));
+            console.log("SSE generic message received:", data);
+            // Only update content if no specific handler caught this event
+            if (data.content || data.new_text) {
+              setCurrentStreamingMessage((currentState) => ({
+                content:
+                  currentState?.content + (data.content || data.new_text || ""),
+                isComplete: false,
+              }));
+            }
           } catch (error) {
-            console.error("Error parsing SSE message:", error);
+            console.error("Error parsing SSE message event:", error);
           }
         });
 
@@ -84,7 +128,8 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
           setCurrentSource(null);
         });
 
-        source.addEventListener("error", () => {
+        source.addEventListener("error", (e: Event) => {
+          console.error("SSE error event:", e);
           setCurrentStreamingMessage((prev) =>
             prev
               ? {
@@ -100,6 +145,7 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
 
         source.stream();
       } catch (error) {
+        console.error("Failed to start streaming:", error);
         setCurrentStreamingMessage({
           content: "",
           isComplete: true,
