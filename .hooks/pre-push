@@ -32,7 +32,7 @@ check_backend_changes() {
     local modified_files=$(printf '%s\n' "${backend_files[@]}")
 
     # Present interactive selection for tests/lint with preview window
-    local selected=$(printf "Run tests\nRun lint" | fzf \
+    local selected=$(printf "Run tests\nRun lint\nCheck OpenAPI" | fzf \
         --multi \
         --header="Select actions to perform (use TAB to select multiple, ENTER to confirm, ESC to skip)" \
         --preview "echo 'Modified backend files:'; echo '$modified_files'" \
@@ -53,6 +53,11 @@ check_backend_changes() {
         if echo "$selected" | grep -q "Run lint"; then
             echo "Running lint..."
             cd backend && just lint
+            cd "$initial_dir"
+        fi
+        if echo "$selected" | grep -q "Check OpenAPI"; then
+            echo "Checking if OpenAPI spec is up to date..."
+            cd backend && just generate_open_api_check
             cd "$initial_dir"
         fi
     fi
