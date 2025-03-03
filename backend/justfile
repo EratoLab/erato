@@ -25,6 +25,10 @@ generate_db_schema:
 generate_open_api:
     cargo run --bin gen-openapi
 
+# Generates the OpenAPI spec based on the source and check if it's up to date
+generate_open_api_check:
+    cargo run --bin gen-openapi -- --check
+
 test:
     cargo nextest run
 
