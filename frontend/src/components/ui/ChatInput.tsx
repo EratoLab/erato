@@ -9,7 +9,7 @@ import { Button } from "./Button";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
-  onNewChat?: () => void;
+  onAddFile?: () => void;
   onRegenerate?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
@@ -21,7 +21,7 @@ interface ChatInputProps {
 
 export const ChatInput = ({
   onSendMessage,
-  onNewChat,
+  onAddFile,
   onRegenerate,
   isLoading = false,
   disabled = false,
@@ -92,11 +92,11 @@ export const ChatInput = ({
             {showControls && (
               <>
                 <Button
-                  onClick={onNewChat}
+                  onClick={onAddFile}
                   variant="icon-only"
                   icon={<PlusIcon />}
                   size="sm"
-                  aria-label="New chat"
+                  aria-label="Add File"
                 />
                 <Button
                   onClick={onRegenerate}

@@ -24,7 +24,7 @@ const meta = {
   tags: ["autodocs"],
   argTypes: {
     onSendMessage: { action: "message sent" },
-    onNewChat: { action: "new chat" },
+    onAddFile: { action: "add files" },
     onRegenerate: { action: "regenerate" },
     isLoading: { control: "boolean" },
     disabled: { control: "boolean" },
@@ -50,7 +50,7 @@ export const Default: Story = {
   args: {
     onSendMessage: action("message sent"),
     showControls: true,
-    onNewChat: action("new chat"),
+    onAddFile: action("add files"),
     onRegenerate: action("regenerate"),
   },
 };
@@ -60,7 +60,7 @@ export const Loading: Story = {
     onSendMessage: action("message sent"),
     isLoading: true,
     showControls: true,
-    onNewChat: action("new chat"),
+    onAddFile: action("add files"),
     onRegenerate: action("regenerate"),
   },
 };
