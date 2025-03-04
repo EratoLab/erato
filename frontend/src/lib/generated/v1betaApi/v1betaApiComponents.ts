@@ -209,6 +209,113 @@ export const useProfile = <TData = Schemas.UserProfile,>(
   });
 };
 
+export type RecentChatsQueryParams = {
+  /**
+   * Maximum number of chats to return. Defaults to 30 if not provided.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  limit?: number;
+  /**
+   * Number of chats to skip. Defaults to 0 if not provided.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  offset?: number;
+};
+
+export type RecentChatsError = Fetcher.ErrorWrapper<undefined>;
+
+export type RecentChatsResponse = Schemas.RecentChat[];
+
+export type RecentChatsVariables = {
+  queryParams?: RecentChatsQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchRecentChats = (
+  variables: RecentChatsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    RecentChatsResponse,
+    RecentChatsError,
+    undefined,
+    {},
+    RecentChatsQueryParams,
+    {}
+  >({
+    url: "/api/v1beta/me/recent_chats",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function recentChatsQuery(variables: RecentChatsVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<RecentChatsResponse>;
+};
+
+export function recentChatsQuery(
+  variables: RecentChatsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<RecentChatsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function recentChatsQuery(
+  variables: RecentChatsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/recent_chats",
+      operationId: "recentChats",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchRecentChats(variables, signal),
+  };
+}
+
+export const useSuspenseRecentChats = <TData = RecentChatsResponse,>(
+  variables: RecentChatsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<RecentChatsResponse, RecentChatsError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    RecentChatsResponse,
+    RecentChatsError,
+    TData
+  >({
+    ...recentChatsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useRecentChats = <TData = RecentChatsResponse,>(
+  variables: RecentChatsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<RecentChatsResponse, RecentChatsError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<RecentChatsResponse, RecentChatsError, TData>({
+    ...recentChatsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type MessagesError = Fetcher.ErrorWrapper<undefined>;
 
 export type MessagesResponse = Schemas.Message[];
@@ -366,6 +473,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/profile";
       operationId: "profile";
       variables: ProfileVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/recent_chats";
+      operationId: "recentChats";
+      variables: RecentChatsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/messages";

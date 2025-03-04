@@ -4,3 +4,4 @@
 0001_init_database 2025-01-19T18:21:18Z System Administrator <root@Maxs-Laptop.local> # Init database
 0002_add_chat_and_messages_tables 2025-01-19T18:28:49Z System Administrator <root@Maxs-Laptop.local> # Add chat and messages tables
 0003_add_users_table 2025-02-15T04:32:48Z System Administrator <root@Maxs-Laptop.local> # Add users table
+0004_add_view_for_last_message_at 2025-03-04T15:14:23Z System Administrator <root@Maxs-Laptop.local> # Add view for last_message_at

@@ -5,7 +5,7 @@ use erato::config::AppConfig;
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
 use erato::state::AppState;
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 use test_log::test;
@@ -240,4 +240,76 @@ async fn test_message_submit_stream(pool: Pool<Postgres>) {
         has_event_type("message_complete"),
         "No message_complete event received"
     );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
+    // Create app state with the database connection
+    let app_config = test_app_config();
+    let app_state = test_app_state(app_config, pool);
+
+    // Create a test user
+    let issuer = "http://0.0.0.0:5556";
+    let subject = "test-subject-for-recent-chats";
+    let _user = get_or_create_user(&app_state.db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a mock JWT token
+    let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
+
+    // Create two chats by submitting messages
+    for i in 1..=2 {
+        // Submit a message to create a new chat
+        let message_request = json!({
+            "previous_message_id": null,
+            "user_message": format!("Test message for chat {}", i)
+        });
+
+        // Send the message to create a chat
+        let response = server
+            .post("/api/v1beta/me/messages/submitstream")
+            .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+            .add_header(http::header::CONTENT_TYPE, "application/json")
+            .json(&message_request)
+            .await;
+
+        // Verify the response status is OK
+        response.assert_status_ok();
+    }
+
+    // Now query the recent_chats endpoint
+    let response = server
+        .get("/api/v1beta/me/recent_chats")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response body as JSON
+    let chats: Vec<Value> = response.json();
+
+    // Verify we have exactly 2 chats
+    assert_eq!(chats.len(), 2, "Expected 2 chats, got {}", chats.len());
+
+    // Verify each chat has the expected fields
+    for chat in chats {
+        assert!(chat.get("id").is_some(), "Chat is missing 'id' field");
+        assert!(
+            chat.get("title_by_summary").is_some(),
+            "Chat is missing 'title_by_summary' field"
+        );
+        assert!(
+            chat.get("last_message_at").is_some(),
+            "Chat is missing 'last_message_at' field"
+        );
+    }
 }
