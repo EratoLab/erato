@@ -16,7 +16,7 @@ interface ChatWidgetProps {
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
   onMessageAction?: (action: MessageAction) => void | Promise<void>;
-  onNewChat?: () => void;
+  onAddFile?: () => void;
   onRegenerate?: () => void;
 }
 
@@ -28,7 +28,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   controls,
   controlsContext,
   onMessageAction,
-  onNewChat,
+  onAddFile,
   onRegenerate,
 }) => {
   const { messages, messageOrder, sendMessage, isLoading } = useChat();
@@ -67,7 +67,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
 
       <ChatInput
         onSendMessage={sendMessage}
-        onNewChat={onNewChat}
+        onAddFile={onAddFile}
         onRegenerate={onRegenerate}
         className="border-t bg-white"
         isLoading={isLoading}

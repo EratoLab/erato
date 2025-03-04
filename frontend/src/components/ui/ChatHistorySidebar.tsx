@@ -88,6 +88,7 @@ const ChatHistoryFooter = memo<{
       userProfile={userProfile}
       onSignOut={onSignOut}
       className="w-full flex items-center justify-start"
+      showThemeToggle={true}
     />
   </div>
 ));

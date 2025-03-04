@@ -1,22 +1,61 @@
 "use client";
 
-import React, { createContext, useContext, useEffect } from "react";
-import { Theme, defaultTheme } from "@/config/theme";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { Theme, defaultTheme, darkTheme } from "@/config/theme";
+
+export type ThemeMode = "light" | "dark";
 
 type ThemeContextType = {
   theme: Theme;
-  setTheme: (theme: Theme) => void;
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export function ThemeProvider({
-  theme = defaultTheme,
-  children,
-}: {
-  theme?: Theme;
-  children: React.ReactNode;
-}) {
+// Try to get the saved theme from localStorage
+const getSavedTheme = (): ThemeMode => {
+  if (typeof window === "undefined") return "light";
+
+  const savedTheme = localStorage.getItem("theme-mode");
+  if (savedTheme === "dark" || savedTheme === "light") {
+    return savedTheme;
+  }
+
+  // Check system preference if no saved theme
+  if (
+    window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  ) {
+    return "dark";
+  }
+
+  return "light";
+};
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [themeMode, setThemeMode] = useState<ThemeMode>("light");
+  const [theme, setTheme] = useState<Theme>(defaultTheme);
+
+  // Initialize theme from saved settings
+  useEffect(() => {
+    const savedMode = getSavedTheme();
+    setThemeMode(savedMode);
+  }, []);
+
+  // Update theme when themeMode changes
+  useEffect(() => {
+    setTheme(themeMode === "dark" ? darkTheme : defaultTheme);
+
+    // Save to localStorage
+    if (typeof window !== "undefined") {
+      localStorage.setItem("theme-mode", themeMode);
+
+      // Update data-theme attribute on document for potential CSS selectors
+      document.documentElement.setAttribute("data-theme", themeMode);
+    }
+  }, [themeMode]);
+
   useEffect(() => {
     // Apply theme CSS variables
     const root = document.documentElement;
@@ -137,8 +176,18 @@ export function ThemeProvider({
     root.style.setProperty("--theme-focus-ring", theme.colors.focus.ring);
   }, [theme]);
 
+  const toggleTheme = (mode: ThemeMode) => {
+    setThemeMode(mode);
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme: () => {} }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        themeMode,
+        setThemeMode: toggleTheme,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

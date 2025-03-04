@@ -72,16 +72,16 @@ const colors = {
 // Add new state colors for focus, selection, hover
 const stateColors = {
   focus: {
-    light: colors.blue[500], // Increased contrast for focus states
-    dark: colors.blue[400],
+    light: colors.neutral[500], // Monochrome focus for light theme
+    dark: colors.neutral[400], // Monochrome focus for dark theme
   },
   selection: {
-    light: colors.blue[100],
-    dark: colors.blue[900],
+    light: colors.neutral[200], // Monochrome selection for light theme
+    dark: colors.neutral[700], // Monochrome selection for dark theme
   },
   hover: {
-    light: colors.neutral[200], // Higher contrast hover
-    dark: colors.neutral[600], // Higher contrast hover for dark theme
+    light: colors.neutral[200], // Monochrome hover for light theme
+    dark: colors.neutral[600], // Monochrome hover for dark theme
   },
 };
 
@@ -160,8 +160,8 @@ export const defaultTheme: Theme = {
       secondary: colors.neutral[100], // Sidebar, cards, containers
       tertiary: "#ffffff", // Input fields, form elements
       accent: colors.neutral[200], // Subtle accent color (monochrome)
-      hover: colors.neutral[200], // Higher contrast hover color
-      selected: colors.neutral[200], // Selected items
+      hover: stateColors.hover.light, // Using stateColors for hover
+      selected: stateColors.selection.light, // Using stateColors for selected
     },
     foreground: {
       primary: colors.neutral[900], // Main text color - increased contrast
@@ -172,7 +172,7 @@ export const defaultTheme: Theme = {
     border: {
       default: colors.neutral[300], // Default border color - increased contrast
       strong: colors.neutral[400], // Strong borders - improved contrast
-      focus: colors.neutral[500], // Focus state borders - monochrome
+      focus: stateColors.focus.light, // Using stateColors for focus
     },
     avatar: {
       user: {
@@ -207,7 +207,7 @@ export const defaultTheme: Theme = {
       },
     },
     focus: {
-      ring: colors.neutral[400], // Monochrome focus ring
+      ring: stateColors.focus.light, // Using stateColors for focus ring
     },
   },
   borderRadius: "0.375rem",
@@ -226,36 +226,36 @@ export const darkTheme: Theme = {
       primary: colors.neutral[900], // Main background
       secondary: colors.neutral[800], // Sidebar, cards, containers
       tertiary: colors.neutral[700], // Input fields, form elements
-      accent: colors.blue[900], // Subtle accent
-      hover: stateColors.hover.dark, // Better contrast hover
-      selected: colors.blue[900], // Selected items
+      accent: colors.neutral[700], // Subtle accent - monochrome
+      hover: stateColors.hover.dark, // Using stateColors for hover state
+      selected: colors.neutral[700], // Selected items - monochrome
     },
     foreground: {
       primary: colors.neutral[50], // Main text color
       secondary: colors.neutral[200], // Subheadings, labels
       muted: colors.neutral[400], // Placeholders, disabled
-      accent: colors.blue[300], // Links, buttons - higher contrast
+      accent: colors.neutral[200], // Links, buttons - monochrome
     },
     border: {
-      default: colors.neutral[600], // Default border - improved contrast
-      strong: colors.neutral[500], // Strong borders - improved contrast
-      focus: colors.blue[400], // Focus state borders - improved contrast
+      default: colors.neutral[600], // Default border
+      strong: colors.neutral[500], // Strong borders
+      focus: colors.neutral[400], // Focus state borders - monochrome
     },
     avatar: {
       user: {
-        background: colors.indigo[500], // User avatar
+        background: colors.neutral[500], // User avatar - monochrome
         foreground: colors.neutral[50], // Text on user avatar
       },
       assistant: {
-        background: colors.green[500], // Assistant avatar
+        background: colors.neutral[600], // Assistant avatar - monochrome
         foreground: colors.neutral[50], // Text on assistant avatar
       },
     },
     status: {
       info: {
-        foreground: colors.blue[300],
-        background: colors.blue[900],
-        border: colors.blue[700],
+        foreground: colors.neutral[200],
+        background: colors.neutral[800],
+        border: colors.neutral[600],
       },
       success: {
         foreground: colors.green[300],
@@ -274,7 +274,7 @@ export const darkTheme: Theme = {
       },
     },
     focus: {
-      ring: stateColors.focus.dark,
+      ring: stateColors.focus.dark, // Using stateColors for focus ring
     },
   },
 };
