@@ -29,17 +29,18 @@ interface ButtonProps
 
 // Extract variant styles to a constant
 const VARIANT_STYLES = {
-  primary:
-    "bg-theme-fg-primary text-theme-bg-primary hover:bg-theme-fg-secondary",
+  primary: "bg-neutral-800 text-white hover:bg-neutral-700 theme-transition",
   secondary:
-    "bg-theme-bg-primary hover:bg-theme-bg-secondary text-theme-fg-secondary",
-  ghost: "hover:bg-theme-bg-secondary text-theme-fg-secondary",
-  danger:
-    "text-theme-danger hover:text-theme-danger-hover hover:bg-theme-danger-bg",
+    "bg-theme-bg-secondary border border-theme-border hover:bg-theme-bg-hover text-theme-fg-secondary theme-transition",
+  ghost:
+    "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
+  danger: "text-theme-error-fg hover:bg-theme-error-bg theme-transition",
   "sidebar-icon":
-    "p-2 rounded-lg text-theme-fg-secondary hover:text-theme-fg-primary",
-  "list-item": "w-full px-4 py-2 text-sm text-left hover:bg-theme-bg-accent",
-  "icon-only": "p-2 rounded-lg",
+    "p-2 rounded-lg text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
+  "list-item":
+    "w-full px-4 py-2 text-sm text-left text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
+  "icon-only":
+    "p-2 rounded-lg text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
 } as const;
 
 const SIZE_STYLES = {
@@ -121,16 +122,15 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const buttonClasses = useMemo(
       () =>
         clsx(
-          "flex items-center gap-2 rounded transition-colors",
-          "focus:outline-none focus:ring-2 focus:ring-theme-focus ring-offset-2",
+          "flex items-center gap-2 rounded",
+          "focus-ring",
           VARIANT_STYLES[variant],
           SIZE_STYLES[size],
           {
-            "bg-theme-bg-secondary": ariaPressed === true,
+            "bg-theme-bg-selected": ariaPressed === true,
           },
-          showOnHover && "opacity-0 group-hover:opacity-100 transition-opacity",
+          showOnHover && "opacity-0 group-hover:opacity-100 theme-transition",
           "disabled:opacity-50 disabled:cursor-not-allowed",
-          "focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2",
           className,
         ),
       [variant, size, ariaPressed, showOnHover, className],

@@ -43,21 +43,22 @@ export const Alert: React.FC<AlertProps> = ({
   // Define styles for different alert types
   const styles = {
     error: {
-      container: "bg-theme-error-bg text-theme-error border-theme-error-border",
+      container:
+        "bg-theme-error-bg text-theme-error-fg border-theme-error-border",
       icon: <ExclamationCircleIcon className="h-5 w-5" />,
     },
     warning: {
       container:
-        "bg-theme-warning-bg text-theme-warning border-theme-warning-border",
+        "bg-theme-warning-bg text-theme-warning-fg border-theme-warning-border",
       icon: <ExclamationTriangleIcon className="h-5 w-5" />,
     },
     info: {
-      container: "bg-theme-info-bg text-theme-info border-theme-info-border",
+      container: "bg-theme-info-bg text-theme-info-fg border-theme-info-border",
       icon: <InformationCircleIcon className="h-5 w-5" />,
     },
     success: {
       container:
-        "bg-theme-success-bg text-theme-success border-theme-success-border",
+        "bg-theme-success-bg text-theme-success-fg border-theme-success-border",
       icon: <CheckCircleIcon className="h-5 w-5" />,
     },
   };

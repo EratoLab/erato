@@ -130,7 +130,7 @@ export const ChatInput = ({
       {selectedFiles.length > 0 && (
         <div className="mb-3">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="text-sm font-medium text-theme-text-secondary">
+            <h3 className="text-sm font-medium text-theme-fg-secondary">
               Attachments ({selectedFiles.length}/{maxFiles})
             </h3>
             {selectedFiles.length > 1 && (
@@ -173,10 +173,11 @@ export const ChatInput = ({
 
       <div
         className={clsx(
-          "w-full rounded-2xl bg-theme-bg-primary",
+          "w-full rounded-2xl bg-theme-bg-tertiary",
           "p-3",
           "shadow-[0_0_15px_rgba(0,0,0,0.1)]",
           "border border-theme-border",
+          "focus-within:border-theme-border-focus theme-transition",
           "flex flex-col gap-3",
           className,
         )}
@@ -199,7 +200,7 @@ export const ChatInput = ({
             "w-full resize-none overflow-hidden",
             "px-3 py-2",
             "bg-transparent",
-            "text-gray-900 placeholder:text-gray-500 dark:text-gray-100 dark:placeholder:text-gray-400",
+            "text-theme-fg-primary placeholder:text-theme-fg-muted",
             "focus:outline-none",
             "disabled:opacity-50 disabled:cursor-not-allowed",
             "min-h-[24px] max-h-[200px]",
@@ -240,7 +241,7 @@ export const ChatInput = ({
 
           <Button
             type="submit"
-            variant="icon-only"
+            variant="secondary"
             disabled={!message.trim() || isLoading || disabled}
             icon={<ArrowUpIcon />}
             size="sm"

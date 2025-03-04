@@ -34,7 +34,7 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
             <Avatar
               userProfile={userProfile}
               size="sm"
-              className="cursor-pointer hover:opacity-80 transition-opacity"
+              className="cursor-pointer hover:opacity-80 theme-transition"
             />
           }
         />

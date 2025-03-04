@@ -151,7 +151,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           style={{ width: sidebarWidth }}
           className={clsx(
             "flex flex-col h-full border-r border-theme-border",
-            "bg-theme-bg-secondary transition-all duration-200",
+            "bg-theme-bg-secondary theme-transition",
             collapsed && "overflow-hidden",
             className,
           )}

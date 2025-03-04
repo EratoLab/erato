@@ -36,7 +36,7 @@ export const DefaultMessageControls = ({
     <div
       className={clsx(
         "flex items-center gap-2",
-        showOnHover && "opacity-0 group-hover:opacity-100 transition-opacity",
+        showOnHover && "opacity-0 group-hover:opacity-100 theme-transition",
         className,
       )}
     >

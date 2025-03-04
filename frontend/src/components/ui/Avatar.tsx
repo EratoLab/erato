@@ -39,7 +39,9 @@ export const Avatar = React.memo<AvatarProps>(
       <div
         className={clsx(
           "relative rounded-full flex items-center justify-center shrink-0",
-          "bg-theme-bg-accent text-theme-fg-primary font-medium",
+          userOrAssistant
+            ? "bg-theme-avatar-assistant-bg text-theme-avatar-assistant-fg"
+            : "bg-theme-avatar-user-bg text-theme-avatar-user-fg",
           sizeClasses[size],
           className,
         )}
