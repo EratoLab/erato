@@ -39,6 +39,7 @@ const ChatHistoryListItem = memo<{
 }>(({ session, isActive, layout, onSelect, onDelete, onShowDetails }) => (
   <InteractiveContainer
     onClick={onSelect}
+    useDiv={true}
     className={clsx(
       "flex flex-col text-left px-4 py-3 rounded-lg",
       isActive && "bg-theme-bg-selected",
