@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MessageStreamProvider } from "../components/containers/MessageStreamProvider";
 import { ProfileProvider } from "@/components/containers/ProfileProvider";
 import { useChatHistory } from "@/components/containers/ChatHistoryProvider";
+import { FileType } from "@/utils/fileTypes";
 
 // Dynamically import Chat with ssr disabled
 const Chat = dynamic(
@@ -40,6 +41,40 @@ const ChatContainer = () => {
     createSession();
   }, [createSession]);
 
+  // Define which file types are accepted in this chat
+  const acceptedFileTypes: FileType[] = ["pdf", "image", "document", "text"];
+
+  const handleAddFiles = useCallback((files: File[]) => {
+    // Process the selected files
+    console.log(
+      "Files selected:",
+      files.map((f) => f.name),
+    );
+
+    // TODO: Implement file upload to backend server
+    // Example implementation:
+    // 1. Create FormData object
+    // const formData = new FormData();
+    // files.forEach(file => {
+    //   formData.append('files', file);
+    // });
+    // formData.append('sessionId', currentSessionId || '');
+    //
+    // 2. Send to backend
+    // fetch('/api/upload', {
+    //   method: 'POST',
+    //   body: formData
+    // }).then(response => response.json())
+    //   .then(data => {
+    //     console.log('Files uploaded:', data);
+    //     // Update UI with file references or trigger a message with attachments
+    //   })
+    //   .catch(error => {
+    //     console.error('Error uploading files:', error);
+    //     // Handle error state
+    //   });
+  }, []);
+
   return (
     <ChatProvider>
       <Chat
@@ -53,9 +88,11 @@ const ChatContainer = () => {
           isSharedDialog: false,
         }}
         onNewChat={handleNewChat}
+        onAddFile={handleAddFiles}
         onRegenerate={() => console.log("Regenerate")}
         sidebarCollapsed={sidebarCollapsed}
         onToggleCollapse={handleToggleCollapse}
+        acceptedFileTypes={acceptedFileTypes}
       />
     </ChatProvider>
   );

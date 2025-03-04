@@ -4,12 +4,18 @@ import {
   PlusIcon,
   ArrowUpIcon,
   ArrowPathIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "./Button";
+import { FilePreview } from "./FilePreview";
+import { FileType, FileTypeUtil } from "@/utils/fileTypes";
+import { Tooltip } from "./Tooltip";
+import { Alert } from "./Alert";
+import { FileInput } from "./FileInput";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
-  onAddFile?: () => void;
+  onAddFile?: (files: File[]) => void;
   onRegenerate?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
@@ -17,8 +23,15 @@ interface ChatInputProps {
   placeholder?: string;
   maxLength?: number;
   showControls?: boolean;
+  /** Limit the total number of files that can be attached */
+  maxFiles?: number;
+  /** Array of accepted file types, or empty for all enabled types */
+  acceptedFileTypes?: FileType[];
 }
 
+/**
+ * ChatInput component with file attachment capabilities
+ */
 export const ChatInput = ({
   onSendMessage,
   onAddFile,
@@ -29,8 +42,12 @@ export const ChatInput = ({
   placeholder = "Type a message...",
   maxLength = 2000,
   showControls = true,
+  maxFiles = 5,
+  acceptedFileTypes = [],
 }: ChatInputProps) => {
   const [message, setMessage] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -38,7 +55,64 @@ export const ChatInput = ({
     if (message.trim() && !isLoading && !disabled) {
       onSendMessage(message.trim());
       setMessage("");
+      // Keep files after sending message to allow for additional messages with the same files
+      // Clear files only when explicitly requested or new files are selected
     }
+  };
+
+  const handleFileInputChange = (files: File[]) => {
+    setFileError(null);
+
+    // Check if adding these files would exceed the maximum
+    if (selectedFiles.length + files.length > maxFiles) {
+      setFileError(`You can only attach up to ${maxFiles} files`);
+      return;
+    }
+
+    // Validate and filter files
+    const validFiles: File[] = [];
+    const invalidFiles: { file: File; error: string }[] = [];
+
+    for (const file of files) {
+      const validation = FileTypeUtil.validateFile(file);
+
+      if (validation.valid) {
+        validFiles.push(file);
+      } else {
+        invalidFiles.push({ file, error: validation.error || "Invalid file" });
+      }
+    }
+
+    // If there are invalid files, show error for the first one
+    if (invalidFiles.length > 0) {
+      setFileError(`${invalidFiles[0].file.name}: ${invalidFiles[0].error}`);
+      // If there are multiple errors, show a more general message
+      if (invalidFiles.length > 1) {
+        setFileError(
+          `${invalidFiles[0].file.name}: ${invalidFiles[0].error} (and ${invalidFiles.length - 1} more)`,
+        );
+      }
+    }
+
+    // Add valid files to selection
+    if (validFiles.length > 0) {
+      setSelectedFiles((prev) => [...prev, ...validFiles]);
+
+      // Call the parent's onAddFile callback if it exists
+      if (onAddFile) {
+        onAddFile(validFiles);
+      }
+    }
+  };
+
+  const handleRemoveFile = (fileToRemove: File) => {
+    setSelectedFiles((prev) => prev.filter((file) => file !== fileToRemove));
+    setFileError(null);
+  };
+
+  const handleRemoveAllFiles = () => {
+    setSelectedFiles([]);
+    setFileError(null);
   };
 
   // Auto-resize textarea
@@ -52,6 +126,51 @@ export const ChatInput = ({
 
   return (
     <form className={clsx("w-2/3 mx-auto mb-4")} onSubmit={handleSubmit}>
+      {/* File previews */}
+      {selectedFiles.length > 0 && (
+        <div className="mb-3">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-medium text-theme-text-secondary">
+              Attachments ({selectedFiles.length}/{maxFiles})
+            </h3>
+            {selectedFiles.length > 1 && (
+              <Tooltip content="Remove all files">
+                <Button
+                  onClick={handleRemoveAllFiles}
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
+                  icon={<XMarkIcon className="h-3 w-3 mr-1" />}
+                >
+                  Remove all
+                </Button>
+              </Tooltip>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {selectedFiles.map((file, index) => (
+              <FilePreview
+                key={`${file.name}-${index}`}
+                file={file}
+                onRemove={handleRemoveFile}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* File error message */}
+      {fileError && (
+        <Alert
+          type="error"
+          dismissible
+          onDismiss={() => setFileError(null)}
+          className="mb-2"
+        >
+          {fileError}
+        </Alert>
+      )}
+
       <div
         className={clsx(
           "w-full rounded-2xl bg-theme-bg-primary",
@@ -80,7 +199,7 @@ export const ChatInput = ({
             "w-full resize-none overflow-hidden",
             "px-3 py-2",
             "bg-transparent",
-            "text-gray-900 placeholder:text-gray-500",
+            "text-gray-900 placeholder:text-gray-500 dark:text-gray-100 dark:placeholder:text-gray-400",
             "focus:outline-none",
             "disabled:opacity-50 disabled:cursor-not-allowed",
             "min-h-[24px] max-h-[200px]",
@@ -91,20 +210,30 @@ export const ChatInput = ({
           <div className="flex items-center gap-2">
             {showControls && (
               <>
-                <Button
-                  onClick={onAddFile}
-                  variant="icon-only"
-                  icon={<PlusIcon />}
-                  size="sm"
-                  aria-label="Add File"
-                />
-                <Button
-                  onClick={onRegenerate}
-                  variant="icon-only"
-                  icon={<ArrowPathIcon />}
-                  size="sm"
-                  aria-label="Regenerate response"
-                />
+                <FileInput
+                  onFilesSelected={handleFileInputChange}
+                  acceptedFileTypes={acceptedFileTypes}
+                  disabled={selectedFiles.length >= maxFiles}
+                >
+                  <Tooltip content={`Add file${maxFiles > 1 ? "s" : ""}`}>
+                    <Button
+                      variant="icon-only"
+                      size="sm"
+                      icon={<PlusIcon />}
+                      aria-label="Add File"
+                      disabled={selectedFiles.length >= maxFiles}
+                    />
+                  </Tooltip>
+                </FileInput>
+                <Tooltip content="Regenerate response">
+                  <Button
+                    onClick={onRegenerate}
+                    variant="icon-only"
+                    icon={<ArrowPathIcon />}
+                    size="sm"
+                    aria-label="Regenerate response"
+                  />
+                </Tooltip>
               </>
             )}
           </div>

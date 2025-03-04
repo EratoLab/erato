@@ -12,6 +12,7 @@ import {
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { useChatHistory } from "../containers/ChatHistoryProvider";
 import { useProfile } from "@/hooks/useProfile";
+import { FileType } from "@/utils/fileTypes";
 
 export interface ChatProps {
   className?: string;
@@ -38,11 +39,13 @@ export interface ChatProps {
   // Optional custom controls component
   messageControls?: MessageControlsComponent;
   onNewChat?: () => void;
-  onAddFile?: () => void;
+  onAddFile?: (files: File[]) => void;
   onRegenerate?: () => void;
   // Add new prop for sidebar collapsed state
   sidebarCollapsed?: boolean;
   onToggleCollapse: () => void;
+  /** Optional array of accepted file types */
+  acceptedFileTypes?: FileType[];
 }
 
 export const Chat = ({
@@ -59,6 +62,7 @@ export const Chat = ({
   onRegenerate,
   sidebarCollapsed = false,
   onToggleCollapse,
+  acceptedFileTypes,
 }: ChatProps) => {
   const { messages, messageOrder, sendMessage, isLoading } = useChat();
   const { profile } = useProfile();
@@ -151,6 +155,7 @@ export const Chat = ({
           showControls
           onAddFile={onAddFile}
           onRegenerate={onRegenerate}
+          acceptedFileTypes={acceptedFileTypes}
         />
       </div>
     </div>

@@ -24,11 +24,15 @@ const meta = {
   tags: ["autodocs"],
   argTypes: {
     onSendMessage: { action: "message sent" },
-    onAddFile: { action: "add files" },
+    onAddFile: {
+      action: "add files",
+      description: "Callback when files are added",
+    },
     onRegenerate: { action: "regenerate" },
     isLoading: { control: "boolean" },
     disabled: { control: "boolean" },
     showControls: { control: "boolean" },
+    acceptedFileTypes: { control: "text" },
   },
   decorators: [
     (Story) => (
