@@ -37,6 +37,67 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 | -------------------------- | -------------------- | ------------------------ |
 | `NEXT_PUBLIC_API_ROOT_URL` | Backend API root URL | `http://localhost:3001/` |
 
+## Linting and Type Checking
+
+The project uses ESLint with enhanced TypeScript type checking to catch potential issues at development time.
+
+### Available Commands
+
+- `pnpm run lint` - Standard linting using Next.js defaults
+- `pnpm run lint:strict` - Strict linting that includes type checking
+- `pnpm run lint:fix` - Try to automatically fix linting issues
+- `pnpm run typecheck` - Run TypeScript type checking only
+- `pnpm run check` - Run both linting and type checking
+
+### Via Just
+
+- `just lint` - Run standard lint
+- `just lint-fix` - Run lint with auto-fix
+- `just type-check` - Run TypeScript type checking
+- `just strict-check` - Run strict linting with type checking
+
+### Common Issues and How to Fix Them
+
+#### Floating Promises
+
+Error: `Promises must be awaited, end with a call to .catch...`
+
+Fix by adding one of the following:
+
+- Add `await` before the function call
+- Add `.catch(error => { /* handle error */ })`
+- Add `void` operator before the function call if you're intentionally ignoring the promise
+
+```typescript
+// Bad
+somePromiseFunction();
+
+// Good - Option 1
+await somePromiseFunction();
+
+// Good - Option 2
+somePromiseFunction().catch((error) => console.error(error));
+
+// Good - Option 3 (only if you intentionally want to ignore the result)
+void somePromiseFunction();
+```
+
+#### Misused Promises
+
+Error: `Promise-returning function provided to property where a void return was expected`
+
+Fix by creating a handler function:
+
+```typescript
+// Bad
+<button onClick={somePromiseFunction} />
+
+// Good
+<button onClick={() => void somePromiseFunction()} />
+// or
+<button onClick={async () => await somePromiseFunction()} />
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

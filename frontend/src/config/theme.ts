@@ -90,6 +90,7 @@ export type ThemeColors = {
     primary: string; // Main background
     secondary: string; // Card, sidebar backgrounds
     tertiary: string; // Input backgrounds, alternate rows
+    sidebar: string; // Dedicated sidebar background
     accent: string; // Highlighted, selected or focus areas
     hover: string; // Hover state backgrounds
     selected: string; // Selected item background
@@ -157,8 +158,9 @@ export const defaultTheme: Theme = {
   colors: {
     background: {
       primary: colors.neutral[50], // Main background
-      secondary: colors.neutral[100], // Sidebar, cards, containers
+      secondary: colors.neutral[100], // Cards, containers
       tertiary: "#ffffff", // Input fields, form elements
+      sidebar: colors.neutral[200], // Darker sidebar background
       accent: colors.neutral[200], // Subtle accent color (monochrome)
       hover: stateColors.hover.light, // Using stateColors for hover
       selected: stateColors.selection.light, // Using stateColors for selected
@@ -224,8 +226,9 @@ export const darkTheme: Theme = {
   colors: {
     background: {
       primary: colors.neutral[900], // Main background
-      secondary: colors.neutral[800], // Sidebar, cards, containers
+      secondary: colors.neutral[800], // Cards, containers
       tertiary: colors.neutral[700], // Input fields, form elements
+      sidebar: colors.neutral[900], // Sidebar background (less extreme than before)
       accent: colors.neutral[700], // Subtle accent - monochrome
       hover: stateColors.hover.dark, // Using stateColors for hover state
       selected: colors.neutral[700], // Selected items - monochrome

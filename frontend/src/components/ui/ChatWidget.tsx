@@ -1,12 +1,13 @@
-import React, { useEffect, useRef } from "react";
-import { ChatMessage } from "./ChatMessage";
+import React, { useRef, useEffect } from "react";
 import { ChatInput } from "./ChatInput";
 import { useChat } from "../containers/ChatProvider";
+import { useMessageStream } from "../containers/MessageStreamProvider";
 import {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
 } from "../../types/message-controls";
+import { ChatMessage } from "./ChatMessage";
 
 interface ChatWidgetProps {
   className?: string;
@@ -32,6 +33,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   onRegenerate,
 }) => {
   const { messages, messageOrder, sendMessage, isLoading } = useChat();
+  const { currentStreamingMessage } = useMessageStream();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -40,7 +42,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messageOrder]);
+  }, [messageOrder, currentStreamingMessage]);
 
   return (
     <div
@@ -66,7 +68,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       </div>
 
       <ChatInput
-        onSendMessage={sendMessage}
+        onSendMessage={(message) => {
+          void sendMessage(message);
+        }}
         onAddFile={onAddFile}
         onRegenerate={onRegenerate}
         className="border-t bg-white"

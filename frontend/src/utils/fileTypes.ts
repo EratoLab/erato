@@ -313,7 +313,7 @@ export class FileTypeUtil {
     if (!fileTypes || fileTypes.length === 0) {
       // Get all enabled file types
       fileTypes = Object.entries(FILE_TYPES)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         .filter(([_, config]) => config.enabled)
         .map(([type]) => type as FileType);
     }

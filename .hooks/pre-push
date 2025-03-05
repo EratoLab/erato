@@ -89,8 +89,8 @@ check_frontend_changes() {
     # Store the modified files for preview
     local modified_files=$(printf '%s\n' "${frontend_files[@]}")
 
-    # Present interactive selection for format check and type/lint check
-    local selected=$(printf "Run check-format\nRun type/lint check" | fzf \
+    # Present interactive selection for tests/lint with preview window
+    local selected=$(printf "Run standard lint + check\nRun strict type check\nCheck format" | fzf \
         --multi \
         --header="Select actions to perform (use TAB to select multiple, ENTER to confirm, ESC to skip)" \
         --preview "echo 'Modified frontend files:'; echo '$modified_files'" \
@@ -103,19 +103,32 @@ check_frontend_changes() {
     fi
 
     if [ -n "$selected" ]; then
-        if echo "$selected" | grep -q "Run check-format"; then
-            echo "Running format check..."
-            cd frontend && just check-format
-            local format_status=$?
-            cd "$initial_dir"
-            [ $format_status -ne 0 ] && return 1
-        fi
-        if echo "$selected" | grep -q "Run type/lint check"; then
-            echo "Running type and lint checks..."
+        if echo "$selected" | grep -q "Run standard lint + check"; then
+            echo "Running lint and type check..."
             cd frontend && pnpm run check
-            local check_status=$?
-            cd "$initial_dir"
-            [ $check_status -ne 0 ] && return 1
+            if [ $? -ne 0 ]; then
+                echo "Lint or type check failed. Fix the issues before pushing."
+                return 1
+            fi
+        fi
+
+        if echo "$selected" | grep -q "Run strict type check"; then
+            echo "Running strict type check..."
+            cd frontend && pnpm run lint:strict
+            if [ $? -ne 0 ]; then
+                echo "Strict type check failed. You can try 'cd frontend && pnpm run lint:fix' to automatically fix some issues."
+                echo "For Type errors, you'll need to fix them manually."
+                return 1
+            fi
+        fi
+
+        if echo "$selected" | grep -q "Check format"; then
+            echo "Checking formatting..."
+            cd frontend && just check-format
+            if [ $? -ne 0 ]; then
+                echo "Formatting check failed. Run 'cd frontend && just format' to fix."
+                return 1
+            fi
         fi
     fi
 

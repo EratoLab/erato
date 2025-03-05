@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import clsx from "clsx";
 import { Button } from "./Button";
@@ -29,7 +31,7 @@ export const DefaultMessageControls = ({
   const isDialogOwner = context.currentUserId === context.dialogOwnerId;
 
   const handleAction = (type: MessageActionType) => {
-    onAction({ type, messageId });
+    void onAction({ type, messageId });
   };
 
   return (

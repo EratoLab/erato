@@ -34,7 +34,7 @@ interface MessageMap {
 export interface ChatContextType {
   messages: MessageMap;
   messageOrder: string[]; // Preserve message order
-  sendMessage: (message: string) => void;
+  sendMessage: (message: string) => Promise<void>;
   updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void;
   isLoading: boolean;
 }
@@ -69,7 +69,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   useEffect(() => {
     if (loadMessages) {
       setIsLoading(true);
-      loadMessages()
+      void loadMessages()
         .then(({ messages: apiMessages, order }) => {
           setMessages(apiMessages);
           setMessageOrder(order);

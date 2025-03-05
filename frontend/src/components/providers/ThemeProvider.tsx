@@ -73,6 +73,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       "--theme-bg-tertiary",
       theme.colors.background.tertiary,
     );
+    root.style.setProperty(
+      "--theme-bg-sidebar",
+      theme.colors.background.sidebar,
+    );
     root.style.setProperty("--theme-bg-accent", theme.colors.background.accent);
     root.style.setProperty("--theme-bg-hover", theme.colors.background.hover);
     root.style.setProperty(

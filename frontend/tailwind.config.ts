@@ -14,6 +14,7 @@ export default {
             primary: "var(--theme-bg-primary)",
             secondary: "var(--theme-bg-secondary)",
             tertiary: "var(--theme-bg-tertiary)",
+            sidebar: "var(--theme-bg-sidebar)",
             accent: "var(--theme-bg-accent)",
             hover: "var(--theme-bg-hover)",
             selected: "var(--theme-bg-selected)",
