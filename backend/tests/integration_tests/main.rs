@@ -1,3 +1,5 @@
+#![allow(clippy::manual_strip)]
+
 use axum::{http, Router};
 use axum_test::TestServer;
 use ctor::ctor;
@@ -310,6 +312,205 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
         assert!(
             chat.get("last_message_at").is_some(),
             "Chat is missing 'last_message_at' field"
+        );
+    }
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
+    // Set up the test environment
+    let app_config = test_app_config();
+    let app_state = test_app_state(app_config, pool);
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a mock JWT for authentication
+    let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
+
+    // Create a chat by sending a message
+    let first_message = "First test message";
+    let message_request = json!({
+        "previous_message_id": null,
+        "user_message": first_message
+    });
+
+    // Send the first message to create a chat
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response to get the chat ID and message ID
+    let response_text = response.text();
+    dbg!(&response_text);
+    let lines: Vec<&str> = response_text.lines().collect();
+
+    // Find the chat_created event and extract the chat ID
+    let mut chat_id = String::new();
+    for i in 0..lines.len() - 1 {
+        if lines[i] == "event: chat_created" {
+            // The data is on the next line, prefixed with "data: "
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse chat_created data");
+
+                chat_id = data_json["chat_id"]
+                    .as_str()
+                    .expect("Expected chat_id to be a string")
+                    .to_string();
+
+                break;
+            }
+        }
+    }
+    dbg!(&lines);
+
+    assert!(
+        !chat_id.is_empty(),
+        "Failed to extract chat_id from response"
+    );
+
+    // Find the message_complete event and extract the message ID
+    let mut first_message_id = String::new();
+    for i in 0..lines.len() - 1 {
+        if lines[i] == "event: message_complete" {
+            // The data is on the next line, prefixed with "data: "
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse message_complete data");
+
+                first_message_id = data_json["message_id"]
+                    .as_str()
+                    .expect("Expected message_id to be a string")
+                    .to_string();
+
+                break;
+            }
+        }
+    }
+
+    assert!(
+        !first_message_id.is_empty(),
+        "Failed to extract message_id from response"
+    );
+
+    // Send a second message to the same chat
+    let second_message = "Second test message";
+    let message_request = json!({
+        "previous_message_id": first_message_id,
+        "user_message": second_message
+    });
+
+    // Send the second message
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+    dbg!("Second message sent");
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Now query the chat messages endpoint
+    let response = server
+        .get(&format!("/api/v1beta/chats/{}/messages", chat_id))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response body as JSON
+    let messages: Vec<Value> = response.json();
+
+    // Verify we have exactly 4 messages (2 user messages + 2 assistant responses)
+    assert_eq!(
+        messages.len(),
+        4,
+        "Expected 4 messages, got {}",
+        messages.len()
+    );
+
+    // Verify the messages have the expected structure and content
+    let user_messages = messages
+        .iter()
+        .filter(|msg| msg["role"].as_str().unwrap_or("") == "user")
+        .collect::<Vec<_>>();
+
+    let assistant_messages = messages
+        .iter()
+        .filter(|msg| msg["role"].as_str().unwrap_or("") == "assistant")
+        .collect::<Vec<_>>();
+
+    // Verify we have 2 user messages and 2 assistant messages
+    assert_eq!(
+        user_messages.len(),
+        2,
+        "Expected 2 user messages, got {}",
+        user_messages.len()
+    );
+    assert_eq!(
+        assistant_messages.len(),
+        2,
+        "Expected 2 assistant messages, got {}",
+        assistant_messages.len()
+    );
+
+    // Verify the content of the user messages
+    let user_message_texts: Vec<&str> = user_messages
+        .iter()
+        .map(|msg| msg["full_text"].as_str().unwrap_or(""))
+        .collect();
+
+    assert!(
+        user_message_texts.contains(&first_message),
+        "First user message not found"
+    );
+    assert!(
+        user_message_texts.contains(&second_message),
+        "Second user message not found"
+    );
+
+    // Verify each message has the expected fields
+    for message in &messages {
+        assert!(message.get("id").is_some(), "Message is missing 'id' field");
+        assert!(
+            message.get("chat_id").is_some(),
+            "Message is missing 'chat_id' field"
+        );
+        assert!(
+            message.get("role").is_some(),
+            "Message is missing 'role' field"
+        );
+        assert!(
+            message.get("full_text").is_some(),
+            "Message is missing 'full_text' field"
+        );
+        assert!(
+            message.get("created_at").is_some(),
+            "Message is missing 'created_at' field"
+        );
+        assert!(
+            message.get("updated_at").is_some(),
+            "Message is missing 'updated_at' field"
+        );
+        assert!(
+            message.get("is_message_in_active_thread").is_some(),
+            "Message is missing 'is_message_in_active_thread' field"
         );
     }
 }
