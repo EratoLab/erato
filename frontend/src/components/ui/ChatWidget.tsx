@@ -1,12 +1,13 @@
-import React, { useEffect, useRef } from "react";
-import { ChatMessage } from "./ChatMessage";
+import React, { useRef, useEffect } from "react";
 import { ChatInput } from "./ChatInput";
 import { useChat } from "../containers/ChatProvider";
+import { useMessageStream } from "../containers/MessageStreamProvider";
 import {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
 } from "../../types/message-controls";
+import { ChatMessage } from "./ChatMessage";
 
 interface ChatWidgetProps {
   className?: string;
@@ -16,7 +17,7 @@ interface ChatWidgetProps {
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
   onMessageAction?: (action: MessageAction) => void | Promise<void>;
-  onNewChat?: () => void;
+  onAddFile?: () => void;
   onRegenerate?: () => void;
 }
 
@@ -28,10 +29,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   controls,
   controlsContext,
   onMessageAction,
-  onNewChat,
+  onAddFile,
   onRegenerate,
 }) => {
   const { messages, messageOrder, sendMessage, isLoading } = useChat();
+  const { currentStreamingMessage } = useMessageStream();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -40,7 +42,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messageOrder]);
+  }, [messageOrder, currentStreamingMessage]);
 
   return (
     <div
@@ -66,8 +68,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       </div>
 
       <ChatInput
-        onSendMessage={sendMessage}
-        onNewChat={onNewChat}
+        onSendMessage={(message) => {
+          void sendMessage(message);
+        }}
+        onAddFile={onAddFile}
         onRegenerate={onRegenerate}
         className="border-t bg-white"
         isLoading={isLoading}

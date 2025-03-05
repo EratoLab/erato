@@ -88,6 +88,7 @@ const ChatHistoryFooter = memo<{
       userProfile={userProfile}
       onSignOut={onSignOut}
       className="w-full flex items-center justify-start"
+      showThemeToggle={true}
     />
   </div>
 ));
@@ -151,7 +152,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           style={{ width: sidebarWidth }}
           className={clsx(
             "flex flex-col h-full border-r border-theme-border",
-            "bg-theme-bg-secondary transition-all duration-200",
+            "bg-theme-bg-sidebar theme-transition",
             collapsed && "overflow-hidden",
             className,
           )}

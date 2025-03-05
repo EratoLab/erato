@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import clsx from "clsx";
 import { Button } from "./Button";
@@ -29,14 +31,14 @@ export const DefaultMessageControls = ({
   const isDialogOwner = context.currentUserId === context.dialogOwnerId;
 
   const handleAction = (type: MessageActionType) => {
-    onAction({ type, messageId });
+    void onAction({ type, messageId });
   };
 
   return (
     <div
       className={clsx(
         "flex items-center gap-2",
-        showOnHover && "opacity-0 group-hover:opacity-100 transition-opacity",
+        showOnHover && "opacity-0 group-hover:opacity-100 theme-transition",
         className,
       )}
     >

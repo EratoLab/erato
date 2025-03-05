@@ -94,7 +94,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
       <div
         className={clsx(
           "flex flex-col gap-1 overflow-y-auto p-2",
-          "bg-theme-bg-secondary w-full min-w-[280px] max-w-md",
+          "w-full min-w-[280px] max-w-md",
           className,
         )}
       >

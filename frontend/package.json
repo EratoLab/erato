@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "lint:strict": "eslint --max-warnings=0 .",
+    "lint:fix": "eslint --fix .",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test": "vitest",
@@ -15,7 +17,7 @@
     "coverage": "vitest run --coverage",
     "codegen": "openapi-codegen gen v1betaApi",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm lint && pnpm typecheck"
+    "check": "pnpm lint:strict && pnpm typecheck"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -52,6 +54,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@typescript-eslint/eslint-plugin": "^8.26.0",
+    "@typescript-eslint/parser": "^8.26.0",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9",
     "eslint-config-next": "15.1.6",

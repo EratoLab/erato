@@ -1,19 +1,41 @@
 import React, { memo } from "react";
 import { Avatar } from "./Avatar";
 import { DropdownMenu } from "./DropdownMenu";
-import { LogOutIcon } from "./icons";
+import { LogOutIcon, SunIcon, MoonIcon } from "./icons";
 import type { UserProfile } from "@/types/chat";
 import { clsx } from "clsx";
+import { useTheme } from "../providers/ThemeProvider";
 
 interface UserProfileDropdownProps {
   userProfile?: UserProfile;
   onSignOut: () => void;
   className?: string;
+  /** Enable theme toggle feature */
+  showThemeToggle?: boolean;
 }
 
 export const UserProfileDropdown = memo<UserProfileDropdownProps>(
-  ({ userProfile, onSignOut, className }) => {
+  ({ userProfile, onSignOut, className, showThemeToggle = false }) => {
+    const { themeMode, setThemeMode } = useTheme();
+
+    // Create dropdown items array
     const dropdownItems = [
+      ...(showThemeToggle
+        ? [
+            {
+              label: themeMode === "light" ? "Dark mode" : "Light mode",
+              icon:
+                themeMode === "light" ? (
+                  <MoonIcon className="w-4 h-4" />
+                ) : (
+                  <SunIcon className="w-4 h-4" />
+                ),
+              onClick: () => {
+                setThemeMode(themeMode === "light" ? "dark" : "light");
+              },
+            },
+          ]
+        : []),
       {
         label: "Sign out",
         icon: <LogOutIcon className="w-4 h-4" />,
@@ -34,7 +56,7 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
             <Avatar
               userProfile={userProfile}
               size="sm"
-              className="cursor-pointer hover:opacity-80 transition-opacity"
+              className="cursor-pointer hover:opacity-80 theme-transition"
             />
           }
         />

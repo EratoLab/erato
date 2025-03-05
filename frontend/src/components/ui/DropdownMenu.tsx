@@ -44,12 +44,12 @@ const MenuItem = memo(
       className={clsx(
         "w-full px-4 py-2 text-sm text-left",
         "flex items-center gap-2",
-        "transition-colors duration-150",
+        "theme-transition",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         "focus:outline-none focus-visible:bg-theme-bg-accent",
         item.variant === "danger"
-          ? "text-theme-danger hover:text-theme-danger-hover hover:bg-theme-danger-bg"
-          : "hover:bg-theme-bg-accent text-theme-fg-primary",
+          ? "text-theme-error-fg hover:bg-theme-error-bg"
+          : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary",
       )}
       onClick={onSelect}
       disabled={item.disabled}
@@ -243,7 +243,7 @@ export const DropdownMenu = memo(
             "fixed w-48 rounded-md shadow-lg",
             "bg-theme-bg-primary border border-theme-border",
             "z-[9999]",
-            "transition-all duration-200",
+            "theme-transition",
           )}
           style={{
             top:

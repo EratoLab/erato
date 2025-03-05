@@ -100,6 +100,12 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
         // Default message handler as fallback
         source.addEventListener("message", (e: MessageEvent) => {
           try {
+            // Add validation to check if e.data exists and is not empty
+            if (!e.data || typeof e.data !== "string" || e.data.trim() === "") {
+              console.warn("SSE message event received with empty data");
+              return; // Skip processing this event
+            }
+
             const data = JSON.parse(e.data);
             console.log("SSE generic message received:", data);
             // Only update content if no specific handler caught this event
@@ -111,7 +117,12 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
               }));
             }
           } catch (error) {
-            console.error("Error parsing SSE message event:", error);
+            console.error(
+              "Error parsing SSE message event:",
+              error,
+              "Raw data:",
+              e.data,
+            );
           }
         });
 

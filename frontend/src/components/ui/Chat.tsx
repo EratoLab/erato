@@ -12,6 +12,8 @@ import {
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { useChatHistory } from "../containers/ChatHistoryProvider";
 import { useProfile } from "@/hooks/useProfile";
+import { FileType } from "@/utils/fileTypes";
+import { useMessageStream } from "../containers/MessageStreamProvider";
 
 export interface ChatProps {
   className?: string;
@@ -38,10 +40,13 @@ export interface ChatProps {
   // Optional custom controls component
   messageControls?: MessageControlsComponent;
   onNewChat?: () => void;
+  onAddFile?: (files: File[]) => void;
   onRegenerate?: () => void;
   // Add new prop for sidebar collapsed state
   sidebarCollapsed?: boolean;
   onToggleCollapse: () => void;
+  /** Optional array of accepted file types */
+  acceptedFileTypes?: FileType[];
 }
 
 export const Chat = ({
@@ -54,11 +59,14 @@ export const Chat = ({
   controlsContext,
   messageControls,
   onNewChat,
+  onAddFile,
   onRegenerate,
   sidebarCollapsed = false,
   onToggleCollapse,
+  acceptedFileTypes,
 }: ChatProps) => {
   const { messages, messageOrder, sendMessage, isLoading } = useChat();
+  const { currentStreamingMessage } = useMessageStream();
   const { profile } = useProfile();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const {
@@ -78,7 +86,7 @@ export const Chat = ({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messageOrder]);
+  }, [messageOrder, currentStreamingMessage]);
 
   const handleMessageAction = async (action: MessageAction) => {
     if (onMessageAction) {
@@ -143,12 +151,15 @@ export const Chat = ({
         </div>
 
         <ChatInput
-          onSendMessage={sendMessage}
+          onSendMessage={(message) => {
+            void sendMessage(message);
+          }}
           className="border-t border-theme-border bg-theme-bg-primary p-2 sm:p-4"
           isLoading={isLoading}
           showControls
-          onNewChat={onNewChat}
+          onAddFile={onAddFile}
           onRegenerate={onRegenerate}
+          acceptedFileTypes={acceptedFileTypes}
         />
       </div>
     </div>

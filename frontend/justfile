@@ -36,7 +36,16 @@ check-format:
     pnpm exec prettier . --check
 
 lint:
-    pnpm run lint
+    pnpm run lint:strict
+
+lint-fix:
+    pnpm run lint:fix
 
 check:
     pnpm run check
+
+type-check:
+    pnpm run typecheck
+
+strict-check:
+    pnpm run lint:strict && pnpm run typecheck
