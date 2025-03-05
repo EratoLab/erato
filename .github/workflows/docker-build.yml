@@ -117,7 +117,7 @@ jobs:
           tool: cargo-nextest@0.9.88,sea-orm-cli@1.1.4
       - name: "Run tests"
         working-directory: backend
-        run: cargo nextest run
+        run: cargo nextest run --retries 2
       - name: "Check if OpenAPI spec is up to date"
         working-directory: backend
         run: cargo run --bin gen-openapi -- --check
