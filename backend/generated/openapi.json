@@ -55,6 +55,9 @@
           },
           "401": {
             "description": "When no valid JWT token is provided"
+          },
+          "500": {
+            "description": "When an internal server error occurs"
           }
         },
         "security": [

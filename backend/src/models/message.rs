@@ -85,6 +85,7 @@ impl From<&messages::Model> for Resource {
 /// and the order_index of the new message will be set to the previous message's order_index + 1.
 ///
 /// If `previous_message_id` is not specified, the order_index will be set to 0.
+#[allow(clippy::too_many_arguments)]
 pub async fn submit_message(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -92,6 +93,8 @@ pub async fn submit_message(
     chat_id: &Uuid,
     raw_message: JsonValue,
     previous_message_id: Option<&Uuid>,
+    sibling_message_id: Option<&Uuid>,
+    generation_input_messages: Option<JsonValue>,
 ) -> Result<messages::Model, Report> {
     // Validate the message format
     MessageSchema::validate(&raw_message)?;
@@ -104,8 +107,7 @@ pub async fn submit_message(
         Action::SubmitMessage
     )?;
 
-    // Determine the order_index for the new message
-    let order_index = if let Some(prev_msg_id) = previous_message_id {
+    if let Some(prev_msg_id) = previous_message_id {
         // Find the previous message
         let previous_message = Messages::find_by_id(*prev_msg_id)
             .one(conn)
@@ -118,18 +120,47 @@ pub async fn submit_message(
                 "Previous message does not belong to the specified chat"
             ));
         }
+    }
 
-        // Increment the order_index
-        previous_message.order_index + 1
-    } else {
-        0
-    };
+    if let Some(sibling_id) = sibling_message_id {
+        // Find the sibling message
+        let sibling_message = Messages::find_by_id(*sibling_id)
+            .one(conn)
+            .await?
+            .ok_or_else(|| eyre!("Sibling message with ID {} not found", sibling_id))?;
+
+        // Verify that the sibling message belongs to the same chat
+        if sibling_message.chat_id != *chat_id {
+            return Err(eyre!(
+                "Sibling message does not belong to the specified chat"
+            ));
+        }
+    }
+
+    // If this is a sibling message, we need to update the active thread status
+    // of the existing sibling to make it inactive
+    if let Some(sibling_id) = sibling_message_id {
+        let update = messages::ActiveModel {
+            id: ActiveValue::Set(*sibling_id),
+            is_message_in_active_thread: ActiveValue::Set(false),
+            ..Default::default()
+        };
+
+        // Update the sibling message to be inactive in the thread
+        messages::Entity::update(update)
+            .filter(messages::Column::Id.eq(*sibling_id))
+            .exec(conn)
+            .await?;
+    }
 
     // Create and insert the new message
     let new_message = messages::ActiveModel {
         chat_id: ActiveValue::Set(*chat_id),
-        order_index: ActiveValue::Set(order_index),
         raw_message: ActiveValue::Set(raw_message),
+        previous_message_id: ActiveValue::Set(previous_message_id.copied()),
+        sibling_message_id: ActiveValue::Set(sibling_message_id.copied()),
+        is_message_in_active_thread: ActiveValue::Set(true), // New messages are active by default
+        generation_input_messages: ActiveValue::Set(generation_input_messages),
         ..Default::default()
     };
 
