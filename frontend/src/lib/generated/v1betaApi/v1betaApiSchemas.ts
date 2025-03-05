@@ -10,6 +10,52 @@ export type Chat = {
   id: string;
 };
 
+/**
+ * A message in a chat
+ */
+export type ChatMessage = {
+  /**
+   * The ID of the chat this message belongs to
+   */
+  chat_id: string;
+  /**
+   * When the message was created
+   *
+   * @format date-time
+   */
+  created_at: string;
+  /**
+   * The text content of the message
+   */
+  full_text: string;
+  /**
+   * The unique ID of the message
+   */
+  id: string;
+  /**
+   * Whether this message is in the active thread
+   */
+  is_message_in_active_thread: boolean;
+  /**
+   * The ID of the previous message in the thread, if any
+   */
+  previous_message_id?: void;
+  /**
+   * Role of the message sender. May be on of "user", "assistant", "system"
+   */
+  role: string;
+  /**
+   * The ID of the sibling message, if any
+   */
+  sibling_message_id?: void;
+  /**
+   * When the message was last updated
+   *
+   * @format date-time
+   */
+  updated_at: string;
+};
+
 export type Message = {
   id: string;
 };
@@ -56,6 +102,7 @@ export type MessageSubmitStreamingResponseMessage =
 
 export type MessageSubmitStreamingResponseMessageComplete = {
   full_text: string;
+  message: ChatMessage;
   /**
    * @format uuid
    */
@@ -71,6 +118,7 @@ export type MessageSubmitStreamingResponseMessageTextDelta = {
 };
 
 export type MessageSubmitStreamingResponseUserMessageSaved = {
+  message: ChatMessage;
   /**
    * @format uuid
    */

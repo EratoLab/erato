@@ -56,6 +56,35 @@ pub async fn get_or_create_chat(
     }
 }
 
+/// Convenience method to get or create a chat based on a previous message ID.
+///
+/// If the message ID is provided, it will find the chat that the message belongs to.
+/// If the message ID is not provided, it will create a new chat.
+///
+/// Returns a tuple of (chat model, creation status) where the status indicates whether
+/// the chat was newly created or already existed.
+pub async fn get_or_create_chat_by_previous_message_id(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    previous_message_id: Option<&Uuid>,
+    owner_user_id: &str,
+) -> Result<(chats::Model, ChatCreationStatus), Report> {
+    if let Some(message_id) = previous_message_id {
+        // Find the message to get its chat_id
+        let message = Messages::find_by_id(*message_id)
+            .one(conn)
+            .await?
+            .ok_or_else(|| eyre!("Message with ID {} not found", message_id))?;
+
+        // Use the chat_id from the message with get_or_create_chat
+        get_or_create_chat(conn, policy, subject, Some(&message.chat_id), owner_user_id).await
+    } else {
+        // No previous message ID, so create a new chat using get_or_create_chat
+        get_or_create_chat(conn, policy, subject, None, owner_user_id).await
+    }
+}
+
 #[derive(Debug, FromQueryResult)]
 pub struct RecentChat {
     pub id: String,

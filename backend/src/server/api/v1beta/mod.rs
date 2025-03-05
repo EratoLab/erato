@@ -1,11 +1,15 @@
 #![allow(deprecated)]
 pub mod me_profile_middleware;
 
-use crate::models::chat::{get_or_create_chat, get_recent_chats, ChatCreationStatus};
-use crate::models::message::submit_message;
+use crate::db::entity_ext::messages;
+use crate::models;
+use crate::models::chat::{
+    get_or_create_chat_by_previous_message_id, get_recent_chats, ChatCreationStatus,
+};
+use crate::models::message::{submit_message, MessageSchema};
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::state::AppState;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::sse::Event;
 use axum::response::{IntoResponse, Sse};
@@ -14,7 +18,7 @@ use axum::{middleware, Extension, Json, Router};
 use chrono::{DateTime, FixedOffset};
 use eyre::{eyre, Report};
 use futures::stream::Stream;
-use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ChatStreamEvent};
+use genai::chat::{ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatStreamEvent};
 use serde::Serialize;
 use serde_json::{self, json};
 use sqlx::types::{chrono, Uuid};
@@ -30,6 +34,15 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/recent_chats", get(recent_chats))
         .route_layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            me_profile_middleware::user_profile_middleware,
+        ));
+
+    // authenticated routes that are not nested under /me
+    // Should at a later time use a more generic middleware that can use a non-me profile as a Subject
+    let authenticated_routes = Router::new()
+        .route("/chats/:chat_id/messages", get(chat_messages))
+        .route_layer(middleware::from_fn_with_state(
             app_state,
             me_profile_middleware::user_profile_middleware,
         ));
@@ -38,16 +51,25 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages", get(messages))
         .route("/chats", get(chats))
         .nest("/me", me_routes)
+        .merge(authenticated_routes)
         .fallback(fallback);
     app.into()
 }
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(messages, chats, recent_chats, message_submit_sse, profile),
+    paths(
+        messages,
+        chats,
+        recent_chats,
+        message_submit_sse,
+        profile,
+        chat_messages
+    ),
     components(schemas(
         Message,
         Chat,
+        ChatMessage,
         RecentChat,
         MessageSubmitStreamingResponseMessage,
         UserProfile,
@@ -110,6 +132,45 @@ pub struct RecentChat {
     last_message_at: DateTime<FixedOffset>,
 }
 
+/// A message in a chat
+#[derive(Serialize, ToSchema)]
+pub struct ChatMessage {
+    /// The unique ID of the message
+    id: String,
+    /// The ID of the chat this message belongs to
+    chat_id: String,
+    /// Role of the message sender. May be on of "user", "assistant", "system"
+    role: String,
+    /// The text content of the message
+    full_text: String,
+    /// When the message was created
+    created_at: DateTime<FixedOffset>,
+    /// When the message was last updated
+    updated_at: DateTime<FixedOffset>,
+    /// The ID of the previous message in the thread, if any
+    previous_message_id: Option<String>,
+    /// The ID of the sibling message, if any
+    sibling_message_id: Option<String>,
+    /// Whether this message is in the active thread
+    is_message_in_active_thread: bool,
+}
+
+impl ChatMessage {
+    pub fn from_model(msg: messages::Model) -> Result<Self, Report> {
+        let parsed_message = MessageSchema::validate(&msg.raw_message)?;
+        Ok(ChatMessage {
+            id: msg.id.to_string(),
+            chat_id: msg.chat_id.to_string(),
+            role: parsed_message.role.to_string(),
+            full_text: parsed_message.full_text(),
+            created_at: msg.created_at,
+            updated_at: msg.updated_at,
+            previous_message_id: msg.previous_message_id.map(|id| id.to_string()),
+            sibling_message_id: msg.sibling_message_id.map(|id| id.to_string()),
+            is_message_in_active_thread: msg.is_message_in_active_thread,
+        })
+    }
+}
 #[utoipa::path(get, path = "/messages", responses((status = OK, body = Vec<Message>)))]
 pub async fn messages() -> Json<Vec<Message>> {
     vec![].into()
@@ -118,7 +179,56 @@ pub async fn messages() -> Json<Vec<Message>> {
 #[deprecated = "Use /me/recent_chats instead"]
 #[utoipa::path(get, path = "/chats", responses((status = OK, body = Vec<Chat>)))]
 pub async fn chats() -> Json<Vec<Chat>> {
-    vec![].into()
+    Json(vec![Chat {
+        id: "00000000-0000-0000-0000-000000000000".to_string(),
+    }])
+}
+
+/// Get all messages for a specific chat
+#[utoipa::path(
+    get,
+    path = "/chats/{chat_id}/messages",
+    responses(
+        (status = OK, body = Vec<ChatMessage>),
+        (status = UNAUTHORIZED, description = "Unauthorized"),
+        (status = FORBIDDEN, description = "Forbidden"),
+        (status = NOT_FOUND, description = "Chat not found")
+    ),
+    params(
+        ("chat_id" = String, Path, description = "The ID of the chat to get messages for")
+    )
+)]
+pub async fn chat_messages(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Path(chat_id): Path<String>,
+) -> Result<Json<Vec<ChatMessage>>, StatusCode> {
+    // Parse the chat ID
+    let chat_id = Uuid::parse_str(&chat_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Get the messages for this chat
+    let messages = models::message::get_chat_messages(
+        &app_state.db,
+        app_state.policy(),
+        &me_user.to_subject(),
+        &chat_id,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to get chat messages: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Convert the messages to the API response format
+    let converted_messages: Result<_, Report> =
+        messages.into_iter().map(ChatMessage::from_model).collect();
+
+    let response = converted_messages.map_err(|e| {
+        tracing::error!("Failed to get chat messages: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(response))
 }
 
 #[utoipa::path(
@@ -209,6 +319,7 @@ struct MessageSubmitStreamingResponseChatCreated {
 #[serde(rename_all = "snake_case")]
 struct MessageSubmitStreamingResponseUserMessageSaved {
     message_id: Uuid,
+    message: ChatMessage,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -216,6 +327,7 @@ struct MessageSubmitStreamingResponseUserMessageSaved {
 struct MessageSubmitStreamingResponseMessageComplete {
     message_id: Uuid,
     full_text: String,
+    message: ChatMessage,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -266,8 +378,8 @@ pub async fn message_submit_sse(
 
     // Spawn a task to process the request and send events
     tokio::spawn(async move {
-        // Get or create the chat
-        let result = get_or_create_chat(
+        // Get or create the chat using the previous message ID
+        let result = get_or_create_chat_by_previous_message_id(
             &app_state.db,
             app_state.policy(),
             &me_user.to_subject(),
@@ -336,10 +448,25 @@ pub async fn message_submit_sse(
                     }
                 };
 
+                let saved_user_message_wrapped =
+                    match ChatMessage::from_model(saved_user_message.clone()) {
+                        Ok(msg) => msg,
+                        Err(err) => {
+                            let _ = tx
+                                .send(Err(eyre!(
+                                    "Failed to convert submitted user message: {}",
+                                    err
+                                )))
+                                .await;
+                            return;
+                        }
+                    };
+
                 // Send user message saved event
                 let user_message_saved = MessageSubmitStreamingResponseMessage::UserMessageSaved(
                     MessageSubmitStreamingResponseUserMessageSaved {
                         message_id: saved_user_message.id,
+                        message: saved_user_message_wrapped,
                     },
                 );
                 match serde_json::to_string(&user_message_saved) {
@@ -371,7 +498,8 @@ pub async fn message_submit_sse(
                 let mut chat_request: ChatRequest = Default::default();
                 // TODO: Initial system message?
                 // TODO: Full previous message history
-                chat_request = chat_request.append_message(ChatMessage::user(request.user_message));
+                chat_request =
+                    chat_request.append_message(GenAiChatMessage::user(request.user_message));
                 let chat_options = ChatOptions::default().with_capture_content(true);
 
                 let chat_stream = match app_state
@@ -476,11 +604,25 @@ pub async fn message_submit_sse(
                                         }
                                     };
 
+                                    let saved_assistant_message_wrapped =
+                                        match ChatMessage::from_model(
+                                            saved_assistant_message.clone(),
+                                        ) {
+                                            Ok(msg) => msg,
+                                            Err(err) => {
+                                                let _ = tx
+                                                .send(Err(eyre!("Failed to convert saved assistant message: {}", err)))
+                                                .await;
+                                                return;
+                                            }
+                                        };
+
                                     let message_complete =
                                         MessageSubmitStreamingResponseMessage::MessageComplete(
                                             MessageSubmitStreamingResponseMessageComplete {
                                                 message_id: saved_assistant_message.id,
                                                 full_text: final_content.clone(),
+                                                message: saved_assistant_message_wrapped,
                                             },
                                         );
                                     match serde_json::to_string(&message_complete) {

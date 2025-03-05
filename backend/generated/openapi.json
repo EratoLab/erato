@@ -28,6 +28,48 @@
         "deprecated": true
       }
     },
+    "/api/v1beta/chats/{chat_id}/messages": {
+      "get": {
+        "tags": [],
+        "summary": "Get all messages for a specific chat",
+        "operationId": "chat_messages",
+        "parameters": [
+          {
+            "name": "chat_id",
+            "in": "path",
+            "description": "The ID of the chat to get messages for",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChatMessage"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Chat not found"
+          }
+        }
+      }
+    },
     "/api/v1beta/me/messages/submitstream": {
       "post": {
         "tags": [],
@@ -218,6 +260,65 @@
         },
         "deprecated": true
       },
+      "ChatMessage": {
+        "type": "object",
+        "description": "A message in a chat",
+        "required": [
+          "id",
+          "chat_id",
+          "role",
+          "full_text",
+          "created_at",
+          "updated_at",
+          "is_message_in_active_thread"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "description": "The ID of the chat this message belongs to"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the message was created"
+          },
+          "full_text": {
+            "type": "string",
+            "description": "The text content of the message"
+          },
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the message"
+          },
+          "is_message_in_active_thread": {
+            "type": "boolean",
+            "description": "Whether this message is in the active thread"
+          },
+          "previous_message_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The ID of the previous message in the thread, if any"
+          },
+          "role": {
+            "type": "string",
+            "description": "Role of the message sender. May be on of \"user\", \"assistant\", \"system\""
+          },
+          "sibling_message_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The ID of the sibling message, if any"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the message was last updated"
+          }
+        }
+      },
       "Message": {
         "type": "object",
         "required": [
@@ -384,11 +485,15 @@
         "type": "object",
         "required": [
           "message_id",
-          "full_text"
+          "full_text",
+          "message"
         ],
         "properties": {
           "full_text": {
             "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ChatMessage"
           },
           "message_id": {
             "type": "string",
@@ -421,9 +526,13 @@
       "MessageSubmitStreamingResponseUserMessageSaved": {
         "type": "object",
         "required": [
-          "message_id"
+          "message_id",
+          "message"
         ],
         "properties": {
+          "message": {
+            "$ref": "#/components/schemas/ChatMessage"
+          },
           "message_id": {
             "type": "string",
             "format": "uuid"

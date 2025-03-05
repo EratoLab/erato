@@ -3,7 +3,7 @@ use crate::db::entity::prelude::*;
 use crate::policy::prelude::*;
 use eyre::{eyre, Report};
 use sea_orm::prelude::*;
-use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait};
+use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, QueryOrder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::fmt;
@@ -70,6 +70,13 @@ impl MessageSchema {
     /// Convert the schema to a JSON value
     pub fn to_json(&self) -> Result<JsonValue, Report> {
         serde_json::to_value(self).map_err(|e| eyre!("Failed to serialize message: {}", e))
+    }
+
+    pub fn full_text(&self) -> String {
+        match &self.content {
+            MessageContent::String(content) => content.to_string(),
+            MessageContent::Array(contents) => contents.join(" "),
+        }
     }
 }
 
@@ -169,4 +176,32 @@ pub async fn submit_message(
         .await?;
 
     Ok(created_message)
+}
+
+/// Get all messages for a chat.
+///
+/// This function retrieves all messages for a given chat ID, after checking that
+/// the subject has read permission for the chat.
+pub async fn get_chat_messages(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+) -> Result<Vec<messages::Model>, Report> {
+    // Authorize that the subject can read this chat
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat_id.as_hyphenated().to_string()),
+        Action::Read
+    )?;
+
+    // Query all messages for this chat, ordered by creation time
+    let messages = Messages::find()
+        .filter(messages::Column::ChatId.eq(*chat_id))
+        .order_by_asc(messages::Column::CreatedAt)
+        .all(conn)
+        .await?;
+
+    Ok(messages)
 }

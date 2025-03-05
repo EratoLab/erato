@@ -88,6 +88,103 @@ export const useChats = <TData = ChatsResponse,>(
   });
 };
 
+export type ChatMessagesPathParams = {
+  /**
+   * The ID of the chat to get messages for
+   */
+  chatId: string;
+};
+
+export type ChatMessagesError = Fetcher.ErrorWrapper<undefined>;
+
+export type ChatMessagesResponse = Schemas.ChatMessage[];
+
+export type ChatMessagesVariables = {
+  pathParams: ChatMessagesPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchChatMessages = (
+  variables: ChatMessagesVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    ChatMessagesResponse,
+    ChatMessagesError,
+    undefined,
+    {},
+    {},
+    ChatMessagesPathParams
+  >({
+    url: "/api/v1beta/chats/{chatId}/messages",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function chatMessagesQuery(variables: ChatMessagesVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<ChatMessagesResponse>;
+};
+
+export function chatMessagesQuery(
+  variables: ChatMessagesVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<ChatMessagesResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function chatMessagesQuery(
+  variables: ChatMessagesVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/chats/{chatId}/messages",
+      operationId: "chatMessages",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchChatMessages(variables, signal),
+  };
+}
+
+export const useSuspenseChatMessages = <TData = ChatMessagesResponse,>(
+  variables: ChatMessagesVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<ChatMessagesResponse, ChatMessagesError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    ChatMessagesResponse,
+    ChatMessagesError,
+    TData
+  >({
+    ...chatMessagesQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useChatMessages = <TData = ChatMessagesResponse,>(
+  variables: ChatMessagesVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<ChatMessagesResponse, ChatMessagesError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<ChatMessagesResponse, ChatMessagesError, TData>({
+    ...chatMessagesQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type MessageSubmitSseError = Fetcher.ErrorWrapper<undefined>;
 
 export type MessageSubmitSseVariables = {
@@ -468,6 +565,11 @@ export type QueryOperation =
       path: "/api/v1beta/chats";
       operationId: "chats";
       variables: ChatsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/chats/{chatId}/messages";
+      operationId: "chatMessages";
+      variables: ChatMessagesVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/profile";
