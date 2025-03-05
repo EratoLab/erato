@@ -1173,6 +1173,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tower-http",
+ "tracing",
  "tracing-subscriber",
  "utoipa",
  "utoipa-axum",

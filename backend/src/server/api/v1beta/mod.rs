@@ -12,12 +12,12 @@ use axum::response::{IntoResponse, Sse};
 use axum::routing::{get, post};
 use axum::{middleware, Extension, Json, Router};
 use chrono::{DateTime, FixedOffset};
+use eyre::{eyre, Report};
 use futures::stream::Stream;
 use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ChatStreamEvent};
 use serde::Serialize;
 use serde_json::{self, json};
 use sqlx::types::{chrono, Uuid};
-use std::convert::Infallible;
 use std::time::Duration;
 use tokio_stream::StreamExt as _;
 use utoipa::{OpenApi, ToSchema};
@@ -249,7 +249,8 @@ pub struct MessageSubmitRequest {
     request_body = MessageSubmitRequest,
     responses(
         (status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage),
-        (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
     security(
         ("bearer_auth" = [])
@@ -259,9 +260,9 @@ pub async fn message_submit_sse(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Json(request): Json<MessageSubmitRequest>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+) -> Sse<impl Stream<Item = Result<Event, Report>>> {
     // Create a channel for sending events
-    let (tx, rx) = tokio::sync::mpsc::channel::<Event>(100);
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
 
     // Spawn a task to process the request and send events
     tokio::spawn(async move {
@@ -275,46 +276,96 @@ pub async fn message_submit_sse(
         )
         .await;
 
-        if let Ok((chat, chat_status)) = result {
-            // Send chat created event if the chat was newly created
-            if chat_status == ChatCreationStatus::Created {
-                let chat_created = MessageSubmitStreamingResponseMessage::ChatCreated(
-                    MessageSubmitStreamingResponseChatCreated { chat_id: chat.id },
-                );
-                if let Ok(json) = serde_json::to_string(&chat_created) {
-                    let _ = tx
-                        .send(Event::default().event("chat_created").data(json))
-                        .await;
+        match result {
+            Ok((chat, chat_status)) => {
+                // Send chat created event if the chat was newly created
+                if chat_status == ChatCreationStatus::Created {
+                    let chat_created = MessageSubmitStreamingResponseMessage::ChatCreated(
+                        MessageSubmitStreamingResponseChatCreated { chat_id: chat.id },
+                    );
+                    match serde_json::to_string(&chat_created) {
+                        Ok(json) => {
+                            if let Err(err) = tx
+                                .send(Ok(Event::default().event("chat_created").data(json)))
+                                .await
+                            {
+                                let _ = tx
+                                    .send(Err(eyre!("Failed to send chat_created event: {}", err)))
+                                    .await;
+                                return;
+                            }
+                        }
+                        Err(err) => {
+                            let _ = tx
+                                .send(Err(eyre!(
+                                    "Failed to serialize chat_created event: {}",
+                                    err
+                                )))
+                                .await;
+                            return;
+                        }
+                    }
                 }
-            }
 
-            // Create and save the user's message
-            let user_message = json!({
-                "role": "user",
-                "content": request.user_message.clone(),
-                "name": me_user.0.id
-            });
+                // Create and save the user's message
+                let user_message = json!({
+                    "role": "user",
+                    "content": request.user_message.clone(),
+                    "name": me_user.0.id
+                });
 
-            if let Ok(saved_user_message) = submit_message(
-                &app_state.db,
-                app_state.policy(),
-                &me_user.to_subject(),
-                &chat.id,
-                user_message,
-                request.previous_message_id.as_ref(),
-            )
-            .await
-            {
+                let saved_user_message = match submit_message(
+                    &app_state.db,
+                    app_state.policy(),
+                    &me_user.to_subject(),
+                    &chat.id,
+                    user_message,
+                    request.previous_message_id.as_ref(),
+                    // TODO: Add support for sibling message regenerate
+                    None,
+                    None,
+                )
+                .await
+                {
+                    Ok(msg) => msg,
+                    Err(err) => {
+                        let _ = tx
+                            .send(Err(eyre!("Failed to submit user message: {}", err)))
+                            .await;
+                        return;
+                    }
+                };
+
                 // Send user message saved event
                 let user_message_saved = MessageSubmitStreamingResponseMessage::UserMessageSaved(
                     MessageSubmitStreamingResponseUserMessageSaved {
                         message_id: saved_user_message.id,
                     },
                 );
-                if let Ok(json) = serde_json::to_string(&user_message_saved) {
-                    let _ = tx
-                        .send(Event::default().event("user_message_saved").data(json))
-                        .await;
+                match serde_json::to_string(&user_message_saved) {
+                    Ok(json) => {
+                        if let Err(err) = tx
+                            .send(Ok(Event::default().event("user_message_saved").data(json)))
+                            .await
+                        {
+                            let _ = tx
+                                .send(Err(eyre!(
+                                    "Failed to send user_message_saved event: {}",
+                                    err
+                                )))
+                                .await;
+                            return;
+                        }
+                    }
+                    Err(err) => {
+                        let _ = tx
+                            .send(Err(eyre!(
+                                "Failed to serialize user_message_saved event: {}",
+                                err
+                            )))
+                            .await;
+                        return;
+                    }
                 }
 
                 let mut chat_request: ChatRequest = Default::default();
@@ -323,69 +374,158 @@ pub async fn message_submit_sse(
                 chat_request = chat_request.append_message(ChatMessage::user(request.user_message));
                 let chat_options = ChatOptions::default().with_capture_content(true);
 
-                let chat_stream = app_state
+                let chat_stream = match app_state
                     .genai()
                     .exec_chat_stream("foo_model", chat_request, Some(&chat_options))
                     .await
-                    .unwrap();
+                {
+                    Ok(stream) => stream,
+                    Err(err) => {
+                        let _ = tx
+                            .send(Err(eyre!("Failed to execute chat stream: {}", err)))
+                            .await;
+                        return;
+                    }
+                };
+
                 let mut inner_stream = chat_stream.stream;
                 // Await until stream end
-                while let Some(Ok(message)) = inner_stream.next().await {
-                    match message {
-                        ChatStreamEvent::Chunk(chunk) => {
-                            let delta = MessageSubmitStreamingResponseMessageTextDelta {
-                                new_text: chunk.content,
-                            };
-                            let message = MessageSubmitStreamingResponseMessage::TextDelta(delta);
-                            if let Ok(json) = serde_json::to_string(&message) {
-                                let _ = tx
-                                    .send(Event::default().event("text_delta").data(json))
-                                    .await;
-                            }
-                        }
-                        ChatStreamEvent::End(end) => {
-                            let final_content = end
-                                .captured_content
-                                .unwrap()
-                                .text_into_string()
-                                .expect("Expected text response");
+                while let Some(result) = inner_stream.next().await {
+                    match result {
+                        Ok(message) => {
+                            match message {
+                                ChatStreamEvent::Chunk(chunk) => {
+                                    let delta = MessageSubmitStreamingResponseMessageTextDelta {
+                                        new_text: chunk.content,
+                                    };
+                                    let message =
+                                        MessageSubmitStreamingResponseMessage::TextDelta(delta);
+                                    match serde_json::to_string(&message) {
+                                        Ok(json) => {
+                                            if let Err(err) = tx
+                                                .send(Ok(Event::default()
+                                                    .event("text_delta")
+                                                    .data(json)))
+                                                .await
+                                            {
+                                                let _ = tx
+                                                    .send(Err(eyre!(
+                                                        "Failed to send text_delta event: {}",
+                                                        err
+                                                    )))
+                                                    .await;
+                                                return;
+                                            }
+                                        }
+                                        Err(err) => {
+                                            let _ = tx
+                                                .send(Err(eyre!(
+                                                    "Failed to serialize text_delta event: {}",
+                                                    err
+                                                )))
+                                                .await;
+                                            return;
+                                        }
+                                    }
+                                }
+                                ChatStreamEvent::End(end) => {
+                                    let final_content = match end
+                                        .captured_content
+                                        .ok_or_else(|| {
+                                            eyre!("No captured content in chat stream end event")
+                                        })
+                                        .map(|content| {
+                                            content
+                                                .text_into_string()
+                                                .expect("Expected text response")
+                                        }) {
+                                        Ok(content) => content,
+                                        Err(err) => {
+                                            let _ = tx.send(Err(err)).await;
+                                            return;
+                                        }
+                                    };
 
-                            let assistant_message = json!({
-                                "role": "assistant",
-                                "content": final_content.clone(),
-                            });
-                            let saved_assistant_message = submit_message(
-                                &app_state.db,
-                                app_state.policy(),
-                                &me_user.to_subject(),
-                                &chat.id,
-                                assistant_message.clone(),
-                                Some(&saved_user_message.id),
-                            )
-                            .await
-                            .unwrap();
-                            let message_complete =
-                                MessageSubmitStreamingResponseMessage::MessageComplete(
-                                    MessageSubmitStreamingResponseMessageComplete {
-                                        message_id: saved_assistant_message.id,
-                                        full_text: final_content.clone(),
-                                    },
-                                );
-                            if let Ok(json) = serde_json::to_string(&message_complete) {
-                                let _ = tx
-                                    .send(Event::default().event("message_complete").data(json))
-                                    .await;
+                                    let assistant_message = json!({
+                                        "role": "assistant",
+                                        "content": final_content.clone(),
+                                    });
+
+                                    let saved_assistant_message = match submit_message(
+                                        &app_state.db,
+                                        app_state.policy(),
+                                        &me_user.to_subject(),
+                                        &chat.id,
+                                        assistant_message.clone(),
+                                        Some(&saved_user_message.id),
+                                        None,
+                                        // TODO: Save input messages here
+                                        None,
+                                    )
+                                    .await
+                                    {
+                                        Ok(msg) => msg,
+                                        Err(err) => {
+                                            let _ = tx
+                                                .send(Err(eyre!(
+                                                    "Failed to submit assistant message: {}",
+                                                    err
+                                                )))
+                                                .await;
+                                            return;
+                                        }
+                                    };
+
+                                    let message_complete =
+                                        MessageSubmitStreamingResponseMessage::MessageComplete(
+                                            MessageSubmitStreamingResponseMessageComplete {
+                                                message_id: saved_assistant_message.id,
+                                                full_text: final_content.clone(),
+                                            },
+                                        );
+                                    match serde_json::to_string(&message_complete) {
+                                        Ok(json) => {
+                                            if let Err(err) = tx
+                                                .send(Ok(Event::default()
+                                                    .event("message_complete")
+                                                    .data(json)))
+                                                .await
+                                            {
+                                                let _ = tx
+                                                    .send(Err(eyre!(
+                                                        "Failed to send message_complete event: {}",
+                                                        err
+                                                    )))
+                                                    .await;
+                                                return;
+                                            }
+                                        }
+                                        Err(err) => {
+                                            let _ = tx.send(Err(eyre!("Failed to serialize message_complete event: {}", err))).await;
+                                            return;
+                                        }
+                                    }
+                                }
+                                _ => {}
                             }
                         }
-                        _ => {}
+                        Err(err) => {
+                            let _ = tx.send(Err(eyre!("Error from chat stream: {}", err))).await;
+                            return;
+                        }
                     }
                 }
+            }
+            Err(err) => {
+                let _ = tx
+                    .send(Err(eyre!("Failed to get or create chat: {}", err)))
+                    .await;
             }
         }
     });
 
     // Convert the receiver into a stream and return it
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(Ok);
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
 
     Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()

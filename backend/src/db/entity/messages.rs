@@ -8,11 +8,15 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub chat_id: Uuid,
-    pub order_index: i32,
     #[sea_orm(column_type = "JsonBinary")]
     pub raw_message: Json,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+    pub previous_message_id: Option<Uuid>,
+    pub sibling_message_id: Option<Uuid>,
+    pub is_message_in_active_thread: bool,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub generation_input_messages: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -25,6 +29,22 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     Chats,
+    #[sea_orm(
+        belongs_to = "Entity",
+        from = "Column::PreviousMessageId",
+        to = "Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    SelfRef2,
+    #[sea_orm(
+        belongs_to = "Entity",
+        from = "Column::SiblingMessageId",
+        to = "Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    SelfRef1,
 }
 
 impl Related<super::chats::Entity> for Entity {

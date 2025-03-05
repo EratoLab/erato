@@ -4,3 +4,6 @@ default:
 deploy_local:
     sqitch deploy local_dev
     ./generate_summary.sh
+
+dump_schema:
+    ./dump_current_schema.sh --db-uri postgresql://eratouser:eratopw@localhost:5432/erato
