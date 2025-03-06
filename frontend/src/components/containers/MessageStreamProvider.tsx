@@ -14,7 +14,11 @@ interface StreamingState {
 
 interface MessageStreamContextType {
   currentStreamingMessage: StreamingState | null;
-  streamMessage: (chatId: string, userMessageContent: string) => Promise<void>;
+  streamMessage: (
+    chatId: string,
+    userMessageContent: string,
+    lastMessageId?: string,
+  ) => Promise<void>;
   cancelStreaming: () => void;
 }
 
@@ -22,8 +26,13 @@ const MessageStreamContext = createContext<
   MessageStreamContextType | undefined
 >(undefined);
 
-export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
+interface MessageStreamProviderProps extends React.PropsWithChildren {
+  onChatCreated?: (tempId: string, permanentId: string) => void;
+}
+
+export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
   children,
+  onChatCreated,
 }) => {
   const [currentSource, setCurrentSource] = useState<SSE | null>(null);
   const [currentStreamingMessage, setCurrentStreamingMessage] =
@@ -38,7 +47,11 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
   }, [currentSource]);
 
   const streamMessage = useCallback(
-    async (chatId: string, userMessageContent: string) => {
+    async (
+      chatId: string,
+      userMessageContent: string,
+      lastMessageId?: string,
+    ) => {
       // Cancel any existing stream
       cancelStreaming();
 
@@ -48,6 +61,8 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
         ? apiRootUrl.slice(0, -1)
         : apiRootUrl;
       const sseUrl = `${baseUrl}/v1beta/me/messages/submitstream`;
+
+      const isNewChat = chatId.startsWith("temp-"); // Check if this is a temporary chat
 
       try {
         const source = new SSE(sseUrl, {
@@ -59,7 +74,7 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
           payload: JSON.stringify({
             // Format according to MessageSubmitRequest schema
             user_message: userMessageContent,
-            previous_message_id: chatId !== "new" ? undefined : null,
+            previous_message_id: isNewChat ? null : lastMessageId,
           }),
         });
 
@@ -156,6 +171,25 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
           setCurrentSource(null);
         });
 
+        // Add event listener for chat_created event
+        source.addEventListener("chat_created", (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(
+              e.data,
+            ) as MessageSubmitStreamingResponseMessage;
+            if (
+              data.message_type === "chat_created" &&
+              isNewChat &&
+              onChatCreated
+            ) {
+              // Convert the temporary chat to a permanent one with the server ID
+              onChatCreated(chatId, data.chat_id);
+            }
+          } catch (error) {
+            console.error("Error parsing SSE chat_created event:", error);
+          }
+        });
+
         source.stream();
       } catch (error) {
         console.error("Failed to start streaming:", error);
@@ -169,7 +203,7 @@ export const MessageStreamProvider: React.FC<React.PropsWithChildren> = ({
         });
       }
     },
-    [cancelStreaming],
+    [cancelStreaming, onChatCreated],
   );
 
   return (

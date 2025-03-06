@@ -67,7 +67,14 @@ export const Chat = ({
   onToggleCollapse,
   acceptedFileTypes,
 }: ChatProps) => {
-  const { messages, messageOrder, sendMessage, isLoading } = useChat();
+  const {
+    messages,
+    messageOrder,
+    sendMessage,
+    isLoading: chatLoading,
+    hasOlderMessages,
+    loadOlderMessages,
+  } = useChat();
   const { currentStreamingMessage } = useMessageStream();
   const { profile } = useProfile();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -128,6 +135,17 @@ export const Chat = ({
             layoutStyles[layout],
           )}
         >
+          {hasOlderMessages && (
+            <div className="sticky top-0 z-10 flex justify-center py-2 bg-theme-bg-secondary">
+              <button
+                onClick={loadOlderMessages}
+                className="px-4 py-2 text-sm bg-theme-bg-primary text-theme-text-primary rounded-full hover:bg-theme-bg-tertiary focus:outline-none focus:ring-2 focus:ring-theme-primary transition-colors"
+                disabled={chatLoading}
+              >
+                {chatLoading ? "Loading..." : "Load more messages"}
+              </button>
+            </div>
+          )}
           {messageOrder.map((messageId) => {
             const message = messages[messageId];
             return (
@@ -157,7 +175,7 @@ export const Chat = ({
             void sendMessage(message);
           }}
           className="border-t border-theme-border bg-theme-bg-primary p-2 sm:p-4"
-          isLoading={isLoading}
+          isLoading={chatLoading}
           showControls
           onAddFile={onAddFile}
           onRegenerate={onRegenerate}

@@ -8,6 +8,9 @@ export interface ChatHistoryContextType {
   deleteSession: (sessionId: string) => void;
   switchSession: (sessionId: string) => void;
   getCurrentSession: () => ChatSession | null;
+  confirmSession: (tempId: string, permanentId: string) => void;
+  loadMoreChats: () => Promise<void>;
+  hasMoreChats: boolean;
   isLoading: boolean;
   error?: Error;
 }

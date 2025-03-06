@@ -53,6 +53,7 @@ export interface UserProfile extends VoidToString<ApiUserProfile> {
 
 export interface ChatMetadata {
   isShared?: boolean;
+  isTemporary?: boolean;
   ownerId: string;
   sharedWith?: string[];
   permissions?: ChatPermissions;
