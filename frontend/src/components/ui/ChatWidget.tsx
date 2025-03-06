@@ -1,13 +1,15 @@
 import React, { useRef, useEffect } from "react";
+
 import { ChatInput } from "./ChatInput";
+import { ChatMessage } from "./ChatMessage";
 import { useChat } from "../containers/ChatProvider";
 import { useMessageStream } from "../containers/MessageStreamProvider";
-import {
+
+import type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
 } from "../../types/message-controls";
-import { ChatMessage } from "./ChatMessage";
 
 interface ChatWidgetProps {
   className?: string;

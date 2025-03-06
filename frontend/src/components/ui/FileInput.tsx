@@ -1,5 +1,9 @@
-import React, { useRef, ReactNode } from "react";
-import { FileType, FileTypeUtil } from "@/utils/fileTypes";
+import React, { useRef } from "react";
+
+import { FileTypeUtil } from "@/utils/fileTypes";
+
+import type { FileType } from "@/utils/fileTypes";
+import type { ReactNode } from "react";
 
 interface FileInputProps {
   /** Callback when files are selected */
@@ -40,6 +44,17 @@ export const FileInput: React.FC<FileInputProps> = ({
     }
   };
 
+  // Handle keyboard events (Enter or Space) to trigger file input
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+    }
+  };
+
   // Handle file selection
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -59,8 +74,12 @@ export const FileInput: React.FC<FileInputProps> = ({
     <>
       <div
         onClick={handleClick}
+        onKeyDown={handleKeyDown}
         className={className}
         style={{ cursor: disabled ? "not-allowed" : "pointer" }}
+        tabIndex={disabled ? -1 : 0}
+        role="button"
+        aria-disabled={disabled}
       >
         {children}
       </div>

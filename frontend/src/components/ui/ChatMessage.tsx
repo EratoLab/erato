@@ -1,15 +1,19 @@
-import React, { memo } from "react";
-import { ChatMessage as ChatMessageType } from "../containers/ChatProvider";
 import clsx from "clsx";
-import { messageStyles } from "./styles/chatMessageStyles";
+import React, { memo } from "react";
+
 import { Avatar } from "./Avatar";
-import { MessageContent } from "./MessageContent";
-import { LoadingIndicator } from "./LoadingIndicator";
-import { MessageControlsComponent } from "../../types/message-controls";
-import { MessageControlsContext } from "../../types/message-controls";
-import { MessageAction } from "../../types/message-controls";
 import { DefaultMessageControls } from "./DefaultMessageControls";
-import { UserProfile } from "@/types/chat";
+import { LoadingIndicator } from "./LoadingIndicator";
+import { MessageContent } from "./MessageContent";
+import { messageStyles } from "./styles/chatMessageStyles";
+
+import type {
+  MessageControlsComponent,
+  MessageControlsContext,
+  MessageAction,
+} from "../../types/message-controls";
+import type { ChatMessage as ChatMessageType } from "../containers/ChatProvider";
+import type { UserProfile } from "@/types/chat";
 
 export interface ChatMessageProps {
   message: ChatMessageType;
@@ -53,7 +57,7 @@ export const ChatMessage = memo(function ChatMessage({
   const role = isUser ? "user" : "assistant";
 
   // Content validation
-  if (!message?.content && !message?.loading) {
+  if (!message.content && !message.loading) {
     return null;
   }
 
@@ -92,7 +96,7 @@ export const ChatMessage = memo(function ChatMessage({
               />
             </div>
           )}
-          {Controls && showTimestamp && (
+          {showTimestamp && (
             <Controls
               messageId={message.id}
               messageType={message.sender}

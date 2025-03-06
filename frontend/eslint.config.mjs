@@ -23,7 +23,11 @@ const eslintConfig = [
     ],
   },
   // Base configuration for all files
-  ...compat.extends("next/core-web-vitals"),
+  ...compat.extends(
+    "next/core-web-vitals",
+    "plugin:react-hooks/recommended",
+    "plugin:jsx-a11y/recommended",
+  ),
 
   // Storybook configuration - less strict
   {
@@ -79,6 +83,12 @@ const eslintConfig = [
       "react/prop-types": "off", // TypeScript handles this better
       "react/jsx-uses-react": "off", // Not needed in React 17+
       "react/react-in-jsx-scope": "off", // Not needed in React 17+
+      "react/no-danger": "error", // Prevent dangerous HTML injection
+      "react/jsx-no-target-blank": "error", // Security for _blank links
+
+      // React hooks rules
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
 
       // Type checking rules - these catch actual runtime bugs
       "@typescript-eslint/no-unnecessary-type-assertion": "error",
@@ -89,6 +99,35 @@ const eslintConfig = [
       "@typescript-eslint/restrict-plus-operands": "error",
       "@typescript-eslint/restrict-template-expressions": "error",
       "@typescript-eslint/unbound-method": "error",
+
+      // Additional TypeScript safety rules
+      "@typescript-eslint/prefer-optional-chain": "warn",
+      "@typescript-eslint/prefer-nullish-coalescing": "warn",
+      "@typescript-eslint/no-unnecessary-condition": "warn",
+      "@typescript-eslint/no-non-null-assertion": "warn",
+      "@typescript-eslint/consistent-type-imports": [
+        "warn",
+        { prefer: "type-imports" },
+      ],
+
+      // Import rules
+      "import/no-duplicates": "error",
+      "import/order": [
+        "warn",
+        {
+          groups: [
+            "builtin",
+            "external",
+            "internal",
+            ["parent", "sibling"],
+            "index",
+            "object",
+            "type",
+          ],
+          "newlines-between": "always",
+          alphabetize: { order: "asc" },
+        },
+      ],
     },
   },
 ];

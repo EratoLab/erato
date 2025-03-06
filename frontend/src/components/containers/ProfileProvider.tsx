@@ -1,9 +1,12 @@
 "use client";
 
 import React, { createContext } from "react";
-import { useProfile } from "../../lib/generated/v1betaApi/v1betaApiComponents";
-import type { UserProfile } from "@/types/chat";
+
 import { createTransformedQueryHook } from "@/hooks/useTransformedQuery";
+
+import { useProfile } from "../../lib/generated/v1betaApi/v1betaApiComponents";
+
+import type { UserProfile } from "@/types/chat";
 
 // Create a utility hook that transforms void to string
 // TODO: remove this once #53 is resolved

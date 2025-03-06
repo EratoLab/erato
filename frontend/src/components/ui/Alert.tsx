@@ -1,13 +1,16 @@
-import React, { ReactNode } from "react";
-import clsx from "clsx";
-import { XMarkIcon } from "@heroicons/react/24/outline";
 import {
+  XMarkIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
   ExclamationCircleIcon,
   CheckCircleIcon,
 } from "@heroicons/react/24/outline";
+import clsx from "clsx";
+import React from "react";
+
 import { Button } from "./Button";
+
+import type { ReactNode } from "react";
 
 export type AlertType = "error" | "warning" | "info" | "success";
 
@@ -64,7 +67,7 @@ export const Alert: React.FC<AlertProps> = ({
   };
 
   // Use provided icon or default for the alert type
-  const alertIcon = icon || styles[type].icon;
+  const alertIcon = icon ?? styles[type].icon;
 
   return (
     <div

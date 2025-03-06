@@ -1,6 +1,7 @@
-import React from "react";
-import { LoadingState } from "@/types/chat";
 import clsx from "clsx";
+import React from "react";
+
+import type { LoadingState } from "@/types/chat";
 
 interface LoadingIndicatorProps {
   state: LoadingState;

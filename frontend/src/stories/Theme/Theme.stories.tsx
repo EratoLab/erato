@@ -86,6 +86,8 @@ export const Branded: Story = {
         background: {
           primary: "#fdf2f8",
           secondary: "#fce7f3",
+          tertiary: "#fae8fb",
+          sidebar: "#fdf4ff",
           accent: "#fbcfe8",
           selected: "#f9a8d4",
           hover: "#f472b6",
@@ -94,12 +96,34 @@ export const Branded: Story = {
           primary: "#831843",
           secondary: "#9d174d",
           muted: "#be185d",
+          accent: "#d946ef",
         },
-        border: "#f0abfc",
-        danger: {
-          text: "#be123c",
-          hover: "#e11d48",
-          bg: "#fecdd3",
+        border: {
+          default: "#f0abfc",
+          strong: "#e879f9",
+          focus: "#d946ef",
+        },
+        status: {
+          info: {
+            foreground: "#3b82f6",
+            background: "#eff6ff",
+            border: "#93c5fd",
+          },
+          success: {
+            foreground: "#10b981",
+            background: "#ecfdf5",
+            border: "#6ee7b7",
+          },
+          warning: {
+            foreground: "#f59e0b",
+            background: "#fffbeb",
+            border: "#fcd34d",
+          },
+          error: {
+            foreground: "#be123c",
+            background: "#fecdd3",
+            border: "#e11d48",
+          },
         },
         avatar: {
           user: {
@@ -110,6 +134,9 @@ export const Branded: Story = {
             background: "#be185d",
             foreground: "#ffffff",
           },
+        },
+        focus: {
+          ring: "#d946ef",
         },
       },
     },

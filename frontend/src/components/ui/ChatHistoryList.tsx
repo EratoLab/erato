@@ -1,9 +1,11 @@
-import React, { memo } from "react";
 import clsx from "clsx";
-import { ChatSession } from "@/types/chat";
+import React, { memo } from "react";
+
 import { DropdownMenu } from "./DropdownMenu";
-import { Info, Trash } from "./icons";
 import { InteractiveContainer } from "./InteractiveContainer";
+import { Info, Trash } from "./icons";
+
+import type { ChatSession } from "@/types/chat";
 
 export interface ChatHistoryListProps {
   sessions: ChatSession[];
@@ -54,12 +56,12 @@ const ChatHistoryListItem = memo<{
           {
             label: "Show Details",
             icon: <Info className="w-4 h-4" />,
-            onClick: onShowDetails || (() => {}),
+            onClick: onShowDetails ?? (() => {}),
           },
           {
             label: "Delete",
             icon: <Trash className="w-4 h-4" />,
-            onClick: onDelete || (() => {}),
+            onClick: onDelete ?? (() => {}),
             variant: "danger",
           },
         ]}

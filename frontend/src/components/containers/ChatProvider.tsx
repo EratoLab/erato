@@ -5,9 +5,11 @@ import React, {
   useCallback,
   useEffect,
 } from "react";
-import { StreamingContext } from "@/types/chat";
+
 import { useChatHistory } from "./ChatHistoryProvider";
 import { useMessageStream } from "./MessageStreamProvider";
+
+import type { StreamingContext } from "@/types/chat";
 
 // TODO: move later to types folder, that we can align with what we have from the backend programmaticaly
 /**
@@ -154,18 +156,18 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     const lastAssistantMessage =
       assistantMessages[assistantMessages.length - 1];
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (lastAssistantMessage) {
       // Store the current message ID and content to avoid updating unnecessarily
       const messageId = lastAssistantMessage.id;
-      const currentContent = messages[messageId]?.content;
+      const currentContent = messages[messageId].content;
       const newContent = currentStreamingMessage.content;
 
       // Only update if the content has actually changed
       if (
         currentContent !== newContent ||
-        !!messages[messageId]?.loading !==
-          !currentStreamingMessage.isComplete ||
-        !!messages[messageId]?.error !== !!currentStreamingMessage.error
+        !!messages[messageId].loading !== !currentStreamingMessage.isComplete ||
+        !!messages[messageId].error !== !!currentStreamingMessage.error
       ) {
         updateMessage(messageId, {
           content: newContent,
@@ -175,9 +177,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
           error:
             currentStreamingMessage.error instanceof Error
               ? currentStreamingMessage.error
-              : currentStreamingMessage.error
-                ? new Error(currentStreamingMessage.error)
-                : undefined,
+              : undefined,
         });
       }
     }

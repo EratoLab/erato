@@ -1,14 +1,19 @@
 "use client";
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useState, useEffect, useCallback } from "react";
-import { ChatProvider } from "../components/containers/ChatProvider";
-import { ChatHistoryProvider } from "../components/containers/ChatHistoryProvider";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MessageStreamProvider } from "../components/containers/MessageStreamProvider";
+
+import {
+  useChatHistory,
+  ChatHistoryProvider,
+} from "@/components/containers/ChatHistoryProvider";
 import { ProfileProvider } from "@/components/containers/ProfileProvider";
-import { useChatHistory } from "@/components/containers/ChatHistoryProvider";
-import { FileType } from "@/utils/fileTypes";
+
+import { ChatProvider } from "../components/containers/ChatProvider";
+import { MessageStreamProvider } from "../components/containers/MessageStreamProvider";
+
+import type { FileType } from "@/utils/fileTypes";
 
 // Dynamically import Chat with ssr disabled
 const Chat = dynamic(

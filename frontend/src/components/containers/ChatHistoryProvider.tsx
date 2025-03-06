@@ -1,13 +1,15 @@
+import * as reactQuery from "@tanstack/react-query";
 import React, { useContext, useCallback, useMemo, useState } from "react";
+import { useMap } from "react-use";
+
+import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
 import {
   useChats,
   useMessages,
 } from "../../lib/generated/v1betaApi/v1betaApiComponents";
-import * as reactQuery from "@tanstack/react-query";
-import { useMap } from "react-use";
-import type { ChatSession } from "@/types/chat";
+
 import type { ChatHistoryContextType } from "../../types/chat-history";
-import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
+import type { ChatSession } from "@/types/chat";
 
 interface ChatHistoryProviderProps extends React.PropsWithChildren {
   initialSessions?: ChatSession[];
@@ -102,13 +104,11 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   const updateSession = useCallback(
     (sessionId: string, updates: Partial<ChatSession>) => {
       const currentSession = sessions[sessionId];
-      if (currentSession) {
-        set(sessionId, {
-          ...currentSession,
-          ...updates,
-          updatedAt: new Date(),
-        });
-      }
+      set(sessionId, {
+        ...currentSession,
+        ...updates,
+        updatedAt: new Date(),
+      });
     },
     [sessions, set],
   );

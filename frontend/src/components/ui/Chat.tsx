@@ -1,19 +1,21 @@
-import React from "react";
-import { ChatInput } from "./ChatInput";
-import { useChat } from "../containers/ChatProvider";
-import { useRef, useEffect } from "react";
 import clsx from "clsx";
+import React, { useRef, useEffect } from "react";
+
+import { useProfile } from "@/hooks/useProfile";
+
+import { ChatHistorySidebar } from "./ChatHistorySidebar";
+import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
-import {
+import { useChatHistory } from "../containers/ChatHistoryProvider";
+import { useChat } from "../containers/ChatProvider";
+import { useMessageStream } from "../containers/MessageStreamProvider";
+
+import type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
 } from "../../types/message-controls";
-import { ChatHistorySidebar } from "./ChatHistorySidebar";
-import { useChatHistory } from "../containers/ChatHistoryProvider";
-import { useProfile } from "@/hooks/useProfile";
-import { FileType } from "@/utils/fileTypes";
-import { useMessageStream } from "../containers/MessageStreamProvider";
+import type { FileType } from "@/utils/fileTypes";
 
 export interface ChatProps {
   className?: string;

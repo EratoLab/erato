@@ -33,7 +33,7 @@ export const useKeyboard = ({
       }
     };
 
-    const element = target.current || document;
+    const element = target.current ?? document;
     element.addEventListener("keydown", handleKeyDown);
     return () => element.removeEventListener("keydown", handleKeyDown);
   }, [target, enabled, onEscape, onTab, onEnter]);

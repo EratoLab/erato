@@ -1,11 +1,13 @@
-import React, { memo, useRef, useState } from "react";
-import clsx from "clsx";
-import { ErrorBoundary } from "react-error-boundary";
 import useResizeObserver from "@react-hook/resize-observer";
-import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
-import { SidebarToggleIcon, EditIcon } from "./icons";
+import clsx from "clsx";
+import React, { memo, useRef, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
+
 import { Button } from "./Button";
+import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { UserProfileDropdown } from "./UserProfileDropdown";
+import { SidebarToggleIcon, EditIcon } from "./icons";
+
 import type { ChatSession, UserProfile } from "@/types/chat";
 
 export interface ChatHistorySidebarProps {

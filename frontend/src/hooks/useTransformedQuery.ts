@@ -1,6 +1,6 @@
 // TODO: remove this once #53 is resolved
 
-import { VoidToString } from "@/types/chat";
+import type { VoidToString } from "@/types/chat";
 
 export function createTransformedQueryHook<T, Args extends unknown[]>(
   useQueryHook: (...args: Args) => {

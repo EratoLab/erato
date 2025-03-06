@@ -1,17 +1,21 @@
-import React, { useState, useRef, useEffect } from "react";
-import clsx from "clsx";
 import {
   PlusIcon,
   ArrowUpIcon,
   ArrowPathIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { Button } from "./Button";
-import { FilePreview } from "./FilePreview";
-import { FileType, FileTypeUtil } from "@/utils/fileTypes";
-import { Tooltip } from "./Tooltip";
+import clsx from "clsx";
+import React, { useState, useRef, useEffect } from "react";
+
+import { FileTypeUtil } from "@/utils/fileTypes";
+
 import { Alert } from "./Alert";
+import { Button } from "./Button";
 import { FileInput } from "./FileInput";
+import { FilePreview } from "./FilePreview";
+import { Tooltip } from "./Tooltip";
+
+import type { FileType } from "@/utils/fileTypes";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -79,7 +83,7 @@ export const ChatInput = ({
       if (validation.valid) {
         validFiles.push(file);
       } else {
-        invalidFiles.push({ file, error: validation.error || "Invalid file" });
+        invalidFiles.push({ file, error: validation.error ?? "Invalid file" });
       }
     }
 
