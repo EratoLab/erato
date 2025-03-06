@@ -65,18 +65,19 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   );
 
   // Replace the deprecated useChats with useRecentChats
-  const { data: recentChats, isLoading: isLoadingChats } = useRecentChats(
-    { queryParams: { limit: 50 } }, // Fetch up to 50 recent chats
-    {
-      staleTime: 30000,
-      gcTime: 5 * 60 * 1000,
-    },
-  );
+  const { data: recentChatsResponse, isLoading: isLoadingChats } =
+    useRecentChats(
+      { queryParams: { limit: 20 } }, // Fetch up to 50 recent chats
+      {
+        staleTime: 30000,
+        gcTime: 5 * 60 * 1000,
+      },
+    );
 
   // Sync RecentChat data with sessions state when they load
   useEffect(() => {
-    if (recentChats && recentChats.length > 0) {
-      recentChats.forEach((recentChat: RecentChat) => {
+    if (recentChatsResponse?.chats && recentChatsResponse.chats.length > 0) {
+      recentChatsResponse.chats.forEach((recentChat: RecentChat) => {
         // Check if the key exists in the sessions map
         if (!Object.prototype.hasOwnProperty.call(sessions, recentChat.id)) {
           // Convert RecentChat to ChatSession format
@@ -91,7 +92,7 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
         }
       });
     }
-  }, [recentChats, sessions, set]);
+  }, [recentChatsResponse, sessions, set]);
 
   // TODO: @backend - Add sessionId to message query params
   const { isLoading: isLoadingMessages } = useMessages(
@@ -200,25 +201,28 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   const [currentOffset, setCurrentOffset] = useState(0);
   const [hasMoreChats, setHasMoreChats] = useState(true);
 
+  // Update hasMoreChats when we receive a response
+  useEffect(() => {
+    if (recentChatsResponse?.stats) {
+      setHasMoreChats(recentChatsResponse.stats.has_more);
+      setCurrentOffset(recentChatsResponse.stats.current_offset);
+    }
+  }, [recentChatsResponse]);
+
   const loadMoreChats = useCallback(async () => {
     if (!hasMoreChats || isLoadingChats) return;
 
-    const nextOffset = currentOffset + 50;
-
     try {
-      // This implementation would need to be updated if we want to manually fetch more
-      // Rather than replacing the current approach, we're adding this as a placeholder
+      // Calculate the next offset using the stats
+      const nextOffset =
+        currentOffset + (recentChatsResponse?.stats.returned_count ?? 20);
       setCurrentOffset(nextOffset);
 
-      // Check if there might be more chats to load
-      // If recentChats length is less than the requested limit, there are no more
-      if (recentChats && recentChats.length < 50) {
-        setHasMoreChats(false);
-      }
+      // We'll get updated hasMoreChats from the API response
     } catch (e) {
       setError(e instanceof Error ? e : new Error("Failed to load more chats"));
     }
-  }, [currentOffset, hasMoreChats, isLoadingChats, recentChats]);
+  }, [currentOffset, hasMoreChats, isLoadingChats, recentChatsResponse]);
 
   // Combine loading states for simpler consumption
   const isLoading = isLoadingChats || isLoadingMessages;

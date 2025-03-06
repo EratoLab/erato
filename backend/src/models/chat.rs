@@ -1,10 +1,13 @@
 use crate::db::entity_ext::chats;
 use crate::db::entity_ext::chats_latest_message;
 use crate::db::entity_ext::prelude::*;
+use crate::models::pagination;
 use crate::policy::prelude::*;
 use eyre::{eyre, Report};
 use sea_orm::prelude::*;
-use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QuerySelect};
+use sea_orm::{
+    ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QueryOrder, QuerySelect,
+};
 
 /// Indicates whether a chat was newly created or already existed
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,9 +97,24 @@ pub struct RecentChat {
     pub last_message_at: DateTimeWithTimeZone,
 }
 
+/// Statistics for a list of chats
+#[derive(Debug, Clone)]
+pub struct ChatListStats {
+    /// Total number of chats available
+    pub total_count: i64,
+    /// Current offset in the list
+    pub current_offset: u64,
+    /// Number of chats in the current response
+    pub returned_count: usize,
+    /// Whether there are more chats available
+    pub has_more: bool,
+}
+
 /// Get the most recent chats for a user.
 ///
-/// Returns a compact form of the chat, suitable for usage in e.g. displaying in the sidebar of a UI.
+/// Returns a tuple of (chats, stats) where:
+/// - chats: Vec<RecentChat> - The list of recent chats
+/// - stats: ChatListStats - Statistics about the chat list
 pub async fn get_recent_chats(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
@@ -104,16 +122,29 @@ pub async fn get_recent_chats(
     owner_user_id: &str,
     limit: u64,
     offset: u64,
-) -> Result<Vec<RecentChat>, Report> {
+) -> Result<(Vec<RecentChat>, ChatListStats), Report> {
     // Query the most recent chats for the user.
     // Query the chats belongin to a user, and join with the chats_latest_message view.
     let chats: Vec<(chats::Model, Option<chats_latest_message::Model>)> = Chats::find()
         .filter(chats::Column::OwnerUserId.eq(owner_user_id))
         .find_also_related(chats_latest_message::Entity)
         .filter(chats_latest_message::Column::LatestMessageId.is_not_null())
+        .order_by_desc(chats_latest_message::Column::LatestMessageAt)
         .limit(limit)
         .offset(offset)
         .all(conn)
+        .await?;
+
+    // Use our pagination utility to efficiently calculate the total count
+    let (total_count, has_more) =
+        pagination::calculate_total_count(offset, limit, chats.len(), || async {
+            Chats::find()
+                .filter(chats::Column::OwnerUserId.eq(owner_user_id))
+                .find_also_related(chats_latest_message::Entity)
+                .filter(chats_latest_message::Column::LatestMessageId.is_not_null())
+                .count(conn)
+                .await
+        })
         .await?;
 
     // Should already be filtered to the correct user, but make sure to authorize.
@@ -146,8 +177,17 @@ pub async fn get_recent_chats(
                 last_message_at: latest_message.latest_message_at,
             }
         })
-        .collect();
-    Ok(recent_chats)
+        .collect::<Vec<RecentChat>>();
+
+    // Create the statistics object
+    let stats = ChatListStats {
+        total_count: pagination::u64_to_i64_count(total_count),
+        current_offset: offset,
+        returned_count: recent_chats.len(),
+        has_more,
+    };
+
+    Ok((recent_chats, stats))
 }
 
 pub async fn get_chat_by_message_id(

@@ -1,14 +1,13 @@
 import clsx from "clsx";
-import React, { useRef, useEffect } from "react";
+import React, { useCallback, useMemo } from "react";
 
 import { useProfile } from "@/hooks/useProfile";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
-import { ChatMessage } from "./ChatMessage";
+import { MessageList } from "./MessageList";
 import { useChatHistory } from "../containers/ChatHistoryProvider";
 import { useChat } from "../containers/ChatProvider";
-import { useMessageStream } from "../containers/MessageStreamProvider";
 
 import type {
   MessageAction,
@@ -51,6 +50,10 @@ export interface ChatProps {
   acceptedFileTypes?: FileType[];
 }
 
+/**
+ * Main Chat component that integrates chat UI, history, and messaging functionality.
+ * This is the top-level component that coordinates all chat-related components.
+ */
 export const Chat = ({
   className,
   layout = "default",
@@ -67,6 +70,7 @@ export const Chat = ({
   onToggleCollapse,
   acceptedFileTypes,
 }: ChatProps) => {
+  // Get chat data and actions from context providers
   const {
     messages,
     messageOrder,
@@ -74,10 +78,9 @@ export const Chat = ({
     isLoading: chatLoading,
     hasOlderMessages,
     loadOlderMessages,
+    apiMessagesResponse,
   } = useChat();
-  const { currentStreamingMessage } = useMessageStream();
   const { profile } = useProfile();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const {
     sessions,
     currentSessionId,
@@ -87,21 +90,32 @@ export const Chat = ({
     error: chatHistoryError,
   } = useChatHistory();
 
-  const layoutStyles = {
-    default: "space-y-4 p-4",
-    compact: "space-y-2 p-2",
-    comfortable: "space-y-6 p-6",
-  };
+  // Wrap the sendMessage with a void handler for ChatInput
+  const handleSendMessage = useCallback(
+    (message: string) => {
+      void sendMessage(message);
+    },
+    [sendMessage],
+  );
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messageOrder, currentStreamingMessage]);
+  // Memoize message action handler
+  const handleMessageAction = useCallback(
+    async (action: MessageAction) => {
+      if (onMessageAction) {
+        await onMessageAction(action);
+      }
+    },
+    [onMessageAction],
+  );
 
-  const handleMessageAction = async (action: MessageAction) => {
-    if (onMessageAction) {
-      await onMessageAction(action);
-    }
-  };
+  // Determine if we should use virtualization based on message count
+  const useVirtualization = useMemo(
+    () => messageOrder.length > 30,
+    [messageOrder.length],
+  );
+
+  // Define a constant for the page size
+  const messagePageSize = 6;
 
   return (
     <div className="flex h-full w-full flex-col sm:flex-row">
@@ -127,59 +141,36 @@ export const Chat = ({
         role="region"
         aria-label="Chat conversation"
       >
-        <div
-          className={clsx(
-            "flex-1 overflow-y-auto",
-            "bg-theme-bg-secondary",
-            "px-2 sm:px-4",
-            layoutStyles[layout],
-          )}
-        >
-          {hasOlderMessages && (
-            <div className="sticky top-0 z-10 flex justify-center py-2 bg-theme-bg-secondary">
-              <button
-                onClick={loadOlderMessages}
-                className="px-4 py-2 text-sm bg-theme-bg-primary text-theme-text-primary rounded-full hover:bg-theme-bg-tertiary focus:outline-none focus:ring-2 focus:ring-theme-primary transition-colors"
-                disabled={chatLoading}
-              >
-                {chatLoading ? "Loading..." : "Load more messages"}
-              </button>
-            </div>
-          )}
-          {messageOrder.map((messageId) => {
-            const message = messages[messageId];
-            return (
-              <ChatMessage
-                key={messageId}
-                message={message}
-                maxWidth={maxWidth}
-                showTimestamp={showTimestamps}
-                showAvatar={showAvatars}
-                userProfile={profile}
-                controls={messageControls}
-                controlsContext={controlsContext}
-                onMessageAction={handleMessageAction}
-                className={clsx(
-                  "mx-auto w-full sm:w-[85%]",
-                  layout === "compact" && "py-2",
-                  layout === "comfortable" && "py-6",
-                )}
-              />
-            );
-          })}
-          <div ref={messagesEndRef} />
-        </div>
+        {/* Use the new MessageList component with virtualization */}
+        <MessageList
+          messages={messages}
+          messageOrder={messageOrder}
+          loadOlderMessages={loadOlderMessages}
+          hasOlderMessages={hasOlderMessages}
+          isLoading={chatLoading}
+          currentSessionId={currentSessionId}
+          apiMessagesResponse={apiMessagesResponse}
+          pageSize={messagePageSize}
+          maxWidth={maxWidth}
+          showTimestamps={showTimestamps}
+          showAvatars={showAvatars}
+          userProfile={profile}
+          controls={messageControls}
+          controlsContext={controlsContext}
+          onMessageAction={handleMessageAction}
+          className={layout}
+          useVirtualization={useVirtualization}
+          virtualizationThreshold={30}
+        />
 
         <ChatInput
-          onSendMessage={(message) => {
-            void sendMessage(message);
-          }}
+          onSendMessage={handleSendMessage}
+          acceptedFileTypes={acceptedFileTypes}
+          onAddFile={onAddFile}
           className="border-t border-theme-border bg-theme-bg-primary p-2 sm:p-4"
           isLoading={chatLoading}
           showControls
-          onAddFile={onAddFile}
           onRegenerate={onRegenerate}
-          acceptedFileTypes={acceptedFileTypes}
         />
       </div>
     </div>

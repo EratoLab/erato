@@ -297,7 +297,44 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
     response.assert_status_ok();
 
     // Parse the response body as JSON
-    let chats: Vec<Value> = response.json();
+    let response_body: Value = response.json();
+
+    // Extract the chats array
+    let chats = response_body
+        .get("chats")
+        .expect("Response missing 'chats' field")
+        .as_array()
+        .expect("'chats' field is not an array");
+
+    // Extract the stats object
+    let stats = response_body
+        .get("stats")
+        .expect("Response missing 'stats' field");
+
+    // Verify the stats fields
+    assert!(
+        stats.get("total_count").is_some(),
+        "Stats missing 'total_count' field"
+    );
+    assert!(
+        stats.get("current_offset").is_some(),
+        "Stats missing 'current_offset' field"
+    );
+    assert!(
+        stats.get("returned_count").is_some(),
+        "Stats missing 'returned_count' field"
+    );
+    assert!(
+        stats.get("has_more").is_some(),
+        "Stats missing 'has_more' field"
+    );
+
+    // Verify stats values
+    assert_eq!(
+        stats.get("returned_count").unwrap().as_i64().unwrap(),
+        2,
+        "Expected returned_count to be 2"
+    );
 
     // Verify we have exactly 2 chats
     assert_eq!(chats.len(), 2, "Expected 2 chats, got {}", chats.len());
@@ -435,7 +472,44 @@ async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
     response.assert_status_ok();
 
     // Parse the response body as JSON
-    let messages: Vec<Value> = response.json();
+    let response_body: Value = response.json();
+
+    // Extract the messages array
+    let messages = response_body
+        .get("messages")
+        .expect("Response missing 'messages' field")
+        .as_array()
+        .expect("'messages' field is not an array");
+
+    // Extract the stats object
+    let stats = response_body
+        .get("stats")
+        .expect("Response missing 'stats' field");
+
+    // Verify the stats fields
+    assert!(
+        stats.get("total_count").is_some(),
+        "Stats missing 'total_count' field"
+    );
+    assert!(
+        stats.get("current_offset").is_some(),
+        "Stats missing 'current_offset' field"
+    );
+    assert!(
+        stats.get("returned_count").is_some(),
+        "Stats missing 'returned_count' field"
+    );
+    assert!(
+        stats.get("has_more").is_some(),
+        "Stats missing 'has_more' field"
+    );
+
+    // Verify stats values
+    assert_eq!(
+        stats.get("total_count").unwrap().as_i64().unwrap(),
+        stats.get("returned_count").unwrap().as_i64().unwrap(),
+        "total_count should match returned_count since we're fetching all messages"
+    );
 
     // Verify we have exactly 4 messages (2 user messages + 2 assistant responses)
     assert_eq!(
@@ -486,7 +560,7 @@ async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
     );
 
     // Verify each message has the expected fields
-    for message in &messages {
+    for message in messages.iter() {
         assert!(message.get("id").is_some(), "Message is missing 'id' field");
         assert!(
             message.get("chat_id").is_some(),
@@ -700,17 +774,44 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
     response.assert_status_ok();
 
     // Parse the response body as JSON
-    let messages: Vec<Value> = response.json();
+    let response_body: Value = response.json();
 
-    // Count the active messages
-    let active_messages = messages
-        .iter()
-        .filter(|msg| {
-            msg["is_message_in_active_thread"]
-                .as_bool()
-                .unwrap_or(false)
-        })
-        .collect::<Vec<_>>();
+    // Extract the messages array
+    let messages = response_body
+        .get("messages")
+        .expect("Response missing 'messages' field")
+        .as_array()
+        .expect("'messages' field is not an array");
+
+    // Extract the stats object
+    let stats = response_body
+        .get("stats")
+        .expect("Response missing 'stats' field");
+
+    // Verify the stats fields
+    assert!(
+        stats.get("total_count").is_some(),
+        "Stats missing 'total_count' field"
+    );
+    assert!(
+        stats.get("current_offset").is_some(),
+        "Stats missing 'current_offset' field"
+    );
+    assert!(
+        stats.get("returned_count").is_some(),
+        "Stats missing 'returned_count' field"
+    );
+    assert!(
+        stats.get("has_more").is_some(),
+        "Stats missing 'has_more' field"
+    );
+
+    // Verify stats values
+    assert_eq!(
+        stats.get("total_count").unwrap().as_i64().unwrap(),
+        stats.get("returned_count").unwrap().as_i64().unwrap(),
+        "total_count should match returned_count since we're fetching all messages"
+    );
 
     // Verify we have exactly 5 messages in total (2 user messages + 3 assistant responses, but only 2 active)
     assert_eq!(
@@ -721,6 +822,15 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
     );
 
     // Verify we have exactly 2 active messages (1 user message + 1 assistant response)
+    let active_messages = messages
+        .iter()
+        .filter(|msg| {
+            msg["is_message_in_active_thread"]
+                .as_bool()
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+
     assert_eq!(
         active_messages.len(),
         2,
@@ -745,7 +855,6 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
         "Expected 1 active user message, got {}",
         active_user_messages.len()
     );
-
     assert_eq!(
         active_assistant_messages.len(),
         1,

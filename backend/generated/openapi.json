@@ -42,32 +42,53 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of messages to return per page. Defaults to 100 if not provided. Larger values may impact performance.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of messages to skip for pagination. Defaults to 0 if not provided.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "Successfully retrieved messages with pagination metadata",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ChatMessage"
-                  }
+                  "$ref": "#/components/schemas/ChatMessagesResponse"
                 }
               }
             }
           },
-          "401": {
-            "description": "Unauthorized"
+          "400": {
+            "description": "Invalid chat ID format"
           },
-          "403": {
-            "description": "Forbidden"
-          },
-          "404": {
-            "description": "Chat not found"
+          "500": {
+            "description": "Server error while retrieving messages"
           }
-        }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/api/v1beta/me/messages/regeneratestream": {
@@ -182,7 +203,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Maximum number of chats to return. Defaults to 30 if not provided.",
+            "description": "Maximum number of chats to return per page. Defaults to 30 if not provided. Larger values may impact performance.",
             "required": false,
             "schema": {
               "type": "integer",
@@ -193,7 +214,7 @@
           {
             "name": "offset",
             "in": "query",
-            "description": "Number of chats to skip. Defaults to 0 if not provided.",
+            "description": "Number of chats to skip for pagination. Defaults to 0 if not provided.",
             "required": false,
             "schema": {
               "type": "integer",
@@ -204,20 +225,17 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "Successfully retrieved chats with pagination metadata",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/RecentChat"
-                  }
+                  "$ref": "#/components/schemas/RecentChatsResponse"
                 }
               }
             }
           },
           "500": {
-            "description": ""
+            "description": "Server error while retrieving chats"
           }
         },
         "security": [
@@ -349,12 +367,65 @@
               "string",
               "null"
             ],
-            "description": "The ID of the sibling message, if any"
+            "description": "The unique ID of the sibling message, if any"
           },
           "updated_at": {
             "type": "string",
             "format": "date-time",
             "description": "When the message was last updated"
+          }
+        }
+      },
+      "ChatMessageStats": {
+        "type": "object",
+        "description": "Statistics for a list of chat messages",
+        "required": [
+          "total_count",
+          "current_offset",
+          "returned_count",
+          "has_more"
+        ],
+        "properties": {
+          "current_offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Current offset in the list",
+            "minimum": 0
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "Whether there are more messages available"
+          },
+          "returned_count": {
+            "type": "integer",
+            "description": "Number of messages in the current response",
+            "minimum": 0
+          },
+          "total_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total number of messages in the chat"
+          }
+        }
+      },
+      "ChatMessagesResponse": {
+        "type": "object",
+        "description": "Response for the chat_messages endpoint",
+        "required": [
+          "messages",
+          "stats"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "description": "The list of messages"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/ChatMessageStats",
+            "description": "Statistics about the message list"
           }
         }
       },
@@ -565,6 +636,59 @@
           "title_by_summary": {
             "type": "string",
             "description": "Title of the chat, as generated by a summary of the chat."
+          }
+        }
+      },
+      "RecentChatStats": {
+        "type": "object",
+        "description": "Statistics for a list of recent chats",
+        "required": [
+          "total_count",
+          "current_offset",
+          "returned_count",
+          "has_more"
+        ],
+        "properties": {
+          "current_offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Current offset in the list",
+            "minimum": 0
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "Whether there are more chats available"
+          },
+          "returned_count": {
+            "type": "integer",
+            "description": "Number of chats in the current response",
+            "minimum": 0
+          },
+          "total_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total number of chats available"
+          }
+        }
+      },
+      "RecentChatsResponse": {
+        "type": "object",
+        "description": "Response for the recent_chats endpoint",
+        "required": [
+          "chats",
+          "stats"
+        ],
+        "properties": {
+          "chats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecentChat"
+            },
+            "description": "The list of recent chats"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/RecentChatStats",
+            "description": "Statistics about the chat list"
           }
         }
       },
