@@ -1,14 +1,18 @@
+import { skipToken } from "@tanstack/react-query";
 import React, {
   createContext,
   useContext,
   useState,
   useCallback,
   useEffect,
+  useMemo,
 } from "react";
 
 import { useChatHistory } from "./ChatHistoryProvider";
 import { useMessageStream } from "./MessageStreamProvider";
+import { useChatMessages } from "../../lib/generated/v1betaApi/v1betaApiComponents";
 
+import type { ChatMessage as APIChatMessage } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
 import type { StreamingContext } from "@/types/chat";
 
 // TODO: move later to types folder, that we can align with what we have from the backend programmaticaly
@@ -38,6 +42,8 @@ export interface ChatContextType {
   messageOrder: string[]; // Preserve message order
   sendMessage: (message: string) => Promise<void>;
   updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void;
+  loadOlderMessages: () => void;
+  hasOlderMessages: boolean;
   isLoading: boolean;
 }
 
@@ -47,8 +53,6 @@ interface ChatProviderProps extends React.PropsWithChildren {
   // For storybook/testing only
   initialMessages?: MessageMap;
   initialMessageOrder?: string[];
-  // For real API integration
-  loadMessages?: () => Promise<{ messages: MessageMap; order: string[] }>;
 }
 
 /**
@@ -58,7 +62,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   children,
   initialMessages = {},
   initialMessageOrder = [],
-  loadMessages,
 }) => {
   const { currentSessionId } = useChatHistory();
   const { currentStreamingMessage, streamMessage } = useMessageStream();
@@ -67,18 +70,94 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     useState<string[]>(initialMessageOrder);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load messages from API if provided
+  // Track message loading state
+  const [displayCount, setDisplayCount] = useState(20); // Start by showing the most recent 20 messages
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+
+  // Use the chatMessages API to fetch messages when a chat is selected
+  const { data: apiMessages, isLoading: apiLoadingState } = useChatMessages(
+    currentSessionId && !currentSessionId.startsWith("temp-")
+      ? { pathParams: { chatId: currentSessionId } }
+      : skipToken,
+    {
+      enabled: !!currentSessionId && !currentSessionId.startsWith("temp-"),
+      staleTime: 30000, // Cache for 30 seconds
+    },
+  );
+
+  // Convert API messages to the app's message format
+  const convertApiMessageToAppMessage = useCallback(
+    (apiMessage: APIChatMessage): ChatMessage => {
+      return {
+        id: apiMessage.id,
+        content: apiMessage.full_text,
+        sender: apiMessage.role === "assistant" ? "assistant" : "user",
+        createdAt: new Date(apiMessage.created_at),
+        authorId: apiMessage.role,
+      };
+    },
+    [],
+  );
+
+  // Reset display count when switching chats
   useEffect(() => {
-    if (loadMessages) {
-      setIsLoading(true);
-      void loadMessages()
-        .then(({ messages: apiMessages, order }) => {
-          setMessages(apiMessages);
-          setMessageOrder(order);
-        })
-        .finally(() => setIsLoading(false));
+    setDisplayCount(20);
+  }, [currentSessionId]);
+
+  // Load messages from API when currentSessionId changes
+  useEffect(() => {
+    if (apiMessages && apiMessages.length > 0 && currentSessionId) {
+      // Convert API messages to app message format
+      const newMessages: MessageMap = {};
+      const newOrder: string[] = [];
+
+      // Sort messages by creation time to ensure correct order
+      const sortedMessages = [...apiMessages].sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+
+      // Update if there are more messages than we're displaying
+      setHasOlderMessages(sortedMessages.length > displayCount);
+
+      // Only display the most recent messages up to displayCount
+      const messagesToDisplay = sortedMessages.slice(-displayCount);
+
+      for (const apiMessage of messagesToDisplay) {
+        const message = convertApiMessageToAppMessage(apiMessage);
+        newMessages[message.id] = message;
+        newOrder.push(message.id);
+      }
+
+      setMessages(newMessages);
+      setMessageOrder(newOrder);
+    } else if (currentSessionId?.startsWith("temp-")) {
+      // Reset messages for new/temporary sessions
+      setMessages({});
+      setMessageOrder([]);
+      setHasOlderMessages(false);
     }
-  }, [loadMessages]);
+  }, [
+    apiMessages,
+    currentSessionId,
+    convertApiMessageToAppMessage,
+    displayCount,
+  ]);
+
+  // Update the loading state based on API loading
+  useEffect(() => {
+    setIsLoading(apiLoadingState);
+  }, [apiLoadingState]);
+
+  // Function to load older messages
+  const loadOlderMessages = useCallback(() => {
+    if (apiMessages && apiMessages.length > displayCount) {
+      // Increase the number of messages to display
+      setDisplayCount((prevCount) =>
+        Math.min(prevCount + 20, apiMessages.length),
+      );
+    }
+  }, [apiMessages, displayCount]);
 
   const updateMessage = useCallback(
     (messageId: string, updates: Partial<ChatMessage>) => {
@@ -100,6 +179,17 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       setIsLoading(true);
 
       try {
+        // Get the last message ID (the most recent non-user message ID, if possible)
+        const recentMessages = messageOrder
+          .map((id) => messages[id])
+          .filter((msg) => msg.sender === "assistant"); // Filter to assistant messages
+
+        // Get the ID of the last assistant message if available
+        const lastMessageId =
+          recentMessages.length > 0
+            ? recentMessages[recentMessages.length - 1].id
+            : undefined;
+
         // Add user message
         const userMessage: ChatMessage = {
           id: generateMessageId(),
@@ -122,8 +212,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         };
         addMessage(assistantMessage);
 
-        // Start streaming - pass the current session ID
-        await streamMessage(currentSessionId, content);
+        // Start streaming - pass the current session ID and last message ID
+        await streamMessage(currentSessionId, content, lastMessageId);
       } catch (error) {
         console.error("Error sending message:", error);
         // Update the last message to show the error
@@ -141,7 +231,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         setIsLoading(false);
       }
     },
-    [currentSessionId, streamMessage, messageOrder, updateMessage],
+    [currentSessionId, streamMessage, messageOrder, updateMessage, messages],
   );
 
   // Update streaming message content
@@ -196,18 +286,30 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     setMessageOrder((prev) => [...prev, message.id]);
   };
 
+  // Update the context value to include the new functions
+  const contextValue = useMemo(
+    () => ({
+      messages,
+      messageOrder,
+      sendMessage,
+      updateMessage,
+      loadOlderMessages,
+      hasOlderMessages,
+      isLoading,
+    }),
+    [
+      messages,
+      messageOrder,
+      sendMessage,
+      updateMessage,
+      loadOlderMessages,
+      hasOlderMessages,
+      isLoading,
+    ],
+  );
+
   return (
-    <ChatContext.Provider
-      value={{
-        messages,
-        messageOrder,
-        sendMessage,
-        updateMessage,
-        isLoading,
-      }}
-    >
-      {children}
-    </ChatContext.Provider>
+    <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>
   );
 };
 

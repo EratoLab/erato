@@ -5,13 +5,12 @@ import dynamic from "next/dynamic";
 import { useState, useEffect, useCallback } from "react";
 
 import {
-  useChatHistory,
   ChatHistoryProvider,
-} from "@/components/containers/ChatHistoryProvider";
-import { ProfileProvider } from "@/components/containers/ProfileProvider";
-
+  useChatHistory,
+} from "../components/containers/ChatHistoryProvider";
 import { ChatProvider } from "../components/containers/ChatProvider";
 import { MessageStreamProvider } from "../components/containers/MessageStreamProvider";
+import { ProfileProvider } from "../components/containers/ProfileProvider";
 
 import type { FileType } from "@/utils/fileTypes";
 
@@ -103,15 +102,26 @@ const ChatContainer = () => {
   );
 };
 
+// ChatBridge component connects the ChatHistoryProvider with MessageStreamProvider
+const ChatBridge: React.FC<React.PropsWithChildren> = ({ children }) => {
+  const { confirmSession } = useChatHistory();
+
+  return (
+    <MessageStreamProvider onChatCreated={confirmSession}>
+      {children}
+    </MessageStreamProvider>
+  );
+};
+
 export default function Home() {
   return (
     <QueryClientProvider client={queryClient}>
       <div className="flex h-screen min-h-screen bg-theme-bg-primary">
         <ProfileProvider>
           <ChatHistoryProvider>
-            <MessageStreamProvider>
+            <ChatBridge>
               <ChatContainer />
-            </MessageStreamProvider>
+            </ChatBridge>
           </ChatHistoryProvider>
         </ProfileProvider>
       </div>

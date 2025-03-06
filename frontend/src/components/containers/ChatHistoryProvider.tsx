@@ -1,14 +1,21 @@
 import * as reactQuery from "@tanstack/react-query";
-import React, { useContext, useCallback, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useMap } from "react-use";
 
 import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
 import {
-  useChats,
   useMessages,
+  useRecentChats,
 } from "../../lib/generated/v1betaApi/v1betaApiComponents";
 
 import type { ChatHistoryContextType } from "../../types/chat-history";
+import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 
 interface ChatHistoryProviderProps extends React.PropsWithChildren {
@@ -57,14 +64,34 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     [queryClient],
   );
 
-  // TODO: @backend - Add proper query params for filtering chats
-  const { isLoading: isLoadingChats } = useChats(
-    {},
+  // Replace the deprecated useChats with useRecentChats
+  const { data: recentChats, isLoading: isLoadingChats } = useRecentChats(
+    { queryParams: { limit: 50 } }, // Fetch up to 50 recent chats
     {
       staleTime: 30000,
       gcTime: 5 * 60 * 1000,
     },
   );
+
+  // Sync RecentChat data with sessions state when they load
+  useEffect(() => {
+    if (recentChats && recentChats.length > 0) {
+      recentChats.forEach((recentChat: RecentChat) => {
+        // Check if the key exists in the sessions map
+        if (!Object.prototype.hasOwnProperty.call(sessions, recentChat.id)) {
+          // Convert RecentChat to ChatSession format
+          const chatSession: ChatSession = {
+            id: recentChat.id,
+            title: recentChat.title_by_summary || "Untitled Chat",
+            messages: [], // Messages will be loaded separately
+            createdAt: new Date(), // We don't have this info, use current time
+            updatedAt: new Date(recentChat.last_message_at),
+          };
+          set(recentChat.id, chatSession);
+        }
+      });
+    }
+  }, [recentChats, sessions, set]);
 
   // TODO: @backend - Add sessionId to message query params
   const { isLoading: isLoadingMessages } = useMessages(
@@ -84,21 +111,55 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   // Add error handling to existing operations
   const createSession = useCallback(() => {
     try {
+      const tempId = `temp-${new Date().toISOString()}`;
       const newSession: ChatSession = {
-        id: new Date().toISOString(),
+        id: tempId,
         title: "New Chat",
         messages: [],
         createdAt: new Date(),
         updatedAt: new Date(),
+        metadata: {
+          isTemporary: true,
+          ownerId: "", // Will be set when the chat is confirmed with the first message
+        },
       };
-      set(newSession.id, newSession);
-      setCurrentSessionId(newSession.id);
-      return newSession.id;
+      set(tempId, newSession);
+      setCurrentSessionId(tempId);
+      return tempId;
     } catch (e) {
       setError(e instanceof Error ? e : new Error("Failed to create session"));
       return "";
     }
   }, [set, setCurrentSessionId]);
+
+  // Add a function to replace a temporary session with a permanent one
+  const confirmSession = useCallback(
+    (tempId: string, permanentId: string) => {
+      if (Object.prototype.hasOwnProperty.call(sessions, tempId)) {
+        const tempSession = sessions[tempId];
+        // Create a permanent session from the temporary one
+        const permanentSession: ChatSession = {
+          ...tempSession,
+          id: permanentId,
+          metadata: {
+            ...tempSession.metadata,
+            isTemporary: false,
+            ownerId: tempSession.metadata?.ownerId ?? "",
+          },
+        };
+
+        // Add the permanent session and set it as current
+        set(permanentId, permanentSession);
+        setCurrentSessionId(permanentId);
+
+        // Remove the temporary session
+        if (tempId !== permanentId) {
+          remove(tempId);
+        }
+      }
+    },
+    [sessions, set, setCurrentSessionId, remove],
+  );
 
   // TODO: @backend - Add API mutation for updating sessions
   const updateSession = useCallback(
@@ -135,9 +196,34 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     return currentSessionId ? (sessions[currentSessionId] ?? null) : null;
   }, [sessions, currentSessionId]);
 
+  // Add a function to load more chats (for pagination)
+  const [currentOffset, setCurrentOffset] = useState(0);
+  const [hasMoreChats, setHasMoreChats] = useState(true);
+
+  const loadMoreChats = useCallback(async () => {
+    if (!hasMoreChats || isLoadingChats) return;
+
+    const nextOffset = currentOffset + 50;
+
+    try {
+      // This implementation would need to be updated if we want to manually fetch more
+      // Rather than replacing the current approach, we're adding this as a placeholder
+      setCurrentOffset(nextOffset);
+
+      // Check if there might be more chats to load
+      // If recentChats length is less than the requested limit, there are no more
+      if (recentChats && recentChats.length < 50) {
+        setHasMoreChats(false);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error("Failed to load more chats"));
+    }
+  }, [currentOffset, hasMoreChats, isLoadingChats, recentChats]);
+
   // Combine loading states for simpler consumption
   const isLoading = isLoadingChats || isLoadingMessages;
 
+  // Expose the new confirmSession method in the context
   const contextValue = useMemo(
     () => ({
       sessions: sortedSessions,
@@ -147,6 +233,9 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
       deleteSession,
       switchSession,
       getCurrentSession,
+      confirmSession,
+      loadMoreChats,
+      hasMoreChats,
       isLoading,
       error,
     }),
@@ -158,6 +247,9 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
       deleteSession,
       switchSession,
       getCurrentSession,
+      confirmSession,
+      loadMoreChats,
+      hasMoreChats,
       isLoading,
       error,
     ],
