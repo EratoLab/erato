@@ -51,7 +51,7 @@ export const LoadMoreButton = memo<LoadMoreButtonProps>(
     <div
       className={clsx(
         isSticky && "sticky top-0 z-10",
-        "flex justify-center py-2 bg-theme-bg-secondary",
+        "flex justify-center py-2",
         className,
       )}
     >

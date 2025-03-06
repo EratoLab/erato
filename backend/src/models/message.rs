@@ -275,7 +275,7 @@ pub async fn get_chat_messages(
     // Query messages for this chat with pagination, ordered by creation time
     let messages = Messages::find()
         .filter(messages::Column::ChatId.eq(*chat_id))
-        .order_by_asc(messages::Column::CreatedAt)
+        .order_by_desc(messages::Column::CreatedAt)
         .limit(limit)
         .offset(offset)
         .all(conn)

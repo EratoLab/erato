@@ -1,7 +1,14 @@
 import clsx from "clsx";
 import { debounce } from "lodash";
-import React, { memo, useCallback, useMemo, useState, useEffect } from "react";
-import { FixedSizeList as VirtualList } from "react-window";
+import React, {
+  memo,
+  useCallback,
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
+import { VariableSizeList as VirtualList } from "react-window";
 
 import { usePaginatedData } from "@/hooks/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
@@ -19,7 +26,7 @@ import type {
   MessageControlsContext,
 } from "@/types/message-controls";
 
-// Memoized message item component
+// Memoized message item component with custom comparison
 const MessageItem = memo<{
   messageId: string;
   message: ChatMessageType;
@@ -63,6 +70,31 @@ const MessageItem = memo<{
       />
     </div>
   ),
+  // Custom comparison function to optimize rendering
+  (prevProps, nextProps) => {
+    // Always re-render if message ID changes
+    if (prevProps.messageId !== nextProps.messageId) return false;
+
+    // Always re-render if isNew status changes
+    if (prevProps.isNew !== nextProps.isNew) return false;
+
+    const prevMessage = prevProps.message;
+    const nextMessage = nextProps.message;
+
+    // Re-render if content changes
+    if (prevMessage.content !== nextMessage.content) return false;
+
+    // Re-render if loading or error state changes
+    if (!!prevMessage.loading !== !!nextMessage.loading) return false;
+    if (!!prevMessage.error !== !!nextMessage.error) return false;
+
+    // Re-render if style changes (for virtualization)
+    if (JSON.stringify(prevProps.style) !== JSON.stringify(nextProps.style))
+      return false;
+
+    // Otherwise, prevent re-render
+    return true;
+  },
 );
 MessageItem.displayName = "MessageItem";
 
@@ -199,35 +231,41 @@ export const MessageList = memo<MessageListProps>(
         initialCount: pageSize,
         pageSize: pageSize,
         enabled: hasOlderMessages,
+        direction: "backward", // Use backward pagination for chat (older messages first)
       });
 
     // Create debounced function with useMemo
     const debouncedLoadMore = useMemo(
       () =>
         debounce(() => {
-          if (isLoading) return; // Prevent multiple loads
-
-          // Prioritize loading from API based on stats
-          if (apiMessagesResponse?.stats.has_more) {
-            loadOlderMessages();
-          }
-          // Fall back to client-side pagination if API doesn't indicate more messages
-          else if (hasOlderMessages) {
-            loadOlderMessages();
+          if (isLoading) {
+            console.log("Skipping load more because already loading");
+            return;
           }
 
-          // Always try client-side pagination as well if available
-          if (hasMore) {
+          console.log("Load more triggered in MessageList");
+
+          // For chat history (backward pagination), we only need to load from the API
+          // Our hook is already configured to show all messages
+          if (apiMessagesResponse?.stats.has_more || hasOlderMessages) {
+            console.log("Loading older messages from API");
+            loadOlderMessages();
+          }
+          // Only use the client-side pagination if we're not loading from API
+          else if (hasMore) {
+            console.log("Loading more messages from client-side pagination");
             loadMore();
+          } else {
+            console.log("No more messages to load");
           }
-        }, 300), // Adjust the debounce time as needed
+        }, 300),
       [
+        apiMessagesResponse?.stats.has_more,
+        hasOlderMessages,
+        hasMore,
         isLoading,
         loadOlderMessages,
         loadMore,
-        hasOlderMessages,
-        hasMore,
-        apiMessagesResponse,
       ],
     );
 
@@ -281,9 +319,45 @@ export const MessageList = memo<MessageListProps>(
       [useVirtualization, visibleData.length, virtualizationThreshold],
     );
 
-    // Generate classnames for messages based on their properties
-    const getMessageClassName = useCallback((isNewlyLoaded: boolean) => {
-      return clsx("mx-auto w-full sm:w-[85%]", "py-4", isNewlyLoaded && "pl-2");
+    // Helper function to get CSS classes for message highlighting
+    const getMessageClassName = useCallback(
+      (isNew: boolean) =>
+        clsx(
+          "mx-auto w-full sm:w-[85%]",
+          "py-4",
+          "transition-all duration-700 ease-in-out",
+          isNew
+            ? "animate-fadeIn bg-theme-bg-accent border-l-4 border-theme-accent pl-2"
+            : "bg-transparent",
+        ),
+      [],
+    );
+
+    // Define animation keyframes in CSS
+    useEffect(() => {
+      // Only inject if not already present
+      if (!document.getElementById("message-animations")) {
+        const style = document.createElement("style");
+        style.id = "message-animations";
+        style.innerHTML = `
+          @keyframes fadeIn {
+            from { opacity: 0.7; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          .animate-fadeIn {
+            animation: fadeIn 0.5s ease-out forwards;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+
+      // Clean up on unmount
+      return () => {
+        const style = document.getElementById("message-animations");
+        if (style) {
+          document.head.removeChild(style);
+        }
+      };
     }, []);
 
     // Update container dimensions for virtualization
@@ -310,6 +384,56 @@ export const MessageList = memo<MessageListProps>(
         resizeObserver.disconnect();
       };
     }, [containerRef, useVirtualization]);
+
+    // Virtual list ref for scrolling and resizing
+    const listRef = useRef<VirtualList>(null);
+
+    // Estimated size mapping for messages based on content
+    const messageSizeCache = useRef<{ [key: string]: number }>({});
+
+    // Estimate message height based on content length
+    const estimateMessageSize = useCallback(
+      (messageId: string) => {
+        if (messageSizeCache.current[messageId]) {
+          return messageSizeCache.current[messageId];
+        }
+
+        const message = messages[messageId];
+        // Message will always exist here based on how messageId is used
+
+        // Base height for message UI elements
+        const baseHeight = 70;
+
+        // Estimate content height based on character count
+        // Average 100 chars per line, 20px line height
+        const contentLength = message.content.length;
+        const estimatedLines = Math.ceil(contentLength / 100);
+        const contentHeight = Math.max(20, estimatedLines * 20);
+
+        // Store in cache
+        const totalHeight = baseHeight + contentHeight;
+        messageSizeCache.current[messageId] = totalHeight;
+
+        return totalHeight;
+      },
+      [messages],
+    );
+
+    // Item size getter for variable list
+    const getItemSize = useCallback(
+      (index: number) => {
+        const messageId = visibleData[index];
+        return estimateMessageSize(messageId);
+      },
+      [visibleData, estimateMessageSize],
+    );
+
+    // Reset the list when message heights might have changed
+    useEffect(() => {
+      if (listRef.current) {
+        listRef.current.resetAfterIndex(0);
+      }
+    }, [visibleData.length]);
 
     // Message renderer for virtualized list
     const renderMessage = useCallback(
@@ -398,10 +522,11 @@ export const MessageList = memo<MessageListProps>(
         {/* Virtualized list for performance with large lists */}
         {shouldUseVirtualization ? (
           <VirtualList
+            ref={listRef}
             height={containerSize.height || 600}
             width="100%"
             itemCount={visibleData.length}
-            itemSize={100}
+            itemSize={getItemSize}
             overscanCount={5}
           >
             {renderMessage}
@@ -430,6 +555,9 @@ export const MessageList = memo<MessageListProps>(
             );
           })
         )}
+
+        {/* End of conversation indicator */}
+        <ConversationIndicator type="end" />
       </div>
     );
   },
