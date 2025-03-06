@@ -6,3 +6,4 @@
 0003_add_users_table 2025-02-15T04:32:48Z System Administrator <root@Maxs-Laptop.local> # Add users table
 0004_add_view_for_last_message_at 2025-03-04T15:14:23Z System Administrator <root@Maxs-Laptop.local> # Add view for last_message_at
 0005_adjust_message_lineage 2025-03-05T09:23:41Z System Administrator <root@Maxs-Laptop.local> # Adjust message lineage
+0006_add_chats_summary_and_archived 2025-03-06T14:44:54Z System Administrator <root@Maxs-Laptop.local> # Add chats summary and archived

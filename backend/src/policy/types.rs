@@ -77,6 +77,8 @@ pub enum Action {
     Read,
     #[serde(rename = "create")]
     Create,
+    #[serde(rename = "update")]
+    Update,
     #[serde(rename = "submit_message")]
     SubmitMessage,
 }
