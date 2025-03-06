@@ -4,7 +4,9 @@ use crate::models::pagination;
 use crate::policy::prelude::*;
 use eyre::{eyre, Report};
 use sea_orm::prelude::*;
-use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, QueryOrder, QuerySelect, TransactionTrait};
+use sea_orm::{
+    ActiveValue, DatabaseConnection, EntityTrait, QueryOrder, QuerySelect, TransactionTrait,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::fmt;
@@ -280,18 +282,14 @@ pub async fn get_chat_messages(
         .await?;
 
     // Use our pagination utility to efficiently calculate the total count
-    let (total_count, has_more) = pagination::calculate_total_count(
-        offset,
-        limit,
-        messages.len(),
-        || async {
+    let (total_count, has_more) =
+        pagination::calculate_total_count(offset, limit, messages.len(), || async {
             Messages::find()
                 .filter(messages::Column::ChatId.eq(*chat_id))
                 .count(conn)
                 .await
-        },
-    )
-    .await?;
+        })
+        .await?;
 
     // Create the statistics object
     let stats = MessageListStats {

@@ -95,12 +95,28 @@ export type ChatMessagesPathParams = {
   chatId: string;
 };
 
-export type ChatMessagesError = Fetcher.ErrorWrapper<undefined>;
+export type ChatMessagesQueryParams = {
+  /**
+   * Maximum number of messages to return per page. Defaults to 100 if not provided. Larger values may impact performance.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  limit?: number;
+  /**
+   * Number of messages to skip for pagination. Defaults to 0 if not provided.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  offset?: number;
+};
 
-export type ChatMessagesResponse = Schemas.ChatMessage[];
+export type ChatMessagesError = Fetcher.ErrorWrapper<undefined>;
 
 export type ChatMessagesVariables = {
   pathParams: ChatMessagesPathParams;
+  queryParams?: ChatMessagesQueryParams;
 } & V1betaApiContext["fetcherOptions"];
 
 export const fetchChatMessages = (
@@ -108,11 +124,11 @@ export const fetchChatMessages = (
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    ChatMessagesResponse,
+    Schemas.ChatMessagesResponse,
     ChatMessagesError,
     undefined,
     {},
-    {},
+    ChatMessagesQueryParams,
     ChatMessagesPathParams
   >({
     url: "/api/v1beta/chats/{chatId}/messages",
@@ -123,7 +139,7 @@ export const fetchChatMessages = (
 
 export function chatMessagesQuery(variables: ChatMessagesVariables): {
   queryKey: reactQuery.QueryKey;
-  queryFn: (options: QueryFnOptions) => Promise<ChatMessagesResponse>;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.ChatMessagesResponse>;
 };
 
 export function chatMessagesQuery(
@@ -131,7 +147,7 @@ export function chatMessagesQuery(
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn:
-    | ((options: QueryFnOptions) => Promise<ChatMessagesResponse>)
+    | ((options: QueryFnOptions) => Promise<Schemas.ChatMessagesResponse>)
     | reactQuery.SkipToken;
 };
 
@@ -151,16 +167,20 @@ export function chatMessagesQuery(
   };
 }
 
-export const useSuspenseChatMessages = <TData = ChatMessagesResponse,>(
+export const useSuspenseChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   variables: ChatMessagesVariables,
   options?: Omit<
-    reactQuery.UseQueryOptions<ChatMessagesResponse, ChatMessagesError, TData>,
+    reactQuery.UseQueryOptions<
+      Schemas.ChatMessagesResponse,
+      ChatMessagesError,
+      TData
+    >,
     "queryKey" | "queryFn" | "initialData"
   >,
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useSuspenseQuery<
-    ChatMessagesResponse,
+    Schemas.ChatMessagesResponse,
     ChatMessagesError,
     TData
   >({
@@ -170,15 +190,23 @@ export const useSuspenseChatMessages = <TData = ChatMessagesResponse,>(
   });
 };
 
-export const useChatMessages = <TData = ChatMessagesResponse,>(
+export const useChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   variables: ChatMessagesVariables | reactQuery.SkipToken,
   options?: Omit<
-    reactQuery.UseQueryOptions<ChatMessagesResponse, ChatMessagesError, TData>,
+    reactQuery.UseQueryOptions<
+      Schemas.ChatMessagesResponse,
+      ChatMessagesError,
+      TData
+    >,
     "queryKey" | "queryFn" | "initialData"
   >,
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
-  return reactQuery.useQuery<ChatMessagesResponse, ChatMessagesError, TData>({
+  return reactQuery.useQuery<
+    Schemas.ChatMessagesResponse,
+    ChatMessagesError,
+    TData
+  >({
     ...chatMessagesQuery(deepMerge(fetcherOptions, variables)),
     ...options,
     ...queryOptions,
@@ -354,14 +382,14 @@ export const useProfile = <TData = Schemas.UserProfile,>(
 
 export type RecentChatsQueryParams = {
   /**
-   * Maximum number of chats to return. Defaults to 30 if not provided.
+   * Maximum number of chats to return per page. Defaults to 30 if not provided. Larger values may impact performance.
    *
    * @format int64
    * @minimum 0
    */
   limit?: number;
   /**
-   * Number of chats to skip. Defaults to 0 if not provided.
+   * Number of chats to skip for pagination. Defaults to 0 if not provided.
    *
    * @format int64
    * @minimum 0
@@ -370,8 +398,6 @@ export type RecentChatsQueryParams = {
 };
 
 export type RecentChatsError = Fetcher.ErrorWrapper<undefined>;
-
-export type RecentChatsResponse = Schemas.RecentChat[];
 
 export type RecentChatsVariables = {
   queryParams?: RecentChatsQueryParams;
@@ -382,7 +408,7 @@ export const fetchRecentChats = (
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    RecentChatsResponse,
+    Schemas.RecentChatsResponse,
     RecentChatsError,
     undefined,
     {},
@@ -397,7 +423,7 @@ export const fetchRecentChats = (
 
 export function recentChatsQuery(variables: RecentChatsVariables): {
   queryKey: reactQuery.QueryKey;
-  queryFn: (options: QueryFnOptions) => Promise<RecentChatsResponse>;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.RecentChatsResponse>;
 };
 
 export function recentChatsQuery(
@@ -405,7 +431,7 @@ export function recentChatsQuery(
 ): {
   queryKey: reactQuery.QueryKey;
   queryFn:
-    | ((options: QueryFnOptions) => Promise<RecentChatsResponse>)
+    | ((options: QueryFnOptions) => Promise<Schemas.RecentChatsResponse>)
     | reactQuery.SkipToken;
 };
 
@@ -425,16 +451,20 @@ export function recentChatsQuery(
   };
 }
 
-export const useSuspenseRecentChats = <TData = RecentChatsResponse,>(
+export const useSuspenseRecentChats = <TData = Schemas.RecentChatsResponse,>(
   variables: RecentChatsVariables,
   options?: Omit<
-    reactQuery.UseQueryOptions<RecentChatsResponse, RecentChatsError, TData>,
+    reactQuery.UseQueryOptions<
+      Schemas.RecentChatsResponse,
+      RecentChatsError,
+      TData
+    >,
     "queryKey" | "queryFn" | "initialData"
   >,
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useSuspenseQuery<
-    RecentChatsResponse,
+    Schemas.RecentChatsResponse,
     RecentChatsError,
     TData
   >({
@@ -444,15 +474,23 @@ export const useSuspenseRecentChats = <TData = RecentChatsResponse,>(
   });
 };
 
-export const useRecentChats = <TData = RecentChatsResponse,>(
+export const useRecentChats = <TData = Schemas.RecentChatsResponse,>(
   variables: RecentChatsVariables | reactQuery.SkipToken,
   options?: Omit<
-    reactQuery.UseQueryOptions<RecentChatsResponse, RecentChatsError, TData>,
+    reactQuery.UseQueryOptions<
+      Schemas.RecentChatsResponse,
+      RecentChatsError,
+      TData
+    >,
     "queryKey" | "queryFn" | "initialData"
   >,
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
-  return reactQuery.useQuery<RecentChatsResponse, RecentChatsError, TData>({
+  return reactQuery.useQuery<
+    Schemas.RecentChatsResponse,
+    RecentChatsError,
+    TData
+  >({
     ...recentChatsQuery(deepMerge(fetcherOptions, variables)),
     ...options,
     ...queryOptions,

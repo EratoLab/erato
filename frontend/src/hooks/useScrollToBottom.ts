@@ -1,5 +1,5 @@
 import { debounce } from "lodash";
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 
 interface UseScrollToBottomOptions {
   /**
@@ -50,6 +50,9 @@ export function useScrollToBottom({
   // Track if the user is currently scrolled up (viewing history)
   const isUserScrolledUpRef = useRef(false);
 
+  // We need a state value to trigger re-renders when this changes
+  const [isScrolledUp, setIsScrolledUp] = useState(false);
+
   // Memoize the scroll position check function for performance
   const checkIfUserIsScrolledUp = useCallback(() => {
     const container = containerRef.current;
@@ -58,7 +61,11 @@ export function useScrollToBottom({
     const { scrollTop, scrollHeight, clientHeight } = container;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
-    isUserScrolledUpRef.current = distanceFromBottom > scrollUpThreshold;
+    const scrolledUp = distanceFromBottom > scrollUpThreshold;
+
+    // Store the value in both the ref and state
+    isUserScrolledUpRef.current = scrolledUp;
+    setIsScrolledUp(scrolledUp);
   }, [scrollUpThreshold]);
 
   // Force a scroll to bottom regardless of current scroll position
@@ -69,6 +76,10 @@ export function useScrollToBottom({
     requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
       hasScrolledToBottomRef.current = true;
+
+      // When we scroll to bottom, update scrolled up state
+      setIsScrolledUp(false);
+      isUserScrolledUpRef.current = false;
     });
   }, []);
 
@@ -92,12 +103,20 @@ export function useScrollToBottom({
 
     container.addEventListener("scroll", handleScroll);
 
+    // Check initial scroll position
+    checkIfUserIsScrolledUp();
+
     return () => {
       container.removeEventListener("scroll", handleScroll);
       // Make sure to cancel any pending debounced calls on cleanup
       debouncedCheckScrollPosition.cancel();
     };
-  }, [enabled, handleScroll, debouncedCheckScrollPosition]);
+  }, [
+    enabled,
+    handleScroll,
+    debouncedCheckScrollPosition,
+    checkIfUserIsScrolledUp,
+  ]);
 
   // Handle automatic scrolling on initial load and when new messages arrive
   useEffect(() => {
@@ -120,7 +139,7 @@ export function useScrollToBottom({
   return {
     containerRef,
     scrollToBottom,
-    isScrolledUp: isUserScrolledUpRef.current,
+    isScrolledUp, // Return the state value, not the ref value
     // Expose the check function so consumers can manually check scroll position
     checkScrollPosition: checkIfUserIsScrolledUp,
   };

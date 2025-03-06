@@ -12,7 +12,10 @@ import { useChatHistory } from "./ChatHistoryProvider";
 import { useMessageStream } from "./MessageStreamProvider";
 import { useChatMessages } from "../../lib/generated/v1betaApi/v1betaApiComponents";
 
-import type { ChatMessage as APIChatMessage } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ChatMessage as APIChatMessage,
+  ChatMessagesResponse,
+} from "../../lib/generated/v1betaApi/v1betaApiSchemas";
 import type { StreamingContext } from "@/types/chat";
 
 // TODO: move later to types folder, that we can align with what we have from the backend programmaticaly
@@ -46,6 +49,7 @@ export interface ChatContextType {
   hasOlderMessages: boolean;
   isLoading: boolean;
   lastLoadedCount: number; // Number of messages loaded in the last batch
+  apiMessagesResponse?: ChatMessagesResponse; // Raw API response data with stats
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -72,20 +76,30 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   // Track message loading state
-  const [displayCount, setDisplayCount] = useState(6); // Start by showing just the 6 most recent messages
+  const MESSAGE_PAGE_SIZE = 6; // Single source of truth for page size
+  const [displayCount, setDisplayCount] = useState(MESSAGE_PAGE_SIZE);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [lastLoadedCount, setLastLoadedCount] = useState(0);
 
   // Use the chatMessages API to fetch messages when a chat is selected
-  const { data: apiMessages, isLoading: apiLoadingState } = useChatMessages(
-    currentSessionId && !currentSessionId.startsWith("temp-")
-      ? { pathParams: { chatId: currentSessionId } }
-      : skipToken,
-    {
-      enabled: !!currentSessionId && !currentSessionId.startsWith("temp-"),
-      staleTime: 30000, // Cache for 30 seconds
-    },
-  );
+  // Include pagination params
+  const [messageOffset, setMessageOffset] = useState(0);
+  const { data: apiMessagesResponse, isLoading: apiLoadingState } =
+    useChatMessages(
+      currentSessionId && !currentSessionId.startsWith("temp-")
+        ? {
+            pathParams: { chatId: currentSessionId },
+            queryParams: {
+              limit: MESSAGE_PAGE_SIZE, // Use the constant
+              offset: messageOffset,
+            },
+          }
+        : skipToken,
+      {
+        enabled: !!currentSessionId && !currentSessionId.startsWith("temp-"),
+        staleTime: 30000, // Cache for 30 seconds
+      },
+    );
 
   // Convert API messages to the app's message format
   const convertApiMessageToAppMessage = useCallback(
@@ -101,26 +115,31 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     [],
   );
 
-  // Reset display count when switching chats
+  // Reset display count and message offset when switching chats
   useEffect(() => {
-    setDisplayCount(6); // Reset to 6 messages on chat switch
+    setDisplayCount(MESSAGE_PAGE_SIZE); // Use the constant
+    setMessageOffset(0); // Reset offset when switching chats
   }, [currentSessionId]);
 
   // Load messages from API when currentSessionId changes
   useEffect(() => {
-    if (apiMessages && apiMessages.length > 0 && currentSessionId) {
+    if (
+      apiMessagesResponse &&
+      apiMessagesResponse.messages.length > 0 &&
+      currentSessionId
+    ) {
       // Convert API messages to app message format
       const newMessages: MessageMap = {};
       const newOrder: string[] = [];
 
       // Sort messages by creation time to ensure correct order
-      const sortedMessages = [...apiMessages].sort(
+      const sortedMessages = [...apiMessagesResponse.messages].sort(
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
 
-      // Update if there are more messages than we're displaying
-      setHasOlderMessages(sortedMessages.length > displayCount);
+      // Update if there are more messages based on API response stats
+      setHasOlderMessages(apiMessagesResponse.stats.has_more);
 
       // Only display the most recent messages up to displayCount
       const messagesToDisplay = sortedMessages.slice(-displayCount);
@@ -140,7 +159,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       setHasOlderMessages(false);
     }
   }, [
-    apiMessages,
+    apiMessagesResponse,
     currentSessionId,
     convertApiMessageToAppMessage,
     displayCount,
@@ -153,20 +172,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
 
   // Function to load older messages
   const loadOlderMessages = useCallback(() => {
-    if (apiMessages && apiMessages.length > displayCount) {
-      // Calculate how many new messages will be loaded
-      const newCount = Math.min(displayCount + 6, apiMessages.length);
-      const addedCount = newCount - displayCount;
+    if (apiMessagesResponse?.stats.has_more) {
+      // Increment offset to fetch earlier messages
+      setMessageOffset((currentOffset) => currentOffset + MESSAGE_PAGE_SIZE);
 
-      // Update last loaded count for UI feedback
-      setLastLoadedCount(addedCount);
-
-      // Increase the number of messages to display by 6 at a time
-      setDisplayCount((prevCount) =>
-        Math.min(prevCount + 6, apiMessages.length),
-      );
+      // Track how many new messages we loaded
+      setLastLoadedCount(apiMessagesResponse.stats.returned_count);
     }
-  }, [apiMessages, displayCount]);
+  }, [apiMessagesResponse, MESSAGE_PAGE_SIZE]);
 
   const updateMessage = useCallback(
     (messageId: string, updates: Partial<ChatMessage>) => {
@@ -295,7 +308,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     setMessageOrder((prev) => [...prev, message.id]);
   };
 
-  // Update the context value to include the new functions
+  // Memoize the chat context for performance
   const contextValue = useMemo(
     () => ({
       messages,
@@ -306,6 +319,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       hasOlderMessages,
       isLoading,
       lastLoadedCount,
+      apiMessagesResponse,
     }),
     [
       messages,
@@ -316,6 +330,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       hasOlderMessages,
       isLoading,
       lastLoadedCount,
+      apiMessagesResponse,
     ],
   );
 

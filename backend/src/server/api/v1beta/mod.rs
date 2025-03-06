@@ -258,13 +258,9 @@ pub async fn chat_messages(
     let chat_id = Uuid::parse_str(&chat_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Parse pagination parameters
-    let limit = params
-        .get("limit")
-        .and_then(|l| l.parse::<u64>().ok());
-    
-    let offset = params
-        .get("offset")
-        .and_then(|o| o.parse::<u64>().ok());
+    let limit = params.get("limit").and_then(|l| l.parse::<u64>().ok());
+
+    let offset = params.get("offset").and_then(|o| o.parse::<u64>().ok());
 
     // Get the messages for this chat
     let (messages, stats) = models::message::get_chat_messages(

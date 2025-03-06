@@ -5,7 +5,9 @@ use crate::models::pagination;
 use crate::policy::prelude::*;
 use eyre::{eyre, Report};
 use sea_orm::prelude::*;
-use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QueryOrder, QuerySelect};
+use sea_orm::{
+    ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QueryOrder, QuerySelect,
+};
 
 /// Indicates whether a chat was newly created or already existed
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,20 +136,16 @@ pub async fn get_recent_chats(
         .await?;
 
     // Use our pagination utility to efficiently calculate the total count
-    let (total_count, has_more) = pagination::calculate_total_count(
-        offset,
-        limit,
-        chats.len(),
-        || async {
+    let (total_count, has_more) =
+        pagination::calculate_total_count(offset, limit, chats.len(), || async {
             Chats::find()
                 .filter(chats::Column::OwnerUserId.eq(owner_user_id))
                 .find_also_related(chats_latest_message::Entity)
                 .filter(chats_latest_message::Column::LatestMessageId.is_not_null())
                 .count(conn)
                 .await
-        },
-    )
-    .await?;
+        })
+        .await?;
 
     // Should already be filtered to the correct user, but make sure to authorize.
     let authorized_chats: Vec<_> = chats
@@ -180,7 +178,7 @@ pub async fn get_recent_chats(
             }
         })
         .collect::<Vec<RecentChat>>();
-    
+
     // Create the statistics object
     let stats = ChatListStats {
         total_count: pagination::u64_to_i64_count(total_count),
@@ -188,7 +186,7 @@ pub async fn get_recent_chats(
         returned_count: recent_chats.len(),
         has_more,
     };
-    
+
     Ok((recent_chats, stats))
 }
 

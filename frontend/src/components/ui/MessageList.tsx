@@ -10,6 +10,7 @@ import { ChatMessage } from "./ChatMessage";
 import { ConversationIndicator } from "./ConversationIndicator";
 import { LoadMoreButton } from "./LoadMoreButton";
 
+import type { ChatMessagesResponse } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatMessage as ChatMessageType } from "../containers/ChatProvider";
 import type { UserProfile } from "@/types/chat";
 import type {
@@ -82,7 +83,7 @@ export interface MessageListProps {
   loadOlderMessages: () => void;
 
   /**
-   * Whether more messages are available to load
+   * Whether more messages are available
    */
   hasOlderMessages: boolean;
 
@@ -95,6 +96,16 @@ export interface MessageListProps {
    * The current chat/session ID
    */
   currentSessionId: string | null;
+
+  /**
+   * API response data with stats (optional)
+   */
+  apiMessagesResponse?: ChatMessagesResponse;
+
+  /**
+   * Number of messages to load per page
+   */
+  pageSize?: number;
 
   /**
    * Maximum width of messages in pixels
@@ -158,6 +169,8 @@ export const MessageList = memo<MessageListProps>(
     hasOlderMessages,
     isLoading,
     currentSessionId,
+    apiMessagesResponse,
+    pageSize = 6,
     maxWidth = 768,
     showTimestamps = true,
     showAvatars = false,
@@ -183,8 +196,8 @@ export const MessageList = memo<MessageListProps>(
     const { visibleData, hasMore, loadMore, isNewlyLoaded, paginationStats } =
       usePaginatedData({
         data: messageOrder,
-        initialCount: 6,
-        pageSize: 6,
+        initialCount: pageSize,
+        pageSize: pageSize,
         enabled: hasOlderMessages,
       });
 
@@ -193,18 +206,29 @@ export const MessageList = memo<MessageListProps>(
       () =>
         debounce(() => {
           if (isLoading) return; // Prevent multiple loads
-          
-          // Prioritize loading from backend if available
-          if (hasOlderMessages) {
+
+          // Prioritize loading from API based on stats
+          if (apiMessagesResponse?.stats.has_more) {
             loadOlderMessages();
           }
-          
-          // Always try client-side pagination as well
+          // Fall back to client-side pagination if API doesn't indicate more messages
+          else if (hasOlderMessages) {
+            loadOlderMessages();
+          }
+
+          // Always try client-side pagination as well if available
           if (hasMore) {
-            loadMore(); 
+            loadMore();
           }
         }, 300), // Adjust the debounce time as needed
-      [isLoading, loadOlderMessages, loadMore, hasOlderMessages, hasMore]
+      [
+        isLoading,
+        loadOlderMessages,
+        loadMore,
+        hasOlderMessages,
+        hasMore,
+        apiMessagesResponse,
+      ],
     );
 
     // Use the memoized debounced function
@@ -220,15 +244,37 @@ export const MessageList = memo<MessageListProps>(
     }, [debouncedLoadMore]);
 
     // Memoize derived values
-    const showLoadMoreButton = useMemo(
-      () => (hasOlderMessages || hasMore) && isScrolledUp,
-      [hasOlderMessages, hasMore, isScrolledUp],
-    );
+    const showLoadMoreButton = useMemo(() => {
+      // Get API pagination status
+      const hasMoreMessagesFromApi =
+        apiMessagesResponse?.stats.has_more ?? false;
 
-    const showBeginningIndicator = useMemo(
-      () => !hasMore && messageOrder.length > 0,
-      [hasMore, messageOrder.length],
-    );
+      // Show load more button in two cases:
+      // 1. API indicates more messages are available - show regardless of scroll position
+      if (hasMoreMessagesFromApi) {
+        return true;
+      }
+
+      // 2. There are locally cached messages (hasOlderMessages or hasMore) AND user is scrolled up
+      const hasMoreLocalMessages = hasOlderMessages || hasMore;
+      return hasMoreLocalMessages && isScrolledUp;
+    }, [apiMessagesResponse, hasOlderMessages, hasMore, isScrolledUp]);
+
+    const showBeginningIndicator = useMemo(() => {
+      // Only show the beginning indicator if:
+      // 1. API indicates no more messages are available
+      // 2. There are no more messages in client-side pagination
+      // 3. There are no more messages to load from the API
+      // 4. We have at least one message to display
+      const hasNoMoreMessagesFromApi =
+        apiMessagesResponse?.stats.has_more === false;
+      return (
+        !hasMore &&
+        !hasOlderMessages &&
+        hasNoMoreMessagesFromApi &&
+        messageOrder.length > 0
+      );
+    }, [apiMessagesResponse, hasMore, hasOlderMessages, messageOrder.length]);
 
     const shouldUseVirtualization = useMemo(
       () => useVirtualization && visibleData.length > virtualizationThreshold,
@@ -311,6 +357,14 @@ export const MessageList = memo<MessageListProps>(
       }
     }, [visibleData.length, checkScrollPosition, containerRef]);
 
+    // Force check when we receive new messages from API
+    useEffect(() => {
+      if (containerRef.current && apiMessagesResponse) {
+        // Short delay to ensure DOM is updated
+        setTimeout(() => checkScrollPosition(), 100);
+      }
+    }, [apiMessagesResponse, checkScrollPosition, containerRef]);
+
     return (
       <div
         ref={containerRef as React.RefObject<HTMLDivElement>}
@@ -332,8 +386,12 @@ export const MessageList = memo<MessageListProps>(
         {/* Debug info in development */}
         {process.env.NODE_ENV === "development" && (
           <div className="sticky top-0 right-0 text-xs opacity-50 z-50 text-right">
-            Showing {paginationStats.displayed} of {paginationStats.total}{" "}
+            Showing{" "}
+            {apiMessagesResponse?.stats.returned_count ??
+              paginationStats.displayed}{" "}
+            of {apiMessagesResponse?.stats.total_count ?? paginationStats.total}{" "}
             messages
+            {apiMessagesResponse?.stats.has_more && " (more available)"}
           </div>
         )}
 

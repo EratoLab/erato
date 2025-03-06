@@ -298,23 +298,44 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
 
     // Parse the response body as JSON
     let response_body: Value = response.json();
-    
+
     // Extract the chats array
-    let chats = response_body.get("chats").expect("Response missing 'chats' field").as_array()
+    let chats = response_body
+        .get("chats")
+        .expect("Response missing 'chats' field")
+        .as_array()
         .expect("'chats' field is not an array");
-    
+
     // Extract the stats object
-    let stats = response_body.get("stats").expect("Response missing 'stats' field");
-    
+    let stats = response_body
+        .get("stats")
+        .expect("Response missing 'stats' field");
+
     // Verify the stats fields
-    assert!(stats.get("total_count").is_some(), "Stats missing 'total_count' field");
-    assert!(stats.get("current_offset").is_some(), "Stats missing 'current_offset' field");
-    assert!(stats.get("returned_count").is_some(), "Stats missing 'returned_count' field");
-    assert!(stats.get("has_more").is_some(), "Stats missing 'has_more' field");
-    
+    assert!(
+        stats.get("total_count").is_some(),
+        "Stats missing 'total_count' field"
+    );
+    assert!(
+        stats.get("current_offset").is_some(),
+        "Stats missing 'current_offset' field"
+    );
+    assert!(
+        stats.get("returned_count").is_some(),
+        "Stats missing 'returned_count' field"
+    );
+    assert!(
+        stats.get("has_more").is_some(),
+        "Stats missing 'has_more' field"
+    );
+
     // Verify stats values
-    assert_eq!(stats.get("returned_count").unwrap().as_i64().unwrap(), 2, "Expected returned_count to be 2");
-    
+    assert_eq!(
+        stats.get("returned_count").unwrap().as_i64().unwrap(),
+        2,
+        "Expected returned_count to be 2"
+    );
+
     // Verify we have exactly 2 chats
     assert_eq!(chats.len(), 2, "Expected 2 chats, got {}", chats.len());
 
@@ -452,26 +473,51 @@ async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
 
     // Parse the response body as JSON
     let response_body: Value = response.json();
-    
+
     // Extract the messages array
-    let messages = response_body.get("messages").expect("Response missing 'messages' field").as_array()
+    let messages = response_body
+        .get("messages")
+        .expect("Response missing 'messages' field")
+        .as_array()
         .expect("'messages' field is not an array");
-    
+
     // Extract the stats object
-    let stats = response_body.get("stats").expect("Response missing 'stats' field");
-    
+    let stats = response_body
+        .get("stats")
+        .expect("Response missing 'stats' field");
+
     // Verify the stats fields
-    assert!(stats.get("total_count").is_some(), "Stats missing 'total_count' field");
-    assert!(stats.get("current_offset").is_some(), "Stats missing 'current_offset' field");
-    assert!(stats.get("returned_count").is_some(), "Stats missing 'returned_count' field");
-    assert!(stats.get("has_more").is_some(), "Stats missing 'has_more' field");
-    
+    assert!(
+        stats.get("total_count").is_some(),
+        "Stats missing 'total_count' field"
+    );
+    assert!(
+        stats.get("current_offset").is_some(),
+        "Stats missing 'current_offset' field"
+    );
+    assert!(
+        stats.get("returned_count").is_some(),
+        "Stats missing 'returned_count' field"
+    );
+    assert!(
+        stats.get("has_more").is_some(),
+        "Stats missing 'has_more' field"
+    );
+
     // Verify stats values
-    assert_eq!(stats.get("total_count").unwrap().as_i64().unwrap(), stats.get("returned_count").unwrap().as_i64().unwrap(),
-              "total_count should match returned_count since we're fetching all messages");
+    assert_eq!(
+        stats.get("total_count").unwrap().as_i64().unwrap(),
+        stats.get("returned_count").unwrap().as_i64().unwrap(),
+        "total_count should match returned_count since we're fetching all messages"
+    );
 
     // Verify we have exactly 4 messages (2 user messages + 2 assistant responses)
-    assert_eq!(messages.len(), 4, "Expected 4 messages, got {}", messages.len());
+    assert_eq!(
+        messages.len(),
+        4,
+        "Expected 4 messages, got {}",
+        messages.len()
+    );
 
     // Verify the messages have the expected structure and content
     let user_messages = messages
@@ -729,26 +775,51 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
 
     // Parse the response body as JSON
     let response_body: Value = response.json();
-    
+
     // Extract the messages array
-    let messages = response_body.get("messages").expect("Response missing 'messages' field").as_array()
+    let messages = response_body
+        .get("messages")
+        .expect("Response missing 'messages' field")
+        .as_array()
         .expect("'messages' field is not an array");
-    
+
     // Extract the stats object
-    let stats = response_body.get("stats").expect("Response missing 'stats' field");
-    
+    let stats = response_body
+        .get("stats")
+        .expect("Response missing 'stats' field");
+
     // Verify the stats fields
-    assert!(stats.get("total_count").is_some(), "Stats missing 'total_count' field");
-    assert!(stats.get("current_offset").is_some(), "Stats missing 'current_offset' field");
-    assert!(stats.get("returned_count").is_some(), "Stats missing 'returned_count' field");
-    assert!(stats.get("has_more").is_some(), "Stats missing 'has_more' field");
-    
+    assert!(
+        stats.get("total_count").is_some(),
+        "Stats missing 'total_count' field"
+    );
+    assert!(
+        stats.get("current_offset").is_some(),
+        "Stats missing 'current_offset' field"
+    );
+    assert!(
+        stats.get("returned_count").is_some(),
+        "Stats missing 'returned_count' field"
+    );
+    assert!(
+        stats.get("has_more").is_some(),
+        "Stats missing 'has_more' field"
+    );
+
     // Verify stats values
-    assert_eq!(stats.get("total_count").unwrap().as_i64().unwrap(), stats.get("returned_count").unwrap().as_i64().unwrap(),
-              "total_count should match returned_count since we're fetching all messages");
+    assert_eq!(
+        stats.get("total_count").unwrap().as_i64().unwrap(),
+        stats.get("returned_count").unwrap().as_i64().unwrap(),
+        "total_count should match returned_count since we're fetching all messages"
+    );
 
     // Verify we have exactly 5 messages in total (2 user messages + 3 assistant responses, but only 2 active)
-    assert_eq!(messages.len(), 5, "Expected 5 total messages, got {}", messages.len());
+    assert_eq!(
+        messages.len(),
+        5,
+        "Expected 5 total messages, got {}",
+        messages.len()
+    );
 
     // Verify we have exactly 2 active messages (1 user message + 1 assistant response)
     let active_messages = messages
@@ -760,7 +831,12 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
         })
         .collect::<Vec<_>>();
 
-    assert_eq!(active_messages.len(), 2, "Expected 2 active messages, got {}", active_messages.len());
+    assert_eq!(
+        active_messages.len(),
+        2,
+        "Expected 2 active messages, got {}",
+        active_messages.len()
+    );
 
     // Verify the active messages have the expected roles
     let active_user_messages = active_messages
@@ -773,19 +849,41 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
         .filter(|msg| msg["role"].as_str().unwrap_or("") == "assistant")
         .collect::<Vec<_>>();
 
-    assert_eq!(active_user_messages.len(), 1, "Expected 1 active user message, got {}", active_user_messages.len());
-    assert_eq!(active_assistant_messages.len(), 1, "Expected 1 active assistant message, got {}", active_assistant_messages.len());
+    assert_eq!(
+        active_user_messages.len(),
+        1,
+        "Expected 1 active user message, got {}",
+        active_user_messages.len()
+    );
+    assert_eq!(
+        active_assistant_messages.len(),
+        1,
+        "Expected 1 active assistant message, got {}",
+        active_assistant_messages.len()
+    );
 
     // Verify the active user message is the first message
-    assert_eq!(active_user_messages[0]["full_text"].as_str().unwrap_or(""), first_message, "Active user message does not match the first message");
+    assert_eq!(
+        active_user_messages[0]["full_text"].as_str().unwrap_or(""),
+        first_message,
+        "Active user message does not match the first message"
+    );
 
     // Verify the active assistant message is the regenerated message
-    assert_eq!(active_assistant_messages[0]["id"].as_str().unwrap_or(""), regenerated_message_id, "Active assistant message is not the regenerated message");
+    assert_eq!(
+        active_assistant_messages[0]["id"].as_str().unwrap_or(""),
+        regenerated_message_id,
+        "Active assistant message is not the regenerated message"
+    );
 
     // Verify that the regenerated message has the original message listed as sibling message
-    assert_eq!(active_assistant_messages[0]["sibling_message_id"]
+    assert_eq!(
+        active_assistant_messages[0]["sibling_message_id"]
             .as_str()
-            .unwrap_or(""), assistant_message_id, "Regenerated message does not have the original message as sibling");
+            .unwrap_or(""),
+        assistant_message_id,
+        "Regenerated message does not have the original message as sibling"
+    );
 
     // Verify that the original assistant message is not in the active thread
     let original_assistant_message = messages

@@ -13,10 +13,10 @@ pub mod pagination {
     }
 
     /// Calculate a total count estimate without doing a full COUNT query when possible
-    /// 
+    ///
     /// This optimizes by avoiding an expensive COUNT query when we already know
     /// the total or can determine if there are more items.
-    /// 
+    ///
     /// Parameters:
     /// - offset: The current offset in the pagination
     /// - limit: The requested limit of items per page
@@ -37,11 +37,11 @@ pub mod pagination {
             let total = offset + (returned_count as u64);
             return Ok((total, false));
         }
-        
+
         // Otherwise, we need to do a COUNT query to get the exact total
         let total = do_count_query().await?;
         let has_more = (offset + (returned_count as u64)) < total;
-        
+
         Ok((total, has_more))
     }
 
@@ -110,7 +110,7 @@ mod tests {
         // When we get fewer items than the limit, we should know the exact count
         // without doing a COUNT query
         let mut count_query_called = false;
-        
+
         let (total, has_more) = pagination::calculate_total_count(
             10, // offset
             20, // limit
@@ -122,18 +122,21 @@ mod tests {
         )
         .await
         .unwrap();
-        
+
         // Should calculate total as offset + returned_count
         assert_eq!(total, 25);
         assert!(!has_more, "Should not have more items");
-        assert!(!count_query_called, "COUNT query should not be called for partial page");
+        assert!(
+            !count_query_called,
+            "COUNT query should not be called for partial page"
+        );
     }
-    
+
     #[tokio::test]
     async fn test_calculate_total_count_with_full_page() {
         // When we get exactly the limit, we need to do a COUNT query
         let mut count_query_called = false;
-        
+
         let (total, has_more) = pagination::calculate_total_count(
             10, // offset
             20, // limit
@@ -145,17 +148,20 @@ mod tests {
         )
         .await
         .unwrap();
-        
+
         assert_eq!(total, 50);
         assert!(has_more, "Should have more items");
-        assert!(count_query_called, "COUNT query should be called for full page");
+        assert!(
+            count_query_called,
+            "COUNT query should be called for full page"
+        );
     }
-    
+
     #[tokio::test]
     async fn test_calculate_total_count_with_full_page_no_more() {
         // When we get a full page but there are no more items
         let mut count_query_called = false;
-        
+
         let (total, has_more) = pagination::calculate_total_count(
             10, // offset
             20, // limit
@@ -167,24 +173,27 @@ mod tests {
         )
         .await
         .unwrap();
-        
+
         assert_eq!(total, 30);
         assert!(!has_more, "Should not have more items");
-        assert!(count_query_called, "COUNT query should be called even if no more items");
+        assert!(
+            count_query_called,
+            "COUNT query should be called even if no more items"
+        );
     }
-    
+
     #[test]
     fn test_u64_to_i64_count_normal() {
         let result = pagination::u64_to_i64_count(100);
         assert_eq!(result, 100);
     }
-    
+
     #[test]
     fn test_u64_to_i64_count_max() {
         // Test with a value larger than i64::MAX
         let huge_value = u64::MAX;
         let result = pagination::u64_to_i64_count(huge_value);
-        
+
         // Should cap at i64::MAX
         assert_eq!(result, i64::MAX);
     }

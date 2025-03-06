@@ -78,6 +78,7 @@ export const Chat = ({
     isLoading: chatLoading,
     hasOlderMessages,
     loadOlderMessages,
+    apiMessagesResponse,
   } = useChat();
   const { profile } = useProfile();
   const {
@@ -113,6 +114,9 @@ export const Chat = ({
     [messageOrder.length],
   );
 
+  // Define a constant for the page size
+  const messagePageSize = 6;
+
   return (
     <div className="flex h-full w-full flex-col sm:flex-row">
       <ChatHistorySidebar
@@ -145,6 +149,8 @@ export const Chat = ({
           hasOlderMessages={hasOlderMessages}
           isLoading={chatLoading}
           currentSessionId={currentSessionId}
+          apiMessagesResponse={apiMessagesResponse}
+          pageSize={messagePageSize}
           maxWidth={maxWidth}
           showTimestamps={showTimestamps}
           showAvatars={showAvatars}
