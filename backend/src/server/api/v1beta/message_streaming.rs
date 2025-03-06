@@ -447,6 +447,52 @@ async fn stream_save_generated_completion<
     Ok(())
 }
 
+/// Generate a summary of the chat, based on the first message to the chat.
+pub async fn generate_chat_summary(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    chat: &chats::Model,
+    first_message: &messages::Model,
+) -> Result<(), Report> {
+    let first_message_content = MessageSchema::validate(&first_message.raw_message)?;
+    let first_message_content_text = first_message_content.full_text();
+
+    let prompt = format!(
+        "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description like e.g. `Regex Search-and-Replace with Ripgrep` or `Explain a customer support flow`. Only return that sentence and nothing else. The chat message : {}",
+        first_message_content_text
+    );
+
+    let mut chat_request: ChatRequest = Default::default();
+    chat_request = chat_request.append_message(GenAiChatMessage::user(prompt));
+    let chat_options = ChatOptions::default()
+        .with_capture_content(true)
+        .with_max_tokens(30);
+
+    let summary_completion = app_state
+        .genai()
+        .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
+        .await?;
+
+    let summary = summary_completion
+        .content
+        .ok_or_else(|| eyre!("No captured content in chat stream end event"))?
+        .text_into_string()
+        .ok_or_else(|| eyre!("Expected text response"))?;
+
+    // Update the chat with the generated summary
+    crate::models::chat::update_chat_summary(
+        &app_state.db,
+        &app_state.policy,
+        &me_user.to_subject(),
+        &chat.id,
+        summary,
+    )
+    .await
+    .map_err(|e| eyre!("Failed to update chat summary: {}", e))?;
+
+    Ok(())
+}
+
 #[utoipa::path(
     post,
     path = "/me/messages/submitstream",
@@ -470,7 +516,7 @@ pub async fn message_submit_sse(
 
     // Spawn a task to process the request and send events
     tokio::spawn(async move {
-        let (chat, _chat_status) =
+        let (chat, chat_status) =
             stream_get_or_create_chat::<MessageSubmitStreamingResponseMessage>(
                 tx.clone(),
                 &app_state,
@@ -488,6 +534,23 @@ pub async fn message_submit_sse(
             &request.user_message,
         )
         .await?;
+
+        if chat_status == ChatCreationStatus::Created {
+            let app_state_clone = app_state.clone();
+            let me_user_clone = me_user.clone();
+            let chat_clone = chat.clone();
+            let saved_user_message_clone = saved_user_message.clone();
+            tokio::spawn(async move {
+                generate_chat_summary(
+                    &app_state_clone,
+                    &me_user_clone,
+                    &chat_clone,
+                    &saved_user_message_clone,
+                )
+                .await?;
+                Ok::<(), Report>(())
+            });
+        }
 
         let (chat_request, chat_options) = prepare_chat_request(request.user_message).await?;
 

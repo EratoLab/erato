@@ -138,9 +138,11 @@ pub async fn get_recent_chats(
                 .expect("Latest message should never be None");
             RecentChat {
                 id: chat.id.to_string(),
-                // title_by_summary: latest_message.title_by_summary.clone(),
-                // TODO: Implement summary generation
-                title_by_summary: "Title summary".to_string(),
+                // Use the chat's title_by_summary if available, otherwise use a default
+                title_by_summary: chat
+                    .title_by_summary
+                    .clone()
+                    .unwrap_or_else(|| "Untitled Chat".to_string()),
                 last_message_at: latest_message.latest_message_at,
             }
         })
@@ -175,4 +177,35 @@ pub async fn get_chat_by_message_id(
     )?;
 
     Ok(chat)
+}
+
+/// Update the title_by_summary field of a chat
+pub async fn update_chat_summary(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+    summary: String,
+) -> Result<chats::Model, Report> {
+    // Find the chat
+    let chat = Chats::find_by_id(*chat_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
+
+    // Authorize the user to update the chat
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat.id.to_string()),
+        Action::Update
+    )?;
+
+    // Update the chat
+    let mut chat_active: chats::ActiveModel = chat.clone().into();
+    chat_active.title_by_summary = ActiveValue::Set(Some(summary));
+
+    let updated_chat = chat_active.update(conn).await?;
+
+    Ok(updated_chat)
 }
