@@ -7,10 +7,12 @@ use crate::models;
 use crate::models::chat::get_recent_chats;
 use crate::models::message::MessageSchema;
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
-use crate::server::api::v1beta::message_streaming::__path_message_submit_sse;
 use crate::server::api::v1beta::message_streaming::message_submit_sse;
 use crate::server::api::v1beta::message_streaming::{
     MessageSubmitRequest, MessageSubmitStreamingResponseMessage,
+};
+use crate::server::api::v1beta::message_streaming::{
+    __path_message_submit_sse, __path_regenerate_message_sse, regenerate_message_sse,
 };
 use crate::state::AppState;
 use axum::extract::{Path, State};
@@ -30,6 +32,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     let me_routes = Router::new()
         .route("/profile", get(profile))
         .route("/messages/submitstream", post(message_submit_sse))
+        .route("/messages/regeneratestream", post(regenerate_message_sse))
         .route("/recent_chats", get(recent_chats))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
@@ -61,6 +64,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         chats,
         recent_chats,
         message_submit_sse,
+        regenerate_message_sse,
         profile,
         chat_messages
     ),

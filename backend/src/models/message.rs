@@ -3,7 +3,7 @@ use crate::db::entity::prelude::*;
 use crate::policy::prelude::*;
 use eyre::{eyre, Report};
 use sea_orm::prelude::*;
-use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, QueryOrder};
+use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, QueryOrder, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::fmt;
@@ -144,23 +144,66 @@ pub async fn submit_message(
         }
     }
 
-    // If this is a sibling message, we need to update the active thread status
-    // of the existing sibling to make it inactive
-    if let Some(sibling_id) = sibling_message_id {
-        let update = messages::ActiveModel {
-            id: ActiveValue::Set(*sibling_id),
-            is_message_in_active_thread: ActiveValue::Set(false),
-            ..Default::default()
-        };
+    // Begin a transaction
+    let txn = conn
+        .begin()
+        .await
+        .map_err(|e| eyre!("Failed to begin transaction: {}", e))?;
 
-        // Update the sibling message to be inactive in the thread
-        messages::Entity::update(update)
-            .filter(messages::Column::Id.eq(*sibling_id))
-            .exec(conn)
-            .await?;
+    // Step 1: Set is_message_in_active_thread to false for all messages in the chat
+    let update_all = messages::ActiveModel {
+        is_message_in_active_thread: ActiveValue::Set(false),
+        ..Default::default()
+    };
+
+    messages::Entity::update_many()
+        .set(update_all)
+        .filter(messages::Column::ChatId.eq(*chat_id))
+        .exec(&txn)
+        .await
+        .map_err(|e| eyre!("Failed to update all messages: {}", e))?;
+
+    // Step 2: If there's a previous message, recursively set is_message_in_active_thread to true
+    // for all messages in the lineage
+    if let Some(prev_msg_id) = previous_message_id {
+        let mut current_msg_id = *prev_msg_id;
+
+        // Keep track of visited message IDs to avoid infinite loops
+        let mut visited_ids = std::collections::HashSet::new();
+
+        while !visited_ids.contains(&current_msg_id) {
+            visited_ids.insert(current_msg_id);
+
+            // Set the current message to active
+            let update = messages::ActiveModel {
+                id: ActiveValue::Set(current_msg_id),
+                is_message_in_active_thread: ActiveValue::Set(true),
+                ..Default::default()
+            };
+
+            messages::Entity::update(update)
+                .filter(messages::Column::Id.eq(current_msg_id))
+                .exec(&txn)
+                .await
+                .map_err(|e| eyre!("Failed to update message {}: {}", current_msg_id, e))?;
+
+            // Get the previous message ID
+            let message = Messages::find_by_id(current_msg_id)
+                .one(&txn)
+                .await
+                .map_err(|e| eyre!("Failed to find message {}: {}", current_msg_id, e))?
+                .ok_or_else(|| eyre!("Message with ID {} not found", current_msg_id))?;
+
+            // If there's no previous message, break the loop
+            if let Some(prev_id) = message.previous_message_id {
+                current_msg_id = prev_id;
+            } else {
+                break;
+            }
+        }
     }
 
-    // Create and insert the new message
+    // Step 3: Create and insert the new message
     let new_message = messages::ActiveModel {
         chat_id: ActiveValue::Set(*chat_id),
         raw_message: ActiveValue::Set(raw_message),
@@ -172,8 +215,14 @@ pub async fn submit_message(
     };
 
     let created_message = messages::Entity::insert(new_message)
-        .exec_with_returning(conn)
-        .await?;
+        .exec_with_returning(&txn)
+        .await
+        .map_err(|e| eyre!("Failed to insert new message: {}", e))?;
+
+    // Commit the transaction
+    txn.commit()
+        .await
+        .map_err(|e| eyre!("Failed to commit transaction: {}", e))?;
 
     Ok(created_message)
 }
@@ -204,4 +253,27 @@ pub async fn get_chat_messages(
         .await?;
 
     Ok(messages)
+}
+
+pub async fn get_message_by_id(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    message_id: &Uuid,
+) -> Result<messages::Model, Report> {
+    // Find the message
+    let message = Messages::find_by_id(*message_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Message with ID {} not found", message_id))?;
+
+    // Authorize that the subject can read this message
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(message.chat_id.to_string()),
+        Action::Read
+    )?;
+
+    Ok(message)
 }

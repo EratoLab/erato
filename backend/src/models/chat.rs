@@ -147,3 +147,32 @@ pub async fn get_recent_chats(
         .collect();
     Ok(recent_chats)
 }
+
+pub async fn get_chat_by_message_id(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    message_id: &Uuid,
+) -> Result<chats::Model, Report> {
+    // Find the message to get its chat_id
+    let message = Messages::find_by_id(*message_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Message with ID {} not found", message_id))?;
+
+    // Find the chat
+    let chat = Chats::find_by_id(message.chat_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Chat with ID {} not found", message.chat_id))?;
+
+    // Authorize that the subject can read this chat
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat.id.to_string()),
+        Action::Read
+    )?;
+
+    Ok(chat)
+}

@@ -185,6 +185,52 @@ export const useChatMessages = <TData = ChatMessagesResponse,>(
   });
 };
 
+export type RegenerateMessageSseError = Fetcher.ErrorWrapper<undefined>;
+
+export type RegenerateMessageSseVariables = {
+  body: Schemas.RegenerateMessageRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchRegenerateMessageSse = (
+  variables: RegenerateMessageSseVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    RegenerateMessageSseError,
+    Schemas.RegenerateMessageRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/messages/regeneratestream",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useRegenerateMessageSse = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      RegenerateMessageSseError,
+      RegenerateMessageSseVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    RegenerateMessageSseError,
+    RegenerateMessageSseVariables
+  >({
+    mutationFn: (variables: RegenerateMessageSseVariables) =>
+      fetchRegenerateMessageSse(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type MessageSubmitSseError = Fetcher.ErrorWrapper<undefined>;
 
 export type MessageSubmitSseVariables = {

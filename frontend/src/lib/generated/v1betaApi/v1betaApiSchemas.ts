@@ -132,6 +132,24 @@ export type RecentChat = {
   title_by_summary: string;
 };
 
+export type RegenerateMessageRequest = {
+  /**
+   * The ID of the message that should have a replacement response generated.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  current_message_id: string;
+};
+
+export type RegenerateMessageStreamingResponseMessage =
+  | (MessageSubmitStreamingResponseMessageComplete & {
+      message_type: "message_complete";
+    })
+  | (MessageSubmitStreamingResponseMessageTextDelta & {
+      message_type: "text_delta";
+    });
+
 export type UserProfile = {
   /**
    * The user's email address. Shouldn't be used as a unique identifier, as it may change.

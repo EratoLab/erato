@@ -514,3 +514,304 @@ async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
         );
     }
 }
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
+    // Set up the test environment
+    let app_config = test_app_config();
+    let app_state = test_app_state(app_config, pool);
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a mock JWT for authentication
+    let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
+
+    // Step 1: Send a message to a new chat
+    let first_message = "First test message for regeneration test";
+    let message_request = json!({
+        "previous_message_id": null,
+        "user_message": first_message
+    });
+
+    // Send the first message to create a chat
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response to get the chat ID and message ID
+    let response_text = response.text();
+    let lines: Vec<&str> = response_text.lines().collect();
+
+    // Find the chat_created event and extract the chat ID
+    let mut chat_id = String::new();
+    for i in 0..lines.len() - 1 {
+        if lines[i] == "event: chat_created" {
+            // The data is on the next line, prefixed with "data: "
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse chat_created data");
+
+                chat_id = data_json["chat_id"]
+                    .as_str()
+                    .expect("Expected chat_id to be a string")
+                    .to_string();
+
+                break;
+            }
+        }
+    }
+
+    assert!(
+        !chat_id.is_empty(),
+        "Failed to extract chat_id from response"
+    );
+
+    // Find the user_message_saved event and extract the user message ID
+    let mut user_message_id = String::new();
+    for i in 0..lines.len() - 1 {
+        if lines[i] == "event: user_message_saved" {
+            // The data is on the next line, prefixed with "data: "
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse user_message_saved data");
+
+                user_message_id = data_json["message_id"]
+                    .as_str()
+                    .expect("Expected message_id to be a string")
+                    .to_string();
+
+                break;
+            }
+        }
+    }
+
+    assert!(
+        !user_message_id.is_empty(),
+        "Failed to extract user message_id from response"
+    );
+
+    // Find the message_complete event and extract the assistant message ID
+    let mut assistant_message_id = String::new();
+    for i in 0..lines.len() - 1 {
+        if lines[i] == "event: message_complete" {
+            // The data is on the next line, prefixed with "data: "
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse message_complete data");
+
+                assistant_message_id = data_json["message_id"]
+                    .as_str()
+                    .expect("Expected message_id to be a string")
+                    .to_string();
+
+                break;
+            }
+        }
+    }
+
+    assert!(
+        !assistant_message_id.is_empty(),
+        "Failed to extract assistant message_id from response"
+    );
+
+    // Step 2: Send a follow-up message to the chat
+    let second_message = "Second test message for regeneration test";
+    let message_request = json!({
+        "previous_message_id": assistant_message_id,
+        "user_message": second_message
+    });
+
+    // Send the second message
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Step 3: Use the regenerate message endpoint with the assistant message from the first message
+    let regenerate_request = json!({
+        "current_message_id": assistant_message_id
+    });
+
+    let response = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&regenerate_request)
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response to get the regenerated message ID
+    let response_text = response.text();
+    let lines: Vec<&str> = response_text.lines().collect();
+
+    // Find the message_complete event and extract the regenerated message ID
+    let mut regenerated_message_id = String::new();
+    for i in 0..lines.len() - 1 {
+        if lines[i] == "event: message_complete" {
+            // The data is on the next line, prefixed with "data: "
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse message_complete data");
+
+                regenerated_message_id = data_json["message_id"]
+                    .as_str()
+                    .expect("Expected message_id to be a string")
+                    .to_string();
+
+                break;
+            }
+        }
+    }
+
+    assert!(
+        !regenerated_message_id.is_empty(),
+        "Failed to extract regenerated message_id from response"
+    );
+
+    // Step 4: List messages and check that there are only two active messages
+    let response = server
+        .get(&format!("/api/v1beta/chats/{}/messages", chat_id))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response body as JSON
+    let messages: Vec<Value> = response.json();
+
+    // Count the active messages
+    let active_messages = messages
+        .iter()
+        .filter(|msg| {
+            msg["is_message_in_active_thread"]
+                .as_bool()
+                .unwrap_or(false)
+        })
+        .collect::<Vec<_>>();
+
+    // Verify we have exactly 5 messages in total (2 user messages + 3 assistant responses, but only 2 active)
+    assert_eq!(
+        messages.len(),
+        5,
+        "Expected 5 total messages, got {}",
+        messages.len()
+    );
+
+    // Verify we have exactly 2 active messages (1 user message + 1 assistant response)
+    assert_eq!(
+        active_messages.len(),
+        2,
+        "Expected 2 active messages, got {}",
+        active_messages.len()
+    );
+
+    // Verify the active messages have the expected roles
+    let active_user_messages = active_messages
+        .iter()
+        .filter(|msg| msg["role"].as_str().unwrap_or("") == "user")
+        .collect::<Vec<_>>();
+
+    let active_assistant_messages = active_messages
+        .iter()
+        .filter(|msg| msg["role"].as_str().unwrap_or("") == "assistant")
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        active_user_messages.len(),
+        1,
+        "Expected 1 active user message, got {}",
+        active_user_messages.len()
+    );
+
+    assert_eq!(
+        active_assistant_messages.len(),
+        1,
+        "Expected 1 active assistant message, got {}",
+        active_assistant_messages.len()
+    );
+
+    // Verify the active user message is the first message
+    assert_eq!(
+        active_user_messages[0]["full_text"].as_str().unwrap_or(""),
+        first_message,
+        "Active user message does not match the first message"
+    );
+
+    // Verify the active assistant message is the regenerated message
+    assert_eq!(
+        active_assistant_messages[0]["id"].as_str().unwrap_or(""),
+        regenerated_message_id,
+        "Active assistant message is not the regenerated message"
+    );
+
+    // Verify that the regenerated message has the original message listed as sibling message
+    assert_eq!(
+        active_assistant_messages[0]["sibling_message_id"]
+            .as_str()
+            .unwrap_or(""),
+        assistant_message_id,
+        "Regenerated message does not have the original message as sibling"
+    );
+
+    // Verify that the original assistant message is not in the active thread
+    let original_assistant_message = messages
+        .iter()
+        .find(|msg| msg["id"].as_str().unwrap_or("") == assistant_message_id)
+        .expect("Original assistant message not found in messages list");
+
+    assert!(
+        !original_assistant_message["is_message_in_active_thread"]
+            .as_bool()
+            .unwrap_or(true),
+        "Original assistant message should not be in the active thread"
+    );
+
+    // Verify that the first user message is in the active thread
+    let first_user_message = messages
+        .iter()
+        .find(|msg| msg["full_text"].as_str().unwrap_or("") == first_message)
+        .expect("First user message not found in messages list");
+
+    assert!(
+        first_user_message["is_message_in_active_thread"]
+            .as_bool()
+            .unwrap_or(false),
+        "First user message should be in the active thread"
+    );
+
+    // Verify that the second user message is not in the active thread
+    let second_user_message = messages
+        .iter()
+        .find(|msg| msg["full_text"].as_str().unwrap_or("") == second_message)
+        .expect("Second user message not found in messages list");
+
+    assert!(
+        !second_user_message["is_message_in_active_thread"]
+            .as_bool()
+            .unwrap_or(true),
+        "Second user message should not be in the active thread"
+    );
+}
