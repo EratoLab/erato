@@ -1,10 +1,12 @@
+import { clsx } from "clsx";
 import React, { memo } from "react";
+
 import { Avatar } from "./Avatar";
 import { DropdownMenu } from "./DropdownMenu";
 import { LogOutIcon, SunIcon, MoonIcon } from "./icons";
-import type { UserProfile } from "@/types/chat";
-import { clsx } from "clsx";
 import { useTheme } from "../providers/ThemeProvider";
+
+import type { UserProfile } from "@/types/chat";
 
 interface UserProfileDropdownProps {
   userProfile?: UserProfile;

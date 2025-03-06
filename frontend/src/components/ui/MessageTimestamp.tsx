@@ -1,6 +1,6 @@
-import React, { memo, useEffect, useState } from "react";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
+import React, { memo, useEffect, useState } from "react";
 import { useUpdateEffect } from "react-use";
 
 interface MessageTimestampProps {

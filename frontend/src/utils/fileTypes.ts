@@ -270,7 +270,7 @@ export class FileTypeUtil {
    * @returns The file extension or empty string if no extension
    */
   private static getExtension(filename: string): string {
-    return filename.split(".").pop() || "";
+    return filename.split(".").pop() ?? "";
   }
 
   /**

@@ -1,7 +1,8 @@
-import React from "react";
 import clsx from "clsx";
 import Image from "next/image";
-import { UserProfile } from "@/types/chat";
+import React from "react";
+
+import type { UserProfile } from "@/types/chat";
 
 export interface AvatarProps {
   userProfile?: UserProfile;
@@ -20,7 +21,7 @@ export const Avatar = React.memo<AvatarProps>(
         const nameParts = userProfile.name.split(" ");
         return `${nameParts[0][0]}${nameParts[1] ? nameParts[1][0] : ""}`.toUpperCase();
       }
-      if (userProfile?.firstName && userProfile?.lastName) {
+      if (userProfile?.firstName && userProfile.lastName) {
         return `${userProfile.firstName[0]}${userProfile.lastName[0]}`.toUpperCase();
       }
       if (userProfile?.username) {

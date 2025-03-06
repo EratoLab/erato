@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo } from "react";
 import clsx from "clsx";
+import React, { useCallback, useMemo } from "react";
 
 // Create a type for variants to improve type safety
 type ButtonVariant =
@@ -110,7 +110,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     // Memoize role determination
     const role = useMemo(
-      () => explicitRole || (variant === "list-item" ? "menuitem" : undefined),
+      () => explicitRole ?? (variant === "list-item" ? "menuitem" : undefined),
       [explicitRole, variant],
     );
 

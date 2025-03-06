@@ -14,7 +14,7 @@ declare global {
 
 export const env = (): Env => {
   const apiRootUrl =
-    process.env.NEXT_PUBLIC_API_ROOT_URL || window.API_ROOT_URL;
+    process.env.NEXT_PUBLIC_API_ROOT_URL ?? window.API_ROOT_URL;
   if (!apiRootUrl) {
     throw new Error("API_ROOT_URL not set");
   }

@@ -1,4 +1,5 @@
 import { useContext } from "react";
+
 import { ProfileContext } from "../components/containers/ProfileProvider";
 
 export const useProfile = () => {

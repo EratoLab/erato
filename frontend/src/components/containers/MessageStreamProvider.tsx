@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useCallback, useState } from "react";
 import { SSE } from "sse.js";
+
 import { env } from "../../app/env";
-import { MessageSubmitStreamingResponseMessage } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
+
+import type { MessageSubmitStreamingResponseMessage } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
 // import type { ChatMessage } from '../../types/chat';
 
 interface StreamingState {

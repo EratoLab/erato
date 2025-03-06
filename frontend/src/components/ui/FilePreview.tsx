@@ -1,7 +1,9 @@
-import React from "react";
-import clsx from "clsx";
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import clsx from "clsx";
+import React from "react";
+
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
+
 import { Button } from "./Button";
 
 interface FilePreviewProps {
@@ -94,7 +96,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
 const truncateFilename = (filename: string, maxLength = 30): string => {
   if (filename.length <= maxLength) return filename;
 
-  const extension = filename.split(".").pop() || "";
+  const extension = filename.split(".").pop() ?? "";
   const nameWithoutExtension = filename.substring(
     0,
     filename.length - extension.length - 1,

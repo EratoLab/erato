@@ -56,6 +56,34 @@ The project uses ESLint with enhanced TypeScript type checking to catch potentia
 - `just type-check` - Run TypeScript type checking
 - `just strict-check` - Run strict linting with type checking
 
+### Enhanced ESLint Rules
+
+The project uses several ESLint plugins and rules to enforce code quality:
+
+#### Type Safety
+
+- Strict promise handling prevents unhandled rejections
+- Optional chaining and nullish coalescing operators are preferred
+- Unnecessary type assertions and non-null assertions are flagged
+
+#### React Best Practices
+
+- React Hooks rules to prevent common bugs
+- Safe use of JSX props and attributes
+- Security rules for dangerous HTML and links
+
+#### Accessibility
+
+- Basic accessibility rules for JSX elements
+- ARIA attributes validation
+- Alt text requirements for images
+
+#### Code Organization
+
+- Import/export organization and sorting
+- Consistent type imports
+- No duplicate imports
+
 ### Common Issues and How to Fix Them
 
 #### Floating Promises
@@ -96,6 +124,38 @@ Fix by creating a handler function:
 <button onClick={() => void somePromiseFunction()} />
 // or
 <button onClick={async () => await somePromiseFunction()} />
+```
+
+#### Unnecessary Type Assertions
+
+Error: `This assertion is unnecessary since it doesn't change the type of the expression.`
+
+Fix by removing the unnecessary type assertion:
+
+```typescript
+// Bad
+const value = someValue as string;
+
+// Good
+const value = someValue; // If already typed as string
+```
+
+#### Missing Hook Dependencies
+
+Warning: `React Hook useEffect has a missing dependency: 'someValue'`
+
+Fix by adding the missing dependency:
+
+```typescript
+// Bad
+useEffect(() => {
+  doSomething(someValue);
+}, []); // Missing dependency
+
+// Good
+useEffect(() => {
+  doSomething(someValue);
+}, [someValue]); // Properly included dependency
 ```
 
 ## Learn More

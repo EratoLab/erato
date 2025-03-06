@@ -1,9 +1,5 @@
 "use client";
 
-import React from "react";
-import clsx from "clsx";
-import { Button } from "./Button";
-import { MessageTimestamp } from "./MessageTimestamp";
 import {
   ClipboardDocumentIcon,
   HandThumbUpIcon,
@@ -11,7 +7,13 @@ import {
   ArrowPathIcon,
   PencilSquareIcon,
 } from "@heroicons/react/24/outline";
-import {
+import clsx from "clsx";
+import React from "react";
+
+import { Button } from "./Button";
+import { MessageTimestamp } from "./MessageTimestamp";
+
+import type {
   MessageControlsProps,
   MessageActionType,
 } from "../../types/message-controls";

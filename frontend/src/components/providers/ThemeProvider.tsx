@@ -1,7 +1,10 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Theme, defaultTheme, darkTheme } from "@/config/theme";
+
+import { defaultTheme, darkTheme } from "@/config/theme";
+
+import type { Theme } from "@/config/theme";
 
 export type ThemeMode = "light" | "dark";
 
@@ -23,10 +26,7 @@ const getSavedTheme = (): ThemeMode => {
   }
 
   // Check system preference if no saved theme
-  if (
-    window.matchMedia &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-  ) {
+  if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
     return "dark";
   }
 

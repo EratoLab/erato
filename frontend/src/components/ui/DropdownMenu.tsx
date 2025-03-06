@@ -1,10 +1,12 @@
-import React, { useState, useRef, useCallback, memo, useEffect } from "react";
 import clsx from "clsx";
-import { Button } from "./Button";
-import { MoreVertical } from "./icons";
+import React, { useState, useRef, useCallback, memo, useEffect } from "react";
+import { createPortal } from "react-dom";
+
 import { useClickOutside } from "@/hooks/useClickOutside";
 import { useKeyboard } from "@/hooks/useKeyboard";
-import { createPortal } from "react-dom";
+
+import { Button } from "./Button";
+import { MoreVertical } from "./icons";
 
 export interface DropdownMenuItem {
   label: string;
@@ -87,12 +89,12 @@ export const DropdownMenu = memo(
     const [isProcessingClick, setIsProcessingClick] = useState(false);
     const clickTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
     const [position, setPosition] = useState<Position>({
-      vertical: preferredOrientation?.vertical || "bottom",
-      horizontal: preferredOrientation?.horizontal || align,
+      vertical: preferredOrientation?.vertical ?? "bottom",
+      horizontal: preferredOrientation?.horizontal ?? align,
     });
     const menuRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
-    const menuId = id || `dropdown-${Math.random().toString(36).slice(2)}`;
+    const menuId = id ?? `dropdown-${Math.random().toString(36).slice(2)}`;
 
     const updatePosition = useCallback(() => {
       if (!isOpen || !menuRef.current || !buttonRef.current) return;
@@ -220,7 +222,7 @@ export const DropdownMenu = memo(
           const firstItem = menuRef.current?.querySelector(
             '[role="menuitem"]',
           ) as HTMLElement;
-          firstItem?.focus();
+          firstItem.focus();
         });
       }
     }, [isOpen]);

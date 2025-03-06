@@ -1,5 +1,7 @@
-import React, { useState, useRef, ReactNode } from "react";
+import React, { useState, useRef } from "react";
 import { createPortal } from "react-dom";
+
+import type { ReactNode } from "react";
 
 interface TooltipProps {
   /** Content to display in the tooltip */

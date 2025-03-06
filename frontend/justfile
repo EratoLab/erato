@@ -36,7 +36,7 @@ check-format:
     pnpm exec prettier . --check
 
 lint:
-    pnpm run lint:strict
+    pnpm lint:strict && pnpm typecheck
 
 lint-fix:
     pnpm run lint:fix
@@ -49,3 +49,7 @@ type-check:
 
 strict-check:
     pnpm run lint:strict && pnpm run typecheck
+
+fix-imports:
+    pnpm exec eslint --fix --rule 'import/order: error' --rule '@typescript-eslint/consistent-type-imports: error' .
+
