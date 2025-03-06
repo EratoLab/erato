@@ -95,9 +95,6 @@ export type MessageSubmitStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
-    })
-  | (MessageSubmitStreamingResponseMessageOther & {
-      message_type: "example_other";
     });
 
 export type MessageSubmitStreamingResponseMessageComplete = {
@@ -107,10 +104,6 @@ export type MessageSubmitStreamingResponseMessageComplete = {
    * @format uuid
    */
   message_id: string;
-};
-
-export type MessageSubmitStreamingResponseMessageOther = {
-  foo: string;
 };
 
 export type MessageSubmitStreamingResponseMessageTextDelta = {
