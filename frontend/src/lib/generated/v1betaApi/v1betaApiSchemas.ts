@@ -95,9 +95,6 @@ export type MessageSubmitStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
-    })
-  | (MessageSubmitStreamingResponseMessageOther & {
-      message_type: "example_other";
     });
 
 export type MessageSubmitStreamingResponseMessageComplete = {
@@ -107,10 +104,6 @@ export type MessageSubmitStreamingResponseMessageComplete = {
    * @format uuid
    */
   message_id: string;
-};
-
-export type MessageSubmitStreamingResponseMessageOther = {
-  foo: string;
 };
 
 export type MessageSubmitStreamingResponseMessageTextDelta = {
@@ -138,6 +131,24 @@ export type RecentChat = {
    */
   title_by_summary: string;
 };
+
+export type RegenerateMessageRequest = {
+  /**
+   * The ID of the message that should have a replacement response generated.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  current_message_id: string;
+};
+
+export type RegenerateMessageStreamingResponseMessage =
+  | (MessageSubmitStreamingResponseMessageComplete & {
+      message_type: "message_complete";
+    })
+  | (MessageSubmitStreamingResponseMessageTextDelta & {
+      message_type: "text_delta";
+    });
 
 export type UserProfile = {
   /**
