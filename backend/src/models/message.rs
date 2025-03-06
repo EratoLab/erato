@@ -1,9 +1,10 @@
 use crate::db::entity::messages;
 use crate::db::entity::prelude::*;
+use crate::models::pagination;
 use crate::policy::prelude::*;
 use eyre::{eyre, Report};
 use sea_orm::prelude::*;
-use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, QueryOrder, TransactionTrait};
+use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, QueryOrder, QuerySelect, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::fmt;
@@ -33,6 +34,19 @@ impl fmt::Display for MessageRole {
 pub enum MessageContent {
     String(String),
     Array(Vec<String>),
+}
+
+/// Statistics for a list of messages
+#[derive(Debug, Clone)]
+pub struct MessageListStats {
+    /// Total number of messages in the chat
+    pub total_count: i64,
+    /// Current offset in the list
+    pub current_offset: u64,
+    /// Number of messages in the current response
+    pub returned_count: usize,
+    /// Whether there are more messages available
+    pub has_more: bool,
 }
 
 /// Schema for validating message structure
@@ -227,16 +241,23 @@ pub async fn submit_message(
     Ok(created_message)
 }
 
-/// Get all messages for a chat.
+/// Get messages for a chat with pagination support.
 ///
-/// This function retrieves all messages for a given chat ID, after checking that
-/// the subject has read permission for the chat.
+/// This function retrieves messages for a given chat ID, after checking that
+/// the subject has read permission for the chat. It supports pagination with
+/// limit and offset parameters.
+///
+/// Returns a tuple of (messages, stats) where:
+/// - messages: Vec<messages::Model> - The list of messages
+/// - stats: MessageListStats - Statistics about the message list
 pub async fn get_chat_messages(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
     subject: &Subject,
     chat_id: &Uuid,
-) -> Result<Vec<messages::Model>, Report> {
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Result<(Vec<messages::Model>, MessageListStats), Report> {
     // Authorize that the subject can read this chat
     authorize!(
         policy,
@@ -245,14 +266,42 @@ pub async fn get_chat_messages(
         Action::Read
     )?;
 
-    // Query all messages for this chat, ordered by creation time
+    // Set default pagination values
+    let limit = limit.unwrap_or(100);
+    let offset = offset.unwrap_or(0);
+
+    // Query messages for this chat with pagination, ordered by creation time
     let messages = Messages::find()
         .filter(messages::Column::ChatId.eq(*chat_id))
         .order_by_asc(messages::Column::CreatedAt)
+        .limit(limit)
+        .offset(offset)
         .all(conn)
         .await?;
 
-    Ok(messages)
+    // Use our pagination utility to efficiently calculate the total count
+    let (total_count, has_more) = pagination::calculate_total_count(
+        offset,
+        limit,
+        messages.len(),
+        || async {
+            Messages::find()
+                .filter(messages::Column::ChatId.eq(*chat_id))
+                .count(conn)
+                .await
+        },
+    )
+    .await?;
+
+    // Create the statistics object
+    let stats = MessageListStats {
+        total_count: pagination::u64_to_i64_count(total_count),
+        current_offset: offset,
+        returned_count: messages.len(),
+        has_more,
+    };
+
+    Ok((messages, stats))
 }
 
 pub async fn get_message_by_id(
