@@ -50,3 +50,7 @@ env_logger = "0.11.2"
 pretty_assertions = "1.4.0"
 ctor = "0.2.9"
 axum-test = "16.4.1"
+
+[patch.crates-io]
+# See https://github.com/EratoLab/erato/issues/78
+sqlx = { git = "https://github.com/launchbadge/sqlx.git", rev = "a92626d6cc1aef88b0036d633ed370f6f9129c32" }
