@@ -58,6 +58,9 @@ jobs:
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
 
+      - name: "Install sqitch"
+        run: sudo apt install -y sqitch
+
       # Lint run section
       # Every step here should be conditional on "success() || failure()",
       # in order to prevent failing fast, so that we can run all linting steps in one run.
@@ -83,6 +86,11 @@ jobs:
         working-directory: ./frontend
         if: success() || failure()
         run: pnpm run lint
+
+      - name: "sqitch db summary up-to-date"
+        working-directory: ./backend/sqitch
+        if: success() || failure()
+        run: ./generate_summary.sh --check
 
   cargo-clippy:
     runs-on: ubuntu-22.04

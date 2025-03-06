@@ -2,7 +2,10 @@
   "migrations": [
     "deploy/0001_init_database.sql",
     "deploy/0002_add_chat_and_messages_tables.sql",
-    "deploy/0003_add_users_table.sql"
+    "deploy/0003_add_users_table.sql",
+    "deploy/0004_add_view_for_last_message_at.sql",
+    "deploy/0005_adjust_message_lineage.sql",
+    "deploy/0006_add_chats_summary_and_archived.sql"
   ],
-  "latest_change": "a8133df0ff604040656d48db63c5d932adf722fd"
+  "latest_change": "527cc5e746c90aa197f42593258577d6e64f5cb7"
 }
