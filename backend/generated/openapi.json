@@ -91,6 +91,48 @@
         ]
       }
     },
+    "/api/v1beta/me/files": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Upload files and return UUIDs for each",
+        "description": "This endpoint accepts a multipart form with one or more files and returns UUIDs for each.",
+        "operationId": "upload_file",
+        "requestBody": {
+          "description": "Files to upload",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MultipartFormFile"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid file upload"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
     "/api/v1beta/me/messages/regeneratestream": {
       "post": {
         "tags": [],
@@ -429,6 +471,40 @@
           }
         }
       },
+      "FileUploadItem": {
+        "type": "object",
+        "description": "Response for file upload",
+        "required": [
+          "id",
+          "filename"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "The original filename of the uploaded file"
+          },
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the uploaded file"
+          }
+        }
+      },
+      "FileUploadResponse": {
+        "type": "object",
+        "description": "Response for file upload",
+        "required": [
+          "files"
+        ],
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileUploadItem"
+            },
+            "description": "The list of uploaded files with their IDs and filenames"
+          }
+        }
+      },
       "Message": {
         "type": "object",
         "required": [
@@ -614,6 +690,23 @@
           "message_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "MultipartFormFile": {
+        "type": "object",
+        "required": [
+          "name",
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "contentMediaType": "application/octet-stream"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },

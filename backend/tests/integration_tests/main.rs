@@ -1,6 +1,8 @@
 #![allow(clippy::manual_strip)]
 
 use axum::{http, Router};
+use axum_test::multipart::MultipartForm;
+use axum_test::multipart::Part;
 use axum_test::TestServer;
 use ctor::ctor;
 use erato::config::AppConfig;
@@ -923,4 +925,81 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
             .unwrap_or(true),
         "Second user message should not be in the active thread"
     );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
+    // Set up the test environment
+    let app_config = test_app_config();
+    let app_state = test_app_state(app_config, pool);
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a mock JWT for authentication
+    let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
+
+    // Create temporary JSON files for testing
+    let file1_content = json!({
+        "name": "test1",
+        "value": 123
+    })
+    .to_string();
+
+    let file2_content = json!({
+        "name": "test2",
+        "value": 456,
+        "nested": {
+            "key": "value"
+        }
+    })
+    .to_string();
+
+    // Convert to owned Vec<u8> to satisfy 'static lifetime requirement
+    let file1_bytes = file1_content.into_bytes();
+    let file2_bytes = file2_content.into_bytes();
+
+    // Create a multipart form with two files using axum_test::multipart
+    let multipart_form = MultipartForm::new()
+        .add_part(
+            "file1",
+            Part::bytes(file1_bytes)
+                .file_name("test1.json")
+                .mime_type("application/json"),
+        )
+        .add_part(
+            "file2",
+            Part::bytes(file2_bytes)
+                .file_name("test2.json")
+                .mime_type("application/json"),
+        );
+
+    // Make the request
+    let response = server
+        .post("/api/v1beta/me/files")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .multipart(multipart_form)
+        .await;
+
+    // Verify the response
+    response.assert_status_ok();
+    let response_json: Value = response.json();
+
+    // Check that we got a response with two files
+    let files = response_json["files"].as_array().unwrap();
+    assert_eq!(files.len(), 2);
+
+    // Check that each file has an id and filename
+    for file in files {
+        assert!(file["id"].as_str().is_some());
+        assert!(file["filename"].as_str().is_some());
+
+        // Check that the filenames match one of our test files
+        let filename = file["filename"].as_str().unwrap();
+        assert!(filename == "test1.json" || filename == "test2.json");
+    }
 }

@@ -99,6 +99,30 @@ export type ChatMessagesResponse = {
   stats: ChatMessageStats;
 };
 
+/**
+ * Response for file upload
+ */
+export type FileUploadItem = {
+  /**
+   * The original filename of the uploaded file
+   */
+  filename: string;
+  /**
+   * The unique ID of the uploaded file
+   */
+  id: string;
+};
+
+/**
+ * Response for file upload
+ */
+export type FileUploadResponse = {
+  /**
+   * The list of uploaded files with their IDs and filenames
+   */
+  files: FileUploadItem[];
+};
+
 export type Message = {
   id: string;
 };
@@ -159,6 +183,14 @@ export type MessageSubmitStreamingResponseUserMessageSaved = {
    * @format uuid
    */
   message_id: string;
+};
+
+export type MultipartFormFile = {
+  /**
+   * @format binary
+   */
+  file: Blob;
+  name: string;
 };
 
 export type RecentChat = {
