@@ -8,7 +8,7 @@ use sea_orm::{
     ActiveValue, DatabaseConnection, EntityTrait, QueryOrder, QuerySelect, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
+use serde_json::{to_value, Value as JsonValue};
 use std::fmt;
 
 /// Role of the message author
@@ -117,10 +117,12 @@ pub async fn submit_message(
     raw_message: JsonValue,
     previous_message_id: Option<&Uuid>,
     sibling_message_id: Option<&Uuid>,
-    generation_input_messages: Option<JsonValue>,
+    generation_input_messages: Option<GenerationInputMessages>,
 ) -> Result<messages::Model, Report> {
     // Validate the message format
     MessageSchema::validate(&raw_message)?;
+    let generation_input_messages: Option<JsonValue> =
+        generation_input_messages.map(to_value).transpose()?;
 
     // Authorize that the subject can submit messages to this chat
     authorize!(
@@ -323,4 +325,61 @@ pub async fn get_message_by_id(
     )?;
 
     Ok(message)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InputMessage {
+    pub role: MessageRole,
+    pub content: MessageContent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenerationInputMessages {
+    pub(crate) messages: Vec<InputMessage>,
+}
+
+impl GenerationInputMessages {
+    pub fn validate(json: &JsonValue) -> Result<Self, Report> {
+        serde_json::from_value(json.clone())
+            .map_err(|e| eyre!("Invalid input message format: {}", e))
+    }
+}
+
+/// For now retrieves the last `n` (= default 10) messages in the chat to serve as input for generating the next message.
+pub async fn get_generation_input_messages_by_previous_message_id(
+    conn: &DatabaseConnection,
+    previous_message_id: &Uuid,
+    num_previous_messages: Option<usize>,
+) -> Result<GenerationInputMessages, Report> {
+    let num_previous_messages = num_previous_messages.unwrap_or(10);
+
+    let mut input_messages: Vec<InputMessage> = vec![];
+
+    // Traverse the chat history, until we have `num_previous_messages` messages, or we reach the first message
+    let mut current_message_id: Uuid = previous_message_id.to_owned();
+    while input_messages.len() < num_previous_messages {
+        let message = Messages::find_by_id(current_message_id)
+            .one(conn)
+            .await?
+            .ok_or_else(|| eyre!("Message with ID {} not found", current_message_id))?;
+
+        let parsed_raw_message = MessageSchema::validate(&message.raw_message)?;
+        input_messages.push(InputMessage {
+            role: parsed_raw_message.role,
+            content: parsed_raw_message.content,
+        });
+
+        if let Some(prev_id) = message.previous_message_id {
+            current_message_id = prev_id;
+        } else {
+            break;
+        }
+    }
+
+    // Reverse the order of the messages, as we want to start with the oldest message
+    input_messages.reverse();
+
+    Ok(GenerationInputMessages {
+        messages: input_messages,
+    })
 }
