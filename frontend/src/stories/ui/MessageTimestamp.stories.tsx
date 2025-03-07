@@ -1,5 +1,6 @@
+import { MessageTimestamp } from "../../components/ui/Message/MessageTimestamp";
+
 import type { Meta, StoryObj } from "@storybook/react";
-import { MessageTimestamp } from "../../components/ui/MessageTimestamp";
 
 const meta = {
   title: "UI/MessageTimestamp",

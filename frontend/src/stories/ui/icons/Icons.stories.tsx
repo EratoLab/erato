@@ -1,4 +1,3 @@
-import type { Meta, StoryObj } from "@storybook/react";
 import {
   CopyIcon,
   EditIcon,
@@ -6,6 +5,8 @@ import {
   ThumbDownIcon,
   RerunIcon,
 } from "../../../components/ui/icons";
+
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "UI/Icons",

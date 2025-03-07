@@ -1,6 +1,8 @@
-import type { Meta, StoryObj } from "@storybook/react";
 import { expect, within } from "@storybook/test";
-import { Avatar } from "../../components/ui/Avatar";
+
+import { Avatar } from "../../components/ui/Feedback/Avatar";
+
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "UI/Avatar/Tests",

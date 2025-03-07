@@ -1,8 +1,9 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { ChatMessage } from "../../components/ui/ChatMessage";
 import { ChatMessageFactory } from "./mockData";
-import { DefaultMessageControls } from "../../components/ui/DefaultMessageControls";
-import { MessageAction } from "../../types/message-controls";
+import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
+import { DefaultMessageControls } from "../../components/ui/Message/DefaultMessageControls";
+
+import type { MessageAction } from "../../types/message-controls";
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "Chat/ChatMessage",

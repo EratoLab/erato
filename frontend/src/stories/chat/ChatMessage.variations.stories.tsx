@@ -1,6 +1,7 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { ChatMessage } from "../../components/ui/ChatMessage";
 import { ChatMessageFactory } from "./mockData";
+import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
+
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "CHAT/ChatMessage/Variations",

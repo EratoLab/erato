@@ -1,5 +1,3 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { Button } from "../../components/ui/Button";
 import {
   ArrowUpIcon,
   PlusIcon,
@@ -8,6 +6,10 @@ import {
   HandThumbUpIcon,
   HandThumbDownIcon,
 } from "@heroicons/react/24/outline";
+
+import { Button } from "../../components/ui/Controls/Button";
+
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "UI/Button",

@@ -1,5 +1,7 @@
+import { defaultTheme } from "../../config/theme";
+
+import type { Theme } from "../../config/theme";
 import type { Meta, StoryObj } from "@storybook/react";
-import { defaultTheme, Theme } from "../../config/theme";
 
 type ThemeValue = string | number | Record<string, unknown>;
 

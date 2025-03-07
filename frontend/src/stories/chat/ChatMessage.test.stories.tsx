@@ -1,8 +1,9 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { ChatMessage } from "../../components/ui/ChatMessage";
+import { expect, within, userEvent } from "@storybook/test";
+
 import { ChatMessageFactory } from "./mockData";
-import { expect, within } from "@storybook/test";
-import { userEvent } from "@storybook/test";
+import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
+
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "CHAT/ChatMessage/Tests",
@@ -43,15 +44,15 @@ export const AccessibilityChecks: Story = {
 
     // Check ARIA attributes
     const article = canvas.getByRole("log");
-    expect(article).toBeInTheDocument();
-    expect(article.getAttribute("aria-live")).toBe("polite");
-    expect(article.getAttribute("aria-label")).toBe("Assistant message");
+    await expect(article).toBeInTheDocument();
+    await expect(article.getAttribute("aria-live")).toBe("polite");
+    await expect(article.getAttribute("aria-label")).toBe("Assistant message");
 
     // Check if timestamp is accessible
     const timestamp = canvas.getByTitle(
       ChatMessageFactory.samples.assistant.createdAt.toLocaleString(),
     );
-    expect(timestamp).toBeInTheDocument();
+    await expect(timestamp).toBeInTheDocument();
   },
 };
 
@@ -78,21 +79,21 @@ export const InteractionTest: Story = {
 
     // Verify initial state (controls should be hidden)
     const controls = copyButton.closest('[class*="group-hover"]');
-    expect(controls).toBeInTheDocument();
-    expect(controls?.className).toContain("opacity-0");
+    await expect(controls).toBeInTheDocument();
+    await expect(controls?.className).toContain("opacity-0");
 
     // Simulate hover
     await user.hover(controls!.parentElement!);
 
     // Verify controls become visible
-    expect(controls?.className).toContain("group-hover:opacity-100");
+    await expect(controls?.className).toContain("group-hover:opacity-100");
 
     // Test button interaction
     await user.click(copyButton);
 
     // Test hover exit
     await user.unhover(controls!.parentElement!);
-    expect(controls?.className).toContain("opacity-0");
+    await expect(controls?.className).toContain("opacity-0");
   },
 };
 
@@ -113,15 +114,15 @@ export const ResponsiveTest: Story = {
     // Verify message container is properly sized
     const container = canvas.getByRole("log");
     const styles = window.getComputedStyle(container);
-    expect(styles.minWidth).toBe("280px");
-    expect(styles.maxWidth).toBe("768px");
+    await expect(styles.minWidth).toBe("280px");
+    await expect(styles.maxWidth).toBe("768px");
 
     // Verify text wrapping
     const messageText = canvas.getByText(
       ChatMessageFactory.samples.longMessage.content,
     );
     const textStyles = window.getComputedStyle(messageText);
-    expect(textStyles.whiteSpace).toBe("pre-wrap");
+    await expect(textStyles.whiteSpace).toBe("pre-wrap");
   },
 };
 
@@ -150,10 +151,10 @@ export const LoadingStateTest: Story = {
 
     // Verify loading indicator is present
     const loadingIndicator = canvas.getByText("Loading");
-    expect(loadingIndicator).toBeInTheDocument();
+    await expect(loadingIndicator).toBeInTheDocument();
 
     // Verify loading context
     const context = canvas.getByText("Test loading state");
-    expect(context).toBeInTheDocument();
+    await expect(context).toBeInTheDocument();
   },
 };

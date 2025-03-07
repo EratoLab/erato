@@ -1,11 +1,13 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { Chat } from "../../components/ui/Chat";
-import { ChatProvider } from "../../components/containers/ChatProvider";
-import { ChatHistoryProvider } from "../../components/containers/ChatHistoryProvider";
-import { ChatMessageFactory } from "./mockData";
 import { action } from "@storybook/addon-actions";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+
+import { ChatMessageFactory } from "./mockData";
+import { ChatHistoryProvider } from "../../components/containers/ChatHistoryProvider";
+import { ChatProvider } from "../../components/containers/ChatProvider";
+import { Chat } from "../../components/ui/Chat/Chat";
+
+import type { Meta, StoryObj } from "@storybook/react";
 
 // Create a new client for Storybook
 const queryClient = new QueryClient({

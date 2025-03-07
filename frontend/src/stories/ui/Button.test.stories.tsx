@@ -1,8 +1,10 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { Button } from "../../components/ui/Button";
-import { PlusIcon, ArrowUpIcon } from "@heroicons/react/24/outline";
+import { PlusIcon } from "@heroicons/react/24/outline";
 import { expect, userEvent, within } from "@storybook/test";
 import { useState } from "react";
+
+import { Button } from "../../components/ui/Controls/Button";
+
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "UI/Button/Tests",

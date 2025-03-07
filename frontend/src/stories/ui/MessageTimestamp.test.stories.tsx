@@ -1,6 +1,8 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { MessageTimestamp } from "../../components/ui/MessageTimestamp";
 import { expect, within } from "@storybook/test";
+
+import { MessageTimestamp } from "../../components/ui/Message/MessageTimestamp";
+
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "UI/MessageTimestamp/Tests",
@@ -22,8 +24,8 @@ export const DefaultBehaviorTest: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const timeElement = canvas.getByRole("time");
-    expect(timeElement).toBeInTheDocument();
-    expect(timeElement.textContent).toMatch(/less than 5 seconds ago/i);
+    await expect(timeElement).toBeInTheDocument();
+    await expect(timeElement.textContent).toMatch(/less than 5 seconds ago/i);
   },
 };
 
@@ -35,7 +37,7 @@ export const ExactTimeTest: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const timeElement = canvas.getByRole("time");
-    expect(timeElement.textContent).toBe("15:30");
+    await expect(timeElement.textContent).toBe("15:30");
   },
 };
 
@@ -46,7 +48,7 @@ export const TitleAttributeTest: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const timeElement = canvas.getByRole("time");
-    expect(timeElement.title).toBe(
+    await expect(timeElement.title).toBe(
       new Date("2024-03-20T15:30:00").toLocaleString(),
     );
   },
@@ -65,10 +67,10 @@ export const AutoUpdateTest: Story = {
     const canvas = within(canvasElement);
     const timeElement = canvas.getByRole("time");
 
-    expect(timeElement.textContent).toMatch(/less than 5 seconds ago/i);
+    await expect(timeElement.textContent).toMatch(/less than 5 seconds ago/i);
 
     await new Promise((resolve) => setTimeout(resolve, 5000));
-    expect(timeElement.textContent).toMatch(/less than 10 seconds ago/i);
+    await expect(timeElement.textContent).toMatch(/less than 10 seconds ago/i);
   },
 };
 
@@ -85,9 +87,9 @@ export const NoAutoUpdateTest: Story = {
     const canvas = within(canvasElement);
     const timeElement = canvas.getByRole("time");
 
-    expect(timeElement.textContent).toMatch(/less than 5 seconds ago/i);
+    await expect(timeElement.textContent).toMatch(/less than 5 seconds ago/i);
 
     await new Promise((resolve) => setTimeout(resolve, 5000));
-    expect(timeElement.textContent).toMatch(/less than 5 seconds ago/i);
+    await expect(timeElement.textContent).toMatch(/less than 5 seconds ago/i);
   },
 };

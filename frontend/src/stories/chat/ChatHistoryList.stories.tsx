@@ -1,9 +1,10 @@
-import type { Meta, StoryObj } from "@storybook/react";
 import {
   ChatHistoryList,
   ChatHistoryListSkeleton,
 } from "../../components/ui/ChatHistoryList";
+
 import type { ChatSession } from "@/types/chat";
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "CHAT/ChatHistoryList",

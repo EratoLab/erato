@@ -1,7 +1,8 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { ChatWidget } from "../components/ui/ChatWidget";
 import { ChatProvider } from "../components/containers/ChatProvider";
+import { ChatWidget } from "../components/ui/Chat/ChatWidget";
+
 import type { ChatMessage } from "../components/containers/ChatProvider";
+import type { Meta, StoryObj } from "@storybook/react";
 
 const mockMessages: Record<string, ChatMessage> = {
   "1": {

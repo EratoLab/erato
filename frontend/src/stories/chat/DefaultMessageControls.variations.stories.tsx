@@ -1,5 +1,6 @@
+import { DefaultMessageControls } from "../../components/ui/Message/DefaultMessageControls";
+
 import type { Meta, StoryObj } from "@storybook/react";
-import { DefaultMessageControls } from "../../components/ui/DefaultMessageControls";
 
 const meta = {
   title: "Chat/DefaultMessageControls/Variations",

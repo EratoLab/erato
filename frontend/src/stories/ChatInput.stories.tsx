@@ -1,6 +1,8 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { ChatInput } from "../components/ui/ChatInput";
 import { action } from "@storybook/addon-actions";
+
+import { ChatInput } from "../components/ui/Chat/ChatInput";
+
+import type { Meta, StoryObj } from "@storybook/react";
 
 // export const WithCustomTheme: Story = {
 //   parameters: {
