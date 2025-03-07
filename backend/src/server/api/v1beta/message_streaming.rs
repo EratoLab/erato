@@ -2,7 +2,10 @@ use crate::db::entity_ext::{chats, messages};
 use crate::models::chat::{
     get_chat_by_message_id, get_or_create_chat_by_previous_message_id, ChatCreationStatus,
 };
-use crate::models::message::{get_message_by_id, submit_message, MessageSchema};
+use crate::models::message::{
+    get_generation_input_messages_by_previous_message_id, get_message_by_id, submit_message,
+    GenerationInputMessages, MessageSchema,
+};
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::ChatMessage;
 use crate::state::AppState;
@@ -305,14 +308,21 @@ async fn stream_save_user_message<
     Ok(saved_user_message)
 }
 
-async fn prepare_chat_request(new_user_message: String) -> Result<(ChatRequest, ChatOptions), ()> {
-    let mut chat_request: ChatRequest = Default::default();
+async fn prepare_chat_request(
+    app_state: &AppState,
+    previous_message_id: &Uuid,
+) -> Result<(ChatRequest, ChatOptions, GenerationInputMessages), Report> {
     // TODO: Initial system message?
-    // TODO: Full previous message history
-    chat_request = chat_request.append_message(GenAiChatMessage::user(new_user_message));
+    let generation_input_messages = get_generation_input_messages_by_previous_message_id(
+        &app_state.db,
+        previous_message_id,
+        Some(10),
+    )
+    .await?;
+    let chat_request = generation_input_messages.clone().into_chat_request();
     let chat_options = ChatOptions::default().with_capture_content(true);
 
-    Ok((chat_request, chat_options))
+    Ok((chat_request, chat_options, generation_input_messages))
 }
 
 async fn stream_generate_chat_completion<
@@ -372,6 +382,7 @@ async fn stream_generate_chat_completion<
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn stream_save_generated_completion<
     MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseMessageComplete>,
 >(
@@ -382,6 +393,7 @@ async fn stream_save_generated_completion<
     chat: &chats::Model,
     saved_user_message: &messages::Model,
     sibling_message_id: Option<&Uuid>,
+    generation_input_messages: GenerationInputMessages,
 ) -> Result<(), ()> {
     let final_content = match end
         .captured_content
@@ -408,8 +420,7 @@ async fn stream_save_generated_completion<
         assistant_message.clone(),
         Some(&saved_user_message.id),
         sibling_message_id,
-        // TODO: Save input messages here
-        None,
+        Some(generation_input_messages),
     )
     .await
     {
@@ -552,7 +563,14 @@ pub async fn message_submit_sse(
             });
         }
 
-        let (chat_request, chat_options) = prepare_chat_request(request.user_message).await?;
+        let prepare_chat_request_res =
+            prepare_chat_request(&app_state, &saved_user_message.id).await;
+        if let Err(err) = prepare_chat_request_res {
+            let _ = tx.send(Err(err)).await;
+            return Err(());
+        }
+        let (chat_request, chat_options, generation_input_messages) =
+            prepare_chat_request_res.unwrap();
 
         let end = stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
             tx.clone(),
@@ -570,6 +588,7 @@ pub async fn message_submit_sse(
             &chat,
             &saved_user_message,
             None,
+            generation_input_messages,
         )
         .await?;
 
@@ -664,14 +683,13 @@ pub async fn regenerate_message_sse(
         }
         let chat = chat_res.unwrap();
 
-        let message_content_res = MessageSchema::validate(&previous_message.raw_message);
-        if let Err(err) = message_content_res {
+        let prepare_chat_request_res = prepare_chat_request(&app_state, &previous_message.id).await;
+        if let Err(err) = prepare_chat_request_res {
             let _ = tx.send(Err(err)).await;
             return Err(());
         }
-        let message_content = message_content_res.unwrap().full_text();
-
-        let (chat_request, chat_options) = prepare_chat_request(message_content).await?;
+        let (chat_request, chat_options, generation_input_messages) =
+            prepare_chat_request_res.unwrap();
 
         let end = stream_generate_chat_completion::<RegenerateMessageStreamingResponseMessage>(
             tx.clone(),
@@ -689,6 +707,7 @@ pub async fn regenerate_message_sse(
             &chat,
             &previous_message,
             Some(&request.current_message_id),
+            generation_input_messages,
         )
         .await?;
 
