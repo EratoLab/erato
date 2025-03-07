@@ -20,9 +20,10 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{middleware, Extension, Json, Router};
+use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
 use eyre::Report;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::types::{chrono, Uuid};
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
@@ -34,6 +35,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/messages/regeneratestream", post(regenerate_message_sse))
         .route("/recent_chats", get(recent_chats))
+        .route("/files", post(upload_file))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             me_profile_middleware::user_profile_middleware,
@@ -62,17 +64,24 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     paths(
         messages,
         chats,
-        recent_chats,
-        message_submit_sse,
-        regenerate_message_sse,
         profile,
-        chat_messages
+        chat_messages,
+        recent_chats,
+        upload_file,
+        message_submit_sse,
+        regenerate_message_sse
     ),
     components(schemas(
         Message,
         Chat,
-        ChatMessage,
         RecentChat,
+        ChatMessage,
+        ChatMessageStats,
+        ChatMessagesResponse,
+        RecentChatStats,
+        RecentChatsResponse,
+        FileUploadItem,
+        FileUploadResponse,
         MessageSubmitStreamingResponseMessage,
         UserProfile,
         MessageSubmitRequest
@@ -199,6 +208,99 @@ pub struct RecentChatsResponse {
     chats: Vec<RecentChat>,
     /// Statistics about the chat list
     stats: RecentChatStats,
+}
+
+#[derive(Deserialize, ToSchema)]
+#[allow(unused)]
+struct MultipartFormFile {
+    name: String,
+    #[schema(format = Binary, content_media_type = "application/octet-stream")]
+    file: String,
+}
+
+/// Response for file upload
+#[derive(Serialize, ToSchema)]
+pub struct FileUploadItem {
+    /// The unique ID of the uploaded file
+    id: String,
+    /// The original filename of the uploaded file
+    filename: String,
+}
+
+/// Response for file upload
+#[derive(Serialize, ToSchema)]
+pub struct FileUploadResponse {
+    /// The list of uploaded files with their IDs and filenames
+    files: Vec<FileUploadItem>,
+}
+
+/// Upload files and return UUIDs for each
+///
+/// This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
+#[utoipa::path(
+    post,
+    path = "/me/files",
+    tag = "files",
+    request_body(content = Vec<MultipartFormFile>, description = "Files to upload", content_type = "multipart/form-data"),
+    responses(
+        (status = OK, body = FileUploadResponse),
+        (status = BAD_REQUEST, description = "Invalid file upload"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error"),
+    )
+)]
+pub async fn upload_file(
+    State(_app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    mut multipart: Multipart,
+) -> Result<Json<FileUploadResponse>, StatusCode> {
+    let mut uploaded_files = Vec::new();
+
+    // Process the multipart form
+    while let Some(field) = multipart.next_field().await.map_err(|e| {
+        tracing::error!("Failed to process multipart form: {}", e);
+        StatusCode::BAD_REQUEST
+    })? {
+        // Read the field's contents
+        let filename = field
+            .file_name()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "unnamed_file".to_string());
+        let _content_type = field.content_type().map(|s| s.to_string());
+
+        let data = field.bytes().await.map_err(|e| {
+            tracing::error!("Failed to read file data: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        // Generate a random UUID
+        let file_id = Uuid::new_v4().to_string();
+
+        // In a real implementation, you would store the file data somewhere
+        // For now, we just log the size and return the UUID
+        tracing::info!(
+            "User {} uploaded file '{}' with size {} bytes, assigned ID: {}",
+            me_user.0.id,
+            filename,
+            data.len(),
+            file_id
+        );
+
+        // Add this file to our list of uploaded files
+        uploaded_files.push(FileUploadItem {
+            id: file_id,
+            filename,
+        });
+    }
+
+    // If no files were uploaded, return an error
+    if uploaded_files.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Return the list of uploaded files
+    Ok(Json(FileUploadResponse {
+        files: uploaded_files,
+    }))
 }
 
 impl ChatMessage {

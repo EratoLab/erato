@@ -213,6 +213,55 @@ export const useChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   });
 };
 
+export type UploadFileError = Fetcher.ErrorWrapper<undefined>;
+
+export type UploadFileRequestBody = Schemas.MultipartFormFile[];
+
+export type UploadFileVariables = {
+  body?: UploadFileRequestBody;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
+ */
+export const fetchUploadFile = (
+  variables: UploadFileVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.FileUploadResponse,
+    UploadFileError,
+    UploadFileRequestBody,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/me/files", method: "post", ...variables, signal });
+
+/**
+ * This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
+ */
+export const useUploadFile = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.FileUploadResponse,
+      UploadFileError,
+      UploadFileVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.FileUploadResponse,
+    UploadFileError,
+    UploadFileVariables
+  >({
+    mutationFn: (variables: UploadFileVariables) =>
+      fetchUploadFile(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type RegenerateMessageSseError = Fetcher.ErrorWrapper<undefined>;
 
 export type RegenerateMessageSseVariables = {
