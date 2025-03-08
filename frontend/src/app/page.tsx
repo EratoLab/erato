@@ -28,14 +28,49 @@ const queryClient = new QueryClient();
 // Inner component to access hooks within providers
 const ChatContainer = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Add local loading state to control UI transitions
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const { switchSessionWithUrl, createNewChat } = useChatNavigation();
 
   const handleToggleCollapse = () => {
     setSidebarCollapsed((prev) => !prev);
   };
 
+  // Create an enhanced session switcher that manages loading states
+  const handleSessionSelect = useCallback(
+    (chatId: string) => {
+      // Start transition
+      setIsTransitioning(true);
+
+      // Set a minimum transition time to prevent flickering for fast loads
+      const minTransitionTimeout = setTimeout(() => {
+        switchSessionWithUrl(chatId);
+
+        // End transition with a slight delay to ensure smooth UI
+        setTimeout(() => {
+          setIsTransitioning(false);
+        }, 50);
+      }, 50);
+
+      // Cleanup timeout if component unmounts during transition
+      return () => clearTimeout(minTransitionTimeout);
+    },
+    [switchSessionWithUrl],
+  );
+
   const handleNewChat = useCallback(() => {
-    createNewChat();
+    // Start transition
+    setIsTransitioning(true);
+
+    // Create new chat with minimum transition time
+    setTimeout(() => {
+      createNewChat();
+
+      // End transition with a slight delay
+      setTimeout(() => {
+        setIsTransitioning(false);
+      }, 50);
+    }, 50);
   }, [createNewChat]);
 
   // Define which file types are accepted in this chat
@@ -69,7 +104,8 @@ const ChatContainer = () => {
         sidebarCollapsed={sidebarCollapsed}
         onToggleCollapse={handleToggleCollapse}
         acceptedFileTypes={acceptedFileTypes}
-        customSessionSelect={switchSessionWithUrl}
+        customSessionSelect={handleSessionSelect}
+        isTransitioning={isTransitioning}
       />
     </ChatProvider>
   );
