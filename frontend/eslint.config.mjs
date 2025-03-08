@@ -16,7 +16,7 @@ const eslintConfig = [
   {
     ignores: [
       "src/lib/generated/**/*",
-      "src/stories/**/*",
+      // "src/stories/**/*",
       ".next/**/*",
       "node_modules/**/*",
       "out/**/*",

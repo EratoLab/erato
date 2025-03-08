@@ -5,7 +5,7 @@ import { useProfile } from "@/hooks/useProfile";
 
 import { useChatHistory } from "../../containers/ChatHistoryProvider";
 import { useChat } from "../../containers/ChatProvider";
-import { MessageList } from "../Message";
+import { MessageList } from "../MessageList";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
 
