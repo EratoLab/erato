@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import { useState, useCallback } from "react";
+import { useState, useCallback, Suspense } from "react";
 
 import {
   ChatHistoryProvider,
@@ -122,6 +122,13 @@ const ChatBridge: React.FC<React.PropsWithChildren> = ({ children }) => {
   );
 };
 
+// Add a loading fallback component
+const LoadingFallback = () => (
+  <div className="flex h-screen items-center justify-center">
+    <div className="animate-pulse text-lg">Loading chat...</div>
+  </div>
+);
+
 export default function Home() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -129,7 +136,9 @@ export default function Home() {
         <ProfileProvider>
           <ChatHistoryProvider>
             <ChatBridge>
-              <ChatContainer />
+              <Suspense fallback={<LoadingFallback />}>
+                <ChatContainer />
+              </Suspense>
             </ChatBridge>
           </ChatHistoryProvider>
         </ProfileProvider>

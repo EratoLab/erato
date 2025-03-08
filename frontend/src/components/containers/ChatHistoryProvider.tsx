@@ -9,19 +9,26 @@ import React, {
 import { useMap } from "react-use";
 
 import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
-import {
-  useMessages,
-  useRecentChats,
-} from "../../lib/generated/v1betaApi/v1betaApiComponents";
+import { useMessages } from "../../lib/generated/v1betaApi/v1betaApiComponents";
 
 import type { ChatHistoryContextType } from "../../types/chat-history";
-import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  RecentChat,
+  RecentChatsResponse,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
+
+// Debug logging
+const DEBUG = process.env.NODE_ENV === "development";
+const log = (...args: unknown[]) => DEBUG && console.log(...args);
 
 interface ChatHistoryProviderProps extends React.PropsWithChildren {
   initialSessions?: ChatSession[];
   initialSessionId?: string;
 }
+
+// Constants
+const CHATS_PAGE_SIZE = 20;
 
 export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   children,
@@ -64,52 +71,78 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     [queryClient],
   );
 
-  // Replace the deprecated useChats with useRecentChats
-  const { data: recentChatsResponse, isLoading: isLoadingChats } =
-    useRecentChats(
-      { queryParams: { limit: 20 } }, // Fetch up to 50 recent chats
-      {
-        staleTime: 30000,
-        gcTime: 5 * 60 * 1000,
-      },
-    );
+  // Change error state to match the context type (undefined instead of null)
+  const [error, setError] = useState<Error | undefined>(undefined);
+
+  // Use React Query's useInfiniteQuery for paginated chat history
+  const {
+    data: paginatedChatsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: isLoadingChats,
+    refetch: refetchChats,
+  } = reactQuery.useInfiniteQuery({
+    queryKey: ["recentChats"],
+    queryFn: async ({ pageParam = 0 }) => {
+      // Fetch chat data from the API
+      const response = await fetch(
+        `/api/v1beta/me/recent_chats?limit=${CHATS_PAGE_SIZE}&offset=${pageParam}`,
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to fetch chats: ${response.status}`);
+      }
+      return (await response.json()) as RecentChatsResponse;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      // Return next offset for pagination or undefined if no more data
+      return lastPage.stats.has_more
+        ? lastPage.stats.current_offset + lastPage.stats.returned_count
+        : undefined;
+    },
+    staleTime: 30000, // 30 seconds
+    gcTime: 5 * 60 * 1000, // 5 minutes
+  });
 
   // Sync RecentChat data with sessions state when they load
   useEffect(() => {
-    if (recentChatsResponse?.chats && recentChatsResponse.chats.length > 0) {
-      recentChatsResponse.chats.forEach((recentChat: RecentChat) => {
-        // Check if the key exists in the sessions map
-        if (!Object.prototype.hasOwnProperty.call(sessions, recentChat.id)) {
-          // Convert RecentChat to ChatSession format
-          const chatSession: ChatSession = {
-            id: recentChat.id,
-            title: recentChat.title_by_summary || "Untitled Chat",
-            messages: [], // Messages will be loaded separately
-            createdAt: new Date(), // We don't have this info, use current time
-            updatedAt: new Date(recentChat.last_message_at),
-          };
-          set(recentChat.id, chatSession);
-        }
-      });
-    }
-  }, [recentChatsResponse, sessions, set]);
+    if (!paginatedChatsData) return;
 
-  // TODO: @backend - Add sessionId to message query params
+    // Process all pages of chat data
+    paginatedChatsData.pages.forEach((page) => {
+      if (page.chats.length > 0) {
+        page.chats.forEach((recentChat: RecentChat) => {
+          // Only add new sessions
+          if (!Object.prototype.hasOwnProperty.call(sessions, recentChat.id)) {
+            // Convert RecentChat to ChatSession format
+            const chatSession: ChatSession = {
+              id: recentChat.id,
+              title: recentChat.title_by_summary || "Untitled Chat",
+              messages: [], // Messages will be loaded separately
+              createdAt: new Date(), // We don't have this info, use current time
+              updatedAt: new Date(recentChat.last_message_at),
+            };
+            set(recentChat.id, chatSession);
+          }
+        });
+      }
+    });
+  }, [paginatedChatsData, sessions, set]);
+
+  // Load messages for the current session
   const { isLoading: isLoadingMessages } = useMessages(
-    currentSessionId
+    currentSessionId && !currentSessionId.startsWith("temp-")
       ? { queryParams: { sessionId: currentSessionId } }
       : reactQuery.skipToken,
     {
-      enabled: !!currentSessionId,
+      enabled: !!currentSessionId && !currentSessionId.startsWith("temp-"),
       staleTime: 5000,
       gcTime: 60000,
     },
   );
 
-  // Change error state to match the context type (undefined instead of null)
-  const [error, setError] = useState<Error | undefined>(undefined);
-
-  // Add error handling to existing operations
+  // Create a new temporary session
   const createSession = useCallback(() => {
     try {
       const tempId = `temp-${new Date().toISOString()}`;
@@ -121,7 +154,7 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
         updatedAt: new Date(),
         metadata: {
           isTemporary: true,
-          ownerId: "", // Will be set when the chat is confirmed with the first message
+          ownerId: "", // Will be set when confirmed with first message
         },
       };
       set(tempId, newSession);
@@ -133,7 +166,7 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     }
   }, [set, setCurrentSessionId]);
 
-  // Add a function to replace a temporary session with a permanent one
+  // Convert a temporary session to a permanent one
   const confirmSession = useCallback(
     (tempId: string, permanentId: string) => {
       if (Object.prototype.hasOwnProperty.call(sessions, tempId)) {
@@ -157,12 +190,15 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
         if (tempId !== permanentId) {
           remove(tempId);
         }
+
+        // Refresh the chat list after confirming a new session
+        void refetchChats();
       }
     },
-    [sessions, set, setCurrentSessionId, remove],
+    [sessions, set, setCurrentSessionId, remove, refetchChats],
   );
 
-  // TODO: @backend - Add API mutation for updating sessions
+  // Update an existing session
   const updateSession = useCallback(
     (sessionId: string, updates: Partial<ChatSession>) => {
       const currentSession = sessions[sessionId];
@@ -175,7 +211,7 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     [sessions, set],
   );
 
-  // TODO: @backend - Add API mutation for deleting sessions
+  // Delete a session
   const deleteSession = useCallback(
     (sessionId: string) => {
       remove(sessionId);
@@ -186,6 +222,7 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     [currentSessionId, remove, setCurrentSessionId],
   );
 
+  // Switch to a different session
   const switchSession = useCallback(
     (sessionId: string) => {
       setCurrentSessionId(sessionId);
@@ -193,41 +230,30 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     [setCurrentSessionId],
   );
 
+  // Get the current active session
   const getCurrentSession = useCallback(() => {
     return currentSessionId ? (sessions[currentSessionId] ?? null) : null;
   }, [sessions, currentSessionId]);
 
-  // Add a function to load more chats (for pagination)
-  const [currentOffset, setCurrentOffset] = useState(0);
-  const [hasMoreChats, setHasMoreChats] = useState(true);
-
-  // Update hasMoreChats when we receive a response
-  useEffect(() => {
-    if (recentChatsResponse?.stats) {
-      setHasMoreChats(recentChatsResponse.stats.has_more);
-      setCurrentOffset(recentChatsResponse.stats.current_offset);
-    }
-  }, [recentChatsResponse]);
-
+  // Load more chats using infinite pagination
   const loadMoreChats = useCallback(async () => {
-    if (!hasMoreChats || isLoadingChats) return;
+    if (isFetchingNextPage || !hasNextPage) return;
 
     try {
-      // Calculate the next offset using the stats
-      const nextOffset =
-        currentOffset + (recentChatsResponse?.stats.returned_count ?? 20);
-      setCurrentOffset(nextOffset);
-
-      // We'll get updated hasMoreChats from the API response
+      log("Loading more chats with fetchNextPage");
+      await fetchNextPage();
     } catch (e) {
       setError(e instanceof Error ? e : new Error("Failed to load more chats"));
     }
-  }, [currentOffset, hasMoreChats, isLoadingChats, recentChatsResponse]);
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  // Calculate if we have more chats
+  const hasMoreChats = hasNextPage === true;
 
   // Combine loading states for simpler consumption
-  const isLoading = isLoadingChats || isLoadingMessages;
+  const isLoading = isLoadingChats || isFetchingNextPage || isLoadingMessages;
 
-  // Expose the new confirmSession method in the context
+  // Expose the context
   const contextValue = useMemo(
     () => ({
       sessions: sortedSessions,
@@ -266,6 +292,7 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   );
 };
 
+// Export a hook to use the chat history context
 export const useChatHistory = (): ChatHistoryContextType => {
   const context = useContext(ChatHistoryContext);
   if (!context) {
