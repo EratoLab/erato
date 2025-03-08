@@ -39,8 +39,13 @@ export const MessageListHeader: React.FC<MessageListHeaderProps> = ({
       {process.env.NODE_ENV === "development" && (
         <div className="sticky right-0 top-0 z-50 text-right text-xs opacity-50">
           Showing{" "}
-          {apiMessagesResponse?.stats.returned_count ??
-            paginationStats.displayed}{" "}
+          {apiMessagesResponse
+            ? Math.min(
+                apiMessagesResponse.stats.current_offset +
+                  apiMessagesResponse.stats.returned_count,
+                apiMessagesResponse.stats.total_count,
+              )
+            : paginationStats.displayed}{" "}
           of {apiMessagesResponse?.stats.total_count ?? paginationStats.total}{" "}
           messages
           {apiMessagesResponse?.stats.has_more && " (more available)"}
