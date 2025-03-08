@@ -39,7 +39,7 @@ export const ConversationIndicator = memo<ConversationIndicatorProps>(
     return (
       <div
         className={clsx(
-          "flex justify-center py-2 text-xs text-theme-text-secondary",
+          "text-theme-text-secondary flex justify-center py-2 text-xs",
           className,
         )}
       >

@@ -1,6 +1,6 @@
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
-import React from "react";
+import React, { useState, useEffect } from "react";
 
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
 
@@ -29,6 +29,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
   // Get file type and configuration
   const fileType = FileTypeUtil.getFileType(file);
   const typeConfig = FILE_TYPES[fileType];
+  const [maxFilenameLength, setMaxFilenameLength] = useState(30);
 
   // Get the icon component for this file type
   const IconComponent = typeConfig.icon;
@@ -38,30 +39,44 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
     ? FileTypeUtil.formatFileSize(file.size)
     : null;
 
+  // Set max filename length based on screen size
+  useEffect(() => {
+    const handleResize = () => {
+      setMaxFilenameLength(window.innerWidth < 640 ? 20 : 30);
+    };
+
+    handleResize(); // Initial check
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
   return (
     <div
       className={clsx(
-        "flex items-center rounded-lg p-2 bg-theme-bg-secondary",
+        "flex items-center rounded-lg bg-theme-bg-secondary p-2",
         "border border-theme-border",
-        "max-w-xs relative group hover:border-theme-border-strong theme-transition",
+        "theme-transition group relative w-full hover:border-theme-border-strong sm:max-w-xs",
         className,
       )}
     >
       <div
         className={clsx(
-          "flex justify-center items-center",
-          "h-10 w-10 rounded-md bg-theme-bg-primary",
-          "mr-2",
+          "flex items-center justify-center",
+          "size-10 rounded-md bg-theme-bg-primary",
+          "mr-2 shrink-0",
         )}
       >
         <IconComponent
-          className="h-5 w-5"
+          className="size-5"
           style={{ color: typeConfig.iconColor }}
         />
       </div>
-      <div className="flex-1 min-w-0 mr-1">
-        <p className="text-sm font-medium text-theme-fg-primary truncate">
-          {truncateFilename(file.name)}
+      <div className="mr-1 min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-theme-fg-primary">
+          {truncateFilename(file.name, maxFilenameLength)}
         </p>
         <div className="flex items-center text-xs text-theme-fg-secondary">
           <span className="uppercase">{typeConfig.displayName}</span>
@@ -78,8 +93,8 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
           onClick={() => onRemove(file)}
           variant="icon-only"
           size="sm"
-          className="ml-1 -mr-1 hover:bg-theme-bg-hover"
-          icon={<XMarkIcon className="h-4 w-4" />}
+          className="-mr-1 ml-1 touch-manipulation p-2 hover:bg-theme-bg-hover"
+          icon={<XMarkIcon className="size-4" />}
           aria-label="Remove file"
         />
       )}

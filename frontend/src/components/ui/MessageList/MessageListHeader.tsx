@@ -37,7 +37,7 @@ export const MessageListHeader: React.FC<MessageListHeaderProps> = ({
 
       {/* Debug info in development */}
       {process.env.NODE_ENV === "development" && (
-        <div className="sticky top-0 right-0 text-xs opacity-50 z-50 text-right">
+        <div className="sticky right-0 top-0 z-50 text-right text-xs opacity-50">
           Showing{" "}
           {apiMessagesResponse?.stats.returned_count ??
             paginationStats.displayed}{" "}

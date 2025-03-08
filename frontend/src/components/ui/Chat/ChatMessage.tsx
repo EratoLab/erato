@@ -64,8 +64,8 @@ export const ChatMessage = memo(function ChatMessage({
   return (
     <div
       className={clsx(
-        "relative flex gap-4 p-4 rounded-lg group",
-        "min-w-[280px] w-full shrink-0",
+        "group relative flex gap-4 rounded-lg p-4",
+        "w-full min-w-[280px] shrink-0",
         "hover:bg-theme-bg-accent",
         messageStyles.container[role],
         className,
@@ -74,14 +74,14 @@ export const ChatMessage = memo(function ChatMessage({
       aria-live="polite"
       aria-label={`${isUser ? "Your" : "Assistant"} message`}
     >
-      <div className="w-full flex gap-6">
+      <div className="flex w-full gap-6">
         {showAvatar && (
           <Avatar userProfile={userProfile} userOrAssistant={!!isUser} />
         )}
 
         <div className="min-w-0 flex-1 break-words">
-          <div className="flex justify-between items-start">
-            <div className="font-semibold mb-1 text-sm text-theme-fg-primary">
+          <div className="flex items-start justify-between">
+            <div className="mb-1 text-sm font-semibold text-theme-fg-primary">
               {isUser ? "You" : "Assistant"}
             </div>
           </div>

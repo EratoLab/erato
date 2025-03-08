@@ -129,11 +129,14 @@ export const ChatInput = ({
   }, [message]);
 
   return (
-    <form className={clsx("w-2/3 mx-auto mb-4")} onSubmit={handleSubmit}>
+    <form
+      className={clsx("mx-auto mb-4 w-full sm:w-5/6 md:w-2/3")}
+      onSubmit={handleSubmit}
+    >
       {/* File previews */}
       {selectedFiles.length > 0 && (
         <div className="mb-3">
-          <div className="flex justify-between items-center mb-2">
+          <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-medium text-theme-fg-secondary">
               Attachments ({selectedFiles.length}/{maxFiles})
             </h3>
@@ -144,7 +147,7 @@ export const ChatInput = ({
                   variant="ghost"
                   size="sm"
                   className="text-xs"
-                  icon={<XMarkIcon className="h-3 w-3 mr-1" />}
+                  icon={<XMarkIcon className="mr-1 size-3" />}
                 >
                   Remove all
                 </Button>
@@ -178,11 +181,11 @@ export const ChatInput = ({
       <div
         className={clsx(
           "w-full rounded-2xl bg-theme-bg-tertiary",
-          "p-3",
+          "p-2 sm:p-3",
           "shadow-[0_0_15px_rgba(0,0,0,0.1)]",
           "border border-theme-border",
-          "focus-within:border-theme-border-focus theme-transition",
-          "flex flex-col gap-3",
+          "theme-transition focus-within:border-theme-border-focus",
+          "flex flex-col gap-2 sm:gap-3",
           className,
         )}
       >
@@ -202,17 +205,18 @@ export const ChatInput = ({
           disabled={isLoading || disabled}
           className={clsx(
             "w-full resize-none overflow-hidden",
-            "px-3 py-2",
+            "p-2 sm:px-3",
             "bg-transparent",
             "text-theme-fg-primary placeholder:text-theme-fg-muted",
             "focus:outline-none",
-            "disabled:opacity-50 disabled:cursor-not-allowed",
-            "min-h-[24px] max-h-[200px]",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            "max-h-[200px] min-h-[32px]",
+            "text-base",
           )}
         />
 
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1 sm:gap-2">
             {showControls && (
               <>
                 <FileInput
@@ -224,7 +228,8 @@ export const ChatInput = ({
                     <Button
                       variant="icon-only"
                       size="sm"
-                      icon={<PlusIcon />}
+                      className="touch-manipulation p-2"
+                      icon={<PlusIcon className="size-5" />}
                       aria-label="Add File"
                       disabled={selectedFiles.length >= maxFiles}
                     />
@@ -234,8 +239,9 @@ export const ChatInput = ({
                   <Button
                     onClick={onRegenerate}
                     variant="icon-only"
-                    icon={<ArrowPathIcon />}
                     size="sm"
+                    className="touch-manipulation p-2"
+                    icon={<ArrowPathIcon className="size-5" />}
                     aria-label="Regenerate response"
                   />
                 </Tooltip>
@@ -247,8 +253,9 @@ export const ChatInput = ({
             type="submit"
             variant="secondary"
             disabled={!message.trim() || isLoading || disabled}
-            icon={<ArrowUpIcon />}
+            icon={<ArrowUpIcon className="size-5" />}
             size="sm"
+            className="touch-manipulation p-2"
             aria-label="Send message"
           />
         </div>

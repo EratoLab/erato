@@ -16,7 +16,7 @@ const meta = {
   title: "UI/ChatInput",
   component: ChatInput,
   parameters: {
-    layout: "centered",
+    layout: "fullscreen",
     docs: {
       description: {
         component: "ChatGPT-style input with controls and responsive design",
@@ -38,8 +38,12 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className="w-[768px] bg-white rounded-2xl p-8">
-        <Story />
+      <div className="flex h-screen w-full items-center justify-center bg-theme-bg-primary p-0">
+        <div className="flex size-full items-center justify-center rounded-lg bg-theme-bg-tertiary p-4 shadow-lg md:w-4/5 lg:w-3/4 xl:w-2/3">
+          <div className="w-full max-w-full">
+            <Story />
+          </div>
+        </div>
       </div>
     ),
   ],
@@ -58,6 +62,11 @@ export const Default: Story = {
     showControls: true,
     onAddFile: action("add files"),
     onRegenerate: action("regenerate"),
+  },
+  parameters: {
+    viewport: {
+      defaultViewport: "desktop",
+    },
   },
 };
 
@@ -96,5 +105,33 @@ export const WithCustomClassName: Story = {
   args: {
     className: "bg-gray-100",
     ...defaultArgs,
+  },
+};
+
+export const Mobile: Story = {
+  args: {
+    onSendMessage: action("message sent"),
+    showControls: true,
+    onAddFile: action("add files"),
+    onRegenerate: action("regenerate"),
+  },
+  parameters: {
+    viewport: {
+      defaultViewport: "mobile",
+    },
+  },
+};
+
+export const Tablet: Story = {
+  args: {
+    onSendMessage: action("message sent"),
+    showControls: true,
+    onAddFile: action("add files"),
+    onRegenerate: action("regenerate"),
+  },
+  parameters: {
+    viewport: {
+      defaultViewport: "tablet",
+    },
   },
 };

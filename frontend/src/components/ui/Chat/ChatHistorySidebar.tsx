@@ -47,7 +47,7 @@ const ChatHistoryHeader = memo<{
       collapsed ? "justify-center" : "justify-between",
     )}
   >
-    <div className="w-12 flex justify-center">
+    <div className="flex w-12 justify-center">
       <Button
         onClick={onToggleCollapse}
         variant="sidebar-icon"
@@ -59,14 +59,14 @@ const ChatHistoryHeader = memo<{
     </div>
     {!collapsed && (
       <>
-        <div className="flex-1 flex items-center">
+        <div className="flex flex-1 items-center">
           {showTitle && (
             <h2 className="font-semibold text-theme-fg-primary">
               Chat History
             </h2>
           )}
         </div>
-        <div className="w-12 flex justify-center">
+        <div className="flex w-12 justify-center">
           <Button
             onClick={onNewChat}
             variant="sidebar-icon"
@@ -85,11 +85,11 @@ const ChatHistoryFooter = memo<{
   userProfile?: UserProfile;
   onSignOut: () => void;
 }>(({ userProfile, onSignOut }) => (
-  <div className="p-2 border-t border-theme-border">
+  <div className="border-t border-theme-border p-2">
     <UserProfileDropdown
       userProfile={userProfile}
       onSignOut={onSignOut}
-      className="w-full flex items-center justify-start"
+      className="flex w-full items-center justify-start"
       showThemeToggle={true}
     />
   </div>
@@ -98,7 +98,7 @@ const ChatHistoryFooter = memo<{
 ChatHistoryFooter.displayName = "ChatHistoryFooter";
 
 const ErrorDisplay = ({ error }: { error: Error }) => (
-  <div className="flex flex-col items-center justify-center p-4 text-theme-fg-error">
+  <div className="text-theme-fg-error flex flex-col items-center justify-center p-4">
     <p className="font-medium">Something went wrong</p>
     <p className="text-sm">{error.message}</p>
   </div>
@@ -153,8 +153,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           ref={ref}
           style={{ width: sidebarWidth }}
           className={clsx(
-            "flex flex-col h-full border-r border-theme-border",
-            "bg-theme-bg-sidebar theme-transition",
+            "flex h-full flex-col border-r border-theme-border",
+            "theme-transition bg-theme-bg-sidebar",
             collapsed && "overflow-hidden",
             className,
           )}
@@ -167,7 +167,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           />
           {!collapsed && (
             <>
-              <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex min-h-0 flex-1 flex-col">
                 {error ? (
                   <ErrorDisplay error={error} />
                 ) : isLoading ? (

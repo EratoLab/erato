@@ -28,9 +28,9 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
               label: themeMode === "light" ? "Dark mode" : "Light mode",
               icon:
                 themeMode === "light" ? (
-                  <MoonIcon className="w-4 h-4" />
+                  <MoonIcon className="size-4" />
                 ) : (
-                  <SunIcon className="w-4 h-4" />
+                  <SunIcon className="size-4" />
                 ),
               onClick: () => {
                 setThemeMode(themeMode === "light" ? "dark" : "light");
@@ -40,13 +40,13 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
         : []),
       {
         label: "Sign out",
-        icon: <LogOutIcon className="w-4 h-4" />,
+        icon: <LogOutIcon className="size-4" />,
         onClick: onSignOut,
       },
     ];
 
     return (
-      <div className={clsx("min-h-[40px] flex items-center", className)}>
+      <div className={clsx("flex min-h-[40px] items-center", className)}>
         <DropdownMenu
           items={dropdownItems}
           align="left"
@@ -58,7 +58,7 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
             <Avatar
               userProfile={userProfile}
               size="sm"
-              className="cursor-pointer hover:opacity-80 theme-transition"
+              className="theme-transition cursor-pointer hover:opacity-80"
             />
           }
         />

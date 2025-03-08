@@ -35,12 +35,12 @@ export const Default: Story = {
     items: [
       {
         label: "Edit",
-        icon: <EditIcon className="w-4 h-4" />,
+        icon: <EditIcon className="size-4" />,
         onClick: () => console.log("Edit clicked"),
       },
       {
         label: "Delete",
-        icon: <Trash className="w-4 h-4" />,
+        icon: <Trash className="size-4" />,
         onClick: () => console.log("Delete clicked"),
         variant: "danger",
       },
@@ -65,12 +65,12 @@ export const WithDisabledItem: Story = {
     items: [
       {
         label: "Edit",
-        icon: <EditIcon className="w-4 h-4" />,
+        icon: <EditIcon className="size-4" />,
         onClick: () => console.log("Edit clicked"),
       },
       {
         label: "Delete",
-        icon: <Trash className="w-4 h-4" />,
+        icon: <Trash className="size-4" />,
         onClick: () => console.log("Delete clicked"),
         disabled: true,
         variant: "danger",

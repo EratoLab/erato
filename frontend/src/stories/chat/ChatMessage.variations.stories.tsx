@@ -104,7 +104,7 @@ export const MessageSequence: Story = {
   },
   decorators: [
     (Story) => (
-      <div className="space-y-2 w-full max-w-3xl">
+      <div className="w-full max-w-3xl space-y-2">
         <Story />
       </div>
     ),

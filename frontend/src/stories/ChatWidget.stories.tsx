@@ -42,7 +42,7 @@ const meta = {
         initialMessages={mockMessages}
         initialMessageOrder={mockMessageOrder}
       >
-        <div className="w-[400px] h-[400px]">
+        <div className="size-[400px]">
           <Story />
         </div>
       </ChatProvider>
@@ -57,7 +57,7 @@ export const Empty: Story = {
   decorators: [
     (Story) => (
       <ChatProvider>
-        <div className="w-[400px] h-[400px]">
+        <div className="size-[400px]">
           <Story />
         </div>
       </ChatProvider>

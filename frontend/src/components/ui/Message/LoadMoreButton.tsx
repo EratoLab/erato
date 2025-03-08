@@ -60,7 +60,7 @@ export const LoadMoreButton = memo<LoadMoreButtonProps>(
         disabled={isLoading}
         variant="secondary"
         size="sm"
-        className="px-4 rounded-full"
+        className="rounded-full px-4"
         icon={isLoading ? <SpinnerIcon size="sm" /> : undefined}
       >
         {isLoading ? loadingLabel : label}

@@ -107,13 +107,13 @@ export const Tooltip: React.FC<TooltipProps> = ({
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className={`fixed z-50 pointer-events-none ${positionClass} ${className}`}
+            className={`pointer-events-none fixed z-50 ${positionClass} ${className}`}
             style={{
               top: `${tooltipPosition.top}px`,
               left: `${tooltipPosition.left}px`,
             }}
           >
-            <div className="bg-slate-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap shadow-md">
+            <div className="whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white shadow-md">
               {content}
             </div>
           </div>,

@@ -38,7 +38,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className="p-8 bg-theme-bg-primary">
+      <div className="bg-theme-bg-primary p-8">
         <Story />
       </div>
     ),

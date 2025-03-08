@@ -43,24 +43,24 @@ const ChatHistoryListItem = memo<{
     onClick={onSelect}
     useDiv={true}
     className={clsx(
-      "flex flex-col text-left px-4 py-3 rounded-lg",
+      "flex flex-col rounded-lg px-4 py-3 text-left",
       isActive && "bg-theme-bg-selected",
       "hover:bg-theme-bg-hover",
       layout === "compact" ? "gap-0.5" : "gap-2",
     )}
   >
     <div className="flex items-center justify-between gap-2">
-      <span className="font-medium truncate">{session.title}</span>
+      <span className="truncate font-medium">{session.title}</span>
       <DropdownMenu
         items={[
           {
             label: "Show Details",
-            icon: <Info className="w-4 h-4" />,
+            icon: <Info className="size-4" />,
             onClick: onShowDetails ?? (() => {}),
           },
           {
             label: "Delete",
-            icon: <Trash className="w-4 h-4" />,
+            icon: <Trash className="size-4" />,
             onClick: onDelete ?? (() => {}),
             variant: "danger",
           },
@@ -68,7 +68,7 @@ const ChatHistoryListItem = memo<{
       />
     </div>
     {layout !== "compact" && session.metadata?.lastMessage && (
-      <p className="text-sm text-theme-fg-secondary truncate">
+      <p className="truncate text-sm text-theme-fg-secondary">
         {session.metadata.lastMessage.content}
       </p>
     )}
@@ -129,20 +129,20 @@ export const ChatHistoryListSkeleton = ({
 }) => (
   <div
     data-testid="chat-history-skeleton"
-    className="flex flex-col gap-1 overflow-y-auto bg-theme-bg-secondary w-full min-w-[280px] max-w-md p-2"
+    className="flex w-full min-w-[280px] max-w-md flex-col gap-1 overflow-y-auto bg-theme-bg-secondary p-2"
   >
     {Array.from({ length: 5 }, (_, i) => (
       <div
         key={i}
         data-testid="chat-history-skeleton-item"
-        className="px-4 py-3 rounded-lg w-full bg-theme-bg-primary"
+        className="w-full rounded-lg bg-theme-bg-primary px-4 py-3"
       >
-        <div className="flex items-center justify-between gap-2 w-full">
-          <div className="h-5 bg-theme-bg-accent rounded w-2/3 animate-pulse" />
-          <div className="h-8 w-8 bg-theme-bg-accent rounded animate-pulse shrink-0" />
+        <div className="flex w-full items-center justify-between gap-2">
+          <div className="h-5 w-2/3 animate-pulse rounded bg-theme-bg-accent" />
+          <div className="size-8 shrink-0 animate-pulse rounded bg-theme-bg-accent" />
         </div>
         {layout !== "compact" && (
-          <div className="h-4 bg-theme-bg-accent rounded w-4/5 mt-2 animate-pulse" />
+          <div className="mt-2 h-4 w-4/5 animate-pulse rounded bg-theme-bg-accent" />
         )}
       </div>
     ))}

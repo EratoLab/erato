@@ -147,7 +147,7 @@ A playground that demonstrates the ChatMessage component's streaming capabilitie
   },
   decorators: [
     (Story) => (
-      <div className="w-[400px] flex justify-center">
+      <div className="flex w-[400px] justify-center">
         <Story />
       </div>
     ),

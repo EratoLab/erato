@@ -45,7 +45,7 @@ const meta = {
             initialMessages={mockMessages}
             initialMessageOrder={mockOrder}
           >
-            <div className="h-screen w-full max-w-6xl mx-auto">
+            <div className="mx-auto h-screen w-full max-w-6xl">
               <Story />
             </div>
           </ChatProvider>

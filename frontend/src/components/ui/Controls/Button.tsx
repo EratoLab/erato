@@ -129,8 +129,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           {
             "bg-theme-bg-selected": ariaPressed === true,
           },
-          showOnHover && "opacity-0 group-hover:opacity-100 theme-transition",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
+          showOnHover && "theme-transition opacity-0 group-hover:opacity-100",
+          "disabled:cursor-not-allowed disabled:opacity-50",
           className,
         ),
       [variant, size, ariaPressed, showOnHover, className],
@@ -141,8 +141,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         clsx(
           "flex items-center justify-center",
           variant === "icon-only" || variant === "sidebar-icon"
-            ? "w-5 h-5"
-            : "w-4 h-4",
+            ? "size-5"
+            : "size-4",
         ),
       [variant],
     );
