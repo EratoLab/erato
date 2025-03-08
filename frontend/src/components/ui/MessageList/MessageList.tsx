@@ -12,7 +12,7 @@ import {
 } from "./MessageListUtils";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
-import { ConversationIndicator } from "../Message/ConversationIndicator";
+// import { ConversationIndicator } from "../Message/ConversationIndicator";
 
 import type { ChatMessagesResponse } from "../../../lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
@@ -311,41 +311,43 @@ export const MessageList = memo<MessageListProps>(
           apiMessagesResponse={apiMessagesResponse}
           paginationStats={paginationStats}
         />
+        <div className={clsx("mx-auto w-full sm:w-5/6 md:w-4/5")}>
+          {shouldUseVirtualization ? (
+            <VirtualizedMessageList
+              messages={messages}
+              visibleData={visibleData}
+              containerSize={containerSize}
+              isNewlyLoaded={isNewlyLoaded}
+              getMessageClassName={getMessageClassName}
+              maxWidth={maxWidth}
+              showTimestamps={showTimestamps}
+              showAvatars={showAvatars}
+              userProfile={userProfile}
+              controls={controls}
+              controlsContext={controlsContext}
+              onMessageAction={onMessageAction}
+            />
+          ) : (
+            <StandardMessageList
+              messages={messages}
+              visibleData={visibleData}
+              isNewlyLoaded={isNewlyLoaded}
+              getMessageClassName={getMessageClassName}
+              maxWidth={maxWidth}
+              showTimestamps={showTimestamps}
+              showAvatars={showAvatars}
+              userProfile={userProfile}
+              controls={controls}
+              controlsContext={controlsContext}
+              onMessageAction={onMessageAction}
+            />
+          )}
+
+          {/* End of conversation indicator */}
+          {/* <ConversationIndicator type="end" /> */}
+        </div>
 
         {/* Message List - virtualized or standard based on settings and message count */}
-        {shouldUseVirtualization ? (
-          <VirtualizedMessageList
-            messages={messages}
-            visibleData={visibleData}
-            containerSize={containerSize}
-            isNewlyLoaded={isNewlyLoaded}
-            getMessageClassName={getMessageClassName}
-            maxWidth={maxWidth}
-            showTimestamps={showTimestamps}
-            showAvatars={showAvatars}
-            userProfile={userProfile}
-            controls={controls}
-            controlsContext={controlsContext}
-            onMessageAction={onMessageAction}
-          />
-        ) : (
-          <StandardMessageList
-            messages={messages}
-            visibleData={visibleData}
-            isNewlyLoaded={isNewlyLoaded}
-            getMessageClassName={getMessageClassName}
-            maxWidth={maxWidth}
-            showTimestamps={showTimestamps}
-            showAvatars={showAvatars}
-            userProfile={userProfile}
-            controls={controls}
-            controlsContext={controlsContext}
-            onMessageAction={onMessageAction}
-          />
-        )}
-
-        {/* End of conversation indicator */}
-        <ConversationIndicator type="end" />
       </div>
     );
   },

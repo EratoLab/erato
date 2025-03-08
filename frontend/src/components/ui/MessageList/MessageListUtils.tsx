@@ -10,7 +10,7 @@ export const useMessageClassNameHelper = () => {
   return useCallback(
     (isNew: boolean) =>
       clsx(
-        "mx-auto w-full sm:w-[85%]",
+        "mx-auto w-full",
         "py-4",
         "transition-all duration-700 ease-in-out",
         isNew
