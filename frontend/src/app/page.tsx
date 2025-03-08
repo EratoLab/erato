@@ -2,7 +2,8 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import { useState, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 import {
   ChatHistoryProvider,
@@ -24,26 +25,127 @@ const Chat = dynamic(
 
 const queryClient = new QueryClient();
 
+// Create a custom hook to handle URL-based chat navigation
+const useChatNavigation = () => {
+  const { createSession, currentSessionId, switchSession } = useChatHistory();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Track if a programmatic URL change is happening
+  const isNavigating = useRef(false);
+  // Keep track of the last selected chatId to prevent loops
+  const lastSelectedChatId = useRef<string | null>(null);
+
+  // Enhanced switchSession that also updates URL
+  const switchSessionWithUrl = useCallback(
+    (chatId: string) => {
+      // Don't do anything if we're already on this chat or navigating
+      if (chatId === currentSessionId || isNavigating.current) return;
+
+      // Set navigating flag first
+      isNavigating.current = true;
+      lastSelectedChatId.current = chatId;
+
+      // First update the URL with a slight delay to ensure consistent behavior
+      setTimeout(() => {
+        const newParams = new URLSearchParams(searchParams.toString());
+        newParams.set("chatId", chatId);
+        router.replace(`${pathname}?${newParams.toString()}`);
+
+        // Then switch the session
+        switchSession(chatId);
+
+        // Reset flag after all operations complete
+        setTimeout(() => {
+          isNavigating.current = false;
+        }, 200);
+      }, 10);
+    },
+    [currentSessionId, router, pathname, searchParams, switchSession],
+  );
+
+  // Handle initial load and URL changes
+  useEffect(() => {
+    // Skip if we're in the middle of a programmatic navigation
+    if (isNavigating.current) return;
+
+    const chatId = searchParams.get("chatId");
+
+    // Only process if there's a chatId in the URL
+    if (chatId) {
+      // Only switch if it's actually different from current and last selected
+      if (
+        chatId !== currentSessionId &&
+        chatId !== lastSelectedChatId.current
+      ) {
+        // Update the last selected to prevent loops
+        lastSelectedChatId.current = chatId;
+        switchSession(chatId);
+      }
+    } else if (!currentSessionId) {
+      // No chat ID in URL and no current session, create a new one
+      const newId = createSession();
+      lastSelectedChatId.current = newId;
+
+      // Update URL without triggering the searchParams effect
+      isNavigating.current = true;
+      const newParams = new URLSearchParams(searchParams.toString());
+      newParams.set("chatId", newId);
+      router.replace(`${pathname}?${newParams.toString()}`);
+
+      // Reset flag after navigation completes
+      setTimeout(() => {
+        isNavigating.current = false;
+      }, 200);
+    }
+  }, [
+    searchParams,
+    pathname,
+    router,
+    currentSessionId,
+    switchSession,
+    createSession,
+  ]);
+
+  // Create a new chat with updated URL
+  const createNewChat = useCallback(() => {
+    // Skip if we're already navigating
+    if (isNavigating.current) return "";
+
+    const newId = createSession();
+    lastSelectedChatId.current = newId;
+
+    isNavigating.current = true;
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.set("chatId", newId);
+    router.replace(`${pathname}?${newParams.toString()}`);
+
+    setTimeout(() => {
+      isNavigating.current = false;
+    }, 200);
+
+    return newId;
+  }, [createSession, pathname, router, searchParams]);
+
+  return {
+    switchSessionWithUrl,
+    createNewChat,
+  };
+};
+
 // Inner component to access hooks within providers
 const ChatContainer = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { createSession, currentSessionId } = useChatHistory();
-
-  // Create a new chat session when no session exists
-  useEffect(() => {
-    if (!currentSessionId) {
-      createSession();
-    }
-  }, [currentSessionId, createSession]);
+  const { switchSessionWithUrl, createNewChat } = useChatNavigation();
 
   const handleToggleCollapse = () => {
     setSidebarCollapsed((prev) => !prev);
   };
 
   const handleNewChat = useCallback(() => {
-    // Create a new chat session
-    createSession();
-  }, [createSession]);
+    createNewChat();
+  }, [createNewChat]);
 
   // Define which file types are accepted in this chat
   const acceptedFileTypes: FileType[] = ["pdf", "image", "document", "text"];
@@ -56,27 +158,6 @@ const ChatContainer = () => {
     );
 
     // TODO: Implement file upload to backend server
-    // Example implementation:
-    // 1. Create FormData object
-    // const formData = new FormData();
-    // files.forEach(file => {
-    //   formData.append('files', file);
-    // });
-    // formData.append('sessionId', currentSessionId || '');
-    //
-    // 2. Send to backend
-    // fetch('/api/upload', {
-    //   method: 'POST',
-    //   body: formData
-    // }).then(response => response.json())
-    //   .then(data => {
-    //     console.log('Files uploaded:', data);
-    //     // Update UI with file references or trigger a message with attachments
-    //   })
-    //   .catch(error => {
-    //     console.error('Error uploading files:', error);
-    //     // Handle error state
-    //   });
   }, []);
 
   return (
@@ -97,6 +178,8 @@ const ChatContainer = () => {
         sidebarCollapsed={sidebarCollapsed}
         onToggleCollapse={handleToggleCollapse}
         acceptedFileTypes={acceptedFileTypes}
+        // Pass our enhanced session switching function that handles URL updates
+        customSessionSelect={switchSessionWithUrl}
       />
     </ChatProvider>
   );

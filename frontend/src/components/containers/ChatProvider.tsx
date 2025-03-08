@@ -94,6 +94,18 @@ const DEBUG = process.env.NODE_ENV === "development";
 const log = (...args: unknown[]) => DEBUG && console.log(...args);
 const LOCAL_STORAGE_KEY = "chat_cache_v1";
 
+// Throttle log messages to prevent spam
+const logTimestamps = new Map<string, number>();
+const throttledLog = (message: string, ...args: unknown[]) => {
+  const now = Date.now();
+  const lastLog = logTimestamps.get(message) ?? 0;
+  if (now - lastLog > 5000) {
+    // Only log the same message once every 5 seconds
+    log(message, ...args);
+    logTimestamps.set(message, now);
+  }
+};
+
 // Reducer function to handle all chat state updates
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
   switch (action.type) {
@@ -209,14 +221,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     const isCacheValid = now - cached.lastUpdated < 24 * 60 * 60 * 1000;
 
     if (isCacheValid) {
-      log(`Using cached data for session ${currentSessionId}`);
+      throttledLog(`Using cached data for session ${currentSessionId}`);
       return {
         ...initialChatState,
         messages: cached.messages,
         messageOrder: cached.messageOrder,
       };
     } else {
-      log(`Cache expired for session ${currentSessionId}`);
+      throttledLog(`Cache expired for session ${currentSessionId}`);
       return {
         ...initialChatState,
         messages: initialMessages,
@@ -243,7 +255,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
 
   // Log state values when in debug mode
   useEffect(() => {
-    log("Chat state updated:", {
+    throttledLog("Chat state updated:", {
       messagesCount: Object.keys(messages).length,
       messageOrderLength: messageOrder.length,
       hasOlderMessages,
@@ -281,7 +293,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       },
     }));
 
-    log(
+    throttledLog(
       `Updated cache for session ${currentSessionId} with ${messageOrder.length} messages`,
     );
   }, [currentSessionId, messages, messageOrder]);
@@ -292,7 +304,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     if (!currentSessionId) return;
 
     try {
-      log(`Resetting state for session: ${currentSessionId}`);
+      throttledLog(`Resetting state for session: ${currentSessionId}`);
 
       // Reset state for new session
       dispatch({ type: "RESET_STATE", sessionId: currentSessionId });
@@ -306,7 +318,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         });
       }
     } catch (error) {
-      log("Error handling session change:", error);
+      throttledLog("Error handling session change:", error);
     }
   }, [currentSessionId]);
 
@@ -370,7 +382,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         newOrder.push(message.id);
       }
 
-      log(`Setting initial messages: ${newOrder.length} messages`);
+      throttledLog(`Setting initial messages: ${newOrder.length} messages`);
 
       dispatch({
         type: "SET_MESSAGES",
@@ -401,12 +413,12 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         }
       }
 
-      log(`Found ${newMessageIds.length} new messages to add`);
-      log(`Current message order: ${messageOrder.length} messages`);
+      throttledLog(`Found ${newMessageIds.length} new messages to add`);
+      throttledLog(`Current message order: ${messageOrder.length} messages`);
 
       // The newMessageIds are already in oldest-first order
       if (newMessageIds.length > 0) {
-        log(`Prepending ${newMessageIds.length} older messages`);
+        throttledLog(`Prepending ${newMessageIds.length} older messages`);
 
         // Prepend the new (older) messages to the existing message order
         dispatch({
@@ -415,7 +427,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
           messageIds: newMessageIds,
         });
       } else {
-        log("No new messages to add after filtering");
+        throttledLog("No new messages to add after filtering");
       }
     },
     [messages, messageOrder, convertApiMessageToAppMessage],
@@ -425,21 +437,21 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   const processApiMessages = useCallback(
     (apiResponse: ChatMessagesResponse) => {
       if (apiResponse.messages.length === 0) {
-        log("No messages in API response, skipping processing");
+        throttledLog("No messages in API response, skipping processing");
         return;
       }
 
-      log(
+      throttledLog(
         `Processing API response: offset=${messageOffset}, messages count=${apiResponse.messages.length}, has_more=${apiResponse.stats.has_more}`,
       );
-      log(
+      throttledLog(
         `First message ID: ${apiResponse.messages[0]?.id}, Last message ID: ${apiResponse.messages[apiResponse.messages.length - 1]?.id}`,
       );
 
       // Generate a response identifier and check for duplicates
       const responseId = getResponseIdentifier(apiResponse, messageOffset);
       if (prevApiResponseRef.current === responseId) {
-        log(`Skipping duplicate response: ${responseId}`);
+        throttledLog(`Skipping duplicate response: ${responseId}`);
         return;
       }
 
@@ -539,7 +551,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
 
   // Logger for the infinite query state
   useEffect(() => {
-    log("Infinite query state:", {
+    throttledLog("Infinite query state:", {
       hasNextPage,
       isFetchingNextPage,
     });
@@ -549,7 +561,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   // This maintains the button-based loading approach
   const loadOlderMessages = useCallback(() => {
     if (hasOlderMessages && !isLoading) {
-      log(`Loading older messages: using React Query's fetchNextPage`);
+      throttledLog(`Loading older messages: using React Query's fetchNextPage`);
 
       // Set loading state manually to reflect in the UI immediately
       dispatch({ type: "SET_LOADING", isLoading: true });
@@ -562,9 +574,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       // But for now, both mechanisms work together
       void fetchNextPage();
     } else if (isLoading) {
-      log("Skipping loadOlderMessages because already loading");
+      throttledLog("Skipping loadOlderMessages because already loading");
     } else {
-      log("No more older messages to load");
+      throttledLog("No more older messages to load");
     }
   }, [hasOlderMessages, isLoading, fetchNextPage]);
 
@@ -584,6 +596,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     [],
   );
 
+  // Throttle updates to reduce unnecessary renders
+  const throttledUpdate = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Process streaming updates
   useUpdateEffect(() => {
     if (!currentStreamingMessage || !currentSessionId) return;
@@ -593,31 +608,51 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       .map((id) => messages[id])
       .filter((msg) => msg.sender === "assistant");
 
+    // Skip update if no assistant messages exist
+    if (assistantMessages.length === 0) {
+      return;
+    }
+
     const lastAssistantMessage =
       assistantMessages[assistantMessages.length - 1];
-
-    // No need to check if lastAssistantMessage exists since it's always truthy here
     const messageId = lastAssistantMessage.id;
-    const currentContent = messages[messageId].content;
-    const newContent = currentStreamingMessage.content;
 
-    // Only update if content or status changed
-    if (
-      currentContent !== newContent ||
-      !!messages[messageId].loading !== !currentStreamingMessage.isComplete ||
-      !!messages[messageId].error !== !!currentStreamingMessage.error
-    ) {
-      updateMessage(messageId, {
-        content: newContent,
-        loading: currentStreamingMessage.isComplete
-          ? undefined
-          : { state: "loading" },
-        error:
-          currentStreamingMessage.error instanceof Error
-            ? currentStreamingMessage.error
-            : undefined,
-      });
+    // Cancel previous update if it exists
+    if (throttledUpdate.current) {
+      clearTimeout(throttledUpdate.current);
     }
+
+    throttledUpdate.current = setTimeout(() => {
+      const currentContent = messages[messageId].content;
+      const newContent = currentStreamingMessage.content;
+
+      // Only update if content or status changed
+      if (
+        currentContent !== newContent ||
+        !!messages[messageId].loading !== !currentStreamingMessage.isComplete ||
+        !!messages[messageId].error !== !!currentStreamingMessage.error
+      ) {
+        updateMessage(messageId, {
+          content: newContent,
+          loading: currentStreamingMessage.isComplete
+            ? undefined
+            : { state: "loading" },
+          error:
+            currentStreamingMessage.error instanceof Error
+              ? currentStreamingMessage.error
+              : undefined,
+        });
+      }
+
+      throttledUpdate.current = null;
+    }, 16); // Using ~60fps (16ms) for near-instant visual updates
+
+    // Clean up on unmount
+    return () => {
+      if (throttledUpdate.current) {
+        clearTimeout(throttledUpdate.current);
+      }
+    };
   }, [
     currentStreamingMessage,
     currentSessionId,
@@ -654,11 +689,11 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         };
         addMessage(userMessage);
 
-        // Add assistant placeholder
+        // Add assistant placeholder immediately so streaming can begin
         const assistantMessageId = generateMessageId();
         const assistantMessage: ChatMessage = {
           id: assistantMessageId,
-          content: "",
+          content: "", // Initial empty content that will be streamed
           sender: "assistant",
           createdAt: new Date(),
           loading: { state: "loading" },
@@ -666,10 +701,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         };
         addMessage(assistantMessage);
 
-        // Start streaming
+        // This ensures the placeholder message is added before streaming starts
+        // Ensures React can render it before content starts streaming
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // Start streaming the response
         await streamMessage(currentSessionId, content, lastMessageId);
       } catch (error) {
-        log("Error sending message:", error);
+        throttledLog("Error sending message:", error);
 
         // Update last message with error
         const lastMessageId = messageOrder[messageOrder.length - 1];

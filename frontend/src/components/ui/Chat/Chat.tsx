@@ -48,6 +48,8 @@ export interface ChatProps {
   onToggleCollapse: () => void;
   /** Optional array of accepted file types */
   acceptedFileTypes?: FileType[];
+  /** Optional custom session select handler to override default behavior */
+  customSessionSelect?: (sessionId: string) => void;
 }
 
 /**
@@ -69,6 +71,7 @@ export const Chat = ({
   sidebarCollapsed = false,
   onToggleCollapse,
   acceptedFileTypes,
+  customSessionSelect,
 }: ChatProps) => {
   // Get chat data and actions from context providers
   const {
@@ -89,6 +92,18 @@ export const Chat = ({
     isLoading: chatHistoryLoading,
     error: chatHistoryError,
   } = useChatHistory();
+
+  // Use custom session select function or fall back to the default one
+  const handleSessionSelect = useCallback(
+    (sessionId: string) => {
+      if (customSessionSelect) {
+        customSessionSelect(sessionId);
+      } else {
+        switchSession(sessionId);
+      }
+    },
+    [customSessionSelect, switchSession],
+  );
 
   // Wrap the sendMessage with a void handler for ChatInput
   const handleSendMessage = useCallback(
@@ -125,7 +140,7 @@ export const Chat = ({
         onToggleCollapse={onToggleCollapse}
         sessions={sessions}
         currentSessionId={currentSessionId}
-        onSessionSelect={switchSession}
+        onSessionSelect={handleSessionSelect}
         onSessionDelete={deleteSession}
         isLoading={chatHistoryLoading}
         error={chatHistoryError}

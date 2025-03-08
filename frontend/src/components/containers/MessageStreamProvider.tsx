@@ -4,6 +4,7 @@ import { SSE } from "sse.js";
 import { env } from "../../app/env";
 
 import type { MessageSubmitStreamingResponseMessage } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
+
 // import type { ChatMessage } from '../../types/chat';
 
 interface StreamingState {
@@ -29,6 +30,28 @@ const MessageStreamContext = createContext<
 interface MessageStreamProviderProps extends React.PropsWithChildren {
   onChatCreated?: (tempId: string, permanentId: string) => void;
 }
+
+interface SSEErrorEvent extends CustomEvent {
+  responseCode?: number;
+  data?: string;
+  source?: unknown;
+}
+
+// Debug logging
+const DEBUG = process.env.NODE_ENV === "development";
+const log = (...args: unknown[]) => DEBUG && console.log(...args);
+
+// Throttle log messages to prevent spam
+const logTimestamps = new Map<string, number>();
+const throttledLog = (message: string, ...args: unknown[]) => {
+  const now = Date.now();
+  const lastLog = logTimestamps.get(message) ?? 0;
+  if (now - lastLog > 5000) {
+    // Only log the same message once every 5 seconds
+    log(message, ...args);
+    logTimestamps.set(message, now);
+  }
+};
 
 export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
   children,
@@ -78,6 +101,7 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
           }),
         });
 
+        throttledLog(`Starting SSE stream to ${sseUrl}`);
         setCurrentSource(source);
         setCurrentStreamingMessage({ content: "", isComplete: false });
 
@@ -87,10 +111,11 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
             const data = JSON.parse(
               e.data,
             ) as MessageSubmitStreamingResponseMessage;
-            if (data.message_type === "text_delta") {
+            if (data.message_type === "text_delta" && data.new_text) {
               setCurrentStreamingMessage((prev) => ({
-                content: prev?.content + data.new_text,
+                content: (prev?.content ?? "") + data.new_text,
                 isComplete: false,
+                error: undefined, // Clear any previous errors
               }));
             }
           } catch (error) {
@@ -158,15 +183,38 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
 
         source.addEventListener("error", (e: Event) => {
           console.error("SSE error event:", e);
-          setCurrentStreamingMessage((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  error: new Error("Stream error occurred"),
-                  isComplete: true,
-                }
-              : null,
-          );
+
+          // Don't mark as error if it's just the connection closing normally
+          // This helps prevent the ERR_INCOMPLETE_CHUNKED_ENCODING error
+          const isNormalClose =
+            e instanceof CustomEvent &&
+            ((e as SSEErrorEvent).responseCode === 200 ||
+              (e as SSEErrorEvent).responseCode === 0) &&
+            (!(e as SSEErrorEvent).data || (e as SSEErrorEvent).data === "");
+
+          if (!isNormalClose) {
+            setCurrentStreamingMessage((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    error: new Error("Stream error occurred"),
+                    isComplete: true,
+                  }
+                : null,
+            );
+          } else {
+            // Just finish the stream normally if it's a clean close
+            setCurrentStreamingMessage((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    isComplete: true,
+                  }
+                : null,
+            );
+          }
+
+          // Always clean up the source
           source.close();
           setCurrentSource(null);
         });
@@ -190,6 +238,7 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
           }
         });
 
+        // Start the stream
         source.stream();
       } catch (error) {
         console.error("Failed to start streaming:", error);

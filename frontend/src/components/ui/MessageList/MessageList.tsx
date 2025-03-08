@@ -145,11 +145,41 @@ export const MessageList = memo<MessageListProps>(
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
     // Use our custom hooks for scroll behavior and pagination
-    const { containerRef, isScrolledUp, checkScrollPosition } =
+    const { containerRef, isScrolledUp, checkScrollPosition, scrollToBottom } =
       useScrollToBottom({
         enabled: true,
-        deps: [messageOrder.length, currentSessionId],
+        deps: [
+          messageOrder.length,
+          currentSessionId,
+          // Add dependencies to detect content changes in the last message
+          // This ensures scrolling works during streaming
+          messageOrder.length > 0
+            ? messages[messageOrder[messageOrder.length - 1]].content
+            : "",
+          messageOrder.length > 0
+            ? messages[messageOrder[messageOrder.length - 1]].loading
+            : null,
+        ],
       });
+
+    // Force scroll to bottom when a message is actively streaming
+    useEffect(() => {
+      // Check if the last message is from the assistant and is still loading
+      if (messageOrder.length > 0) {
+        const lastMessageId = messageOrder[messageOrder.length - 1];
+        const lastMessage = messages[lastMessageId];
+
+        if (
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          lastMessage &&
+          lastMessage.sender === "assistant" &&
+          !!lastMessage.loading
+        ) {
+          // Message is streaming, so scroll to bottom
+          scrollToBottom();
+        }
+      }
+    }, [messageOrder, messages, scrollToBottom]);
 
     // Set up pagination for message data
     const { visibleData, hasMore, loadMore, isNewlyLoaded, paginationStats } =
