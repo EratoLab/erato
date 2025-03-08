@@ -50,6 +50,10 @@ export function useScrollToBottom({
   // Track if the user is currently scrolled up (viewing history)
   const isUserScrolledUpRef = useRef(false);
 
+  // Also track if user is near the top of the message list
+  const isNearTopRef = useRef(false);
+  const [isNearTop, setIsNearTop] = useState(false);
+
   // We need a state value to trigger re-renders when this changes
   const [isScrolledUp, setIsScrolledUp] = useState(false);
 
@@ -60,12 +64,20 @@ export function useScrollToBottom({
 
     const { scrollTop, scrollHeight, clientHeight } = container;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const distanceFromTop = scrollTop;
 
+    // Consider user as scrolled up if they're not at the bottom
     const scrolledUp = distanceFromBottom > scrollUpThreshold;
 
-    // Store the value in both the ref and state
+    // Consider user near top if they're within 50px of the top of the message list
+    const nearTop = distanceFromTop < 50;
+
+    // Store the values in both refs and state
     isUserScrolledUpRef.current = scrolledUp;
+    isNearTopRef.current = nearTop;
+
     setIsScrolledUp(scrolledUp);
+    setIsNearTop(nearTop);
   }, [scrollUpThreshold]);
 
   // Force a scroll to bottom regardless of current scroll position
@@ -140,6 +152,7 @@ export function useScrollToBottom({
     containerRef,
     scrollToBottom,
     isScrolledUp, // Return the state value, not the ref value
+    isNearTop, // Add the isNearTop state value to help with "Load More" visibility
     // Expose the check function so consumers can manually check scroll position
     checkScrollPosition: checkIfUserIsScrolledUp,
   };

@@ -145,22 +145,27 @@ export const MessageList = memo<MessageListProps>(
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
     // Use our custom hooks for scroll behavior and pagination
-    const { containerRef, isScrolledUp, checkScrollPosition, scrollToBottom } =
-      useScrollToBottom({
-        enabled: true,
-        deps: [
-          messageOrder.length,
-          currentSessionId,
-          // Add dependencies to detect content changes in the last message
-          // This ensures scrolling works during streaming
-          messageOrder.length > 0
-            ? messages[messageOrder[messageOrder.length - 1]].content
-            : "",
-          messageOrder.length > 0
-            ? messages[messageOrder[messageOrder.length - 1]].loading
-            : null,
-        ],
-      });
+    const {
+      containerRef,
+      isScrolledUp,
+      isNearTop,
+      checkScrollPosition,
+      scrollToBottom,
+    } = useScrollToBottom({
+      enabled: true,
+      deps: [
+        messageOrder.length,
+        currentSessionId,
+        // Add dependencies to detect content changes in the last message
+        // This ensures scrolling works during streaming
+        messageOrder.length > 0
+          ? messages[messageOrder[messageOrder.length - 1]].content
+          : "",
+        messageOrder.length > 0
+          ? messages[messageOrder[messageOrder.length - 1]].loading
+          : null,
+      ],
+    });
 
     // Force scroll to bottom when a message is actively streaming
     useEffect(() => {
@@ -190,6 +195,18 @@ export const MessageList = memo<MessageListProps>(
         enabled: hasOlderMessages,
         direction: "backward", // Use backward pagination for chat (older messages first)
       });
+
+    // Add a message when user scrolls back down to new messages
+    useEffect(() => {
+      // Don't show any notification while loading or if no messages
+      if (isLoading || messageOrder.length === 0) return;
+
+      // User was scrolled up but now scrolled back down, check if there are new messages
+      if (isScrolledUp === false && visibleData.length < messageOrder.length) {
+        // This is where you'd show a "new messages" indicator if desired
+        console.log("User scrolled back to see new messages");
+      }
+    }, [isScrolledUp, isLoading, messageOrder.length, visibleData.length]);
 
     // Create debounced function with useMemo
     const debouncedLoadMore = useMemo(
@@ -240,20 +257,19 @@ export const MessageList = memo<MessageListProps>(
 
     // Memoize derived values
     const showLoadMoreButton = useMemo(() => {
+      // Show load more button only when the user is near the top of the message list
+      if (!isNearTop) return false;
+
       // Get API pagination status
       const hasMoreMessagesFromApi =
         apiMessagesResponse?.stats.has_more ?? false;
 
-      // Show load more button in two cases:
-      // 1. API indicates more messages are available - show regardless of scroll position
-      if (hasMoreMessagesFromApi) {
-        return true;
-      }
-
-      // 2. There are locally cached messages (hasOlderMessages or hasMore) AND user is scrolled up
+      // Only show load more when user is near the top AND there are more messages
       const hasMoreLocalMessages = hasOlderMessages || hasMore;
-      return hasMoreLocalMessages && isScrolledUp;
-    }, [apiMessagesResponse, hasOlderMessages, hasMore, isScrolledUp]);
+
+      // Show button only when there are more messages (API or client-side)
+      return hasMoreMessagesFromApi || hasMoreLocalMessages;
+    }, [apiMessagesResponse, hasOlderMessages, hasMore, isNearTop]);
 
     const showBeginningIndicator = useMemo(() => {
       // Only show the beginning indicator if:
