@@ -26,20 +26,43 @@ const getUpdateInterval = (diff: number): number => {
   return day; // Update daily
 };
 
+/**
+ * Safely ensures a valid Date object
+ * Returns current date if input is invalid
+ */
+const ensureValidDate = (dateInput: unknown): Date => {
+  if (dateInput instanceof Date) {
+    return isNaN(dateInput.getTime()) ? new Date() : dateInput;
+  }
+
+  try {
+    const dateObj = new Date(dateInput as string | number);
+    return isNaN(dateObj.getTime()) ? new Date() : dateObj;
+  } catch {
+    console.warn(
+      "Invalid date provided to MessageTimestamp, using current date",
+    );
+    return new Date();
+  }
+};
+
 export const MessageTimestamp = memo(function MessageTimestamp({
   createdAt,
   className,
   displayStyle = "relative",
   autoUpdate = false,
 }: MessageTimestampProps) {
+  // Ensure we have a valid date object
+  const safeCreatedAt = ensureValidDate(createdAt);
+
   const [now, setNow] = useState<number>(() => Date.now());
   const [timeString, setTimeString] = useState(() =>
     displayStyle === "time"
-      ? createdAt.toLocaleTimeString(undefined, {
+      ? safeCreatedAt.toLocaleTimeString(undefined, {
           hour: "2-digit",
           minute: "2-digit",
         })
-      : formatDistanceToNow(createdAt, {
+      : formatDistanceToNow(safeCreatedAt, {
           addSuffix: true,
           includeSeconds: true,
         }),
@@ -52,21 +75,21 @@ export const MessageTimestamp = memo(function MessageTimestamp({
   useUpdateEffect(() => {
     setTimeString(
       displayStyle === "time"
-        ? createdAt.toLocaleTimeString(undefined, {
+        ? safeCreatedAt.toLocaleTimeString(undefined, {
             hour: "2-digit",
             minute: "2-digit",
           })
-        : formatDistanceToNow(createdAt, {
+        : formatDistanceToNow(safeCreatedAt, {
             addSuffix: true,
             includeSeconds: true,
           }),
     );
-  }, [createdAt, displayStyle, shouldUpdateOnNowChange && now]);
+  }, [safeCreatedAt, displayStyle, shouldUpdateOnNowChange && now]);
 
   useEffect(() => {
     if (!autoUpdate || displayStyle === "time") return;
 
-    const diff = Date.now() - createdAt.getTime();
+    const diff = Date.now() - safeCreatedAt.getTime();
     const interval = getUpdateInterval(diff);
 
     const timer = setInterval(() => {
@@ -74,13 +97,13 @@ export const MessageTimestamp = memo(function MessageTimestamp({
     }, interval);
 
     return () => clearInterval(timer);
-  }, [createdAt, displayStyle, autoUpdate]);
+  }, [safeCreatedAt, displayStyle, autoUpdate]);
 
   return (
     <time
       className={clsx("block text-xs text-theme-fg-muted", className)}
-      dateTime={createdAt.toISOString()}
-      title={createdAt.toLocaleString()}
+      dateTime={safeCreatedAt.toISOString()}
+      title={safeCreatedAt.toLocaleString()}
     >
       {timeString}
     </time>

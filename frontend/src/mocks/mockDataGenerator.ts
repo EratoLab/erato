@@ -64,13 +64,17 @@ export class MockDataGenerator {
       }
     };
 
+    // Ensure we have valid dates
+    const createdAt = overrides?.created_at ?? now.toISOString();
+    const updatedAt = overrides?.updated_at ?? now.toISOString();
+
     return {
       id: messageId,
       chat_id: chatId,
       role: role,
       full_text: overrides?.full_text ?? generateRealisticText(),
-      created_at: overrides?.created_at ?? now.toISOString(),
-      updated_at: overrides?.updated_at ?? now.toISOString(),
+      created_at: createdAt,
+      updated_at: updatedAt,
       is_message_in_active_thread:
         overrides?.is_message_in_active_thread ?? true,
       previous_message_id: overrides?.previous_message_id,
@@ -98,7 +102,7 @@ export class MockDataGenerator {
   /**
    * Generate a complete set of mock data for chats and messages
    */
-  static createMockDataset(chatCount = 5, messagesPerChat = 5) {
+  static createMockDataset(chatCount = 5, messagesPerChat = 10) {
     // Create user profiles
     const userProfile = this.createUserProfile({ id: "user_1" });
     const assistantProfile = this.createAssistantProfile({ id: "assistant_1" });
@@ -244,16 +248,14 @@ export class MockDataGenerator {
     );
 
     // With typical query params
-    [10, 20, 50, 100].forEach((limit) => {
+    [6, 10, 20, 50, 100].forEach((limit) => {
       queryClient.setQueryData(
         ["api", "v1beta", "chats", chatId, "messages", { limit }],
         messagesResponse,
       );
-    });
 
-    // With limit and offset combinations
-    [0, 10, 20].forEach((offset) => {
-      [10, 20, 50].forEach((limit) => {
+      // Also set combinations of limit and offset
+      [0, 6, 10, 20].forEach((offset) => {
         queryClient.setQueryData(
           ["api", "v1beta", "chats", chatId, "messages", { limit, offset }],
           messagesResponse,
@@ -261,11 +263,26 @@ export class MockDataGenerator {
       });
     });
 
-    // Legacy format
-    queryClient.setQueryData(["messages", chatId], {
-      messages: messagesResponse.messages,
-      totalCount: messagesResponse.stats.total_count,
-      hasMore: messagesResponse.stats.has_more,
+    // Support the alternate query format with sessionId parameter
+    queryClient.setQueryData(
+      ["api", "v1beta", "messages", { sessionId: chatId }],
+      messagesResponse,
+    );
+
+    // Support alternate formats with sessionId and other params
+    [6, 10, 20, 50].forEach((limit) => {
+      queryClient.setQueryData(
+        ["api", "v1beta", "messages", { sessionId: chatId, limit }],
+        messagesResponse,
+      );
+
+      // With offset
+      [0, 6, 10].forEach((offset) => {
+        queryClient.setQueryData(
+          ["api", "v1beta", "messages", { sessionId: chatId, limit, offset }],
+          messagesResponse,
+        );
+      });
     });
   }
 

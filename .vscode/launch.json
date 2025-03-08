@@ -1,0 +1,105 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Frontend (just dev)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/frontend",
+      "sourceMapPathOverrides": {
+        "webpack://_N_E/*": "${webRoot}/*",
+        "webpack:///*": "${webRoot}/*",
+        "webpack:///./~/*": "${webRoot}/node_modules/*",
+        "webpack:///./*": "${webRoot}/*",
+        "webpack:///src/*": "${webRoot}/src/*"
+      },
+      "preLaunchTask": "Start Frontend Dev Server",
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**",
+        "**/@babel/**",
+        "**/webpack/**"
+      ],
+      "smartStep": true,
+      "sourceMaps": true,
+      "disableNetworkCache": true,
+      "timeout": 30000,
+      "trace": false
+    },
+    {
+      "name": "Debug Storybook",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:6006",
+      "webRoot": "${workspaceFolder}/frontend",
+      "sourceMapPathOverrides": {
+        "webpack://*": "${webRoot}/*",
+        "webpack:///./*": "${webRoot}/*",
+        "webpack:///./~/*": "${webRoot}/node_modules/*",
+        "webpack:///src/*": "${webRoot}/src/*"
+      },
+      "preLaunchTask": "Start Storybook",
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**",
+        "**/@babel/**",
+        "**/webpack/**"
+      ],
+      "smartStep": true,
+      "sourceMaps": true,
+      "disableNetworkCache": true,
+      "timeout": 30000,
+      "trace": false
+    },
+    {
+      "name": "Attach to Running Frontend",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+      "urlFilter": "http://localhost:3000/*",
+      "webRoot": "${workspaceFolder}/frontend",
+      "sourceMapPathOverrides": {
+        "webpack://_N_E/*": "${webRoot}/*",
+        "webpack:///*": "${webRoot}/*",
+        "webpack:///./~/*": "${webRoot}/node_modules/*",
+        "webpack:///./*": "${webRoot}/*",
+        "webpack:///src/*": "${webRoot}/src/*"
+      },
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**",
+        "**/@babel/**",
+        "**/webpack/**"
+      ],
+      "smartStep": true,
+      "sourceMaps": true,
+      "disableNetworkCache": true,
+      "trace": false
+    },
+    {
+      "name": "Attach to Running Storybook",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+      "urlFilter": "http://localhost:6006/*",
+      "webRoot": "${workspaceFolder}/frontend",
+      "sourceMapPathOverrides": {
+        "webpack://*": "${webRoot}/*",
+        "webpack:///./*": "${webRoot}/*",
+        "webpack:///./~/*": "${webRoot}/node_modules/*",
+        "webpack:///src/*": "${webRoot}/src/*"
+      },
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**",
+        "**/@babel/**",
+        "**/webpack/**"
+      ],
+      "smartStep": true,
+      "sourceMaps": true,
+      "disableNetworkCache": true,
+      "trace": false
+    }
+  ]
+} 

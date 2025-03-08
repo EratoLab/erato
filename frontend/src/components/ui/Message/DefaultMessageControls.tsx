@@ -18,6 +18,26 @@ import type {
   MessageActionType,
 } from "../../../types/message-controls";
 
+/**
+ * Safely ensures a valid Date object
+ * Returns current date if input is invalid
+ */
+const ensureValidDate = (dateInput: unknown): Date => {
+  if (dateInput instanceof Date) {
+    return isNaN(dateInput.getTime()) ? new Date() : dateInput;
+  }
+
+  try {
+    const dateObj = new Date(dateInput as string | number);
+    return isNaN(dateObj.getTime()) ? new Date() : dateObj;
+  } catch {
+    console.warn(
+      "Invalid date provided to DefaultMessageControls, using current date",
+    );
+    return new Date();
+  }
+};
+
 export const DefaultMessageControls = ({
   messageId,
   messageType,
@@ -31,6 +51,9 @@ export const DefaultMessageControls = ({
   const isUser = messageType === "user";
   const isOwnMessage = authorId === context.currentUserId;
   const isDialogOwner = context.currentUserId === context.dialogOwnerId;
+
+  // Ensure createdAt is a valid Date object
+  const safeCreatedAt = ensureValidDate(createdAt);
 
   const handleAction = (type: MessageActionType) => {
     void onAction({ type, messageId });
@@ -101,7 +124,7 @@ export const DefaultMessageControls = ({
           </>
         )}
       </div>
-      <MessageTimestamp createdAt={createdAt} />
+      <MessageTimestamp createdAt={safeCreatedAt} />
     </div>
   );
 };
