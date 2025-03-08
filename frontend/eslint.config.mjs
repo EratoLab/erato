@@ -27,6 +27,7 @@ const eslintConfig = [
     "next/core-web-vitals",
     "plugin:react-hooks/recommended",
     "plugin:jsx-a11y/recommended",
+    "plugin:tailwindcss/recommended",
   ),
 
   // Storybook configuration - less strict

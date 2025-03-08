@@ -57,7 +57,7 @@ Default implementation of message controls with permission-based visibility.
   },
   decorators: [
     (Story) => (
-      <div className="relative group p-8 rounded">
+      <div className="group relative rounded p-8">
         <Story />
       </div>
     ),

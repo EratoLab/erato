@@ -75,11 +75,12 @@ export const FileInput: React.FC<FileInputProps> = ({
       <div
         onClick={handleClick}
         onKeyDown={handleKeyDown}
-        className={className}
+        className={`min-h-[36px] min-w-[36px] touch-manipulation sm:min-h-0 sm:min-w-0 ${className ?? ""}`}
         style={{ cursor: disabled ? "not-allowed" : "pointer" }}
         tabIndex={disabled ? -1 : 0}
         role="button"
         aria-disabled={disabled}
+        aria-label="Select file"
       >
         {children}
       </div>

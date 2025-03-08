@@ -34,7 +34,7 @@ export const InteractiveContainer = ({
   const commonClassNames = clsx(
     "w-full",
     interactive && "hover:bg-theme-bg-accent focus:outline-none focus:ring-2",
-    "disabled:opacity-50 disabled:cursor-not-allowed",
+    "disabled:cursor-not-allowed disabled:opacity-50",
     className,
   );
 

@@ -43,10 +43,11 @@ const VARIANT_STYLES = {
     "p-2 rounded-lg text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
 } as const;
 
+// Update size styles to ensure mobile-friendly touch targets
 const SIZE_STYLES = {
-  sm: "p-2 text-sm",
-  md: "px-3 py-2",
-  lg: "px-4 py-3",
+  sm: "p-2 min-h-[36px] min-w-[36px] text-sm",
+  md: "px-3 py-2 min-h-[40px] min-w-[40px]",
+  lg: "px-4 py-3 min-h-[44px] min-w-[44px]",
 } as const;
 
 const validateProps = (props: ButtonProps) => {
@@ -122,15 +123,15 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const buttonClasses = useMemo(
       () =>
         clsx(
-          "flex items-center gap-2 rounded",
+          "flex touch-manipulation items-center gap-2 rounded",
           "focus-ring",
           VARIANT_STYLES[variant],
           SIZE_STYLES[size],
           {
             "bg-theme-bg-selected": ariaPressed === true,
           },
-          showOnHover && "opacity-0 group-hover:opacity-100 theme-transition",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
+          showOnHover && "theme-transition opacity-0 group-hover:opacity-100",
+          "disabled:cursor-not-allowed disabled:opacity-50",
           className,
         ),
       [variant, size, ariaPressed, showOnHover, className],
@@ -141,8 +142,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         clsx(
           "flex items-center justify-center",
           variant === "icon-only" || variant === "sidebar-icon"
-            ? "w-5 h-5"
-            : "w-4 h-4",
+            ? "size-5"
+            : "size-4",
         ),
       [variant],
     );

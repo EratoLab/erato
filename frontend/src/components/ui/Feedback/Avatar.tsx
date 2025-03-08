@@ -39,7 +39,7 @@ export const Avatar = React.memo<AvatarProps>(
     return (
       <div
         className={clsx(
-          "relative rounded-full flex items-center justify-center shrink-0",
+          "relative flex shrink-0 items-center justify-center rounded-full",
           userOrAssistant
             ? "bg-theme-avatar-assistant-bg text-theme-avatar-assistant-fg"
             : "bg-theme-avatar-user-bg text-theme-avatar-user-fg",

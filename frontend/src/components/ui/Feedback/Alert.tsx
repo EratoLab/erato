@@ -48,21 +48,21 @@ export const Alert: React.FC<AlertProps> = ({
     error: {
       container:
         "bg-theme-error-bg text-theme-error-fg border-theme-error-border",
-      icon: <ExclamationCircleIcon className="h-5 w-5" />,
+      icon: <ExclamationCircleIcon className="size-5" />,
     },
     warning: {
       container:
         "bg-theme-warning-bg text-theme-warning-fg border-theme-warning-border",
-      icon: <ExclamationTriangleIcon className="h-5 w-5" />,
+      icon: <ExclamationTriangleIcon className="size-5" />,
     },
     info: {
       container: "bg-theme-info-bg text-theme-info-fg border-theme-info-border",
-      icon: <InformationCircleIcon className="h-5 w-5" />,
+      icon: <InformationCircleIcon className="size-5" />,
     },
     success: {
       container:
         "bg-theme-success-bg text-theme-success-fg border-theme-success-border",
-      icon: <CheckCircleIcon className="h-5 w-5" />,
+      icon: <CheckCircleIcon className="size-5" />,
     },
   };
 
@@ -72,16 +72,16 @@ export const Alert: React.FC<AlertProps> = ({
   return (
     <div
       className={clsx(
-        "flex items-start gap-3 p-3 border rounded-md",
+        "flex items-start gap-3 rounded-md border p-3",
         styles[type].container,
         className,
       )}
       role="alert"
     >
-      <div className="flex-shrink-0 mt-0.5">{alertIcon}</div>
+      <div className="mt-0.5 shrink-0">{alertIcon}</div>
 
-      <div className="flex-1 min-w-0">
-        {title && <h4 className="font-medium mb-1">{title}</h4>}
+      <div className="min-w-0 flex-1">
+        {title && <h4 className="mb-1 font-medium">{title}</h4>}
         <div className="text-sm">{children}</div>
       </div>
 
@@ -89,9 +89,9 @@ export const Alert: React.FC<AlertProps> = ({
         <Button
           variant="icon-only"
           size="sm"
-          className="flex-shrink-0 -mt-1 -mr-1"
+          className="-mr-1 -mt-1 shrink-0"
           onClick={onDismiss}
-          icon={<XMarkIcon className="h-4 w-4" />}
+          icon={<XMarkIcon className="size-4" />}
           aria-label="Dismiss"
         />
       )}

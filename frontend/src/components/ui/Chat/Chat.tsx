@@ -118,7 +118,7 @@ export const Chat = ({
   const messagePageSize = 6;
 
   return (
-    <div className="flex h-full w-full flex-col sm:flex-row">
+    <div className="flex size-full flex-col sm:flex-row">
       <ChatHistorySidebar
         collapsed={sidebarCollapsed}
         onNewChat={onNewChat}
@@ -134,7 +134,7 @@ export const Chat = ({
       />
       <div
         className={clsx(
-          "flex-1 flex flex-col h-full bg-theme-bg-secondary min-w-0",
+          "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
           "mt-14 sm:mt-0",
           className,
         )}

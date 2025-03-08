@@ -44,10 +44,10 @@ const MenuItem = memo(
   }) => (
     <button
       className={clsx(
-        "w-full px-4 py-2 text-sm text-left",
+        "w-full px-4 py-2 text-left text-sm",
         "flex items-center gap-2",
         "theme-transition",
-        "disabled:opacity-50 disabled:cursor-not-allowed",
+        "disabled:cursor-not-allowed disabled:opacity-50",
         "focus:outline-none focus-visible:bg-theme-bg-accent",
         item.variant === "danger"
           ? "text-theme-error-fg hover:bg-theme-error-bg"
@@ -60,13 +60,13 @@ const MenuItem = memo(
       type="button"
     >
       {item.icon && (
-        <span className="w-4 h-4 flex-shrink-0" aria-hidden="true">
+        <span className="size-4 shrink-0" aria-hidden="true">
           {item.icon}
         </span>
       )}
       <span className="flex-1">{item.label}</span>
       {item.shortcut && (
-        <span className="ml-auto text-theme-fg-muted text-xs">
+        <span className="ml-auto text-xs text-theme-fg-muted">
           {item.shortcut}
         </span>
       )}
@@ -81,7 +81,7 @@ export const DropdownMenu = memo(
     items,
     className,
     align = "right",
-    triggerIcon = <MoreVertical className="w-4 h-4" />,
+    triggerIcon = <MoreVertical className="size-4" />,
     id,
     preferredOrientation,
   }: DropdownMenuProps) => {
@@ -243,7 +243,7 @@ export const DropdownMenu = memo(
           id={menuId}
           className={clsx(
             "fixed w-48 rounded-md shadow-lg",
-            "bg-theme-bg-primary border border-theme-border",
+            "border border-theme-border bg-theme-bg-primary",
             "z-[9999]",
             "theme-transition",
           )}
@@ -275,7 +275,7 @@ export const DropdownMenu = memo(
           aria-orientation="vertical"
           aria-labelledby={buttonRef.current?.id}
         >
-          <div className="py-1 overflow-y-auto" role="none">
+          <div className="overflow-y-auto py-1" role="none">
             {items.map((item, index) => (
               <MenuItem
                 key={`${item.label}-${index}`}

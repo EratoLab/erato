@@ -10,7 +10,7 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className="relative group p-8 bg-theme-bg-secondary min-w-[200px]">
+      <div className="group relative min-w-[200px] bg-theme-bg-secondary p-8">
         <Story />
       </div>
     ),

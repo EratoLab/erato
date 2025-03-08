@@ -78,7 +78,7 @@ export const MessageTimestamp = memo(function MessageTimestamp({
 
   return (
     <time
-      className={clsx("text-xs text-theme-fg-muted block", className)}
+      className={clsx("block text-xs text-theme-fg-muted", className)}
       dateTime={createdAt.toISOString()}
       title={createdAt.toLocaleString()}
     >

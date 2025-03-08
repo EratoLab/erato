@@ -48,7 +48,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
 
   return (
     <div
-      className={`flex flex-col h-full ${className}`}
+      className={`flex h-full flex-col ${className}`}
       role="region"
       aria-label="Chat messages"
     >
