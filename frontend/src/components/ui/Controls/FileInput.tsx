@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef } from "react";
 
 import { FileTypeUtil } from "@/utils/fileTypes";
 
@@ -35,21 +35,6 @@ export const FileInput: React.FC<FileInputProps> = ({
   disabled = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Check if device is mobile
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-
-    return () => {
-      window.removeEventListener("resize", checkMobile);
-    };
-  }, []);
 
   // Handle click on the children to trigger file input
   const handleClick = () => {
@@ -90,13 +75,8 @@ export const FileInput: React.FC<FileInputProps> = ({
       <div
         onClick={handleClick}
         onKeyDown={handleKeyDown}
-        className={className}
-        style={{
-          cursor: disabled ? "not-allowed" : "pointer",
-          // Ensure touch target is large enough on mobile
-          minWidth: isMobile ? "44px" : undefined,
-          minHeight: isMobile ? "44px" : undefined,
-        }}
+        className={`min-h-[36px] min-w-[36px] touch-manipulation sm:min-h-0 sm:min-w-0 ${className ?? ""}`}
+        style={{ cursor: disabled ? "not-allowed" : "pointer" }}
         tabIndex={disabled ? -1 : 0}
         role="button"
         aria-disabled={disabled}

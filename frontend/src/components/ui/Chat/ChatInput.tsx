@@ -228,7 +228,6 @@ export const ChatInput = ({
                     <Button
                       variant="icon-only"
                       size="sm"
-                      className="touch-manipulation p-2"
                       icon={<PlusIcon className="size-5" />}
                       aria-label="Add File"
                       disabled={selectedFiles.length >= maxFiles}
@@ -240,7 +239,6 @@ export const ChatInput = ({
                     onClick={onRegenerate}
                     variant="icon-only"
                     size="sm"
-                    className="touch-manipulation p-2"
                     icon={<ArrowPathIcon className="size-5" />}
                     aria-label="Regenerate response"
                   />
@@ -255,7 +253,6 @@ export const ChatInput = ({
             disabled={!message.trim() || isLoading || disabled}
             icon={<ArrowUpIcon className="size-5" />}
             size="sm"
-            className="touch-manipulation p-2"
             aria-label="Send message"
           />
         </div>

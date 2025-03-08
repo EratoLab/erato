@@ -98,7 +98,7 @@ const ChatHistoryFooter = memo<{
 ChatHistoryFooter.displayName = "ChatHistoryFooter";
 
 const ErrorDisplay = ({ error }: { error: Error }) => (
-  <div className="text-theme-fg-error flex flex-col items-center justify-center p-4">
+  <div className="flex flex-col items-center justify-center p-4 text-theme-error-fg">
     <p className="font-medium">Something went wrong</p>
     <p className="text-sm">{error.message}</p>
   </div>

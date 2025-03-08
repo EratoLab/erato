@@ -14,7 +14,7 @@ export const useMessageClassNameHelper = () => {
         "py-4",
         "transition-all duration-700 ease-in-out",
         isNew
-          ? "animate-fadeIn border-theme-accent border-l-4 bg-theme-bg-accent pl-2"
+          ? "border-l-4 border-theme-border-focus bg-theme-bg-hover pl-2"
           : "bg-transparent",
       ),
     [],

@@ -32,7 +32,7 @@ export const SpinnerIcon = memo<SpinnerIconProps>(
     return (
       <div
         className={clsx(
-          "text-theme-text-secondary inline-block animate-spin rounded-full border-2 border-solid border-current border-e-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]",
+          "inline-block animate-spin rounded-full border-2 border-solid border-current border-e-transparent align-[-0.125em] text-theme-fg-secondary motion-reduce:animate-[spin_1.5s_linear_infinite]",
           sizeClasses[size],
           className,
         )}

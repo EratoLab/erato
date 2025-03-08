@@ -1,6 +1,6 @@
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
-import React, { useState, useEffect } from "react";
+import React from "react";
 
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
 
@@ -29,7 +29,6 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
   // Get file type and configuration
   const fileType = FileTypeUtil.getFileType(file);
   const typeConfig = FILE_TYPES[fileType];
-  const [maxFilenameLength, setMaxFilenameLength] = useState(30);
 
   // Get the icon component for this file type
   const IconComponent = typeConfig.icon;
@@ -38,20 +37,6 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
   const formattedSize = showFileSize
     ? FileTypeUtil.formatFileSize(file.size)
     : null;
-
-  // Set max filename length based on screen size
-  useEffect(() => {
-    const handleResize = () => {
-      setMaxFilenameLength(window.innerWidth < 640 ? 20 : 30);
-    };
-
-    handleResize(); // Initial check
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
 
   return (
     <div
@@ -76,7 +61,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
       </div>
       <div className="mr-1 min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-theme-fg-primary">
-          {truncateFilename(file.name, maxFilenameLength)}
+          {truncateFilename(file.name, 20)}
         </p>
         <div className="flex items-center text-xs text-theme-fg-secondary">
           <span className="uppercase">{typeConfig.displayName}</span>
@@ -93,7 +78,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
           onClick={() => onRemove(file)}
           variant="icon-only"
           size="sm"
-          className="-mr-1 ml-1 touch-manipulation p-2 hover:bg-theme-bg-hover"
+          className="-mr-1 ml-1 hover:bg-theme-bg-hover"
           icon={<XMarkIcon className="size-4" />}
           aria-label="Remove file"
         />
