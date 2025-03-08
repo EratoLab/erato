@@ -5,17 +5,17 @@ import React, { memo, useCallback, useMemo, useState, useEffect } from "react";
 import { usePaginatedData } from "@/hooks/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
 
-import { ConversationIndicator } from "./Message/ConversationIndicator";
-import { MessageListHeader } from "./Message/MessageList/MessageListHeader";
+import { MessageListHeader } from "./MessageListHeader";
 import {
   useMessageClassNameHelper,
   useMessageAnimations,
-} from "./Message/MessageList/MessageListUtils";
-import { StandardMessageList } from "./Message/MessageList/StandardMessageList";
-import { VirtualizedMessageList } from "./Message/MessageList/VirtualizedMessageList";
+} from "./MessageListUtils";
+import { StandardMessageList } from "./StandardMessageList";
+import { VirtualizedMessageList } from "./VirtualizedMessageList";
+import { ConversationIndicator } from "../Message/ConversationIndicator";
 
-import type { ChatMessagesResponse } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
-import type { ChatMessage as ChatMessageType } from "../containers/ChatProvider";
+import type { ChatMessagesResponse } from "../../../lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
 import type { UserProfile } from "@/types/chat";
 import type {
   MessageAction,

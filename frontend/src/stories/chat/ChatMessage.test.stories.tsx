@@ -82,8 +82,11 @@ export const InteractionTest: Story = {
     await expect(controls).toBeInTheDocument();
     await expect(controls?.className).toContain("opacity-0");
 
-    // Simulate hover
-    await user.hover(controls!.parentElement!);
+    // Simulate hover - replace non-null assertion
+    const controlParent = controls?.parentElement;
+    if (controlParent) {
+      await user.hover(controlParent);
+    }
 
     // Verify controls become visible
     await expect(controls?.className).toContain("group-hover:opacity-100");
@@ -91,8 +94,10 @@ export const InteractionTest: Story = {
     // Test button interaction
     await user.click(copyButton);
 
-    // Test hover exit
-    await user.unhover(controls!.parentElement!);
+    // Test hover exit - replace non-null assertion
+    if (controlParent) {
+      await user.unhover(controlParent);
+    }
     await expect(controls?.className).toContain("opacity-0");
   },
 };

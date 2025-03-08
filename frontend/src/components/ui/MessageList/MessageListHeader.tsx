@@ -1,9 +1,9 @@
 import React from "react";
 
-import { ConversationIndicator } from "../ConversationIndicator";
-import { LoadMoreButton } from "../LoadMoreButton";
+import { ConversationIndicator } from "../Message/ConversationIndicator";
+import { LoadMoreButton } from "../Message/LoadMoreButton";
 
-import type { ChatMessagesResponse } from "../../../lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ChatMessagesResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface MessageListHeaderProps {
   showLoadMoreButton: boolean;

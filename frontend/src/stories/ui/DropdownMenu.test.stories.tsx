@@ -36,7 +36,7 @@ type Story = StoryObj<typeof meta>;
 export const AccessibilityTest: Story = {
   args: {
     ...Default.args,
-    items: Default.args.items ?? [],
+    items: Default.args.items,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -61,7 +61,7 @@ export const AccessibilityTest: Story = {
 export const InteractionTest: Story = {
   args: {
     ...Default.args,
-    items: Default.args.items ?? [],
+    items: Default.args.items,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -87,7 +87,7 @@ export const InteractionTest: Story = {
 export const DisabledItemTest: Story = {
   args: {
     ...WithDisabledItem.args,
-    items: WithDisabledItem.args.items ?? [],
+    items: WithDisabledItem.args.items,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -110,7 +110,7 @@ export const DisabledItemTest: Story = {
 export const KeyboardNavigationTest: Story = {
   args: {
     ...Default.args,
-    items: Default.args.items ?? [],
+    items: Default.args.items,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

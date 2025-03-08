@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 
-import { ChatMessage } from "../ChatMessage";
+import { ChatMessage } from "../Chat";
 
 import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
 import type { UserProfile } from "@/types/chat";

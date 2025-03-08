@@ -1,7 +1,7 @@
 import { action } from "@storybook/addon-actions";
 import { useState } from "react";
 
-import { ChatHistorySidebar } from "../../components/ui/ChatHistorySidebar";
+import { ChatHistorySidebar } from "@/components/ui";
 
 import type { ChatSession } from "@/types/chat";
 import type { Meta, StoryObj } from "@storybook/react";
