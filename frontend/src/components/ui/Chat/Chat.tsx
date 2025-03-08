@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 
 import { useProfile } from "@/hooks/useProfile";
 
@@ -48,6 +48,10 @@ export interface ChatProps {
   onToggleCollapse: () => void;
   /** Optional array of accepted file types */
   acceptedFileTypes?: FileType[];
+  /** Optional custom session select handler to override default behavior */
+  customSessionSelect?: (sessionId: string) => void;
+  /** Whether the UI is in a transitioning state (prevents loading flickers) */
+  isTransitioning?: boolean;
 }
 
 /**
@@ -69,6 +73,8 @@ export const Chat = ({
   sidebarCollapsed = false,
   onToggleCollapse,
   acceptedFileTypes,
+  customSessionSelect,
+  isTransitioning = false,
 }: ChatProps) => {
   // Get chat data and actions from context providers
   const {
@@ -90,6 +96,43 @@ export const Chat = ({
     error: chatHistoryError,
   } = useChatHistory();
 
+  // Create a state to maintain previous messages during transitions
+  const [prevMessages, setPrevMessages] = useState<typeof messages>({});
+  const [prevMessageOrder, setPrevMessageOrder] = useState<string[]>([]);
+
+  // Keep previous messages during transitions to prevent flickering
+  useEffect(() => {
+    if (Object.keys(messages).length > 0) {
+      setPrevMessages(messages);
+      setPrevMessageOrder(messageOrder);
+    }
+  }, [messages, messageOrder]);
+
+  // Determine which messages to display - current or previous during transitions
+  const displayMessages = useMemo(() => {
+    return isTransitioning && Object.keys(messages).length === 0
+      ? prevMessages
+      : messages;
+  }, [isTransitioning, messages, prevMessages]);
+
+  const displayMessageOrder = useMemo(() => {
+    return isTransitioning && messageOrder.length === 0
+      ? prevMessageOrder
+      : messageOrder;
+  }, [isTransitioning, messageOrder, prevMessageOrder]);
+
+  // Use custom session select function or fall back to the default one
+  const handleSessionSelect = useCallback(
+    (sessionId: string) => {
+      if (customSessionSelect) {
+        customSessionSelect(sessionId);
+      } else {
+        switchSession(sessionId);
+      }
+    },
+    [customSessionSelect, switchSession],
+  );
+
   // Wrap the sendMessage with a void handler for ChatInput
   const handleSendMessage = useCallback(
     (message: string) => {
@@ -110,8 +153,8 @@ export const Chat = ({
 
   // Determine if we should use virtualization based on message count
   const useVirtualization = useMemo(
-    () => messageOrder.length > 30,
-    [messageOrder.length],
+    () => displayMessageOrder.length > 30,
+    [displayMessageOrder.length],
   );
 
   // Define a constant for the page size
@@ -125,9 +168,9 @@ export const Chat = ({
         onToggleCollapse={onToggleCollapse}
         sessions={sessions}
         currentSessionId={currentSessionId}
-        onSessionSelect={switchSession}
+        onSessionSelect={handleSessionSelect}
         onSessionDelete={deleteSession}
-        isLoading={chatHistoryLoading}
+        isLoading={isTransitioning ? false : chatHistoryLoading}
         error={chatHistoryError}
         className="fixed inset-0 z-50 sm:relative sm:z-auto"
         userProfile={profile}
@@ -143,11 +186,11 @@ export const Chat = ({
       >
         {/* Use the new MessageList component with virtualization */}
         <MessageList
-          messages={messages}
-          messageOrder={messageOrder}
+          messages={displayMessages}
+          messageOrder={displayMessageOrder}
           loadOlderMessages={loadOlderMessages}
           hasOlderMessages={hasOlderMessages}
-          isLoading={chatLoading}
+          isLoading={isTransitioning ? false : chatLoading}
           currentSessionId={currentSessionId}
           apiMessagesResponse={apiMessagesResponse}
           pageSize={messagePageSize}

@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, Suspense } from "react";
 
 import {
   ChatHistoryProvider,
@@ -11,6 +11,7 @@ import {
 import { ChatProvider } from "../components/containers/ChatProvider";
 import { MessageStreamProvider } from "../components/containers/MessageStreamProvider";
 import { ProfileProvider } from "../components/containers/ProfileProvider";
+import { useChatNavigation } from "../hooks/useChatNavigation";
 
 import type { FileType } from "@/utils/fileTypes";
 
@@ -27,23 +28,50 @@ const queryClient = new QueryClient();
 // Inner component to access hooks within providers
 const ChatContainer = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { createSession, currentSessionId } = useChatHistory();
-
-  // Create a new chat session when no session exists
-  useEffect(() => {
-    if (!currentSessionId) {
-      createSession();
-    }
-  }, [currentSessionId, createSession]);
+  // Add local loading state to control UI transitions
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const { switchSessionWithUrl, createNewChat } = useChatNavigation();
 
   const handleToggleCollapse = () => {
     setSidebarCollapsed((prev) => !prev);
   };
 
+  // Create an enhanced session switcher that manages loading states
+  const handleSessionSelect = useCallback(
+    (chatId: string) => {
+      // Start transition
+      setIsTransitioning(true);
+
+      // Set a minimum transition time to prevent flickering for fast loads
+      const minTransitionTimeout = setTimeout(() => {
+        switchSessionWithUrl(chatId);
+
+        // End transition with a slight delay to ensure smooth UI
+        setTimeout(() => {
+          setIsTransitioning(false);
+        }, 50);
+      }, 50);
+
+      // Cleanup timeout if component unmounts during transition
+      return () => clearTimeout(minTransitionTimeout);
+    },
+    [switchSessionWithUrl],
+  );
+
   const handleNewChat = useCallback(() => {
-    // Create a new chat session
-    createSession();
-  }, [createSession]);
+    // Start transition
+    setIsTransitioning(true);
+
+    // Create new chat with minimum transition time
+    setTimeout(() => {
+      createNewChat();
+
+      // End transition with a slight delay
+      setTimeout(() => {
+        setIsTransitioning(false);
+      }, 50);
+    }, 50);
+  }, [createNewChat]);
 
   // Define which file types are accepted in this chat
   const acceptedFileTypes: FileType[] = ["pdf", "image", "document", "text"];
@@ -56,27 +84,6 @@ const ChatContainer = () => {
     );
 
     // TODO: Implement file upload to backend server
-    // Example implementation:
-    // 1. Create FormData object
-    // const formData = new FormData();
-    // files.forEach(file => {
-    //   formData.append('files', file);
-    // });
-    // formData.append('sessionId', currentSessionId || '');
-    //
-    // 2. Send to backend
-    // fetch('/api/upload', {
-    //   method: 'POST',
-    //   body: formData
-    // }).then(response => response.json())
-    //   .then(data => {
-    //     console.log('Files uploaded:', data);
-    //     // Update UI with file references or trigger a message with attachments
-    //   })
-    //   .catch(error => {
-    //     console.error('Error uploading files:', error);
-    //     // Handle error state
-    //   });
   }, []);
 
   return (
@@ -97,6 +104,8 @@ const ChatContainer = () => {
         sidebarCollapsed={sidebarCollapsed}
         onToggleCollapse={handleToggleCollapse}
         acceptedFileTypes={acceptedFileTypes}
+        customSessionSelect={handleSessionSelect}
+        isTransitioning={isTransitioning}
       />
     </ChatProvider>
   );
@@ -113,6 +122,13 @@ const ChatBridge: React.FC<React.PropsWithChildren> = ({ children }) => {
   );
 };
 
+// Add a loading fallback component
+const LoadingFallback = () => (
+  <div className="flex h-screen items-center justify-center">
+    <div className="animate-pulse text-lg">Loading chat...</div>
+  </div>
+);
+
 export default function Home() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -120,7 +136,9 @@ export default function Home() {
         <ProfileProvider>
           <ChatHistoryProvider>
             <ChatBridge>
-              <ChatContainer />
+              <Suspense fallback={<LoadingFallback />}>
+                <ChatContainer />
+              </Suspense>
             </ChatBridge>
           </ChatHistoryProvider>
         </ProfileProvider>

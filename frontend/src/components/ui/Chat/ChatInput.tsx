@@ -130,7 +130,7 @@ export const ChatInput = ({
 
   return (
     <form
-      className={clsx("mx-auto mb-4 w-full sm:w-5/6 md:w-2/3")}
+      className={clsx("mx-auto mb-4 w-full sm:w-5/6 md:w-4/5")}
       onSubmit={handleSubmit}
     >
       {/* File previews */}

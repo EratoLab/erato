@@ -6,12 +6,12 @@ import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 
 interface LoadMoreButtonProps {
   /**
-   * Click handler for the button
+   * Function to call when the button is clicked
    */
   onClick: () => void;
 
   /**
-   * Whether the data is currently loading
+   * Whether messages are currently loading
    */
   isLoading?: boolean;
 
@@ -21,7 +21,7 @@ interface LoadMoreButtonProps {
   label?: string;
 
   /**
-   * Custom loading label for the button
+   * Custom label when loading
    */
   loadingLabel?: string;
 
@@ -31,7 +31,7 @@ interface LoadMoreButtonProps {
   className?: string;
 
   /**
-   * Whether to make the button sticky at the top
+   * Whether the button should stick to the top of the container
    */
   isSticky?: boolean;
 }
@@ -51,16 +51,17 @@ export const LoadMoreButton = memo<LoadMoreButtonProps>(
     <div
       className={clsx(
         isSticky && "sticky top-0 z-10",
-        "flex justify-center py-2",
+        "mt-2 flex justify-center py-4",
+        "after:absolute after:inset-x-0 after:bottom-0 after:-z-10 after:h-6 after:bg-gradient-to-b after:from-transparent after:to-theme-bg-secondary after:opacity-50 after:content-['']",
         className,
       )}
     >
       <Button
         onClick={onClick}
         disabled={isLoading}
-        variant="secondary"
+        variant="primary"
         size="sm"
-        className="rounded-full px-4"
+        className="rounded-full px-4 shadow-md transition-all hover:shadow-lg"
         icon={isLoading ? <SpinnerIcon size="sm" /> : undefined}
       >
         {isLoading ? loadingLabel : label}

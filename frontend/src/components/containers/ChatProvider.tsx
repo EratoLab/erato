@@ -1,4 +1,4 @@
-import { skipToken, useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import React, {
   createContext,
   useContext,
@@ -12,7 +12,6 @@ import { useUpdateEffect, useLocalStorage } from "react-use";
 
 import { useChatHistory } from "./ChatHistoryProvider";
 import { useMessageStream } from "./MessageStreamProvider";
-import { useChatMessages } from "../../lib/generated/v1betaApi/v1betaApiComponents";
 
 import type {
   ChatMessage as APIChatMessage,
@@ -89,10 +88,22 @@ const initialChatState: ChatState = {
 };
 
 // Constants for the component
-const MESSAGE_PAGE_SIZE = 6;
+const MESSAGE_PAGE_SIZE = 20; // Number of messages to fetch per page
 const DEBUG = process.env.NODE_ENV === "development";
 const log = (...args: unknown[]) => DEBUG && console.log(...args);
 const LOCAL_STORAGE_KEY = "chat_cache_v1";
+
+// Throttle log messages to prevent spam
+const logTimestamps = new Map<string, number>();
+const throttledLog = (message: string, ...args: unknown[]) => {
+  const now = Date.now();
+  const lastLog = logTimestamps.get(message) ?? 0;
+  if (now - lastLog > 5000) {
+    // Only log the same message once every 5 seconds
+    log(message, ...args);
+    logTimestamps.set(message, now);
+  }
+};
 
 // Reducer function to handle all chat state updates
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
@@ -209,14 +220,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     const isCacheValid = now - cached.lastUpdated < 24 * 60 * 60 * 1000;
 
     if (isCacheValid) {
-      log(`Using cached data for session ${currentSessionId}`);
+      throttledLog(`Using cached data for session ${currentSessionId}`);
       return {
         ...initialChatState,
         messages: cached.messages,
         messageOrder: cached.messageOrder,
       };
     } else {
-      log(`Cache expired for session ${currentSessionId}`);
+      throttledLog(`Cache expired for session ${currentSessionId}`);
       return {
         ...initialChatState,
         messages: initialMessages,
@@ -238,18 +249,16 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     hasOlderMessages,
     lastLoadedCount,
     apiMessagesResponse,
-    messageOffset,
   } = chatState;
 
   // Log state values when in debug mode
   useEffect(() => {
-    log("Chat state updated:", {
+    throttledLog("Chat state updated:", {
       messagesCount: Object.keys(messages).length,
       messageOrderLength: messageOrder.length,
       hasOlderMessages,
       lastLoadedCount,
       apiMessagesResponse,
-      messageOffset,
       isLoading,
     });
   }, [
@@ -258,7 +267,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     hasOlderMessages,
     lastLoadedCount,
     apiMessagesResponse,
-    messageOffset,
     isLoading,
   ]);
 
@@ -281,7 +289,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       },
     }));
 
-    log(
+    throttledLog(
       `Updated cache for session ${currentSessionId} with ${messageOrder.length} messages`,
     );
   }, [currentSessionId, messages, messageOrder]);
@@ -292,7 +300,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     if (!currentSessionId) return;
 
     try {
-      log(`Resetting state for session: ${currentSessionId}`);
+      throttledLog(`Resetting state for session: ${currentSessionId}`);
 
       // Reset state for new session
       dispatch({ type: "RESET_STATE", sessionId: currentSessionId });
@@ -306,7 +314,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         });
       }
     } catch (error) {
-      log("Error handling session change:", error);
+      throttledLog("Error handling session change:", error);
     }
   }, [currentSessionId]);
 
@@ -324,201 +332,20 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     [],
   );
 
-  // Track previous API response to prevent processing the same data multiple times
-  const prevApiResponseRef = useRef<string | null>(null);
-
-  // Helper to identify API responses
-  const getResponseIdentifier = useCallback(
-    (apiResponse: ChatMessagesResponse, offset: number): string => {
-      // Check for empty messages array
-      if (apiResponse.messages.length === 0) return "";
-
-      const firstId = apiResponse.messages[0]?.id;
-      const lastId = apiResponse.messages[apiResponse.messages.length - 1]?.id;
-      return `${firstId}-${lastId}-${apiResponse.messages.length}-${offset}`;
-    },
-    [],
-  );
-
-  // Helper to update pagination state
-  const updatePaginationState = useCallback(
-    (apiResponse: ChatMessagesResponse) => {
-      dispatch({
-        type: "SET_HAS_OLDER_MESSAGES",
-        hasOlderMessages: apiResponse.stats.has_more,
-      });
-      dispatch({
-        type: "SET_LAST_LOADED_COUNT",
-        count: apiResponse.messages.length,
-      });
-    },
-    [],
-  );
-
-  // Helper to process initial messages (offset 0)
-  const processInitialMessages = useCallback(
-    (apiResponse: ChatMessagesResponse) => {
-      // Initial load: Replace all messages
-      const newMessages: MessageMap = {};
-      const newOrder: string[] = [];
-
-      // API returns messages in newest-first order, but we want oldest-first in our UI
-      // So we process them in reverse to get chronological order
-      for (let i = apiResponse.messages.length - 1; i >= 0; i--) {
-        const message = convertApiMessageToAppMessage(apiResponse.messages[i]);
-        newMessages[message.id] = message;
-        newOrder.push(message.id);
-      }
-
-      log(`Setting initial messages: ${newOrder.length} messages`);
-
-      dispatch({
-        type: "SET_MESSAGES",
-        messages: newMessages,
-        messageOrder: newOrder,
-      });
-    },
-    [convertApiMessageToAppMessage],
-  );
-
-  // Helper to process older messages (offset > 0)
-  const processOlderMessages = useCallback(
-    (apiResponse: ChatMessagesResponse) => {
-      // Loading older messages with an offset > 0
-      const newMessages: MessageMap = {};
-      const newMessageIds: string[] = [];
-
-      // API returns messages in NEWEST-FIRST order (for any offset)
-      // Process in REVERSE to get OLDEST-FIRST order
-      for (let i = apiResponse.messages.length - 1; i >= 0; i--) {
-        const apiMessage = apiResponse.messages[i];
-        const message = convertApiMessageToAppMessage(apiMessage);
-
-        // Only add if not already in the list
-        if (!(message.id in messages)) {
-          newMessages[message.id] = message;
-          newMessageIds.push(message.id); // Add in OLDEST-FIRST order
-        }
-      }
-
-      log(`Found ${newMessageIds.length} new messages to add`);
-      log(`Current message order: ${messageOrder.length} messages`);
-
-      // The newMessageIds are already in oldest-first order
-      if (newMessageIds.length > 0) {
-        log(`Prepending ${newMessageIds.length} older messages`);
-
-        // Prepend the new (older) messages to the existing message order
-        dispatch({
-          type: "PREPEND_MESSAGES",
-          messages: newMessages,
-          messageIds: newMessageIds,
-        });
-      } else {
-        log("No new messages to add after filtering");
-      }
-    },
-    [messages, messageOrder, convertApiMessageToAppMessage],
-  );
-
-  // Process messages from the API
-  const processApiMessages = useCallback(
-    (apiResponse: ChatMessagesResponse) => {
-      if (apiResponse.messages.length === 0) {
-        log("No messages in API response, skipping processing");
-        return;
-      }
-
-      log(
-        `Processing API response: offset=${messageOffset}, messages count=${apiResponse.messages.length}, has_more=${apiResponse.stats.has_more}`,
-      );
-      log(
-        `First message ID: ${apiResponse.messages[0]?.id}, Last message ID: ${apiResponse.messages[apiResponse.messages.length - 1]?.id}`,
-      );
-
-      // Generate a response identifier and check for duplicates
-      const responseId = getResponseIdentifier(apiResponse, messageOffset);
-      if (prevApiResponseRef.current === responseId) {
-        log(`Skipping duplicate response: ${responseId}`);
-        return;
-      }
-
-      // Update our reference for next time
-      prevApiResponseRef.current = responseId;
-
-      // Update pagination state
-      updatePaginationState(apiResponse);
-
-      // Process messages based on offset
-      if (messageOffset === 0) {
-        processInitialMessages(apiResponse);
-      } else {
-        processOlderMessages(apiResponse);
-      }
-    },
-    [
-      messageOffset,
-      getResponseIdentifier,
-      updatePaginationState,
-      processInitialMessages,
-      processOlderMessages,
-    ],
-  );
-
-  // Use React Query for message fetching with proper cancellation
-  const { data: freshApiMessagesResponse, isLoading: apiLoadingState } =
-    useChatMessages(
-      currentSessionId && !currentSessionId.startsWith("temp-")
-        ? {
-            pathParams: { chatId: currentSessionId },
-            queryParams: {
-              limit: MESSAGE_PAGE_SIZE,
-              offset: messageOffset,
-            },
-          }
-        : skipToken,
-      {
-        enabled: !!currentSessionId && !currentSessionId.startsWith("temp-"),
-        staleTime: 30000,
-        // Using options compatible with React Query v5
-        gcTime: 5000, // Short garbage collection time
-      },
-    );
-
-  // Handle successful API responses only when response changes
-  useUpdateEffect(() => {
-    if (freshApiMessagesResponse) {
-      // Update API response reference
-      dispatch({
-        type: "SET_API_RESPONSE",
-        response: freshApiMessagesResponse,
-      });
-
-      // Process the messages
-      processApiMessages(freshApiMessagesResponse);
-    }
-  }, [freshApiMessagesResponse]);
-
-  // Update loading state based on API
-  useUpdateEffect(() => {
-    dispatch({ type: "SET_LOADING", isLoading: apiLoadingState });
-  }, [apiLoadingState]);
-
-  // Simplified useInfiniteQuery demonstration that maintains button-based loading
-
+  // Enhanced infinite query for messages using React Query's useInfiniteQuery
   const {
+    data: paginatedMessages,
     fetchNextPage,
-    hasNextPage, // This variable is now allowed to be unused
+    hasNextPage,
     isFetchingNextPage,
+    isLoading: isLoadingInfiniteMessages,
+    refetch: refetchMessages,
   } = useInfiniteQuery({
     queryKey: ["chatMessages", currentSessionId],
-    queryFn: async ({ pageParam: _pageParam = 0 }) => {
-      // In a real implementation, you'd fetch data here
-      // For now, we're simulating by just returning the messages
-      // This is simulated - in a real implementation,
-      // this would be a proper API call like fetchChatMessages
-      return (
-        freshApiMessagesResponse ?? {
+    queryFn: async ({ pageParam = 0 }) => {
+      if (!currentSessionId || currentSessionId.startsWith("temp-")) {
+        // Return empty response for temporary sessions
+        return {
           messages: [],
           stats: {
             has_more: false,
@@ -526,47 +353,194 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
             returned_count: 0,
             current_offset: 0,
           },
-        }
+        } as ChatMessagesResponse;
+      }
+
+      // Fetch messages from the API
+      const response = await fetch(
+        `/api/v1beta/chats/${currentSessionId}/messages?limit=${MESSAGE_PAGE_SIZE}&offset=${pageParam}`,
       );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch messages: ${response.status}`);
+      }
+
+      return (await response.json()) as ChatMessagesResponse;
     },
     initialPageParam: 0,
-    getNextPageParam: (_lastPage, _allPages, lastPageParam) => {
-      // For demonstration - real implementation would check lastPage.stats.has_more
-      return hasOlderMessages ? lastPageParam + MESSAGE_PAGE_SIZE : undefined;
+    getNextPageParam: (lastPage) => {
+      // If has_more is true, return the next offset for pagination
+      if (lastPage.stats.has_more) {
+        return lastPage.stats.current_offset + lastPage.stats.returned_count;
+      }
+      // Return undefined to signal we've reached the end
+      return undefined;
     },
-    enabled: false, // Disable auto-fetching - only trigger via button
+    enabled: !!currentSessionId && !currentSessionId.startsWith("temp-"),
+    staleTime: 30000, // 30 seconds
+    gcTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Logger for the infinite query state
+  // Process messages from the paginated data
   useEffect(() => {
-    log("Infinite query state:", {
-      hasNextPage,
-      isFetchingNextPage,
+    if (!paginatedMessages || !currentSessionId) return;
+
+    // Handle all pages in one batch to avoid UI flicker
+    const newMessages: MessageMap = {};
+    const newMessageIds: string[] = [];
+
+    // First, clear the current messages if this is a new session
+    if (Object.keys(messages).length === 0) {
+      log("Processing all pages of messages for initial load");
+
+      // Process all pages of messages
+      paginatedMessages.pages.forEach((page) => {
+        if (!page.messages.length) return;
+
+        // Messages come in descending order (newest first), but we want ascending
+        // Start from the last page and process in reverse order
+        const pageMessages = [...page.messages].reverse();
+
+        pageMessages.forEach((apiMessage) => {
+          const message = convertApiMessageToAppMessage(apiMessage);
+          if (!(message.id in newMessages)) {
+            newMessages[message.id] = message;
+            newMessageIds.push(message.id);
+          }
+        });
+      });
+
+      if (newMessageIds.length > 0) {
+        dispatch({
+          type: "SET_MESSAGES",
+          messages: newMessages,
+          messageOrder: newMessageIds,
+        });
+      }
+
+      // Update pagination state based on the most recent page
+      const latestPage =
+        paginatedMessages.pages[paginatedMessages.pages.length - 1];
+      dispatch({
+        type: "SET_HAS_OLDER_MESSAGES",
+        hasOlderMessages: latestPage.stats.has_more,
+      });
+
+      dispatch({
+        type: "SET_LAST_LOADED_COUNT",
+        count: latestPage.messages.length,
+      });
+
+      dispatch({
+        type: "SET_API_RESPONSE",
+        response: latestPage,
+      });
+    }
+    // If we already have messages and are loading more, only process new pages
+    else if (paginatedMessages.pages.length > 1) {
+      log("Processing new pages for pagination");
+
+      // Get the latest page (the one just loaded)
+      const latestPage =
+        paginatedMessages.pages[paginatedMessages.pages.length - 1];
+
+      // Process messages in reverse order to get oldest first
+      const pageMessages = [...latestPage.messages].reverse();
+
+      pageMessages.forEach((apiMessage) => {
+        const message = convertApiMessageToAppMessage(apiMessage);
+        if (!(message.id in messages) && !(message.id in newMessages)) {
+          newMessages[message.id] = message;
+          newMessageIds.push(message.id);
+        }
+      });
+
+      if (newMessageIds.length > 0) {
+        log(`Adding ${newMessageIds.length} older messages`);
+
+        // Prepend older messages
+        dispatch({
+          type: "PREPEND_MESSAGES",
+          messages: newMessages,
+          messageIds: newMessageIds,
+        });
+      }
+
+      // Update pagination state
+      dispatch({
+        type: "SET_HAS_OLDER_MESSAGES",
+        hasOlderMessages: latestPage.stats.has_more,
+      });
+
+      dispatch({
+        type: "SET_LAST_LOADED_COUNT",
+        count: latestPage.messages.length,
+      });
+
+      dispatch({
+        type: "SET_API_RESPONSE",
+        response: latestPage,
+      });
+    }
+  }, [
+    paginatedMessages,
+    currentSessionId,
+    messages,
+    convertApiMessageToAppMessage,
+  ]);
+
+  // Handle session ID changes - reset state and refetch
+  useUpdateEffect(() => {
+    // Skip effect for null session ID
+    if (!currentSessionId) return;
+
+    try {
+      throttledLog(`Resetting state for session: ${currentSessionId}`);
+
+      // Reset state for new session
+      dispatch({ type: "RESET_STATE", sessionId: currentSessionId });
+
+      // For temporary sessions, ensure messages are cleared
+      if (currentSessionId.startsWith("temp-")) {
+        dispatch({
+          type: "SET_MESSAGES",
+          messages: {},
+          messageOrder: [],
+        });
+      } else {
+        // Refetch messages for non-temporary sessions
+        void refetchMessages();
+      }
+    } catch (error) {
+      throttledLog("Error handling session change:", error);
+    }
+  }, [currentSessionId, refetchMessages]);
+
+  // Update loading state
+  useEffect(() => {
+    dispatch({
+      type: "SET_LOADING",
+      isLoading: isLoadingInfiniteMessages || isFetchingNextPage,
     });
-  }, [hasNextPage, isFetchingNextPage]);
+  }, [isLoadingInfiniteMessages, isFetchingNextPage]);
 
   // Function to load older messages - using React Query's fetchNextPage
-  // This maintains the button-based loading approach
   const loadOlderMessages = useCallback(() => {
-    if (hasOlderMessages && !isLoading) {
-      log(`Loading older messages: using React Query's fetchNextPage`);
-
-      // Set loading state manually to reflect in the UI immediately
-      dispatch({ type: "SET_LOADING", isLoading: true });
-
-      // Use the standard messageOffset increment to maintain compatibility
-      dispatch({ type: "INCREMENT_MESSAGE_OFFSET" });
-
-      // This is the key improvement - you could eventually migrate all
-      // loading logic to use fetchNextPage instead of messageOffset
-      // But for now, both mechanisms work together
-      void fetchNextPage();
-    } else if (isLoading) {
-      log("Skipping loadOlderMessages because already loading");
-    } else {
-      log("No more older messages to load");
+    if (!hasNextPage || isLoading) {
+      log(
+        hasNextPage ? "Already loading messages" : "No more messages to load",
+      );
+      return;
     }
-  }, [hasOlderMessages, isLoading, fetchNextPage]);
+
+    log("Loading older messages with fetchNextPage");
+
+    // Set loading state first for better UI feedback
+    dispatch({ type: "SET_LOADING", isLoading: true });
+
+    // Use fetchNextPage from useInfiniteQuery to load the next page of messages
+    void fetchNextPage();
+  }, [hasNextPage, isLoading, fetchNextPage]);
 
   // Helper to generate unique IDs
   const generateMessageId = useCallback(() => crypto.randomUUID(), []);
@@ -584,6 +558,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     [],
   );
 
+  // Throttle updates to reduce unnecessary renders
+  const throttledUpdate = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Process streaming updates
   useUpdateEffect(() => {
     if (!currentStreamingMessage || !currentSessionId) return;
@@ -593,31 +570,51 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       .map((id) => messages[id])
       .filter((msg) => msg.sender === "assistant");
 
+    // Skip update if no assistant messages exist
+    if (assistantMessages.length === 0) {
+      return;
+    }
+
     const lastAssistantMessage =
       assistantMessages[assistantMessages.length - 1];
-
-    // No need to check if lastAssistantMessage exists since it's always truthy here
     const messageId = lastAssistantMessage.id;
-    const currentContent = messages[messageId].content;
-    const newContent = currentStreamingMessage.content;
 
-    // Only update if content or status changed
-    if (
-      currentContent !== newContent ||
-      !!messages[messageId].loading !== !currentStreamingMessage.isComplete ||
-      !!messages[messageId].error !== !!currentStreamingMessage.error
-    ) {
-      updateMessage(messageId, {
-        content: newContent,
-        loading: currentStreamingMessage.isComplete
-          ? undefined
-          : { state: "loading" },
-        error:
-          currentStreamingMessage.error instanceof Error
-            ? currentStreamingMessage.error
-            : undefined,
-      });
+    // Cancel previous update if it exists
+    if (throttledUpdate.current) {
+      clearTimeout(throttledUpdate.current);
     }
+
+    throttledUpdate.current = setTimeout(() => {
+      const currentContent = messages[messageId].content;
+      const newContent = currentStreamingMessage.content;
+
+      // Only update if content or status changed
+      if (
+        currentContent !== newContent ||
+        !!messages[messageId].loading !== !currentStreamingMessage.isComplete ||
+        !!messages[messageId].error !== !!currentStreamingMessage.error
+      ) {
+        updateMessage(messageId, {
+          content: newContent,
+          loading: currentStreamingMessage.isComplete
+            ? undefined
+            : { state: "loading" },
+          error:
+            currentStreamingMessage.error instanceof Error
+              ? currentStreamingMessage.error
+              : undefined,
+        });
+      }
+
+      throttledUpdate.current = null;
+    }, 16); // Using ~60fps (16ms) for near-instant visual updates
+
+    // Clean up on unmount
+    return () => {
+      if (throttledUpdate.current) {
+        clearTimeout(throttledUpdate.current);
+      }
+    };
   }, [
     currentStreamingMessage,
     currentSessionId,
@@ -654,11 +651,11 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         };
         addMessage(userMessage);
 
-        // Add assistant placeholder
+        // Add assistant placeholder immediately so streaming can begin
         const assistantMessageId = generateMessageId();
         const assistantMessage: ChatMessage = {
           id: assistantMessageId,
-          content: "",
+          content: "", // Initial empty content that will be streamed
           sender: "assistant",
           createdAt: new Date(),
           loading: { state: "loading" },
@@ -666,10 +663,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         };
         addMessage(assistantMessage);
 
-        // Start streaming
+        // This ensures the placeholder message is added before streaming starts
+        // Ensures React can render it before content starts streaming
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // Start streaming the response
         await streamMessage(currentSessionId, content, lastMessageId);
       } catch (error) {
-        log("Error sending message:", error);
+        throttledLog("Error sending message:", error);
 
         // Update last message with error
         const lastMessageId = messageOrder[messageOrder.length - 1];
@@ -697,27 +698,17 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     ],
   );
 
-  // Get the latest stats from the API response
-  const latestApiStats = useMemo(() => {
-    if (!freshApiMessagesResponse) {
-      return null;
-    }
-
-    // Return stats from the most recent page
-    return freshApiMessagesResponse.stats;
-  }, [freshApiMessagesResponse]);
-
   // Memoize the context value for performance
-  const contextValue = useMemo(
+  const contextValue = useMemo<ChatContextType>(
     () => ({
       messages,
       messageOrder,
       sendMessage,
       updateMessage,
       loadOlderMessages,
-      hasOlderMessages,
-      isLoading: isLoading || isFetchingNextPage, // Include both loading states
-      lastLoadedCount: latestApiStats?.returned_count ?? 0,
+      hasOlderMessages: hasNextPage === true,
+      isLoading,
+      lastLoadedCount,
       apiMessagesResponse,
     }),
     [
@@ -726,10 +717,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       sendMessage,
       updateMessage,
       loadOlderMessages,
-      hasOlderMessages,
+      hasNextPage,
       isLoading,
-      isFetchingNextPage,
-      latestApiStats,
+      lastLoadedCount,
       apiMessagesResponse,
     ],
   );

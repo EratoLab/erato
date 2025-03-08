@@ -158,7 +158,6 @@ const preview: Preview = {
     },
     viewport: {
       viewports: VIEWPORTS,
-      defaultViewport: "desktop",
     },
     backgrounds: {
       disable: true, // Disable the backgrounds addon as we'll handle it with themes
