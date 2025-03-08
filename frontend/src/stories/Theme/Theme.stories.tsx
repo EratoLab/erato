@@ -1,5 +1,7 @@
+import { defaultTheme, darkTheme } from "../../config/theme";
+
+import type { Theme } from "../../config/theme";
 import type { Meta, StoryObj } from "@storybook/react";
-import { defaultTheme, darkTheme, Theme } from "../../config/theme";
 
 // Create a component to display theme colors
 const ThemeDisplay = ({ theme }: { theme: Theme }) => (

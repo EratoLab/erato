@@ -1,5 +1,6 @@
 import { faker } from "@faker-js/faker";
-import { ChatMessage } from "../../components/containers/ChatProvider";
+
+import type { ChatMessage } from "../../components/containers/ChatProvider";
 
 // Factory function to create a chat message
 const createChatMessage = (overrides?: Partial<ChatMessage>): ChatMessage => ({

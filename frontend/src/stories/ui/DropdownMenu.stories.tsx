@@ -1,8 +1,10 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { DropdownMenu } from "../../components/ui/DropdownMenu";
+import { within, userEvent } from "@storybook/test";
+
+import { DropdownMenu } from "../../components/ui/Controls/DropdownMenu";
 import { EditIcon, Trash } from "../../components/ui/icons";
 import { defaultTheme } from "../../config/theme";
-import { within, userEvent } from "@storybook/test";
+
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "UI/DropdownMenu",

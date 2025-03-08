@@ -1,5 +1,6 @@
+import { MessageContent } from "../../components/ui/Message/MessageContent";
+
 import type { Meta, StoryObj } from "@storybook/react";
-import { MessageContent } from "../../components/ui/MessageContent";
 
 const meta = {
   title: "UI/MessageContent",

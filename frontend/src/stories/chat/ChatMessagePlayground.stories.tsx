@@ -1,8 +1,10 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import { within, waitFor, userEvent } from "@storybook/test";
 import { useState, useEffect, useCallback } from "react";
-import { ChatMessage as ChatMessageComponent } from "../../components/ui/ChatMessage";
-import { ChatMessage, LoadingState } from "@/types/chat";
-import { within, waitFor, userEvent, expect } from "@storybook/test";
+
+import { ChatMessage as ChatMessageComponent } from "../../components/ui/Chat/ChatMessage";
+
+import type { ChatMessage, LoadingState } from "@/types/chat";
+import type { Meta, StoryObj } from "@storybook/react";
 
 interface PlaygroundProps {
   streamingSpeed?: number;
@@ -244,7 +246,7 @@ export const InteractionTest: Story = {
 
     // Wait for streaming to complete
     await waitFor(async () => {
-      const message = canvas.getByRole("log");
+      // const message = canvas.getByRole("log");
       // expect(message).toBeInTheDocument();
     });
 

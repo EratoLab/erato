@@ -1,21 +1,18 @@
 import clsx from "clsx";
 import { debounce } from "lodash";
-import React, {
-  memo,
-  useCallback,
-  useMemo,
-  useState,
-  useEffect,
-  useRef,
-} from "react";
-import { VariableSizeList as VirtualList } from "react-window";
+import React, { memo, useCallback, useMemo, useState, useEffect } from "react";
 
 import { usePaginatedData } from "@/hooks/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
 
-import { ChatMessage } from "./ChatMessage";
-import { ConversationIndicator } from "./ConversationIndicator";
-import { LoadMoreButton } from "./LoadMoreButton";
+import { ConversationIndicator } from "./Message/ConversationIndicator";
+import { MessageListHeader } from "./Message/MessageList/MessageListHeader";
+import {
+  useMessageClassNameHelper,
+  useMessageAnimations,
+} from "./Message/MessageList/MessageListUtils";
+import { StandardMessageList } from "./Message/MessageList/StandardMessageList";
+import { VirtualizedMessageList } from "./Message/MessageList/VirtualizedMessageList";
 
 import type { ChatMessagesResponse } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatMessage as ChatMessageType } from "../containers/ChatProvider";
@@ -26,77 +23,7 @@ import type {
   MessageControlsContext,
 } from "@/types/message-controls";
 
-// Memoized message item component with custom comparison
-const MessageItem = memo<{
-  messageId: string;
-  message: ChatMessageType;
-  isNew: boolean;
-  style?: React.CSSProperties;
-  maxWidth?: number;
-  showTimestamp?: boolean;
-  showAvatar?: boolean;
-  userProfile?: UserProfile;
-  controls?: MessageControlsComponent;
-  controlsContext: MessageControlsContext;
-  onMessageAction: (action: MessageAction) => Promise<void>;
-  className?: string;
-}>(
-  ({
-    messageId,
-    message,
-    // Used in parent component via getMessageClassName
-    isNew: _isNew,
-    style,
-    maxWidth,
-    showTimestamp,
-    showAvatar,
-    userProfile,
-    controls: Controls,
-    controlsContext,
-    onMessageAction,
-    className,
-  }) => (
-    <div style={style} className={className}>
-      <ChatMessage
-        key={messageId}
-        message={message}
-        showTimestamp={showTimestamp}
-        showAvatar={showAvatar}
-        maxWidth={maxWidth}
-        userProfile={userProfile}
-        controls={Controls}
-        controlsContext={controlsContext}
-        onMessageAction={onMessageAction}
-      />
-    </div>
-  ),
-  // Custom comparison function to optimize rendering
-  (prevProps, nextProps) => {
-    // Always re-render if message ID changes
-    if (prevProps.messageId !== nextProps.messageId) return false;
-
-    // Always re-render if isNew status changes
-    if (prevProps.isNew !== nextProps.isNew) return false;
-
-    const prevMessage = prevProps.message;
-    const nextMessage = nextProps.message;
-
-    // Re-render if content changes
-    if (prevMessage.content !== nextMessage.content) return false;
-
-    // Re-render if loading or error state changes
-    if (!!prevMessage.loading !== !!nextMessage.loading) return false;
-    if (!!prevMessage.error !== !!nextMessage.error) return false;
-
-    // Re-render if style changes (for virtualization)
-    if (JSON.stringify(prevProps.style) !== JSON.stringify(nextProps.style))
-      return false;
-
-    // Otherwise, prevent re-render
-    return true;
-  },
-);
-MessageItem.displayName = "MessageItem";
+// Import the split components
 
 export interface MessageListProps {
   /**
@@ -320,45 +247,10 @@ export const MessageList = memo<MessageListProps>(
     );
 
     // Helper function to get CSS classes for message highlighting
-    const getMessageClassName = useCallback(
-      (isNew: boolean) =>
-        clsx(
-          "mx-auto w-full sm:w-[85%]",
-          "py-4",
-          "transition-all duration-700 ease-in-out",
-          isNew
-            ? "animate-fadeIn bg-theme-bg-accent border-l-4 border-theme-accent pl-2"
-            : "bg-transparent",
-        ),
-      [],
-    );
+    const getMessageClassName = useMessageClassNameHelper();
 
-    // Define animation keyframes in CSS
-    useEffect(() => {
-      // Only inject if not already present
-      if (!document.getElementById("message-animations")) {
-        const style = document.createElement("style");
-        style.id = "message-animations";
-        style.innerHTML = `
-          @keyframes fadeIn {
-            from { opacity: 0.7; transform: translateY(-8px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          .animate-fadeIn {
-            animation: fadeIn 0.5s ease-out forwards;
-          }
-        `;
-        document.head.appendChild(style);
-      }
-
-      // Clean up on unmount
-      return () => {
-        const style = document.getElementById("message-animations");
-        if (style) {
-          document.head.removeChild(style);
-        }
-      };
-    }, []);
+    // Inject message animations
+    useMessageAnimations();
 
     // Update container dimensions for virtualization
     useEffect(() => {
@@ -385,95 +277,6 @@ export const MessageList = memo<MessageListProps>(
       };
     }, [containerRef, useVirtualization]);
 
-    // Virtual list ref for scrolling and resizing
-    const listRef = useRef<VirtualList>(null);
-
-    // Estimated size mapping for messages based on content
-    const messageSizeCache = useRef<{ [key: string]: number }>({});
-
-    // Estimate message height based on content length
-    const estimateMessageSize = useCallback(
-      (messageId: string) => {
-        if (messageSizeCache.current[messageId]) {
-          return messageSizeCache.current[messageId];
-        }
-
-        const message = messages[messageId];
-        // Message will always exist here based on how messageId is used
-
-        // Base height for message UI elements
-        const baseHeight = 70;
-
-        // Estimate content height based on character count
-        // Average 100 chars per line, 20px line height
-        const contentLength = message.content.length;
-        const estimatedLines = Math.ceil(contentLength / 100);
-        const contentHeight = Math.max(20, estimatedLines * 20);
-
-        // Store in cache
-        const totalHeight = baseHeight + contentHeight;
-        messageSizeCache.current[messageId] = totalHeight;
-
-        return totalHeight;
-      },
-      [messages],
-    );
-
-    // Item size getter for variable list
-    const getItemSize = useCallback(
-      (index: number) => {
-        const messageId = visibleData[index];
-        return estimateMessageSize(messageId);
-      },
-      [visibleData, estimateMessageSize],
-    );
-
-    // Reset the list when message heights might have changed
-    useEffect(() => {
-      if (listRef.current) {
-        listRef.current.resetAfterIndex(0);
-      }
-    }, [visibleData.length]);
-
-    // Message renderer for virtualized list
-    const renderMessage = useCallback(
-      ({ index, style }: { index: number; style: React.CSSProperties }) => {
-        const messageId = visibleData[index];
-        const message = messages[messageId];
-        const isNew = isNewlyLoaded(index);
-
-        return (
-          <MessageItem
-            messageId={messageId}
-            message={message}
-            isNew={isNew}
-            style={style}
-            maxWidth={maxWidth}
-            showTimestamp={showTimestamps}
-            showAvatar={showAvatars}
-            userProfile={userProfile}
-            controls={controls}
-            controlsContext={controlsContext}
-            onMessageAction={onMessageAction}
-            className={getMessageClassName(isNew)}
-          />
-        );
-      },
-      [
-        visibleData,
-        messages,
-        isNewlyLoaded,
-        getMessageClassName,
-        maxWidth,
-        showTimestamps,
-        showAvatars,
-        userProfile,
-        controls,
-        controlsContext,
-        onMessageAction,
-      ],
-    );
-
     // Update scroll position check after rendering
     useEffect(() => {
       if (containerRef.current) {
@@ -499,61 +302,46 @@ export const MessageList = memo<MessageListProps>(
         )}
         data-testid="message-list"
       >
-        {/* Load more button */}
-        {showLoadMoreButton && (
-          <LoadMoreButton onClick={handleLoadMore} isLoading={isLoading} />
-        )}
+        {/* Header components: load more button, beginning indicator, debug info */}
+        <MessageListHeader
+          showLoadMoreButton={showLoadMoreButton}
+          handleLoadMore={handleLoadMore}
+          isLoading={isLoading}
+          showBeginningIndicator={showBeginningIndicator}
+          apiMessagesResponse={apiMessagesResponse}
+          paginationStats={paginationStats}
+        />
 
-        {/* Beginning of conversation indicator */}
-        {showBeginningIndicator && <ConversationIndicator type="beginning" />}
-
-        {/* Debug info in development */}
-        {process.env.NODE_ENV === "development" && (
-          <div className="sticky top-0 right-0 text-xs opacity-50 z-50 text-right">
-            Showing{" "}
-            {apiMessagesResponse?.stats.returned_count ??
-              paginationStats.displayed}{" "}
-            of {apiMessagesResponse?.stats.total_count ?? paginationStats.total}{" "}
-            messages
-            {apiMessagesResponse?.stats.has_more && " (more available)"}
-          </div>
-        )}
-
-        {/* Virtualized list for performance with large lists */}
+        {/* Message List - virtualized or standard based on settings and message count */}
         {shouldUseVirtualization ? (
-          <VirtualList
-            ref={listRef}
-            height={containerSize.height || 600}
-            width="100%"
-            itemCount={visibleData.length}
-            itemSize={getItemSize}
-            overscanCount={5}
-          >
-            {renderMessage}
-          </VirtualList>
+          <VirtualizedMessageList
+            messages={messages}
+            visibleData={visibleData}
+            containerSize={containerSize}
+            isNewlyLoaded={isNewlyLoaded}
+            getMessageClassName={getMessageClassName}
+            maxWidth={maxWidth}
+            showTimestamps={showTimestamps}
+            showAvatars={showAvatars}
+            userProfile={userProfile}
+            controls={controls}
+            controlsContext={controlsContext}
+            onMessageAction={onMessageAction}
+          />
         ) : (
-          // Standard rendering for smaller lists
-          visibleData.map((messageId, index) => {
-            const message = messages[messageId];
-            const isNew = isNewlyLoaded(index);
-
-            return (
-              <MessageItem
-                key={messageId}
-                messageId={messageId}
-                message={message}
-                isNew={isNew}
-                maxWidth={maxWidth}
-                showTimestamp={showTimestamps}
-                showAvatar={showAvatars}
-                userProfile={userProfile}
-                controls={controls}
-                controlsContext={controlsContext}
-                onMessageAction={onMessageAction}
-                className={getMessageClassName(isNew)}
-              />
-            );
-          })
+          <StandardMessageList
+            messages={messages}
+            visibleData={visibleData}
+            isNewlyLoaded={isNewlyLoaded}
+            getMessageClassName={getMessageClassName}
+            maxWidth={maxWidth}
+            showTimestamps={showTimestamps}
+            showAvatars={showAvatars}
+            userProfile={userProfile}
+            controls={controls}
+            controlsContext={controlsContext}
+            onMessageAction={onMessageAction}
+          />
         )}
 
         {/* End of conversation indicator */}

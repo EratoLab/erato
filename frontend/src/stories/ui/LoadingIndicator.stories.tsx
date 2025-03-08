@@ -1,6 +1,7 @@
+import { LoadingIndicator } from "../../components/ui/Feedback/LoadingIndicator";
+
+import type { LoadingState } from "@/types/chat";
 import type { Meta, StoryObj } from "@storybook/react";
-import { LoadingIndicator } from "../../components/ui/LoadingIndicator";
-import { LoadingState } from "@/types/chat";
 
 const meta = {
   title: "UI/LoadingIndicator",

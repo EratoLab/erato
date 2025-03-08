@@ -1,9 +1,10 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { useState } from "react";
 import { action } from "@storybook/addon-actions";
+import { useState } from "react";
+
 import { ChatHistorySidebar } from "../../components/ui/ChatHistorySidebar";
+
 import type { ChatSession } from "@/types/chat";
-import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
+import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
   title: "CHAT/ChatHistorySidebar",
