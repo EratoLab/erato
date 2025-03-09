@@ -3,6 +3,7 @@ import React, { useCallback, useMemo, useState, useEffect } from "react";
 
 import { useChatHistory } from "@/components/containers/ChatHistoryProvider";
 import { useChat } from "@/components/containers/ChatProvider";
+import { useSidebar } from "@/contexts/SidebarContext";
 import { useProfile } from "@/hooks/useProfile";
 
 import { MessageList } from "../MessageList";
@@ -42,14 +43,14 @@ export interface ChatProps {
   messageControls?: MessageControlsComponent;
   onNewChat?: () => void;
   onRegenerate?: () => void;
-  // Add new prop for sidebar collapsed state
+  // Sidebar collapsed state is now handled by context, so these are optional
   sidebarCollapsed?: boolean;
-  onToggleCollapse: () => void;
+  onToggleCollapse?: () => void;
   /** Optional array of accepted file types */
   acceptedFileTypes?: FileType[];
   /** Optional custom session select handler to override default behavior */
   customSessionSelect?: (sessionId: string) => void;
-  /** Whether the UI is in a transitioning state (prevents loading flickers) */
+  /** Flag to indicate if the chat is currently transitioning between sessions */
   isTransitioning?: boolean;
 }
 
@@ -68,12 +69,20 @@ export const Chat = ({
   messageControls,
   onNewChat,
   onRegenerate,
-  sidebarCollapsed = false,
-  onToggleCollapse,
+  // Prefix unused props with underscore
+  sidebarCollapsed: _sidebarCollapsed,
+  onToggleCollapse: _onToggleCollapse,
   acceptedFileTypes,
   customSessionSelect,
   isTransitioning = false,
 }: ChatProps) => {
+  // Use the sidebar context
+  const sidebarContext = useSidebar();
+
+  // These values are guaranteed to exist from the context
+  const sidebarCollapsed = sidebarContext.collapsed;
+  const onToggleCollapse = sidebarContext.toggleCollapsed;
+
   // Get chat data and actions from context providers
   const {
     messages,
@@ -180,7 +189,7 @@ export const Chat = ({
       <div
         className={clsx(
           "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
-          "mt-14 sm:mt-0",
+          "sm:mt-0",
           className,
         )}
         role="region"

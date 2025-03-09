@@ -36,27 +36,24 @@ export interface ChatHistorySidebarProps {
 
 const ChatHistoryHeader = memo<{
   onNewChat?: () => void;
-  collapsed?: boolean;
+  collapsed: boolean;
   onToggleCollapse?: () => void;
   showTitle?: boolean;
-}>(({ onNewChat, collapsed, onToggleCollapse, showTitle = false }) => (
-  <div
-    className={clsx(
-      "flex h-14 border-b border-theme-border",
-      // Replace grid with flex layout for better control
-      collapsed ? "justify-center" : "justify-between",
+}>(({ onNewChat, collapsed, onToggleCollapse, showTitle }) => (
+  <div className="flex border-b border-theme-border p-2">
+    {/* Only show the toggle button when not collapsed */}
+    {!collapsed && (
+      <div className="flex w-12 justify-center">
+        <Button
+          onClick={onToggleCollapse}
+          variant="sidebar-icon"
+          icon={<SidebarToggleIcon />}
+          className="rotate-180"
+          aria-label="collapse sidebar"
+          aria-expanded="true"
+        />
+      </div>
     )}
-  >
-    <div className="flex w-12 justify-center">
-      <Button
-        onClick={onToggleCollapse}
-        variant="sidebar-icon"
-        icon={<SidebarToggleIcon />}
-        className={!collapsed ? "rotate-180" : ""}
-        aria-label={collapsed ? "expand sidebar" : "collapse sidebar"}
-        aria-expanded={collapsed ? "false" : "true"}
-      />
-    </div>
     {!collapsed && (
       <>
         <div className="flex flex-1 items-center">
@@ -127,7 +124,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       setWidth(entry.contentRect.width);
     });
 
-    const sidebarWidth = collapsed ? 56 : Math.max(width, minWidth);
+    // When not collapsed, set the sidebar width
+    // When collapsed, we'll hide it completely with CSS
+    const sidebarWidth = collapsed ? 0 : Math.max(width, minWidth);
 
     const handleSignOut = () => {
       console.log("ChatHistorySidebar handleSignOut called");
@@ -149,46 +148,58 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     return (
       <ErrorBoundary FallbackComponent={ErrorDisplay}>
-        <aside
-          ref={ref}
-          style={{ width: sidebarWidth }}
-          className={clsx(
-            "flex h-full flex-col border-r border-theme-border",
-            "theme-transition bg-theme-bg-sidebar",
-            collapsed && "overflow-hidden",
-            className,
-          )}
-        >
-          <ChatHistoryHeader
-            onNewChat={onNewChat}
-            collapsed={collapsed}
-            onToggleCollapse={onToggleCollapse}
-            showTitle={showTitle}
-          />
-          {!collapsed && (
-            <>
-              <div className="flex min-h-0 flex-1 flex-col">
-                {error ? (
-                  <ErrorDisplay error={error} />
-                ) : isLoading ? (
-                  <ChatHistoryListSkeleton />
-                ) : (
-                  <ChatHistoryList
-                    sessions={sessions}
-                    currentSessionId={currentSessionId}
-                    onSessionSelect={onSessionSelect}
-                    onSessionDelete={onSessionDelete}
-                    className="flex-1 p-2"
-                  />
-                )}
-              </div>
-              <ChatHistoryFooter
-                userProfile={userProfile}
-                onSignOut={handleSignOut}
+        <div className="relative h-full">
+          {/* Absolutely positioned toggle button when collapsed */}
+          {collapsed && (
+            <div className="absolute left-4 top-4 z-30">
+              <Button
+                onClick={onToggleCollapse}
+                variant="sidebar-icon"
+                icon={<SidebarToggleIcon />}
+                className="border border-theme-border bg-theme-bg-sidebar shadow-md"
+                aria-label="expand sidebar"
+                aria-expanded="false"
               />
-            </>
+            </div>
           )}
-        </aside>
+
+          <aside
+            ref={ref}
+            style={{ width: sidebarWidth }}
+            className={clsx(
+              "flex h-full flex-col border-r border-theme-border",
+              "theme-transition bg-theme-bg-sidebar",
+              collapsed ? "invisible w-0 opacity-0" : "visible opacity-100",
+              className,
+            )}
+          >
+            <ChatHistoryHeader
+              onNewChat={onNewChat}
+              collapsed={collapsed}
+              onToggleCollapse={onToggleCollapse}
+              showTitle={showTitle}
+            />
+            <div className="flex min-h-0 flex-1 flex-col">
+              {error ? (
+                <ErrorDisplay error={error} />
+              ) : isLoading ? (
+                <ChatHistoryListSkeleton />
+              ) : (
+                <ChatHistoryList
+                  sessions={sessions}
+                  currentSessionId={currentSessionId}
+                  onSessionSelect={onSessionSelect}
+                  onSessionDelete={onSessionDelete}
+                  className="flex-1 p-2"
+                />
+              )}
+            </div>
+            <ChatHistoryFooter
+              userProfile={userProfile}
+              onSignOut={handleSignOut}
+            />
+          </aside>
+        </div>
       </ErrorBoundary>
     );
   },

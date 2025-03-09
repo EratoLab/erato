@@ -11,6 +11,7 @@ import { MessageStreamProvider } from "../../components/containers/MessageStream
 import { ProfileProvider } from "../../components/containers/ProfileProvider";
 import { Chat } from "../../components/ui/Chat/Chat";
 import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
+import { SidebarProvider } from "../../contexts/SidebarContext";
 import { MockDataGenerator } from "../../mocks/mockDataGenerator";
 
 import type { ChatMessage } from "../../components/containers/ChatProvider";
@@ -328,13 +329,10 @@ export const Default: Story = {
     onRegenerate: action("regenerate"),
   },
   render: function Wrapper(args) {
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     return (
-      <Chat
-        {...args}
-        sidebarCollapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-      />
+      <SidebarProvider>
+        <Chat {...args} />
+      </SidebarProvider>
     );
   },
 };

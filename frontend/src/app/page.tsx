@@ -11,6 +11,7 @@ import {
 import { ChatProvider } from "../components/containers/ChatProvider";
 import { MessageStreamProvider } from "../components/containers/MessageStreamProvider";
 import { ProfileProvider } from "../components/containers/ProfileProvider";
+import { useSidebar } from "../contexts/SidebarContext";
 import { useChatNavigation } from "../hooks/useChatNavigation";
 
 import type { FileType } from "@/utils/fileTypes";
@@ -27,14 +28,13 @@ const queryClient = new QueryClient();
 
 // Inner component to access hooks within providers
 const ChatContainer = () => {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Use sidebar context instead of local state
+  const { collapsed: sidebarCollapsed, toggleCollapsed: handleToggleCollapse } =
+    useSidebar();
+
   // Add local loading state to control UI transitions
   const [isTransitioning, setIsTransitioning] = useState(false);
   const { switchSessionWithUrl, createNewChat } = useChatNavigation();
-
-  const handleToggleCollapse = () => {
-    setSidebarCollapsed((prev) => !prev);
-  };
 
   // Create an enhanced session switcher that manages loading states
   const handleSessionSelect = useCallback(
@@ -49,28 +49,31 @@ const ChatContainer = () => {
         // End transition with a slight delay to ensure smooth UI
         setTimeout(() => {
           setIsTransitioning(false);
-        }, 50);
-      }, 50);
+        }, 100);
+      }, 200);
 
-      // Cleanup timeout if component unmounts during transition
-      return () => clearTimeout(minTransitionTimeout);
+      return () => {
+        clearTimeout(minTransitionTimeout);
+      };
     },
     [switchSessionWithUrl],
   );
 
+  // Using the same pattern for new chat creation
   const handleNewChat = useCallback(() => {
-    // Start transition
     setIsTransitioning(true);
 
-    // Create new chat with minimum transition time
-    setTimeout(() => {
+    const minTransitionTimeout = setTimeout(() => {
       createNewChat();
 
-      // End transition with a slight delay
       setTimeout(() => {
         setIsTransitioning(false);
-      }, 50);
-    }, 50);
+      }, 100);
+    }, 200);
+
+    return () => {
+      clearTimeout(minTransitionTimeout);
+    };
   }, [createNewChat]);
 
   // Define which file types are accepted in this chat
