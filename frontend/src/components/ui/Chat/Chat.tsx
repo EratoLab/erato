@@ -41,7 +41,6 @@ export interface ChatProps {
   // Optional custom controls component
   messageControls?: MessageControlsComponent;
   onNewChat?: () => void;
-  onAddFile?: (files: File[]) => void;
   onRegenerate?: () => void;
   // Add new prop for sidebar collapsed state
   sidebarCollapsed?: boolean;
@@ -68,7 +67,6 @@ export const Chat = ({
   controlsContext,
   messageControls,
   onNewChat,
-  onAddFile,
   onRegenerate,
   sidebarCollapsed = false,
   onToggleCollapse,
@@ -210,12 +208,13 @@ export const Chat = ({
         <ChatInput
           onSendMessage={handleSendMessage}
           acceptedFileTypes={acceptedFileTypes}
-          onAddFile={onAddFile}
           handleFileAttachments={handleFileAttachments}
-          className="border-t border-theme-border bg-theme-bg-primary p-2 sm:p-4"
+          className="p-2 sm:p-4"
           isLoading={chatLoading}
           showControls
           onRegenerate={onRegenerate}
+          showFileTypes={true}
+          initialFiles={[]}
         />
       </div>
     </div>

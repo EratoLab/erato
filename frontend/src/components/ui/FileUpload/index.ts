@@ -1,9 +1,10 @@
+// File upload components
 export { FileUpload } from "./FileUpload";
-export { FilePreview } from "./FilePreview";
 export { FileUploadButton } from "./FileUploadButton";
-export { FileUploadButtonLoading } from "./FileUploadButtonLoading";
-export { FileUploadButtonError } from "./FileUploadButtonError";
-export type { FileUploadButtonProps } from "./FileUploadButton";
+export { FilePreviewButton } from "./FilePreviewButton";
+export { FileUploadProgress } from "./FileUploadProgress";
 
-// Also export types
-export type { FilePreviewProps } from "./FilePreview";
+// Re-export types for external usage
+export type { FileUploadProps } from "./FileUpload";
+export type { FileUploadButtonProps } from "./FileUploadButton";
+export type { FileUploadItemWithSize } from "./FilePreviewBase";

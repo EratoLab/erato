@@ -26,8 +26,8 @@ const meta = {
   tags: ["autodocs"],
   argTypes: {
     onSendMessage: { action: "message sent" },
-    onAddFile: {
-      action: "add files",
+    handleFileAttachments: {
+      action: "handle file attachments",
       description: "Callback when files are added",
     },
     onRegenerate: { action: "regenerate" },
@@ -60,8 +60,10 @@ export const Default: Story = {
   args: {
     onSendMessage: action("message sent"),
     showControls: true,
-    onAddFile: action("add files"),
+    handleFileAttachments: action("handle file attachments"),
     onRegenerate: action("regenerate"),
+    showFileTypes: true,
+    initialFiles: [],
   },
   parameters: {
     viewport: {
@@ -75,8 +77,10 @@ export const Loading: Story = {
     onSendMessage: action("message sent"),
     isLoading: true,
     showControls: true,
-    onAddFile: action("add files"),
+    handleFileAttachments: action("handle file attachments"),
     onRegenerate: action("regenerate"),
+    showFileTypes: true,
+    initialFiles: [],
   },
 };
 
@@ -112,8 +116,10 @@ export const Mobile: Story = {
   args: {
     onSendMessage: action("message sent"),
     showControls: true,
-    onAddFile: action("add files"),
+    handleFileAttachments: action("handle file attachments"),
     onRegenerate: action("regenerate"),
+    showFileTypes: true,
+    initialFiles: [],
   },
   parameters: {
     viewport: {
@@ -126,8 +132,10 @@ export const Tablet: Story = {
   args: {
     onSendMessage: action("message sent"),
     showControls: true,
-    onAddFile: action("add files"),
+    handleFileAttachments: action("handle file attachments"),
     onRegenerate: action("regenerate"),
+    showFileTypes: true,
+    initialFiles: [],
   },
   parameters: {
     viewport: {

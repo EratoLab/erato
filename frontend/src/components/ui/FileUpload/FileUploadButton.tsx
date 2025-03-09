@@ -1,17 +1,109 @@
-import React, { useRef, useState, useCallback, memo, Suspense } from "react";
+import React, { useState, memo, Suspense } from "react";
+import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { PlusIcon } from "../icons";
-import { FileUploadButtonError } from "./FileUploadButtonError";
-import { FileUploadButtonLoading } from "./FileUploadButtonLoading";
 import { BUTTON_STYLES } from "./fileUploadStyles";
+import { Button } from "../Controls";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 
+/**
+ * Props for the loading state component
+ */
+export interface FileUploadButtonLoadingProps {
+  /** Additional class name */
+  className?: string;
+  /** Custom label for accessibility */
+  label?: string;
+}
+
+/**
+ * Loading state for file upload button
+ */
+export const FileUploadButtonLoading = memo<FileUploadButtonLoadingProps>(
+  ({ className = "", label = "Uploading file" }) => (
+    <Button
+      disabled
+      className={className}
+      aria-label={label}
+      variant="secondary"
+    >
+      <svg
+        className="size-5 animate-spin text-[var(--theme-fg-muted)]"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <circle
+          className="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          strokeWidth="4"
+        ></circle>
+        <path
+          className="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+        ></path>
+      </svg>
+    </Button>
+  ),
+);
+
+FileUploadButtonLoading.displayName = "FileUploadButtonLoading";
+
+/**
+ * Props for the error state component
+ */
+export interface FileUploadButtonErrorProps {
+  /** Error object to display */
+  error: Error;
+  /** Additional class name */
+  className?: string;
+}
+
+/**
+ * Error state for file upload button
+ */
+export const FileUploadButtonError = memo<FileUploadButtonErrorProps>(
+  ({ error, className = "" }) => (
+    <Button
+      disabled
+      variant="danger"
+      className={className}
+      title={error.message}
+      aria-label={`Error: ${error.message}`}
+    >
+      <svg
+        className="size-5 text-[var(--theme-error-fg)]"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path
+          fillRule="evenodd"
+          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+          clipRule="evenodd"
+        />
+      </svg>
+    </Button>
+  ),
+);
+
+FileUploadButtonError.displayName = "FileUploadButtonError";
+
+/**
+ * Props for the file upload button
+ */
 export interface FileUploadButtonProps {
   /** Callback when files are successfully uploaded */
   onFilesUploaded?: (files: FileUploadItem[]) => void;
@@ -29,7 +121,9 @@ export interface FileUploadButtonProps {
   iconOnly?: boolean;
 }
 
-// Inner component that can throw during loading
+/**
+ * Inner button component that handles the actual file selection
+ */
 const FileUploadButtonInner = memo<FileUploadButtonProps>(
   ({
     onFilesUploaded,
@@ -40,43 +134,40 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     disabled = false,
     iconOnly = true,
   }) => {
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const [isHovered, setIsHovered] = useState(false);
 
     // Use our file upload hook
     const { uploadFiles, isUploading, error } = useFileUpload({
       onUploadSuccess: (files) => {
         onFilesUploaded?.(files);
-        // Reset the file input so the same file can be selected again
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
       },
     });
 
-    // Handle file selection with useCallback for better performance
-    const handleFileSelect = useCallback(
-      (event: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(event.target.files ?? []);
-        if (files.length === 0) return;
-
-        // Use void to explicitly ignore the promise
-        void uploadFiles(files);
+    // Setup react-dropzone
+    const { getRootProps, getInputProps, open } = useDropzone({
+      onDrop: (acceptedFiles) => {
+        if (acceptedFiles.length > 0) {
+          void uploadFiles(acceptedFiles);
+        }
       },
-      [uploadFiles],
-    );
+      accept:
+        acceptedFileTypes.length > 0
+          ? FileTypeUtil.getAcceptObject(acceptedFileTypes)
+          : undefined,
+      multiple,
+      disabled: disabled || isUploading,
+      noClick: true, // We'll manually open the file dialog
+      noKeyboard: true,
+    });
 
-    // Trigger file input click with useCallback
-    const handleButtonClick = useCallback(() => {
-      fileInputRef.current?.click();
-    }, []);
+    // Handle hover states
+    function handleMouseEnter() {
+      setIsHovered(true);
+    }
 
-    // Handle hover states with useCallback
-    const handleMouseEnter = useCallback(() => setIsHovered(true), []);
-    const handleMouseLeave = useCallback(() => setIsHovered(false), []);
-
-    // Generate accept string from accepted file types
-    const acceptString = FileTypeUtil.getAcceptString(acceptedFileTypes);
+    function handleMouseLeave() {
+      setIsHovered(false);
+    }
 
     // Show loading state if uploading
     if (isUploading) {
@@ -99,21 +190,12 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     const iconStyles = `size-5 ${isHovered ? "text-blue-500" : "text-[var(--theme-fg-muted)]"}`;
 
     return (
-      <>
-        <input
-          type="file"
-          ref={fileInputRef}
-          className="hidden"
-          accept={acceptString}
-          multiple={multiple}
-          onChange={handleFileSelect}
-          disabled={disabled || isUploading}
-          aria-hidden="true"
-        />
+      <div {...getRootProps({ className: "contents" })}>
+        <input {...getInputProps()} />
         <button
           type="button"
           className={buttonStyles}
-          onClick={handleButtonClick}
+          onClick={open}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           disabled={disabled || isUploading}
@@ -122,7 +204,7 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
           <PlusIcon className={iconStyles} />
           {!iconOnly && <span>{label}</span>}
         </button>
-      </>
+      </div>
     );
   },
 );
@@ -131,6 +213,10 @@ FileUploadButtonInner.displayName = "FileUploadButtonInner";
 
 /**
  * Button component for file uploads with Suspense support
+ *
+ * This component provides a button that triggers a file selection dialog
+ * and handles the upload process, with built-in loading and error states.
+ * Uses react-dropzone for optimized file selection handling.
  */
 export const FileUploadButton = memo<FileUploadButtonProps>((props) => {
   return (

@@ -305,30 +305,69 @@ export class FileTypeUtil {
   }
 
   /**
-   * Generate the accepted file types string for file input
-   * @param fileTypes - Array of file types to accept, or empty for all
-   * @returns String formatted for the accept attribute
+   * Get the accept string for HTML file input
+   * @param fileTypes - Array of allowed file types (or undefined for all)
+   * @returns Accept string (e.g. ".pdf,.jpg,.png,image/*")
    */
   static getAcceptString(fileTypes?: FileType[]): string {
+    // If no types are specified, allow all files
     if (!fileTypes || fileTypes.length === 0) {
-      // Get all enabled file types
-      fileTypes = Object.entries(FILE_TYPES)
-
-        .filter(([_, config]) => config.enabled)
-        .map(([type]) => type as FileType);
+      return "";
     }
 
-    const mimeTypes = new Set<string>();
+    // Collect unique extensions and mime types
     const extensions = new Set<string>();
+    const mimeTypes = new Set<string>();
 
-    fileTypes.forEach((type) => {
+    for (const type of fileTypes) {
       const config = FILE_TYPES[type];
-      if (config.enabled) {
-        config.mimeTypes.forEach((mime) => mimeTypes.add(mime));
-        config.extensions.forEach((ext) => extensions.add(`.${ext}`));
-      }
-    });
+      if (!config.enabled) continue;
 
-    return [...Array.from(mimeTypes), ...Array.from(extensions)].join(",");
+      // Add extensions with leading dot
+      for (const ext of config.extensions) {
+        extensions.add(`.${ext}`);
+      }
+
+      // Add mime types
+      for (const mime of config.mimeTypes) {
+        mimeTypes.add(mime);
+      }
+    }
+
+    return [...extensions, ...mimeTypes].join(",");
+  }
+
+  /**
+   * Get the accept object for react-dropzone
+   * @param fileTypes - Array of allowed file types (or undefined for all)
+   * @returns Accept object in the format required by react-dropzone
+   */
+  static getAcceptObject(fileTypes?: FileType[]): Record<string, string[]> {
+    // If no types are specified, return empty object (accept all)
+    if (!fileTypes || fileTypes.length === 0) {
+      return {};
+    }
+
+    const acceptObject: Record<string, string[]> = {};
+
+    for (const type of fileTypes) {
+      const config = FILE_TYPES[type];
+      if (!config.enabled) continue;
+
+      // Add mime types as keys and extensions as values
+      for (const mime of config.mimeTypes) {
+        const extensions = config.extensions.map((ext) => `.${ext}`);
+
+        // If this mime type isn't in the object yet, initialize it with an empty array
+        if (!(mime in acceptObject)) {
+          acceptObject[mime] = [];
+        }
+
+        // Add the extensions
+        acceptObject[mime].push(...extensions);
+      }
+    }
+
+    return acceptObject;
   }
 }
