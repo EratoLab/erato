@@ -87,11 +87,22 @@ export const ChatInput = ({
       ) {
         onSendMessage(message.trim());
         setMessage("");
-        // Keep attachments after sending message to allow for additional messages with the same files
-        // Files will be cleared when a new chat is started or reset function is called
+        // Clear attachments after sending message - files are now part of the message
+        setAttachedFiles([]);
+        // Notify parent component that files have been cleared
+        if (handleFileAttachments) {
+          handleFileAttachments([]);
+        }
       }
     },
-    [message, attachedFiles.length, isLoading, disabled, onSendMessage],
+    [
+      message,
+      attachedFiles.length,
+      isLoading,
+      disabled,
+      onSendMessage,
+      handleFileAttachments,
+    ],
   );
 
   // Handle files uploaded via the enhanced FileUpload component
