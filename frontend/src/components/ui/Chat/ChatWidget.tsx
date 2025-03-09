@@ -10,6 +10,7 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "../../../types/message-controls";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface ChatWidgetProps {
   className?: string;
@@ -19,7 +20,7 @@ interface ChatWidgetProps {
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
   onMessageAction?: (action: MessageAction) => void | Promise<void>;
-  onAddFile?: () => void;
+  handleFileAttachments?: (files: FileUploadItem[]) => void;
   onRegenerate?: () => void;
 }
 
@@ -31,7 +32,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   controls,
   controlsContext,
   onMessageAction,
-  onAddFile,
+  handleFileAttachments,
   onRegenerate,
 }) => {
   const { messages, messageOrder, sendMessage, isLoading } = useChat();
@@ -73,10 +74,12 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
         onSendMessage={(message) => {
           void sendMessage(message);
         }}
-        onAddFile={onAddFile}
+        handleFileAttachments={handleFileAttachments}
         onRegenerate={onRegenerate}
         className="border-t bg-white"
         isLoading={isLoading}
+        showFileTypes={true}
+        initialFiles={[]}
       />
     </div>
   );

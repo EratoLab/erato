@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import * as reactQuery from "@tanstack/react-query";
 import React, {
   createContext,
   useContext,
@@ -10,12 +10,15 @@ import React, {
 } from "react";
 import { useUpdateEffect, useLocalStorage } from "react-use";
 
+import { useFileUpload } from "@/hooks/useFileUpload";
+
 import { useChatHistory } from "./ChatHistoryProvider";
 import { useMessageStream } from "./MessageStreamProvider";
 
 import type {
   ChatMessage as APIChatMessage,
   ChatMessagesResponse,
+  FileUploadItem,
 } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
 import type { StreamingContext } from "@/types/chat";
 
@@ -30,6 +33,7 @@ export interface ChatMessage {
   authorId: string;
   loading?: StreamingContext;
   error?: Error;
+  attachments?: { id: string; filename: string }[]; // Added file attachments
 }
 
 // Mapping of message IDs to message objects
@@ -50,6 +54,10 @@ export interface ChatContextType {
   isLoading: boolean;
   lastLoadedCount: number; // Number of messages loaded in the last batch
   apiMessagesResponse?: ChatMessagesResponse; // Raw API response data with stats
+  handleFileAttachments: (files: { id: string; filename: string }[]) => void; // Added for file handling
+  performFileUpload: (files: File[]) => Promise<FileUploadItem[] | undefined>; // Added for file uploading
+  isUploadingFiles: boolean; // File upload status
+  uploadError: Error | null; // File upload error state
 }
 
 // Action types for the chat reducer
@@ -193,7 +201,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   initialMessageOrder = [],
 }) => {
   const { currentSessionId } = useChatHistory();
-  const { currentStreamingMessage, streamMessage } = useMessageStream();
+  const { currentStreamingMessage, streamMessage, resetStreaming } =
+    useMessageStream();
 
   // Local storage cache for chat sessions
   const [chatCache, setChatCache] = useLocalStorage<{
@@ -203,6 +212,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       lastUpdated: number;
     };
   }>(LOCAL_STORAGE_KEY, {});
+
+  // Store React Query client for cache invalidation
+  const queryClient = reactQuery.useQueryClient();
 
   // Initialize with cached data if available
   const getCachedInitialState = useCallback(() => {
@@ -294,30 +306,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     );
   }, [currentSessionId, messages, messageOrder]);
 
-  // Handle session ID changes
-  useUpdateEffect(() => {
-    // Skip effect for null session ID
-    if (!currentSessionId) return;
-
-    try {
-      throttledLog(`Resetting state for session: ${currentSessionId}`);
-
-      // Reset state for new session
-      dispatch({ type: "RESET_STATE", sessionId: currentSessionId });
-
-      // For temporary sessions, ensure messages are cleared
-      if (currentSessionId.startsWith("temp-")) {
-        dispatch({
-          type: "SET_MESSAGES",
-          messages: {},
-          messageOrder: [],
-        });
-      }
-    } catch (error) {
-      throttledLog("Error handling session change:", error);
-    }
-  }, [currentSessionId]);
-
   // Convert API messages to the app's message format
   const convertApiMessageToAppMessage = useCallback(
     (apiMessage: APIChatMessage): ChatMessage => {
@@ -340,7 +328,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     isFetchingNextPage,
     isLoading: isLoadingInfiniteMessages,
     refetch: refetchMessages,
-  } = useInfiniteQuery({
+  } = reactQuery.useInfiniteQuery({
     queryKey: ["chatMessages", currentSessionId],
     queryFn: async ({ pageParam = 0 }) => {
       if (!currentSessionId || currentSessionId.startsWith("temp-")) {
@@ -489,33 +477,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     convertApiMessageToAppMessage,
   ]);
 
-  // Handle session ID changes - reset state and refetch
-  useUpdateEffect(() => {
-    // Skip effect for null session ID
-    if (!currentSessionId) return;
-
-    try {
-      throttledLog(`Resetting state for session: ${currentSessionId}`);
-
-      // Reset state for new session
-      dispatch({ type: "RESET_STATE", sessionId: currentSessionId });
-
-      // For temporary sessions, ensure messages are cleared
-      if (currentSessionId.startsWith("temp-")) {
-        dispatch({
-          type: "SET_MESSAGES",
-          messages: {},
-          messageOrder: [],
-        });
-      } else {
-        // Refetch messages for non-temporary sessions
-        void refetchMessages();
-      }
-    } catch (error) {
-      throttledLog("Error handling session change:", error);
-    }
-  }, [currentSessionId, refetchMessages]);
-
   // Update loading state
   useEffect(() => {
     dispatch({
@@ -544,6 +505,28 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
 
   // Helper to generate unique IDs
   const generateMessageId = useCallback(() => crypto.randomUUID(), []);
+
+  // Reference for files to be attached to next message
+  const messageFilesRef = useRef<{ id: string; filename: string }[]>([]);
+
+  // Use the file upload hook at the provider level
+  const {
+    uploadFiles,
+    isUploading: isUploadingFiles,
+    error: uploadError,
+  } = useFileUpload({
+    onUploadSuccess: (files) => {
+      // Store the files for the next message
+      messageFilesRef.current = files.map((file) => ({
+        id: file.id,
+        filename: file.filename,
+      }));
+    },
+    onUploadError: (error) => {
+      console.error("File upload error:", error);
+      // Error is already captured in the uploadError state from useFileUpload
+    },
+  });
 
   // Helper to add messages to local state
   const addMessage = useCallback((message: ChatMessage) => {
@@ -604,6 +587,22 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
               ? currentStreamingMessage.error
               : undefined,
         });
+
+        // If the message is complete, invalidate the chat messages query cache
+        // This ensures that when we come back to this chat, we'll get fresh data
+        if (
+          currentStreamingMessage.isComplete &&
+          !currentStreamingMessage.error
+        ) {
+          throttledLog(
+            `Message complete, invalidating cache for chat ${currentSessionId}`,
+          );
+          // Invalidate the specific chat messages query
+          void queryClient.invalidateQueries({
+            queryKey: ["chatMessages", currentSessionId],
+            exact: true,
+          });
+        }
       }
 
       throttledUpdate.current = null;
@@ -613,6 +612,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     return () => {
       if (throttledUpdate.current) {
         clearTimeout(throttledUpdate.current);
+        throttledUpdate.current = null;
       }
     };
   }, [
@@ -621,80 +621,104 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     messages,
     messageOrder,
     updateMessage,
+    queryClient,
   ]);
+
+  // Function to handle file uploads for a message
+  const handleFileAttachments = useCallback(
+    (files: { id: string; filename: string }[]) => {
+      // Store the files for the next message
+      messageFilesRef.current = files;
+    },
+    [],
+  );
+
+  // Expose the uploadFiles function as part of context
+  const performFileUpload = useCallback(
+    (files: File[]) => {
+      return uploadFiles(files);
+    },
+    [uploadFiles],
+  );
 
   // Send a message and handle streaming
   const sendMessage = useCallback(
-    async (content: string) => {
-      if (!currentSessionId) return;
+    async (content: string): Promise<void> => {
+      if (!content.trim() && !messageFilesRef.current.length) {
+        return; // Don't send empty messages without attachments
+      }
 
-      dispatch({ type: "SET_LOADING", isLoading: true });
+      // Generate a unique ID for the new messages
+      const userMessageId = generateMessageId();
+      const assistantMessageId = generateMessageId();
+
+      // Get the current time for message creation
+      const now = new Date();
+
+      // Get the last message ID, if any
+      let lastMessageId: string | undefined;
+      if (messageOrder.length > 0) {
+        lastMessageId = messageOrder[messageOrder.length - 1];
+      }
+
+      // Create the user message with any attached files
+      const userMessage: ChatMessage = {
+        id: userMessageId,
+        content,
+        sender: "user",
+        createdAt: now,
+        authorId: "user", // TODO: Get actual user ID
+        attachments: messageFilesRef.current, // Add any file attachments
+      };
+
+      // Clear the attached files for future messages
+      const attachedFiles = messageFilesRef.current;
+      messageFilesRef.current = [];
+
+      // Add user message to state
+      addMessage(userMessage);
+
+      // Create the assistant message with loading state
+      const assistantMessage: ChatMessage = {
+        id: assistantMessageId,
+        content: "",
+        sender: "assistant",
+        createdAt: new Date(now.getTime() + 1), // 1ms after user message
+        authorId: "assistant",
+        loading: { state: "loading" },
+      };
+
+      // Add assistant message to state
+      addMessage(assistantMessage);
 
       try {
-        // Get last message ID for context
-        const recentMessages = messageOrder
-          .map((id) => messages[id])
-          .filter((msg) => msg.sender === "assistant");
-
-        const lastMessageId =
-          recentMessages.length > 0
-            ? recentMessages[recentMessages.length - 1].id
-            : undefined;
-
-        // Add user message
-        const userMessage: ChatMessage = {
-          id: generateMessageId(),
+        // Stream the message (includes file IDs in the API call)
+        await streamMessage(
+          currentSessionId as string,
           content,
-          sender: "user",
-          createdAt: new Date(),
-          authorId: "user_1",
-        };
-        addMessage(userMessage);
-
-        // Add assistant placeholder immediately so streaming can begin
-        const assistantMessageId = generateMessageId();
-        const assistantMessage: ChatMessage = {
-          id: assistantMessageId,
-          content: "", // Initial empty content that will be streamed
-          sender: "assistant",
-          createdAt: new Date(),
-          loading: { state: "loading" },
-          authorId: "assistant",
-        };
-        addMessage(assistantMessage);
-
-        // This ensures the placeholder message is added before streaming starts
-        // Ensures React can render it before content starts streaming
-        await new Promise((resolve) => setTimeout(resolve, 0));
-
-        // Start streaming the response
-        await streamMessage(currentSessionId, content, lastMessageId);
+          lastMessageId,
+          attachedFiles.map((file) => file.id), // Pass file IDs to streamMessage
+        );
       } catch (error) {
-        throttledLog("Error sending message:", error);
+        throttledLog("Error streaming message:", error);
 
-        // Update last message with error
-        const lastMessageId = messageOrder[messageOrder.length - 1];
-        if (lastMessageId) {
-          updateMessage(lastMessageId, {
-            error:
-              error instanceof Error
-                ? error
-                : new Error("Failed to send message"),
-            loading: undefined,
-          });
-        }
-      } finally {
-        dispatch({ type: "SET_LOADING", isLoading: false });
+        // Update the assistant message with the error
+        updateMessage(assistantMessageId, {
+          loading: undefined,
+          error:
+            error instanceof Error
+              ? error
+              : new Error("Failed to send message"),
+        });
       }
     },
     [
       currentSessionId,
       messageOrder,
-      messages,
       addMessage,
-      generateMessageId,
-      streamMessage,
       updateMessage,
+      streamMessage,
+      generateMessageId,
     ],
   );
 
@@ -710,6 +734,10 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       isLoading,
       lastLoadedCount,
       apiMessagesResponse,
+      handleFileAttachments,
+      performFileUpload,
+      isUploadingFiles,
+      uploadError,
     }),
     [
       messages,
@@ -721,8 +749,47 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       isLoading,
       lastLoadedCount,
       apiMessagesResponse,
+      handleFileAttachments,
+      performFileUpload,
+      isUploadingFiles,
+      uploadError,
     ],
   );
+
+  // Handle session ID changes - reset state and refetch
+  useUpdateEffect(() => {
+    // Skip effect for null session ID
+    if (!currentSessionId) return;
+
+    try {
+      throttledLog(`Resetting state for session: ${currentSessionId}`);
+
+      // Reset streaming message state when changing chats
+      resetStreaming();
+
+      // Reset state for new session
+      dispatch({ type: "RESET_STATE", sessionId: currentSessionId });
+
+      // For temporary sessions, ensure messages are cleared
+      if (currentSessionId.startsWith("temp-")) {
+        dispatch({
+          type: "SET_MESSAGES",
+          messages: {},
+          messageOrder: [],
+        });
+      } else {
+        // Refetch messages for non-temporary sessions with no caching
+        // Force refetch with fresh data by invalidating the cache first
+        void queryClient.invalidateQueries({
+          queryKey: ["chatMessages", currentSessionId],
+          exact: true,
+        });
+        void refetchMessages();
+      }
+    } catch (error) {
+      throttledLog("Error handling session change:", error);
+    }
+  }, [currentSessionId, refetchMessages, resetStreaming, queryClient]);
 
   return (
     <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>

@@ -74,17 +74,7 @@ const ChatContainer = () => {
   }, [createNewChat]);
 
   // Define which file types are accepted in this chat
-  const acceptedFileTypes: FileType[] = ["pdf", "image", "document", "text"];
-
-  const handleAddFiles = useCallback((files: File[]) => {
-    // Process the selected files
-    console.log(
-      "Files selected:",
-      files.map((f) => f.name),
-    );
-
-    // TODO: Implement file upload to backend server
-  }, []);
+  const acceptedFileTypes: FileType[] = ["pdf", "image", "document"];
 
   return (
     <ChatProvider>
@@ -99,7 +89,6 @@ const ChatContainer = () => {
           isSharedDialog: false,
         }}
         onNewChat={handleNewChat}
-        onAddFile={handleAddFiles}
         onRegenerate={() => console.log("Regenerate")}
         sidebarCollapsed={sidebarCollapsed}
         onToggleCollapse={handleToggleCollapse}

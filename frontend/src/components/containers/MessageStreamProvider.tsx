@@ -19,8 +19,10 @@ interface MessageStreamContextType {
     chatId: string,
     userMessageContent: string,
     lastMessageId?: string,
+    fileIds?: string[],
   ) => Promise<void>;
   cancelStreaming: () => void;
+  resetStreaming: () => void;
 }
 
 const MessageStreamContext = createContext<
@@ -69,11 +71,16 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
     }
   }, [currentSource]);
 
+  const resetStreaming = useCallback(() => {
+    setCurrentStreamingMessage(null);
+  }, []);
+
   const streamMessage = useCallback(
     async (
       chatId: string,
       userMessageContent: string,
       lastMessageId?: string,
+      fileIds: string[] = [],
     ) => {
       // Cancel any existing stream
       cancelStreaming();
@@ -98,6 +105,7 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
             // Format according to MessageSubmitRequest schema
             user_message: userMessageContent,
             previous_message_id: isNewChat ? null : lastMessageId,
+            file_ids: fileIds.length > 0 ? fileIds : undefined,
           }),
         });
 
@@ -261,6 +269,7 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
         currentStreamingMessage,
         streamMessage,
         cancelStreaming,
+        resetStreaming,
       }}
     >
       {children}
