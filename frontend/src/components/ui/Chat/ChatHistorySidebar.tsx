@@ -5,7 +5,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { Button } from "../Controls/Button";
-import { UserProfileDropdown } from "../Controls/UserProfileDropdown";
+import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { SidebarToggleIcon, EditIcon } from "../icons";
 
 import type { ChatSession, UserProfile } from "@/types/chat";
@@ -86,7 +86,7 @@ const ChatHistoryFooter = memo<{
   onSignOut: () => void;
 }>(({ userProfile, onSignOut }) => (
   <div className="border-t border-theme-border p-2">
-    <UserProfileDropdown
+    <UserProfileThemeDropdown
       userProfile={userProfile}
       onSignOut={onSignOut}
       className="flex w-full items-center justify-start"

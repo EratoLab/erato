@@ -664,7 +664,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         sender: "user",
         createdAt: now,
         authorId: "user", // TODO: Get actual user ID
-        attachments: messageFilesRef.current ?? [], // Add any file attachments
+        attachments: messageFilesRef.current, // Add any file attachments
       };
 
       // Clear the attached files for future messages
@@ -693,7 +693,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
           currentSessionId as string,
           content,
           lastMessageId,
-          attachedFiles.map((file) => file.id) ?? [], // Pass file IDs to streamMessage
+          attachedFiles.map((file) => file.id), // Pass file IDs to streamMessage
         );
       } catch (error) {
         throttledLog("Error streaming message:", error);
