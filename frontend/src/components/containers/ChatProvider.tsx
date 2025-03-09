@@ -30,6 +30,7 @@ export interface ChatMessage {
   authorId: string;
   loading?: StreamingContext;
   error?: Error;
+  attachments?: { id: string; filename: string }[]; // Added file attachments
 }
 
 // Mapping of message IDs to message objects
@@ -50,6 +51,7 @@ export interface ChatContextType {
   isLoading: boolean;
   lastLoadedCount: number; // Number of messages loaded in the last batch
   apiMessagesResponse?: ChatMessagesResponse; // Raw API response data with stats
+  handleFileAttachments: (files: { id: string; filename: string }[]) => void; // Added for file handling
 }
 
 // Action types for the chat reducer
@@ -498,6 +500,11 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   // Helper to generate unique IDs
   const generateMessageId = useCallback(() => crypto.randomUUID(), []);
 
+  // Helper to handle file uploads for a message
+  const messageFilesRef = useRef<{ id: string; filename: string }[] | null>(
+    null,
+  );
+
   // Helper to add messages to local state
   const addMessage = useCallback((message: ChatMessage) => {
     dispatch({ type: "ADD_MESSAGE", message });
@@ -594,78 +601,93 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     queryClient,
   ]);
 
+  // Function to handle file uploads for a message
+  const handleFileAttachments = useCallback(
+    (files: { id: string; filename: string }[]) => {
+      // Store the files for the next message
+      messageFilesRef.current = files;
+    },
+    [],
+  );
+
   // Send a message and handle streaming
   const sendMessage = useCallback(
-    async (content: string) => {
-      if (!currentSessionId) return;
+    async (content: string): Promise<void> => {
+      if (!content.trim() && !messageFilesRef.current?.length) {
+        return; // Don't send empty messages without attachments
+      }
 
-      dispatch({ type: "SET_LOADING", isLoading: true });
+      // Generate a unique ID for the new messages
+      const userMessageId = generateMessageId();
+      const assistantMessageId = generateMessageId();
+
+      // Get the current time for message creation
+      const now = new Date();
+
+      // Get the last message ID, if any
+      let lastMessageId: string | undefined;
+      if (messageOrder.length > 0) {
+        lastMessageId = messageOrder[messageOrder.length - 1];
+      }
+
+      // Create the user message with any attached files
+      const userMessage: ChatMessage = {
+        id: userMessageId,
+        content,
+        sender: "user",
+        createdAt: now,
+        authorId: "user", // TODO: Get actual user ID
+        attachments: messageFilesRef.current ?? [], // Add any file attachments
+      };
+
+      // Clear the attached files for future messages
+      const attachedFiles = messageFilesRef.current;
+      messageFilesRef.current = [];
+
+      // Add user message to state
+      addMessage(userMessage);
+
+      // Create the assistant message with loading state
+      const assistantMessage: ChatMessage = {
+        id: assistantMessageId,
+        content: "",
+        sender: "assistant",
+        createdAt: new Date(now.getTime() + 1), // 1ms after user message
+        authorId: "assistant",
+        loading: { state: "loading" },
+      };
+
+      // Add assistant message to state
+      addMessage(assistantMessage);
 
       try {
-        // Get last message ID for context
-        const recentMessages = messageOrder
-          .map((id) => messages[id])
-          .filter((msg) => msg.sender === "assistant");
-
-        const lastMessageId =
-          recentMessages.length > 0
-            ? recentMessages[recentMessages.length - 1].id
-            : undefined;
-
-        // Add user message
-        const userMessage: ChatMessage = {
-          id: generateMessageId(),
+        // Stream the message (includes file IDs in the API call)
+        await streamMessage(
+          currentSessionId as string,
           content,
-          sender: "user",
-          createdAt: new Date(),
-          authorId: "user_1",
-        };
-        addMessage(userMessage);
-
-        // Add assistant placeholder immediately so streaming can begin
-        const assistantMessageId = generateMessageId();
-        const assistantMessage: ChatMessage = {
-          id: assistantMessageId,
-          content: "", // Initial empty content that will be streamed
-          sender: "assistant",
-          createdAt: new Date(),
-          loading: { state: "loading" },
-          authorId: "assistant",
-        };
-        addMessage(assistantMessage);
-
-        // This ensures the placeholder message is added before streaming starts
-        // Ensures React can render it before content starts streaming
-        await new Promise((resolve) => setTimeout(resolve, 0));
-
-        // Start streaming the response
-        await streamMessage(currentSessionId, content, lastMessageId);
+          lastMessageId,
+          attachedFiles?.map((file) => file.id) ?? [], // Pass file IDs to streamMessage
+        );
       } catch (error) {
-        throttledLog("Error sending message:", error);
+        throttledLog("Error streaming message:", error);
 
-        // Update last message with error
-        const lastMessageId = messageOrder[messageOrder.length - 1];
-        if (lastMessageId) {
-          updateMessage(lastMessageId, {
-            error:
-              error instanceof Error
-                ? error
-                : new Error("Failed to send message"),
-            loading: undefined,
-          });
-        }
-      } finally {
-        dispatch({ type: "SET_LOADING", isLoading: false });
+        // Update the assistant message with the error
+        updateMessage(assistantMessageId, {
+          loading: undefined,
+          error:
+            error instanceof Error
+              ? error
+              : new Error("Failed to send message"),
+        });
       }
     },
     [
       currentSessionId,
       messageOrder,
-      messages,
       addMessage,
-      generateMessageId,
-      streamMessage,
       updateMessage,
+      streamMessage,
+      generateMessageId,
     ],
   );
 
@@ -681,6 +703,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       isLoading,
       lastLoadedCount,
       apiMessagesResponse,
+      handleFileAttachments,
     }),
     [
       messages,
@@ -692,6 +715,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       isLoading,
       lastLoadedCount,
       apiMessagesResponse,
+      handleFileAttachments,
     ],
   );
 

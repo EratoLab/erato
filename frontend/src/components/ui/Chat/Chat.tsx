@@ -1,10 +1,10 @@
 import clsx from "clsx";
 import React, { useCallback, useMemo, useState, useEffect } from "react";
 
+import { useChatHistory } from "@/components/containers/ChatHistoryProvider";
+import { useChat } from "@/components/containers/ChatProvider";
 import { useProfile } from "@/hooks/useProfile";
 
-import { useChatHistory } from "../../containers/ChatHistoryProvider";
-import { useChat } from "../../containers/ChatProvider";
 import { MessageList } from "../MessageList";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
@@ -85,6 +85,7 @@ export const Chat = ({
     hasOlderMessages,
     loadOlderMessages,
     apiMessagesResponse,
+    handleFileAttachments,
   } = useChat();
   const { profile } = useProfile();
   const {
@@ -210,6 +211,7 @@ export const Chat = ({
           onSendMessage={handleSendMessage}
           acceptedFileTypes={acceptedFileTypes}
           onAddFile={onAddFile}
+          handleFileAttachments={handleFileAttachments}
           className="border-t border-theme-border bg-theme-bg-primary p-2 sm:p-4"
           isLoading={chatLoading}
           showControls

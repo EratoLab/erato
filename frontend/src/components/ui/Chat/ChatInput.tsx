@@ -7,6 +7,7 @@ import {
 import clsx from "clsx";
 import React, { useState, useRef, useEffect } from "react";
 
+import { FileUploadButton } from "@/components/ui/FileUpload";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { Button } from "../Controls/Button";
@@ -15,12 +16,14 @@ import { FilePreview } from "../Controls/FilePreview";
 import { Tooltip } from "../Controls/Tooltip";
 import { Alert } from "../Feedback/Alert";
 
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
   onAddFile?: (files: File[]) => void;
   onRegenerate?: () => void;
+  handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
   disabled?: boolean;
   className?: string;
@@ -40,6 +43,7 @@ export const ChatInput = ({
   onSendMessage,
   onAddFile,
   onRegenerate,
+  handleFileAttachments,
   isLoading = false,
   disabled = false,
   className = "",
@@ -51,19 +55,42 @@ export const ChatInput = ({
 }: ChatInputProps) => {
   const [message, setMessage] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<FileUploadItem[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() && !isLoading && !disabled) {
+    if (
+      (message.trim() || attachedFiles.length > 0) &&
+      !isLoading &&
+      !disabled
+    ) {
       onSendMessage(message.trim());
       setMessage("");
-      // Keep files after sending message to allow for additional messages with the same files
-      // Clear files only when explicitly requested or new files are selected
+      // Keep attachments after sending message to allow for additional messages with the same files
+      // Files will be cleared when a new chat is started or reset function is called
     }
   };
 
+  // Handle file upload via the API
+  const handleFilesUploaded = (files: FileUploadItem[]) => {
+    // Add new files to the list
+    setAttachedFiles((prev) => {
+      const newFiles = [...prev, ...files];
+      // Only keep the most recent 'maxFiles' files
+      const trimmedFiles = newFiles.slice(-maxFiles);
+
+      // Call the parent component's handler with the updated files
+      if (handleFileAttachments) {
+        handleFileAttachments(trimmedFiles);
+      }
+
+      return trimmedFiles;
+    });
+  };
+
+  // Legacy file handling for backward compatibility
   const handleFileInputChange = (files: File[]) => {
     setFileError(null);
 
@@ -114,8 +141,29 @@ export const ChatInput = ({
     setFileError(null);
   };
 
+  // Remove an uploaded file
+  const handleRemoveAttachedFile = (fileId: string) => {
+    setAttachedFiles((prev) => {
+      const updated = prev.filter((file) => file.id !== fileId);
+
+      // Call the parent component's handler with the updated files
+      if (handleFileAttachments) {
+        handleFileAttachments(updated);
+      }
+
+      return updated;
+    });
+  };
+
   const handleRemoveAllFiles = () => {
     setSelectedFiles([]);
+    setAttachedFiles([]);
+
+    // Clear attached files in parent component
+    if (handleFileAttachments) {
+      handleFileAttachments([]);
+    }
+
     setFileError(null);
   };
 
@@ -133,14 +181,15 @@ export const ChatInput = ({
       className={clsx("mx-auto mb-4 w-full sm:w-5/6 md:w-4/5")}
       onSubmit={handleSubmit}
     >
-      {/* File previews */}
-      {selectedFiles.length > 0 && (
+      {/* File previews - both uploaded files and legacy file selection */}
+      {(attachedFiles.length > 0 || selectedFiles.length > 0) && (
         <div className="mb-3">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-medium text-theme-fg-secondary">
-              Attachments ({selectedFiles.length}/{maxFiles})
+              Attachments ({attachedFiles.length + selectedFiles.length}/
+              {maxFiles})
             </h3>
-            {selectedFiles.length > 1 && (
+            {(attachedFiles.length > 1 || selectedFiles.length > 1) && (
               <Tooltip content="Remove all files">
                 <Button
                   onClick={handleRemoveAllFiles}
@@ -154,15 +203,42 @@ export const ChatInput = ({
               </Tooltip>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {selectedFiles.map((file, index) => (
-              <FilePreview
-                key={`${file.name}-${index}`}
-                file={file}
-                onRemove={handleRemoveFile}
-              />
-            ))}
-          </div>
+
+          {/* API uploaded files */}
+          {attachedFiles.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {attachedFiles.map((file) => (
+                <div
+                  key={file.id}
+                  className="flex items-center space-x-1 rounded-md bg-gray-100 px-2 py-1"
+                >
+                  <span className="max-w-[150px] truncate text-sm">
+                    {file.filename}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttachedFile(file.id)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <XMarkIcon className="size-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Legacy file previews */}
+          {selectedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {selectedFiles.map((file, index) => (
+                <FilePreview
+                  key={`${file.name}-${index}`}
+                  file={file}
+                  onRemove={handleRemoveFile}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -219,21 +295,45 @@ export const ChatInput = ({
           <div className="flex items-center gap-1 sm:gap-2">
             {showControls && (
               <>
-                <FileInput
-                  onFilesSelected={handleFileInputChange}
-                  acceptedFileTypes={acceptedFileTypes}
-                  disabled={selectedFiles.length >= maxFiles}
-                >
-                  <Tooltip content={`Add file${maxFiles > 1 ? "s" : ""}`}>
-                    <Button
-                      variant="icon-only"
-                      size="sm"
-                      icon={<PlusIcon className="size-5" />}
-                      aria-label="Add File"
-                      disabled={selectedFiles.length >= maxFiles}
-                    />
-                  </Tooltip>
-                </FileInput>
+                {/* API File Upload Button */}
+                {handleFileAttachments && (
+                  <FileUploadButton
+                    onFilesUploaded={handleFilesUploaded}
+                    acceptedFileTypes={acceptedFileTypes}
+                    multiple={maxFiles > 1}
+                    iconOnly={true}
+                    className="p-1"
+                    disabled={
+                      attachedFiles.length >= maxFiles || isLoading || disabled
+                    }
+                  />
+                )}
+
+                {/* Legacy File Input (only show if no API upload support) */}
+                {!handleFileAttachments && (
+                  <FileInput
+                    onFilesSelected={handleFileInputChange}
+                    acceptedFileTypes={acceptedFileTypes}
+                    disabled={
+                      selectedFiles.length >= maxFiles || isLoading || disabled
+                    }
+                  >
+                    <Tooltip content={`Add file${maxFiles > 1 ? "s" : ""}`}>
+                      <Button
+                        variant="icon-only"
+                        size="sm"
+                        icon={<PlusIcon className="size-5" />}
+                        aria-label="Add File"
+                        disabled={
+                          selectedFiles.length >= maxFiles ||
+                          isLoading ||
+                          disabled
+                        }
+                      />
+                    </Tooltip>
+                  </FileInput>
+                )}
+
                 <Tooltip content="Regenerate response">
                   <Button
                     onClick={onRegenerate}
@@ -241,6 +341,7 @@ export const ChatInput = ({
                     size="sm"
                     icon={<ArrowPathIcon className="size-5" />}
                     aria-label="Regenerate response"
+                    disabled={isLoading || disabled}
                   />
                 </Tooltip>
               </>
@@ -250,9 +351,15 @@ export const ChatInput = ({
           <Button
             type="submit"
             variant="secondary"
-            disabled={!message.trim() || isLoading || disabled}
-            icon={<ArrowUpIcon className="size-5" />}
             size="sm"
+            icon={<ArrowUpIcon className="size-5" />}
+            disabled={
+              (!message.trim() &&
+                attachedFiles.length === 0 &&
+                selectedFiles.length === 0) ||
+              isLoading ||
+              disabled
+            }
             aria-label="Send message"
           />
         </div>
