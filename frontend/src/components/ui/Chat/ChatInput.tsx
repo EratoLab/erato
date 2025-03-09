@@ -2,6 +2,7 @@ import { ArrowUpIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 
+import { useChat } from "@/components/containers/ChatProvider";
 import {
   FileUploadButton,
   FilePreviewButton,
@@ -32,6 +33,12 @@ interface ChatInputProps {
   initialFiles?: FileUploadItem[];
   /** Show file type in previews */
   showFileTypes?: boolean;
+  /** File upload function provided by the ChatProvider */
+  performFileUpload?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
+  /** Whether files are currently being uploaded */
+  isUploading?: boolean;
+  /** Any error that occurred during upload */
+  uploadError?: Error | null;
 }
 
 /**
@@ -51,6 +58,9 @@ export const ChatInput = ({
   acceptedFileTypes = [],
   initialFiles = [],
   showFileTypes = false,
+  performFileUpload,
+  isUploading,
+  uploadError,
 }: ChatInputProps) => {
   const [message, setMessage] = useState("");
   const [attachedFiles, setAttachedFiles] =
@@ -58,6 +68,13 @@ export const ChatInput = ({
   const [fileError, setFileError] = useState<string | null>(null);
   const [uploadInProgress, setUploadInProgress] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Get file upload functionality from ChatProvider
+  const {
+    performFileUpload: chatProviderPerformFileUpload,
+    isUploadingFiles,
+    uploadError: chatProviderUploadError,
+  } = useChat();
 
   // Handle form submission for sending a message
   const handleSubmit = useCallback(
@@ -143,14 +160,25 @@ export const ChatInput = ({
     }
   }, [message]);
 
+  // Handle file upload error if any
+  useEffect(() => {
+    if (chatProviderUploadError) {
+      setFileError(`File upload error: ${chatProviderUploadError.message}`);
+      setUploadInProgress(false);
+    }
+  }, [chatProviderUploadError]);
+
+  // Update upload progress tracking from provider's state
+  useEffect(() => {
+    setUploadInProgress(isUploadingFiles);
+  }, [isUploadingFiles]);
+
   // Determine if send button should be enabled
   const canSendMessage =
     (message.trim() || attachedFiles.length > 0) &&
     !isLoading &&
     !disabled &&
     !uploadInProgress;
-
-  console.log(attachedFiles);
 
   return (
     <form
@@ -265,6 +293,11 @@ export const ChatInput = ({
                       disabled ||
                       uploadInProgress
                     }
+                    performFileUpload={
+                      performFileUpload ?? chatProviderPerformFileUpload
+                    }
+                    isUploading={isUploading ?? isUploadingFiles}
+                    uploadError={uploadError ?? chatProviderUploadError}
                   />
                 )}
 

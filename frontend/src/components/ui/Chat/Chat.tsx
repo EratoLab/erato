@@ -84,6 +84,9 @@ export const Chat = ({
     loadOlderMessages,
     apiMessagesResponse,
     handleFileAttachments,
+    performFileUpload,
+    isUploadingFiles,
+    uploadError,
   } = useChat();
   const { profile } = useProfile();
   const {
@@ -215,6 +218,9 @@ export const Chat = ({
           onRegenerate={onRegenerate}
           showFileTypes={true}
           initialFiles={[]}
+          performFileUpload={performFileUpload}
+          isUploading={isUploadingFiles}
+          uploadError={uploadError}
         />
       </div>
     </div>

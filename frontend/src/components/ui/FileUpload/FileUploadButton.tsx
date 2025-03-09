@@ -2,7 +2,6 @@ import React, { useState, memo, Suspense } from "react";
 import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
 
-import { useFileUpload } from "@/hooks/useFileUpload";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { PlusIcon } from "../icons";
@@ -119,6 +118,12 @@ export interface FileUploadButtonProps {
   disabled?: boolean;
   /** Whether to show only the icon without text */
   iconOnly?: boolean;
+  /** File upload function provided by a parent component */
+  performFileUpload?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
+  /** Whether a file upload is in progress */
+  isUploading?: boolean;
+  /** Any error that occurred during file upload */
+  uploadError?: Error | null;
 }
 
 /**
@@ -133,21 +138,22 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     className = "",
     disabled = false,
     iconOnly = true,
+    performFileUpload,
+    isUploading = false,
+    uploadError = null,
   }) => {
     const [isHovered, setIsHovered] = useState(false);
-
-    // Use our file upload hook
-    const { uploadFiles, isUploading, error } = useFileUpload({
-      onUploadSuccess: (files) => {
-        onFilesUploaded?.(files);
-      },
-    });
 
     // Setup react-dropzone
     const { getRootProps, getInputProps, open } = useDropzone({
       onDrop: (acceptedFiles) => {
-        if (acceptedFiles.length > 0) {
-          void uploadFiles(acceptedFiles);
+        if (acceptedFiles.length > 0 && performFileUpload) {
+          // Call the provided upload function
+          void performFileUpload(acceptedFiles).then((files) => {
+            if (files) {
+              onFilesUploaded?.(files);
+            }
+          });
         }
       },
       accept:
@@ -175,8 +181,8 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     }
 
     // Show error state if there was an error
-    if (error) {
-      return <FileUploadButtonError error={error} />;
+    if (uploadError) {
+      return <FileUploadButtonError error={uploadError} />;
     }
 
     // Compute button styles based on props and state

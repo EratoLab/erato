@@ -1,7 +1,6 @@
 import React, { useState, useCallback, memo, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 
-import { useFileUpload } from "@/hooks/useFileUpload";
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
 
 import { FilePreviewButton } from "./FilePreviewButton";
@@ -50,6 +49,12 @@ export interface FileUploadProps {
   initialFiles?: FileUploadItem[];
   /** Show file type labels in previews */
   showFileTypes?: boolean;
+  /** File upload function provided by a parent component */
+  performFileUpload?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
+  /** Whether a file upload is in progress */
+  isUploading?: boolean;
+  /** Any error that occurred during file upload */
+  uploadError?: Error | null;
 }
 
 /**
@@ -79,6 +84,9 @@ export const FileUpload = memo<FileUploadProps>(
     showFilePreviews = true,
     initialFiles = [],
     showFileTypes = false,
+    performFileUpload,
+    isUploading = false,
+    uploadError = null,
   }) => {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadedFiles, setUploadedFiles] = useState<
@@ -96,17 +104,6 @@ export const FileUpload = memo<FileUploadProps>(
     const isUploadDisabled =
       disabled ||
       (multiple ? uploadedFiles.length >= maxFiles : uploadedFiles.length > 0);
-
-    // Use our file upload hook with progress tracking
-    const { uploadFiles, isUploading, error } = useFileUpload({
-      onUploadStart: () => {
-        setUploadProgress(0);
-        setDropzoneError(null);
-      },
-      onUploadSuccess: (files) => {
-        handleNewFiles(files);
-      },
-    });
 
     // Handle new files being uploaded
     const handleNewFiles = useCallback(
@@ -224,8 +221,12 @@ export const FileUpload = memo<FileUploadProps>(
             multiple ? remainingSlots : 1,
           );
 
-          if (filesToUpload.length > 0) {
-            void uploadFiles(filesToUpload);
+          if (filesToUpload.length > 0 && performFileUpload) {
+            void performFileUpload(filesToUpload).then((files) => {
+              if (files) {
+                handleNewFiles(files);
+              }
+            });
           }
         }
       },
@@ -235,7 +236,8 @@ export const FileUpload = memo<FileUploadProps>(
         maxFiles,
         multiple,
         uploadedFiles.length,
-        uploadFiles,
+        performFileUpload,
+        handleNewFiles,
       ],
     );
 
@@ -340,9 +342,9 @@ export const FileUpload = memo<FileUploadProps>(
         )}
 
         {/* Error messages */}
-        {(error ?? dropzoneError) && (
+        {(uploadError ?? dropzoneError) && (
           <div className="rounded-md bg-[var(--theme-error-bg)] p-2 text-sm text-[var(--theme-error-fg)]">
-            {error?.message ?? dropzoneError}
+            {uploadError?.message ?? dropzoneError}
           </div>
         )}
 

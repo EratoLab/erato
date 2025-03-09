@@ -10,12 +10,15 @@ import React, {
 } from "react";
 import { useUpdateEffect, useLocalStorage } from "react-use";
 
+import { useFileUpload } from "@/hooks/useFileUpload";
+
 import { useChatHistory } from "./ChatHistoryProvider";
 import { useMessageStream } from "./MessageStreamProvider";
 
 import type {
   ChatMessage as APIChatMessage,
   ChatMessagesResponse,
+  FileUploadItem,
 } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
 import type { StreamingContext } from "@/types/chat";
 
@@ -52,6 +55,9 @@ export interface ChatContextType {
   lastLoadedCount: number; // Number of messages loaded in the last batch
   apiMessagesResponse?: ChatMessagesResponse; // Raw API response data with stats
   handleFileAttachments: (files: { id: string; filename: string }[]) => void; // Added for file handling
+  performFileUpload: (files: File[]) => Promise<FileUploadItem[] | undefined>; // Added for file uploading
+  isUploadingFiles: boolean; // File upload status
+  uploadError: Error | null; // File upload error state
 }
 
 // Action types for the chat reducer
@@ -500,10 +506,23 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   // Helper to generate unique IDs
   const generateMessageId = useCallback(() => crypto.randomUUID(), []);
 
-  // Helper to handle file uploads for a message
-  const messageFilesRef = useRef<{ id: string; filename: string }[] | null>(
-    null,
-  );
+  // Reference for files to be attached to next message
+  const messageFilesRef = useRef<{ id: string; filename: string }[]>([]);
+
+  // Use the file upload hook at the provider level
+  const {
+    uploadFiles,
+    isUploading: isUploadingFiles,
+    error: uploadError,
+  } = useFileUpload({
+    onUploadSuccess: (files) => {
+      // Store the files for the next message
+      messageFilesRef.current = files.map((file) => ({
+        id: file.id,
+        filename: file.filename,
+      }));
+    },
+  });
 
   // Helper to add messages to local state
   const addMessage = useCallback((message: ChatMessage) => {
@@ -610,10 +629,18 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     [],
   );
 
+  // Expose the uploadFiles function as part of context
+  const performFileUpload = useCallback(
+    (files: File[]) => {
+      return uploadFiles(files);
+    },
+    [uploadFiles],
+  );
+
   // Send a message and handle streaming
   const sendMessage = useCallback(
     async (content: string): Promise<void> => {
-      if (!content.trim() && !messageFilesRef.current?.length) {
+      if (!content.trim() && !messageFilesRef.current.length) {
         return; // Don't send empty messages without attachments
       }
 
@@ -666,7 +693,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
           currentSessionId as string,
           content,
           lastMessageId,
-          attachedFiles?.map((file) => file.id) ?? [], // Pass file IDs to streamMessage
+          attachedFiles.map((file) => file.id) ?? [], // Pass file IDs to streamMessage
         );
       } catch (error) {
         throttledLog("Error streaming message:", error);
@@ -704,6 +731,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       lastLoadedCount,
       apiMessagesResponse,
       handleFileAttachments,
+      performFileUpload,
+      isUploadingFiles,
+      uploadError,
     }),
     [
       messages,
@@ -716,6 +746,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       lastLoadedCount,
       apiMessagesResponse,
       handleFileAttachments,
+      performFileUpload,
+      isUploadingFiles,
+      uploadError,
     ],
   );
 
