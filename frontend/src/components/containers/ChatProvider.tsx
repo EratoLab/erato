@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import * as reactQuery from "@tanstack/react-query";
 import React, {
   createContext,
   useContext,
@@ -193,7 +193,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   initialMessageOrder = [],
 }) => {
   const { currentSessionId } = useChatHistory();
-  const { currentStreamingMessage, streamMessage } = useMessageStream();
+  const { currentStreamingMessage, streamMessage, resetStreaming } =
+    useMessageStream();
 
   // Local storage cache for chat sessions
   const [chatCache, setChatCache] = useLocalStorage<{
@@ -203,6 +204,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       lastUpdated: number;
     };
   }>(LOCAL_STORAGE_KEY, {});
+
+  // Store React Query client for cache invalidation
+  const queryClient = reactQuery.useQueryClient();
 
   // Initialize with cached data if available
   const getCachedInitialState = useCallback(() => {
@@ -294,30 +298,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     );
   }, [currentSessionId, messages, messageOrder]);
 
-  // Handle session ID changes
-  useUpdateEffect(() => {
-    // Skip effect for null session ID
-    if (!currentSessionId) return;
-
-    try {
-      throttledLog(`Resetting state for session: ${currentSessionId}`);
-
-      // Reset state for new session
-      dispatch({ type: "RESET_STATE", sessionId: currentSessionId });
-
-      // For temporary sessions, ensure messages are cleared
-      if (currentSessionId.startsWith("temp-")) {
-        dispatch({
-          type: "SET_MESSAGES",
-          messages: {},
-          messageOrder: [],
-        });
-      }
-    } catch (error) {
-      throttledLog("Error handling session change:", error);
-    }
-  }, [currentSessionId]);
-
   // Convert API messages to the app's message format
   const convertApiMessageToAppMessage = useCallback(
     (apiMessage: APIChatMessage): ChatMessage => {
@@ -340,7 +320,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     isFetchingNextPage,
     isLoading: isLoadingInfiniteMessages,
     refetch: refetchMessages,
-  } = useInfiniteQuery({
+  } = reactQuery.useInfiniteQuery({
     queryKey: ["chatMessages", currentSessionId],
     queryFn: async ({ pageParam = 0 }) => {
       if (!currentSessionId || currentSessionId.startsWith("temp-")) {
@@ -489,33 +469,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     convertApiMessageToAppMessage,
   ]);
 
-  // Handle session ID changes - reset state and refetch
-  useUpdateEffect(() => {
-    // Skip effect for null session ID
-    if (!currentSessionId) return;
-
-    try {
-      throttledLog(`Resetting state for session: ${currentSessionId}`);
-
-      // Reset state for new session
-      dispatch({ type: "RESET_STATE", sessionId: currentSessionId });
-
-      // For temporary sessions, ensure messages are cleared
-      if (currentSessionId.startsWith("temp-")) {
-        dispatch({
-          type: "SET_MESSAGES",
-          messages: {},
-          messageOrder: [],
-        });
-      } else {
-        // Refetch messages for non-temporary sessions
-        void refetchMessages();
-      }
-    } catch (error) {
-      throttledLog("Error handling session change:", error);
-    }
-  }, [currentSessionId, refetchMessages]);
-
   // Update loading state
   useEffect(() => {
     dispatch({
@@ -604,6 +557,22 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
               ? currentStreamingMessage.error
               : undefined,
         });
+
+        // If the message is complete, invalidate the chat messages query cache
+        // This ensures that when we come back to this chat, we'll get fresh data
+        if (
+          currentStreamingMessage.isComplete &&
+          !currentStreamingMessage.error
+        ) {
+          throttledLog(
+            `Message complete, invalidating cache for chat ${currentSessionId}`,
+          );
+          // Invalidate the specific chat messages query
+          void queryClient.invalidateQueries({
+            queryKey: ["chatMessages", currentSessionId],
+            exact: true,
+          });
+        }
       }
 
       throttledUpdate.current = null;
@@ -613,6 +582,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     return () => {
       if (throttledUpdate.current) {
         clearTimeout(throttledUpdate.current);
+        throttledUpdate.current = null;
       }
     };
   }, [
@@ -621,6 +591,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     messages,
     messageOrder,
     updateMessage,
+    queryClient,
   ]);
 
   // Send a message and handle streaming
@@ -723,6 +694,41 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       apiMessagesResponse,
     ],
   );
+
+  // Handle session ID changes - reset state and refetch
+  useUpdateEffect(() => {
+    // Skip effect for null session ID
+    if (!currentSessionId) return;
+
+    try {
+      throttledLog(`Resetting state for session: ${currentSessionId}`);
+
+      // Reset streaming message state when changing chats
+      resetStreaming();
+
+      // Reset state for new session
+      dispatch({ type: "RESET_STATE", sessionId: currentSessionId });
+
+      // For temporary sessions, ensure messages are cleared
+      if (currentSessionId.startsWith("temp-")) {
+        dispatch({
+          type: "SET_MESSAGES",
+          messages: {},
+          messageOrder: [],
+        });
+      } else {
+        // Refetch messages for non-temporary sessions with no caching
+        // Force refetch with fresh data by invalidating the cache first
+        void queryClient.invalidateQueries({
+          queryKey: ["chatMessages", currentSessionId],
+          exact: true,
+        });
+        void refetchMessages();
+      }
+    } catch (error) {
+      throttledLog("Error handling session change:", error);
+    }
+  }, [currentSessionId, refetchMessages, resetStreaming, queryClient]);
 
   return (
     <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>

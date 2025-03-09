@@ -21,6 +21,7 @@ interface MessageStreamContextType {
     lastMessageId?: string,
   ) => Promise<void>;
   cancelStreaming: () => void;
+  resetStreaming: () => void;
 }
 
 const MessageStreamContext = createContext<
@@ -68,6 +69,10 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
       setCurrentStreamingMessage(null);
     }
   }, [currentSource]);
+
+  const resetStreaming = useCallback(() => {
+    setCurrentStreamingMessage(null);
+  }, []);
 
   const streamMessage = useCallback(
     async (
@@ -261,6 +266,7 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
         currentStreamingMessage,
         streamMessage,
         cancelStreaming,
+        resetStreaming,
       }}
     >
       {children}
