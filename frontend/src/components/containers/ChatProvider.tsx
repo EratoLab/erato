@@ -522,6 +522,10 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         filename: file.filename,
       }));
     },
+    onUploadError: (error) => {
+      console.error("File upload error:", error);
+      // Error is already captured in the uploadError state from useFileUpload
+    },
   });
 
   // Helper to add messages to local state

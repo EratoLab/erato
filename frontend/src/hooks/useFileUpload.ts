@@ -1,12 +1,8 @@
 import { useState } from "react";
 
-import { useUploadFile } from "../lib/generated/v1betaApi/v1betaApiComponents";
 import { FileTypeUtil } from "../utils/fileTypes";
 
-import type {
-  FileUploadItem,
-  MultipartFormFile,
-} from "../lib/generated/v1betaApi/v1betaApiSchemas";
+import type { FileUploadItem } from "../lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface UploadOptions {
   /** Function to call when upload starts */
@@ -37,9 +33,6 @@ export function useFileUpload(options?: UploadOptions): FileUploadResult {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<FileUploadItem[]>([]);
-
-  // Use the API mutation for file uploads
-  const uploadMutation = useUploadFile();
 
   /**
    * Reset the upload state
@@ -84,16 +77,28 @@ export function useFileUpload(options?: UploadOptions): FileUploadResult {
         );
       }
 
-      // Convert files to MultipartFormFile format
-      const formFiles: MultipartFormFile[] = files.map((file) => ({
-        file: file, // This is a Blob
-        name: file.name,
-      }));
+      // Use FormData to handle file uploads directly
+      // This bypasses the deep merge issues in the generated client
+      const formData = new FormData();
 
-      // Call the API mutation
-      const result = await uploadMutation.mutateAsync({
-        body: formFiles,
+      // Append each file
+      files.forEach((file) => {
+        // Just append the file with the field name 'file'
+        // Note: The backend should be able to handle multiple files with the same field name
+        formData.append("file", file, file.name);
       });
+
+      // Direct fetch approach to avoid the generated client's deepMerge issues
+      const response = await fetch("/api/v1beta/me/files", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
 
       // Store the uploaded files
       setUploadedFiles(result.files);
