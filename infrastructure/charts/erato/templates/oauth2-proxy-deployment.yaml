@@ -18,6 +18,7 @@ spec:
         app.kubernetes.io/name: {{ .Release.Name }}-oauth2-proxy
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      {{- include "erato.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: oauth2-proxy
           image: "{{ .Values.oauth2Proxy.image.repository }}:{{ .Values.oauth2Proxy.image.tag }}"

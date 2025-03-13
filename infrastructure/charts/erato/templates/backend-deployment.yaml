@@ -14,6 +14,7 @@ spec:
       labels:
         app: erato
     spec:
+      {{- include "erato.imagePullSecrets" . | nindent 6 }}
       initContainers:
         - name: run-migrations
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
@@ -52,7 +53,9 @@ spec:
             - name: ENVIRONMENT
               value: {{ .Values.global.environment }}
             {{- toYaml .Values.backend.env | nindent 12 }}
+          {{- if and .Values.backend.envSecrets (gt (len .Values.backend.envSecrets) 0) }}
           envFrom:
             {{- range $envSecret := .Values.backend.envSecrets }}
             - secretRef: {{- $envSecret | toYaml | nindent 16 }}
             {{- end }}
+          {{- end }}
