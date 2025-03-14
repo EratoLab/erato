@@ -104,7 +104,7 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
           payload: JSON.stringify({
             // Format according to MessageSubmitRequest schema
             user_message: userMessageContent,
-            previous_message_id: isNewChat ? null : lastMessageId,
+            previous_message_id: isNewChat ? null : (lastMessageId ?? null),
             file_ids: fileIds.length > 0 ? fileIds : undefined,
           }),
         });
