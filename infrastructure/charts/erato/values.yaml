@@ -1,5 +1,6 @@
 global:
   environment: development
+  imagePullSecrets: []
 
 ingress:
   enabled: true
@@ -16,6 +17,7 @@ oauth2Proxy:
     repository: quay.io/oauth2-proxy/oauth2-proxy
     tag: v7.8.1
     pullPolicy: IfNotPresent
+    pullSecrets: []
   # Full configuration file content for oauth2-proxy
   config: |
     # Example configuration - replace with your own
@@ -39,6 +41,7 @@ backend:
     repository: harbor.imassage.me/erato/app
     tag: latest
     pullPolicy: IfNotPresent
+    pullSecrets: []
   replicaCount: 1
   resources:
     requests:

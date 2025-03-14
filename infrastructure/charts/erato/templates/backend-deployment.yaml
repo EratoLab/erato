@@ -52,7 +52,9 @@ spec:
               {{- include "erato.postgresValueOrValueFrom" . | nindent 14 }}
             - name: ENVIRONMENT
               value: {{ .Values.global.environment }}
-            {{- toYaml .Values.backend.env | nindent 12 }}
+            {{- if .Values.backend.env }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.backend.env "context" $) | nindent 12 }}
+            {{- end }}
           {{- if and .Values.backend.envSecrets (gt (len .Values.backend.envSecrets) 0) }}
           envFrom:
             {{- range $envSecret := .Values.backend.envSecrets }}
