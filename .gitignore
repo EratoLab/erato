@@ -9,3 +9,6 @@
 
 # Requirements directory (managed via git submodules)
 .requirements/
+
+# Temporary files
+tmp/
