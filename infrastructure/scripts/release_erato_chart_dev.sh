@@ -49,7 +49,7 @@ sed -i.bak "s/^version:.*/version: ${CHART_VERSION}/" "${CHART_DIR}/Chart.yaml"
 rm "${CHART_DIR}/Chart.yaml.bak"
 
 echo "Packaging Helm chart..."
-helm package "${CHART_DIR}" --destination "${TMP_DIR}"
+helm package "${CHART_DIR}" --dependency-update --destination "${TMP_DIR}"
 
 # Get the packaged chart filename
 CHART_PACKAGE=$(find "${TMP_DIR}" -name "${CHART_NAME}-${CHART_VERSION}.tgz" -type f)
