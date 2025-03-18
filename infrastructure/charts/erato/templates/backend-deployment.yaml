@@ -1,18 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: erato-backend
-  labels:
-    app: erato
+  name: {{ .Release.Name }}-erato-app
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: erato-app
 spec:
   replicas: {{ .Values.backend.replicaCount }}
   selector:
-    matchLabels:
-      app: erato
+    matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
+      app.kubernetes.io/component: erato-app
   template:
     metadata:
-      labels:
-        app: erato
+      labels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
+        app.kubernetes.io/component: erato-app
+        app.kubernetes.io/app-version: {{ .Chart.AppVersion }}
     spec:
       {{- include "erato.imagePullSecrets" . | nindent 6 }}
       initContainers:

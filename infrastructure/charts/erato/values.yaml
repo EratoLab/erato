@@ -2,6 +2,13 @@ global:
   environment: development
   imagePullSecrets: []
 
+## @param nameOverride String to partially override common.names.fullname
+##
+nameOverride: ""
+## @param commonLabels Labels to add to all deployed objects
+##
+commonLabels: {}
+
 ingress:
   enabled: true
   host: app.erato.internal

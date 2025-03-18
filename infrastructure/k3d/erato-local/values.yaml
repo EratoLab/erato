@@ -9,13 +9,22 @@ erato:
       repository: harbor.imassage.me/erato/app
       tag: "latest"
       pullPolicy: Always
+    env:
+      - name: CHAT_PROVIDER__PROVIDER_KIND
+        value: "ollama"
+      - name: CHAT_PROVIDER__MODEL_NAME
+        value: "smollm2:135m"
+      # NOTE: This currently points nowhere
+      - name: CHAT_PROVIDER__BASE_URL
+        value: "http://localhost:11434/v1/"
   
   oauth2Proxy:
     enabled: true
     config: |
       http_address = "0.0.0.0:4180"
 
-      upstreams = ["http://erato-backend:3130"]
+      # Hostname of the app. Structure <release_name>-erato-app
+      upstreams = ["http://erato-local-erato-app:3130"]
       email_domains = ["*"]
       cookie_secret = "0123456789abcdef0123456789abcdef"  # Replace in production
       cookie_secure = false

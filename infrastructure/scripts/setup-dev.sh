@@ -54,8 +54,8 @@ helm repo update
 
 # Install/upgrade local development chart
 echo "Installing/upgrading Erato local development chart..."
-helm upgrade --install erato "${CHART_PATH}" \
-    --namespace erato --create-namespace
+helm upgrade --install erato-local "${CHART_PATH}" \
+    --namespace erato-local-ns --create-namespace
 
 # Ensure local DNS entries exist
 for host in "${APP_HOST}" "${DEX_HOST}" "k3d-registry.localhost"; do
