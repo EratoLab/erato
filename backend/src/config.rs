@@ -16,6 +16,8 @@ pub struct AppConfig {
     pub frontend_bundle_path: String,
     pub database_url: String,
     pub chat_provider: ChatProviderConfig,
+    // If present, will enable Sentry for error reporting.
+    pub sentry_dsn: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
