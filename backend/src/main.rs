@@ -26,6 +26,9 @@ async fn main() -> Result<(), Report> {
 
     let config = AppConfig::new()?;
 
+    let _sentry_guard = None;
+    setup_sentry(config.sentry_dsn.as_ref(), _sentry_guard);
+
     let state = AppState::new(config.clone()).await?;
 
     // Verify that the database has been migrated to the latest version
@@ -81,3 +84,19 @@ pub fn build_frontend_environment() -> FrontedEnvironment {
 
     env
 }
+
+#[cfg(feature = "sentry")]
+fn setup_sentry(sentry_dsn: Option<&String>, mut _sentry_guard: Option<sentry::ClientInitGuard>) {
+    if let Some(sentry_dsn) = sentry_dsn {
+        _sentry_guard = Some(sentry::init((
+            sentry_dsn.as_str(),
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                ..Default::default()
+            },
+        )));
+    }
+}
+
+#[cfg(not(feature = "sentry"))]
+fn setup_sentry(_sentry_dsn: Option<&String>, _sentry_guard: Option<()>) {}

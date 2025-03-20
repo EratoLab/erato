@@ -44,6 +44,13 @@ tokio-stream = "0.1.17"
 genai = { version = "0.1.24-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "ad7c3a1b70b7629e76719843427652192520a281" }
 reqwest = { version = "0.12.12", features = ["multipart"] }
 
+[dependencies.sentry]
+version = "0.35.0"
+optional = true
+default-features = false
+# Default features, except for `debug-images`; See https://github.com/getsentry/sentry-rust/issues/574
+features = ["backtrace", "contexts", "panic", "transport", "reqwest", "native-tls"]
+
 [dev-dependencies]
 test-log = "0.2.14"
 env_logger = "0.11.2"
@@ -54,3 +61,15 @@ axum-test = "16.4.1"
 [patch.crates-io]
 # See https://github.com/EratoLab/erato/issues/78
 sqlx = { git = "https://github.com/launchbadge/sqlx.git", rev = "a92626d6cc1aef88b0036d633ed370f6f9129c32" }
+
+[features]
+default = ["sentry"]
+sentry = ["dep:sentry"]
+
+[profile.dev]
+split-debuginfo = "packed"
+
+[profile.release]
+# Better stack traces in production deployments
+debug = "full"
+split-debuginfo = "packed"
