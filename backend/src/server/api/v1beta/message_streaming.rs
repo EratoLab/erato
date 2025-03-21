@@ -596,9 +596,14 @@ pub async fn message_submit_sse(
     });
 
     // Convert the receiver into a stream and return it
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    let receiver_stream = tokio_stream::wrappers::ReceiverStream::<Result<Event, Report>>::new(rx);
+    let inspected_stream = futures::StreamExt::inspect(receiver_stream, |event| {
+        if let Err(err) = event {
+            capture_report(err);
+        }
+    });
 
-    Sse::new(stream).keep_alive(
+    Sse::new(inspected_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
@@ -715,11 +720,26 @@ pub async fn regenerate_message_sse(
     });
 
     // Convert the receiver into a stream and return it
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    let receiver_stream = tokio_stream::wrappers::ReceiverStream::<Result<Event, Report>>::new(rx);
+    let inspected_stream = futures::StreamExt::inspect(receiver_stream, |event| {
+        if let Err(err) = event {
+            capture_report(err);
+        }
+    });
 
-    Sse::new(stream).keep_alive(
+    Sse::new(inspected_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
     )
+}
+
+#[cfg(feature = "sentry")]
+fn capture_report(err: &Report) {
+    sentry_eyre::capture_report(err);
+}
+
+#[cfg(not(feature = "sentry"))]
+fn log_internal_server_error(err: &Report) {
+    tracing::error!("{}", err.to_string());
 }

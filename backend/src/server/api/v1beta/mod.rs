@@ -445,7 +445,8 @@ pub async fn recent_chats(
         offset,
     )
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(log_internal_server_error)?;
 
     // Convert from model RecentChat to API RecentChat
     let api_chats: Vec<RecentChat> = model_chats
@@ -469,4 +470,16 @@ pub async fn recent_chats(
     };
 
     Ok(Json(response))
+}
+
+#[cfg(feature = "sentry")]
+fn log_internal_server_error(err: Report) -> StatusCode {
+    sentry_eyre::capture_report(&err);
+    StatusCode::INTERNAL_SERVER_ERROR
+}
+
+#[cfg(not(feature = "sentry"))]
+fn log_internal_server_error(err: Report) -> StatusCode {
+    tracing::error!("{}", err.to_string());
+    StatusCode::INTERNAL_SERVER_ERROR
 }
