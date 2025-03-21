@@ -1,4 +1,6 @@
+use axum::body::Body;
 use axum::handler::HandlerWithoutStateExt;
+use axum::http::Request;
 use axum::Extension;
 use eyre::Report;
 use serde_json::{json, Value};
@@ -17,6 +19,7 @@ use tower_http::cors::CorsLayer;
 async fn main() -> Result<(), Report> {
     // initialize tracing
     tracing_subscriber::fmt::init();
+    color_eyre::install()?;
     let loaded_dotenv_files = dotenv_flow::dotenv_flow().ok();
     if let Some(loaded_dotenv_files) = loaded_dotenv_files {
         for file in loaded_dotenv_files {
@@ -26,8 +29,8 @@ async fn main() -> Result<(), Report> {
 
     let config = AppConfig::new()?;
 
-    let _sentry_guard = None;
-    setup_sentry(config.sentry_dsn.as_ref(), _sentry_guard);
+    let mut _sentry_guard = None;
+    setup_sentry(config.sentry_dsn.as_ref(), &mut _sentry_guard);
 
     let state = AppState::new(config.clone()).await?;
 
@@ -48,6 +51,8 @@ async fn main() -> Result<(), Report> {
     ))]);
 
     let app = router
+        .layer(sentry_tower::NewSentryLayer::<Request<Body>>::new_from_top())
+        .layer(sentry_tower::SentryHttpLayer::with_transaction())
         .merge(Scalar::with_url("/scalar", spec.clone()))
         .route(
             "/openapi.json",
@@ -86,15 +91,18 @@ pub fn build_frontend_environment() -> FrontedEnvironment {
 }
 
 #[cfg(feature = "sentry")]
-fn setup_sentry(sentry_dsn: Option<&String>, mut _sentry_guard: Option<sentry::ClientInitGuard>) {
+fn setup_sentry(sentry_dsn: Option<&String>, _sentry_guard: &mut Option<sentry::ClientInitGuard>) {
     if let Some(sentry_dsn) = sentry_dsn {
-        _sentry_guard = Some(sentry::init((
+        *_sentry_guard = Some(sentry::init((
             sentry_dsn.as_str(),
             sentry::ClientOptions {
                 release: sentry::release_name!(),
+                // debug: true,
                 ..Default::default()
             },
         )));
+    } else {
+        println!("No SENTRY_DSN specified. Observability via Sentry is disabled");
     }
 }
 

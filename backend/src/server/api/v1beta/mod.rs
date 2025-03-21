@@ -23,8 +23,10 @@ use axum::{middleware, Extension, Json, Router};
 use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
 use eyre::Report;
+use sentry::{event_from_error, Hub};
 use serde::{Deserialize, Serialize};
 use sqlx::types::{chrono, Uuid};
+use std::error::Error;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 
@@ -473,8 +475,17 @@ pub async fn recent_chats(
 }
 
 #[cfg(feature = "sentry")]
-fn log_internal_server_error(err: Report) -> StatusCode {
-    sentry_eyre::capture_report(&err);
+fn log_internal_server_error(report: Report) -> StatusCode {
+    Hub::with_active(|hub| {
+        let err: &dyn Error = report.as_ref();
+        let event = event_from_error(err);
+        // if let Some(exc) = event.exception.iter_mut().last() {
+        //     let backtrace = err.backtrace();
+        //     exc.stacktrace = sentry_backtrace::parse_stacktrace(&format!("{backtrace:#}"));
+        // }
+
+        hub.capture_event(event);
+    });
     StatusCode::INTERNAL_SERVER_ERROR
 }
 

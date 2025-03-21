@@ -13,14 +13,17 @@ use axum::extract::State;
 use axum::response::sse::Event;
 use axum::response::Sse;
 use axum::{Extension, Json};
+use eyre::WrapErr;
 use eyre::{eyre, Report};
 use futures::Stream;
 use genai::chat::{
     ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatStreamEvent, StreamEnd,
 };
 use sea_orm::prelude::Uuid;
+use sentry::{event_from_error, Hub};
 use serde::Serialize;
 use serde_json::json;
+use std::error::Error;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamExt as _;
@@ -369,7 +372,7 @@ async fn stream_generate_chat_completion<
                 _ => {}
             },
             Err(err) => {
-                let _ = tx.send(Err(eyre!("Error from chat stream: {}", err))).await;
+                let _ = tx.send(Err(err).wrap_err("Error from chat stream")).await;
                 return Err(());
             }
         }
@@ -735,8 +738,17 @@ pub async fn regenerate_message_sse(
 }
 
 #[cfg(feature = "sentry")]
-fn capture_report(err: &Report) {
-    sentry_eyre::capture_report(err);
+fn capture_report(report: &Report) {
+    Hub::with_active(|hub| {
+        let err: &dyn Error = report.as_ref();
+        let event = event_from_error(err);
+        // if let Some(exc) = event.exception.iter_mut().last() {
+        //     let backtrace = err.backtrace();
+        //     exc.stacktrace = sentry_backtrace::parse_stacktrace(&format!("{backtrace:#}"));
+        // }
+
+        hub.capture_event(event);
+    });
 }
 
 #[cfg(not(feature = "sentry"))]
