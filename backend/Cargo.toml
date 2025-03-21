@@ -44,6 +44,9 @@ tokio-stream = "0.1.17"
 genai = { version = "0.1.24-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "ad7c3a1b70b7629e76719843427652192520a281" }
 reqwest = { version = "0.12.12", features = ["multipart"] }
 
+sentry-tracing = { version = "0.35.0", optional = true }
+sentry-eyre = { version = "0.2.0", optional = true }
+
 [dependencies.sentry]
 version = "0.35.0"
 optional = true
@@ -64,7 +67,7 @@ sqlx = { git = "https://github.com/launchbadge/sqlx.git", rev = "a92626d6cc1aef8
 
 [features]
 default = ["sentry"]
-sentry = ["dep:sentry"]
+sentry = ["dep:sentry", "dep:sentry-tracing", "dep:sentry-eyre"]
 
 [profile.dev]
 split-debuginfo = "packed"
