@@ -7,6 +7,9 @@ appVersion: "0.1.0"
 maintainers:
   - name: Erato Team
 dependencies:
+  - name: common
+    version: 2.30.0
+    repository: oci://registry-1.docker.io/bitnamicharts
   - name: postgresql
     version: "12.x.x"
     repository: https://charts.bitnami.com/bitnami

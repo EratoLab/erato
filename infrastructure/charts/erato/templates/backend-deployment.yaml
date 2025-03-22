@@ -26,6 +26,17 @@ spec:
           env:
             - name: DATABASE_URL
               {{- include "erato.postgresValueOrValueFrom" . | nindent 14 }}
+          {{- if or .Values.backend.extraEnvVarsCM .Values.backend.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.backend.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ .Values.backend.extraEnvVarsCM }}
+            {{- end }}
+            {{- if .Values.backend.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ .Values.backend.extraEnvVarsSecret }}
+            {{- end }}
+          {{- end }}
       containers:
         - name: erato-backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
@@ -53,12 +64,17 @@ spec:
               {{- include "erato.postgresValueOrValueFrom" . | nindent 14 }}
             - name: ENVIRONMENT
               value: {{ .Values.global.environment }}
-            {{- if .Values.backend.env }}
-            {{- include "common.tplvalues.render" (dict "value" .Values.backend.env "context" $) | nindent 12 }}
+            {{- if .Values.backend.extraEnvVars }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.backend.extraEnvVars "context" $) | nindent 12 }}
             {{- end }}
-          {{- if and .Values.backend.envSecrets (gt (len .Values.backend.envSecrets) 0) }}
+          {{- if or .Values.backend.extraEnvVarsCM .Values.backend.extraEnvVarsSecret }}
           envFrom:
-            {{- range $envSecret := .Values.backend.envSecrets }}
-            - secretRef: {{- $envSecret | toYaml | nindent 16 }}
+            {{- if .Values.backend.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ .Values.backend.extraEnvVarsCM }}
+            {{- end }}
+            {{- if .Values.backend.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ .Values.backend.extraEnvVarsSecret }}
             {{- end }}
           {{- end }}
