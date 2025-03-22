@@ -1,5 +1,7 @@
 global:
-  environment: development
+  # A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
+  # but is never parsed/interpreted by the application to trigger environment-specific behavior.
+  environment: production
   imagePullSecrets: []
 
 ## @param nameOverride String to partially override common.names.fullname
@@ -25,6 +27,9 @@ oauth2Proxy:
     tag: v7.8.1
     pullPolicy: IfNotPresent
     pullSecrets: []
+  extraEnvVars: []
+  extraEnvVarsCM: ""
+  extraEnvVarsSecret: ""
   # Full configuration file content for oauth2-proxy
   config: |
     # Example configuration - replace with your own
@@ -50,6 +55,9 @@ backend:
     pullPolicy: IfNotPresent
     pullSecrets: []
   replicaCount: 1
+  extraEnvVars: []
+  extraEnvVarsCM: ""
+  extraEnvVarsSecret: ""
   resources:
     requests:
       cpu: 100m
@@ -60,7 +68,6 @@ backend:
   service:
     type: ClusterIP
     port: 8080
-  env: []
   envSecrets: []
 
 postgresql:
