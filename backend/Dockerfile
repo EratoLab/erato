@@ -19,9 +19,11 @@ FROM debian:bookworm-slim
 WORKDIR /app
 
 # Install dependencies
-# sqitch + libdbd-pg-perl postgresql-client -> sqitch
+# ca-certificates -> Certificates for HTTPS
+# sqitch + libdbd-pg-perl + postgresql-client -> sqitch
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    ca-certificates \
     sqitch \
     libdbd-pg-perl \
     postgresql-client \

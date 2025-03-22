@@ -97,7 +97,7 @@ fn setup_sentry(sentry_dsn: Option<&String>, _sentry_guard: &mut Option<sentry::
             sentry_dsn.as_str(),
             sentry::ClientOptions {
                 release: sentry::release_name!(),
-                // debug: true,
+                debug: std::env::var("SENTRY_DEBUG").is_ok(),
                 ..Default::default()
             },
         )));

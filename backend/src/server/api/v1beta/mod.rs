@@ -22,7 +22,7 @@ use axum::routing::{get, post};
 use axum::{middleware, Extension, Json, Router};
 use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
-use eyre::Report;
+use eyre::{Report, WrapErr};
 use sentry::{event_from_error, Hub};
 use serde::{Deserialize, Serialize};
 use sqlx::types::{chrono, Uuid};
@@ -376,19 +376,16 @@ pub async fn chat_messages(
         offset,
     )
     .await
-    .map_err(|e| {
-        tracing::error!("Failed to get chat messages: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    .wrap_err("Failed to get chat messages")
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Convert the messages to the API response format
     let converted_messages: Result<_, Report> =
         messages.into_iter().map(ChatMessage::from_model).collect();
 
-    let response_messages = converted_messages.map_err(|e| {
-        tracing::error!("Failed to get chat messages: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let response_messages = converted_messages
+        .wrap_err("Failed to get chat messages")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Create the response with messages and stats
     let response = ChatMessagesResponse {
@@ -447,7 +444,6 @@ pub async fn recent_chats(
         offset,
     )
     .await
-    // .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     .map_err(log_internal_server_error)?;
 
     // Convert from model RecentChat to API RecentChat
