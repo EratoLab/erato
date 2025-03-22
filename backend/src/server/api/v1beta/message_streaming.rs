@@ -242,7 +242,7 @@ async fn stream_get_or_create_chat<
         }
         Err(err) => {
             let _ = tx
-                .send(Err(eyre!("Failed to get or create chat: {}", err)))
+                .send(Err(err).wrap_err("Failed to get or create chat"))
                 .await;
             Err(())
         }
@@ -282,7 +282,7 @@ async fn stream_save_user_message<
         Ok(msg) => msg,
         Err(err) => {
             let _ = tx
-                .send(Err(eyre!("Failed to submit user message: {}", err)))
+                .send(Err(err).wrap_err("Failed to submit user message"))
                 .await;
             return Err(());
         }
@@ -292,10 +292,7 @@ async fn stream_save_user_message<
         Ok(msg) => msg,
         Err(err) => {
             let _ = tx
-                .send(Err(eyre!(
-                    "Failed to convert submitted user message: {}",
-                    err
-                )))
+                .send(Err(err).wrap_err("Failed to submit user message"))
                 .await;
             return Err(());
         }
@@ -344,10 +341,7 @@ async fn stream_generate_chat_completion<
         Ok(stream) => stream,
         Err(err) => {
             let _ = tx
-                .send(Err(eyre!(
-                    "Failed to start chat stream with LLM provider: {}",
-                    err
-                )))
+                .send(Err(err).wrap_err("Failed to start chat stream with LLM provider"))
                 .await;
             return Err(());
         }
@@ -430,7 +424,7 @@ async fn stream_save_generated_completion<
         Ok(msg) => msg,
         Err(err) => {
             let _ = tx
-                .send(Err(eyre!("Failed to submit assistant message: {}", err)))
+                .send(Err(err).wrap_err("Failed to submit assistant message"))
                 .await;
             return Err(());
         }
@@ -441,10 +435,7 @@ async fn stream_save_generated_completion<
             Ok(msg) => msg,
             Err(err) => {
                 let _ = tx
-                    .send(Err(eyre!(
-                        "Failed to convert saved assistant message: {}",
-                        err
-                    )))
+                    .send(Err(err).wrap_err("Failed to convert saved assistant message"))
                     .await;
                 return Err(());
             }
@@ -502,7 +493,7 @@ pub async fn generate_chat_summary(
         summary,
     )
     .await
-    .map_err(|e| eyre!("Failed to update chat summary: {}", e))?;
+    .wrap_err("Failed to update chat summary")?;
 
     Ok(())
 }
