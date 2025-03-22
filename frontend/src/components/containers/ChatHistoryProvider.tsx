@@ -250,40 +250,44 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   // Calculate if we have more chats
   const hasMoreChats = hasNextPage === true;
 
-  // Combine loading states for simpler consumption
-  const isLoading = isLoadingChats || isFetchingNextPage || isLoadingMessages;
+  // Calculate loading state
+  const isLoading = isLoadingChats || isLoadingMessages;
 
   // Expose the context
-  const contextValue = useMemo(
-    () => ({
-      sessions: sortedSessions,
-      currentSessionId,
-      createSession,
-      updateSession,
-      deleteSession,
-      switchSession,
-      getCurrentSession,
-      confirmSession,
-      loadMoreChats,
-      hasMoreChats,
-      isLoading,
-      error,
-    }),
-    [
-      sortedSessions,
-      currentSessionId,
-      createSession,
-      updateSession,
-      deleteSession,
-      switchSession,
-      getCurrentSession,
-      confirmSession,
-      loadMoreChats,
-      hasMoreChats,
-      isLoading,
-      error,
-    ],
-  );
+  const contextValue: ChatHistoryContextType = {
+    sessions: sortedSessions,
+    currentSessionId,
+    error,
+    isLoading,
+    createSession,
+    confirmSession,
+    updateSession,
+    deleteSession,
+    switchSession,
+    getCurrentSession,
+    loadMoreChats,
+    hasMoreChats,
+  };
+
+  // Expose the context globally for our ChatBridge component
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Make confirmSession available globally
+      (
+        window as Window & {
+          __CHAT_HISTORY_CONTEXT__?: { confirmSession?: typeof confirmSession };
+        }
+      ).__CHAT_HISTORY_CONTEXT__ = {
+        confirmSession,
+      };
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        delete (window as Window & { __CHAT_HISTORY_CONTEXT__?: unknown })
+          .__CHAT_HISTORY_CONTEXT__;
+      }
+    };
+  }, [confirmSession]);
 
   return (
     <ChatHistoryContext.Provider value={contextValue}>
