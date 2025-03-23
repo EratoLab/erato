@@ -1,12 +1,13 @@
 import { ArrowUpIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 import { useChat } from "@/components/containers/ChatProvider";
 import {
   FileUploadButton,
   FilePreviewButton,
 } from "@/components/ui/FileUpload";
+import { useChatInputHandlers } from "@/hooks/useChatInputHandlers";
 
 import { Button } from "../Controls/Button";
 import { Tooltip } from "../Controls/Tooltip";
@@ -63,11 +64,8 @@ export const ChatInput = ({
   uploadError,
 }: ChatInputProps) => {
   const [message, setMessage] = useState("");
-  const [attachedFiles, setAttachedFiles] =
-    useState<FileUploadItem[]>(initialFiles);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const [uploadInProgress, setUploadInProgress] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [uploadInProgress, setUploadInProgress] = useState(false);
 
   // Get file upload functionality from ChatProvider
   const {
@@ -76,91 +74,25 @@ export const ChatInput = ({
     uploadError: chatProviderUploadError,
   } = useChat();
 
-  // Handle form submission for sending a message
-  const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      if (
-        (message.trim() || attachedFiles.length > 0) &&
-        !isLoading &&
-        !disabled
-      ) {
-        onSendMessage(message.trim());
-        setMessage("");
-        // Clear attachments after sending message - files are now part of the message
-        setAttachedFiles([]);
-        // Notify parent component that files have been cleared
-        if (handleFileAttachments) {
-          handleFileAttachments([]);
-        }
-      }
-    },
-    [
-      message,
-      attachedFiles.length,
-      isLoading,
-      disabled,
-      onSendMessage,
-      handleFileAttachments,
-    ],
+  // Use the custom hook for file handling
+  const {
+    attachedFiles,
+    fileError,
+    setFileError,
+    handleFilesUploaded,
+    handleRemoveFile,
+    handleRemoveAllFiles,
+    createSubmitHandler,
+  } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
+
+  // Create the submit handler
+  const handleSubmit = createSubmitHandler(
+    message,
+    onSendMessage,
+    isLoading,
+    disabled,
+    () => setMessage(""),
   );
-
-  // Handle files uploaded via the enhanced FileUpload component
-  const handleFilesUploaded = useCallback(
-    (files: FileUploadItem[]) => {
-      console.log("handleFilesUploaded");
-      setFileError(null);
-      setUploadInProgress(false);
-
-      // Limit to max files
-      const trimmedFiles = files.slice(0, maxFiles);
-
-      // Update state
-      setAttachedFiles(trimmedFiles);
-
-      // Notify parent component
-      if (handleFileAttachments) {
-        handleFileAttachments(trimmedFiles);
-      }
-    },
-    [maxFiles, handleFileAttachments],
-  );
-
-  // Remove a single file
-  const handleRemoveFile = useCallback(
-    (fileIdOrFile: string | File) => {
-      // We expect a string fileId in this context
-      if (typeof fileIdOrFile === "string") {
-        const fileId = fileIdOrFile;
-
-        setAttachedFiles((prev) => {
-          const updated = prev.filter((file) => file.id !== fileId);
-
-          // Notify parent component
-          if (handleFileAttachments) {
-            handleFileAttachments(updated);
-          }
-
-          return updated;
-        });
-
-        setFileError(null);
-      }
-    },
-    [handleFileAttachments],
-  );
-
-  // Remove all files
-  const handleRemoveAllFiles = useCallback(() => {
-    setAttachedFiles([]);
-
-    // Notify parent component
-    if (handleFileAttachments) {
-      handleFileAttachments([]);
-    }
-
-    setFileError(null);
-  }, [handleFileAttachments]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -177,7 +109,7 @@ export const ChatInput = ({
       setFileError(`File upload error: ${chatProviderUploadError.message}`);
       setUploadInProgress(false);
     }
-  }, [chatProviderUploadError]);
+  }, [chatProviderUploadError, setFileError]);
 
   // Update upload progress tracking from provider's state
   useEffect(() => {
