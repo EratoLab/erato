@@ -80,7 +80,7 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-    isLoading: isLoadingChats,
+    isPending: isPendingChats,
     refetch: refetchChats,
   } = reactQuery.useInfiniteQuery({
     queryKey: ["recentChats"],
@@ -131,7 +131,7 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   }, [paginatedChatsData, sessions, set]);
 
   // Load messages for the current session
-  const { isLoading: isLoadingMessages } = useMessages(
+  const { isPending: isPendingMessages } = useMessages(
     currentSessionId && !currentSessionId.startsWith("temp-")
       ? { queryParams: { sessionId: currentSessionId } }
       : reactQuery.skipToken,
@@ -250,15 +250,15 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   // Calculate if we have more chats
   const hasMoreChats = hasNextPage === true;
 
-  // Calculate loading state
-  const isLoading = isLoadingChats || isLoadingMessages;
+  // Determine if we are loading anything
+  const isPending = isPendingChats || isPendingMessages;
 
   // Expose the context
   const contextValue: ChatHistoryContextType = {
     sessions: sortedSessions,
     currentSessionId,
     error,
-    isLoading,
+    isPending,
     createSession,
     confirmSession,
     updateSession,

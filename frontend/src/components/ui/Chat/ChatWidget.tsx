@@ -35,7 +35,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   handleFileAttachments,
   onRegenerate,
 }) => {
-  const { messages, messageOrder, sendMessage, isLoading } = useChat();
+  const { messages, messageOrder, sendMessage, isPending } = useChat();
   const { currentStreamingMessage } = useMessageStream();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -77,7 +77,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
         handleFileAttachments={handleFileAttachments}
         onRegenerate={onRegenerate}
         className="border-t bg-white"
-        isLoading={isLoading}
+        isLoading={isPending}
         showFileTypes={true}
         initialFiles={[]}
       />

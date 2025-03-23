@@ -49,7 +49,7 @@ export interface MessageListProps {
   /**
    * Whether messages are currently loading
    */
-  isLoading: boolean;
+  isPending: boolean;
 
   /**
    * The current chat/session ID
@@ -126,7 +126,7 @@ export const MessageList = memo<MessageListProps>(
     messageOrder,
     loadOlderMessages,
     hasOlderMessages,
-    isLoading,
+    isPending,
     currentSessionId,
     apiMessagesResponse,
     pageSize = 6,
@@ -199,20 +199,20 @@ export const MessageList = memo<MessageListProps>(
     // Add a message when user scrolls back down to new messages
     useEffect(() => {
       // Don't show any notification while loading or if no messages
-      if (isLoading || messageOrder.length === 0) return;
+      if (isPending || messageOrder.length === 0) return;
 
       // User was scrolled up but now scrolled back down, check if there are new messages
       if (isScrolledUp === false && visibleData.length < messageOrder.length) {
         // This is where you'd show a "new messages" indicator if desired
         console.log("User scrolled back to see new messages");
       }
-    }, [isScrolledUp, isLoading, messageOrder.length, visibleData.length]);
+    }, [isScrolledUp, isPending, messageOrder.length, visibleData.length]);
 
     // Create debounced function with useMemo
     const debouncedLoadMore = useMemo(
       () =>
         debounce(() => {
-          if (isLoading) {
+          if (isPending) {
             console.log("Skipping load more because already loading");
             return;
           }
@@ -237,7 +237,7 @@ export const MessageList = memo<MessageListProps>(
         apiMessagesResponse?.stats.has_more,
         hasOlderMessages,
         hasMore,
-        isLoading,
+        isPending,
         loadOlderMessages,
         loadMore,
       ],
@@ -255,42 +255,9 @@ export const MessageList = memo<MessageListProps>(
       };
     }, [debouncedLoadMore]);
 
-    // Memoize derived values
-    const showLoadMoreButton = useMemo(() => {
-      // Show load more button only when the user is near the top of the message list
-      if (!isNearTop) return false;
-
-      // Get API pagination status
-      const hasMoreMessagesFromApi =
-        apiMessagesResponse?.stats.has_more ?? false;
-
-      // Only show load more when user is near the top AND there are more messages
-      const hasMoreLocalMessages = hasOlderMessages || hasMore;
-
-      // Show button only when there are more messages (API or client-side)
-      return hasMoreMessagesFromApi || hasMoreLocalMessages;
-    }, [apiMessagesResponse, hasOlderMessages, hasMore, isNearTop]);
-
-    const showBeginningIndicator = useMemo(() => {
-      // Only show the beginning indicator if:
-      // 1. API indicates no more messages are available
-      // 2. There are no more messages in client-side pagination
-      // 3. There are no more messages to load from the API
-      // 4. We have at least one message to display
-      const hasNoMoreMessagesFromApi =
-        apiMessagesResponse?.stats.has_more === false;
-      return (
-        !hasMore &&
-        !hasOlderMessages &&
-        hasNoMoreMessagesFromApi &&
-        messageOrder.length > 0
-      );
-    }, [apiMessagesResponse, hasMore, hasOlderMessages, messageOrder.length]);
-
-    const shouldUseVirtualization = useMemo(
-      () => useVirtualization && visibleData.length > virtualizationThreshold,
-      [useVirtualization, visibleData.length, virtualizationThreshold],
-    );
+    // Calculate if we should use virtualization based on message count
+    const shouldUseVirtualization =
+      useVirtualization && messageOrder.length >= virtualizationThreshold;
 
     // Helper function to get CSS classes for message highlighting
     const getMessageClassName = useMessageClassNameHelper();
@@ -298,45 +265,93 @@ export const MessageList = memo<MessageListProps>(
     // Inject message animations
     useMessageAnimations();
 
-    // Update container dimensions for virtualization
+    // Update container size for virtualization
     useEffect(() => {
-      if (!containerRef.current || !useVirtualization) return;
+      if (!containerRef.current || !shouldUseVirtualization) return;
+
+      const resizeObserver = new ResizeObserver((entries) => {
+        const { width, height } = entries[0].contentRect;
+        setContainerSize({ width, height });
+      });
+
+      resizeObserver.observe(containerRef.current);
+      return () => resizeObserver.disconnect();
+    }, [containerRef, shouldUseVirtualization]);
+
+    // Update scroll position check when near the top
+    useEffect(() => {
+      if (isNearTop && hasOlderMessages && !isPending) {
+        console.log("Near top, loading more messages");
+        handleLoadMore();
+      }
+    }, [isNearTop, hasOlderMessages, isPending, handleLoadMore]);
+
+    // Update container size on resize for virtualization
+    useEffect(() => {
+      if (!shouldUseVirtualization) return;
 
       const updateSize = () => {
-        const { offsetWidth, offsetHeight } =
-          containerRef.current as HTMLDivElement;
-        setContainerSize({
-          width: offsetWidth || window.innerWidth,
-          height: offsetHeight || window.innerHeight,
-        });
+        if (containerRef.current) {
+          const { clientWidth, clientHeight } = containerRef.current;
+          setContainerSize({
+            width: clientWidth,
+            height: clientHeight,
+          });
+        }
       };
 
-      // Initial size measurement
       updateSize();
+      window.addEventListener("resize", updateSize);
+      return () => window.removeEventListener("resize", updateSize);
+    }, [containerRef, shouldUseVirtualization]);
 
-      // Update on resize
-      const resizeObserver = new ResizeObserver(debounce(updateSize, 100));
-      resizeObserver.observe(containerRef.current);
+    // Register scroll handler to update position markers
+    useEffect(() => {
+      if (!containerRef.current) return;
 
+      // Check scroll position on scroll events
+      containerRef.current.addEventListener("scroll", checkScrollPosition);
       return () => {
-        resizeObserver.disconnect();
+        if (containerRef.current) {
+          containerRef.current.removeEventListener(
+            "scroll",
+            checkScrollPosition,
+          );
+        }
       };
-    }, [containerRef, useVirtualization]);
-
-    // Update scroll position check after rendering
-    useEffect(() => {
-      if (containerRef.current) {
-        checkScrollPosition();
-      }
-    }, [visibleData.length, checkScrollPosition, containerRef]);
-
-    // Force check when we receive new messages from API
-    useEffect(() => {
-      if (containerRef.current && apiMessagesResponse) {
-        // Short delay to ensure DOM is updated
-        setTimeout(() => checkScrollPosition(), 100);
-      }
     }, [apiMessagesResponse, checkScrollPosition, containerRef]);
+
+    // Return the header component with load more button if needed
+    const renderMessageListHeader = useMemo(() => {
+      // Should show load more button if we have more messages and we're not already loading
+      const showLoadMoreButton =
+        (apiMessagesResponse?.stats.has_more || hasOlderMessages) &&
+        !isPending &&
+        messageOrder.length > 0;
+
+      // Show beginning indicator when we've loaded all messages
+      const showBeginningIndicator =
+        !apiMessagesResponse?.stats.has_more &&
+        !hasOlderMessages &&
+        messageOrder.length > 0;
+
+      return (
+        <MessageListHeader
+          showLoadMoreButton={showLoadMoreButton}
+          handleLoadMore={handleLoadMore}
+          isPending={isPending}
+          showBeginningIndicator={showBeginningIndicator}
+          paginationStats={paginationStats}
+        />
+      );
+    }, [
+      apiMessagesResponse?.stats.has_more,
+      hasOlderMessages,
+      isPending,
+      messageOrder.length,
+      handleLoadMore,
+      paginationStats,
+    ]);
 
     return (
       <div
@@ -348,15 +363,7 @@ export const MessageList = memo<MessageListProps>(
         )}
         data-testid="message-list"
       >
-        {/* Header components: load more button, beginning indicator, debug info */}
-        <MessageListHeader
-          showLoadMoreButton={showLoadMoreButton}
-          handleLoadMore={handleLoadMore}
-          isLoading={isLoading}
-          showBeginningIndicator={showBeginningIndicator}
-          apiMessagesResponse={apiMessagesResponse}
-          paginationStats={paginationStats}
-        />
+        {renderMessageListHeader}
         <div className={clsx("mx-auto w-full sm:w-5/6 md:w-4/5")}>
           {shouldUseVirtualization ? (
             <VirtualizedMessageList

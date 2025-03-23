@@ -51,7 +51,7 @@ export interface ChatContextType {
   updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void;
   loadOlderMessages: () => void;
   hasOlderMessages: boolean;
-  isLoading: boolean;
+  isPending: boolean;
   lastLoadedCount: number; // Number of messages loaded in the last batch
   apiMessagesResponse?: ChatMessagesResponse; // Raw API response data with stats
   handleFileAttachments: (files: { id: string; filename: string }[]) => void; // Added for file handling
@@ -63,7 +63,7 @@ export interface ChatContextType {
 // Action types for the chat reducer
 type ChatAction =
   | { type: "RESET_STATE"; sessionId: string | null }
-  | { type: "SET_LOADING"; isLoading: boolean }
+  | { type: "SET_LOADING"; isPending: boolean }
   | { type: "SET_MESSAGES"; messages: MessageMap; messageOrder: string[] }
   | { type: "PREPEND_MESSAGES"; messages: MessageMap; messageIds: string[] }
   | { type: "ADD_MESSAGE"; message: ChatMessage }
@@ -78,7 +78,7 @@ type ChatAction =
 interface ChatState {
   messages: MessageMap;
   messageOrder: string[];
-  isLoading: boolean;
+  isPending: boolean;
   hasOlderMessages: boolean;
   lastLoadedCount: number;
   apiMessagesResponse?: ChatMessagesResponse;
@@ -89,7 +89,7 @@ interface ChatState {
 const initialChatState: ChatState = {
   messages: {},
   messageOrder: [],
-  isLoading: false,
+  isPending: false,
   hasOlderMessages: false,
   lastLoadedCount: 0,
   messageOffset: 0,
@@ -126,7 +126,7 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
       };
 
     case "SET_LOADING":
-      return { ...state, isLoading: action.isLoading };
+      return { ...state, isPending: action.isPending };
 
     case "SET_MESSAGES":
       return {
@@ -257,7 +257,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   const {
     messages,
     messageOrder,
-    isLoading,
+    isPending,
     hasOlderMessages,
     lastLoadedCount,
     apiMessagesResponse,
@@ -271,7 +271,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       hasOlderMessages,
       lastLoadedCount,
       apiMessagesResponse,
-      isLoading,
+      isPending,
     });
   }, [
     messages,
@@ -279,7 +279,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     hasOlderMessages,
     lastLoadedCount,
     apiMessagesResponse,
-    isLoading,
+    isPending,
   ]);
 
   // Update cache when chat state changes
@@ -481,13 +481,13 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   useEffect(() => {
     dispatch({
       type: "SET_LOADING",
-      isLoading: isLoadingInfiniteMessages || isFetchingNextPage,
+      isPending: isLoadingInfiniteMessages || isFetchingNextPage,
     });
   }, [isLoadingInfiniteMessages, isFetchingNextPage]);
 
   // Function to load older messages - using React Query's fetchNextPage
   const loadOlderMessages = useCallback(() => {
-    if (!hasNextPage || isLoading) {
+    if (!hasNextPage || isPending) {
       log(
         hasNextPage ? "Already loading messages" : "No more messages to load",
       );
@@ -497,11 +497,11 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     log("Loading older messages with fetchNextPage");
 
     // Set loading state first for better UI feedback
-    dispatch({ type: "SET_LOADING", isLoading: true });
+    dispatch({ type: "SET_LOADING", isPending: true });
 
     // Use fetchNextPage from useInfiniteQuery to load the next page of messages
     void fetchNextPage();
-  }, [hasNextPage, isLoading, fetchNextPage]);
+  }, [hasNextPage, isPending, fetchNextPage]);
 
   // Helper to generate unique IDs
   const generateMessageId = useCallback(() => crypto.randomUUID(), []);
@@ -731,7 +731,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       updateMessage,
       loadOlderMessages,
       hasOlderMessages: hasNextPage === true,
-      isLoading,
+      isPending,
       lastLoadedCount,
       apiMessagesResponse,
       handleFileAttachments,
@@ -746,7 +746,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       updateMessage,
       loadOlderMessages,
       hasNextPage,
-      isLoading,
+      isPending,
       lastLoadedCount,
       apiMessagesResponse,
       handleFileAttachments,

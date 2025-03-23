@@ -11,6 +11,6 @@ export interface ChatHistoryContextType {
   confirmSession: (tempId: string, permanentId: string) => void;
   loadMoreChats: () => Promise<void>;
   hasMoreChats: boolean;
-  isLoading: boolean;
+  isPending: boolean;
   error?: Error;
 }
