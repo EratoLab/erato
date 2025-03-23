@@ -1,9 +1,10 @@
 import clsx from "clsx";
-import React, { useCallback, useMemo, useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 import { useChatHistory } from "@/components/containers/ChatHistoryProvider";
 import { useChat } from "@/components/containers/ChatProvider";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { useChatActions } from "@/hooks/useChatActions";
 import { useProfile } from "@/hooks/useProfile";
 
 import { MessageList } from "../MessageList";
@@ -88,7 +89,7 @@ export const Chat = ({
     messages,
     messageOrder,
     sendMessage,
-    isLoading: chatLoading,
+    isPending: chatLoading,
     hasOlderMessages,
     loadOlderMessages,
     apiMessagesResponse,
@@ -103,9 +104,21 @@ export const Chat = ({
     currentSessionId,
     switchSession,
     deleteSession,
-    isLoading: chatHistoryLoading,
+    isPending: chatHistoryLoading,
     error: chatHistoryError,
   } = useChatHistory();
+
+  // Use chat actions hook for handlers
+  const {
+    handleSessionSelect: baseHandleSessionSelect,
+    handleSendMessage,
+    handleMessageAction,
+  } = useChatActions(switchSession, sendMessage, onMessageAction);
+
+  // Customize session select handler to use custom handler if provided
+  const handleSessionSelect = (sessionId: string) => {
+    baseHandleSessionSelect(sessionId, customSessionSelect);
+  };
 
   // Create a state to maintain previous messages during transitions
   const [prevMessages, setPrevMessages] = useState<typeof messages>({});
@@ -131,36 +144,6 @@ export const Chat = ({
       ? prevMessageOrder
       : messageOrder;
   }, [isTransitioning, messageOrder, prevMessageOrder]);
-
-  // Use custom session select function or fall back to the default one
-  const handleSessionSelect = useCallback(
-    (sessionId: string) => {
-      if (customSessionSelect) {
-        customSessionSelect(sessionId);
-      } else {
-        switchSession(sessionId);
-      }
-    },
-    [customSessionSelect, switchSession],
-  );
-
-  // Wrap the sendMessage with a void handler for ChatInput
-  const handleSendMessage = useCallback(
-    (message: string) => {
-      void sendMessage(message);
-    },
-    [sendMessage],
-  );
-
-  // Memoize message action handler
-  const handleMessageAction = useCallback(
-    async (action: MessageAction) => {
-      if (onMessageAction) {
-        await onMessageAction(action);
-      }
-    },
-    [onMessageAction],
-  );
 
   // Determine if we should use virtualization based on message count
   const useVirtualization = useMemo(
@@ -201,7 +184,7 @@ export const Chat = ({
           messageOrder={displayMessageOrder}
           loadOlderMessages={loadOlderMessages}
           hasOlderMessages={hasOlderMessages}
-          isLoading={isTransitioning ? false : chatLoading}
+          isPending={isTransitioning ? false : chatLoading}
           currentSessionId={currentSessionId}
           apiMessagesResponse={apiMessagesResponse}
           pageSize={messagePageSize}

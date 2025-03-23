@@ -10,13 +10,14 @@ import React, {
 } from "react";
 import { useUpdateEffect, useLocalStorage } from "react-use";
 
+import { generateMessageId } from "@/hooks/useChatMessaging";
 import { useFileUpload } from "@/hooks/useFileUpload";
+import { convertApiMessageToAppMessage } from "@/hooks/useMessageProcessing";
 
 import { useChatHistory } from "./ChatHistoryProvider";
 import { useMessageStream } from "./MessageStreamProvider";
 
 import type {
-  ChatMessage as APIChatMessage,
   ChatMessagesResponse,
   FileUploadItem,
 } from "../../lib/generated/v1betaApi/v1betaApiSchemas";
@@ -200,7 +201,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   const queryClient = reactQuery.useQueryClient();
 
   // Initialize with cached data if available
-  const getCachedInitialState = useCallback(() => {
+  const getCachedInitialState = () => {
     if (!currentSessionId || !chatCache?.[currentSessionId]) {
       return {
         ...initialChatState,
@@ -229,7 +230,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         messageOrder: initialMessageOrder,
       };
     }
-  }, [currentSessionId, chatCache, initialMessages, initialMessageOrder]);
+  };
 
   // Use a reducer for complex state management
   const [chatState, dispatch] = useReducer(
@@ -278,20 +279,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       `Updated cache for session ${currentSessionId} with ${messageOrder.length} messages`,
     );
   }, [currentSessionId, messages, messageOrder]);
-
-  // Convert API messages to the app's message format
-  const convertApiMessageToAppMessage = useCallback(
-    (apiMessage: APIChatMessage): ChatMessage => {
-      return {
-        id: apiMessage.id,
-        content: apiMessage.full_text,
-        sender: apiMessage.role === "assistant" ? "assistant" : "user",
-        createdAt: new Date(apiMessage.created_at),
-        authorId: apiMessage.role,
-      };
-    },
-    [],
-  );
 
   // Enhanced infinite query for messages using React Query's useInfiniteQuery
   const {
@@ -467,9 +454,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     void fetchNextPage();
   }, [hasNextPage, isPending, fetchNextPage]);
 
-  // Helper to generate unique IDs
-  const generateMessageId = useCallback(() => crypto.randomUUID(), []);
-
   // Reference for files to be attached to next message
   const messageFilesRef = useRef<{ id: string; filename: string }[]>([]);
 
@@ -493,17 +477,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   });
 
   // Helper to add messages to local state
-  const addMessage = useCallback((message: ChatMessage) => {
+  const addMessage = (message: ChatMessage) => {
     dispatch({ type: "ADD_MESSAGE", message });
-  }, []);
+  };
 
   // Helper to update messages in local state
-  const updateMessage = useCallback(
-    (messageId: string, updates: Partial<ChatMessage>) => {
-      dispatch({ type: "UPDATE_MESSAGE", messageId, updates });
-    },
-    [],
-  );
+  const updateMessage = (messageId: string, updates: Partial<ChatMessage>) => {
+    dispatch({ type: "UPDATE_MESSAGE", messageId, updates });
+  };
 
   // Throttle updates to reduce unnecessary renders
   const throttledUpdate = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -589,21 +570,15 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   ]);
 
   // Function to handle file uploads for a message
-  const handleFileAttachments = useCallback(
-    (files: { id: string; filename: string }[]) => {
-      // Store the files for the next message
-      messageFilesRef.current = files;
-    },
-    [],
-  );
+  const handleFileAttachments = (files: { id: string; filename: string }[]) => {
+    // Store the files for the next message
+    messageFilesRef.current = files;
+  };
 
   // Expose the uploadFiles function as part of context
-  const performFileUpload = useCallback(
-    (files: File[]) => {
-      return uploadFiles(files);
-    },
-    [uploadFiles],
-  );
+  const performFileUpload = (files: File[]) => {
+    return uploadFiles(files);
+  };
 
   // Send a message and handle streaming
   const sendMessage = useCallback(
