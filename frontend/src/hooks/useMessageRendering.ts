@@ -20,8 +20,6 @@ export const getMessageClassName = (isNew: boolean) =>
  * Estimates message size for virtualization based on content
  */
 export const estimateMessageSize = (message: ChatMessage): number => {
-  if (!message) return 90; // Default height if message is undefined
-
   // Base height for message UI elements
   const baseHeight = 70;
 
@@ -87,8 +85,6 @@ export const useMessageSizeEstimation = (
       }
 
       const message = messages[messageId];
-      if (!message) return 90; // Default height
-
       const size = estimateMessageSize(message);
       messageSizeCache.current[messageId] = size;
 

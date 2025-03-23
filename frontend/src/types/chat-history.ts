@@ -13,4 +13,5 @@ export interface ChatHistoryContextType {
   hasMoreChats: boolean;
   isPending: boolean;
   error?: Error;
+  refreshChats: () => Promise<unknown>;
 }

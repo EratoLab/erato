@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import React, { createContext, useContext, useCallback, useState } from "react";
 import { SSE } from "sse.js";
 
@@ -62,6 +63,7 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
   const [currentSource, setCurrentSource] = useState<SSE | null>(null);
   const [currentStreamingMessage, setCurrentStreamingMessage] =
     useState<StreamingState | null>(null);
+  const queryClient = useQueryClient();
 
   const cancelStreaming = useCallback(() => {
     if (currentSource) {
@@ -102,7 +104,6 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
             Accept: "text/event-stream",
           },
           payload: JSON.stringify({
-            // Format according to MessageSubmitRequest schema
             user_message: userMessageContent,
             previous_message_id: isNewChat ? null : (lastMessageId ?? null),
             file_ids: fileIds.length > 0 ? fileIds : undefined,
@@ -162,7 +163,8 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
             if (data.content || data.new_text) {
               setCurrentStreamingMessage((currentState) => ({
                 content:
-                  currentState?.content + (data.content || data.new_text || ""),
+                  (currentState?.content ?? "") +
+                  (data.content ?? data.new_text ?? ""),
                 isComplete: false,
               }));
             }
@@ -187,18 +189,40 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
           );
           source.close();
           setCurrentSource(null);
+
+          // Invalidate chat queries to ensure fresh data
+          void queryClient.invalidateQueries({
+            queryKey: ["recentChats"],
+          });
         });
 
-        source.addEventListener("error", (e: Event) => {
+        source.addEventListener("chat_created", (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(
+              e.data,
+            ) as MessageSubmitStreamingResponseMessage;
+            if (
+              data.message_type === "chat_created" &&
+              isNewChat &&
+              onChatCreated
+            ) {
+              // Convert the temporary chat to a permanent one with the server ID
+              onChatCreated(chatId, data.chat_id);
+            }
+          } catch (error) {
+            console.error("Error parsing SSE chat_created event:", error);
+          }
+        });
+
+        source.addEventListener("error", (e: SSEErrorEvent) => {
           console.error("SSE error event:", e);
 
           // Don't mark as error if it's just the connection closing normally
           // This helps prevent the ERR_INCOMPLETE_CHUNKED_ENCODING error
           const isNormalClose =
             e instanceof CustomEvent &&
-            ((e as SSEErrorEvent).responseCode === 200 ||
-              (e as SSEErrorEvent).responseCode === 0) &&
-            (!(e as SSEErrorEvent).data || (e as SSEErrorEvent).data === "");
+            (e.responseCode === 200 || e.responseCode === 0) &&
+            (!e.data || e.data === "");
 
           if (!isNormalClose) {
             setCurrentStreamingMessage((prev) =>
@@ -227,25 +251,6 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
           setCurrentSource(null);
         });
 
-        // Add event listener for chat_created event
-        source.addEventListener("chat_created", (e: MessageEvent) => {
-          try {
-            const data = JSON.parse(
-              e.data,
-            ) as MessageSubmitStreamingResponseMessage;
-            if (
-              data.message_type === "chat_created" &&
-              isNewChat &&
-              onChatCreated
-            ) {
-              // Convert the temporary chat to a permanent one with the server ID
-              onChatCreated(chatId, data.chat_id);
-            }
-          } catch (error) {
-            console.error("Error parsing SSE chat_created event:", error);
-          }
-        });
-
         // Start the stream
         source.stream();
       } catch (error) {
@@ -260,7 +265,7 @@ export const MessageStreamProvider: React.FC<MessageStreamProviderProps> = ({
         });
       }
     },
-    [cancelStreaming, onChatCreated],
+    [cancelStreaming, onChatCreated, queryClient],
   );
 
   return (

@@ -38,9 +38,17 @@ const ChatBridge: React.FC<PropsWithChildren> = ({ children }) => {
 };
 
 export function ClientProviders({ children }: PropsWithChildren) {
-  // Create a client that can be shared across the app
-  // Must be created in component scope with useState to work with SSR
-  const [queryClient] = useState(() => new QueryClient());
+  // Create a client that can be shared across the app with proper configuration
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 5 * 1000, // 5 seconds
+          },
+        },
+      }),
+  );
 
   return (
     <QueryClientProvider client={queryClient}>

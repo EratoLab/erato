@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { useChatHistory } from "../../../components/containers/ChatHistoryProvider";
 import { ChatProvider } from "../../../components/containers/ChatProvider";
@@ -25,10 +25,17 @@ export default function ChatPage() {
   const { collapsed: sidebarCollapsed, toggleCollapsed: handleToggleCollapse } =
     useSidebar();
   const { switchSession } = useChatHistory();
+  const isRedirecting = useRef(false);
 
   useEffect(() => {
+    // Prevent redirect loops by checking if the ID is a temp ID
+    if (chatId.startsWith("temp-")) {
+      console.log("Warning: Accessing temp chat ID directly:", chatId);
+    }
+
     // When the page loads, switch to the chat session based on the URL parameter
     if (chatId) {
+      console.log("Switching to chat session:", chatId);
       switchSession(chatId);
     }
   }, [chatId, switchSession]);
@@ -48,13 +55,34 @@ export default function ChatPage() {
           dialogOwnerId: "user_1",
           isSharedDialog: false,
         }}
-        onNewChat={() => router.push("/chat/new")}
+        onNewChat={() => {
+          if (!isRedirecting.current) {
+            isRedirecting.current = true;
+            console.log("Creating new chat");
+            router.push("/chat/new");
+
+            // Reset the redirecting flag after a short delay
+            setTimeout(() => {
+              isRedirecting.current = false;
+            }, 500);
+          }
+        }}
         onRegenerate={() => console.log("Regenerate")}
         sidebarCollapsed={sidebarCollapsed}
         onToggleCollapse={handleToggleCollapse}
         acceptedFileTypes={acceptedFileTypes}
         customSessionSelect={(selectedChatId) => {
-          router.push(`/chat/${selectedChatId}`);
+          // Don't navigate if already on this chat or if currently redirecting
+          if (selectedChatId !== chatId && !isRedirecting.current) {
+            isRedirecting.current = true;
+            console.log("Navigating to chat:", selectedChatId);
+            router.push(`/chat/${selectedChatId}`);
+
+            // Reset the redirecting flag after a short delay
+            setTimeout(() => {
+              isRedirecting.current = false;
+            }, 500);
+          }
         }}
         isTransitioning={false}
       />

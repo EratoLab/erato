@@ -309,15 +309,13 @@ export const MessageList = memo<MessageListProps>(
     useEffect(() => {
       if (!containerRef.current) return;
 
+      // Capture the ref in a local variable to avoid closure issues
+      const container = containerRef.current;
+
       // Check scroll position on scroll events
-      containerRef.current.addEventListener("scroll", checkScrollPosition);
+      container.addEventListener("scroll", checkScrollPosition);
       return () => {
-        if (containerRef.current) {
-          containerRef.current.removeEventListener(
-            "scroll",
-            checkScrollPosition,
-          );
-        }
+        container.removeEventListener("scroll", checkScrollPosition);
       };
     }, [apiMessagesResponse, checkScrollPosition, containerRef]);
 
@@ -325,7 +323,7 @@ export const MessageList = memo<MessageListProps>(
     const renderMessageListHeader = useMemo(() => {
       // Should show load more button if we have more messages and we're not already loading
       const showLoadMoreButton =
-        (apiMessagesResponse?.stats.has_more || hasOlderMessages) &&
+        (apiMessagesResponse?.stats.has_more ?? hasOlderMessages) &&
         !isPending &&
         messageOrder.length > 0;
 

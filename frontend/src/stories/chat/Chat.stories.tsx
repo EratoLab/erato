@@ -277,7 +277,12 @@ const meta = {
         },
         hasMoreChats: false,
         isLoading: false,
+        isPending: false,
         error: undefined,
+        refreshChats: async () => {
+          action("refreshChats")();
+          return Promise.resolve();
+        },
       };
 
       return (
