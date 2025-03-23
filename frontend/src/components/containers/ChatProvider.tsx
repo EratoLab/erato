@@ -68,7 +68,6 @@ type ChatAction =
   | { type: "PREPEND_MESSAGES"; messages: MessageMap; messageIds: string[] }
   | { type: "ADD_MESSAGE"; message: ChatMessage }
   | { type: "UPDATE_MESSAGE"; messageId: string; updates: Partial<ChatMessage> }
-  | { type: "SET_HAS_OLDER_MESSAGES"; hasOlderMessages: boolean }
   | { type: "SET_LAST_LOADED_COUNT"; count: number }
   | { type: "SET_API_RESPONSE"; response: ChatMessagesResponse | undefined }
   | { type: "INCREMENT_MESSAGE_OFFSET" }
@@ -79,10 +78,8 @@ interface ChatState {
   messages: MessageMap;
   messageOrder: string[];
   isPending: boolean;
-  hasOlderMessages: boolean;
   lastLoadedCount: number;
   apiMessagesResponse?: ChatMessagesResponse;
-  messageOffset: number;
 }
 
 // Initial state for the chat reducer
@@ -90,9 +87,7 @@ const initialChatState: ChatState = {
   messages: {},
   messageOrder: [],
   isPending: false,
-  hasOlderMessages: false,
   lastLoadedCount: 0,
-  messageOffset: 0,
 };
 
 // Constants for the component
@@ -161,23 +156,11 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
         },
       };
 
-    case "SET_HAS_OLDER_MESSAGES":
-      return { ...state, hasOlderMessages: action.hasOlderMessages };
-
     case "SET_LAST_LOADED_COUNT":
       return { ...state, lastLoadedCount: action.count };
 
     case "SET_API_RESPONSE":
       return { ...state, apiMessagesResponse: action.response };
-
-    case "INCREMENT_MESSAGE_OFFSET":
-      return {
-        ...state,
-        messageOffset: state.messageOffset + MESSAGE_PAGE_SIZE,
-      };
-
-    case "RESET_MESSAGE_OFFSET":
-      return { ...state, messageOffset: 0 };
 
     default:
       return state;
@@ -258,7 +241,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     messages,
     messageOrder,
     isPending,
-    hasOlderMessages,
     lastLoadedCount,
     apiMessagesResponse,
   } = chatState;
@@ -268,19 +250,10 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     throttledLog("Chat state updated:", {
       messagesCount: Object.keys(messages).length,
       messageOrderLength: messageOrder.length,
-      hasOlderMessages,
-      lastLoadedCount,
       apiMessagesResponse,
       isPending,
     });
-  }, [
-    messages,
-    messageOrder,
-    hasOlderMessages,
-    lastLoadedCount,
-    apiMessagesResponse,
-    isPending,
-  ]);
+  }, [messages, messageOrder, apiMessagesResponse, isPending]);
 
   // Update cache when chat state changes
   useUpdateEffect(() => {
@@ -409,10 +382,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       // Update pagination state based on the most recent page
       const latestPage =
         paginatedMessages.pages[paginatedMessages.pages.length - 1];
-      dispatch({
-        type: "SET_HAS_OLDER_MESSAGES",
-        hasOlderMessages: latestPage.stats.has_more,
-      });
 
       dispatch({
         type: "SET_LAST_LOADED_COUNT",
@@ -455,11 +424,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       }
 
       // Update pagination state
-      dispatch({
-        type: "SET_HAS_OLDER_MESSAGES",
-        hasOlderMessages: latestPage.stats.has_more,
-      });
-
       dispatch({
         type: "SET_LAST_LOADED_COUNT",
         count: latestPage.messages.length,
@@ -722,39 +686,28 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     ],
   );
 
-  // Memoize the context value for performance
-  const contextValue = useMemo<ChatContextType>(
-    () => ({
-      messages,
-      messageOrder,
-      sendMessage,
-      updateMessage,
-      loadOlderMessages,
-      hasOlderMessages: hasNextPage === true,
-      isPending,
-      lastLoadedCount,
-      apiMessagesResponse,
-      handleFileAttachments,
-      performFileUpload,
-      isUploadingFiles,
-      uploadError,
-    }),
-    [
-      messages,
-      messageOrder,
-      sendMessage,
-      updateMessage,
-      loadOlderMessages,
-      hasNextPage,
-      isPending,
-      lastLoadedCount,
-      apiMessagesResponse,
-      handleFileAttachments,
-      performFileUpload,
-      isUploadingFiles,
-      uploadError,
-    ],
-  );
+  // Calculate if we have older messages inline
+  const hasOlderMessages = useMemo(() => {
+    if (!apiMessagesResponse) return false;
+    return apiMessagesResponse.stats.has_more;
+  }, [apiMessagesResponse]);
+
+  // Expose the context values
+  const contextValue: ChatContextType = {
+    messages,
+    messageOrder,
+    sendMessage,
+    updateMessage,
+    loadOlderMessages,
+    hasOlderMessages,
+    isPending,
+    lastLoadedCount,
+    apiMessagesResponse,
+    handleFileAttachments,
+    performFileUpload,
+    isUploadingFiles,
+    uploadError,
+  };
 
   // Handle session ID changes - reset state and refetch
   useUpdateEffect(() => {
