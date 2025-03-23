@@ -15,17 +15,17 @@ const useTransformedProfile = createTransformedQueryHook(useProfile);
 // Add this context definition
 export const ProfileContext = createContext<{
   profile?: UserProfile;
-  isLoading: boolean;
+  isPending: boolean;
   error: unknown;
 } | null>(null);
 
 export const ProfileProvider: React.FC<React.PropsWithChildren> = ({
   children,
 }) => {
-  const { data: profile, isLoading, error } = useTransformedProfile({});
+  const { data: profile, isPending, error } = useTransformedProfile({});
 
   return (
-    <ProfileContext.Provider value={{ profile, isLoading, error }}>
+    <ProfileContext.Provider value={{ profile, isPending, error }}>
       {children}
     </ProfileContext.Provider>
   );

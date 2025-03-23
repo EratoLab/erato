@@ -8,7 +8,7 @@ import type { ChatMessagesResponse } from "@/lib/generated/v1betaApi/v1betaApiSc
 interface MessageListHeaderProps {
   showLoadMoreButton: boolean;
   handleLoadMore: () => void;
-  isLoading: boolean;
+  isPending: boolean;
   showBeginningIndicator: boolean;
   apiMessagesResponse?: ChatMessagesResponse;
   paginationStats: {
@@ -17,22 +17,22 @@ interface MessageListHeaderProps {
   };
 }
 
-export const MessageListHeader: React.FC<MessageListHeaderProps> = ({
+/**
+ * Header for the message list that shows pagination controls and indicators
+ */
+export const MessageListHeader = ({
   showLoadMoreButton,
   handleLoadMore,
-  isLoading,
+  isPending,
   showBeginningIndicator,
   apiMessagesResponse,
   paginationStats,
-}) => {
+}: MessageListHeaderProps) => {
   return (
-    <>
-      {/* Load more button */}
+    <div className="pb-2">
       {showLoadMoreButton && (
-        <LoadMoreButton onClick={handleLoadMore} isLoading={isLoading} />
+        <LoadMoreButton onClick={handleLoadMore} isPending={isPending} />
       )}
-
-      {/* Beginning of conversation indicator */}
       {showBeginningIndicator && <ConversationIndicator type="beginning" />}
 
       {/* Debug info in development */}
@@ -51,6 +51,6 @@ export const MessageListHeader: React.FC<MessageListHeaderProps> = ({
           {apiMessagesResponse?.stats.has_more && " (more available)"}
         </div>
       )}
-    </>
+    </div>
   );
 };
