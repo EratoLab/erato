@@ -8,11 +8,15 @@ import React, {
   useRef,
   useEffect,
 } from "react";
-import { useUpdateEffect, useLocalStorage } from "react-use";
+import { useUpdateEffect } from "react-use";
 
 import { generateMessageId } from "@/hooks/useChatMessaging";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { convertApiMessageToAppMessage } from "@/hooks/useMessageProcessing";
+import {
+  useChatMessages,
+  chatMessagesQuery,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { useChatHistory } from "./ChatHistoryProvider";
 import { useMessageStream } from "./MessageStreamProvider";
@@ -95,7 +99,6 @@ const initialChatState: ChatState = {
 const MESSAGE_PAGE_SIZE = 20; // Number of messages to fetch per page
 const DEBUG = process.env.NODE_ENV === "development";
 const log = (...args: unknown[]) => DEBUG && console.log(...args);
-const LOCAL_STORAGE_KEY = "chat_cache_v1";
 
 // Throttle log messages to prevent spam
 const logTimestamps = new Map<string, number>();
@@ -188,21 +191,12 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   const { currentStreamingMessage, streamMessage, resetStreaming } =
     useMessageStream();
 
-  // Local storage cache for chat sessions
-  const [chatCache, setChatCache] = useLocalStorage<{
-    [sessionId: string]: {
-      messages: MessageMap;
-      messageOrder: string[];
-      lastUpdated: number;
-    };
-  }>(LOCAL_STORAGE_KEY, {});
-
-  // Store React Query client for cache invalidation
+  // Store React Query client for cache management
   const queryClient = reactQuery.useQueryClient();
 
   // Initialize with cached data if available
   const getCachedInitialState = () => {
-    if (!currentSessionId || !chatCache?.[currentSessionId]) {
+    if (!currentSessionId) {
       return {
         ...initialChatState,
         messages: initialMessages,
@@ -210,17 +204,31 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       };
     }
 
-    // Use cached data if it exists and isn't too old (24 hours)
-    const cached = chatCache[currentSessionId];
+    // Try to get data from React Query cache
+    const cachedData = queryClient.getQueryData<{
+      messages: MessageMap;
+      messageOrder: string[];
+      lastUpdated: number;
+    }>(["chatSession", currentSessionId]);
+
+    if (!cachedData) {
+      return {
+        ...initialChatState,
+        messages: initialMessages,
+        messageOrder: initialMessageOrder,
+      };
+    }
+
+    // Check if cache is still valid (24 hours)
     const now = Date.now();
-    const isCacheValid = now - cached.lastUpdated < 24 * 60 * 60 * 1000;
+    const isCacheValid = now - cachedData.lastUpdated < 24 * 60 * 60 * 1000;
 
     if (isCacheValid) {
       throttledLog(`Using cached data for session ${currentSessionId}`);
       return {
         ...initialChatState,
-        messages: cached.messages,
-        messageOrder: cached.messageOrder,
+        messages: cachedData.messages,
+        messageOrder: cachedData.messageOrder,
       };
     } else {
       throttledLog(`Cache expired for session ${currentSessionId}`);
@@ -256,7 +264,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     });
   }, [messages, messageOrder, apiMessagesResponse, isPending]);
 
-  // Update cache when chat state changes
+  // Update React Query cache when chat state changes
   useUpdateEffect(() => {
     if (!currentSessionId) return;
 
@@ -266,96 +274,135 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
     // Only cache if we have messages
     if (Object.keys(messages).length === 0) return;
 
-    setChatCache((prev) => ({
-      ...prev,
-      [currentSessionId]: {
-        messages,
-        messageOrder,
-        lastUpdated: Date.now(),
-      },
-    }));
+    queryClient.setQueryData(["chatSession", currentSessionId], {
+      messages,
+      messageOrder,
+      lastUpdated: Date.now(),
+    });
 
     throttledLog(
       `Updated cache for session ${currentSessionId} with ${messageOrder.length} messages`,
     );
-  }, [currentSessionId, messages, messageOrder]);
+  }, [messages, messageOrder, currentSessionId]);
 
-  // Enhanced infinite query for messages using React Query's useInfiniteQuery
+  // Enhanced messages query using the generated API hook
   const {
-    data: paginatedMessages,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading: isLoadingInfiniteMessages,
+    data: messagesData,
+    isLoading: isLoadingMessages,
     refetch: refetchMessages,
-  } = reactQuery.useInfiniteQuery({
-    queryKey: ["chatMessages", currentSessionId],
-    queryFn: async ({ pageParam = 0 }) => {
-      if (!currentSessionId || currentSessionId.startsWith("temp-")) {
-        // Return empty response for temporary sessions
-        return {
-          messages: [],
-          stats: {
-            has_more: false,
-            total_count: 0,
-            returned_count: 0,
-            current_offset: 0,
-          },
-        } as ChatMessagesResponse;
-      }
+  } = useChatMessages(
+    currentSessionId && !currentSessionId.startsWith("temp-")
+      ? {
+          pathParams: { chatId: currentSessionId },
+          queryParams: { limit: MESSAGE_PAGE_SIZE },
+        }
+      : reactQuery.skipToken,
+    {
+      select: (data) => data,
+      enabled: !!currentSessionId && !currentSessionId.startsWith("temp-"),
+      staleTime: 30000, // 30 seconds
+      gcTime: 5 * 60 * 1000, // 5 minutes
+    },
+  );
 
-      // Fetch messages from the API
-      const response = await fetch(
-        `/api/v1beta/chats/${currentSessionId}/messages?limit=${MESSAGE_PAGE_SIZE}&offset=${pageParam}`,
+  // Determine if we can load more messages and handle pagination manually
+  const hasNextPage = messagesData?.stats.has_more ?? false;
+  const isFetchingNextPage = false; // We'll manage this state manually when implementing fetchNextPage
+
+  // Function to load older messages - fetch with different offset
+  const loadOlderMessages = useCallback(() => {
+    if (!hasNextPage || isPending || !currentSessionId || !messagesData) {
+      log(
+        hasNextPage ? "Already loading messages" : "No more messages to load",
       );
+      return;
+    }
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch messages: ${response.status}`);
-      }
+    log("Loading older messages");
 
-      return (await response.json()) as ChatMessagesResponse;
-    },
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => {
-      // If has_more is true, return the next offset for pagination
-      if (lastPage.stats.has_more) {
-        return lastPage.stats.current_offset + lastPage.stats.returned_count;
-      }
-      // Return undefined to signal we've reached the end
-      return undefined;
-    },
-    enabled: !!currentSessionId && !currentSessionId.startsWith("temp-"),
-    staleTime: 30000, // 30 seconds
-    gcTime: 5 * 60 * 1000, // 5 minutes
-  });
+    // Set loading state first for better UI feedback
+    dispatch({ type: "SET_LOADING", isPending: true });
 
-  // Process messages from the paginated data
-  useEffect(() => {
-    if (!paginatedMessages || !currentSessionId) return;
+    // Calculate the next offset based on current data
+    const nextOffset =
+      messagesData.stats.current_offset + messagesData.stats.returned_count;
 
-    // Handle all pages in one batch to avoid UI flicker
-    const newMessages: MessageMap = {};
-    const newMessageIds: string[] = [];
-
-    // First, clear the current messages if this is a new session
-    if (Object.keys(messages).length === 0) {
-      log("Processing all pages of messages for initial load");
-
-      // Process all pages of messages
-      paginatedMessages.pages.forEach((page) => {
-        if (!page.messages.length) return;
+    // Fetch older messages with a new offset
+    fetch(
+      `/api/v1beta/chats/${currentSessionId}/messages?limit=${MESSAGE_PAGE_SIZE}&offset=${nextOffset}`,
+    )
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to fetch older messages: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((olderMessagesData: ChatMessagesResponse) => {
+        // Process the older messages
+        const newMessages: MessageMap = {};
+        const newMessageIds: string[] = [];
 
         // Messages come in descending order (newest first), but we want ascending
-        // Start from the last page and process in reverse order
-        const pageMessages = [...page.messages].reverse();
+        const pageMessages = [...olderMessagesData.messages].reverse();
 
         pageMessages.forEach((apiMessage) => {
           const message = convertApiMessageToAppMessage(apiMessage);
-          if (!(message.id in newMessages)) {
+          if (!(message.id in messages) && !(message.id in newMessages)) {
             newMessages[message.id] = message;
             newMessageIds.push(message.id);
           }
         });
+
+        if (newMessageIds.length > 0) {
+          log(`Adding ${newMessageIds.length} older messages`);
+
+          // Prepend older messages
+          dispatch({
+            type: "PREPEND_MESSAGES",
+            messages: newMessages,
+            messageIds: newMessageIds,
+          });
+        }
+
+        // Update pagination state
+        dispatch({
+          type: "SET_LAST_LOADED_COUNT",
+          count: olderMessagesData.messages.length,
+        });
+
+        dispatch({
+          type: "SET_API_RESPONSE",
+          response: olderMessagesData,
+        });
+      })
+      .catch((error) => {
+        console.error("Error loading older messages:", error);
+      })
+      .finally(() => {
+        dispatch({ type: "SET_LOADING", isPending: false });
+      });
+  }, [hasNextPage, isPending, currentSessionId, messagesData, messages]);
+
+  // Process messages from the data
+  useEffect(() => {
+    if (!messagesData || !currentSessionId) return;
+
+    // Handle the messages
+    const newMessages: MessageMap = {};
+    const newMessageIds: string[] = [];
+
+    if (Object.keys(messages).length === 0) {
+      log("Processing messages for initial load");
+
+      // Messages come in descending order (newest first), but we want ascending
+      const pageMessages = [...messagesData.messages].reverse();
+
+      pageMessages.forEach((apiMessage) => {
+        const message = convertApiMessageToAppMessage(apiMessage);
+        if (!(message.id in newMessages)) {
+          newMessages[message.id] = message;
+          newMessageIds.push(message.id);
+        }
       });
 
       if (newMessageIds.length > 0) {
@@ -366,93 +413,26 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         });
       }
 
-      // Update pagination state based on the most recent page
-      const latestPage =
-        paginatedMessages.pages[paginatedMessages.pages.length - 1];
-
-      dispatch({
-        type: "SET_LAST_LOADED_COUNT",
-        count: latestPage.messages.length,
-      });
-
-      dispatch({
-        type: "SET_API_RESPONSE",
-        response: latestPage,
-      });
-    }
-    // If we already have messages and are loading more, only process new pages
-    else if (paginatedMessages.pages.length > 1) {
-      log("Processing new pages for pagination");
-
-      // Get the latest page (the one just loaded)
-      const latestPage =
-        paginatedMessages.pages[paginatedMessages.pages.length - 1];
-
-      // Process messages in reverse order to get oldest first
-      const pageMessages = [...latestPage.messages].reverse();
-
-      pageMessages.forEach((apiMessage) => {
-        const message = convertApiMessageToAppMessage(apiMessage);
-        if (!(message.id in messages) && !(message.id in newMessages)) {
-          newMessages[message.id] = message;
-          newMessageIds.push(message.id);
-        }
-      });
-
-      if (newMessageIds.length > 0) {
-        log(`Adding ${newMessageIds.length} older messages`);
-
-        // Prepend older messages
-        dispatch({
-          type: "PREPEND_MESSAGES",
-          messages: newMessages,
-          messageIds: newMessageIds,
-        });
-      }
-
       // Update pagination state
       dispatch({
         type: "SET_LAST_LOADED_COUNT",
-        count: latestPage.messages.length,
+        count: messagesData.messages.length,
       });
 
       dispatch({
         type: "SET_API_RESPONSE",
-        response: latestPage,
+        response: messagesData,
       });
     }
-  }, [
-    paginatedMessages,
-    currentSessionId,
-    messages,
-    convertApiMessageToAppMessage,
-  ]);
+  }, [messagesData, currentSessionId, messages]);
 
   // Update loading state
   useEffect(() => {
     dispatch({
       type: "SET_LOADING",
-      isPending: isLoadingInfiniteMessages || isFetchingNextPage,
+      isPending: isLoadingMessages || isFetchingNextPage,
     });
-  }, [isLoadingInfiniteMessages, isFetchingNextPage]);
-
-  // Function to load older messages - using React Query's fetchNextPage
-  const loadOlderMessages = useCallback(() => {
-    if (!hasNextPage || isPending) {
-      log(
-        hasNextPage ? "Already loading messages" : "No more messages to load",
-      );
-      return;
-    }
-
-    log("Loading older messages with fetchNextPage");
-
-    // Set loading state first for better UI feedback
-    dispatch({ type: "SET_LOADING", isPending: true });
-
-    // Use fetchNextPage from useInfiniteQuery to load the next page of messages
-    void fetchNextPage();
-  }, [hasNextPage, isPending, fetchNextPage]);
+  }, [isLoadingMessages, isFetchingNextPage]);
 
   // Reference for files to be attached to next message
   const messageFilesRef = useRef<{ id: string; filename: string }[]>([]);
@@ -477,14 +457,20 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
   });
 
   // Helper to add messages to local state
-  const addMessage = (message: ChatMessage) => {
-    dispatch({ type: "ADD_MESSAGE", message });
-  };
+  const addMessage = useCallback(
+    (message: ChatMessage) => {
+      dispatch({ type: "ADD_MESSAGE", message });
+    },
+    [dispatch],
+  );
 
   // Helper to update messages in local state
-  const updateMessage = (messageId: string, updates: Partial<ChatMessage>) => {
-    dispatch({ type: "UPDATE_MESSAGE", messageId, updates });
-  };
+  const updateMessage = useCallback(
+    (messageId: string, updates: Partial<ChatMessage>) => {
+      dispatch({ type: "UPDATE_MESSAGE", messageId, updates });
+    },
+    [dispatch],
+  );
 
   // Throttle updates to reduce unnecessary renders
   const throttledUpdate = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -544,8 +530,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
           );
           // Invalidate the specific chat messages query
           void queryClient.invalidateQueries({
-            queryKey: ["chatMessages", currentSessionId],
-            exact: true,
+            queryKey: chatMessagesQuery({
+              pathParams: { chatId: currentSessionId },
+            }).queryKey,
           });
         }
       }
@@ -651,14 +638,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         });
       }
     },
-    [
-      currentSessionId,
-      messageOrder,
-      addMessage,
-      updateMessage,
-      streamMessage,
-      generateMessageId,
-    ],
+    [currentSessionId, messageOrder, addMessage, updateMessage, streamMessage],
   );
 
   // Calculate if we have older messages inline
@@ -698,19 +678,23 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       // Reset state for new session
       dispatch({ type: "RESET_STATE", sessionId: currentSessionId });
 
-      // For temporary sessions, ensure messages are cleared
+      // For temporary sessions, ensure messages are cleared, but don't refetch
+      // This helps prevent redirect loops and loading state issues
       if (currentSessionId.startsWith("temp-")) {
+        throttledLog("Handling temp session:", currentSessionId);
         dispatch({
           type: "SET_MESSAGES",
           messages: {},
           messageOrder: [],
         });
+        dispatch({ type: "SET_LOADING", isPending: false });
       } else {
-        // Refetch messages for non-temporary sessions with no caching
+        // Only refetch for non-temporary sessions
         // Force refetch with fresh data by invalidating the cache first
         void queryClient.invalidateQueries({
-          queryKey: ["chatMessages", currentSessionId],
-          exact: true,
+          queryKey: chatMessagesQuery({
+            pathParams: { chatId: currentSessionId },
+          }).queryKey,
         });
         void refetchMessages();
       }

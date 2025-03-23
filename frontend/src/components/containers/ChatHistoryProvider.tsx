@@ -48,9 +48,9 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
 
   const sortedSessions = useMemo(
     () =>
-      Object.values(sessions).sort(
-        (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
-      ),
+      Object.values(sessions)
+        .filter((session) => session.metadata?.isTemporary !== true) // Filter out temporary sessions
+        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
     [sessions],
   );
 
@@ -251,7 +251,32 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   const hasMoreChats = hasNextPage === true;
 
   // Determine if we are loading anything
-  const isPending = isPendingChats || isPendingMessages;
+  const isPending =
+    isPendingChats ||
+    (isPendingMessages &&
+      typeof currentSessionId === "string" &&
+      !currentSessionId.startsWith("temp-"));
+
+  // Clean up temporary sessions on startup and whenever sessions change
+  useEffect(() => {
+    // Clean up any stale temporary sessions that aren't the current session
+    const tempSessionsToRemove = Object.values(sessions).filter(
+      (session) =>
+        session.metadata?.isTemporary === true &&
+        session.id !== currentSessionId &&
+        // Only remove temp sessions older than 10 minutes
+        Date.now() - session.updatedAt.getTime() > 10 * 60 * 1000,
+    );
+
+    if (tempSessionsToRemove.length > 0) {
+      log(
+        `Cleaning up ${tempSessionsToRemove.length} stale temporary sessions`,
+      );
+      tempSessionsToRemove.forEach((session) => {
+        remove(session.id);
+      });
+    }
+  }, [sessions, currentSessionId, remove]);
 
   // Expose the context
   const contextValue: ChatHistoryContextType = {
@@ -267,24 +292,26 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
     getCurrentSession,
     loadMoreChats,
     hasMoreChats,
+    refreshChats: refetchChats,
   };
 
   // Expose the context globally for our ChatBridge component
   useEffect(() => {
     if (typeof window !== "undefined") {
       // Make confirmSession available globally
-      (
-        window as Window & {
-          __CHAT_HISTORY_CONTEXT__?: { confirmSession?: typeof confirmSession };
-        }
-      ).__CHAT_HISTORY_CONTEXT__ = {
+      const win = window as unknown as {
+        __CHAT_HISTORY_CONTEXT__?: { confirmSession?: typeof confirmSession };
+      };
+      win.__CHAT_HISTORY_CONTEXT__ = {
         confirmSession,
       };
     }
     return () => {
       if (typeof window !== "undefined") {
-        delete (window as Window & { __CHAT_HISTORY_CONTEXT__?: unknown })
-          .__CHAT_HISTORY_CONTEXT__;
+        const win = window as unknown as {
+          __CHAT_HISTORY_CONTEXT__?: unknown;
+        };
+        delete win.__CHAT_HISTORY_CONTEXT__;
       }
     };
   }, [confirmSession]);

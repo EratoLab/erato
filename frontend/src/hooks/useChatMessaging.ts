@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 import { useMessageStream } from "@/components/containers/MessageStreamProvider";
 
@@ -18,7 +18,12 @@ export function useChatMessaging(
   updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void,
 ) {
   const { streamMessage } = useMessageStream();
-  const messageFilesRef = { current: [] as { id: string; filename: string }[] };
+
+  // Use useMemo to create a stable messageFilesRef object
+  const messageFilesRef = useMemo(
+    () => ({ current: [] as { id: string; filename: string }[] }),
+    [],
+  );
 
   const {
     uploadFiles,
@@ -119,7 +124,7 @@ export function useChatMessaging(
         });
       }
     },
-    [messageOrder, addMessage, updateMessage, streamMessage],
+    [messageOrder, addMessage, updateMessage, streamMessage, messageFilesRef],
   );
 
   return {

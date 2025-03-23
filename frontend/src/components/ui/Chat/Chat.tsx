@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useChatHistory } from "@/components/containers/ChatHistoryProvider";
 import { useChat } from "@/components/containers/ChatProvider";
@@ -106,14 +106,31 @@ export const Chat = ({
     deleteSession,
     isPending: chatHistoryLoading,
     error: chatHistoryError,
+    refreshChats,
   } = useChatHistory();
 
   // Use chat actions hook for handlers
   const {
     handleSessionSelect: baseHandleSessionSelect,
-    handleSendMessage,
+    handleSendMessage: baseHandleSendMessage,
     handleMessageAction,
   } = useChatActions(switchSession, sendMessage, onMessageAction);
+
+  // Enhanced sendMessage handler that refreshes the sidebar after sending
+  const handleSendMessage = useCallback(
+    (message: string) => {
+      // Send the message
+      baseHandleSendMessage(message);
+
+      // Schedule a refresh of the chat history sidebar after a short delay
+      // This allows time for the message to be processed and confirmed
+      setTimeout(() => {
+        console.log("Refreshing chat history");
+        void refreshChats();
+      }, 1500); // 1.5 second delay
+    },
+    [baseHandleSendMessage, refreshChats],
+  );
 
   // Customize session select handler to use custom handler if provided
   const handleSessionSelect = (sessionId: string) => {
@@ -160,7 +177,9 @@ export const Chat = ({
         collapsed={sidebarCollapsed}
         onNewChat={onNewChat}
         onToggleCollapse={onToggleCollapse}
-        sessions={sessions}
+        sessions={sessions.filter(
+          (session) => session.metadata?.isTemporary !== true,
+        )}
         currentSessionId={currentSessionId}
         onSessionSelect={handleSessionSelect}
         onSessionDelete={deleteSession}
