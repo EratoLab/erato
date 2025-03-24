@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/chat/:id",
+      "destination": "/chat/next-static-fallback.html"
+    }
+  ]
+}
