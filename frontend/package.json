@@ -30,6 +30,7 @@
     "date-fns": "^4.1.0",
     "eslint-plugin-tailwindcss": "^3.18.0",
     "next": "15.1.6",
+    "next-static-utils": "^1.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.3.8",
