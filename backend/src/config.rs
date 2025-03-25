@@ -5,6 +5,9 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
 pub struct AppConfig {
+    // A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
+    // but is never parsed/interpreted by the application to trigger environment-specific behavior.
+    pub environment: String,
     // The HTTP host to listen on.
     // Defaults to `127.0.0.1`.
     pub http_host: String,
@@ -48,6 +51,7 @@ impl AppConfig {
     /// Separate builder, so we can also add overrides in tests.
     pub fn config_schema_builder() -> Result<ConfigBuilder<DefaultState>, ConfigError> {
         let builder = Config::builder()
+            .set_default("environment", "development")?
             .set_default("http_host", "127.0.0.1")?
             .set_default("http_port", "3130")?
             .set_default("frontend_bundle_path", "./public")?
