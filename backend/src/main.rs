@@ -1,7 +1,7 @@
 use axum::body::Body;
 use axum::handler::HandlerWithoutStateExt;
 use axum::http::Request;
-use axum::Extension;
+use axum::{Extension, Router};
 use eyre::Report;
 use serde_json::{json, Value};
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
@@ -54,9 +54,7 @@ async fn main() -> Result<(), Report> {
         local_addr
     ))]);
 
-    let app = router
-        .layer(sentry_tower::NewSentryLayer::<Request<Body>>::new_from_top())
-        .layer(sentry_tower::SentryHttpLayer::with_transaction())
+    let app = extend_with_sentry_layers(router)
         .merge(Scalar::with_url("/scalar", spec.clone()))
         .route(
             "/openapi.json",
@@ -94,6 +92,16 @@ pub fn build_frontend_environment() -> FrontedEnvironment {
     env
 }
 
+#[allow(unused_mut)]
+fn extend_with_sentry_layers(mut router: Router<AppState>) -> Router<AppState> {
+    #[cfg(feature = "sentry")]
+    {
+        router = router.layer(sentry_tower::NewSentryLayer::<Request<Body>>::new_from_top());
+        router = router.layer(sentry_tower::SentryHttpLayer::with_transaction());
+    }
+    router
+}
+
 #[cfg(feature = "sentry")]
 fn setup_sentry(
     sentry_dsn: Option<&String>,
@@ -116,4 +124,9 @@ fn setup_sentry(
 }
 
 #[cfg(not(feature = "sentry"))]
-fn setup_sentry(_sentry_dsn: Option<&String>, _sentry_guard: Option<()>) {}
+fn setup_sentry(
+    _sentry_dsn: Option<&String>,
+    _environment: String,
+    _sentry_guard: &mut Option<()>,
+) {
+}
