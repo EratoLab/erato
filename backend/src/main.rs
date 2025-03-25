@@ -30,7 +30,11 @@ async fn main() -> Result<(), Report> {
     let config = AppConfig::new()?;
 
     let mut _sentry_guard = None;
-    setup_sentry(config.sentry_dsn.as_ref(), &mut _sentry_guard);
+    setup_sentry(
+        config.sentry_dsn.as_ref(),
+        config.environment.clone(),
+        &mut _sentry_guard,
+    );
 
     let state = AppState::new(config.clone()).await?;
 
@@ -91,13 +95,18 @@ pub fn build_frontend_environment() -> FrontedEnvironment {
 }
 
 #[cfg(feature = "sentry")]
-fn setup_sentry(sentry_dsn: Option<&String>, _sentry_guard: &mut Option<sentry::ClientInitGuard>) {
+fn setup_sentry(
+    sentry_dsn: Option<&String>,
+    environment: String,
+    _sentry_guard: &mut Option<sentry::ClientInitGuard>,
+) {
     if let Some(sentry_dsn) = sentry_dsn {
         *_sentry_guard = Some(sentry::init((
             sentry_dsn.as_str(),
             sentry::ClientOptions {
                 release: sentry::release_name!(),
                 debug: std::env::var("SENTRY_DEBUG").is_ok(),
+                environment: Some(environment.into()),
                 ..Default::default()
             },
         )));

@@ -24,6 +24,8 @@ spec:
             - "-c"
             - "cd /app/sqitch && ./deploy_distributed.sh --db-uri $DATABASE_URL"
           env:
+            - name: ENVIRONMENT
+              {{- .Values.global.environment | nindent 14 }}
             - name: DATABASE_URL
               {{- include "erato.postgresValueOrValueFrom" . | nindent 14 }}
           {{- if or .Values.backend.extraEnvVarsCM .Values.backend.extraEnvVarsSecret }}
