@@ -23,6 +23,7 @@ use axum::{middleware, Extension, Json, Router};
 use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
 use eyre::{Report, WrapErr};
+#[cfg(feature = "sentry")]
 use sentry::{event_from_error, Hub};
 use serde::{Deserialize, Serialize};
 use sqlx::types::{chrono, Uuid};

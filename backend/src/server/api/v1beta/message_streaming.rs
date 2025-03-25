@@ -20,6 +20,7 @@ use genai::chat::{
     ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatStreamEvent, StreamEnd,
 };
 use sea_orm::prelude::Uuid;
+#[cfg(feature = "sentry")]
 use sentry::{event_from_error, Hub};
 use serde::Serialize;
 use serde_json::json;
@@ -743,6 +744,6 @@ fn capture_report(report: &Report) {
 }
 
 #[cfg(not(feature = "sentry"))]
-fn log_internal_server_error(err: &Report) {
+fn capture_report(err: &Report) {
     tracing::error!("{}", err.to_string());
 }
