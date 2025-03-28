@@ -1,6 +1,6 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
-import { useMessageStream } from "@/components/containers/MessageStreamProvider";
+import { useMessagingContext } from "@/components/containers/MessagingProvider";
 
 import { useFileUpload } from "./useFileUpload";
 
@@ -17,7 +17,11 @@ export function useChatMessaging(
   addMessage: (message: ChatMessage) => void,
   updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void,
 ) {
-  const { streamMessage } = useMessageStream();
+  // Use the new messaging context
+  const { sendMessage: contextSendMessage } = useMessagingContext();
+
+  // Reference for tracking the last created assistant message
+  const lastAssistantMessageRef = useRef<string | null>(null);
 
   // Use useMemo to create a stable messageFilesRef object
   const messageFilesRef = useMemo(
@@ -42,7 +46,7 @@ export function useChatMessaging(
     },
   });
 
-  // Function to handle file uploads for a message
+  // Function to handle file attachments for a message
   const handleFileAttachments = (files: { id: string; filename: string }[]) => {
     // Store the files for the next message
     messageFilesRef.current = files;
@@ -55,7 +59,7 @@ export function useChatMessaging(
 
   // Send a message and handle streaming
   const sendMessage = useCallback(
-    async (content: string, sessionId: string): Promise<void> => {
+    async (content: string, _sessionId: string): Promise<void> => {
       if (!content.trim() && !messageFilesRef.current.length) {
         return; // Don't send empty messages without attachments
       }
@@ -63,6 +67,9 @@ export function useChatMessaging(
       // Generate a unique ID for the new messages
       const userMessageId = generateMessageId();
       const assistantMessageId = generateMessageId();
+
+      // Store the assistant message ID for tracking
+      lastAssistantMessageRef.current = assistantMessageId;
 
       // Get the current time for message creation
       const now = new Date();
@@ -104,15 +111,13 @@ export function useChatMessaging(
       addMessage(assistantMessage);
 
       try {
-        // Stream the message (includes file IDs in the API call)
-        await streamMessage(
-          sessionId,
-          content,
-          lastMessageId,
-          attachedFiles.map((file) => file.id),
-        );
+        // Use the new messaging API (delegating to our new context)
+        await contextSendMessage(content, {
+          previousMessageId: lastMessageId,
+          fileIds: attachedFiles.map((file) => file.id),
+        });
       } catch (error) {
-        console.error("Error streaming message:", error);
+        console.error("Error sending message:", error);
 
         // Update the assistant message with the error
         updateMessage(assistantMessageId, {
@@ -124,7 +129,13 @@ export function useChatMessaging(
         });
       }
     },
-    [messageOrder, addMessage, updateMessage, streamMessage, messageFilesRef],
+    [
+      messageOrder,
+      addMessage,
+      updateMessage,
+      contextSendMessage,
+      messageFilesRef,
+    ],
   );
 
   return {
@@ -133,5 +144,6 @@ export function useChatMessaging(
     performFileUpload,
     isUploadingFiles,
     uploadError,
+    lastAssistantMessageId: lastAssistantMessageRef.current,
   };
 }

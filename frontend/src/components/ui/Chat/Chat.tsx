@@ -127,7 +127,7 @@ export const Chat = ({
       setTimeout(() => {
         console.log("Refreshing chat history");
         void refreshChats();
-      }, 1500); // 1.5 second delay
+      }, 2500); // 1.5 second delay
     },
     [baseHandleSendMessage, refreshChats],
   );

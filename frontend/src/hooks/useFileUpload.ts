@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { useUploadFile } from "../lib/generated/v1betaApi/v1betaApiComponents";
 import { FileTypeUtil } from "../utils/fileTypes";
 
 import type { FileUploadItem } from "../lib/generated/v1betaApi/v1betaApiSchemas";
@@ -33,6 +34,20 @@ export function useFileUpload(options?: UploadOptions): FileUploadResult {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<FileUploadItem[]>([]);
+
+  // Use the generated upload mutation
+  const mutation = useUploadFile({
+    onSuccess: (data) => {
+      setUploadedFiles(data.files);
+      options?.onUploadSuccess?.(data.files);
+    },
+    onError: (_err) => {
+      // Create a generic error since the error structure varies
+      const error = new Error("File upload failed");
+      setError(error);
+      options?.onUploadError?.(error);
+    },
+  });
 
   /**
    * Reset the upload state
@@ -88,23 +103,13 @@ export function useFileUpload(options?: UploadOptions): FileUploadResult {
         formData.append("file", file, file.name);
       });
 
-      // Direct fetch approach to avoid the generated client's deepMerge issues
-      const response = await fetch("/api/v1beta/me/files", {
-        method: "POST",
-        body: formData,
+      // Use the generated API mutation
+      const result = await mutation.mutateAsync({
+        body: files.map((file) => ({
+          file,
+          name: file.name,
+        })),
       });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      // Store the uploaded files
-      setUploadedFiles(result.files);
-
-      // Call the onUploadSuccess callback
-      options?.onUploadSuccess?.(result.files);
 
       return result.files;
     } catch (err) {
