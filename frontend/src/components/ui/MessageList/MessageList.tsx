@@ -4,6 +4,7 @@ import React, { memo, useCallback, useMemo, useState, useEffect } from "react";
 
 import { usePaginatedData } from "@/hooks/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
+import { debugLog } from "@/utils/debugLogger";
 
 import { MessageListHeader } from "./MessageListHeader";
 import {
@@ -141,6 +142,13 @@ export const MessageList = memo<MessageListProps>(
     useVirtualization = false,
     virtualizationThreshold = 30,
   }) => {
+    // Debug logging for rendering
+    debugLog("RENDER", "MessageList rendering", {
+      messageCount: messageOrder.length,
+      hasLoadingMessage: messageOrder.some((id) => !!messages[id].loading),
+      loadingMessageIds: messageOrder.filter((id) => !!messages[id].loading),
+    });
+
     // Measure container dimensions for virtualization
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
@@ -181,6 +189,14 @@ export const MessageList = memo<MessageListProps>(
           !!lastMessage.loading
         ) {
           // Message is streaming, so scroll to bottom
+          debugLog(
+            "RENDER",
+            `Message ${lastMessageId} is streaming, scrolling to bottom`,
+            {
+              loadingState: lastMessage.loading.state,
+              contentLength: lastMessage.content.length,
+            },
+          );
           scrollToBottom();
         }
       }

@@ -1,9 +1,9 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useMemo } from "react";
 
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
 import { useChat } from "../../containers/ChatProvider";
-import { useMessageStream } from "../../containers/MessageStreamProvider";
+import { useMessagingContext } from "../../containers/MessagingProvider";
 
 import type {
   MessageAction,
@@ -36,8 +36,17 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   onRegenerate,
 }) => {
   const { messages, messageOrder, sendMessage, isPending } = useChat();
-  const { currentStreamingMessage } = useMessageStream();
+  const { currentStreamingMessageId, streamingStatus } = useMessagingContext();
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Memoize the messages to display to avoid unnecessary re-renders
+  const displayMessages = useMemo(() => {
+    return messageOrder.map((messageId) => ({
+      messageId,
+      message: messages[messageId],
+    }));
+  }, [messageOrder, messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -45,7 +54,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messageOrder, currentStreamingMessage]);
+  }, [displayMessages, currentStreamingMessageId, streamingStatus]);
 
   return (
     <div
@@ -54,10 +63,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       aria-label="Chat messages"
     >
       <div className="flex-1 overflow-y-auto p-4">
-        {messageOrder.map((messageId) => (
+        {displayMessages.map(({ messageId, message }) => (
           <ChatMessage
             key={messageId}
-            message={messages[messageId]}
+            message={message}
             className="mb-4"
             showAvatar={showAvatars}
             showTimestamp={showTimestamps}

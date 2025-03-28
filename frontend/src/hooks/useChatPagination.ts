@@ -1,6 +1,8 @@
 import * as reactQuery from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 
+import { fetchChatMessages } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+
 import type { ChatMessagesResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const MESSAGE_PAGE_SIZE = 20; // Number of messages to fetch per page
@@ -41,16 +43,16 @@ export function useChatPagination(
         } as ChatMessagesResponse;
       }
 
-      // Fetch messages from the API
-      const response = await fetch(
-        `/api/v1beta/chats/${sessionId}/messages?limit=${MESSAGE_PAGE_SIZE}&offset=${pageParam}`,
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch messages: ${response.status}`);
-      }
-
-      return (await response.json()) as ChatMessagesResponse;
+      // Use the generated API functions
+      return fetchChatMessages({
+        pathParams: {
+          chatId: sessionId,
+        },
+        queryParams: {
+          limit: MESSAGE_PAGE_SIZE,
+          offset: pageParam,
+        },
+      });
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage) => {

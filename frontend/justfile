@@ -53,3 +53,35 @@ strict-check:
 fix-imports:
     pnpm exec eslint --fix --rule 'import/order: error' --rule '@typescript-eslint/consistent-type-imports: error' .
 
+# Run all tests once (CI mode)
+test:
+    pnpm exec vitest run
+
+# Run tests in watch mode (development mode)
+test-watch:
+    pnpm run test
+
+# Run tests in watch mode with UI
+test-ui:
+    pnpm run test:ui
+
+# Run tests with coverage report
+test-coverage:
+    pnpm run coverage
+
+# Run tests for a specific file or pattern (single run)
+test-file pattern:
+    pnpm exec vitest run {{pattern}}
+
+# Run tests with verbose output (single run)
+test-verbose:
+    pnpm exec vitest run --reporter verbose
+
+# Run tests and update snapshots (single run)
+test-update:
+    pnpm exec vitest run -u
+
+# Run all checks including tests (single run)
+check-all: check
+    pnpm exec vitest run
+

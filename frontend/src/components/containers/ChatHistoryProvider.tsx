@@ -9,13 +9,13 @@ import React, {
 import { useMap } from "react-use";
 
 import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
-import { useMessages } from "../../lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  useMessages,
+  fetchRecentChats,
+} from "../../lib/generated/v1betaApi/v1betaApiComponents";
 
 import type { ChatHistoryContextType } from "../../types/chat-history";
-import type {
-  RecentChat,
-  RecentChatsResponse,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 
 // Debug logging
@@ -85,14 +85,13 @@ export const ChatHistoryProvider: React.FC<ChatHistoryProviderProps> = ({
   } = reactQuery.useInfiniteQuery({
     queryKey: ["recentChats"],
     queryFn: async ({ pageParam = 0 }) => {
-      // Fetch chat data from the API
-      const response = await fetch(
-        `/api/v1beta/me/recent_chats?limit=${CHATS_PAGE_SIZE}&offset=${pageParam}`,
-      );
-      if (!response.ok) {
-        throw new Error(`Failed to fetch chats: ${response.status}`);
-      }
-      return (await response.json()) as RecentChatsResponse;
+      // Use the generated API function
+      return fetchRecentChats({
+        queryParams: {
+          limit: CHATS_PAGE_SIZE,
+          offset: pageParam,
+        },
+      });
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage) => {
