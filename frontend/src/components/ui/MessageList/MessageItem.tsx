@@ -61,6 +61,7 @@ export const MessageItem = memo<MessageItemProps>(
 
     // Log rendering for assistant messages
     if (message.sender === "assistant") {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (ENABLE_VERBOSE_DEBUG) {
         console.log(
           `%c🔄 RENDERING MESSAGE ${messageId}`,
@@ -107,6 +108,7 @@ export const MessageItem = memo<MessageItemProps>(
 
     // Re-render if loading or error state changes
     if (!!prevMessage.loading !== !!nextMessage.loading) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (ENABLE_VERBOSE_DEBUG) {
         console.log(
           `%c⚡ LOADING STATE CHANGED for ${nextProps.messageId}`,

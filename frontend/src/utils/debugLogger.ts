@@ -25,6 +25,7 @@ export const debugLog = (
   message: string,
   data?: unknown,
 ) => {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (!DEBUG_ENABLED || !ENABLED_CATEGORIES[category]) return;
 
   const prefix = `${getTimeString()} [${category}]`;
@@ -45,6 +46,7 @@ export const logStateTransition = (
   from: unknown,
   to: unknown,
 ) => {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (!DEBUG_ENABLED) return;
 
   const prefix = `${getTimeString()} [STATE_TRANSITION]`;

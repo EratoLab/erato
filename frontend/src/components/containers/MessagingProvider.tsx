@@ -107,6 +107,7 @@ export function MessagingProvider({
     resetMessages();
 
     // Add each initial message to the store
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (initialMessages && Object.keys(initialMessages).length > 0) {
       Object.values(initialMessages).forEach((message) => {
         addMessage(message);

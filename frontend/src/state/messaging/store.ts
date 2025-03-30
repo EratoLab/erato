@@ -82,8 +82,11 @@ export const useMessageStore = create<MessagingState>()(
       updateMessage: (id, updates) =>
         set(
           (state) => {
-            if (state.messages[id]) {
-              state.messages[id] = { ...state.messages[id], ...updates };
+            // Only update if the message exists
+            const message = state.messages[id];
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            if (message) {
+              state.messages[id] = { ...message, ...updates };
             }
           },
           false,
@@ -94,8 +97,11 @@ export const useMessageStore = create<MessagingState>()(
       setMessageStatus: (id, status) =>
         set(
           (state) => {
-            if (state.messages[id]) {
-              state.messages[id].status = status;
+            // Only update if the message exists
+            const message = state.messages[id];
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            if (message) {
+              message.status = status;
             }
           },
           false,
@@ -106,7 +112,10 @@ export const useMessageStore = create<MessagingState>()(
       removeMessage: (id) =>
         set(
           (state) => {
-            if (state.messages[id]) {
+            // Only remove if the message exists
+            const message = state.messages[id];
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            if (message) {
               delete state.messages[id];
               state.messageOrder = state.messageOrder.filter(
                 (messageId: string) => messageId !== id,
@@ -126,13 +135,41 @@ export const useMessageStore = create<MessagingState>()(
         set(
           (state) => {
             // Update message content if it exists
-            if (state.messages[messageId]) {
-              state.messages[messageId].content += content;
+            const message = state.messages[messageId];
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            if (message) {
+              console.log(`📊 STORE: Appending to message ${messageId}`, {
+                existingLength: message.content.length,
+                newContentLength: content.length,
+                newContent:
+                  content.substring(0, Math.min(50, content.length)) +
+                  (content.length > 50 ? "..." : ""),
+              });
+
+              message.content += content;
 
               // If this is the streaming message, also update streaming content
               if (state.streaming.messageId === messageId) {
+                console.log(
+                  `📊 STORE: Updating streaming content for ${messageId}`,
+                  {
+                    streamingStatus: state.streaming.status,
+                    existingStreamingLength: state.streaming.content.length,
+                    totalLength:
+                      state.streaming.content.length + content.length,
+                  },
+                );
+
                 state.streaming.content += content;
+              } else {
+                console.warn(
+                  `⚠️ STORE: Message ${messageId} is not the current streaming message (${state.streaming.messageId})`,
+                );
               }
+            } else {
+              console.error(
+                `❌ STORE: Cannot append to non-existent message ${messageId}`,
+              );
             }
           },
           false,
