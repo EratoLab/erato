@@ -130,7 +130,7 @@ const throttledLog = (message: string, ...args: unknown[]) => {
 };
 
 // Add toggle for verbose debugging
-const ENABLE_VERBOSE_DEBUG = true; // Easy toggle to disable extra logs
+// const ENABLE_VERBOSE_DEBUG = true; // Easy toggle to disable extra logs
 
 // Reducer function to handle all chat state updates
 const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
@@ -537,6 +537,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
 
       // Make sure it's actually an assistant message
       if (
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         !currentMessage ||
         currentMessage.sender !== "assistant" ||
         !currentMessage.loading
@@ -547,6 +548,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
           {
             messageOrder,
             lastMessageId: assistantMessageId,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             currentMessage: currentMessage
               ? {
                   sender: currentMessage.sender,
@@ -559,9 +561,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
       }
 
       // If this is the streaming message, update it
-      if (streamingMessages[currentStreamingMessageId]) {
-        const streamingMessage = streamingMessages[currentStreamingMessageId];
-
+      const streamingMessage = streamingMessages[currentStreamingMessageId];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (streamingMessage) {
         debugLog(
           "MESSAGE_UPDATE",
           "Updating assistant message with streaming content",
@@ -573,18 +575,16 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         );
 
         if (streamingStatus === "completed") {
-          if (ENABLE_VERBOSE_DEBUG) {
-            console.log(
-              "%c📝 UPDATING MESSAGE AFTER STREAM COMPLETE",
-              "background: #121; color: #0f6; font-size: 12px; padding: 2px 6px; border-radius: 3px;",
-              {
-                messageId: assistantMessageId,
-                content: streamingMessage.content.substring(0, 30) + "...",
-                streamingStatus,
-                currentLoading: currentMessage.loading,
-              },
-            );
-          }
+          console.log(
+            "%c📝 UPDATING MESSAGE AFTER STREAM COMPLETE",
+            "background: #121; color: #0f6; font-size: 12px; padding: 2px 6px; border-radius: 3px;",
+            {
+              messageId: assistantMessageId,
+              content: streamingMessage.content.substring(0, 30) + "...",
+              streamingStatus,
+              currentLoading: currentMessage.loading,
+            },
+          );
 
           debugLog(
             "MESSAGE_UPDATE",
@@ -729,13 +729,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({
         });
       }
     },
-    [
-      currentSessionId,
-      messageOrder,
-      addMessage,
-      updateMessage,
-      contextSendMessage,
-    ],
+    [messageOrder, addMessage, updateMessage, contextSendMessage],
   );
 
   // Calculate if we have older messages inline

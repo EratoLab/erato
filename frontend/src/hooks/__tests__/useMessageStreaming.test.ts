@@ -120,15 +120,17 @@ describe("Message Streaming Hook", () => {
     const { result } = renderHook(() => useMessageStreaming());
 
     // Act - Create messages
-    let userMsgId: string;
-    let assistantMsgId: string;
+    let assistantMsgId = "";
+
     await act(async () => {
-      userMsgId = result.current.createMessage("What is React?", "user");
+      // Create a user message but don't need to track its ID
+      result.current.createMessage("What is React?", "user");
       assistantMsgId = result.current.createMessage("", "assistant");
     });
 
     // Start streaming
     let streamController: ReturnType<typeof result.current.startMessageStream>;
+
     await act(async () => {
       streamController = result.current.startMessageStream(assistantMsgId);
     });
@@ -176,7 +178,8 @@ describe("Message Streaming Hook", () => {
     const { result } = renderHook(() => useMessageStreaming());
 
     // Create messages
-    let assistantMsgId: string;
+    let assistantMsgId = "";
+
     await act(async () => {
       result.current.createMessage("Can you explain this error?", "user");
       assistantMsgId = result.current.createMessage("", "assistant");
@@ -184,6 +187,7 @@ describe("Message Streaming Hook", () => {
 
     // Start streaming
     let streamController: ReturnType<typeof result.current.startMessageStream>;
+
     await act(async () => {
       streamController = result.current.startMessageStream(assistantMsgId);
     });
@@ -200,6 +204,7 @@ describe("Message Streaming Hook", () => {
 
     // Simulate an error
     const testError = new Error("Connection lost");
+
     await act(async () => {
       streamController.errorStream(testError);
     });
@@ -221,10 +226,10 @@ describe("Message Streaming Hook", () => {
     const { result } = renderHook(() => useMessageStreaming());
 
     // Create a conversation with multiple turns
-    let userMsg1Id: string;
-    let assistantMsg1Id: string;
-    let userMsg2Id: string;
-    let assistantMsg2Id: string;
+    let userMsg1Id = "";
+    let assistantMsg1Id = "";
+    let userMsg2Id = "";
+    let assistantMsg2Id = "";
 
     // First turn - user message first
     await act(async () => {

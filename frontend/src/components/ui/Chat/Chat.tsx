@@ -143,11 +143,17 @@ export const Chat = ({
 
   // Keep previous messages during transitions to prevent flickering
   useEffect(() => {
-    if (Object.keys(messages).length > 0) {
+    // Only update the state if we have messages and they've actually changed
+    if (
+      Object.keys(messages).length > 0 &&
+      (JSON.stringify(Object.keys(messages)) !==
+        JSON.stringify(Object.keys(prevMessages)) ||
+        JSON.stringify(messageOrder) !== JSON.stringify(prevMessageOrder))
+    ) {
       setPrevMessages(messages);
       setPrevMessageOrder(messageOrder);
     }
-  }, [messages, messageOrder]);
+  }, [messages, messageOrder, prevMessages, prevMessageOrder]);
 
   // Determine which messages to display - current or previous during transitions
   const displayMessages = useMemo(() => {
