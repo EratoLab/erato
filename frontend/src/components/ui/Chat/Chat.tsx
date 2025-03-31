@@ -6,6 +6,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { MessageList } from "../MessageList";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
+import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 
 import type {
   MessageAction,
@@ -178,6 +179,12 @@ export const Chat = ({
   // Define a constant for the page size
   const messagePageSize = 6;
 
+  // Handler for when the error boundary resets
+  const handleErrorReset = useCallback(() => {
+    // Refresh chats on error reset
+    void refreshChats();
+  }, [refreshChats]);
+
   return (
     <div className="flex size-full flex-col sm:flex-row">
       <ChatHistorySidebar
@@ -195,52 +202,54 @@ export const Chat = ({
         className="fixed inset-0 z-50 sm:relative sm:z-auto"
         userProfile={profile}
       />
-      <div
-        className={clsx(
-          "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
-          "sm:mt-0",
-          className,
-        )}
-        role="region"
-        aria-label="Chat conversation"
-      >
-        {/* Use the new MessageList component with virtualization */}
-        <MessageList
-          messages={displayMessages}
-          messageOrder={displayMessageOrder}
-          loadOlderMessages={loadOlderMessages}
-          hasOlderMessages={hasOlderMessages}
-          isPending={isTransitioning ? false : chatLoading}
-          currentSessionId={currentSessionId}
-          apiMessagesResponse={apiMessagesResponse}
-          pageSize={messagePageSize}
-          maxWidth={maxWidth}
-          showTimestamps={showTimestamps}
-          showAvatars={showAvatars}
-          userProfile={profile}
-          controls={messageControls}
-          controlsContext={controlsContext}
-          onMessageAction={handleMessageAction}
-          className={layout}
-          useVirtualization={useVirtualization}
-          virtualizationThreshold={30}
-        />
+      <ChatErrorBoundary onReset={handleErrorReset}>
+        <div
+          className={clsx(
+            "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
+            "sm:mt-0",
+            className,
+          )}
+          role="region"
+          aria-label="Chat conversation"
+        >
+          {/* Use the new MessageList component with virtualization */}
+          <MessageList
+            messages={displayMessages}
+            messageOrder={displayMessageOrder}
+            loadOlderMessages={loadOlderMessages}
+            hasOlderMessages={hasOlderMessages}
+            isPending={isTransitioning ? false : chatLoading}
+            currentSessionId={currentSessionId}
+            apiMessagesResponse={apiMessagesResponse}
+            pageSize={messagePageSize}
+            maxWidth={maxWidth}
+            showTimestamps={showTimestamps}
+            showAvatars={showAvatars}
+            userProfile={profile}
+            controls={messageControls}
+            controlsContext={controlsContext}
+            onMessageAction={handleMessageAction}
+            className={layout}
+            useVirtualization={useVirtualization}
+            virtualizationThreshold={30}
+          />
 
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          acceptedFileTypes={acceptedFileTypes}
-          handleFileAttachments={handleFileAttachments}
-          className="p-2 sm:p-4"
-          isLoading={chatLoading}
-          showControls
-          onRegenerate={onRegenerate}
-          showFileTypes={true}
-          initialFiles={[]}
-          performFileUpload={performFileUpload}
-          isUploading={isUploadingFiles}
-          uploadError={uploadError}
-        />
-      </div>
+          <ChatInput
+            onSendMessage={handleSendMessage}
+            acceptedFileTypes={acceptedFileTypes}
+            handleFileAttachments={handleFileAttachments}
+            className="p-2 sm:p-4"
+            isLoading={chatLoading}
+            showControls
+            onRegenerate={onRegenerate}
+            showFileTypes={true}
+            initialFiles={[]}
+            performFileUpload={performFileUpload}
+            isUploading={isUploadingFiles}
+            uploadError={uploadError}
+          />
+        </div>
+      </ChatErrorBoundary>
     </div>
   );
 };

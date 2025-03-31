@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
+import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 
 import type {
   MessageAction,
@@ -22,6 +23,7 @@ interface ChatWidgetProps {
   onRegenerate?: () => void;
   messages: Message[];
   isLoading?: boolean;
+  onErrorReset?: () => void;
 }
 
 export const ChatWidget: React.FC<ChatWidgetProps> = ({
@@ -36,40 +38,43 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   onRegenerate,
   messages = [],
   isLoading = false,
+  onErrorReset,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div
-      className={`flex h-full flex-col ${className}`}
-      role="region"
-      aria-label="Chat messages"
-    >
-      <div className="flex-1 overflow-y-auto p-4">
-        {messages.map((message) => (
-          <ChatMessage
-            key={message.id}
-            message={message}
-            className="mb-4"
-            showAvatar={showAvatars}
-            showTimestamp={showTimestamps}
-            controls={controls}
-            controlsContext={controlsContext}
-            onMessageAction={onMessageAction ?? (() => {})}
-            showControlsOnHover={showControlsOnHover}
-          />
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
+    <ChatErrorBoundary onReset={onErrorReset}>
+      <div
+        className={`flex h-full flex-col ${className}`}
+        role="region"
+        aria-label="Chat messages"
+      >
+        <div className="flex-1 overflow-y-auto p-4">
+          {messages.map((message) => (
+            <ChatMessage
+              key={message.id}
+              message={message}
+              className="mb-4"
+              showAvatar={showAvatars}
+              showTimestamp={showTimestamps}
+              controls={controls}
+              controlsContext={controlsContext}
+              onMessageAction={onMessageAction ?? (() => {})}
+              showControlsOnHover={showControlsOnHover}
+            />
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
 
-      <ChatInput
-        onSendMessage={onSendMessage}
-        onRegenerate={onRegenerate}
-        className="border-t bg-white"
-        isLoading={isLoading}
-        showFileTypes={true}
-        initialFiles={[]}
-      />
-    </div>
+        <ChatInput
+          onSendMessage={onSendMessage}
+          onRegenerate={onRegenerate}
+          className="border-t bg-white"
+          isLoading={isLoading}
+          showFileTypes={true}
+          initialFiles={[]}
+        />
+      </div>
+    </ChatErrorBoundary>
   );
 };

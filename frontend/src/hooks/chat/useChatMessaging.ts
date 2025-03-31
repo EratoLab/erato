@@ -4,8 +4,8 @@
  * Provides a unified interface for sending messages, handling streaming responses,
  * and managing the current chat's messages.
  */
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useCallback } from "react";
 import { create } from "zustand";
 
 import {
@@ -19,13 +19,7 @@ import type {
   MessageSubmitStreamingResponseMessage,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
-
-// Define types for SSE events
-interface SSEEvent {
-  data: string;
-  type: string;
-  id?: string;
-}
+import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 // Streaming state
 interface StreamingState {
@@ -61,13 +55,14 @@ export function useChatMessaging(chatId: string | null) {
   const queryClient = useQueryClient();
   const [lastError, setLastError] = useState<Error | null>(null);
   const { streaming, setStreaming, resetStreaming } = useMessagingStore();
+  const sseCleanupRef = useRef<(() => void) | null>(null);
 
   // Skip the query if no chatId is provided
   const skipQuery = !chatId;
   const chatMessagesQuery = useChatMessages(
     skipQuery
       ? { pathParams: { chatId: "" } }
-      : { pathParams: { chatId: chatId } },
+      : { pathParams: { chatId: chatId! } },
     {
       enabled: !skipQuery,
       refetchOnWindowFocus: true,
@@ -84,6 +79,16 @@ export function useChatMessaging(chatId: string | null) {
       resetStreaming();
     },
   });
+
+  // Clean up any existing SSE connection on unmount
+  useEffect(() => {
+    return () => {
+      if (sseCleanupRef.current) {
+        sseCleanupRef.current();
+        sseCleanupRef.current = null;
+      }
+    };
+  }, []);
 
   // Convert messages from API format to our internal format
   const messages: Message[] =
@@ -164,6 +169,12 @@ export function useChatMessaging(chatId: string | null) {
         // Reset any previous streaming state
         resetStreaming();
 
+        // Clean up any existing SSE connection
+        if (sseCleanupRef.current) {
+          sseCleanupRef.current();
+          sseCleanupRef.current = null;
+        }
+
         // Generate a temporary ID for the streaming message
         const tempMessageId = `stream-${Date.now()}`;
 
@@ -181,9 +192,27 @@ export function useChatMessaging(chatId: string | null) {
           },
         };
 
-        // Send the message using SSE
-        // Note: In a real implementation, we would register the processStreamEvent
-        // as an event handler for the SSE stream
+        // Create a direct SSE connection for streaming
+        const sseUrl = `/api/v1beta/me/messages/submitstream?user_message=${encodeURIComponent(content)}`;
+
+        sseCleanupRef.current = createSSEConnection(sseUrl, {
+          onMessage: processStreamEvent,
+          onError: () => {
+            setLastError(new Error("SSE connection error"));
+            resetStreaming();
+          },
+          onClose: () => {
+            if (streaming.isStreaming) {
+              // If we're still streaming when the connection closes,
+              // it was probably an error
+              setLastError(new Error("SSE connection closed unexpectedly"));
+              resetStreaming();
+            }
+          },
+        });
+
+        // Also invoke the regular mutation to trigger React Query's
+        // loading state and error handling
         await submitMessageMutation.mutateAsync(requestVars);
 
         return streaming.content;
@@ -198,17 +227,24 @@ export function useChatMessaging(chatId: string | null) {
     },
     [
       chatId,
+      processStreamEvent,
+      queryClient,
       resetStreaming,
       setStreaming,
       streaming.content,
+      streaming.isStreaming,
       submitMessageMutation,
     ],
   );
 
   // Cancel the current message stream
   const cancelMessage = useCallback(() => {
-    // Current implementation doesn't support abort directly
-    // Just reset the streaming state for now
+    // Clean up SSE connection
+    if (sseCleanupRef.current) {
+      sseCleanupRef.current();
+      sseCleanupRef.current = null;
+    }
+
     resetStreaming();
   }, [resetStreaming]);
 
@@ -221,6 +257,5 @@ export function useChatMessaging(chatId: string | null) {
     sendMessage,
     cancelMessage,
     refetch: chatMessagesQuery.refetch,
-    processStreamEvent,
   };
 }
