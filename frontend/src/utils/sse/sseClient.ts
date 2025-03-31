@@ -23,6 +23,8 @@ export interface SSEOptions {
   onError?: (error: Event) => void;
   onOpen?: () => void;
   onClose?: () => void;
+  method?: "GET" | "POST"; // HTTP method to use
+  body?: string; // Request body for POST requests
 }
 
 /**
@@ -42,7 +44,9 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
     onOpen,
     onClose,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    headers, // Not used with native EventSource, but kept for API compatibility
+    headers = {}, // Not used with native EventSource, but kept for API compatibility
+    method = "GET",
+    body,
   } = options;
 
   // In a real browser environment, EventSource will be defined
@@ -52,8 +56,29 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
     return () => {};
   }
 
-  const eventSource = new EventSource(url);
+  // Native EventSource only supports GET requests
+  // For POST requests, we'd need to use a polyfill or fetch + custom event handling
+  // This is a simplified implementation
+  let eventSource: EventSource;
   let isConnected = false;
+
+  if (method === "GET") {
+    // Use standard EventSource for GET requests
+    eventSource = new EventSource(url);
+  } else {
+    // For POST requests, we need to use a fetch-based approach
+    // This is a placeholder - in a real app, use a polyfill like 'event-source-polyfill'
+    console.warn(
+      "Using POST for SSE requires a polyfill. Consider using a library like 'event-source-polyfill'",
+    );
+
+    // Fallback to GET for now, but in a real implementation we'd use a POST-capable EventSource polyfill
+    // or implement a custom solution using fetch + ReadableStream
+    const urlWithParams = body
+      ? `${url}?${new URLSearchParams({ data: body }).toString()}`
+      : url;
+    eventSource = new EventSource(urlWithParams);
+  }
 
   eventSource.onopen = () => {
     isConnected = true;

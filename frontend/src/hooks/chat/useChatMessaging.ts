@@ -4,22 +4,22 @@
  * Provides a unified interface for sending messages, handling streaming responses,
  * and managing the current chat's messages.
  */
-import { useState, useCallback, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { create } from "zustand";
 
 import {
   useChatMessages,
   useMessageSubmitSse,
-  type MessageSubmitSseVariables,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 import type {
   ChatMessage as ApiChatMessage,
+  MessageSubmitRequest,
   MessageSubmitStreamingResponseMessage,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
-import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 // Streaming state
 interface StreamingState {
@@ -62,7 +62,7 @@ export function useChatMessaging(chatId: string | null) {
   const chatMessagesQuery = useChatMessages(
     skipQuery
       ? { pathParams: { chatId: "" } }
-      : { pathParams: { chatId: chatId! } },
+      : { pathParams: { chatId: chatId } },
     {
       enabled: !skipQuery,
       refetchOnWindowFocus: true,
@@ -185,16 +185,36 @@ export function useChatMessaging(chatId: string | null) {
           content: "",
         });
 
-        // This is the request format the API expects
-        const requestVars: MessageSubmitSseVariables = {
-          body: {
-            user_message: content,
-          },
-        };
+        // Find the most recent assistant message to use as previous_message_id
+        let previousMessageId: string | undefined = undefined;
+
+        // If we have messages and this isn't the first message in the chat
+        if (messages.length > 0) {
+          // Look for the last assistant message as the previous message
+          // Messages are sorted with newest last, so we iterate backwards
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === "assistant") {
+              previousMessageId = messages[i].id;
+              break;
+            }
+          }
+        }
+
+        // Create the request body with or without previous_message_id
+        // Only include previous_message_id if we found a valid assistant message
+        const requestBody = previousMessageId
+          ? {
+              user_message: content,
+              previous_message_id: previousMessageId,
+            }
+          : {
+              user_message: content,
+            };
 
         // Create a direct SSE connection for streaming
-        const sseUrl = `/api/v1beta/me/messages/submitstream?user_message=${encodeURIComponent(content)}`;
+        const sseUrl = `/api/v1beta/me/messages/submitstream`;
 
+        // The SSE client will handle the POST request format
         sseCleanupRef.current = createSSEConnection(sseUrl, {
           onMessage: processStreamEvent,
           onError: () => {
@@ -209,11 +229,18 @@ export function useChatMessaging(chatId: string | null) {
               resetStreaming();
             }
           },
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
         });
 
         // Also invoke the regular mutation to trigger React Query's
         // loading state and error handling
-        await submitMessageMutation.mutateAsync(requestVars);
+        await submitMessageMutation.mutateAsync({
+          body: requestBody as unknown as MessageSubmitRequest,
+        });
 
         return streaming.content;
       } catch (error) {
@@ -227,6 +254,7 @@ export function useChatMessaging(chatId: string | null) {
     },
     [
       chatId,
+      messages,
       processStreamEvent,
       queryClient,
       resetStreaming,

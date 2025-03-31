@@ -198,6 +198,22 @@ describe("Chat hooks integration", () => {
   });
 
   it("should create a new chat and send a message", async () => {
+    // Mock empty chat messages for a new chat
+    mockUseChatMessages.mockReturnValueOnce({
+      data: {
+        messages: [],
+        stats: {
+          total_count: 0,
+          returned_count: 0,
+          current_offset: 0,
+          has_more: false,
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
     // Render the chat history hook
     const { result: historyResult } = renderHook(() => useChatHistory());
 
