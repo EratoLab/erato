@@ -6,6 +6,9 @@ import {
   FileUploadButton,
   FilePreviewButton,
 } from "@/components/ui/FileUpload";
+import { useChat } from "@/hooks/chat";
+import { useFileDropzone } from "@/hooks/files";
+import { useChatInputHandlers } from "@/hooks/ui";
 
 import { Button } from "../Controls/Button";
 import { Tooltip } from "../Controls/Tooltip";
@@ -13,9 +16,6 @@ import { Alert } from "../Feedback/Alert";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
-
-import { useChat } from "@/components/containers/ChatProvider";
-import { useChatInputHandlers } from "@/hooks/useChatInputHandlers";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -35,12 +35,6 @@ interface ChatInputProps {
   initialFiles?: FileUploadItem[];
   /** Show file type in previews */
   showFileTypes?: boolean;
-  /** File upload function provided by the ChatProvider */
-  performFileUpload?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
-  /** Whether files are currently being uploaded */
-  isUploading?: boolean;
-  /** Any error that occurred during upload */
-  uploadError?: Error | null;
 }
 
 /**
@@ -60,22 +54,28 @@ export const ChatInput = ({
   acceptedFileTypes = [],
   initialFiles = [],
   showFileTypes = false,
-  performFileUpload,
-  isUploading,
-  uploadError,
 }: ChatInputProps) => {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [uploadInProgress, setUploadInProgress] = useState(false);
 
-  // Get file upload functionality from ChatProvider
+  // Use the modern chat hook
+  const { isStreaming } = useChat();
+
+  // Use our modernized file upload hook
   const {
-    performFileUpload: chatProviderPerformFileUpload,
-    isUploadingFiles,
-    uploadError: chatProviderUploadError,
-  } = useChat();
+    uploadFiles,
+    isUploading,
+    uploadedFiles,
+    error: uploadError,
+  } = useFileDropzone({
+    acceptedFileTypes,
+    multiple: maxFiles > 1,
+    maxFiles,
+    disabled,
+    onFilesUploaded: handleFileAttachments,
+  });
 
-  // Use the custom hook for file handling
+  // Use the custom hook for chat input handling
   const {
     attachedFiles,
     fileError,
@@ -90,7 +90,7 @@ export const ChatInput = ({
   const handleSubmit = createSubmitHandler(
     message,
     onSendMessage,
-    isLoading,
+    isLoading || isStreaming,
     disabled,
     () => setMessage(""),
   );
@@ -106,23 +106,20 @@ export const ChatInput = ({
 
   // Handle file upload error if any
   useEffect(() => {
-    if (chatProviderUploadError) {
-      setFileError(`File upload error: ${chatProviderUploadError.message}`);
-      setUploadInProgress(false);
+    if (uploadError && uploadError instanceof Error) {
+      setFileError(`File upload error: ${uploadError.message}`);
+    } else if (uploadError && typeof uploadError === "string") {
+      setFileError(`File upload error: ${uploadError}`);
     }
-  }, [chatProviderUploadError, setFileError]);
-
-  // Update upload progress tracking from provider's state
-  useEffect(() => {
-    setUploadInProgress(isUploadingFiles);
-  }, [isUploadingFiles]);
+  }, [uploadError, setFileError]);
 
   // Determine if send button should be enabled
   const canSendMessage =
     (message.trim() || attachedFiles.length > 0) &&
     !isLoading &&
+    !isStreaming &&
     !disabled &&
-    !uploadInProgress;
+    !isUploading;
 
   return (
     <form
@@ -157,8 +154,19 @@ export const ChatInput = ({
               <FilePreviewButton
                 key={file.id}
                 file={file}
-                onRemove={handleRemoveFile}
-                disabled={uploadInProgress || isLoading || disabled}
+                onRemove={(fileIdOrFile) => {
+                  if (typeof fileIdOrFile === "string") {
+                    handleRemoveFile(fileIdOrFile);
+                  } else if (
+                    fileIdOrFile &&
+                    typeof fileIdOrFile === "object" &&
+                    "id" in fileIdOrFile &&
+                    typeof fileIdOrFile.id === "string"
+                  ) {
+                    handleRemoveFile(fileIdOrFile.id);
+                  }
+                }}
+                disabled={isUploading || isLoading || isStreaming || disabled}
                 showFileType={showFileTypes}
                 showSize={true}
                 filenameTruncateLength={25}
@@ -203,7 +211,7 @@ export const ChatInput = ({
           placeholder={placeholder}
           maxLength={maxLength}
           rows={1}
-          disabled={isLoading || disabled || uploadInProgress}
+          disabled={isLoading || isStreaming || disabled || isUploading}
           className={clsx(
             "w-full resize-none overflow-hidden",
             "p-2 sm:px-3",
@@ -224,7 +232,6 @@ export const ChatInput = ({
                 {handleFileAttachments && (
                   <FileUploadButton
                     onFilesUploaded={(files) => {
-                      setUploadInProgress(true);
                       handleFilesUploaded(files);
                     }}
                     acceptedFileTypes={acceptedFileTypes}
@@ -234,14 +241,20 @@ export const ChatInput = ({
                     disabled={
                       attachedFiles.length >= maxFiles ||
                       isLoading ||
+                      isStreaming ||
                       disabled ||
-                      uploadInProgress
+                      isUploading
                     }
-                    performFileUpload={
-                      performFileUpload ?? chatProviderPerformFileUpload
+                    // Use our modern file upload hook with proper typing
+                    performFileUpload={async (files) => {
+                      await uploadFiles(files);
+                      // Return the currently uploaded files directly
+                      return uploadedFiles;
+                    }}
+                    isUploading={isUploading}
+                    uploadError={
+                      uploadError instanceof Error ? uploadError : null
                     }
-                    isUploading={isUploading ?? isUploadingFiles}
-                    uploadError={uploadError ?? chatProviderUploadError}
                   />
                 )}
 
@@ -252,7 +265,9 @@ export const ChatInput = ({
                     size="sm"
                     icon={<ArrowPathIcon className="size-5" />}
                     aria-label="Regenerate response"
-                    disabled={isLoading || disabled || uploadInProgress}
+                    disabled={
+                      isLoading || isStreaming || disabled || isUploading
+                    }
                   />
                 </Tooltip>
               </>

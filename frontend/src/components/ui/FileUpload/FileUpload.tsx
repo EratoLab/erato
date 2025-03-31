@@ -1,7 +1,7 @@
-import React, { useState, useCallback, memo, useEffect } from "react";
-import { useDropzone } from "react-dropzone";
+import React, { useCallback, memo, useEffect } from "react";
 
-import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
+import { useFileDropzone } from "@/hooks/files";
+import { FILE_TYPES } from "@/utils/fileTypes";
 
 import { FilePreviewButton } from "./FilePreviewButton";
 import { FileUploadButton } from "./FileUploadButton";
@@ -13,7 +13,6 @@ import { DROP_ZONE_STYLES } from "./fileUploadStyles";
 import type { FileUploadItemWithSize } from "./FilePreviewBase";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
-import type { FileRejection } from "react-dropzone";
 
 /**
  * Props for the main FileUpload component
@@ -49,12 +48,6 @@ export interface FileUploadProps {
   initialFiles?: FileUploadItem[];
   /** Show file type labels in previews */
   showFileTypes?: boolean;
-  /** File upload function provided by a parent component */
-  performFileUpload?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
-  /** Whether a file upload is in progress */
-  isUploading?: boolean;
-  /** Any error that occurred during file upload */
-  uploadError?: Error | null;
 }
 
 /**
@@ -84,214 +77,69 @@ export const FileUpload = memo<FileUploadProps>(
     showFilePreviews = true,
     initialFiles = [],
     showFileTypes = false,
-    performFileUpload,
-    isUploading = false,
-    uploadError = null,
   }) => {
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [uploadedFiles, setUploadedFiles] = useState<
-      FileUploadItemWithSize[]
-    >(
-      () =>
-        initialFiles.map((file) => ({
-          ...file,
-          size: undefined,
-        })) as FileUploadItemWithSize[],
-    );
-    const [dropzoneError, setDropzoneError] = useState<string | null>(null);
-
-    // Determine if upload button should be disabled
-    const isUploadDisabled =
-      disabled ||
-      (multiple ? uploadedFiles.length >= maxFiles : uploadedFiles.length > 0);
-
-    // Handle new files being uploaded
-    const handleNewFiles = useCallback(
-      (files: FileUploadItem[]) => {
-        // Add file size information to the uploaded files
-        const enhancedFiles = files.map((file) => ({
-          ...file,
-          size: undefined, // Set to undefined since we don't have size info from the API
-        })) as FileUploadItemWithSize[];
-
-        setUploadedFiles((prev) => {
-          // Limit to maxFiles
-          const updatedFiles = [...prev, ...enhancedFiles].slice(-maxFiles);
-          // Notify parent component with the standard FileUploadItem[]
-          onFilesUploaded?.(updatedFiles);
-          return updatedFiles;
-        });
-      },
-      [maxFiles, onFilesUploaded],
-    );
-
-    // Initialize with initial files if provided
-    useEffect(() => {
-      if (initialFiles.length > 0 && uploadedFiles.length === 0) {
-        handleNewFiles(initialFiles);
-      }
-    }, [initialFiles, uploadedFiles.length, handleNewFiles]);
-
-    // Calculate max file size based on accepted file types
-    const getMaxSizeForFileTypes = useCallback((): number => {
-      if (!acceptedFileTypes.length) {
-        return Infinity; // No size limit if all file types are allowed
-      }
-
-      // Find the largest max size among the accepted file types
-      return acceptedFileTypes.reduce((maxSize, type) => {
-        const config = FILE_TYPES[type];
-        if (!config.enabled) return maxSize;
-
-        // If no max size specified for this type, don't limit
-        if (!config.maxSize) return Infinity;
-
-        // Return the larger of current max or this type's max
-        return Math.max(maxSize, config.maxSize);
-      }, 0);
-    }, [acceptedFileTypes]);
-
-    // Simulated progress update for better UX
-    useEffect(() => {
-      if (!isUploading) {
-        // Reset progress when not uploading
-        if (uploadProgress !== 0) {
-          const timer = setTimeout(() => {
-            setUploadProgress(0);
-          }, 500); // Show 100% for a moment before resetting
-          return () => clearTimeout(timer);
-        }
-        return;
-      }
-
-      // Create a realistic progress simulation
-      const simulateProgress = () => {
-        // Calculate a random increment that slows down as it approaches 90%
-        const getIncrement = (current: number) => {
-          const remainingToNinety = 90 - current;
-          if (remainingToNinety <= 0) return 0;
-          // Smaller increments as we get closer to 90%
-          return Math.max(0.5, Math.random() * (remainingToNinety / 10));
-        };
-
-        setUploadProgress((prev) => {
-          // Cap at 90% for simulated progress (the last 10% happens when complete)
-          const increment = getIncrement(prev);
-          return Math.min(90, prev + increment);
-        });
-      };
-
-      // Start simulation and update every 200ms
-      const timer = setInterval(simulateProgress, 200);
-
-      // Complete to 100% when upload is done
-      if (uploadProgress >= 90) {
-        clearInterval(timer);
-        setUploadProgress(100);
-      }
-
-      return () => clearInterval(timer);
-    }, [isUploading, uploadProgress]);
-
-    // Handle file drop from react-dropzone
-    const onDrop = useCallback(
-      (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
-        if (disabled || isUploading) return;
-
-        // Clear previous errors
-        setDropzoneError(null);
-
-        // Handle rejections first
-        if (rejectedFiles.length > 0) {
-          const errorMessages = rejectedFiles.map((rejection) => {
-            const { file, errors } = rejection;
-            const errorTypes = errors.map((e) => e.code).join(", ");
-            return `${file.name} (${errorTypes})`;
-          });
-
-          setDropzoneError(`Rejected files: ${errorMessages.join("; ")}`);
-          return;
-        }
-
-        // Handle maxFiles limit
-        if (acceptedFiles.length > 0) {
-          const remainingSlots = maxFiles - uploadedFiles.length;
-          const filesToUpload = acceptedFiles.slice(
-            0,
-            multiple ? remainingSlots : 1,
-          );
-
-          if (filesToUpload.length > 0 && performFileUpload) {
-            void performFileUpload(filesToUpload).then((files) => {
-              if (files) {
-                handleNewFiles(files);
-              }
-            });
-          }
-        }
-      },
-      [
-        disabled,
-        isUploading,
-        maxFiles,
-        multiple,
-        uploadedFiles.length,
-        performFileUpload,
-        handleNewFiles,
-      ],
-    );
-
-    // Setup react-dropzone with validation
-    const maxSize = getMaxSizeForFileTypes();
-
+    // Use our modernized file upload hook
     const {
+      uploadFiles,
+      isUploading,
+      uploadedFiles,
+      error: uploadError,
+      clearFiles,
       getRootProps,
       getInputProps,
       isDragActive,
       isDragAccept,
       isDragReject,
-    } = useDropzone({
-      onDrop,
-      accept:
-        acceptedFileTypes.length > 0
-          ? FileTypeUtil.getAcceptObject(acceptedFileTypes)
-          : undefined,
+    } = useFileDropzone({
+      acceptedFileTypes,
       multiple,
-      disabled: isUploadDisabled,
-      maxSize: maxSize === Infinity ? undefined : maxSize,
-      noClick: buttonOnly, // Disable clicks if buttonOnly mode
-      noKeyboard: buttonOnly,
-      maxFiles: multiple ? maxFiles - uploadedFiles.length : 1,
-      validator: (file) => {
-        const validation = FileTypeUtil.validateFile(file);
-        if (!validation.valid) {
-          return {
-            code: "file-type-not-allowed",
-            message: validation.error ?? "File type not allowed",
-          };
-        }
-        return null;
-      },
+      maxFiles,
+      disabled,
+      onFilesUploaded,
     });
+
+    // Convert to FileUploadItemWithSize for compatibility
+    const enhancedUploadedFiles = uploadedFiles.map((file) => ({
+      ...file,
+      size: undefined,
+    })) as FileUploadItemWithSize[];
+
+    // Initialize with initial files if provided
+    useEffect(() => {
+      if (
+        initialFiles.length > 0 &&
+        uploadedFiles.length === 0 &&
+        onFilesUploaded
+      ) {
+        onFilesUploaded(initialFiles);
+      }
+    }, [initialFiles, uploadedFiles.length, onFilesUploaded]);
+
+    // Calculate upload progress based on isUploading state
+    const uploadProgress = isUploading ? 90 : uploadError ? 0 : 100;
 
     // Handle removing a file
     const handleRemoveFile = useCallback(
       (fileId: string) => {
-        setUploadedFiles((prev) => {
-          const updatedFiles = prev.filter((f) => f.id !== fileId);
-          // Notify parent component
-          onFilesUploaded?.(updatedFiles);
-          return updatedFiles;
-        });
+        const updatedFiles = uploadedFiles.filter((f) => f.id !== fileId);
+
+        // Update state through hook API
+        if (updatedFiles.length === 0) {
+          clearFiles();
+        } else if (onFilesUploaded) {
+          onFilesUploaded(updatedFiles);
+        }
       },
-      [onFilesUploaded],
+      [uploadedFiles, onFilesUploaded, clearFiles],
     );
 
     // Clear all uploaded files
     const handleClearFiles = useCallback(() => {
-      setUploadedFiles([]);
-      onFilesUploaded?.([]);
-    }, [onFilesUploaded]);
+      clearFiles();
+      if (onFilesUploaded) {
+        onFilesUploaded([]);
+      }
+    }, [onFilesUploaded, clearFiles]);
 
     // Determine container classes with enhanced dropzone state
     const containerClasses = [
@@ -299,7 +147,7 @@ export const FileUpload = memo<FileUploadProps>(
       isDragActive ? DROP_ZONE_STYLES.active : DROP_ZONE_STYLES.default,
       isDragAccept ? "border-green-500 bg-green-50 dark:bg-green-900/20" : "",
       isDragReject ? "border-red-500 bg-red-50 dark:bg-red-900/20" : "",
-      isUploadDisabled ? DROP_ZONE_STYLES.disabled : "",
+      disabled ? DROP_ZONE_STYLES.disabled : "",
       className,
     ]
       .filter(Boolean)
@@ -315,8 +163,19 @@ export const FileUpload = memo<FileUploadProps>(
             multiple={multiple}
             label={buttonLabel}
             className={buttonClassName}
-            disabled={isUploadDisabled}
+            disabled={
+              disabled ||
+              (multiple
+                ? enhancedUploadedFiles.length >= maxFiles
+                : enhancedUploadedFiles.length > 0)
+            }
             iconOnly={buttonIconOnly}
+            performFileUpload={async (files) => {
+              await uploadFiles(files);
+              return uploadedFiles;
+            }}
+            isUploading={isUploading}
+            uploadError={uploadError instanceof Error ? uploadError : null}
           />
         ) : (
           <div {...getRootProps({ className: containerClasses })}>
@@ -342,9 +201,11 @@ export const FileUpload = memo<FileUploadProps>(
         )}
 
         {/* Error messages */}
-        {(uploadError ?? dropzoneError) && (
+        {uploadError && (
           <div className="rounded-md bg-[var(--theme-error-bg)] p-2 text-sm text-[var(--theme-error-fg)]">
-            {uploadError?.message ?? dropzoneError}
+            {uploadError instanceof Error
+              ? uploadError.message
+              : String(uploadError)}
           </div>
         )}
 
@@ -354,13 +215,13 @@ export const FileUpload = memo<FileUploadProps>(
         )}
 
         {/* File previews */}
-        {showFilePreviews && uploadedFiles.length > 0 && (
+        {showFilePreviews && enhancedUploadedFiles.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-[var(--theme-fg-secondary)]">
-                Uploaded Files ({uploadedFiles.length}/{maxFiles})
+                Uploaded Files ({enhancedUploadedFiles.length}/{maxFiles})
               </h3>
-              {uploadedFiles.length > 1 && (
+              {enhancedUploadedFiles.length > 1 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -372,7 +233,7 @@ export const FileUpload = memo<FileUploadProps>(
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {uploadedFiles.map((file) => (
+              {enhancedUploadedFiles.map((file) => (
                 <FilePreviewButton
                   key={file.id}
                   file={file}
@@ -380,6 +241,13 @@ export const FileUpload = memo<FileUploadProps>(
                     // Ensure we only pass the ID string
                     if (typeof fileIdOrFile === "string") {
                       handleRemoveFile(fileIdOrFile);
+                    } else if (
+                      fileIdOrFile &&
+                      typeof fileIdOrFile === "object" &&
+                      "id" in fileIdOrFile &&
+                      typeof fileIdOrFile.id === "string"
+                    ) {
+                      handleRemoveFile(fileIdOrFile.id);
                     }
                   }}
                   disabled={isUploading || disabled}
