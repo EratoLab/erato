@@ -1,97 +1,73 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
-import { useDynamicParams } from "next-static-utils";
-import { useEffect, useRef } from "react";
+import { useParams } from "next/navigation";
+import { useEffect } from "react";
 
-import { useChatHistory } from "../../../components/containers/ChatHistoryProvider";
-import { ChatProvider } from "../../../components/containers/ChatProvider";
-import { MessagingProvider } from "../../../components/containers/MessagingProvider";
-import { useSidebar } from "../../../contexts/SidebarContext";
-
-import type { FileType } from "@/utils/fileTypes";
-
-// Dynamically import Chat with ssr disabled
-const Chat = dynamic(
-  () => import("../../../components/ui/Chat").then((mod) => mod.Chat),
-  {
-    ssr: false,
-  },
-);
+import { ChatWidget } from "@/components/ui/Chat/ChatWidget";
+import { useChatHistory } from "@/hooks/chat/useChatHistory";
+import { useChatMessaging } from "@/hooks/chat/useChatMessaging";
+import { useSidebar } from "@/hooks/ui/useSidebar";
 
 export default function ChatPage() {
-  const router = useRouter();
-  const params = useDynamicParams();
-  const chatId = params.id;
-  const { collapsed: sidebarCollapsed, toggleCollapsed: handleToggleCollapse } =
-    useSidebar();
-  const { switchSession } = useChatHistory();
-  const isRedirecting = useRef(false);
+  const params = useParams();
+  const chatId = params.id as string;
 
+  // Use our chat history hook
+  const { currentChatId, navigateToChat } = useChatHistory();
+
+  // Use our chat messaging hook
+  const { messages, isLoading, isStreaming, sendMessage, cancelMessage } =
+    useChatMessaging(chatId);
+
+  // Use our sidebar hook
+  const { isOpen: isSidebarOpen, toggle: toggleSidebar } = useSidebar();
+
+  // Set the current chat ID when the page loads
   useEffect(() => {
-    if (typeof chatId != "undefined") {
-      // Prevent redirect loops by checking if the ID is a temp ID
-      if (chatId.startsWith("temp-")) {
-        console.log("Warning: Accessing temp chat ID directly:", chatId);
-      }
-
-      // When the page loads, switch to the chat session based on the URL parameter
-      if (chatId) {
-        console.log("Switching to chat session:", chatId);
-        switchSession(chatId);
-      }
+    if (chatId && chatId !== currentChatId) {
+      navigateToChat(chatId);
     }
-  }, [chatId, switchSession]);
+  }, [chatId, currentChatId, navigateToChat]);
 
-  // Define which file types are accepted in this chat
-  const acceptedFileTypes: FileType[] = ["pdf", "image", "document"];
+  // Handle sending a message
+  const handleSendMessage = (content: string) => {
+    void sendMessage(content);
+  };
 
   return (
-    <MessagingProvider chatId={chatId}>
-      <ChatProvider>
-        <Chat
-          layout="default"
-          showAvatars={true}
-          showTimestamps={true}
-          onMessageAction={(action) => console.log("Message action:", action)}
+    <div className="flex h-full flex-col">
+      <div className="flex h-12 items-center border-b px-4">
+        <button
+          onClick={toggleSidebar}
+          className="mr-4 p-2"
+          aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+        >
+          {isSidebarOpen ? "✕" : "☰"}
+        </button>
+        <h1 className="text-lg font-semibold">Chat</h1>
+        {isStreaming && (
+          <button
+            onClick={cancelMessage}
+            className="ml-auto rounded bg-red-500 px-3 py-1 text-white"
+          >
+            Stop generating
+          </button>
+        )}
+      </div>
+
+      <div className="flex-1">
+        <ChatWidget
+          messages={messages}
+          onSendMessage={handleSendMessage}
           controlsContext={{
-            currentUserId: "user_1",
-            dialogOwnerId: "user_1",
+            currentUserId: "user1",
+            dialogOwnerId: "user1",
             isSharedDialog: false,
           }}
-          onNewChat={() => {
-            if (!isRedirecting.current) {
-              isRedirecting.current = true;
-              console.log("Creating new chat");
-              router.push("/chat/new");
-
-              // Reset the redirecting flag after a short delay
-              setTimeout(() => {
-                isRedirecting.current = false;
-              }, 500);
-            }
-          }}
-          onRegenerate={() => console.log("Regenerate")}
-          sidebarCollapsed={sidebarCollapsed}
-          onToggleCollapse={handleToggleCollapse}
-          acceptedFileTypes={acceptedFileTypes}
-          customSessionSelect={(selectedChatId) => {
-            // Don't navigate if already on this chat or if currently redirecting
-            if (selectedChatId !== chatId && !isRedirecting.current) {
-              isRedirecting.current = true;
-              console.log("Navigating to chat:", selectedChatId);
-              router.push(`/chat/${selectedChatId}`);
-
-              // Reset the redirecting flag after a short delay
-              setTimeout(() => {
-                isRedirecting.current = false;
-              }, 500);
-            }
-          }}
-          isTransitioning={false}
+          className="h-full"
+          isLoading={isLoading || isStreaming}
         />
-      </ChatProvider>
-    </MessagingProvider>
+      </div>
+    </div>
   );
 }

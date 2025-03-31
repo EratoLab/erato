@@ -1,88 +1,96 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 
-import { useChatHistory } from "../../../components/containers/ChatHistoryProvider";
-import { ChatProvider } from "../../../components/containers/ChatProvider";
-import { useSidebar } from "../../../contexts/SidebarContext";
+import { ChatWidget } from "@/components/ui/Chat/ChatWidget";
+import { useChatHistory } from "@/hooks/chat/useChatHistory";
+import { useSidebar } from "@/hooks/ui/useSidebar";
 
-import type { FileType } from "@/utils/fileTypes";
-
-// Dynamically import Chat with ssr disabled
-const Chat = dynamic(
-  () => import("../../../components/ui/Chat").then((mod) => mod.Chat),
-  {
-    ssr: false,
-  },
-);
+import type { Message } from "@/types/chat";
 
 export default function NewChatPage() {
-  const router = useRouter();
-  const { collapsed: sidebarCollapsed, toggleCollapsed: handleToggleCollapse } =
-    useSidebar();
-  const { createSession } = useChatHistory();
-  const isRedirecting = useRef(false);
+  const { createNewChat } = useChatHistory();
+  const { isOpen: isSidebarOpen, toggle: toggleSidebar } = useSidebar();
 
+  // We use local state for messages since we don't have a chatId yet
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Create a new chat when the page loads
   useEffect(() => {
-    // Prevent redirect loops
-    if (isRedirecting.current) {
-      console.log("Already redirecting, skipping");
-      return;
+    async function initNewChat() {
+      try {
+        // This will navigate when the chat is created
+        await createNewChat();
+      } catch (error) {
+        console.error("Failed to create new chat:", error);
+      }
     }
 
-    // Create a new session when the page loads
-    const newSessionId = createSession();
-    console.log("Created new session with ID:", newSessionId);
+    void initNewChat();
+  }, [createNewChat]);
 
-    // If we got a session ID, redirect to the chat page for that session
-    if (newSessionId) {
-      isRedirecting.current = true;
-      console.log("Redirecting to:", `/chat/${newSessionId}`);
-      router.replace(`/chat/${newSessionId}`);
-    }
+  // Handle sending a message
+  // This is a simple implementation since we expect to be redirected
+  // to a real chat page by the createNewChat effect
+  const handleSendMessage = (content: string) => {
+    setIsLoading(true);
 
-    return () => {
-      // Reset the redirecting flag when component unmounts
-      isRedirecting.current = false;
+    // Add user message
+    const userMessage: Message = {
+      id: `temp-user-${Date.now()}`,
+      content,
+      role: "user",
+      createdAt: new Date().toISOString(),
+      status: "sending",
     };
-  }, [createSession, router]);
 
-  // Define which file types are accepted in this chat
-  const acceptedFileTypes: FileType[] = ["pdf", "image", "document"];
+    setMessages((prev) => [...prev, userMessage]);
+
+    // Simulate a response delay
+    setTimeout(() => {
+      // Add system message indicating redirect
+      const systemMessage: Message = {
+        id: `temp-system-${Date.now()}`,
+        content: "Creating a new chat for you...",
+        role: "system",
+        createdAt: new Date().toISOString(),
+        status: "complete",
+      };
+
+      setMessages((prev) => [...prev, systemMessage]);
+      setIsLoading(false);
+
+      // Redirect should happen via the createNewChat effect
+    }, 1000);
+  };
 
   return (
-    <ChatProvider>
-      <Chat
-        layout="default"
-        showAvatars={true}
-        showTimestamps={true}
-        onMessageAction={(action) => console.log("Message action:", action)}
-        controlsContext={{
-          currentUserId: "user_1",
-          dialogOwnerId: "user_1",
-          isSharedDialog: false,
-        }}
-        onNewChat={() => {
-          // Prevent creating multiple new chats in quick succession
-          if (!isRedirecting.current) {
-            console.log("onNewChat clicked, navigating to /chat/new");
-            router.push("/chat/new");
-          }
-        }}
-        onRegenerate={() => console.log("Regenerate")}
-        sidebarCollapsed={sidebarCollapsed}
-        onToggleCollapse={handleToggleCollapse}
-        acceptedFileTypes={acceptedFileTypes}
-        customSessionSelect={(selectedChatId) => {
-          if (!isRedirecting.current) {
-            console.log("Selecting chat:", selectedChatId);
-            router.push(`/chat/${selectedChatId}`);
-          }
-        }}
-        isTransitioning={true}
-      />
-    </ChatProvider>
+    <div className="flex h-full flex-col">
+      <div className="flex h-12 items-center border-b px-4">
+        <button
+          onClick={toggleSidebar}
+          className="mr-4 p-2"
+          aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+        >
+          {isSidebarOpen ? "✕" : "☰"}
+        </button>
+        <h1 className="text-lg font-semibold">New Chat</h1>
+      </div>
+
+      <div className="flex-1">
+        <ChatWidget
+          messages={messages}
+          onSendMessage={handleSendMessage}
+          controlsContext={{
+            currentUserId: "user1",
+            dialogOwnerId: "user1",
+            isSharedDialog: false,
+          }}
+          className="h-full"
+          isLoading={isLoading}
+        />
+      </div>
+    </div>
   );
 }

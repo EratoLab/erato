@@ -1,10 +1,6 @@
 import clsx from "clsx";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useChatHistory } from "@/components/containers/ChatHistoryProvider";
-import { useChat } from "@/components/containers/ChatProvider";
-import { useSidebar } from "@/contexts/SidebarContext";
-import { useChatActions } from "@/hooks/useChatActions";
 import { useProfile } from "@/hooks/useProfile";
 
 import { MessageList } from "../MessageList";
@@ -17,6 +13,11 @@ import type {
   MessageControlsContext,
 } from "../../../types/message-controls";
 import type { FileType } from "@/utils/fileTypes";
+
+import { useChatHistory } from "@/components/containers/ChatHistoryProvider";
+import { useChat } from "@/components/containers/ChatProvider";
+import { useSidebar } from "@/contexts/SidebarContext";
+import { useChatActions } from "@/hooks/useChatActions";
 
 export interface ChatProps {
   className?: string;

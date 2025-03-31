@@ -2,12 +2,10 @@ import { ArrowUpIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import React, { useState, useRef, useEffect } from "react";
 
-import { useChat } from "@/components/containers/ChatProvider";
 import {
   FileUploadButton,
   FilePreviewButton,
 } from "@/components/ui/FileUpload";
-import { useChatInputHandlers } from "@/hooks/useChatInputHandlers";
 
 import { Button } from "../Controls/Button";
 import { Tooltip } from "../Controls/Tooltip";
@@ -15,6 +13,9 @@ import { Alert } from "../Feedback/Alert";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
+
+import { useChat } from "@/components/containers/ChatProvider";
+import { useChatInputHandlers } from "@/hooks/useChatInputHandlers";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;

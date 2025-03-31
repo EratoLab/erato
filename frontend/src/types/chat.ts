@@ -1,74 +1,19 @@
-import type {
-  Message,
-  Chat,
-  UserProfile as ApiUserProfile,
-} from "../lib/generated/v1betaApi/v1betaApiSchemas";
+/**
+ * Basic types for chat functionality
+ * These are placeholder types for the new implementation
+ */
 
-// Convert void properties to string in a type
-// TODO: remove this once #53 is resolved
-export type VoidToString<T> = {
-  [K in keyof T]: T[K] extends void ? string : T[K];
-};
-
-export type LoadingState =
-  | "idle"
-  | "loading"
-  | "tool-calling"
-  | "reasoning"
-  | "error";
-
-export interface StreamingContext {
-  state: LoadingState;
-  context?: string;
-  partialContent?: string;
-}
-
-// Extend the API Message with frontend-specific fields
-export interface ChatMessage extends VoidToString<Message> {
+export interface Message {
+  id: string;
   content: string;
-  sender: "user" | "assistant";
-  createdAt: Date;
-  authorId: string;
-  loading?: StreamingContext;
+  role: "user" | "assistant" | "system";
+  createdAt: string;
+  status?: "sending" | "complete" | "error";
 }
 
-// Extend the API Chat with frontend-specific fields
-export interface ChatSession extends VoidToString<Chat> {
+export interface ChatSession {
+  id: string;
   title: string;
-  messages: ChatMessage[];
-  createdAt: Date;
-  updatedAt: Date;
-  metadata?: ChatMetadata;
-}
-
-// Extend the API UserProfile with frontend-specific fields
-export interface UserProfile extends VoidToString<ApiUserProfile> {
-  username?: string;
-  firstName?: string;
-  lastName?: string;
-  avatarUrl?: string;
-  // createdAt: string;
-  // updatedAt: string;
-}
-
-export interface ChatMetadata {
-  isShared?: boolean;
-  isTemporary?: boolean;
-  ownerId: string;
-  sharedWith?: string[];
-  permissions?: ChatPermissions;
-  tags?: string[];
-  category?: string;
-  lastMessage?: {
-    content: string;
-    createdAt: Date;
-    sender: "user" | "assistant";
-  };
-  userProfile?: UserProfile;
-}
-
-export interface ChatPermissions {
-  canEdit: boolean;
-  canShare: boolean;
-  canDelete: boolean;
+  updatedAt: string;
+  messages: Message[];
 }

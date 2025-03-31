@@ -1,16 +1,14 @@
-import React, { useRef, useEffect, useMemo } from "react";
+import React, { useRef } from "react";
 
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
-import { useChat } from "../../containers/ChatProvider";
-import { useMessagingContext } from "../../containers/MessagingProvider";
 
 import type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
 } from "../../../types/message-controls";
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Message } from "@/types/chat";
 
 interface ChatWidgetProps {
   className?: string;
@@ -20,8 +18,10 @@ interface ChatWidgetProps {
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
   onMessageAction?: (action: MessageAction) => void | Promise<void>;
-  handleFileAttachments?: (files: FileUploadItem[]) => void;
+  onSendMessage: (message: string) => void;
   onRegenerate?: () => void;
+  messages: Message[];
+  isLoading?: boolean;
 }
 
 export const ChatWidget: React.FC<ChatWidgetProps> = ({
@@ -32,29 +32,12 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   controls,
   controlsContext,
   onMessageAction,
-  handleFileAttachments,
+  onSendMessage,
   onRegenerate,
+  messages = [],
+  isLoading = false,
 }) => {
-  const { messages, messageOrder, sendMessage, isPending } = useChat();
-  const { currentStreamingMessageId, streamingStatus } = useMessagingContext();
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Memoize the messages to display to avoid unnecessary re-renders
-  const displayMessages = useMemo(() => {
-    return messageOrder.map((messageId) => ({
-      messageId,
-      message: messages[messageId],
-    }));
-  }, [messageOrder, messages]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [displayMessages, currentStreamingMessageId, streamingStatus]);
 
   return (
     <div
@@ -63,9 +46,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       aria-label="Chat messages"
     >
       <div className="flex-1 overflow-y-auto p-4">
-        {displayMessages.map(({ messageId, message }) => (
+        {messages.map((message) => (
           <ChatMessage
-            key={messageId}
+            key={message.id}
             message={message}
             className="mb-4"
             showAvatar={showAvatars}
@@ -80,13 +63,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       </div>
 
       <ChatInput
-        onSendMessage={(message) => {
-          void sendMessage(message);
-        }}
-        handleFileAttachments={handleFileAttachments}
+        onSendMessage={onSendMessage}
         onRegenerate={onRegenerate}
         className="border-t bg-white"
-        isLoading={isPending}
+        isLoading={isLoading}
         showFileTypes={true}
         initialFiles={[]}
       />
