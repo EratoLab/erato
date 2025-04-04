@@ -3,21 +3,19 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "messages")]
+#[sea_orm(table_name = "file_uploads")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub chat_id: Uuid,
-    #[sea_orm(column_type = "JsonBinary")]
-    pub raw_message: Json,
+    #[sea_orm(column_type = "Text")]
+    pub filename: String,
+    #[sea_orm(column_type = "Text")]
+    pub file_storage_provider_id: String,
+    #[sea_orm(column_type = "Text")]
+    pub file_storage_path: String,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
-    pub previous_message_id: Option<Uuid>,
-    pub sibling_message_id: Option<Uuid>,
-    pub is_message_in_active_thread: bool,
-    #[sea_orm(column_type = "JsonBinary", nullable)]
-    pub generation_input_messages: Option<Json>,
-    pub input_file_uploads: Option<Vec<Uuid>>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -30,22 +28,6 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     Chats,
-    #[sea_orm(
-        belongs_to = "Entity",
-        from = "Column::PreviousMessageId",
-        to = "Column::Id",
-        on_update = "NoAction",
-        on_delete = "NoAction"
-    )]
-    SelfRef2,
-    #[sea_orm(
-        belongs_to = "Entity",
-        from = "Column::SiblingMessageId",
-        to = "Column::Id",
-        on_update = "NoAction",
-        on_delete = "NoAction"
-    )]
-    SelfRef1,
 }
 
 impl Related<super::chats::Entity> for Entity {
