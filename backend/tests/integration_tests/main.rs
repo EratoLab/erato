@@ -1,11 +1,12 @@
 #![allow(clippy::manual_strip)]
 
+use std::collections::HashMap;
 use axum::{http, Router};
 use axum_test::multipart::MultipartForm;
 use axum_test::multipart::Part;
 use axum_test::TestServer;
 use ctor::ctor;
-use erato::config::AppConfig;
+use erato::config::{AppConfig, FileStorageProviderConfig, StorageProviderSpecificConfigMerged};
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
 use erato::state::AppState;
@@ -13,6 +14,7 @@ use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 use test_log::test;
+use erato::services::file_storage::FileStorage;
 
 mod db;
 mod migrations;
@@ -48,10 +50,27 @@ pub fn test_app_config() -> AppConfig {
 
 pub fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppState {
     let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let mut file_storage_providers = HashMap::new();
+
+    let provider = FileStorage::from_config(&FileStorageProviderConfig {
+        display_name: None,
+        provider_kind: "s3".to_string(),
+        config: StorageProviderSpecificConfigMerged {
+            endpoint: Some("http://localhost:9000".to_string()),
+            bucket: "erato-storage".to_string(),
+            access_key_id: Some("erato-app-user".to_string()),
+            secret_access_key: Some("erato-app-password".to_string()),
+            ..StorageProviderSpecificConfigMerged::default()
+        },
+    }).unwrap();
+    file_storage_providers.insert("local_minio".to_owned(), provider);
+
     AppState {
         db,
         policy: AppState::build_policy().unwrap(),
         genai_client: AppState::build_genai_client(app_config.chat_provider).unwrap(),
+        default_file_storage_provider: None,
+        file_storage_providers
     }
 }
 // This is the main entry point for integration tests

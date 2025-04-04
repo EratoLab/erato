@@ -252,7 +252,7 @@ pub struct FileUploadResponse {
     )
 )]
 pub async fn upload_file(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     mut multipart: Multipart,
 ) -> Result<Json<FileUploadResponse>, StatusCode> {
@@ -268,9 +268,10 @@ pub async fn upload_file(
             .file_name()
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unnamed_file".to_string());
+        // TODO: Use in writer
         let _content_type = field.content_type().map(|s| s.to_string());
 
-        let data = field.bytes().await.map_err(|e| {
+        let mut data = field.bytes().await.map_err(|e| {
             tracing::error!("Failed to read file data: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -278,6 +279,19 @@ pub async fn upload_file(
         // Generate a random UUID
         let file_id = Uuid::new_v4().to_string();
 
+        let mut writer = app_state.default_file_storage_provider().upload_file_writer(file_id.as_str()).await
+            .map_err(|e| {
+            tracing::error!("Failed to write file data: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        writer.write_from(&mut data).await.map_err(|e| {
+            tracing::error!("Failed to write file data: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        writer.close().await.map_err(|e| {
+            tracing::error!("Failed to write file data: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
         // In a real implementation, you would store the file data somewhere
         // For now, we just log the size and return the UUID
         tracing::info!(

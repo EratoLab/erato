@@ -2,6 +2,7 @@ use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment};
 use serde::Deserialize;
 use std::collections::HashMap;
+use eyre::{eyre, OptionExt, Report};
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
 pub struct AppConfig {
@@ -19,6 +20,15 @@ pub struct AppConfig {
     pub frontend_bundle_path: String,
     pub database_url: String,
     pub chat_provider: ChatProviderConfig,
+    // A list of file storage providers to use.
+    //
+    // The keys of the map act as the IDs for the providers.
+    //
+    // If multiple providers are configured, `default_file_storage_provider` must be set.
+    pub file_storage_providers: HashMap<String, FileStorageProviderConfig>,
+    // The default file storage provider to use.
+    pub default_file_storage_provider: Option<String>,
+
     // If present, will enable Sentry for error reporting.
     pub sentry_dsn: Option<String>,
 }
@@ -47,6 +57,75 @@ pub struct ChatProviderConfig {
     pub additional_request_headers: Option<Vec<String>>,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct FileStorageProviderConfig {
+    // Name to display in the UI.
+    pub display_name: Option<String>,
+    // The kind of the file storage provider.
+    //
+    // May be one of:
+    // - "s3" - Amazon S3 or services that expose a S3-compatible API.
+    // - "azblob" - Azure Blob Storage
+    pub provider_kind: String,
+    pub config: StorageProviderSpecificConfigMerged,
+}
+
+impl FileStorageProviderConfig {
+    pub fn specific_config(&self) -> Result<StorageProviderSpecificConfig, Report> {
+        self.config.clone().into_specific_config(&self.provider_kind)
+    }
+
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub enum StorageProviderSpecificConfig {
+    S3(StorageProviderS3Config),
+    AzBlob(StorageProviderAzBlobConfig),
+}
+
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+pub struct StorageProviderAzBlobConfig {
+    pub root: String,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+pub struct StorageProviderS3Config {
+    pub endpoint: Option<String>,
+    pub root: Option<String>,
+    pub bucket: String,
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+/// Merged config for storage provider specific configs.
+pub struct StorageProviderSpecificConfigMerged {
+    pub endpoint: Option<String>,
+    pub root: Option<String>,
+    pub bucket: String,
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+}
+
+impl StorageProviderSpecificConfigMerged {
+    pub fn into_specific_config(self, provider_kind: &str) -> Result<StorageProviderSpecificConfig, Report> {
+        match provider_kind {
+            "s3" => Ok(StorageProviderSpecificConfig::S3(StorageProviderS3Config {
+                endpoint: self.endpoint,
+                root: self.root,
+                bucket: self.bucket,
+                access_key_id: self.access_key_id,
+                secret_access_key: self.secret_access_key,
+            })),
+            "azblob" => Ok(StorageProviderSpecificConfig::AzBlob(StorageProviderAzBlobConfig {
+                root: self.root.ok_or_eyre("root required for azblob storage provider")?,
+            })),
+            _ => Err(eyre!("Unknown storage provider type {}", provider_kind)),
+        }
+    }
+}
+
 impl AppConfig {
     /// Separate builder, so we can also add overrides in tests.
     pub fn config_schema_builder() -> Result<ConfigBuilder<DefaultState>, ConfigError> {
@@ -55,6 +134,7 @@ impl AppConfig {
             .set_default("http_host", "127.0.0.1")?
             .set_default("http_port", "3130")?
             .set_default("frontend_bundle_path", "./public")?
+            .add_source(config::File::with_name("erato.toml").required(false))
             .add_source(
                 Environment::default()
                     .try_parsing(true)

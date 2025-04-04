@@ -5,3 +5,5 @@ target
 .env
 .env.*
 !.env.template
+
+erato.toml
