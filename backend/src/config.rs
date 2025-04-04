@@ -98,6 +98,7 @@ pub struct StorageProviderS3Config {
     pub endpoint: Option<String>,
     pub root: Option<String>,
     pub bucket: String,
+    pub region: Option<String>,
     pub access_key_id: Option<String>,
     pub secret_access_key: Option<String>,
 }
@@ -111,6 +112,7 @@ pub struct StorageProviderSpecificConfigMerged {
     pub bucket: Option<String>,
     pub container: Option<String>,
     pub endpoint: Option<String>,
+    pub region: Option<String>,
     pub root: Option<String>,
     pub secret_access_key: Option<String>,
 }
@@ -124,6 +126,7 @@ impl StorageProviderSpecificConfigMerged {
             "s3" => Ok(StorageProviderSpecificConfig::S3(StorageProviderS3Config {
                 endpoint: self.endpoint,
                 root: self.root,
+                region: self.region,
                 bucket: self
                     .bucket
                     .ok_or_eyre("`bucket` required for s3 storage provider")?,

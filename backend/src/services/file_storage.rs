@@ -37,6 +37,9 @@ impl FileStorage {
         if let Some(val) = &config.root {
             builder = builder.root(val);
         }
+        if let Some(val) = &config.region {
+            builder = builder.region(val);
+        }
         if let Some(val) = &config.access_key_id {
             builder = builder.access_key_id(val);
         }
