@@ -1,5 +1,6 @@
 use crate::config::{AppConfig, ChatProviderConfig};
 use crate::policy::engine::PolicyEngine;
+use crate::services::file_storage::FileStorage;
 use eyre::Report;
 use genai::adapter::AdapterKind;
 use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
@@ -7,6 +8,7 @@ use genai::{Client as GenaiClient, ModelIden, ServiceTarget};
 use reqwest;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use sea_orm::{Database, DatabaseConnection};
+use std::collections::HashMap;
 use std::str::FromStr;
 
 #[derive(Clone, Debug)]
@@ -14,18 +16,23 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub policy: PolicyEngine,
     pub genai_client: GenaiClient,
+    pub default_file_storage_provider: Option<String>,
+    pub file_storage_providers: HashMap<String, FileStorage>,
 }
 
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let db = Database::connect(&config.database_url).await?;
         let policy = Self::build_policy()?;
+        let file_storage_providers = Self::build_file_storage_providers(&config)?;
         let genai_client = Self::build_genai_client(config.chat_provider)?;
 
         Ok(Self {
             db,
             policy,
             genai_client,
+            default_file_storage_provider: config.default_file_storage_provider,
+            file_storage_providers,
         })
     }
 
@@ -39,6 +46,17 @@ impl AppState {
 
     pub fn build_policy() -> Result<PolicyEngine, Report> {
         PolicyEngine::new()
+    }
+
+    pub fn default_file_storage_provider(&self) -> &FileStorage {
+        if let Some(provider_id) = &self.default_file_storage_provider {
+            self.file_storage_providers.get(provider_id).unwrap()
+        } else if self.file_storage_providers.len() == 1 {
+            self.file_storage_providers.values().next().unwrap()
+        } else {
+            // Should already be verified during construction/config validation
+            unreachable!("No default file storage provider configured");
+        }
     }
 
     pub fn build_genai_client(config: ChatProviderConfig) -> Result<GenaiClient, Report> {
@@ -101,5 +119,16 @@ impl AppState {
             },
         )).build();
         Ok(genai_client)
+    }
+
+    fn build_file_storage_providers(
+        config: &AppConfig,
+    ) -> Result<HashMap<String, FileStorage>, Report> {
+        let mut file_storage_providers = HashMap::new();
+        for (provider_config_id, provider_config) in &config.file_storage_providers {
+            let provider = FileStorage::from_config(provider_config)?;
+            file_storage_providers.insert(provider_config_id.clone(), provider);
+        }
+        Ok(file_storage_providers)
     }
 }

@@ -1,7 +1,10 @@
 postgres_data
 minio_data
+azurite_data
 target
 
 .env
 .env.*
 !.env.template
+
+erato.toml
