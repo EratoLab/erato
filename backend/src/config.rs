@@ -1,8 +1,8 @@
 use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment};
+use eyre::{eyre, OptionExt, Report};
 use serde::Deserialize;
 use std::collections::HashMap;
-use eyre::{eyre, OptionExt, Report};
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
 pub struct AppConfig {
@@ -72,9 +72,10 @@ pub struct FileStorageProviderConfig {
 
 impl FileStorageProviderConfig {
     pub fn specific_config(&self) -> Result<StorageProviderSpecificConfig, Report> {
-        self.config.clone().into_specific_config(&self.provider_kind)
+        self.config
+            .clone()
+            .into_specific_config(&self.provider_kind)
     }
-
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
@@ -83,10 +84,13 @@ pub enum StorageProviderSpecificConfig {
     AzBlob(StorageProviderAzBlobConfig),
 }
 
-
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
 pub struct StorageProviderAzBlobConfig {
-    pub root: String,
+    pub root: Option<String>,
+    pub container: String,
+    pub endpoint: String,
+    pub account_name: Option<String>,
+    pub account_key: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
@@ -101,26 +105,44 @@ pub struct StorageProviderS3Config {
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
 /// Merged config for storage provider specific configs.
 pub struct StorageProviderSpecificConfigMerged {
+    pub access_key_id: Option<String>,
+    pub account_key: Option<String>,
+    pub account_name: Option<String>,
+    pub bucket: Option<String>,
+    pub container: Option<String>,
     pub endpoint: Option<String>,
     pub root: Option<String>,
-    pub bucket: String,
-    pub access_key_id: Option<String>,
     pub secret_access_key: Option<String>,
 }
 
 impl StorageProviderSpecificConfigMerged {
-    pub fn into_specific_config(self, provider_kind: &str) -> Result<StorageProviderSpecificConfig, Report> {
+    pub fn into_specific_config(
+        self,
+        provider_kind: &str,
+    ) -> Result<StorageProviderSpecificConfig, Report> {
         match provider_kind {
             "s3" => Ok(StorageProviderSpecificConfig::S3(StorageProviderS3Config {
                 endpoint: self.endpoint,
                 root: self.root,
-                bucket: self.bucket,
+                bucket: self
+                    .bucket
+                    .ok_or_eyre("`bucket` required for s3 storage provider")?,
                 access_key_id: self.access_key_id,
                 secret_access_key: self.secret_access_key,
             })),
-            "azblob" => Ok(StorageProviderSpecificConfig::AzBlob(StorageProviderAzBlobConfig {
-                root: self.root.ok_or_eyre("root required for azblob storage provider")?,
-            })),
+            "azblob" => Ok(StorageProviderSpecificConfig::AzBlob(
+                StorageProviderAzBlobConfig {
+                    root: self.root,
+                    container: self
+                        .container
+                        .ok_or_eyre("container required for azblob storage provider")?,
+                    endpoint: self
+                        .endpoint
+                        .ok_or_eyre("container required for azblob storage provider")?,
+                    account_name: self.account_name,
+                    account_key: self.account_key,
+                },
+            )),
             _ => Err(eyre!("Unknown storage provider type {}", provider_kind)),
         }
     }

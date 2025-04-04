@@ -121,7 +121,9 @@ jobs:
         working-directory: backend
         run: |
           ./run_postgres.sh
+          ./run_minio.sh
           ./run_ollama_smol.sh
+          cp erato.template.toml erato.toml
       # Should be kept in sync with `justfile` -> `install_clis`
       - uses: taiki-e/install-action@v2
         with:

@@ -269,21 +269,25 @@ pub async fn upload_file(
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unnamed_file".to_string());
         // TODO: Use in writer
-        let _content_type = field.content_type().map(|s| s.to_string());
+        let content_type = field.content_type().map(|s| s.to_string());
 
         let mut data = field.bytes().await.map_err(|e| {
             tracing::error!("Failed to read file data: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+        let size_bytes = data.len();
 
         // Generate a random UUID
         let file_id = Uuid::new_v4().to_string();
 
-        let mut writer = app_state.default_file_storage_provider().upload_file_writer(file_id.as_str()).await
+        let mut writer = app_state
+            .default_file_storage_provider()
+            .upload_file_writer(file_id.as_str(), content_type.as_deref())
+            .await
             .map_err(|e| {
-            tracing::error!("Failed to write file data: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+                tracing::error!("Failed to write file data: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
         writer.write_from(&mut data).await.map_err(|e| {
             tracing::error!("Failed to write file data: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -298,7 +302,7 @@ pub async fn upload_file(
             "User {} uploaded file '{}' with size {} bytes, assigned ID: {}",
             me_user.0.id,
             filename,
-            data.len(),
+            size_bytes,
             file_id
         );
 
