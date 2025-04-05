@@ -176,7 +176,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Backend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6.15.0
         with:
           context: ./backend
           push: true
@@ -188,7 +188,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push Frontend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6.15.0
         with:
           context: ./frontend
           push: true
@@ -200,7 +200,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push Combined image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6.15.0
         with:
           context: .
           file: ./Dockerfile.combined
@@ -236,7 +236,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Backend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6.15.0
         with:
           context: ./backend
           push: true
@@ -248,7 +248,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push Frontend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6.15.0
         with:
           context: ./frontend
           push: true
@@ -260,7 +260,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push Combined image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6.15.0
         with:
           context: .
           file: ./Dockerfile.combined
