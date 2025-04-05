@@ -120,6 +120,10 @@ jobs:
       - name: "Setup test environment"
         working-directory: backend
         run: |
+          curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
+          chmod +x mc
+          sudo mv mc /usr/local/bin/
+          
           ./run_postgres.sh
           ./run_minio.sh
           ./run_ollama_smol.sh

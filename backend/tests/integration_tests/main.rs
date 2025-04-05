@@ -948,8 +948,7 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
     );
 }
 
-// #[sqlx::test(migrator = "MIGRATOR")]
-#[allow(dead_code)]
+#[sqlx::test(migrator = "MIGRATOR")]
 async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
     // Set up the test environment
     let app_config = test_app_config();
