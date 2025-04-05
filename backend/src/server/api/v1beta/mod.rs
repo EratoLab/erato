@@ -22,7 +22,7 @@ use axum::routing::{get, post};
 use axum::{middleware, Extension, Json, Router};
 use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
-use eyre::{Report, WrapErr};
+use eyre::{OptionExt, Report, WrapErr};
 #[cfg(feature = "sentry")]
 use sentry::{event_from_error, Hub};
 use serde::{Deserialize, Serialize};
@@ -144,6 +144,8 @@ pub struct RecentChat {
     title_by_summary: String,
     /// Time of the last message in the chat.
     last_message_at: DateTime<FixedOffset>,
+    /// Files uploaded to this chat
+    file_uploads: Vec<FileUploadItem>,
 }
 
 /// A message in a chat
@@ -222,7 +224,7 @@ struct MultipartFormFile {
 }
 
 /// Response for file upload
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, Debug)]
 pub struct FileUploadItem {
     /// The unique ID of the uploaded file
     id: String,
@@ -244,6 +246,9 @@ pub struct FileUploadResponse {
     post,
     path = "/me/files",
     tag = "files",
+    params(
+        ("chat_id" = String, Query, description = "The chat ID to associate the file with."),
+    ),
     request_body(content = Vec<MultipartFormFile>, description = "Files to upload", content_type = "multipart/form-data"),
     responses(
         (status = OK, body = FileUploadResponse),
@@ -254,8 +259,23 @@ pub struct FileUploadResponse {
 pub async fn upload_file(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
     mut multipart: Multipart,
 ) -> Result<Json<FileUploadResponse>, StatusCode> {
+    let chat_id_str = params
+        .get("chat_id")
+        .ok_or_eyre("chat_id missing")
+        .map_err(|e| {
+            tracing::error!("Failed to process multipart form: {}", e);
+            StatusCode::BAD_REQUEST
+        })?;
+
+    // Parse the chat ID
+    let chat_id = Uuid::parse_str(chat_id_str).map_err(|e| {
+        tracing::error!("Invalid chat ID format: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
+
     let mut uploaded_files = Vec::new();
 
     // Process the multipart form
@@ -268,7 +288,6 @@ pub async fn upload_file(
             .file_name()
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unnamed_file".to_string());
-        // TODO: Use in writer
         let content_type = field.content_type().map(|s| s.to_string());
 
         let mut data = field.bytes().await.map_err(|e| {
@@ -277,12 +296,15 @@ pub async fn upload_file(
         })?;
         let size_bytes = data.len();
 
-        // Generate a random UUID
-        let file_id = Uuid::new_v4().to_string();
+        // Generate a random UUID for the file
+        let file_id = Uuid::new_v4();
+        let file_path = file_id.to_string();
 
-        let mut writer = app_state
-            .default_file_storage_provider()
-            .upload_file_writer(file_id.as_str(), content_type.as_deref())
+        let file_storage_provider = app_state.default_file_storage_provider();
+
+        // Upload the file to the storage provider
+        let mut writer = file_storage_provider
+            .upload_file_writer(file_path.as_str(), content_type.as_deref())
             .await
             .map_err(|e| {
                 tracing::error!("Failed to write file data: {}", e);
@@ -296,19 +318,34 @@ pub async fn upload_file(
             tracing::error!("Failed to write file data: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-        // In a real implementation, you would store the file data somewhere
-        // For now, we just log the size and return the UUID
+
+        // Store the file metadata in the database
+        let file_upload = models::file_upload::create_file_upload(
+            &app_state.db,
+            app_state.policy(),
+            &me_user.to_subject(),
+            &chat_id,
+            filename.clone(),
+            app_state.default_file_storage_provider_id(),
+            file_path,
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to create file upload record: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
         tracing::info!(
             "User {} uploaded file '{}' with size {} bytes, assigned ID: {}",
             me_user.0.id,
             filename,
             size_bytes,
-            file_id
+            file_upload.id
         );
 
         // Add this file to our list of uploaded files
         uploaded_files.push(FileUploadItem {
-            id: file_id,
+            id: file_upload.id.to_string(),
             filename,
         });
     }
@@ -466,14 +503,39 @@ pub async fn recent_chats(
     .map_err(log_internal_server_error)?;
 
     // Convert from model RecentChat to API RecentChat
-    let api_chats: Vec<RecentChat> = model_chats
-        .into_iter()
-        .map(|chat| RecentChat {
+    let mut api_chats = Vec::with_capacity(model_chats.len());
+    for chat in model_chats {
+        // For each chat, get its file uploads
+        let chat_id = Uuid::parse_str(&chat.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let file_uploads = models::file_upload::get_chat_file_uploads(
+            &app_state.db,
+            &app_state.policy,
+            &me_user.to_subject(),
+            &chat_id,
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get file uploads for chat {}: {}", chat.id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        // Convert file uploads to FileUploadItem
+        let file_upload_items = file_uploads
+            .into_iter()
+            .map(|upload| FileUploadItem {
+                id: upload.id.to_string(),
+                filename: upload.filename,
+            })
+            .collect();
+
+        api_chats.push(RecentChat {
             id: chat.id,
             title_by_summary: chat.title_by_summary,
             last_message_at: chat.last_message_at,
-        })
-        .collect();
+            file_uploads: file_upload_items,
+        });
+    }
 
     // Create the response with chats and stats
     let response = RecentChatsResponse {

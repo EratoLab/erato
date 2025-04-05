@@ -59,6 +59,17 @@ impl AppState {
         }
     }
 
+    pub fn default_file_storage_provider_id(&self) -> String {
+        if let Some(provider_id) = &self.default_file_storage_provider {
+            provider_id.clone()
+        } else if self.file_storage_providers.len() == 1 {
+            self.file_storage_providers.keys().next().unwrap().clone()
+        } else {
+            // Should already be verified during construction/config validation
+            unreachable!("No default file storage provider configured");
+        }
+    }
+
     pub fn build_genai_client(config: ChatProviderConfig) -> Result<GenaiClient, Report> {
         let base_url = config.base_url.clone();
         let request_params = config.additional_request_parameters_map();

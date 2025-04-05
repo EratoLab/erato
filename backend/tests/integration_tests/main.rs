@@ -965,6 +965,52 @@ async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
     // Create a mock JWT for authentication
     let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
 
+    // First, create a chat by sending a message
+    let message_request = json!({
+        "previous_message_id": null,
+        "user_message": "Test message to create a chat for file upload"
+    });
+
+    // Send the message to create a chat
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response to get the chat ID
+    let response_text = response.text();
+    let lines: Vec<&str> = response_text.lines().collect();
+
+    // Find the chat_created event and extract the chat ID
+    let mut chat_id = String::new();
+    for i in 0..lines.len() - 1 {
+        if lines[i] == "event: chat_created" {
+            // The data is on the next line, prefixed with "data: "
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse chat_created data");
+
+                chat_id = data_json["chat_id"]
+                    .as_str()
+                    .expect("Expected chat_id to be a string")
+                    .to_string();
+
+                break;
+            }
+        }
+    }
+
+    assert!(
+        !chat_id.is_empty(),
+        "Failed to extract chat_id from response"
+    );
+
     // Create temporary JSON files for testing
     let file1_content = json!({
         "name": "test1",
@@ -1000,9 +1046,9 @@ async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
                 .mime_type("application/json"),
         );
 
-    // Make the request
+    // Make the request with the chat_id as a query parameter
     let response = server
-        .post("/api/v1beta/me/files")
+        .post(&format!("/api/v1beta/me/files?chat_id={}", chat_id))
         .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
         .multipart(multipart_form)
         .await;

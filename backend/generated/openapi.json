@@ -99,6 +99,17 @@
         "summary": "Upload files and return UUIDs for each",
         "description": "This endpoint accepts a multipart form with one or more files and returns UUIDs for each.",
         "operationId": "upload_file",
+        "parameters": [
+          {
+            "name": "chat_id",
+            "in": "query",
+            "description": "The chat ID to associate the file with.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "description": "Files to upload",
           "content": {
@@ -715,9 +726,17 @@
         "required": [
           "id",
           "title_by_summary",
-          "last_message_at"
+          "last_message_at",
+          "file_uploads"
         ],
         "properties": {
+          "file_uploads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileUploadItem"
+            },
+            "description": "Files uploaded to this chat"
+          },
           "id": {
             "type": "string"
           },

@@ -3,5 +3,6 @@
 pub mod prelude;
 
 pub mod chats;
+pub mod file_uploads;
 pub mod messages;
 pub mod users;
