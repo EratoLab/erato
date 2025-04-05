@@ -184,8 +184,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64-buildcache
 
       - name: Build and push Frontend image
         uses: docker/build-push-action@v6.15.0
@@ -196,8 +196,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
 
       - name: Build and push Combined image
         uses: docker/build-push-action@v6.15.0
@@ -213,8 +213,6 @@ jobs:
             REGISTRY=${{ env.REGISTRY }}
             BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
             FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
   build-and-push-arm64:
     runs-on: ubuntu-22.04-arm64-custom-large
@@ -244,8 +242,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64-buildcache
 
       - name: Build and push Frontend image
         uses: docker/build-push-action@v6.15.0
@@ -256,8 +254,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
 
       - name: Build and push Combined image
         uses: docker/build-push-action@v6.15.0
@@ -273,8 +271,6 @@ jobs:
             REGISTRY=${{ env.REGISTRY }}
             BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
             FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
   create-manifests:
     needs: [build-and-push-amd64, build-and-push-arm64]
