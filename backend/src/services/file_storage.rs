@@ -3,7 +3,7 @@ use crate::config::{
     StorageProviderSpecificConfig,
 };
 use eyre::Report;
-use opendal::{Operator, Writer};
+use opendal::{Operator, Reader, Writer};
 
 #[derive(Debug, Clone)]
 pub struct FileStorage {
@@ -79,5 +79,18 @@ impl FileStorage {
             writer = writer.content_type(content_type);
         }
         Ok(writer.await?)
+    }
+
+    /// Read a file from the storage and return a Reader
+    pub async fn get_file_reader(&self, path: &str) -> Result<Reader, Report> {
+        Ok(self.opendal_operator.reader(path).await?)
+    }
+
+    /// Read a complete file from storage and return its contents as a byte array
+    pub async fn read_file_to_bytes(&self, path: &str) -> Result<Vec<u8>, Report> {
+        let reader = self.get_file_reader(path).await?;
+        let mut buffer = Vec::new();
+        reader.read_into(&mut buffer, ..).await?;
+        Ok(buffer)
     }
 }

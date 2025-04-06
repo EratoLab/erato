@@ -2,19 +2,21 @@ use crate::db::entity_ext::{chats, messages};
 use crate::models::chat::{
     get_chat_by_message_id, get_or_create_chat_by_previous_message_id, ChatCreationStatus,
 };
+use crate::models::file_upload::get_file_upload_by_id;
 use crate::models::message::{
     get_generation_input_messages_by_previous_message_id, get_message_by_id, submit_message,
     GenerationInputMessages, MessageSchema,
 };
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::ChatMessage;
+use crate::services::file_storage::FileStorage;
 use crate::state::AppState;
 use axum::extract::State;
 use axum::response::sse::Event;
 use axum::response::Sse;
 use axum::{Extension, Json};
-use eyre::WrapErr;
 use eyre::{eyre, Report};
+use eyre::{OptionExt, WrapErr};
 use futures::Stream;
 use genai::chat::{
     ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatStreamEvent, StreamEnd,
@@ -28,6 +30,7 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamExt as _;
+use tracing;
 use utoipa::ToSchema;
 
 #[derive(Serialize, ToSchema)]
@@ -103,6 +106,11 @@ pub struct MessageSubmitRequest {
     /// The text of the message.
     #[allow(dead_code)]
     user_message: String,
+    #[schema(example = "[\"00000000-0000-0000-0000-000000000000\"]")]
+    /// The IDs of any files attached to this message. These files must already be uploaded to the file_uploads table.
+    /// The files should normally only be provided with the first message they appear in the chat. After that they can assumed to be part of the chat history.
+    #[serde(default)]
+    input_files_ids: Vec<Uuid>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -259,6 +267,7 @@ async fn stream_save_user_message<
     chat: &chats::Model,
     previous_message_id: Option<&Uuid>,
     user_message: &str,
+    input_files_ids: &[Uuid],
 ) -> Result<messages::Model, ()> {
     // Create and save the user's message
     let user_message = json!({
@@ -277,6 +286,7 @@ async fn stream_save_user_message<
         // TODO: Add support for sibling message regenerate
         None,
         None,
+        input_files_ids,
     )
     .await
     {
@@ -312,12 +322,14 @@ async fn stream_save_user_message<
 async fn prepare_chat_request(
     app_state: &AppState,
     previous_message_id: &Uuid,
+    new_input_files: Vec<FileContentsForGeneration>,
 ) -> Result<(ChatRequest, ChatOptions, GenerationInputMessages), Report> {
     // TODO: Initial system message?
     let generation_input_messages = get_generation_input_messages_by_previous_message_id(
         &app_state.db,
         previous_message_id,
         Some(10),
+        new_input_files,
     )
     .await?;
     let chat_request = generation_input_messages.clone().into_chat_request();
@@ -419,6 +431,7 @@ async fn stream_save_generated_completion<
         Some(&saved_user_message.id),
         sibling_message_id,
         Some(generation_input_messages),
+        &[], // Assistant messages don't have any file uploads
     )
     .await
     {
@@ -499,6 +512,104 @@ pub async fn generate_chat_summary(
     Ok(())
 }
 
+#[derive(Debug)]
+pub struct FileContentsForGeneration {
+    pub filename: String,
+    pub contents_as_text: String,
+}
+
+/// Process files attached to a message and extract their text content
+async fn process_input_files(
+    tx: Sender<Result<Event, Report>>,
+    app_state: &AppState,
+    me_user: &MeProfile,
+    input_files_ids: &[Uuid],
+) -> Result<Vec<FileContentsForGeneration>, ()> {
+    let mut converted_files = vec![];
+    for file_id in input_files_ids {
+        // Get the file upload record
+        let file_upload = match get_file_upload_by_id(
+            &app_state.db,
+            app_state.policy(),
+            &me_user.to_subject(),
+            file_id,
+        )
+        .await
+        {
+            Ok(file) => file,
+            Err(err) => {
+                let _ = tx
+                    .send(
+                        Err(err).wrap_err(format!("Failed to get file upload with ID {}", file_id)),
+                    )
+                    .await;
+                return Err(());
+            }
+        };
+
+        // Get the file storage provider
+        let file_storage: &FileStorage = match app_state
+            .file_storage_providers
+            .get(&file_upload.file_storage_provider_id)
+            .ok_or_eyre("File storage provider not found")
+        {
+            Ok(provider) => provider,
+            Err(err) => {
+                let _ = tx
+                    .send(Err(err).wrap_err(format!(
+                        "Failed to get file storage provider: {}",
+                        file_upload.file_storage_provider_id
+                    )))
+                    .await;
+                return Err(());
+            }
+        };
+
+        // Read the file content
+        let file_bytes = match file_storage
+            .read_file_to_bytes(&file_upload.file_storage_path)
+            .await
+        {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                let _ = tx
+                    .send(Err(err).wrap_err(format!(
+                        "Failed to read file from storage: {}",
+                        file_upload.file_storage_path
+                    )))
+                    .await;
+                return Err(());
+            }
+        };
+
+        // Use parser_core to extract text from the file
+        match parser_core::parse(&file_bytes) {
+            Ok(text) => {
+                tracing::debug!(
+                    "Successfully parsed file {}: {} (text length: {})",
+                    file_upload.filename,
+                    file_id,
+                    text.len()
+                );
+                tracing::debug!("Extracted text content: {}", text);
+                converted_files.push(FileContentsForGeneration {
+                    filename: file_upload.filename,
+                    contents_as_text: text,
+                });
+            }
+            Err(err) => {
+                tracing::warn!(
+                    "Failed to parse file {}: {} - Error: {}",
+                    file_upload.filename,
+                    file_id,
+                    err
+                );
+            }
+        }
+    }
+    Ok(converted_files)
+}
+
 #[utoipa::path(
     post,
     path = "/me/messages/submitstream",
@@ -538,6 +649,7 @@ pub async fn message_submit_sse(
             &chat,
             request.previous_message_id.as_ref(),
             &request.user_message,
+            &request.input_files_ids,
         )
         .await?;
 
@@ -558,8 +670,10 @@ pub async fn message_submit_sse(
             });
         }
 
+        let files_for_generation =
+            process_input_files(tx.clone(), &app_state, &me_user, &request.input_files_ids).await?;
         let prepare_chat_request_res =
-            prepare_chat_request(&app_state, &saved_user_message.id).await;
+            prepare_chat_request(&app_state, &saved_user_message.id, files_for_generation).await;
         if let Err(err) = prepare_chat_request_res {
             let _ = tx.send(Err(err)).await;
             return Err(());
@@ -683,7 +797,19 @@ pub async fn regenerate_message_sse(
         }
         let chat = chat_res.unwrap();
 
-        let prepare_chat_request_res = prepare_chat_request(&app_state, &previous_message.id).await;
+        let input_files_for_previous_message = previous_message
+            .input_file_uploads
+            .clone()
+            .unwrap_or_default();
+        let files_for_generation = process_input_files(
+            tx.clone(),
+            &app_state,
+            &me_user,
+            &input_files_for_previous_message,
+        )
+        .await?;
+        let prepare_chat_request_res =
+            prepare_chat_request(&app_state, &previous_message.id, files_for_generation).await;
         if let Err(err) = prepare_chat_request_res {
             let _ = tx.send(Err(err)).await;
             return Err(());

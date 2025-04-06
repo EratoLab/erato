@@ -533,6 +533,15 @@
           "user_message"
         ],
         "properties": {
+          "input_files_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The IDs of any files attached to this message. These files must already be uploaded to the file_uploads table.\nThe files should normally only be provided with the first message they appear in the chat. After that they can assumed to be part of the chat history.",
+            "example": "[\"00000000-0000-0000-0000-000000000000\"]"
+          },
           "previous_message_id": {
             "type": [
               "string",

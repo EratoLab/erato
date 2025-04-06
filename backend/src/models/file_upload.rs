@@ -1,7 +1,7 @@
 use crate::db::entity::file_uploads;
 use crate::db::entity::prelude::*;
 use crate::policy::prelude::*;
-use eyre::{eyre, Report};
+use eyre::{ContextCompat, Report};
 use sea_orm::prelude::*;
 use sea_orm::{ActiveValue, DatabaseConnection};
 use sqlx::types::Uuid;
@@ -82,7 +82,7 @@ pub async fn get_file_upload_by_id(
     let file_upload = FileUploads::find_by_id(*file_upload_id)
         .one(conn)
         .await?
-        .ok_or_else(|| eyre!("File upload not found"))?;
+        .wrap_err("File upload not found")?;
 
     // Authorize that the subject can access the chat that the file belongs to
     authorize!(
