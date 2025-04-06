@@ -102,6 +102,11 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Install Rust toolchain"
         run: rustup component add clippy
+      - name: "Setup test environment"
+        working-directory: backend
+        run: |
+          sudo add-apt-repository ppa:alex-p/tesseract-ocr5
+          sudo apt-get update && sudo apt-get install -y libtesseract-dev libleptonica-dev libclang-dev
       - name: "Clippy"
         working-directory: backend
         run: |
@@ -123,6 +128,9 @@ jobs:
           curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
           chmod +x mc
           sudo mv mc /usr/local/bin/
+          
+          sudo add-apt-repository ppa:alex-p/tesseract-ocr5
+          sudo apt-get update && sudo apt-get install -y libtesseract-dev libleptonica-dev libclang-dev
           
           ./run_postgres.sh
           ./run_minio.sh

@@ -2,6 +2,7 @@ use crate::db::entity::messages;
 use crate::db::entity::prelude::*;
 use crate::models::pagination;
 use crate::policy::prelude::*;
+use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
 use eyre::{eyre, Report};
 use sea_orm::prelude::*;
 use sea_orm::{
@@ -118,6 +119,7 @@ pub async fn submit_message(
     previous_message_id: Option<&Uuid>,
     sibling_message_id: Option<&Uuid>,
     generation_input_messages: Option<GenerationInputMessages>,
+    input_files_ids: &[Uuid],
 ) -> Result<messages::Model, Report> {
     // Validate the message format
     MessageSchema::validate(&raw_message)?;
@@ -229,6 +231,11 @@ pub async fn submit_message(
         sibling_message_id: ActiveValue::Set(sibling_message_id.copied()),
         is_message_in_active_thread: ActiveValue::Set(true), // New messages are active by default
         generation_input_messages: ActiveValue::Set(generation_input_messages),
+        input_file_uploads: ActiveValue::Set(if input_files_ids.is_empty() {
+            None
+        } else {
+            Some(input_files_ids.to_vec())
+        }),
         ..Default::default()
     };
 
@@ -350,6 +357,7 @@ pub async fn get_generation_input_messages_by_previous_message_id(
     conn: &DatabaseConnection,
     previous_message_id: &Uuid,
     num_previous_messages: Option<usize>,
+    new_generation_files: Vec<FileContentsForGeneration>,
 ) -> Result<GenerationInputMessages, Report> {
     let num_previous_messages = num_previous_messages.unwrap_or(10);
 
@@ -378,6 +386,20 @@ pub async fn get_generation_input_messages_by_previous_message_id(
 
     // Reverse the order of the messages, as we want to start with the oldest message
     input_messages.reverse();
+    // Now add the new generation files to the input messages
+    for file in new_generation_files {
+        let mut content = String::new();
+        content.push_str(&format!("File: {}\n", file.filename));
+        content.push_str("File contents\n");
+        content.push_str("---\n");
+        content.push_str(&file.contents_as_text);
+        content.push_str("\n---");
+
+        input_messages.push(InputMessage {
+            role: MessageRole::User,
+            content: MessageContent::String(content),
+        });
+    }
 
     Ok(GenerationInputMessages {
         messages: input_messages,
