@@ -58,6 +58,12 @@ backend:
   extraEnvVars: []
   extraEnvVarsCM: ""
   extraEnvVarsSecret: ""
+  # Optional configuration for mounting erato.toml from a secret
+  configFile:
+    # Name of the secret containing the erato.toml file
+    secretName: ""
+    # Key in the secret that contains the erato.toml content
+    secretKey: ""
   resources:
     requests:
       cpu: 100m

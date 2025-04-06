@@ -25,7 +25,7 @@ spec:
             - "cd /app/sqitch && ./deploy_distributed.sh --db-uri $DATABASE_URL"
           env:
             - name: ENVIRONMENT
-              {{- .Values.global.environment | nindent 14 }}
+              value: {{ .Values.global.environment | quote }}
             - name: DATABASE_URL
               {{- include "erato.postgresValueOrValueFrom" . | nindent 14 }}
           {{- if or .Values.backend.extraEnvVarsCM .Values.backend.extraEnvVarsSecret }}
@@ -80,3 +80,19 @@ spec:
                 name: {{ .Values.backend.extraEnvVarsSecret }}
             {{- end }}
           {{- end }}
+          {{- if and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey }}
+          volumeMounts:
+            - name: erato-config
+              mountPath: /app/erato.toml
+              subPath: erato.toml
+              readOnly: true
+          {{- end }}
+      {{- if and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey }}
+      volumes:
+        - name: erato-config
+          secret:
+            secretName: {{ .Values.backend.configFile.secretName }}
+            items:
+              - key: {{ .Values.backend.configFile.secretKey }}
+                path: erato.toml
+      {{- end }}
