@@ -34,6 +34,7 @@ RUN apt-get update && \
     sqitch \
     libdbd-pg-perl \
     postgresql-client \
+    libtesseract5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder
