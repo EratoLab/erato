@@ -4,20 +4,23 @@ import { useParams } from "next/navigation";
 import { useEffect } from "react";
 
 import { ChatWidget } from "@/components/ui/Chat/ChatWidget";
-import { useChatHistory } from "@/hooks/chat/useChatHistory";
-import { useChatMessaging } from "@/hooks/chat/useChatMessaging";
 import { useSidebar } from "@/hooks/ui/useSidebar";
+import { useChatContext } from "@/providers/ChatProvider";
 
 export default function ChatPage() {
   const params = useParams();
   const chatId = params.id as string;
 
-  // Use our chat history hook
-  const { currentChatId, navigateToChat } = useChatHistory();
-
-  // Use our chat messaging hook
-  const { messages, isLoading, isStreaming, sendMessage, cancelMessage } =
-    useChatMessaging(chatId);
+  // Use our chat context
+  const {
+    messages,
+    isStreaming,
+    isMessagingLoading,
+    sendMessage,
+    cancelMessage,
+    currentChatId,
+    navigateToChat,
+  } = useChatContext();
 
   // Use our sidebar hook
   const { isOpen: isSidebarOpen, toggle: toggleSidebar } = useSidebar();
@@ -65,7 +68,7 @@ export default function ChatPage() {
             isSharedDialog: false,
           }}
           className="h-full"
-          isLoading={isLoading || isStreaming}
+          isLoading={isMessagingLoading || isStreaming}
         />
       </div>
     </div>
