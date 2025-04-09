@@ -7,12 +7,11 @@ use crate::models;
 use crate::models::chat::get_recent_chats;
 use crate::models::message::MessageSchema;
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
-use crate::server::api::v1beta::message_streaming::message_submit_sse;
 use crate::server::api::v1beta::message_streaming::{
-    MessageSubmitRequest, MessageSubmitStreamingResponseMessage,
-};
-use crate::server::api::v1beta::message_streaming::{
-    __path_message_submit_sse, __path_regenerate_message_sse, regenerate_message_sse,
+    __path_edit_message_sse, __path_message_submit_sse, __path_regenerate_message_sse,
+    edit_message_sse, message_submit_sse, regenerate_message_sse, EditMessageRequest,
+    EditMessageStreamingResponseMessage, MessageSubmitRequest,
+    MessageSubmitStreamingResponseMessage,
 };
 use crate::state::AppState;
 use axum::extract::{Path, State};
@@ -37,6 +36,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/profile", get(profile))
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/messages/regeneratestream", post(regenerate_message_sse))
+        .route("/messages/editstream", post(edit_message_sse))
         .route("/recent_chats", get(recent_chats))
         .route("/files", post(upload_file))
         .route_layer(middleware::from_fn_with_state(
@@ -72,7 +72,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         recent_chats,
         upload_file,
         message_submit_sse,
-        regenerate_message_sse
+        regenerate_message_sse,
+        edit_message_sse
     ),
     components(schemas(
         Message,
@@ -87,7 +88,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         FileUploadResponse,
         MessageSubmitStreamingResponseMessage,
         UserProfile,
-        MessageSubmitRequest
+        MessageSubmitRequest,
+        EditMessageRequest,
+        EditMessageStreamingResponseMessage
     ))
 )]
 pub struct ApiV1ApiDoc;
