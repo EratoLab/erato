@@ -8,23 +8,10 @@ import {
   useReducer,
 } from "react";
 
-/**
- * Simple debug utility for consistent logging
- */
-const createDebugger = (namespace: string) => {
-  return (message: string, data?: unknown) => {
-    if (process.env.NODE_ENV === "development") {
-      if (data !== undefined) {
-        console.log(`[${namespace}]`, message, data);
-      } else {
-        console.log(`[${namespace}]`, message);
-      }
-    }
-  };
-};
+import { createLogger } from "@/utils/debugLogger";
 
-// Create a debugger for this hook
-const debug = createDebugger("SCROLL_HOOK");
+// Create logger for this hook
+const logger = createLogger("HOOK", "ScrollToBottom");
 
 interface UseScrollToBottomOptions {
   /**
@@ -289,19 +276,19 @@ export function useScrollToBottom({
 
     // During transitions, we just reset state but don't scroll yet
     if (isTransitioning) {
-      debug("In transition - resetting scroll state");
+      logger.log("In transition - resetting scroll state");
       dispatch({ type: "RESET_SCROLL_STATE" });
       return;
     }
 
     // If we haven't scrolled to bottom yet or user isn't scrolled up
     if (!hasScrolledToBottom || !isUserScrolledUp) {
-      debug("Scrolling to bottom - user at bottom or first load");
+      logger.log("Scrolling to bottom - user at bottom or first load");
 
       // Add a small delay to ensure content is fully rendered
       const timer = setTimeout(() => {
         if (useSmoothScroll) {
-          debug("Using smooth scroll");
+          logger.log("Using smooth scroll");
           updateContainerStyle(container, { scrollBehavior: "smooth" });
           container.scrollTop = container.scrollHeight;
 
@@ -310,7 +297,7 @@ export function useScrollToBottom({
             updateContainerStyle(container, { scrollBehavior: "auto" });
           }, transitionDuration);
         } else {
-          debug("Using instant scroll");
+          logger.log("Using instant scroll");
           container.scrollTop = container.scrollHeight;
         }
 
@@ -318,14 +305,14 @@ export function useScrollToBottom({
         dispatch({ type: "SCROLL_TO_BOTTOM" });
 
         if (!hasScrolledToBottom) {
-          debug("Initial scroll complete");
+          logger.log("Initial scroll complete");
           dispatch({ type: "SET_INITIALLY_LOADED", value: true });
         }
       }, 50);
 
       return () => clearTimeout(timer);
     } else {
-      debug("User scrolled up - not auto-scrolling");
+      logger.log("User scrolled up - not auto-scrolling");
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps

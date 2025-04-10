@@ -6,9 +6,13 @@ import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { SidebarToggleIcon, EditIcon } from "../icons";
+import { createLogger } from "@/utils/debugLogger";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
+
+// Create logger for this component
+const logger = createLogger("UI", "ChatHistorySidebar");
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -71,7 +75,7 @@ const ChatHistoryHeader = memo<{
         <div className="flex w-12 justify-center">
           <Button
             onClick={() => {
-              console.log("[CHAT_FLOW] New chat button clicked in sidebar");
+              logger.log("[CHAT_FLOW] New chat button clicked in sidebar");
               if (onNewChat) void onNewChat();
             }}
             variant="sidebar-icon"
@@ -157,20 +161,20 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const handleSignOut = () => {
       if (!isBrowser) return;
 
-      console.log("ChatHistorySidebar handleSignOut called");
+      logger.log("ChatHistorySidebar handleSignOut called");
       try {
         const signOutUrl = "/oauth2/sign_out";
-        console.log("Attempting to redirect to:", signOutUrl);
+        logger.log("Attempting to redirect to:", signOutUrl);
         window.location.href = signOutUrl;
 
         setTimeout(() => {
-          console.log("Fallback timeout triggered");
+          logger.log("Fallback timeout triggered");
           const fullUrl = `${process.env.NEXT_PUBLIC_API_ROOT_URL}${signOutUrl}`;
-          console.log("Attempting fallback redirect to:", fullUrl);
+          logger.log("Attempting fallback redirect to:", fullUrl);
           window.location.href = fullUrl;
         }, 1000);
       } catch (error) {
-        console.error("Failed to sign out:", error);
+        logger.log("Failed to sign out:", error);
       }
     };
 

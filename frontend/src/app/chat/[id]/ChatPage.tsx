@@ -5,6 +5,10 @@ import { useEffect, useRef, useState } from "react";
 
 import { Chat } from "@/components/ui/Chat/Chat";
 import { useChatContext } from "@/providers/ChatProvider";
+import { createLogger } from "@/utils/debugLogger";
+
+// Create logger for this component
+const logger = createLogger("UI", "ChatPage");
 
 export default function ChatPage() {
   const params = useParams();
@@ -23,8 +27,8 @@ export default function ChatPage() {
   useEffect(() => {
     // Only on initial render or page refresh, sync with URL
     if (isFirstRender.current && chatId && chatId !== currentChatId) {
-      console.log(
-        `[CHAT_FLOW] ChatPage initial load: setting currentChatId to URL param (${chatId})`,
+      logger.log(
+        `Initial load: setting currentChatId to URL param (${chatId})`,
       );
 
       // Set transitioning state to true during navigation
@@ -68,7 +72,7 @@ export default function ChatPage() {
         isTransitioning={isTransitioning}
         onMessageAction={async (action) => {
           // Handle message actions here
-          console.log("Message action:", action);
+          logger.log("Message action", action);
         }}
       />
     </div>

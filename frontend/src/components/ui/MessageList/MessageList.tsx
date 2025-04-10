@@ -5,6 +5,7 @@ import React, { memo, useCallback, useMemo, useEffect } from "react";
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
+import { createLogger, debugLog } from "@/utils/debugLogger";
 
 import { MessageListHeader } from "./MessageListHeader";
 import {
@@ -26,16 +27,8 @@ import type {
   MessageControlsContext,
 } from "@/types/message-controls";
 
-// Simple debug logger until the utils/debugLogger is properly set up
-const debugLog = (category: string, message: string, data?: unknown) => {
-  if (process.env.NODE_ENV === "development") {
-    if (data) {
-      console.log(`[${category}] ${message}`, data);
-    } else {
-      console.log(`[${category}] ${message}`);
-    }
-  }
-};
+// Create logger for this component
+const logger = createLogger("UI", "MessageList");
 
 /**
  * Type for chat message with loading state
@@ -205,7 +198,7 @@ function useLoadMoreOnScroll({
   // Update scroll position check when near the top
   useEffect(() => {
     if (isNearTop && hasOlderMessages && !isPending) {
-      console.log("Near top, loading more messages");
+      logger.log("Near top, loading more messages");
       handleLoadMore();
     }
   }, [isNearTop, hasOlderMessages, isPending, handleLoadMore]);
@@ -299,7 +292,7 @@ export const MessageList = memo<MessageListProps>(
       // User was scrolled up but now scrolled back down, check if there are new messages
       if (isScrolledUp === false && visibleData.length < messageOrder.length) {
         // This is where you'd show a "new messages" indicator if desired
-        console.log("User scrolled back to see new messages");
+        logger.log("User scrolled back to see new messages");
       }
     }, [isScrolledUp, isPending, messageOrder.length, visibleData.length]);
 
@@ -308,24 +301,24 @@ export const MessageList = memo<MessageListProps>(
       () =>
         debounce(() => {
           if (isPending) {
-            console.log("Skipping load more because already loading");
+            logger.log("Skipping load more because already loading");
             return;
           }
 
-          console.log("Load more triggered in MessageList");
+          logger.log("Load more triggered in MessageList");
 
           // For chat history (backward pagination), we only need to load from the API
           // Our hook is already configured to show all messages
           if (apiMessagesResponse?.stats.has_more || hasOlderMessages) {
-            console.log("Loading older messages from API");
+            logger.log("Loading older messages from API");
             loadOlderMessages();
           }
           // Only use the client-side pagination if we're not loading from API
           else if (hasMore) {
-            console.log("Loading more messages from client-side pagination");
+            logger.log("Loading more messages from client-side pagination");
             loadMore();
           } else {
-            console.log("No more messages to load");
+            logger.log("No more messages to load");
           }
         }, 300),
       [

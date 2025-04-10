@@ -5,6 +5,7 @@ import { useChatActions, useChatTransition } from "@/hooks/chat";
 import { useSidebar } from "@/hooks/ui/useSidebar";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
+import { createLogger } from "@/utils/debugLogger";
 
 import { MessageList } from "../MessageList";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
@@ -19,6 +20,9 @@ import type {
   MessageControlsContext,
 } from "@/types/message-controls";
 import type { FileType } from "@/utils/fileTypes";
+
+// Create logger for this component
+const logger = createLogger("UI", "Chat");
 
 export interface ChatProps {
   className?: string;
@@ -141,7 +145,7 @@ export const Chat = ({
   // Enhanced sendMessage handler that refreshes the sidebar after sending
   const handleSendMessage = useCallback(
     (message: string) => {
-      console.log("[CHAT_FLOW] Chat - handleSendMessage called");
+      logger.log("[CHAT_FLOW] Chat - handleSendMessage called");
 
       // Scroll to bottom immediately when user sends a message
       if (scrollToBottomRef.current) {
@@ -152,11 +156,11 @@ export const Chat = ({
       // Now baseHandleSendMessage returns a Promise we can chain with
       baseHandleSendMessage(message)
         .then(() => {
-          console.log("[CHAT_FLOW] Message sent, refreshing chats");
+          logger.log("[CHAT_FLOW] Message sent, refreshing chats");
           return refreshChats();
         })
         .catch((error) => {
-          console.error("[CHAT_FLOW] Error sending message:", error);
+          logger.log("[CHAT_FLOW] Error sending message:", error);
         });
     },
     [baseHandleSendMessage, refreshChats],
@@ -181,14 +185,14 @@ export const Chat = ({
 
   // Handle session select with void return type
   const handleSessionSelectWrapper = (sessionId: string) => {
-    console.log(
+    logger.log(
       `[CHAT_FLOW] Handling session select in Chat component for session: ${sessionId}`,
     );
     // Call handleSessionSelect or directly use switchSession if that's not working
     if (customSessionSelect) {
       customSessionSelect(sessionId);
     } else {
-      console.log(
+      logger.log(
         `[CHAT_FLOW] Directly calling switchSession with ID: ${sessionId}`,
       );
       switchSession(sessionId);
@@ -207,7 +211,7 @@ export const Chat = ({
 
   // Handle creating a new chat
   const handleNewChat = useCallback(async () => {
-    console.log("[CHAT_FLOW] New chat button clicked");
+    logger.log("[CHAT_FLOW] New chat button clicked");
 
     try {
       if (onNewChat) {
@@ -217,10 +221,10 @@ export const Chat = ({
         // Otherwise use the default behavior from context
         // Don't chain with then() - use await for cleaner flow
         await createChat();
-        console.log("[CHAT_FLOW] New chat creation completed");
+        logger.log("[CHAT_FLOW] New chat creation completed");
       }
     } catch (error) {
-      console.error("[CHAT_FLOW] Error creating new chat:", error);
+      logger.log("[CHAT_FLOW] Error creating new chat:", error);
     }
   }, [onNewChat, createChat]);
 
