@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import React, { useCallback } from "react";
+import React, { useCallback, useRef } from "react";
 
 import { useChatActions, useChatTransition } from "@/hooks/chat";
 import { useSidebar } from "@/hooks/ui/useSidebar";
@@ -128,10 +128,19 @@ export const Chat = ({
     onMessageAction,
   });
 
+  // Create a ref to store the scrollToBottom function from MessageList
+  const scrollToBottomRef = useRef<(() => void) | null>(null);
+
   // Enhanced sendMessage handler that refreshes the sidebar after sending
   const handleSendMessage = useCallback(
     (message: string) => {
       console.log("[CHAT_FLOW] Chat - handleSendMessage called");
+
+      // Scroll to bottom immediately when user sends a message
+      if (scrollToBottomRef.current) {
+        scrollToBottomRef.current();
+      }
+
       // Send the message
       baseHandleSendMessage(message);
 
@@ -171,6 +180,11 @@ export const Chat = ({
   const handleDeleteSession = (sessionId: string) => {
     void deleteSession(sessionId);
   };
+
+  // Function to capture the scrollToBottom from MessageList
+  const handleMessageListRef = useCallback((scrollToBottom: () => void) => {
+    scrollToBottomRef.current = scrollToBottom;
+  }, []);
 
   return (
     <div className="flex size-full flex-col sm:flex-row">
@@ -217,6 +231,7 @@ export const Chat = ({
             className={layout}
             useVirtualization={useVirtualization}
             virtualizationThreshold={30}
+            onScrollToBottomRef={handleMessageListRef}
           />
 
           <ChatInput

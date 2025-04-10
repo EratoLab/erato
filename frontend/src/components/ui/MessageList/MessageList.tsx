@@ -141,6 +141,11 @@ export interface MessageListProps {
    * Threshold for when to use virtualization (number of messages)
    */
   virtualizationThreshold?: number;
+
+  /**
+   * Callback to expose the scrollToBottom function
+   */
+  onScrollToBottomRef?: (scrollToBottom: () => void) => void;
 }
 
 // Separate hook for managing message loading and streaming behavior
@@ -224,6 +229,7 @@ export const MessageList = memo<MessageListProps>(
     className,
     useVirtualization = false,
     virtualizationThreshold = 30,
+    onScrollToBottomRef,
   }) => {
     // Debug logging for rendering
     // debugLog("RENDER", "MessageList rendering", {
@@ -254,6 +260,13 @@ export const MessageList = memo<MessageListProps>(
           : null,
       ],
     });
+
+    // Expose scrollToBottom function to parent component
+    useEffect(() => {
+      if (onScrollToBottomRef) {
+        onScrollToBottomRef(scrollToBottom);
+      }
+    }, [onScrollToBottomRef, scrollToBottom]);
 
     // Use the message loading hook
     useMessageLoading({ messageOrder, messages, scrollToBottom });

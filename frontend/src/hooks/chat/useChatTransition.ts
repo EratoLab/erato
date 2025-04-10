@@ -36,6 +36,14 @@ export function useChatTransition<T = unknown>({
     if (isTransitioning && (!messages || Object.keys(messages).length === 0)) {
       return prevMessages;
     }
+
+    // If we're transitioning but have new messages, make sure to show both
+    // This ensures user messages appear immediately during longer chat history loads
+    if (isTransitioning && messages && Object.keys(messages).length > 0) {
+      // Combine current and previous messages during transition
+      return { ...prevMessages, ...messages };
+    }
+
     return messages || {};
   }, [isTransitioning, messages, prevMessages]);
 

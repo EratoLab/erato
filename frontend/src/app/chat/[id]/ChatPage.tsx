@@ -35,7 +35,7 @@ export default function ChatPage() {
 
   return (
     <div className="flex size-full flex-col">
-      <div className="flex h-12 items-center border-b px-4">
+      {/* <div className="flex h-12 items-center border-b px-4">
         <button
           onClick={toggleSidebar}
           className="mr-4 p-2"
@@ -52,26 +52,24 @@ export default function ChatPage() {
             Stop generating
           </button>
         )}
-      </div>
+      </div> */}
 
-      <div className="flex-1">
-        <Chat
-          controlsContext={{
-            currentUserId: "user1",
-            dialogOwnerId: "user1",
-            isSharedDialog: false,
-          }}
-          className="h-full"
-          showAvatars={true}
-          showTimestamps={true}
-          layout="default"
-          maxWidth={768}
-          onMessageAction={async (action) => {
-            // Handle message actions here
-            console.log("Message action:", action);
-          }}
-        />
-      </div>
+      <Chat
+        controlsContext={{
+          currentUserId: "user1",
+          dialogOwnerId: "user1",
+          isSharedDialog: false,
+        }}
+        className="h-full"
+        showAvatars={true}
+        showTimestamps={true}
+        layout="default"
+        maxWidth={768}
+        onMessageAction={async (action) => {
+          // Handle message actions here
+          console.log("Message action:", action);
+        }}
+      />
     </div>
   );
 }

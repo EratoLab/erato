@@ -226,7 +226,9 @@ export function useChatMessaging(
 
     // Then add local messages only if they don't conflict with API messages
     localUserMsgs.forEach((msg) => {
-      if (!messageMap.has(msg.id)) {
+      // Always include local user messages while they are in "sending" status
+      // Once they're persisted to the API, they'll be replaced by the API version
+      if (!messageMap.has(msg.id) || msg.status === "sending") {
         messageMap.set(msg.id, msg);
       }
     });
