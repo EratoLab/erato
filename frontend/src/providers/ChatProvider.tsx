@@ -132,6 +132,15 @@ export function ChatProvider({
 
   // Memoize the context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => {
+    // Debug log to track message lifecycle
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        "[CHAT_PROVIDER] Creating context with messages:",
+        Object.keys(messages || {}).length,
+        "messages from useChatMessaging",
+      );
+    }
+
     // Transform messages from useChatMessaging to include the "sender" field required by UI components
     const transformedMessages = Object.entries(messages || {}).reduce(
       (acc, [id, msg]) => {
@@ -151,54 +160,13 @@ export function ChatProvider({
     ): string[] => {
       if (!messages || Object.keys(messages).length === 0) return [];
 
-      // Create a map of previous_message_id to message_id
-      const childMap: Record<string, string[]> = {};
-      const messageIds = Object.keys(messages);
-
-      // Track messages with no previous_message_id (root messages)
-      const rootMessageIds: string[] = [];
-
-      // Build the relationship map
-      messageIds.forEach((id) => {
-        const msg = messages[id];
-        if (!msg.previous_message_id) {
-          rootMessageIds.push(id);
-        } else {
-          const prevId = msg.previous_message_id;
-          if (!childMap[prevId]) {
-            childMap[prevId] = [];
-          }
-          childMap[prevId].push(id);
-        }
-      });
-
-      // Build the ordered list starting from root messages
-      const orderedIds: string[] = [];
-
-      // Sort root messages by createdAt (oldest first)
-      rootMessageIds.sort((a, b) => {
+      // With the refetch pattern, we prioritize server ordering
+      // and just sort by created timestamp for simplicity
+      return Object.keys(messages).sort((a, b) => {
         const dateA = new Date(messages[a].createdAt);
         const dateB = new Date(messages[b].createdAt);
         return dateA.getTime() - dateB.getTime();
       });
-
-      // Recursively add messages in the correct order
-      const addToOrder = (id: string) => {
-        orderedIds.push(id);
-        if (childMap[id]) {
-          // If multiple children, sort by creation date
-          childMap[id].sort((a, b) => {
-            const dateA = new Date(messages[a].createdAt);
-            const dateB = new Date(messages[b].createdAt);
-            return dateA.getTime() - dateB.getTime();
-          });
-          childMap[id].forEach((childId) => addToOrder(childId));
-        }
-      };
-
-      rootMessageIds.forEach((id) => addToOrder(id));
-
-      return orderedIds;
     };
 
     // Create the message order

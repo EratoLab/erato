@@ -3,6 +3,15 @@
  *
  * Provides a unified interface for sending messages, handling streaming responses,
  * and managing the current chat's messages.
+ *
+ * This implementation uses a "temporary message + refetch" pattern:
+ * 1. When a message is sent, it's immediately added to local state for display
+ * 2. As streaming responses arrive, they're shown to the user
+ * 3. Once streaming completes, we refetch the messages from the server
+ * 4. After refetching, temporary messages are cleared to avoid duplication
+ *
+ * This approach eliminates the need for complex ID mapping and localStorage persistence,
+ * resulting in less flickering during navigation and a more reliable message history.
  */
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
@@ -78,10 +87,21 @@ const useMessagingStore = create<MessagingStore>((set) => {
   };
 });
 
-export function useChatMessaging({
-  chatId,
-  onChatCreated,
-}: UseChatMessagingParams) {
+export function useChatMessaging(
+  chatIdOrParams: string | null | UseChatMessagingParams,
+  legacyOnChatCreated?: (newChatId: string) => void,
+) {
+  // Support both old and new function signatures for backward compatibility
+  const chatId =
+    typeof chatIdOrParams === "string" || chatIdOrParams === null
+      ? chatIdOrParams
+      : chatIdOrParams.chatId;
+
+  const onChatCreated =
+    typeof chatIdOrParams === "string" || chatIdOrParams === null
+      ? legacyOnChatCreated
+      : chatIdOrParams.onChatCreated;
+
   const queryClient = useQueryClient();
   const [lastError, setLastError] = useState<Error | null>(null);
   const {
@@ -96,9 +116,6 @@ export function useChatMessaging({
   const isSubmittingRef = useRef(false);
   const pendingChatIdRef = useRef<string | null>(null);
 
-  // Store a mapping from temp streaming IDs to real backend IDs
-  const tempToRealIdMapRef = useRef<Record<string, string>>({});
-
   // Log hook mounting and unmounting - keep this for debugging chat lifecycle
   useEffect(() => {
     const currentChatId = chatId; // Capture chatId for cleanup
@@ -109,51 +126,14 @@ export function useChatMessaging({
       );
     }
 
-    // Only clear user messages if we're not coming from a navigation
-    // This helps preserve messages during chat creation/navigation
-    if (!pendingChatIdRef.current) {
-      clearUserMessages();
-    }
+    // Clear any temporary messages when mounting for a new chat
+    clearUserMessages();
 
-    // Check for messages stored in localStorage during navigation
-    if (currentChatId) {
-      try {
-        // Attempt to find saved messages for this chat
-        const savedMessages = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith("temp_message_")) {
-            try {
-              const savedMessage = JSON.parse(localStorage.getItem(key) || "");
-              if (savedMessage) {
-                savedMessages.push(savedMessage);
-                localStorage.removeItem(key); // Clean up after retrieval
-              }
-            } catch {
-              // Ignore parsing errors for individual items
-            }
-          }
-        }
+    // Reset streaming state
+    resetStreaming();
 
-        // Add saved messages to the store
-        if (savedMessages.length > 0) {
-          if (process.env.NODE_ENV === "development") {
-            console.log(
-              "[CHAT_FLOW] Restoring saved messages:",
-              savedMessages.length,
-            );
-          }
-          savedMessages.forEach((msg) => addUserMessage(msg));
-        }
-      } catch {
-        console.warn("[CHAT_FLOW] Error restoring messages from localStorage");
-      }
-    }
-
-    // Reset the pending chat ID when chatId changes
+    // Reset pending chat ID and ID mapping when chatId changes
     pendingChatIdRef.current = null;
-    // Reset the ID mapping
-    tempToRealIdMapRef.current = {};
 
     return () => {
       // Only log in development
@@ -163,7 +143,7 @@ export function useChatMessaging({
         );
       }
     };
-  }, [chatId, clearUserMessages, addUserMessage]);
+  }, [chatId, clearUserMessages, resetStreaming]);
 
   // Skip the query if no chatId is provided
   const skipQuery = !chatId;
@@ -176,6 +156,36 @@ export function useChatMessaging({
       refetchOnWindowFocus: true,
     },
   );
+
+  // For backward compatibility with tests
+  const cancelMessage = useCallback(() => {
+    // Clean up any existing SSE connection
+    if (sseCleanupRef.current) {
+      sseCleanupRef.current();
+      sseCleanupRef.current = null;
+    }
+
+    // Reset streaming state
+    resetStreaming();
+
+    // Refetch first to ensure we have latest server data before clearing messages
+    if (chatId) {
+      void chatMessagesQuery.refetch().then(() => {
+        clearUserMessages();
+      });
+    } else {
+      // If no chatId, we can just clear
+      clearUserMessages();
+    }
+
+    // Reset the submission flag
+    isSubmittingRef.current = false;
+
+    // Log cancellation
+    if (process.env.NODE_ENV === "development") {
+      console.log("[CHAT_FLOW] Message cancelled");
+    }
+  }, [resetStreaming, clearUserMessages, chatId, chatMessagesQuery]);
 
   // Clean up any existing SSE connection on unmount
   useEffect(() => {
@@ -269,8 +279,9 @@ export function useChatMessaging({
         useMessagingStore.getState().streaming.currentMessageId;
 
       // Extract real message data from the backend
-      const realMessageData = responseData.message;
-      const realMessageId = realMessageData.id || responseData.message_id;
+      const realMessageData = responseData.message || {}; // Handle missing message object
+      const realMessageId =
+        realMessageData.id || responseData.message_id || `msg-${Date.now()}`; // Fallback ID
       const finalContent =
         realMessageData.full_text ||
         responseData.full_text ||
@@ -285,82 +296,27 @@ export function useChatMessaging({
         );
       }
 
-      // Store the mapping from temp ID to real ID
-      if (tempMessageId && realMessageId) {
-        tempToRealIdMapRef.current[tempMessageId] = realMessageId;
-      }
-
-      // Store the complete message with the REAL ID from the backend
-      if (realMessageId) {
-        // Convert previous_message_id to string or undefined
-        const prevMsgId =
-          typeof realMessageData.previous_message_id === "string"
-            ? realMessageData.previous_message_id
-            : undefined;
-
-        const finalMessage: Message = {
-          id: realMessageId, // Use the real ID from the backend
-          content: finalContent,
-          role: "assistant",
-          createdAt: realMessageData.created_at || new Date().toISOString(),
-          status: "complete",
-          previous_message_id: prevMsgId,
-        };
-
-        // Add to userMessages store
-        addUserMessage(finalMessage);
-
-        // If we're about to navigate to a new chat, also store this in localStorage
-        // This ensures the message persists during navigation
-        if (pendingChatIdRef.current) {
-          try {
-            // Store both the assistant message and its context in localStorage
-            const assistantKey = `temp_message_${realMessageId}`;
-            localStorage.setItem(assistantKey, JSON.stringify(finalMessage));
-
-            // We also need to store information about the previous message (user's question)
-            // to avoid duplication
-            if (prevMsgId) {
-              const userMsgKey = `seen_message_${prevMsgId as string}`;
-              localStorage.setItem(userMsgKey, "true");
-
-              // Set an expiration (5 minutes) so we don't fill localStorage
-              setTimeout(
-                () => {
-                  localStorage.removeItem(userMsgKey);
-                },
-                5 * 60 * 1000,
-              );
-            }
-
-            // Set an expiration (5 minutes) so we don't fill localStorage
-            setTimeout(
-              () => {
-                localStorage.removeItem(assistantKey);
-              },
-              5 * 60 * 1000,
-            );
-          } catch (e) {
-            // Ignore storage errors
-            console.warn(
-              "[CHAT_FLOW] Failed to store message in localStorage",
-              e,
-            );
-          }
-        }
-      }
-
-      // Update streaming state
+      // Update streaming state to indicate completion
       setStreaming({
         isStreaming: false,
         content: finalContent,
         currentMessageId: realMessageId || null, // Update to real ID
       });
 
-      // Invalidate query
-      void queryClient.invalidateQueries({
-        queryKey: ["chatMessages", { chatId }],
-      });
+      // Use the promise returned by invalidateQueries and refetch to ensure proper sequence
+      if (chatId) {
+        void queryClient
+          .invalidateQueries({
+            queryKey: ["chatMessages", { chatId }],
+          })
+          .then(() => {
+            // This ensures we get fresh data before clearing temporary messages
+            return chatMessagesQuery.refetch().then(() => {
+              // Only clear after refetch is complete
+              clearUserMessages();
+            });
+          });
+      }
 
       // Handle navigation if needed
       if (pendingChatIdRef.current) {
@@ -370,12 +326,17 @@ export function useChatMessaging({
             pendingChatIdRef.current,
           );
         }
-        // We've already checked pendingChatIdRef.current is not null
         onChatCreated?.(pendingChatIdRef.current);
-        // Don't clear pendingChatIdRef.current here, we'll use it in the cleanup
       }
     },
-    [chatId, queryClient, setStreaming, addUserMessage, onChatCreated],
+    [
+      chatId,
+      queryClient,
+      setStreaming,
+      onChatCreated,
+      chatMessagesQuery,
+      clearUserMessages,
+    ],
   );
 
   const handleChatCreated = useCallback(
@@ -482,10 +443,7 @@ export function useChatMessaging({
       for (let i = allVisibleMessages.length - 1; i >= 0; i--) {
         if (allVisibleMessages[i].role === "assistant") {
           const messageId = allVisibleMessages[i].id;
-
-          // Check if this is a temp ID that has a real ID mapping
-          const realId = tempToRealIdMapRef.current[messageId];
-          previousMessageId = realId || messageId;
+          previousMessageId = messageId;
           break;
         }
       }
@@ -517,15 +475,24 @@ export function useChatMessaging({
       isSubmittingRef.current = true;
 
       // Immediately add user message to local state for optimistic UI update
-      const tempUserMessageId = `temp-user-${Date.now()}`;
+      // Use a more stable ID format that will be easier to identify later
+      const timestamp = Date.now();
+      const tempUserMessageId = `temp-user-${timestamp}`;
       const userMessage: Message = {
         id: tempUserMessageId,
         content,
         role: "user",
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(timestamp).toISOString(),
         status: "sending", // Indicate it's being sent
       };
       addUserMessage(userMessage);
+
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          "[CHAT_FLOW] Added temporary user message:",
+          tempUserMessageId,
+        );
+      }
 
       try {
         // Reset any previous streaming state
@@ -576,19 +543,39 @@ export function useChatMessaging({
           onError: (error) => {
             console.error("[CHAT_FLOW] SSE connection error:", error);
             setLastError(new Error("SSE connection error"));
+
+            // Reset streaming state
             resetStreaming();
+
+            // Clear temporary messages only after refetch completes
+            if (chatId) {
+              void chatMessagesQuery.refetch().then(() => {
+                clearUserMessages();
+              });
+            } else {
+              clearUserMessages();
+            }
+
             isSubmittingRef.current = false; // Reset submission flag on error
           },
           onOpen: () => {
             // No action needed
           },
           onClose: () => {
-            // When SSE connection closes, make sure to invalidate the query
+            // Reset submission flag
+            isSubmittingRef.current = false;
+
             if (!streaming.isStreaming) {
-              // Normal close - invalidate the query
-              void queryClient.invalidateQueries({
-                queryKey: ["chatMessages", { chatId }],
-              });
+              // Normal close - refetch and then clear temporary messages
+              if (chatId) {
+                void chatMessagesQuery.refetch().then(() => {
+                  // Only clear after refetch is complete
+                  clearUserMessages();
+                });
+              } else {
+                // If no chatId (new chat), just clear user messages
+                clearUserMessages();
+              }
 
               // Check for pending chat navigation
               if (pendingChatIdRef.current) {
@@ -602,13 +589,22 @@ export function useChatMessaging({
                 pendingChatIdRef.current = null;
               }
             } else if (streaming.isStreaming) {
+              // Abnormal close - streaming hadn't completed
               console.warn("[CHAT_FLOW] SSE connection closed unexpectedly");
               setLastError(new Error("SSE connection closed unexpectedly"));
-              resetStreaming();
-            }
 
-            // Reset submission flag on close
-            isSubmittingRef.current = false;
+              // Reset streaming state
+              resetStreaming();
+
+              // Refetch and then clear temporary messages
+              if (chatId) {
+                void chatMessagesQuery.refetch().then(() => {
+                  clearUserMessages();
+                });
+              } else {
+                clearUserMessages();
+              }
+            }
           },
           method: "POST",
           headers: {
@@ -623,7 +619,19 @@ export function useChatMessaging({
         setLastError(
           error instanceof Error ? error : new Error("Failed to send message"),
         );
+
+        // Reset streaming state
         resetStreaming();
+
+        // Clear temporary messages after refetch completes
+        if (chatId) {
+          void chatMessagesQuery.refetch().then(() => {
+            clearUserMessages();
+          });
+        } else {
+          clearUserMessages();
+        }
+
         isSubmittingRef.current = false; // Reset submission flag on error
         throw error;
       }
@@ -636,9 +644,11 @@ export function useChatMessaging({
       streaming.isStreaming,
       queryClient,
       addUserMessage,
+      clearUserMessages,
       processStreamEvent,
       findMostRecentAssistantMessageId,
       onChatCreated,
+      chatMessagesQuery,
     ],
   );
 
@@ -649,6 +659,7 @@ export function useChatMessaging({
     streamingContent: streaming.content,
     error: lastError || chatMessagesQuery.error,
     sendMessage,
+    cancelMessage,
     refetch: chatMessagesQuery.refetch,
   };
 }
