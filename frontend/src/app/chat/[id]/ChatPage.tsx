@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Chat } from "@/components/ui/Chat/Chat";
 import { useChatContext } from "@/providers/ChatProvider";
@@ -10,6 +10,7 @@ export default function ChatPage() {
   const params = useParams();
   const chatId = params.id as string;
   const isFirstRender = useRef(true);
+  const [isTransitioning, setIsTransitioning] = useState(true);
 
   // Use our chat context
   const {
@@ -20,20 +21,33 @@ export default function ChatPage() {
 
   // Handle only the initial setting of chat ID and page refreshes
   useEffect(() => {
-    // Set isFirstRender to false after this effect runs
-    const cleanup = () => {
-      isFirstRender.current = false;
-    };
-
     // Only on initial render or page refresh, sync with URL
     if (isFirstRender.current && chatId && chatId !== currentChatId) {
       console.log(
         `[CHAT_FLOW] ChatPage initial load: setting currentChatId to URL param (${chatId})`,
       );
-      navigateToChat(chatId);
-    }
 
-    return cleanup;
+      // Set transitioning state to true during navigation
+      setIsTransitioning(true);
+      navigateToChat(chatId);
+
+      // After a brief delay to allow content to load, set transitioning to false
+      const timer = setTimeout(() => {
+        setIsTransitioning(false);
+        isFirstRender.current = false;
+      }, 150);
+
+      return () => clearTimeout(timer);
+    } else if (isFirstRender.current) {
+      // If we don't need to navigate but it's still first render,
+      // just mark as not transitioning after a brief delay
+      const timer = setTimeout(() => {
+        setIsTransitioning(false);
+        isFirstRender.current = false;
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
   }, [chatId, currentChatId, navigateToChat]);
 
   return (
@@ -68,6 +82,7 @@ export default function ChatPage() {
         showTimestamps={true}
         layout="default"
         maxWidth={768}
+        isTransitioning={isTransitioning}
         onMessageAction={async (action) => {
           // Handle message actions here
           console.log("Message action:", action);

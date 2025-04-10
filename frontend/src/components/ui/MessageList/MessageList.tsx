@@ -146,6 +146,11 @@ export interface MessageListProps {
    * Callback to expose the scrollToBottom function
    */
   onScrollToBottomRef?: (scrollToBottom: () => void) => void;
+
+  /**
+   * Whether the chat is currently transitioning between sessions
+   */
+  isTransitioning?: boolean;
 }
 
 // Separate hook for managing message loading and streaming behavior
@@ -187,10 +192,10 @@ function useMessageLoading({
 
 // Hook to manage loading more messages when near top
 function useLoadMoreOnScroll({
-  isNearTop,
-  hasOlderMessages,
-  isPending,
-  handleLoadMore,
+  isNearTop: isNearTop,
+  hasOlderMessages: hasOlderMessages,
+  isPending: isPending,
+  handleLoadMore: handleLoadMore,
 }: {
   isNearTop: boolean;
   hasOlderMessages: boolean;
@@ -230,6 +235,7 @@ export const MessageList = memo<MessageListProps>(
     useVirtualization = false,
     virtualizationThreshold = 30,
     onScrollToBottomRef,
+    isTransitioning,
   }) => {
     // Debug logging for rendering
     // debugLog("RENDER", "MessageList rendering", {
@@ -245,8 +251,12 @@ export const MessageList = memo<MessageListProps>(
       isNearTop,
       checkScrollPosition,
       scrollToBottom,
+      initiallyLoaded,
     } = useScrollToBottom({
       enabled: true,
+      useSmoothScroll: true,
+      transitionDuration: 300,
+      isTransitioning: isPending || isTransitioning,
       deps: [
         messageOrder.length,
         currentSessionId,

@@ -22,6 +22,23 @@ interface UseScrollToBottomOptions {
    * Debounce time in ms for scroll events
    */
   debounceMs?: number;
+
+  /**
+   * Whether to use CSS smooth scrolling
+   * This can be more performant than manual animation in some cases
+   */
+  useSmoothScroll?: boolean;
+
+  /**
+   * Duration in ms for smooth scroll transitions
+   */
+  transitionDuration?: number;
+
+  /**
+   * Whether the component is in a transition state
+   * (e.g., navigating between chats)
+   */
+  isTransitioning?: boolean;
 }
 
 /**
@@ -31,6 +48,7 @@ interface UseScrollToBottomOptions {
  * 1. Auto-scrolling to bottom on initial load
  * 2. Auto-scrolling when new messages arrive (only if user hasn't scrolled up)
  * 3. Tracking scroll position to determine user intent (reading history vs. following latest)
+ * 4. Managing visibility transitions to prevent flickering on load
  *
  * @param options Configuration options
  * @returns An object containing the ref to attach to the scrollable container and controls
@@ -40,6 +58,9 @@ export function useScrollToBottom({
   deps = [],
   scrollUpThreshold = 100,
   debounceMs = 50,
+  useSmoothScroll = false,
+  transitionDuration = 300,
+  isTransitioning = false,
 }: UseScrollToBottomOptions = {}) {
   // Ref for the scrollable container element - use more specific type
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,6 +77,9 @@ export function useScrollToBottom({
 
   // We need a state value to trigger re-renders when this changes
   const [isScrolledUp, setIsScrolledUp] = useState(false);
+
+  // State to track initial loading state for visibility control
+  const [initiallyLoaded, setInitiallyLoaded] = useState(false);
 
   // Memoize the scroll position check function for performance
   const checkIfUserIsScrolledUp = useCallback(() => {
@@ -85,15 +109,31 @@ export function useScrollToBottom({
     const container = containerRef.current;
     if (!container) return;
 
-    requestAnimationFrame(() => {
+    if (useSmoothScroll) {
+      // Use CSS smooth scrolling for better performance
+      container.style.scrollBehavior = "smooth";
       container.scrollTop = container.scrollHeight;
-      hasScrolledToBottomRef.current = true;
 
-      // When we scroll to bottom, update scrolled up state
+      // Reset after transition completes to not interfere with other scrolling
+      setTimeout(() => {
+        container.style.scrollBehavior = "auto";
+      }, transitionDuration);
+
+      hasScrolledToBottomRef.current = true;
       setIsScrolledUp(false);
       isUserScrolledUpRef.current = false;
-    });
-  }, []);
+    } else {
+      // Use requestAnimationFrame for smoother scrolling
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+        hasScrolledToBottomRef.current = true;
+
+        // When we scroll to bottom, update scrolled up state
+        setIsScrolledUp(false);
+        isUserScrolledUpRef.current = false;
+      });
+    }
+  }, [useSmoothScroll, transitionDuration]);
 
   // Debounced scroll handler to minimize performance impact
   const debouncedCheckScrollPosition = useMemo(
@@ -137,22 +177,58 @@ export function useScrollToBottom({
     const container = containerRef.current;
     if (!container) return;
 
-    // On initial load or if specifically following latest messages
+    // Handle visibility during transitions
+    if (isTransitioning) {
+      // During transition, hide the container temporarily
+      container.style.opacity = "0";
+      hasScrolledToBottomRef.current = false; // Reset to force scroll after transition
+      return;
+    }
+
+    // Control visibility during initial load or content changes
     if (!hasScrolledToBottomRef.current || !isUserScrolledUpRef.current) {
-      requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
+      // Immediately hide container during content load
+      if (!hasScrolledToBottomRef.current) {
+        container.style.opacity = "0";
+      }
+
+      // Small delay to ensure content is ready before scrolling
+      const timer = setTimeout(() => {
+        // Scroll to bottom
+        if (useSmoothScroll) {
+          container.style.scrollBehavior = "smooth";
+          container.scrollTop = container.scrollHeight;
+
+          // Reset after transition
+          setTimeout(() => {
+            container.style.scrollBehavior = "auto";
+          }, transitionDuration);
+        } else {
+          container.scrollTop = container.scrollHeight;
+        }
+
+        // After scrolling, fade in if needed
+        if (!hasScrolledToBottomRef.current) {
+          container.style.opacity = "1";
+          container.style.transition = "opacity 0.2s ease-in-out";
+          setInitiallyLoaded(true);
+        }
+
         hasScrolledToBottomRef.current = true;
-      });
+      }, 50); // Small delay for layout to complete
+
+      return () => clearTimeout(timer);
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, ...deps]);
+  }, [enabled, isTransitioning, useSmoothScroll, transitionDuration, ...deps]);
 
   return {
     containerRef,
     scrollToBottom,
     isScrolledUp, // Return the state value, not the ref value
     isNearTop, // Add the isNearTop state value to help with "Load More" visibility
+    initiallyLoaded, // Export the loaded state for consumers
     // Expose the check function so consumers can manually check scroll position
     checkScrollPosition: checkIfUserIsScrolledUp,
   };
