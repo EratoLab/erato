@@ -1,36 +1,39 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { Chat } from "@/components/ui/Chat/Chat";
-import { useSidebar } from "@/hooks/ui/useSidebar";
 import { useChatContext } from "@/providers/ChatProvider";
 
 export default function ChatPage() {
   const params = useParams();
   const chatId = params.id as string;
+  const isFirstRender = useRef(true);
 
   // Use our chat context
   const {
     // Remove unused variables - Chat component gets them from context
-    // messages,
-    isStreaming,
-    // isMessagingLoading,
-    // sendMessage,
-    cancelMessage,
     currentChatId,
     navigateToChat,
   } = useChatContext();
 
-  // Use our sidebar hook
-  const { isOpen: isSidebarOpen, toggle: toggleSidebar } = useSidebar();
-
-  // Set the current chat ID when the page loads
+  // Handle only the initial setting of chat ID and page refreshes
   useEffect(() => {
-    if (chatId && chatId !== currentChatId) {
+    // Set isFirstRender to false after this effect runs
+    const cleanup = () => {
+      isFirstRender.current = false;
+    };
+
+    // Only on initial render or page refresh, sync with URL
+    if (isFirstRender.current && chatId && chatId !== currentChatId) {
+      console.log(
+        `[CHAT_FLOW] ChatPage initial load: setting currentChatId to URL param (${chatId})`,
+      );
       navigateToChat(chatId);
     }
+
+    return cleanup;
   }, [chatId, currentChatId, navigateToChat]);
 
   return (

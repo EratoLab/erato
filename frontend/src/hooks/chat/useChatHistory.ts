@@ -66,7 +66,10 @@ export function useChatHistory() {
 
       console.log(`[CHAT_FLOW] Navigating to chat: ${chatId}`);
       setCurrentChatId(chatId);
-      router.push(`/chat/${chatId}`);
+
+      // Make sure we actually navigate to the chat URL using the router
+      // Use replace to ensure a clean navigation
+      router.replace(`/chat/${chatId}`);
     },
     [router, setCurrentChatId, isNewChatPending],
   );

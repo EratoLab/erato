@@ -35,6 +35,7 @@ export function useChatActions({
         console.log(
           "[CHAT_FLOW] Using default session select handler to switch session",
         );
+        // Explicitly call switchSession to navigate to the selected chat
         switchSession(sessionId);
       }
     },

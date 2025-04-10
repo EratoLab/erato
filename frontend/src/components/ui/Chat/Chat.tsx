@@ -181,7 +181,18 @@ export const Chat = ({
 
   // Handle session select with void return type
   const handleSessionSelectWrapper = (sessionId: string) => {
-    handleSessionSelect(sessionId, customSessionSelect);
+    console.log(
+      `[CHAT_FLOW] Handling session select in Chat component for session: ${sessionId}`,
+    );
+    // Call handleSessionSelect or directly use switchSession if that's not working
+    if (customSessionSelect) {
+      customSessionSelect(sessionId);
+    } else {
+      console.log(
+        `[CHAT_FLOW] Directly calling switchSession with ID: ${sessionId}`,
+      );
+      switchSession(sessionId);
+    }
   };
 
   // Handle deleting a session with void return type
