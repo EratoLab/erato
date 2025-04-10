@@ -2,11 +2,12 @@ import clsx from "clsx";
 import React, { memo, useRef, useState, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
+import { createLogger } from "@/utils/debugLogger";
+
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { SidebarToggleIcon, EditIcon } from "../icons";
-import { createLogger } from "@/utils/debugLogger";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";

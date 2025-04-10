@@ -15,7 +15,7 @@ import { Button } from "../Controls/Button";
 
 import type {
   MessageControlsProps,
-  MessageActionType,
+  MessageAction,
 } from "../../../types/message-controls";
 
 /**
@@ -39,7 +39,7 @@ const ensureValidDate = (dateInput: unknown): Date => {
 };
 
 export const DefaultMessageControls = ({
-  messageId,
+  messageId: _messageId,
   messageType,
   authorId,
   context,
@@ -47,16 +47,20 @@ export const DefaultMessageControls = ({
   onAction,
   className,
   createdAt,
+  isUserMessage,
 }: MessageControlsProps) => {
-  const isUser = messageType === "user";
+  // Support both isUserMessage (new) and messageType (legacy)
+  const isUser =
+    isUserMessage !== undefined ? isUserMessage : messageType === "user";
   const isOwnMessage = authorId === context.currentUserId;
   const isDialogOwner = context.currentUserId === context.dialogOwnerId;
 
   // Ensure createdAt is a valid Date object
   const safeCreatedAt = ensureValidDate(createdAt);
 
-  const handleAction = (type: MessageActionType) => {
-    void onAction({ type, messageId });
+  // Handle message actions
+  const handleAction = (action: MessageAction) => {
+    void onAction(action);
   };
 
   return (
@@ -112,7 +116,7 @@ export const DefaultMessageControls = ({
             />
             {(isOwnMessage || isDialogOwner) && (
               <Button
-                onClick={() => handleAction("rerun")}
+                onClick={() => handleAction("regenerate")}
                 variant="icon-only"
                 icon={<ArrowPathIcon />}
                 size="sm"

@@ -4,6 +4,7 @@ import { createContext, useContext, useMemo, useEffect } from "react";
 
 import { useChatHistory, useChatMessaging } from "@/hooks/chat";
 import { useFileDropzone } from "@/hooks/files";
+import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
 import type {
   ChatsError,
@@ -154,11 +155,7 @@ export function ChatProvider({
     // Transform messages from useChatMessaging to include the "sender" field required by UI components
     const transformedMessages = Object.entries(messages || {}).reduce(
       (acc, [id, msg]) => {
-        acc[id] = {
-          ...msg,
-          sender: msg.role, // Map the role property to sender
-          authorId: msg.role === "user" ? "user_id" : "assistant_id", // Set default authorId
-        };
+        acc[id] = mapMessageToUiMessage(msg);
         return acc;
       },
       {} as Record<string, ChatMessage>,

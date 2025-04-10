@@ -164,7 +164,7 @@ describe("useChatMessaging with refetch pattern", () => {
     // Connect invalidateQueries calls to the refetchFn
     mockInvalidateQueries.mockImplementation(
       async (options: { queryKey?: [string, Record<string, any>] }) => {
-        if (options?.queryKey?.[0] === "chatMessages") {
+        if (options.queryKey?.[0] === "chatMessages") {
           // When invalidating chatMessages, trigger the refetch function
           await refetchFn();
           return true;

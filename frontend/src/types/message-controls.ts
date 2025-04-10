@@ -9,7 +9,9 @@ export type MessageAction =
   | "edit"
   | "regenerate"
   | "share"
-  | "flag";
+  | "flag"
+  | "like"
+  | "dislike";
 
 /**
  * Context provided to message controls
@@ -28,6 +30,12 @@ export interface MessageControlsProps {
   isUserMessage: boolean;
   onAction: (action: MessageAction) => void | Promise<void>;
   context: MessageControlsContext;
+  // Additional properties used in DefaultMessageControls
+  messageType?: string;
+  authorId?: string;
+  createdAt?: string | Date;
+  showOnHover?: boolean;
+  className?: string;
 }
 
 /**

@@ -12,8 +12,10 @@ import type {
   MessageControlsContext,
   MessageAction,
 } from "../../../types/message-controls";
-import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
-import type { UserProfile } from "@/types/chat";
+import type {
+  ChatMessage as ChatMessageType,
+  UserProfile,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export interface ChatMessageProps {
   message: ChatMessageType;
@@ -53,7 +55,7 @@ export const ChatMessage = memo(function ChatMessage({
   controlsContext,
   onMessageAction,
 }: ChatMessageProps) {
-  const isUser = message.sender === "user";
+  const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
 
   // Content validation

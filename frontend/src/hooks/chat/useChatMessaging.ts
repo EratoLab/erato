@@ -18,10 +18,10 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { create } from "zustand";
 
 import { useChatMessages } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 import type {
-  ChatMessage as ApiChatMessage,
   MessageSubmitStreamingResponseMessage,
   MessageSubmitStreamingResponseMessageTextDelta,
   MessageSubmitStreamingResponseChatCreated,
@@ -221,18 +221,7 @@ export function useChatMessaging(
   // Combine API messages and locally added user messages
   const combinedMessages = useMemo(() => {
     const apiMsgs: Message[] =
-      chatMessagesQuery.data?.messages.map((msg: ApiChatMessage) => ({
-        id: msg.id || `temp-api-${Date.now()}`,
-        content: msg.full_text || "",
-        role: msg.role as "user" | "assistant" | "system", // Use exact role from API
-        createdAt: msg.created_at || new Date().toISOString(),
-        status: "complete",
-        // Handle the previous_message_id conversion properly
-        previous_message_id:
-          msg.previous_message_id && typeof msg.previous_message_id === "string"
-            ? msg.previous_message_id
-            : undefined,
-      })) || [];
+      chatMessagesQuery.data?.messages.map(mapApiMessageToUiMessage) || [];
 
     // Convert locally stored user messages to Message[] array
     const localUserMsgs = Object.values(userMessages);
