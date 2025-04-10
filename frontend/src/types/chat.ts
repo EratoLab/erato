@@ -9,6 +9,7 @@ export interface Message {
   role: "user" | "assistant" | "system";
   createdAt: string;
   status?: "sending" | "complete" | "error";
+  previous_message_id?: string;
 }
 
 export interface ChatSession {

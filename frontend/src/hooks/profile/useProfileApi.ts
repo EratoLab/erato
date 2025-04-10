@@ -4,32 +4,35 @@
  * Uses the generated API hooks to fetch and manage user profile data
  * while adding application-specific logic.
  */
+import { useCallback } from "react";
+
 import { useProfile as useProfileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
-export function useProfile() {
-  // Use the generated API hook to fetch profile data
+/**
+ * Hook for fetching profile data from the API
+ */
+export function useProfileApi() {
   const {
     data: profile,
     isLoading,
-    isError,
     error,
     refetch,
   } = useProfileQuery(
     {},
     {
-      // Set up error retry behavior
-      retry: (failureCount, _error) => {
-        // Retry up to 3 times
-        return failureCount < 3;
-      },
+      retry: false,
+      refetchOnWindowFocus: false,
     },
   );
+
+  const refreshProfile = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   return {
     profile,
     isLoading,
-    isError,
     error,
-    refetch,
+    refreshProfile,
   };
 }

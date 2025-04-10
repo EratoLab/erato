@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useEffect } from "react";
 
-import { ChatWidget } from "@/components/ui/Chat/ChatWidget";
+import { Chat } from "@/components/ui/Chat/Chat";
 import { useSidebar } from "@/hooks/ui/useSidebar";
 import { useChatContext } from "@/providers/ChatProvider";
 
@@ -13,10 +13,11 @@ export default function ChatPage() {
 
   // Use our chat context
   const {
-    messages,
+    // Remove unused variables - Chat component gets them from context
+    // messages,
     isStreaming,
-    isMessagingLoading,
-    sendMessage,
+    // isMessagingLoading,
+    // sendMessage,
     cancelMessage,
     currentChatId,
     navigateToChat,
@@ -32,13 +33,8 @@ export default function ChatPage() {
     }
   }, [chatId, currentChatId, navigateToChat]);
 
-  // Handle sending a message
-  const handleSendMessage = (content: string) => {
-    void sendMessage(content);
-  };
-
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex size-full flex-col">
       <div className="flex h-12 items-center border-b px-4">
         <button
           onClick={toggleSidebar}
@@ -59,16 +55,21 @@ export default function ChatPage() {
       </div>
 
       <div className="flex-1">
-        <ChatWidget
-          messages={messages}
-          onSendMessage={handleSendMessage}
+        <Chat
           controlsContext={{
             currentUserId: "user1",
             dialogOwnerId: "user1",
             isSharedDialog: false,
           }}
           className="h-full"
-          isLoading={isMessagingLoading || isStreaming}
+          showAvatars={true}
+          showTimestamps={true}
+          layout="default"
+          maxWidth={768}
+          onMessageAction={async (action) => {
+            // Handle message actions here
+            console.log("Message action:", action);
+          }}
         />
       </div>
     </div>

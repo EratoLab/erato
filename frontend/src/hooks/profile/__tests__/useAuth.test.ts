@@ -2,10 +2,12 @@ import { renderHook } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { useAuth } from "../useAuth";
-import { useProfile } from "../useProfile";
+import { useProfileApi } from "../useProfileApi";
+
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 // Mock dependencies
-vi.mock("../useProfile");
+vi.mock("../useProfileApi");
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
@@ -36,7 +38,7 @@ afterEach(() => {
 });
 
 // Mock implementations
-const mockUseProfile = useProfile as unknown as ReturnType<typeof vi.fn>;
+const mockUseProfileApi = useProfileApi as unknown as ReturnType<typeof vi.fn>;
 
 describe("useAuth", () => {
   beforeEach(() => {
@@ -44,7 +46,7 @@ describe("useAuth", () => {
     vi.clearAllMocks();
 
     // Default mock implementations
-    mockUseProfile.mockReturnValue({
+    mockUseProfileApi.mockReturnValue({
       profile: undefined,
       isLoading: false,
       error: null,
@@ -53,23 +55,28 @@ describe("useAuth", () => {
   });
 
   it("should detect authenticated state when profile exists", () => {
-    // Mock an authenticated user
-    mockUseProfile.mockReturnValue({
-      profile: { id: "user1", name: "Test User" } as any,
+    const mockProfile: UserProfile = {
+      id: "user1",
+      preferred_language: "en",
+      name: undefined,
+      email: undefined,
+      picture: undefined,
+    };
+
+    mockUseProfileApi.mockReturnValue({
+      profile: mockProfile,
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
     });
 
     const { result } = renderHook(() => useAuth());
-
     expect(result.current.isAuthenticated).toBe(true);
-    expect(result.current.profile).toEqual({ id: "user1", name: "Test User" });
+    expect(result.current.profile).toEqual(mockProfile);
   });
 
   it("should detect unauthenticated state when profile is undefined", () => {
     // Mock an unauthenticated user (no profile)
-    mockUseProfile.mockReturnValue({
+    mockUseProfileApi.mockReturnValue({
       profile: undefined,
       isLoading: false,
       error: null,
@@ -84,7 +91,7 @@ describe("useAuth", () => {
 
   it("should handle loading state", () => {
     // Mock loading state
-    mockUseProfile.mockReturnValue({
+    mockUseProfileApi.mockReturnValue({
       profile: undefined,
       isLoading: true,
       error: null,
@@ -100,7 +107,7 @@ describe("useAuth", () => {
     const testError = new Error("Auth error");
 
     // Mock error state
-    mockUseProfile.mockReturnValue({
+    mockUseProfileApi.mockReturnValue({
       profile: undefined,
       isLoading: false,
       isError: true,
@@ -115,12 +122,18 @@ describe("useAuth", () => {
   });
 
   it("should handle logout", async () => {
-    // Setup authenticated user first
-    mockUseProfile.mockReturnValue({
-      profile: { id: "user1" } as any,
+    const mockProfile: UserProfile = {
+      id: "user1",
+      preferred_language: "en",
+      name: undefined,
+      email: undefined,
+      picture: undefined,
+    };
+
+    mockUseProfileApi.mockReturnValue({
+      profile: mockProfile,
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
     });
 
     const { result, rerender } = renderHook(() => useAuth());
@@ -129,7 +142,7 @@ describe("useAuth", () => {
     expect(result.current.isAuthenticated).toBe(true);
 
     // Prepare for logout state
-    mockUseProfile.mockReturnValue({
+    mockUseProfileApi.mockReturnValue({
       profile: undefined,
       isLoading: false,
       error: null,

@@ -1,5 +1,12 @@
 import clsx from "clsx";
-import React, { useState, useRef, useCallback, memo, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useCallback,
+  memo,
+  useEffect,
+  useId,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { useClickOutside } from "@/hooks/useClickOutside";
@@ -94,7 +101,10 @@ export const DropdownMenu = memo(
     });
     const menuRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
-    const menuId = id ?? `dropdown-${Math.random().toString(36).slice(2)}`;
+
+    // Use React's useId hook for stable IDs across server/client
+    const reactId = useId();
+    const menuId = id ?? `dropdown-${reactId}`;
 
     const updatePosition = useCallback(() => {
       if (!isOpen || !menuRef.current || !buttonRef.current) return;

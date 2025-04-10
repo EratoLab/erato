@@ -8,3 +8,4 @@ export * from "@/components/providers/ApiProvider";
 export * from "./ChatProvider";
 export * from "@/components/providers/ThemeProvider";
 export * from "./RootProvider";
+export * from "./ProfileProvider";

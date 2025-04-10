@@ -1,6 +1,5 @@
-import useResizeObserver from "@react-hook/resize-observer";
 import clsx from "clsx";
-import React, { memo, useRef, useState } from "react";
+import React, { memo, useRef, useState, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
@@ -8,7 +7,8 @@ import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { SidebarToggleIcon, EditIcon } from "../icons";
 
-import type { ChatSession, UserProfile } from "@/types/chat";
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ChatSession } from "@/types/chat";
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -120,15 +120,34 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const ref = useRef<HTMLElement>(null);
     const [width, setWidth] = useState(minWidth);
 
-    useResizeObserver(ref, (entry) => {
-      setWidth(entry.contentRect.width);
-    });
+    // Only use ResizeObserver in the browser
+    const isBrowser = typeof window !== "undefined";
+
+    useEffect(() => {
+      if (isBrowser && ref.current) {
+        // Create observer manually to avoid SSR issues
+        const resizeObserver = new ResizeObserver((entries) => {
+          if (entries.length > 0) {
+            setWidth(entries[0].contentRect.width);
+          }
+        });
+
+        resizeObserver.observe(ref.current);
+
+        // Clean up
+        return () => {
+          resizeObserver.disconnect();
+        };
+      }
+    }, [isBrowser, ref]);
 
     // When not collapsed, set the sidebar width
     // When collapsed, we'll hide it completely with CSS
     const sidebarWidth = collapsed ? 0 : Math.max(width, minWidth);
 
     const handleSignOut = () => {
+      if (!isBrowser) return;
+
       console.log("ChatHistorySidebar handleSignOut called");
       try {
         const signOutUrl = "/oauth2/sign_out";

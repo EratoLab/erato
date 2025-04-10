@@ -6,9 +6,9 @@ import {
   FileUploadButton,
   FilePreviewButton,
 } from "@/components/ui/FileUpload";
-import { useChat } from "@/hooks/chat";
 import { useFileDropzone } from "@/hooks/files";
 import { useChatInputHandlers } from "@/hooks/ui";
+import { useChatContext } from "@/providers/ChatProvider";
 
 import { Button } from "../Controls/Button";
 import { Tooltip } from "../Controls/Tooltip";
@@ -44,7 +44,7 @@ export const ChatInput = ({
   onSendMessage,
   onRegenerate,
   handleFileAttachments,
-  isLoading = false,
+  isLoading: propIsLoading,
   disabled = false,
   className = "",
   placeholder = "Type a message...",
@@ -58,13 +58,15 @@ export const ChatInput = ({
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Use the modern chat hook
-  const { isStreaming } = useChat();
+  // Get necessary state from context instead of useChat()
+  const { isStreaming, isMessagingLoading, isUploading } = useChatContext();
+
+  // Combine loading states
+  const isLoading = propIsLoading || isMessagingLoading;
 
   // Use our modernized file upload hook
   const {
     uploadFiles,
-    isUploading,
     uploadedFiles,
     error: uploadError,
   } = useFileDropzone({
@@ -89,7 +91,14 @@ export const ChatInput = ({
   // Create the submit handler
   const handleSubmit = createSubmitHandler(
     message,
-    onSendMessage,
+    (messageContent) => {
+      console.log(
+        "[CHAT_FLOW] ChatInput - Message submitted:",
+        messageContent.substring(0, 20) +
+          (messageContent.length > 20 ? "..." : ""),
+      );
+      onSendMessage(messageContent);
+    },
     isLoading || isStreaming,
     disabled,
     () => setMessage(""),

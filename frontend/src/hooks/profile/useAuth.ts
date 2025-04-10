@@ -6,7 +6,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
 
-import { useProfile } from "./useProfile";
+import { useProfileApi } from "./useProfileApi";
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -16,7 +16,7 @@ interface AuthState {
 
 export function useAuth() {
   const queryClient = useQueryClient();
-  const { profile, isLoading, error } = useProfile();
+  const { profile, isLoading, error } = useProfileApi();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Determine authentication state based on profile data

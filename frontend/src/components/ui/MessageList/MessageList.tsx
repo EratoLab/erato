@@ -1,10 +1,10 @@
 import clsx from "clsx";
 import { debounce } from "lodash";
-import React, { memo, useCallback, useMemo, useState, useEffect } from "react";
+import React, { memo, useCallback, useMemo, useEffect } from "react";
 
-import { usePaginatedData } from "@/hooks/usePaginatedData";
+import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
+import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
-import { debugLog } from "@/utils/debugLogger";
 
 import { MessageListHeader } from "./MessageListHeader";
 import {
@@ -15,14 +15,39 @@ import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
 // import { ConversationIndicator } from "../Message/ConversationIndicator";
 
-import type { ChatMessagesResponse } from "../../../lib/generated/v1betaApi/v1betaApiSchemas";
-import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
-import type { UserProfile } from "@/types/chat";
+import type {
+  ChatMessagesResponse,
+  UserProfile,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Message } from "@/types/chat";
 import type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+
+// Simple debug logger until the utils/debugLogger is properly set up
+const debugLog = (category: string, message: string, data?: unknown) => {
+  if (process.env.NODE_ENV === "development") {
+    if (data) {
+      console.log(`[${category}] ${message}`, data);
+    } else {
+      console.log(`[${category}] ${message}`);
+    }
+  }
+};
+
+/**
+ * Type for chat message with loading state
+ */
+export interface ChatMessage extends Message {
+  sender: string;
+  authorId: string;
+  loading?: {
+    state: "typing" | "thinking" | "done" | "error";
+    context?: string;
+  };
+}
 
 // Import the split components
 
@@ -30,7 +55,7 @@ export interface MessageListProps {
   /**
    * Array of all messages in the conversation
    */
-  messages: Record<string, ChatMessageType>;
+  messages: Record<string, ChatMessage>;
 
   /**
    * Order of message IDs
@@ -118,6 +143,64 @@ export interface MessageListProps {
   virtualizationThreshold?: number;
 }
 
+// Separate hook for managing message loading and streaming behavior
+function useMessageLoading({
+  messageOrder,
+  messages,
+  scrollToBottom,
+}: {
+  messageOrder: string[];
+  messages: Record<string, ChatMessage>;
+  scrollToBottom: () => void;
+}) {
+  // Force scroll to bottom when a message is actively streaming
+  useEffect(() => {
+    // Check if the last message is from the assistant and is still loading
+    if (messageOrder.length > 0) {
+      const lastMessageId = messageOrder[messageOrder.length - 1];
+      const lastMessage = messages[lastMessageId];
+
+      if (
+        lastMessage &&
+        lastMessage.sender === "assistant" &&
+        !!lastMessage.loading
+      ) {
+        // Message is streaming, so scroll to bottom
+        debugLog(
+          "RENDER",
+          `Message ${lastMessageId} is streaming, scrolling to bottom`,
+          {
+            loadingState: lastMessage.loading.state,
+            contentLength: lastMessage.content.length,
+          },
+        );
+        scrollToBottom();
+      }
+    }
+  }, [messageOrder, messages, scrollToBottom]);
+}
+
+// Hook to manage loading more messages when near top
+function useLoadMoreOnScroll({
+  isNearTop,
+  hasOlderMessages,
+  isPending,
+  handleLoadMore,
+}: {
+  isNearTop: boolean;
+  hasOlderMessages: boolean;
+  isPending: boolean;
+  handleLoadMore: () => void;
+}) {
+  // Update scroll position check when near the top
+  useEffect(() => {
+    if (isNearTop && hasOlderMessages && !isPending) {
+      console.log("Near top, loading more messages");
+      handleLoadMore();
+    }
+  }, [isNearTop, hasOlderMessages, isPending, handleLoadMore]);
+}
+
 /**
  * MessageList component for rendering chat messages with scroll behavior
  */
@@ -143,14 +226,11 @@ export const MessageList = memo<MessageListProps>(
     virtualizationThreshold = 30,
   }) => {
     // Debug logging for rendering
-    debugLog("RENDER", "MessageList rendering", {
-      messageCount: messageOrder.length,
-      hasLoadingMessage: messageOrder.some((id) => !!messages[id].loading),
-      loadingMessageIds: messageOrder.filter((id) => !!messages[id].loading),
-    });
-
-    // Measure container dimensions for virtualization
-    const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+    // debugLog("RENDER", "MessageList rendering", {
+    //   messageCount: messageOrder.length,
+    //   hasLoadingMessage: messageOrder.some((id) => !!messages[id].loading),
+    //   loadingMessageIds: messageOrder.filter((id) => !!messages[id].loading),
+    // });
 
     // Use our custom hooks for scroll behavior and pagination
     const {
@@ -175,32 +255,8 @@ export const MessageList = memo<MessageListProps>(
       ],
     });
 
-    // Force scroll to bottom when a message is actively streaming
-    useEffect(() => {
-      // Check if the last message is from the assistant and is still loading
-      if (messageOrder.length > 0) {
-        const lastMessageId = messageOrder[messageOrder.length - 1];
-        const lastMessage = messages[lastMessageId];
-
-        if (
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          lastMessage &&
-          lastMessage.sender === "assistant" &&
-          !!lastMessage.loading
-        ) {
-          // Message is streaming, so scroll to bottom
-          debugLog(
-            "RENDER",
-            `Message ${lastMessageId} is streaming, scrolling to bottom`,
-            {
-              loadingState: lastMessage.loading.state,
-              contentLength: lastMessage.content.length,
-            },
-          );
-          scrollToBottom();
-        }
-      }
-    }, [messageOrder, messages, scrollToBottom]);
+    // Use the message loading hook
+    useMessageLoading({ messageOrder, messages, scrollToBottom });
 
     // Set up pagination for message data
     const { visibleData, hasMore, loadMore, isNewlyLoaded, paginationStats } =
@@ -275,65 +331,32 @@ export const MessageList = memo<MessageListProps>(
     const shouldUseVirtualization =
       useVirtualization && messageOrder.length >= virtualizationThreshold;
 
+    // Use our virtualization hook
+    const { containerSize } = useMessageListVirtualization({
+      containerRef,
+      shouldUseVirtualization,
+    });
+
     // Helper function to get CSS classes for message highlighting
     const getMessageClassName = useMessageClassNameHelper();
 
     // Inject message animations
     useMessageAnimations();
 
-    // Update container size for virtualization
-    useEffect(() => {
-      if (!containerRef.current || !shouldUseVirtualization) return;
+    // Use our hook for scroll events
+    useScrollEvents({
+      containerRef,
+      onScroll: checkScrollPosition,
+      deps: [apiMessagesResponse],
+    });
 
-      const resizeObserver = new ResizeObserver((entries) => {
-        const { width, height } = entries[0].contentRect;
-        setContainerSize({ width, height });
-      });
-
-      resizeObserver.observe(containerRef.current);
-      return () => resizeObserver.disconnect();
-    }, [containerRef, shouldUseVirtualization]);
-
-    // Update scroll position check when near the top
-    useEffect(() => {
-      if (isNearTop && hasOlderMessages && !isPending) {
-        console.log("Near top, loading more messages");
-        handleLoadMore();
-      }
-    }, [isNearTop, hasOlderMessages, isPending, handleLoadMore]);
-
-    // Update container size on resize for virtualization
-    useEffect(() => {
-      if (!shouldUseVirtualization) return;
-
-      const updateSize = () => {
-        if (containerRef.current) {
-          const { clientWidth, clientHeight } = containerRef.current;
-          setContainerSize({
-            width: clientWidth,
-            height: clientHeight,
-          });
-        }
-      };
-
-      updateSize();
-      window.addEventListener("resize", updateSize);
-      return () => window.removeEventListener("resize", updateSize);
-    }, [containerRef, shouldUseVirtualization]);
-
-    // Register scroll handler to update position markers
-    useEffect(() => {
-      if (!containerRef.current) return;
-
-      // Capture the ref in a local variable to avoid closure issues
-      const container = containerRef.current;
-
-      // Check scroll position on scroll events
-      container.addEventListener("scroll", checkScrollPosition);
-      return () => {
-        container.removeEventListener("scroll", checkScrollPosition);
-      };
-    }, [apiMessagesResponse, checkScrollPosition, containerRef]);
+    // Use our hook to load more messages when scrolling to top
+    useLoadMoreOnScroll({
+      isNearTop,
+      hasOlderMessages,
+      isPending,
+      handleLoadMore,
+    });
 
     // Return the header component with load more button if needed
     const renderMessageListHeader = useMemo(() => {
@@ -409,12 +432,7 @@ export const MessageList = memo<MessageListProps>(
               onMessageAction={onMessageAction}
             />
           )}
-
-          {/* End of conversation indicator */}
-          {/* <ConversationIndicator type="end" /> */}
         </div>
-
-        {/* Message List - virtualized or standard based on settings and message count */}
       </div>
     );
   },

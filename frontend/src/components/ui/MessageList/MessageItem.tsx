@@ -48,33 +48,33 @@ export const MessageItem = memo<MessageItemProps>(
     className,
   }) => {
     // Debug message loading state
-    useEffect(() => {
-      if (message.sender === "assistant" && message.loading) {
-        debugLog("RENDER", `Assistant message ${messageId} is loading`, {
-          loadingState: message.loading.state,
-          content:
-            message.content.substring(0, 30) +
-            (message.content.length > 30 ? "..." : ""),
-        });
-      }
-    }, [messageId, message]);
+    // useEffect(() => {
+    //   if (message.sender === "assistant" && message.loading) {
+    //     debugLog("RENDER", `Assistant message ${messageId} is loading`, {
+    //       loadingState: message.loading.state,
+    //       content:
+    //         message.content.substring(0, 30) +
+    //         (message.content.length > 30 ? "..." : ""),
+    //     });
+    //   }
+    // }, [messageId, message]);
 
     // Log rendering for assistant messages
-    if (message.sender === "assistant") {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (ENABLE_VERBOSE_DEBUG) {
-        console.log(
-          `%c🔄 RENDERING MESSAGE ${messageId}`,
-          "background: #121; color: #4af; font-size: 12px; padding: 2px 6px; border-radius: 3px;",
-          {
-            isLoading: !!message.loading,
-            loadingState: message.loading?.state,
-            contentLength: message.content.length,
-            hasError: !!message.error,
-          },
-        );
-      }
-    }
+    // if (message.sender === "assistant") {
+    //   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    //   if (ENABLE_VERBOSE_DEBUG) {
+    //     console.log(
+    //       `%c🔄 RENDERING MESSAGE ${messageId}`,
+    //       "background: #121; color: #4af; font-size: 12px; padding: 2px 6px; border-radius: 3px;",
+    //       {
+    //         isLoading: !!message.loading,
+    //         loadingState: message.loading?.state,
+    //         contentLength: message.content.length,
+    //         hasError: !!message.error,
+    //       },
+    //     );
+    //   }
+    // }
 
     return (
       <div style={style} className={className}>

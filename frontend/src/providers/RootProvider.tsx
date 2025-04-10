@@ -4,6 +4,7 @@ import { ApiProvider } from "@/components/providers/ApiProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 
 import { ChatProvider } from "./ChatProvider";
+import { ProfileProvider } from "./ProfileProvider";
 
 import type { FileType } from "@/utils/fileTypes";
 import type { ReactNode } from "react";
@@ -26,9 +27,11 @@ export function RootProvider({
   return (
     <ApiProvider>
       <ThemeProvider>
-        <ChatProvider acceptedFileTypes={acceptedFileTypes}>
-          {children}
-        </ChatProvider>
+        <ProfileProvider>
+          <ChatProvider acceptedFileTypes={acceptedFileTypes}>
+            {children}
+          </ChatProvider>
+        </ProfileProvider>
       </ThemeProvider>
     </ApiProvider>
   );

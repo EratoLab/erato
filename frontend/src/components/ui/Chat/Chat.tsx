@@ -1,24 +1,24 @@
 import clsx from "clsx";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback } from "react";
 
+import { useChatActions, useChatTransition } from "@/hooks/chat";
+import { useSidebar } from "@/hooks/ui/useSidebar";
 import { useProfile } from "@/hooks/useProfile";
+import { useChatContext } from "@/providers/ChatProvider";
 
 import { MessageList } from "../MessageList";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 
+import type { ChatMessagesResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ChatSession } from "@/types/chat";
 import type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
-} from "../../../types/message-controls";
+} from "@/types/message-controls";
 import type { FileType } from "@/utils/fileTypes";
-
-import { useChatHistory } from "@/components/containers/ChatHistoryProvider";
-import { useChat } from "@/components/containers/ChatProvider";
-import { useSidebar } from "@/contexts/SidebarContext";
-import { useChatActions } from "@/hooks/useChatActions";
 
 export interface ChatProps {
   className?: string;
@@ -80,101 +80,78 @@ export const Chat = ({
   isTransitioning = false,
 }: ChatProps) => {
   // Use the sidebar context
-  const sidebarContext = useSidebar();
+  const { isOpen: sidebarCollapsed, toggle: onToggleCollapse } = useSidebar();
 
-  // These values are guaranteed to exist from the context
-  const sidebarCollapsed = sidebarContext.collapsed;
-  const onToggleCollapse = sidebarContext.toggleCollapsed;
-
-  // Get chat data and actions from context providers
+  // Get chat data and actions from context provider
   const {
+    // Chat messaging
     messages,
     messageOrder,
     sendMessage,
-    isPending: chatLoading,
-    hasOlderMessages,
-    loadOlderMessages,
-    apiMessagesResponse,
-    handleFileAttachments,
-    performFileUpload,
-    isUploadingFiles,
-    uploadError,
-  } = useChat();
+    isMessagingLoading: chatLoading,
+    // Chat history
+    chats: chatHistory,
+    currentChatId,
+    navigateToChat: switchSession,
+    deleteChat: deleteSession,
+    isHistoryLoading: chatHistoryLoading,
+    historyError: chatHistoryError,
+    refetchHistory: refreshChats,
+  } = useChatContext();
+
   const { profile } = useProfile();
-  const {
-    sessions,
-    currentSessionId,
-    switchSession,
-    deleteSession,
-    isPending: chatHistoryLoading,
-    error: chatHistoryError,
-    refreshChats,
-  } = useChatHistory();
+
+  // Convert the chat history data to the format expected by the sidebar
+  const sessions: ChatSession[] = Array.isArray(chatHistory)
+    ? chatHistory.map((chat) => ({
+        id: chat.id,
+        title: "New Chat", // Default title
+        updatedAt: new Date().toISOString(), // Default date
+        messages: [],
+      }))
+    : [];
+
+  // Define placeholder values for missing functionality
+  const hasOlderMessages = false;
+  const loadOlderMessages = () => {};
+  const apiMessagesResponse: ChatMessagesResponse | undefined = undefined;
+  const handleFileAttachments = () => {};
 
   // Use chat actions hook for handlers
   const {
-    handleSessionSelect: baseHandleSessionSelect,
+    handleSessionSelect,
     handleSendMessage: baseHandleSendMessage,
     handleMessageAction,
-  } = useChatActions(switchSession, sendMessage, onMessageAction);
+  } = useChatActions({
+    switchSession,
+    sendMessage,
+    onMessageAction,
+  });
 
   // Enhanced sendMessage handler that refreshes the sidebar after sending
   const handleSendMessage = useCallback(
     (message: string) => {
+      console.log("[CHAT_FLOW] Chat - handleSendMessage called");
       // Send the message
       baseHandleSendMessage(message);
 
       // Schedule a refresh of the chat history sidebar after a short delay
       // This allows time for the message to be processed and confirmed
       setTimeout(() => {
-        console.log("Refreshing chat history");
+        // Remove noisy logging
         void refreshChats();
-      }, 2500); // 1.5 second delay
+      }, 2500); // 2.5 second delay
     },
     [baseHandleSendMessage, refreshChats],
   );
 
-  // Customize session select handler to use custom handler if provided
-  const handleSessionSelect = (sessionId: string) => {
-    baseHandleSessionSelect(sessionId, customSessionSelect);
-  };
-
-  // Create a state to maintain previous messages during transitions
-  const [prevMessages, setPrevMessages] = useState<typeof messages>({});
-  const [prevMessageOrder, setPrevMessageOrder] = useState<string[]>([]);
-
-  // Keep previous messages during transitions to prevent flickering
-  useEffect(() => {
-    // Only update the state if we have messages and they've actually changed
-    if (
-      Object.keys(messages).length > 0 &&
-      (JSON.stringify(Object.keys(messages)) !==
-        JSON.stringify(Object.keys(prevMessages)) ||
-        JSON.stringify(messageOrder) !== JSON.stringify(prevMessageOrder))
-    ) {
-      setPrevMessages(messages);
-      setPrevMessageOrder(messageOrder);
-    }
-  }, [messages, messageOrder, prevMessages, prevMessageOrder]);
-
-  // Determine which messages to display - current or previous during transitions
-  const displayMessages = useMemo(() => {
-    return isTransitioning && Object.keys(messages).length === 0
-      ? prevMessages
-      : messages;
-  }, [isTransitioning, messages, prevMessages]);
-
-  const displayMessageOrder = useMemo(() => {
-    return isTransitioning && messageOrder.length === 0
-      ? prevMessageOrder
-      : messageOrder;
-  }, [isTransitioning, messageOrder, prevMessageOrder]);
-
-  // Determine if we should use virtualization based on message count
-  const useVirtualization = useMemo(
-    () => displayMessageOrder.length > 30,
-    [displayMessageOrder.length],
-  );
+  // Use our transition hook to handle message transitions
+  const { displayMessages, displayMessageOrder, useVirtualization } =
+    useChatTransition({
+      messages,
+      messageOrder,
+      isTransitioning,
+    });
 
   // Define a constant for the page size
   const messagePageSize = 6;
@@ -185,20 +162,28 @@ export const Chat = ({
     void refreshChats();
   }, [refreshChats]);
 
+  // Handle session select with void return type
+  const handleSessionSelectWrapper = (sessionId: string) => {
+    handleSessionSelect(sessionId, customSessionSelect);
+  };
+
+  // Handle deleting a session with void return type
+  const handleDeleteSession = (sessionId: string) => {
+    void deleteSession(sessionId);
+  };
+
   return (
     <div className="flex size-full flex-col sm:flex-row">
       <ChatHistorySidebar
         collapsed={sidebarCollapsed}
         onNewChat={onNewChat}
         onToggleCollapse={onToggleCollapse}
-        sessions={sessions.filter(
-          (session) => session.metadata?.isTemporary !== true,
-        )}
-        currentSessionId={currentSessionId}
-        onSessionSelect={handleSessionSelect}
-        onSessionDelete={deleteSession}
+        sessions={sessions}
+        currentSessionId={currentChatId || ""}
+        onSessionSelect={handleSessionSelectWrapper}
+        onSessionDelete={handleDeleteSession}
         isLoading={isTransitioning ? false : chatHistoryLoading}
-        error={chatHistoryError}
+        error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
         className="fixed inset-0 z-50 sm:relative sm:z-auto"
         userProfile={profile}
       />
@@ -212,14 +197,14 @@ export const Chat = ({
           role="region"
           aria-label="Chat conversation"
         >
-          {/* Use the new MessageList component with virtualization */}
+          {/* Use the MessageList component */}
           <MessageList
             messages={displayMessages}
             messageOrder={displayMessageOrder}
             loadOlderMessages={loadOlderMessages}
             hasOlderMessages={hasOlderMessages}
             isPending={isTransitioning ? false : chatLoading}
-            currentSessionId={currentSessionId}
+            currentSessionId={currentChatId || ""}
             apiMessagesResponse={apiMessagesResponse}
             pageSize={messagePageSize}
             maxWidth={maxWidth}
@@ -244,9 +229,6 @@ export const Chat = ({
             onRegenerate={onRegenerate}
             showFileTypes={true}
             initialFiles={[]}
-            performFileUpload={performFileUpload}
-            isUploading={isUploadingFiles}
-            uploadError={uploadError}
           />
         </div>
       </ChatErrorBoundary>
