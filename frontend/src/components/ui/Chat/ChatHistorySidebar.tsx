@@ -25,6 +25,11 @@ export interface ChatHistorySidebarProps {
   onNewChat?: () => void;
   onToggleCollapse?: () => void;
   showTitle?: boolean;
+  /**
+   * Whether to show timestamps for chats
+   * @default true
+   */
+  showTimestamps?: boolean;
   sessions: ChatSession[];
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
@@ -109,6 +114,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     onNewChat,
     onToggleCollapse,
     showTitle = false,
+    showTimestamps = true,
     sessions,
     currentSessionId,
     onSessionSelect,
@@ -209,6 +215,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   currentSessionId={currentSessionId}
                   onSessionSelect={onSessionSelect}
                   onSessionDelete={onSessionDelete}
+                  showTimestamps={showTimestamps}
                   className="flex-1 p-2"
                 />
               )}

@@ -38,42 +38,64 @@ const ChatHistoryListItem = memo<{
   onSelect: () => void;
   onDelete?: () => void;
   onShowDetails?: () => void;
-}>(({ session, isActive, layout, onSelect, onDelete, onShowDetails }) => (
-  <InteractiveContainer
-    onClick={onSelect}
-    useDiv={true}
-    className={clsx(
-      "flex flex-col rounded-lg px-4 py-3 text-left",
-      isActive && "bg-theme-bg-selected",
-      "hover:bg-theme-bg-hover",
-      layout === "compact" ? "gap-0.5" : "gap-2",
-    )}
-  >
-    <div className="flex items-center justify-between gap-2">
-      <span className="truncate font-medium">{session.title}</span>
-      <DropdownMenu
-        items={[
-          {
-            label: "Show Details",
-            icon: <Info className="size-4" />,
-            onClick: onShowDetails ?? (() => {}),
-          },
-          {
-            label: "Delete",
-            icon: <Trash className="size-4" />,
-            onClick: onDelete ?? (() => {}),
-            variant: "danger",
-          },
-        ]}
-      />
-    </div>
-    {layout !== "compact" && session.metadata?.lastMessage && (
-      <p className="truncate text-sm text-theme-fg-secondary">
-        {session.metadata.lastMessage.content}
-      </p>
-    )}
-  </InteractiveContainer>
-));
+  showTimestamps?: boolean;
+}>(
+  ({
+    session,
+    isActive,
+    layout,
+    onSelect,
+    onDelete,
+    onShowDetails,
+    showTimestamps = true,
+  }) => (
+    <InteractiveContainer
+      onClick={onSelect}
+      useDiv={true}
+      className={clsx(
+        "flex flex-col rounded-lg px-4 py-3 text-left",
+        isActive && "bg-theme-bg-selected",
+        "hover:bg-theme-bg-hover",
+        layout === "compact" ? "gap-0.5" : "gap-2",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate font-medium">
+          {session.title || "New Chat"}
+        </span>
+        <DropdownMenu
+          items={[
+            {
+              label: "Show Details",
+              icon: <Info className="size-4" />,
+              onClick: onShowDetails ?? (() => {}),
+            },
+            {
+              label: "Delete",
+              icon: <Trash className="size-4" />,
+              onClick: onDelete ?? (() => {}),
+              variant: "danger",
+            },
+          ]}
+        />
+      </div>
+      {layout !== "compact" && (
+        <>
+          {session.metadata?.lastMessage && (
+            <p className="truncate text-sm text-theme-fg-secondary">
+              {session.metadata.lastMessage.content}
+            </p>
+          )}
+          {showTimestamps && session.updatedAt && (
+            <p className="text-xs text-theme-fg-secondary">
+              {new Date(session.updatedAt).toLocaleString()}
+            </p>
+          )}
+        </>
+      )}
+    </InteractiveContainer>
+  ),
+);
 
 ChatHistoryListItem.displayName = "ChatHistoryListItem";
 
@@ -87,6 +109,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     className,
     layout = "default",
     isLoading = false,
+    showTimestamps = true,
   }) => {
     if (isLoading) {
       return <ChatHistoryListSkeleton layout={layout} />;
@@ -106,6 +129,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             session={session}
             isActive={currentSessionId === session.id}
             layout={layout}
+            showTimestamps={showTimestamps}
             onSelect={() => onSessionSelect(session.id)}
             onDelete={
               onSessionDelete ? () => onSessionDelete(session.id) : undefined

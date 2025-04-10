@@ -105,9 +105,15 @@ export const Chat = ({
   const sessions: ChatSession[] = Array.isArray(chatHistory)
     ? chatHistory.map((chat) => ({
         id: chat.id,
-        title: "New Chat", // Default title
-        updatedAt: new Date().toISOString(), // Default date
-        messages: [],
+        title: chat.title_by_summary || "New Chat", // Use title from API
+        updatedAt: chat.last_message_at || new Date().toISOString(), // Use last message timestamp
+        messages: [], // We don't need to populate messages here
+        metadata: {
+          lastMessage: {
+            content: chat.title_by_summary || "", // Reuse title as a preview if no actual message available
+            timestamp: chat.last_message_at || new Date().toISOString(),
+          },
+        },
       }))
     : [];
 
@@ -196,6 +202,7 @@ export const Chat = ({
         currentSessionId={currentChatId || ""}
         onSessionSelect={handleSessionSelectWrapper}
         onSessionDelete={handleDeleteSession}
+        showTimestamps={showTimestamps}
         isLoading={isTransitioning ? false : chatHistoryLoading}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
         className="fixed inset-0 z-50 sm:relative sm:z-auto"

@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { create } from "zustand";
 
-import { useChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 interface ChatHistoryState {
   currentChatId: string | null;
@@ -28,7 +28,10 @@ export function useChatHistory() {
   const { currentChatId, setCurrentChatId } = useChatHistoryStore();
 
   // Fetch chats using the generated API hook
-  const { data: chats, isLoading, error, refetch } = useChats({});
+  const { data, isLoading, error, refetch } = useRecentChats({});
+
+  // Extract chats from the response structure
+  const chats = data?.chats || [];
 
   // Navigate to a specific chat
   const navigateToChat = useCallback(

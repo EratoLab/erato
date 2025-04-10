@@ -12,9 +12,18 @@ export interface Message {
   previous_message_id?: string;
 }
 
+// Metadata for a chat session
+export interface ChatSessionMetadata {
+  lastMessage?: {
+    content: string;
+    timestamp: string;
+  };
+}
+
 export interface ChatSession {
   id: string;
   title: string;
   updatedAt: string;
   messages: Message[];
+  metadata?: ChatSessionMetadata;
 }
