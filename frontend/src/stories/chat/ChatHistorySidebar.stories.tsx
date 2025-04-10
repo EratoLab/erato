@@ -6,7 +6,7 @@ import { ChatHistorySidebar } from "@/components/ui";
 import type { ChatSession } from "@/types/chat";
 import type { Meta, StoryObj } from "@storybook/react";
 
-const meta = {
+const meta: Meta<typeof ChatHistorySidebar> = {
   title: "CHAT/ChatHistorySidebar",
   component: ChatHistorySidebar,
   parameters: {
@@ -40,7 +40,7 @@ A collapsible sidebar for chat history navigation.
     ),
   ],
   tags: ["autodocs"],
-} satisfies Meta<typeof ChatHistorySidebar>;
+};
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -50,14 +50,12 @@ const mockSessions: ChatSession[] = [
     id: "1",
     title: "Chat about React Performance",
     messages: [],
-    createdAt: new Date("2024-01-01"),
-    updatedAt: new Date("2024-01-01"),
+    updatedAt: new Date("2024-01-01").toISOString(),
     metadata: {
       ownerId: "user-1",
       lastMessage: {
         content: "Let's discuss React performance optimization techniques",
-        createdAt: new Date("2024-01-01"),
-        sender: "user" as const,
+        timestamp: new Date("2024-01-01").toISOString(),
       },
     },
   },
@@ -65,14 +63,12 @@ const mockSessions: ChatSession[] = [
     id: "2",
     title: "TypeScript Best Practices",
     messages: [],
-    createdAt: new Date("2024-01-02"),
-    updatedAt: new Date("2024-01-02"),
+    updatedAt: new Date("2024-01-02").toISOString(),
     metadata: {
       ownerId: "user-1",
       lastMessage: {
         content: "What are your thoughts on TypeScript strict mode?",
-        createdAt: new Date("2024-01-02"),
-        sender: "assistant" as const,
+        timestamp: new Date("2024-01-02").toISOString(),
       },
     },
   },

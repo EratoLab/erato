@@ -3,9 +3,10 @@ import { useState } from "react";
 
 import { ChatHistorySidebar } from "../../components/ui/Chat/ChatHistorySidebar";
 
+import type { ChatSession } from "@/types/chat";
 import type { Meta, StoryObj } from "@storybook/react";
 
-const meta = {
+const meta: Meta<typeof ChatHistorySidebar> = {
   title: "CHAT/ChatHistorySidebar/Tests",
   component: ChatHistorySidebar,
   parameters: {
@@ -18,24 +19,21 @@ const meta = {
       </div>
     ),
   ],
-} satisfies Meta<typeof ChatHistorySidebar>;
+};
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const mockSessions = [
+const mockSessions: ChatSession[] = [
   {
     id: "1",
     title: "Chat about React Performance",
     messages: [],
-    createdAt: new Date("2024-01-01"),
-    updatedAt: new Date("2024-01-01"),
+    updatedAt: new Date("2024-01-01").toISOString(),
     metadata: {
-      ownerId: "user-1",
       lastMessage: {
         content: "Let's discuss React performance optimization techniques",
-        createdAt: new Date("2024-01-01"),
-        sender: "user" as const,
+        timestamp: new Date("2024-01-01").toISOString(),
       },
     },
   },

@@ -1,11 +1,11 @@
-import React, { memo, useEffect } from "react";
+import React, { memo } from "react";
 
-import { debugLog } from "@/utils/debugLogger";
+import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
 import { ChatMessage } from "../Chat/ChatMessage";
 
-import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
-import type { UserProfile } from "@/types/chat";
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Message } from "@/types/chat";
 import type {
   MessageAction,
   MessageControlsComponent,
@@ -17,7 +17,7 @@ const ENABLE_VERBOSE_DEBUG = true;
 
 export interface MessageItemProps {
   messageId: string;
-  message: ChatMessageType;
+  message: Message;
   isNew: boolean;
   style?: React.CSSProperties;
   maxWidth?: number;
@@ -80,7 +80,7 @@ export const MessageItem = memo<MessageItemProps>(
       <div style={style} className={className}>
         <ChatMessage
           key={messageId}
-          message={message}
+          message={mapMessageToUiMessage(message)}
           showTimestamp={showTimestamp}
           showAvatar={showAvatar}
           maxWidth={maxWidth}
@@ -106,25 +106,20 @@ export const MessageItem = memo<MessageItemProps>(
     // Re-render if content changes
     if (prevMessage.content !== nextMessage.content) return false;
 
-    // Re-render if loading or error state changes
-    if (!!prevMessage.loading !== !!nextMessage.loading) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    // Re-render if status changes
+    if (prevMessage.status !== nextMessage.status) {
       if (ENABLE_VERBOSE_DEBUG) {
         console.log(
-          `%c⚡ LOADING STATE CHANGED for ${nextProps.messageId}`,
+          `%c⚡ STATUS CHANGED for ${nextProps.messageId}`,
           "background: #121; color: #f93; font-size: 12px; padding: 2px 6px; border-radius: 3px;",
           {
-            from: !!prevMessage.loading,
-            to: !!nextMessage.loading,
-            prevState: prevMessage.loading?.state,
-            nextState: nextMessage.loading?.state,
+            from: prevMessage.status,
+            to: nextMessage.status,
           },
         );
       }
       return false;
     }
-
-    if (!!prevMessage.error !== !!nextMessage.error) return false;
 
     // Re-render if style changes (for virtualization)
     if (JSON.stringify(prevProps.style) !== JSON.stringify(nextProps.style))

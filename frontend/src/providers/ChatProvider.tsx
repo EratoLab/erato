@@ -139,7 +139,7 @@ export function ChatProvider({
 
   // Combine loading states and errors
   const isLoading = isHistoryLoading || isMessagingLoading;
-  const error = historyError || messagingError;
+  const error = historyError ?? messagingError;
 
   // Memoize the context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => {

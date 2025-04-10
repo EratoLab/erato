@@ -1,8 +1,10 @@
 import clsx from "clsx";
 import Image from "next/image";
-import React from "react";
+import React, { useMemo } from "react";
 
-import type { UserProfile } from "@/types/chat";
+import { mapApiUserProfileToUiProfile } from "@/utils/adapters/userProfileAdapter";
+
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export interface AvatarProps {
   userProfile?: UserProfile;
@@ -13,20 +15,25 @@ export interface AvatarProps {
 
 export const Avatar = React.memo<AvatarProps>(
   ({ userProfile, userOrAssistant = false, size = "md", className }) => {
+    const uiProfile = useMemo(
+      () => mapApiUserProfileToUiProfile(userProfile),
+      [userProfile],
+    );
+
     const getInitials = () => {
       if (userOrAssistant) {
         return "A"; // 'A' for Assistant
       }
-      if (userProfile?.name) {
-        const nameParts = userProfile.name.split(" ");
+      if (uiProfile?.name) {
+        const nameParts = uiProfile.name.split(" ");
         return `${nameParts[0][0]}${nameParts[1] ? nameParts[1][0] : ""}`.toUpperCase();
       }
-      if (userProfile?.firstName && userProfile.lastName) {
-        return `${userProfile.firstName[0]}${userProfile.lastName[0]}`.toUpperCase();
-      }
-      if (userProfile?.username) {
-        return userProfile.username[0].toUpperCase();
-      }
+      // if (userProfile?.firstName && userProfile.lastName) {
+      //   return `${userProfile.firstName[0]}${userProfile.lastName[0]}`.toUpperCase();
+      // }
+      // if (userProfile?.username) {
+      //   return userProfile.username[0].toUpperCase();
+      // }
       return "E"; // Default to 'E' for Erato
     };
 
@@ -47,9 +54,9 @@ export const Avatar = React.memo<AvatarProps>(
           className,
         )}
       >
-        {userProfile?.avatarUrl && !userOrAssistant ? (
+        {uiProfile?.avatarUrl && !userOrAssistant ? (
           <Image
-            src={userProfile.avatarUrl}
+            src={uiProfile.avatarUrl}
             alt="User avatar"
             className="rounded-full object-cover"
             fill

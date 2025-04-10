@@ -1,5 +1,7 @@
 import React, { useRef } from "react";
 
+import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
+
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
@@ -53,7 +55,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
           {messages.map((message) => (
             <ChatMessage
               key={message.id}
-              message={message}
+              message={mapMessageToUiMessage(message)}
               className="mb-4"
               showAvatar={showAvatars}
               showTimestamp={showTimestamps}

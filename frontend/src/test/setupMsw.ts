@@ -55,7 +55,7 @@ export function createSSEStreamHandler(chatId: string, messageParts: string[]) {
       let userMessage = "";
       try {
         const body = (await request.json()) as { user_message?: string };
-        userMessage = body.user_message || "";
+        userMessage = body.user_message ?? "";
       } catch (error) {
         console.error("Error parsing request body:", error);
       }

@@ -2,8 +2,8 @@ import React from "react";
 
 import { MessageItem } from "./MessageItem";
 
-import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
-import type { UserProfile } from "@/types/chat";
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Message } from "@/types/chat";
 import type {
   MessageAction,
   MessageControlsComponent,
@@ -11,7 +11,7 @@ import type {
 } from "@/types/message-controls";
 
 interface StandardMessageListProps {
-  messages: Record<string, ChatMessageType>;
+  messages: Record<string, Message>;
   visibleData: string[];
   isNewlyLoaded: (index: number) => boolean;
   getMessageClassName: (isNew: boolean) => string;

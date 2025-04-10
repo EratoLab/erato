@@ -3,7 +3,7 @@ import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
 
 import type { Meta, StoryObj } from "@storybook/react";
 
-const meta = {
+const meta: Meta<typeof ChatMessage> = {
   title: "CHAT/ChatMessage/Variations",
   component: ChatMessage,
   parameters: {
@@ -29,7 +29,7 @@ const meta = {
       description: "Whether to show the avatar",
     },
   },
-} satisfies Meta<typeof ChatMessage>;
+};
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -153,11 +153,12 @@ export const Loading: Story = {
     message: {
       id: "1",
       content: "Initial content",
+      role: "assistant",
+      createdAt: new Date().toISOString(),
       sender: "assistant",
       authorId: "assistant_1",
-      createdAt: new Date(),
       loading: {
-        state: "loading",
+        state: "typing",
         context: "Processing request...",
       },
     },
@@ -171,11 +172,12 @@ export const ToolCalling: Story = {
     message: {
       id: "2",
       content: "Fetching weather data",
+      role: "assistant",
+      createdAt: new Date().toISOString(),
       sender: "assistant",
       authorId: "assistant_1",
-      createdAt: new Date(),
       loading: {
-        state: "tool-calling",
+        state: "thinking",
         context: "Accessing weather API...",
       },
     },
@@ -189,11 +191,12 @@ export const Reasoning: Story = {
     message: {
       id: "3",
       content: "Analyzing data",
+      role: "assistant",
+      createdAt: new Date().toISOString(),
       sender: "assistant",
       authorId: "assistant_1",
-      createdAt: new Date(),
       loading: {
-        state: "reasoning",
+        state: "thinking",
         context: "Processing results...",
       },
     },

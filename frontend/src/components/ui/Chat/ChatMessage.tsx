@@ -12,13 +12,11 @@ import type {
   MessageControlsContext,
   MessageAction,
 } from "../../../types/message-controls";
-import type {
-  ChatMessage as ChatMessageType,
-  UserProfile,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 
 export interface ChatMessageProps {
-  message: ChatMessageType;
+  message: UiChatMessage;
   className?: string;
   /**
    * Maximum width of the message container in pixels
@@ -108,6 +106,7 @@ export const ChatMessage = memo(function ChatMessage({
               showOnHover={showControlsOnHover}
               onAction={onMessageAction}
               className="z-10"
+              isUserMessage={isUser}
             />
           )}
         </div>

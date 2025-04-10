@@ -6,7 +6,7 @@ import { Avatar } from "../Feedback/Avatar";
 import { LogOutIcon, SunIcon, MoonIcon } from "../icons";
 
 import type { ThemeMode } from "@/components/providers/ThemeProvider";
-import type { UserProfile } from "@/types/chat";
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface UserProfileDropdownProps {
   userProfile?: UserProfile;

@@ -3,8 +3,26 @@ import { useState, useEffect, useCallback } from "react";
 
 import { ChatMessage as ChatMessageComponent } from "../../components/ui/Chat/ChatMessage";
 
-import type { ChatMessage, LoadingState } from "@/types/chat";
+import type { MessageAction } from "../../types/message-controls";
+import type { UiChatMessage } from "../../utils/adapters/messageAdapter";
 import type { Meta, StoryObj } from "@storybook/react";
+
+// Custom type for the playground functionality
+type PlaygroundLoadingState = "loading" | "tool-calling" | "reasoning";
+
+interface PlaygroundMessage {
+  id: string;
+  content: string;
+  sender: string;
+  role: "user" | "assistant" | "system";
+  createdAt: Date;
+  authorId: string;
+  loading?: {
+    state: PlaygroundLoadingState;
+    context: string;
+    partialContent?: string;
+  };
+}
 
 interface PlaygroundProps {
   streamingSpeed?: number;
@@ -15,10 +33,11 @@ const StreamingPlayground = ({
   streamingSpeed = 100,
   showLoadingStates = true,
 }: PlaygroundProps) => {
-  const [message, setMessage] = useState<ChatMessage>({
+  const [message, setMessage] = useState<PlaygroundMessage>({
     id: "1",
     content: "",
     sender: "assistant",
+    role: "assistant",
     createdAt: new Date(),
     authorId: "assistant_1",
     loading: {
@@ -28,7 +47,7 @@ const StreamingPlayground = ({
   });
 
   const startStreaming = useCallback(() => {
-    const states: Array<Exclude<LoadingState, "idle" | "error">> = [
+    const states: Array<PlaygroundLoadingState> = [
       "loading",
       "tool-calling",
       "reasoning",
@@ -41,7 +60,7 @@ const StreamingPlayground = ({
     const interval = setInterval(() => {
       if (currentIndex < finalContent.length) {
         // Stream content
-        setMessage((prev) => {
+        setMessage((prev: PlaygroundMessage) => {
           const currentState = showLoadingStates
             ? states[stateIndex % states.length]
             : "loading";
@@ -65,7 +84,7 @@ const StreamingPlayground = ({
         // Move to next state or finish
         stateIndex++;
         if (stateIndex >= states.length || !showLoadingStates) {
-          setMessage((prev) => ({
+          setMessage((prev: PlaygroundMessage) => ({
             ...prev,
             loading: undefined,
           }));
@@ -81,16 +100,28 @@ const StreamingPlayground = ({
     return startStreaming();
   }, [startStreaming]);
 
+  // Adapt the playground message to UiChatMessage format expected by the component
+  const adaptedMessage: UiChatMessage = {
+    ...message,
+    createdAt: message.createdAt.toISOString(),
+    loading: message.loading
+      ? {
+          state: "thinking",
+          context: message.loading.context,
+        }
+      : undefined,
+  };
+
   return (
     <ChatMessageComponent
-      message={message}
+      message={adaptedMessage}
       controlsContext={{
         currentUserId: "user_1",
         dialogOwnerId: "user_1",
         isSharedDialog: false,
       }}
-      onMessageAction={(action) => {
-        switch (action.type) {
+      onMessageAction={(action: MessageAction) => {
+        switch (action) {
           case "copy":
             console.log("copied");
             break;
@@ -100,11 +131,12 @@ const StreamingPlayground = ({
           case "dislike":
             console.log("disliked");
             break;
-          case "rerun":
+          case "regenerate":
             setMessage({
               id: "1",
               content: "",
               sender: "assistant",
+              role: "assistant",
               createdAt: new Date(),
               authorId: "assistant_1",
               loading: {
@@ -185,10 +217,7 @@ const SAMPLE_RESPONSES = [
   "Let me help you with that problem step by step.",
 ];
 
-const LOADING_CONTEXTS: Record<
-  Exclude<LoadingState, "idle" | "error">,
-  string[]
-> = {
+const LOADING_CONTEXTS: Record<PlaygroundLoadingState, string[]> = {
   loading: [
     "Processing request...",
     "Generating response...",

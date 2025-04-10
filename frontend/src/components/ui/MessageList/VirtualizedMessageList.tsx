@@ -4,8 +4,8 @@ import { VariableSizeList as VirtualList } from "react-window";
 import { MessageItem } from "./MessageItem";
 import { useMessageSizeEstimation } from "./MessageListUtils";
 
-import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
-import type { UserProfile } from "@/types/chat";
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Message } from "@/types/chat";
 import type {
   MessageAction,
   MessageControlsComponent,
@@ -13,7 +13,7 @@ import type {
 } from "@/types/message-controls";
 
 interface VirtualizedMessageListProps {
-  messages: Record<string, ChatMessageType>;
+  messages: Record<string, Message>;
   visibleData: string[];
   containerSize: { width: number; height: number };
   isNewlyLoaded: (index: number) => boolean;

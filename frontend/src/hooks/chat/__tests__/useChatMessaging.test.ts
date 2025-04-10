@@ -1234,7 +1234,7 @@ describe("useChatMessaging", () => {
 
     // First send chat_created event
     await act(async () => {
-      onMessageCallback({
+      onMessageCallback!({
         data: JSON.stringify({
           message_type: "chat_created",
           chat_id: "test-chat-id",
@@ -1245,7 +1245,7 @@ describe("useChatMessaging", () => {
 
     // Send text delta events in sequence
     await act(async () => {
-      onMessageCallback({
+      onMessageCallback!({
         data: JSON.stringify({
           message_type: "text_delta",
           new_text: "Hello",
@@ -1255,7 +1255,7 @@ describe("useChatMessaging", () => {
     });
 
     await act(async () => {
-      onMessageCallback({
+      onMessageCallback!({
         data: JSON.stringify({
           message_type: "text_delta",
           new_text: ", I'm",
@@ -1265,7 +1265,7 @@ describe("useChatMessaging", () => {
     });
 
     await act(async () => {
-      onMessageCallback({
+      onMessageCallback!({
         data: JSON.stringify({
           message_type: "text_delta",
           new_text: " the assistant",
@@ -1275,7 +1275,7 @@ describe("useChatMessaging", () => {
     });
 
     await act(async () => {
-      onMessageCallback({
+      onMessageCallback!({
         data: JSON.stringify({
           message_type: "text_delta",
           new_text: ". How can I help you today?",
@@ -1286,7 +1286,7 @@ describe("useChatMessaging", () => {
 
     // Send message complete event
     await act(async () => {
-      onMessageCallback({
+      onMessageCallback!({
         data: JSON.stringify({
           message_type: "message_complete",
           message_id: "assistant-msg-123",

@@ -5,7 +5,7 @@ import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
 
 import type { Meta, StoryObj } from "@storybook/react";
 
-const meta = {
+const meta: Meta<typeof ChatMessage> = {
   title: "CHAT/ChatMessage/Tests",
   component: ChatMessage,
   parameters: {
@@ -22,7 +22,7 @@ const meta = {
       },
     },
   },
-} satisfies Meta<typeof ChatMessage>;
+};
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -136,11 +136,12 @@ export const LoadingStateTest: Story = {
     message: {
       id: "1",
       content: "Processing",
+      role: "assistant",
+      createdAt: new Date().toISOString(),
       sender: "assistant",
-      createdAt: new Date(),
       authorId: "assistant_1",
       loading: {
-        state: "loading",
+        state: "thinking",
         context: "Test loading state",
       },
     },

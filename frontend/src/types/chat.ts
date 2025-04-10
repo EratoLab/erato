@@ -14,9 +14,11 @@ export interface Message {
 
 // Metadata for a chat session
 export interface ChatSessionMetadata {
+  ownerId?: string;
   lastMessage?: {
     content: string;
     timestamp: string;
+    sender?: "user" | "assistant" | "system";
   };
 }
 

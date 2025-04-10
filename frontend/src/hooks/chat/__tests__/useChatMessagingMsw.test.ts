@@ -1,5 +1,4 @@
-import { renderHook } from "@testing-library/react";
-import { http } from "msw";
+import { renderHook, type RenderHookResult } from "@testing-library/react";
 import { act } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -8,7 +7,7 @@ import {
   useMessageSubmitSse,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { server } from "@/test/setupMsw";
-import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
+import { createSSEConnection } from "@/utils/sse/sseClient";
 
 import { useChatMessaging } from "../useChatMessaging";
 
@@ -40,24 +39,13 @@ const mockCreateSSEConnection = createSSEConnection as unknown as ReturnType<
   typeof vi.fn
 >;
 
-// Define a type for hook results to avoid TypeScript errors
-interface ChatMessagingHook {
-  messages: any[];
-  isLoading: boolean;
-  isStreaming: boolean;
-  streamingContent: string;
-  error: Error | null;
-  sendMessage: (content: string) => Promise<any>;
-  cancelMessage: () => void;
-  refetch: () => void;
-}
+// Define type for hook results
+type ChatMessagingHookResult = ReturnType<typeof useChatMessaging>;
 
 describe("useChatMessaging with direct mocking", () => {
   // Store references to rendered hook results to clean up after each test
-  let hookResult: {
-    result: { current: ChatMessagingHook };
-    unmount: () => void;
-  } | null = null;
+  let hookResult: RenderHookResult<ChatMessagingHookResult, unknown> | null =
+    null;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -89,9 +77,10 @@ describe("useChatMessaging with direct mocking", () => {
   afterEach(() => {
     // Clean up any hook state between tests
     if (hookResult) {
+      const currentHookResult = hookResult;
       // Call cancelMessage to clean up any streaming state
       act(() => {
-        hookResult.result.current.cancelMessage();
+        currentHookResult.result.current.cancelMessage();
       });
       hookResult.unmount();
       hookResult = null;
@@ -102,19 +91,19 @@ describe("useChatMessaging with direct mocking", () => {
   });
 
   it("should handle a complete SSE message flow according to the API spec", async () => {
-    // Setup a clean test with controlled SSE callbacks
+    // Precreate the callback handler
+    let onMessageCallback = vi.fn();
     const cleanupFn = vi.fn();
-    let onMessageCallback: ((event: SSEEvent) => void) | null = null;
 
     // Mock the SSE connection function to capture the callbacks
     mockCreateSSEConnection.mockImplementation((url, callbacks) => {
-      // Store the callback function for later use
+      // Replace our mockFn with the actual callback
       onMessageCallback = callbacks.onMessage;
       return cleanupFn;
     });
 
-    // Render the hook with a chat ID this time
-    hookResult = renderHook(() => useChatMessaging("test-chat-id")) as any;
+    // Render the hook with a chat ID
+    hookResult = renderHook(() => useChatMessaging("test-chat-id"));
     const { result } = hookResult;
 
     // Initial checks
@@ -129,11 +118,6 @@ describe("useChatMessaging with direct mocking", () => {
     // Verify the SSE connection was created
     expect(mockCreateSSEConnection).toHaveBeenCalled();
     expect(onMessageCallback).toBeDefined();
-
-    // Now manually trigger SSE events in sequence
-    if (!onMessageCallback) {
-      throw new Error("onMessageCallback was not set");
-    }
 
     // First, start with a chat_created event
     await act(async () => {
@@ -189,8 +173,8 @@ describe("useChatMessaging with direct mocking", () => {
   // Test for diagnosing state accumulation between tests
   it("should properly handle streaming content in a new test", async () => {
     // Setup again with fresh state
+    let onMessageCallback = vi.fn();
     const cleanupFn = vi.fn();
-    let onMessageCallback: ((event: SSEEvent) => void) | null = null;
 
     mockCreateSSEConnection.mockImplementation((url, callbacks) => {
       onMessageCallback = callbacks.onMessage;
@@ -198,7 +182,7 @@ describe("useChatMessaging with direct mocking", () => {
     });
 
     // Render with a different chat ID to ensure clean state
-    hookResult = renderHook(() => useChatMessaging("different-chat-id")) as any;
+    hookResult = renderHook(() => useChatMessaging("different-chat-id"));
     const { result } = hookResult;
 
     // Verify initial state is clean
@@ -208,12 +192,6 @@ describe("useChatMessaging with direct mocking", () => {
     await act(async () => {
       await result.current.sendMessage("Testing fresh state");
     });
-
-    // Ensure callback was set
-    expect(onMessageCallback).toBeDefined();
-    if (!onMessageCallback) {
-      throw new Error("onMessageCallback was not set");
-    }
 
     // Send a test delta
     await act(async () => {
@@ -279,8 +257,8 @@ describe("useChatMessaging with direct mocking", () => {
     });
 
     // Render the hook
-    hookResult = renderHook(() => useChatMessaging("test-chat-id")) as any;
-    const { result } = hookResult!;
+    hookResult = renderHook(() => useChatMessaging("test-chat-id"));
+    const { result } = hookResult;
 
     // Initial state should have no error
     expect(result.current.error).toBeNull();
@@ -289,7 +267,7 @@ describe("useChatMessaging with direct mocking", () => {
     await act(async () => {
       try {
         await result.current.sendMessage("This will fail");
-      } catch (error) {
+      } catch {
         // Expected error
       }
     });
@@ -323,14 +301,14 @@ describe("useChatMessaging with direct mocking", () => {
     });
 
     // Render the hook
-    hookResult = renderHook(() => useChatMessaging("test-chat-id")) as any;
-    const { result } = hookResult!;
+    hookResult = renderHook(() => useChatMessaging("test-chat-id"));
+    const { result } = hookResult;
 
     // Send a message which will fail
     await act(async () => {
       try {
         await result.current.sendMessage("This will fail with server error");
-      } catch (error) {
+      } catch {
         // Expected error
       }
     });

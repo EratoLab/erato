@@ -1,68 +1,94 @@
-import { ChatProvider } from "../components/containers/ChatProvider";
-import { ChatWidget } from "../components/ui/Chat/ChatWidget";
+import { action } from "@storybook/addon-actions";
 
-import type { ChatMessage } from "../components/containers/ChatProvider";
+import { ChatWidget } from "../components/ui/Chat/ChatWidget";
+import { DefaultMessageControls } from "../components/ui/Message/DefaultMessageControls";
+
+import type { Message } from "@/types/chat";
 import type { Meta, StoryObj } from "@storybook/react";
 
-const mockMessages: Record<string, ChatMessage> = {
-  "1": {
+const mockMessages: Message[] = [
+  {
     id: "1",
+    role: "assistant",
     content: "Hello! How can I help you today?",
-    sender: "assistant",
-    createdAt: new Date(2024, 0, 1, 12, 0),
-    authorId: "assistant_1",
+    createdAt: new Date(2024, 0, 1, 12, 0).toISOString(),
   },
-  "2": {
+  {
     id: "2",
+    role: "user",
     content: "I have a question about my account",
-    sender: "user",
-    createdAt: new Date(2024, 0, 1, 12, 1),
-    authorId: "user_1",
+    createdAt: new Date(2024, 0, 1, 12, 1).toISOString(),
   },
-  "3": {
+  {
     id: "3",
+    role: "assistant",
     content: "Sure, I'd be happy to help with any account-related questions.",
-    sender: "assistant",
-    createdAt: new Date(2024, 0, 1, 12, 2),
-    authorId: "assistant_1",
+    createdAt: new Date(2024, 0, 1, 12, 2).toISOString(),
   },
-};
+];
 
-const mockMessageOrder = ["1", "2", "3"];
-
-const meta = {
-  title: "Containers/ChatWidget",
+const meta: Meta<typeof ChatWidget> = {
+  title: "UI/ChatWidget",
   component: ChatWidget,
   parameters: {
     layout: "centered",
   },
   decorators: [
     (Story) => (
-      <ChatProvider
-        initialMessages={mockMessages}
-        initialMessageOrder={mockMessageOrder}
-      >
-        <div className="size-[400px]">
-          <Story />
-        </div>
-      </ChatProvider>
-    ),
-  ],
-} satisfies Meta<typeof ChatWidget>;
-
-export default meta;
-type Story = StoryObj<typeof ChatWidget>;
-
-export const Empty: Story = {
-  decorators: [
-    (Story) => (
-      <ChatProvider>
-        <div className="size-[400px]">
-          <Story />
-        </div>
-      </ChatProvider>
+      <div className="size-[400px]">
+        <Story />
+      </div>
     ),
   ],
 };
 
-export const WithConversation: Story = {};
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Empty: Story = {
+  args: {
+    messages: [],
+    onSendMessage: action("message sent"),
+    onRegenerate: action("regenerate"),
+    isLoading: false,
+    controlsContext: {
+      currentUserId: "user-123",
+      dialogOwnerId: "user-123",
+      isSharedDialog: false,
+    },
+    controls: DefaultMessageControls,
+    onMessageAction: action("message action"),
+  },
+};
+
+export const WithConversation: Story = {
+  args: {
+    messages: mockMessages,
+    onSendMessage: action("message sent"),
+    onRegenerate: action("regenerate"),
+    isLoading: false,
+    controlsContext: {
+      currentUserId: "user-123",
+      dialogOwnerId: "user-123",
+      isSharedDialog: false,
+    },
+    controls: DefaultMessageControls,
+    onMessageAction: action("message action"),
+  },
+};
+
+export const Loading: Story = {
+  args: {
+    messages: mockMessages,
+    onSendMessage: action("message sent"),
+    onRegenerate: action("regenerate"),
+    isLoading: true,
+    controlsContext: {
+      currentUserId: "user-123",
+      dialogOwnerId: "user-123",
+      isSharedDialog: false,
+    },
+    controls: DefaultMessageControls,
+    onMessageAction: action("message action"),
+  },
+};

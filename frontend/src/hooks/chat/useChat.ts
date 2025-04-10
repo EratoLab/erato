@@ -36,7 +36,7 @@ export function useChat() {
 
   // Combine loading states and errors
   const isLoading = isHistoryLoading || isMessagingLoading;
-  const error = historyError || messagingError;
+  const error = historyError ?? messagingError;
 
   // Memoize the combined result
   const result = useMemo(

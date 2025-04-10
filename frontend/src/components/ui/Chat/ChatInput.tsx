@@ -62,7 +62,7 @@ export const ChatInput = ({
   const { isStreaming, isMessagingLoading, isUploading } = useChatContext();
 
   // Combine loading states
-  const isLoading = propIsLoading || isMessagingLoading;
+  const isLoading = propIsLoading ?? isMessagingLoading;
 
   // Use our modernized file upload hook
   const {

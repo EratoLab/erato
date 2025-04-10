@@ -142,7 +142,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         const lines = buffer.split("\n\n");
 
         // Last element might be incomplete, so keep it in the buffer
-        buffer = lines.pop() || "";
+        buffer = lines.pop() ?? "";
 
         if (lines.length > 0) {
           console.log(

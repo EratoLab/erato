@@ -3,7 +3,7 @@ import React from "react";
 import { UserProfileDropdown } from "./UserProfileDropdown";
 import { useTheme } from "../../providers/ThemeProvider";
 
-import type { UserProfile } from "@/types/chat";
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 // This is a container component that connects the UserProfileDropdown
 // to the ThemeProvider context

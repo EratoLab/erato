@@ -44,7 +44,7 @@ export function useChatTransition<T = unknown>({
       return { ...prevMessages, ...messages };
     }
 
-    return messages || {};
+    return messages ?? {};
   }, [isTransitioning, messages, prevMessages]);
 
   const displayMessageOrder = useMemo(() => {

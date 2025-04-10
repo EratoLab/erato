@@ -221,7 +221,7 @@ export function useChatMessaging(
   // Combine API messages and locally added user messages
   const combinedMessages = useMemo(() => {
     const apiMsgs: Message[] =
-      chatMessagesQuery.data?.messages.map(mapApiMessageToUiMessage) || [];
+      chatMessagesQuery.data?.messages.map(mapApiMessageToUiMessage) ?? [];
 
     // Convert locally stored user messages to Message[] array
     const localUserMsgs = Object.values(userMessages);
@@ -752,7 +752,7 @@ export function useChatMessaging(
     isLoading: chatMessagesQuery.isLoading,
     isStreaming: streaming.isStreaming,
     streamingContent: streaming.content,
-    error: lastError || chatMessagesQuery.error,
+    error: lastError ?? chatMessagesQuery.error,
     sendMessage,
     cancelMessage,
     refetch: chatMessagesQuery.refetch,

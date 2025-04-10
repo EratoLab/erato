@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { useCallback, useEffect, useRef } from "react";
 
-import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
+import type { Message } from "@/types/chat";
 
 /**
  * Helper function to create CSS class names for message highlighting
@@ -55,9 +55,7 @@ export const useMessageAnimations = () => {
 /**
  * Hook for estimating message sizes for virtualization
  */
-export const useMessageSizeEstimation = (
-  messages: Record<string, ChatMessageType>,
-) => {
+export const useMessageSizeEstimation = (messages: Record<string, Message>) => {
   const messageSizeCache = useRef<{ [key: string]: number }>({});
 
   const estimateMessageSize = useCallback(

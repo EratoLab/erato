@@ -189,7 +189,7 @@ export function useFileDropzone({
   });
 
   // Format any dropzone validation errors or API errors
-  const error = uploadError || null;
+  const error = uploadError ?? null;
 
   return {
     getRootProps,

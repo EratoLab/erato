@@ -51,7 +51,7 @@ export function useChatHistory() {
   const { data, isLoading, error, refetch } = useRecentChats({});
 
   // Extract chats from the response structure
-  const chats = data?.chats || [];
+  const chats = data?.chats ?? [];
 
   // Navigate to a specific chat
   const navigateToChat = useCallback(
