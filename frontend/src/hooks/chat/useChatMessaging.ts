@@ -26,6 +26,7 @@ import type {
   MessageSubmitStreamingResponseMessageTextDelta,
   MessageSubmitStreamingResponseChatCreated,
   MessageSubmitStreamingResponseMessageComplete,
+  MessageSubmitStreamingResponseUserMessageSaved,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
@@ -50,6 +51,8 @@ interface MessagingStore {
   resetStreaming: () => void;
   addUserMessage: (message: Message) => void;
   clearUserMessages: () => void;
+  // New method to only clear messages that are not in sending state
+  clearCompletedUserMessages: () => void;
 }
 
 // Initial streaming state
@@ -84,6 +87,22 @@ const useMessagingStore = create<MessagingStore>((set) => {
     clearUserMessages: () => {
       set({ userMessages: {} });
     },
+    // New method that only clears messages that are not in sending state
+    clearCompletedUserMessages: () => {
+      set((prev) => {
+        const filteredMessages = Object.entries(prev.userMessages).reduce(
+          (acc, [id, msg]) => {
+            // Keep messages that are still in sending state
+            if (msg.status === "sending") {
+              acc[id] = msg;
+            }
+            return acc;
+          },
+          {} as Record<string, Message>,
+        );
+        return { ...prev, userMessages: filteredMessages };
+      });
+    },
   };
 });
 
@@ -111,6 +130,7 @@ export function useChatMessaging(
     userMessages,
     addUserMessage,
     clearUserMessages,
+    clearCompletedUserMessages,
   } = useMessagingStore();
   const sseCleanupRef = useRef<(() => void) | null>(null);
   const isSubmittingRef = useRef(false);
@@ -126,8 +146,8 @@ export function useChatMessaging(
       );
     }
 
-    // Clear any temporary messages when mounting for a new chat
-    clearUserMessages();
+    // Only clear completed messages to preserve user messages during navigation
+    clearCompletedUserMessages();
 
     // Reset streaming state
     resetStreaming();
@@ -143,7 +163,7 @@ export function useChatMessaging(
         );
       }
     };
-  }, [chatId, clearUserMessages, resetStreaming]);
+  }, [chatId, clearCompletedUserMessages, resetStreaming]);
 
   // Skip the query if no chatId is provided
   const skipQuery = !chatId;
@@ -171,11 +191,12 @@ export function useChatMessaging(
     // Refetch first to ensure we have latest server data before clearing messages
     if (chatId) {
       void chatMessagesQuery.refetch().then(() => {
-        clearUserMessages();
+        // Use the improved clearing method to preserve user messages during transition
+        clearCompletedUserMessages();
       });
     } else {
-      // If no chatId, we can just clear
-      clearUserMessages();
+      // If no chatId, we can use the improved clearing method
+      clearCompletedUserMessages();
     }
 
     // Reset the submission flag
@@ -185,7 +206,7 @@ export function useChatMessaging(
     if (process.env.NODE_ENV === "development") {
       console.log("[CHAT_FLOW] Message cancelled");
     }
-  }, [resetStreaming, clearUserMessages, chatId, chatMessagesQuery]);
+  }, [resetStreaming, clearCompletedUserMessages, chatId, chatMessagesQuery]);
 
   // Clean up any existing SSE connection on unmount
   useEffect(() => {
@@ -216,6 +237,12 @@ export function useChatMessaging(
     // Convert locally stored user messages to Message[] array
     const localUserMsgs = Object.values(userMessages);
 
+    // Track which user messages have content that matches an API message
+    // This helps prevent duplicates when the same message exists in both local and API state
+    const apiUserMessageContents = new Set(
+      apiMsgs.filter((msg) => msg.role === "user").map((msg) => msg.content),
+    );
+
     // Create a Map to store unique messages, preferring API messages
     const messageMap = new Map<string, Message>();
 
@@ -226,12 +253,26 @@ export function useChatMessaging(
 
     // Then add local messages only if they don't conflict with API messages
     localUserMsgs.forEach((msg) => {
-      // Always include local user messages while they are in "sending" status
-      // Once they're persisted to the API, they'll be replaced by the API version
-      if (!messageMap.has(msg.id) || msg.status === "sending") {
+      // Add the message if:
+      // 1. It doesn't share an ID with an API message OR it's still in sending state
+      // 2. AND its content doesn't match any API user message (to prevent duplicates)
+      if (
+        (!messageMap.has(msg.id) || msg.status === "sending") &&
+        // Only deduplicate user messages, not assistant messages
+        (msg.role !== "user" || !apiUserMessageContents.has(msg.content))
+      ) {
         messageMap.set(msg.id, msg);
       }
     });
+
+    // For debugging
+    if (process.env.NODE_ENV === "development" && localUserMsgs.length > 0) {
+      console.log("[CHAT_FLOW] Combined messages:", {
+        apiMessages: apiMsgs.length,
+        localMessages: localUserMsgs.length,
+        finalMessages: messageMap.size,
+      });
+    }
 
     return Array.from(messageMap.values());
   }, [chatMessagesQuery.data, userMessages]);
@@ -314,8 +355,8 @@ export function useChatMessaging(
           .then(() => {
             // This ensures we get fresh data before clearing temporary messages
             return chatMessagesQuery.refetch().then(() => {
-              // Only clear after refetch is complete
-              clearUserMessages();
+              // Only clear completed messages, preserving user messages still in sending state
+              clearCompletedUserMessages();
             });
           });
       }
@@ -337,7 +378,7 @@ export function useChatMessaging(
       setStreaming,
       onChatCreated,
       chatMessagesQuery,
-      clearUserMessages,
+      clearCompletedUserMessages,
     ],
   );
 
@@ -363,6 +404,51 @@ export function useChatMessaging(
         console.warn(
           "[CHAT_FLOW] Received chat_created event without a valid chat_id",
         );
+      }
+    },
+    [],
+  );
+
+  // Handle user message saved event
+  const handleUserMessageSaved = useCallback(
+    (
+      responseData: MessageSubmitStreamingResponseUserMessageSaved & {
+        message_type: "user_message_saved";
+      },
+    ) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[CHAT_FLOW] User message saved:", responseData.message_id);
+      }
+
+      // Update stored user messages to mark them as complete (not in sending state anymore)
+      // This will help properly deduplicate messages after the API message is fetched
+      const existingUserMessages = useMessagingStore.getState().userMessages;
+
+      if (responseData.message.full_text) {
+        const updatedMessages = { ...existingUserMessages };
+        let updatedAny = false;
+
+        Object.entries(updatedMessages).forEach(([id, msg]) => {
+          if (
+            msg.role === "user" &&
+            msg.content === responseData.message.full_text &&
+            msg.status === "sending"
+          ) {
+            updatedMessages[id] = {
+              ...msg,
+              status: "complete", // Mark as complete since it's now in the API
+            };
+            updatedAny = true;
+          }
+        });
+
+        // Only update state if we actually changed something
+        if (updatedAny) {
+          useMessagingStore.setState((state) => ({
+            ...state,
+            userMessages: updatedMessages,
+          }));
+        }
       }
     },
     [],
@@ -396,7 +482,8 @@ export function useChatMessaging(
             break;
 
           case "user_message_saved":
-            // No action needed
+            // Handle user message saved event
+            handleUserMessageSaved(responseData);
             break;
 
           default:
@@ -413,7 +500,12 @@ export function useChatMessaging(
         );
       }
     },
-    [handleTextDelta, handleMessageComplete, handleChatCreated],
+    [
+      handleTextDelta,
+      handleMessageComplete,
+      handleChatCreated,
+      handleUserMessageSaved,
+    ],
   );
 
   // Find the most recent assistant message ID, including temporary ones
@@ -552,16 +644,19 @@ export function useChatMessaging(
             // Clear temporary messages only after refetch completes
             if (chatId) {
               void chatMessagesQuery.refetch().then(() => {
-                clearUserMessages();
+                // Only clear completed messages to preserve the user message
+                clearCompletedUserMessages();
               });
             } else {
-              clearUserMessages();
+              // Even for new chats, keep user messages during errors
+              clearCompletedUserMessages();
             }
 
             isSubmittingRef.current = false; // Reset submission flag on error
           },
           onOpen: () => {
             // No action needed
+            console.log("[CHAT_FLOW] SSE connection opened");
           },
           onClose: () => {
             // Reset submission flag
@@ -571,12 +666,12 @@ export function useChatMessaging(
               // Normal close - refetch and then clear temporary messages
               if (chatId) {
                 void chatMessagesQuery.refetch().then(() => {
-                  // Only clear after refetch is complete
-                  clearUserMessages();
+                  // Only clear completed messages to preserve user message
+                  clearCompletedUserMessages();
                 });
               } else {
-                // If no chatId (new chat), just clear user messages
-                clearUserMessages();
+                // For new chats, keep user messages
+                clearCompletedUserMessages();
               }
 
               // Check for pending chat navigation
@@ -601,10 +696,12 @@ export function useChatMessaging(
               // Refetch and then clear temporary messages
               if (chatId) {
                 void chatMessagesQuery.refetch().then(() => {
-                  clearUserMessages();
+                  // Only clear completed messages to preserve user message
+                  clearCompletedUserMessages();
                 });
               } else {
-                clearUserMessages();
+                // For new chats, keep user messages
+                clearCompletedUserMessages();
               }
             }
           },
@@ -625,13 +722,13 @@ export function useChatMessaging(
         // Reset streaming state
         resetStreaming();
 
-        // Clear temporary messages after refetch completes
+        // Clear temporary messages after refetch completes - but preserve user message
         if (chatId) {
           void chatMessagesQuery.refetch().then(() => {
-            clearUserMessages();
+            clearCompletedUserMessages();
           });
         } else {
-          clearUserMessages();
+          clearCompletedUserMessages();
         }
 
         isSubmittingRef.current = false; // Reset submission flag on error
@@ -647,6 +744,7 @@ export function useChatMessaging(
       queryClient,
       addUserMessage,
       clearUserMessages,
+      clearCompletedUserMessages,
       processStreamEvent,
       findMostRecentAssistantMessageId,
       onChatCreated,

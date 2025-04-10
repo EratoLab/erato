@@ -94,6 +94,7 @@ export const Chat = ({
     currentChatId,
     navigateToChat: switchSession,
     deleteChat: deleteSession,
+    createNewChat: createChat,
     isHistoryLoading: chatHistoryLoading,
     historyError: chatHistoryError,
     refetchHistory: refreshChats,
@@ -147,15 +148,16 @@ export const Chat = ({
         scrollToBottomRef.current();
       }
 
-      // Send the message
-      baseHandleSendMessage(message);
-
-      // Schedule a refresh of the chat history sidebar after a short delay
-      // This allows time for the message to be processed and confirmed
-      setTimeout(() => {
-        // Remove noisy logging
-        void refreshChats();
-      }, 2500); // 2.5 second delay
+      // Send the message using the handler from useChatActions
+      // Now baseHandleSendMessage returns a Promise we can chain with
+      baseHandleSendMessage(message)
+        .then(() => {
+          console.log("[CHAT_FLOW] Message sent, refreshing chats");
+          return refreshChats();
+        })
+        .catch((error) => {
+          console.error("[CHAT_FLOW] Error sending message:", error);
+        });
     },
     [baseHandleSendMessage, refreshChats],
   );
@@ -192,11 +194,30 @@ export const Chat = ({
     scrollToBottomRef.current = scrollToBottom;
   }, []);
 
+  // Handle creating a new chat
+  const handleNewChat = useCallback(async () => {
+    console.log("[CHAT_FLOW] New chat button clicked");
+
+    try {
+      if (onNewChat) {
+        // Use custom handler if provided
+        await onNewChat();
+      } else {
+        // Otherwise use the default behavior from context
+        // Don't chain with then() - use await for cleaner flow
+        await createChat();
+        console.log("[CHAT_FLOW] New chat creation completed");
+      }
+    } catch (error) {
+      console.error("[CHAT_FLOW] Error creating new chat:", error);
+    }
+  }, [onNewChat, createChat]);
+
   return (
     <div className="flex size-full flex-col sm:flex-row">
       <ChatHistorySidebar
         collapsed={sidebarCollapsed}
-        onNewChat={onNewChat}
+        onNewChat={handleNewChat}
         onToggleCollapse={onToggleCollapse}
         sessions={sessions}
         currentSessionId={currentChatId || ""}

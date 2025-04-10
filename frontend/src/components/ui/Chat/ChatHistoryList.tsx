@@ -130,7 +130,10 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             isActive={currentSessionId === session.id}
             layout={layout}
             showTimestamps={showTimestamps}
-            onSelect={() => onSessionSelect(session.id)}
+            onSelect={() => {
+              console.log(`[CHAT_FLOW] Session item click: ${session.id}`);
+              onSessionSelect(session.id);
+            }}
             onDelete={
               onSessionDelete ? () => onSessionDelete(session.id) : undefined
             }

@@ -15,9 +15,26 @@ export function useChatActions({
 }: UseChatActionsProps) {
   const handleSessionSelect = useCallback(
     (sessionId: string, customHandler?: (sessionId: string) => void) => {
+      console.log(`[CHAT_FLOW] Session select: ${sessionId}`);
+
+      // Don't try to navigate to null or empty strings
+      if (!sessionId || sessionId === "null") {
+        console.warn(
+          "[CHAT_FLOW] Attempted to select a session with invalid ID:",
+          sessionId,
+        );
+        return;
+      }
+
       if (customHandler) {
+        // Use custom handler if provided
+        console.log("[CHAT_FLOW] Using custom session select handler");
         customHandler(sessionId);
       } else {
+        // Otherwise use the default behavior
+        console.log(
+          "[CHAT_FLOW] Using default session select handler to switch session",
+        );
         switchSession(sessionId);
       }
     },
@@ -27,8 +44,9 @@ export function useChatActions({
   const handleSendMessage = useCallback(
     (message: string) => {
       if (message.trim()) {
-        void sendMessage(message);
+        return sendMessage(message);
       }
+      return Promise.resolve(undefined);
     },
     [sendMessage],
   );

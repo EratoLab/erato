@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, useEffect } from "react";
 
 import { useChatHistory, useChatMessaging } from "@/hooks/chat";
 import { useFileDropzone } from "@/hooks/files";
@@ -89,7 +89,15 @@ export function ChatProvider({
     deleteChat,
     navigateToChat,
     refetch: refetchHistory,
+    isNewChatPending,
   } = useChatHistory();
+
+  // Add specific logging when currentChatId changes
+  useEffect(() => {
+    console.log(
+      `[CHAT_FLOW] ChatProvider - currentChatId changed to: ${currentChatId ?? "null"}, newChatPending: ${isNewChatPending}`,
+    );
+  }, [currentChatId, isNewChatPending]);
 
   // Get the messaging functionality for the current chat
   const {
@@ -102,7 +110,9 @@ export function ChatProvider({
     cancelMessage,
     refetch: refetchMessages,
   } = useChatMessaging({
-    chatId: currentChatId,
+    // Only pass the chatId if we're not creating a new chat
+    // This prevents unwanted reloads of previous chat data
+    chatId: isNewChatPending ? null : currentChatId,
     onChatCreated: (newChatId: string) => {
       // Only log in development
       if (process.env.NODE_ENV === "development") {

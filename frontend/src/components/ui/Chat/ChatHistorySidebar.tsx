@@ -70,7 +70,10 @@ const ChatHistoryHeader = memo<{
         </div>
         <div className="flex w-12 justify-center">
           <Button
-            onClick={onNewChat}
+            onClick={() => {
+              console.log("[CHAT_FLOW] New chat button clicked in sidebar");
+              if (onNewChat) void onNewChat();
+            }}
             variant="sidebar-icon"
             icon={<EditIcon />}
             aria-label="New Chat"
