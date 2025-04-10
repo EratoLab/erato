@@ -292,12 +292,18 @@ export function useChatMessaging(
         message_type: "text_delta";
       },
     ) => {
-      const latestContent = useMessagingStore.getState().streaming.content;
-      setStreaming({
-        content: latestContent + responseData.new_text,
-      });
+      // Use a more performant way to update streaming content
+      // This avoids going through multiple layers of state transformation
+      // which can cause lag during rapid updates
+      useMessagingStore.setState((state) => ({
+        ...state,
+        streaming: {
+          ...state.streaming,
+          content: state.streaming.content + responseData.new_text,
+        },
+      }));
     },
-    [setStreaming],
+    [], // Remove dependency on setStreaming
   );
 
   const handleMessageComplete = useCallback(

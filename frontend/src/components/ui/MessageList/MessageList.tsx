@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { debounce } from "lodash";
-import React, { memo, useCallback, useMemo, useEffect } from "react";
+import React, { memo, useCallback, useMemo, useEffect, useRef } from "react";
 
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
@@ -156,6 +156,11 @@ function useMessageLoading({
   messages: Record<string, ChatMessage>;
   scrollToBottom: () => void;
 }) {
+  // Track the last loading state to avoid unwanted scroll when message completes
+  const lastLoadingState = useRef<string | null>(null);
+  // Track the last streaming content length to avoid unnecessary scrolls
+  const lastContentLength = useRef<number>(0);
+
   // Force scroll to bottom when a message is actively streaming
   useEffect(() => {
     // Check if the last message is from the assistant and is still loading
@@ -163,21 +168,40 @@ function useMessageLoading({
       const lastMessageId = messageOrder[messageOrder.length - 1];
       const lastMessage = messages[lastMessageId];
 
-      if (
-        lastMessage &&
-        lastMessage.sender === "assistant" &&
-        !!lastMessage.loading
-      ) {
-        // Message is streaming, so scroll to bottom
-        debugLog(
-          "RENDER",
-          `Message ${lastMessageId} is streaming, scrolling to bottom`,
-          {
-            loadingState: lastMessage.loading.state,
-            contentLength: lastMessage.content.length,
-          },
-        );
-        scrollToBottom();
+      if (lastMessage && lastMessage.sender === "assistant") {
+        // Only scroll if message is currently loading (typing/thinking)
+        if (
+          lastMessage.loading &&
+          (lastMessage.loading.state === "typing" ||
+            lastMessage.loading.state === "thinking")
+        ) {
+          // Only scroll on significant content changes to improve performance
+          // This reduces the number of scroll operations during rapid streaming
+          const contentLength = lastMessage.content.length;
+          if (contentLength - lastContentLength.current > 10) {
+            // Only scroll after 10 new chars
+            // Message is streaming, so scroll to bottom
+            debugLog(
+              "RENDER",
+              `Message ${lastMessageId} is streaming, scrolling to bottom`,
+              {
+                loadingState: lastMessage.loading.state,
+                contentLength: lastMessage.content.length,
+              },
+            );
+
+            // Update last content length reference
+            lastContentLength.current = contentLength;
+
+            // Update last loading state reference
+            lastLoadingState.current = lastMessage.loading.state;
+
+            // Scroll to bottom during active streaming
+            scrollToBottom();
+          }
+        }
+        // Don't scroll when message changes from loading to done
+        // This prevents the unwanted "scroll up and down" at the end
       }
     }
   }, [messageOrder, messages, scrollToBottom]);
@@ -253,13 +277,13 @@ export const MessageList = memo<MessageListProps>(
       deps: [
         messageOrder.length,
         currentSessionId,
-        // Add dependencies to detect content changes in the last message
-        // This ensures scrolling works during streaming
-        messageOrder.length > 0
+        // Only include loading state for active streaming, not for completion
+        // This ensures we don't trigger an unwanted scroll when loading completes
+        messageOrder.length > 0 &&
+        messages[messageOrder[messageOrder.length - 1]].loading &&
+        messages[messageOrder[messageOrder.length - 1]].loading?.state !==
+          "done"
           ? messages[messageOrder[messageOrder.length - 1]].content
-          : "",
-        messageOrder.length > 0
-          ? messages[messageOrder[messageOrder.length - 1]].loading
           : null,
       ],
     });

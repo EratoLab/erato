@@ -155,7 +155,24 @@ export function ChatProvider({
     // Transform messages from useChatMessaging to include the "sender" field required by UI components
     const transformedMessages = Object.entries(messages || {}).reduce(
       (acc, [id, msg]) => {
-        acc[id] = mapMessageToUiMessage(msg);
+        // Skip transformation for streaming messages if they're already being streamed
+        // This prevents unnecessary processing during high-frequency updates
+        if (
+          isStreaming &&
+          msg.status === "sending" &&
+          msg.role === "assistant"
+        ) {
+          acc[id] = {
+            ...msg,
+            sender: msg.role,
+            authorId: "assistant_id",
+            loading: {
+              state: "typing",
+            },
+          };
+        } else {
+          acc[id] = mapMessageToUiMessage(msg);
+        }
         return acc;
       },
       {} as Record<string, ChatMessage>,

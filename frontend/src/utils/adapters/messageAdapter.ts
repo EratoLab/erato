@@ -45,6 +45,20 @@ export function mapApiMessageToUiMessage(
  * @returns A message formatted for UI consumption
  */
 export function mapMessageToUiMessage(message: Message): UiChatMessage {
+  // Fast path for streaming messages to improve performance
+  // Avoid unnecessary object spreading and property copying during streaming
+  if (message.status === "sending" && message.role === "assistant") {
+    return {
+      ...message,
+      sender: message.role,
+      authorId: "assistant_id",
+      loading: {
+        state: "typing",
+      },
+    };
+  }
+
+  // Normal path for completed messages
   return {
     ...message,
     sender: message.role,
