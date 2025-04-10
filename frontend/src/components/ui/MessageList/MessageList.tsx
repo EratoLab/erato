@@ -413,14 +413,24 @@ export const MessageList = memo<MessageListProps>(
       paginationStats,
     ]);
 
+    // Add optimized container class based on state
+    const containerClass = useMemo(() => {
+      return clsx(
+        "flex-1 overflow-y-auto bg-theme-bg-secondary px-2 sm:px-4",
+        "space-y-4 p-4",
+        className,
+        // Apply transition properties without changing opacity
+        // This creates a smoother experience when content changes
+        "transition-[opacity,transform] duration-300 ease-in-out",
+        // Only change opacity when explicitly transitioning (not during normal message updates)
+        isTransitioning ? "opacity-0" : "opacity-100",
+      );
+    }, [className, isTransitioning]);
+
     return (
       <div
         ref={containerRef as React.RefObject<HTMLDivElement>}
-        className={clsx(
-          "flex-1 overflow-y-auto bg-theme-bg-secondary px-2 sm:px-4",
-          "space-y-4 p-4",
-          className,
-        )}
+        className={containerClass}
         data-testid="message-list"
       >
         {renderMessageListHeader}

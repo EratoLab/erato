@@ -1,5 +1,30 @@
 import { debounce } from "lodash";
-import { useRef, useEffect, useCallback, useMemo, useState } from "react";
+import {
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+  useState,
+  useReducer,
+} from "react";
+
+/**
+ * Simple debug utility for consistent logging
+ */
+const createDebugger = (namespace: string) => {
+  return (message: string, data?: unknown) => {
+    if (process.env.NODE_ENV === "development") {
+      if (data !== undefined) {
+        console.log(`[${namespace}]`, message, data);
+      } else {
+        console.log(`[${namespace}]`, message);
+      }
+    }
+  };
+};
+
+// Create a debugger for this hook
+const debug = createDebugger("SCROLL_HOOK");
 
 interface UseScrollToBottomOptions {
   /**
@@ -42,6 +67,81 @@ interface UseScrollToBottomOptions {
 }
 
 /**
+ * Types for scroll state tracking
+ */
+interface ScrollState {
+  hasScrolledToBottom: boolean;
+  isUserScrolledUp: boolean;
+  isNearTop: boolean;
+  initiallyLoaded: boolean;
+}
+
+// Actions for the scroll state reducer
+type ScrollAction =
+  | { type: "SCROLL_TO_BOTTOM" }
+  | { type: "SET_SCROLLED_UP"; value: boolean }
+  | { type: "SET_NEAR_TOP"; value: boolean }
+  | { type: "SET_INITIALLY_LOADED"; value: boolean }
+  | { type: "RESET_SCROLL_STATE" };
+
+// Reducer function for scroll state
+function scrollReducer(state: ScrollState, action: ScrollAction): ScrollState {
+  switch (action.type) {
+    case "SCROLL_TO_BOTTOM":
+      return {
+        ...state,
+        hasScrolledToBottom: true,
+        isUserScrolledUp: false,
+      };
+    case "SET_SCROLLED_UP":
+      return {
+        ...state,
+        isUserScrolledUp: action.value,
+      };
+    case "SET_NEAR_TOP":
+      return {
+        ...state,
+        isNearTop: action.value,
+      };
+    case "SET_INITIALLY_LOADED":
+      return {
+        ...state,
+        initiallyLoaded: action.value,
+      };
+    case "RESET_SCROLL_STATE":
+      return {
+        ...state,
+        hasScrolledToBottom: false,
+      };
+    default:
+      return state;
+  }
+}
+
+/**
+ * Return type for the useScrollToBottom hook
+ */
+interface ScrollToBottomResult {
+  /** Ref to attach to the scrollable container */
+  containerRef: React.RefObject<HTMLDivElement | null>;
+
+  /** Function to force scroll to bottom regardless of current position */
+  scrollToBottom: () => void;
+
+  /** Whether the user has scrolled up and is reading history */
+  isScrolledUp: boolean;
+
+  /** Whether the user is near the top of the message list */
+  isNearTop: boolean;
+
+  /** Whether the initial loading has completed */
+  initiallyLoaded: boolean;
+
+  /** Function to manually check and update scroll position */
+  checkScrollPosition: () => void;
+}
+
+/**
  * Hook for managing scroll-to-bottom behavior in chat interfaces
  *
  * This hook handles:
@@ -61,25 +161,24 @@ export function useScrollToBottom({
   useSmoothScroll = false,
   transitionDuration = 300,
   isTransitioning = false,
-}: UseScrollToBottomOptions = {}) {
+}: UseScrollToBottomOptions = {}): ScrollToBottomResult {
   // Ref for the scrollable container element - use more specific type
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Track if we've performed the initial scroll to bottom
-  const hasScrolledToBottomRef = useRef(false);
+  // Use reducer for managing scroll state
+  const [scrollState, dispatch] = useReducer(scrollReducer, {
+    hasScrolledToBottom: false,
+    isUserScrolledUp: false,
+    isNearTop: false,
+    initiallyLoaded: false,
+  });
 
-  // Track if the user is currently scrolled up (viewing history)
-  const isUserScrolledUpRef = useRef(false);
+  // Extract values from scroll state for convenience and backward compatibility
+  const { hasScrolledToBottom, isUserScrolledUp, isNearTop, initiallyLoaded } =
+    scrollState;
 
-  // Also track if user is near the top of the message list
-  const isNearTopRef = useRef(false);
-  const [isNearTop, setIsNearTop] = useState(false);
-
-  // We need a state value to trigger re-renders when this changes
+  // Also provide separate state values for UI updates
   const [isScrolledUp, setIsScrolledUp] = useState(false);
-
-  // State to track initial loading state for visibility control
-  const [initiallyLoaded, setInitiallyLoaded] = useState(false);
 
   // Memoize the scroll position check function for performance
   const checkIfUserIsScrolledUp = useCallback(() => {
@@ -96,44 +195,55 @@ export function useScrollToBottom({
     // Consider user near top if they're within 50px of the top of the message list
     const nearTop = distanceFromTop < 50;
 
-    // Store the values in both refs and state
-    isUserScrolledUpRef.current = scrolledUp;
-    isNearTopRef.current = nearTop;
+    // Update state with new values
+    dispatch({ type: "SET_SCROLLED_UP", value: scrolledUp });
+    dispatch({ type: "SET_NEAR_TOP", value: nearTop });
 
+    // Also update the UI state for backward compatibility
     setIsScrolledUp(scrolledUp);
-    setIsNearTop(nearTop);
   }, [scrollUpThreshold]);
 
-  // Force a scroll to bottom regardless of current scroll position
-  const scrollToBottom = useCallback(() => {
+  // Memoized implementation of smooth scrolling
+  const smoothScrollToBottom = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    if (useSmoothScroll) {
-      // Use CSS smooth scrolling for better performance
-      container.style.scrollBehavior = "smooth";
+    // Use CSS smooth scrolling for better performance
+    container.style.scrollBehavior = "smooth";
+    container.scrollTop = container.scrollHeight;
+
+    // Reset after transition completes to not interfere with other scrolling
+    setTimeout(() => {
+      container.style.scrollBehavior = "auto";
+    }, transitionDuration);
+
+    dispatch({ type: "SCROLL_TO_BOTTOM" });
+    setIsScrolledUp(false);
+  }, [transitionDuration]);
+
+  // Memoized implementation of instant scrolling
+  const instantScrollToBottom = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Use requestAnimationFrame for smoother scrolling
+    requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
+      dispatch({ type: "SCROLL_TO_BOTTOM" });
 
-      // Reset after transition completes to not interfere with other scrolling
-      setTimeout(() => {
-        container.style.scrollBehavior = "auto";
-      }, transitionDuration);
-
-      hasScrolledToBottomRef.current = true;
+      // When we scroll to bottom, update scrolled up state
       setIsScrolledUp(false);
-      isUserScrolledUpRef.current = false;
-    } else {
-      // Use requestAnimationFrame for smoother scrolling
-      requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
-        hasScrolledToBottomRef.current = true;
+    });
+  }, []);
 
-        // When we scroll to bottom, update scrolled up state
-        setIsScrolledUp(false);
-        isUserScrolledUpRef.current = false;
-      });
+  // Force a scroll to bottom regardless of current scroll position
+  const scrollToBottom = useCallback(() => {
+    if (useSmoothScroll) {
+      smoothScrollToBottom();
+    } else {
+      instantScrollToBottom();
     }
-  }, [useSmoothScroll, transitionDuration]);
+  }, [useSmoothScroll, smoothScrollToBottom, instantScrollToBottom]);
 
   // Debounced scroll handler to minimize performance impact
   const debouncedCheckScrollPosition = useMemo(
@@ -177,59 +287,71 @@ export function useScrollToBottom({
     const container = containerRef.current;
     if (!container) return;
 
-    // Handle visibility during transitions
+    // During transitions, we just reset state but don't scroll yet
     if (isTransitioning) {
-      // During transition, hide the container temporarily
-      container.style.opacity = "0";
-      hasScrolledToBottomRef.current = false; // Reset to force scroll after transition
+      debug("In transition - resetting scroll state");
+      dispatch({ type: "RESET_SCROLL_STATE" });
       return;
     }
 
-    // Control visibility during initial load or content changes
-    if (!hasScrolledToBottomRef.current || !isUserScrolledUpRef.current) {
-      // Immediately hide container during content load
-      if (!hasScrolledToBottomRef.current) {
-        container.style.opacity = "0";
-      }
+    // If we haven't scrolled to bottom yet or user isn't scrolled up
+    if (!hasScrolledToBottom || !isUserScrolledUp) {
+      debug("Scrolling to bottom - user at bottom or first load");
 
-      // Small delay to ensure content is ready before scrolling
+      // Add a small delay to ensure content is fully rendered
       const timer = setTimeout(() => {
-        // Scroll to bottom
         if (useSmoothScroll) {
-          container.style.scrollBehavior = "smooth";
+          debug("Using smooth scroll");
+          updateContainerStyle(container, { scrollBehavior: "smooth" });
           container.scrollTop = container.scrollHeight;
 
-          // Reset after transition
+          // Reset scroll behavior after animation completes
           setTimeout(() => {
-            container.style.scrollBehavior = "auto";
+            updateContainerStyle(container, { scrollBehavior: "auto" });
           }, transitionDuration);
         } else {
+          debug("Using instant scroll");
           container.scrollTop = container.scrollHeight;
         }
 
-        // After scrolling, fade in if needed
-        if (!hasScrolledToBottomRef.current) {
-          container.style.opacity = "1";
-          container.style.transition = "opacity 0.2s ease-in-out";
-          setInitiallyLoaded(true);
-        }
+        // Update state after scrolling
+        dispatch({ type: "SCROLL_TO_BOTTOM" });
 
-        hasScrolledToBottomRef.current = true;
-      }, 50); // Small delay for layout to complete
+        if (!hasScrolledToBottom) {
+          debug("Initial scroll complete");
+          dispatch({ type: "SET_INITIALLY_LOADED", value: true });
+        }
+      }, 50);
 
       return () => clearTimeout(timer);
+    } else {
+      debug("User scrolled up - not auto-scrolling");
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, isTransitioning, useSmoothScroll, transitionDuration, ...deps]);
 
+  // Helper function for managing container styles
+  const updateContainerStyle = useCallback(
+    (container: HTMLDivElement, styles: Partial<CSSStyleDeclaration>) => {
+      if (!container) return;
+
+      Object.entries(styles).forEach(([property, value]) => {
+        if (value !== undefined && value !== null) {
+          // @ts-ignore - we know these styles exist
+          container.style[property] = value;
+        }
+      });
+    },
+    [],
+  );
+
   return {
     containerRef,
     scrollToBottom,
-    isScrolledUp, // Return the state value, not the ref value
-    isNearTop, // Add the isNearTop state value to help with "Load More" visibility
-    initiallyLoaded, // Export the loaded state for consumers
-    // Expose the check function so consumers can manually check scroll position
+    isScrolledUp,
+    isNearTop,
+    initiallyLoaded,
     checkScrollPosition: checkIfUserIsScrolledUp,
   };
 }

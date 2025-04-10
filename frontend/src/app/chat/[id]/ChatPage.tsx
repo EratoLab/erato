@@ -29,13 +29,15 @@ export default function ChatPage() {
 
       // Set transitioning state to true during navigation
       setIsTransitioning(true);
+
+      // Start navigation
       navigateToChat(chatId);
 
-      // After a brief delay to allow content to load, set transitioning to false
+      // After a brief delay to allow navigation to complete, set as not transitioning
       const timer = setTimeout(() => {
         setIsTransitioning(false);
         isFirstRender.current = false;
-      }, 150);
+      }, 350);
 
       return () => clearTimeout(timer);
     } else if (isFirstRender.current) {
@@ -44,7 +46,7 @@ export default function ChatPage() {
       const timer = setTimeout(() => {
         setIsTransitioning(false);
         isFirstRender.current = false;
-      }, 100);
+      }, 200);
 
       return () => clearTimeout(timer);
     }
@@ -52,25 +54,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex size-full flex-col">
-      {/* <div className="flex h-12 items-center border-b px-4">
-        <button
-          onClick={toggleSidebar}
-          className="mr-4 p-2"
-          aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
-        >
-          {isSidebarOpen ? "✕" : "☰"}
-        </button>
-        <h1 className="text-lg font-semibold">Chat</h1>
-        {isStreaming && (
-          <button
-            onClick={cancelMessage}
-            className="ml-auto rounded bg-red-500 px-3 py-1 text-white"
-          >
-            Stop generating
-          </button>
-        )}
-      </div> */}
-
       <Chat
         controlsContext={{
           currentUserId: "user1",
