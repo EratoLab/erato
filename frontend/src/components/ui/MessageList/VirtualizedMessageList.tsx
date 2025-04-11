@@ -1,8 +1,6 @@
-import React, { useCallback, useEffect, useRef } from "react";
-import { VariableSizeList as VirtualList } from "react-window";
+import React, { useCallback } from "react";
 
 import { MessageItem } from "./MessageItem";
-import { useMessageSizeEstimation } from "./MessageListUtils";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
@@ -30,7 +28,6 @@ interface VirtualizedMessageListProps {
 export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   messages,
   visibleData,
-  containerSize,
   isNewlyLoaded,
   getMessageClassName,
   maxWidth,
@@ -41,41 +38,18 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   controlsContext,
   onMessageAction,
 }) => {
-  // Virtual list ref for scrolling and resizing
-  const listRef = useRef<VirtualList>(null);
-
-  // Get message size estimation function
-  const estimateMessageSize = useMessageSizeEstimation(messages);
-
-  // Item size getter for variable list
-  const getItemSize = useCallback(
-    (index: number) => {
-      const messageId = visibleData[index];
-      return estimateMessageSize(messageId);
-    },
-    [visibleData, estimateMessageSize],
-  );
-
-  // Reset the list when message heights might have changed
-  useEffect(() => {
-    if (listRef.current) {
-      listRef.current.resetAfterIndex(0);
-    }
-  }, [visibleData.length]);
-
-  // Message renderer for virtualized list
-  const renderMessage = useCallback(
-    ({ index, style }: { index: number; style: React.CSSProperties }) => {
-      const messageId = visibleData[index];
+  // Message renderer
+  const renderMessages = useCallback(() => {
+    return visibleData.map((messageId, index) => {
       const message = messages[messageId];
       const isNew = isNewlyLoaded(index);
 
       return (
         <MessageItem
+          key={messageId}
           messageId={messageId}
           message={message}
           isNew={isNew}
-          style={style}
           maxWidth={maxWidth}
           showTimestamp={showTimestamps}
           showAvatar={showAvatars}
@@ -86,32 +60,22 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
           className={getMessageClassName(isNew)}
         />
       );
-    },
-    [
-      visibleData,
-      messages,
-      isNewlyLoaded,
-      getMessageClassName,
-      maxWidth,
-      showTimestamps,
-      showAvatars,
-      userProfile,
-      controls,
-      controlsContext,
-      onMessageAction,
-    ],
-  );
+    });
+  }, [
+    visibleData,
+    messages,
+    isNewlyLoaded,
+    getMessageClassName,
+    maxWidth,
+    showTimestamps,
+    showAvatars,
+    userProfile,
+    controls,
+    controlsContext,
+    onMessageAction,
+  ]);
 
   return (
-    <VirtualList
-      ref={listRef}
-      height={containerSize.height || 600}
-      width="100%"
-      itemCount={visibleData.length}
-      itemSize={getItemSize}
-      overscanCount={5}
-    >
-      {renderMessage}
-    </VirtualList>
+    <div className="flex w-full flex-col space-y-1">{renderMessages()}</div>
   );
 };

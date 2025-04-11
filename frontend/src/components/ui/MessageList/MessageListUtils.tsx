@@ -1,7 +1,5 @@
 import clsx from "clsx";
-import { useCallback, useEffect, useRef } from "react";
-
-import type { Message } from "@/types/chat";
+import { useCallback, useEffect } from "react";
 
 /**
  * Helper function to create CSS class names for message highlighting
@@ -50,40 +48,4 @@ export const useMessageAnimations = () => {
       }
     };
   }, []);
-};
-
-/**
- * Hook for estimating message sizes for virtualization
- */
-export const useMessageSizeEstimation = (messages: Record<string, Message>) => {
-  const messageSizeCache = useRef<{ [key: string]: number }>({});
-
-  const estimateMessageSize = useCallback(
-    (messageId: string) => {
-      if (messageSizeCache.current[messageId]) {
-        return messageSizeCache.current[messageId];
-      }
-
-      const message = messages[messageId];
-      // Message will always exist here based on how messageId is used
-
-      // Base height for message UI elements
-      const baseHeight = 70;
-
-      // Estimate content height based on character count
-      // Average 100 chars per line, 20px line height
-      const contentLength = message.content.length;
-      const estimatedLines = Math.ceil(contentLength / 100);
-      const contentHeight = Math.max(20, estimatedLines * 20);
-
-      // Store in cache
-      const totalHeight = baseHeight + contentHeight;
-      messageSizeCache.current[messageId] = totalHeight;
-
-      return totalHeight;
-    },
-    [messages],
-  );
-
-  return estimateMessageSize;
 };

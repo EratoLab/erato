@@ -19,7 +19,6 @@ export interface MessageItemProps {
   messageId: string;
   message: Message;
   isNew: boolean;
-  style?: React.CSSProperties;
   maxWidth?: number;
   showTimestamp?: boolean;
   showAvatar?: boolean;
@@ -37,7 +36,6 @@ export const MessageItem = memo<MessageItemProps>(
     message,
     // Used in parent component via getMessageClassName
     isNew: _isNew,
-    style,
     maxWidth,
     showTimestamp,
     showAvatar,
@@ -77,7 +75,7 @@ export const MessageItem = memo<MessageItemProps>(
     // }
 
     return (
-      <div style={style} className={className}>
+      <div className={className}>
         <ChatMessage
           key={messageId}
           message={mapMessageToUiMessage(message)}
@@ -120,10 +118,6 @@ export const MessageItem = memo<MessageItemProps>(
       }
       return false;
     }
-
-    // Re-render if style changes (for virtualization)
-    if (JSON.stringify(prevProps.style) !== JSON.stringify(nextProps.style))
-      return false;
 
     // Otherwise, prevent re-render
     return true;
