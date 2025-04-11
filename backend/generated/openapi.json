@@ -91,6 +91,51 @@
         ]
       }
     },
+    "/api/v1beta/files/{file_id}": {
+      "get": {
+        "tags": [],
+        "summary": "Get a single file by its ID",
+        "description": "This endpoint retrieves information about a specific file by its ID.",
+        "operationId": "get_file",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "description": "The ID of the file to retrieve",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved the file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUploadItem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "When the file doesn't exist or doesn't belong to the user"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/chats": {
       "post": {
         "tags": [],
@@ -460,7 +505,8 @@
           "full_text",
           "created_at",
           "updated_at",
-          "is_message_in_active_thread"
+          "is_message_in_active_thread",
+          "input_files_ids"
         ],
         "properties": {
           "chat_id": {
@@ -479,6 +525,13 @@
           "id": {
             "type": "string",
             "description": "The unique ID of the message"
+          },
+          "input_files_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The IDs of the files that were used to generate this message"
           },
           "is_message_in_active_thread": {
             "type": "boolean",
@@ -686,9 +739,14 @@
         "description": "Response for file upload",
         "required": [
           "id",
-          "filename"
+          "filename",
+          "download_url"
         ],
         "properties": {
+          "download_url": {
+            "type": "string",
+            "description": "Pre-signed URL for downloading the file directly from storage"
+          },
           "filename": {
             "type": "string",
             "description": "The original filename of the uploaded file"
