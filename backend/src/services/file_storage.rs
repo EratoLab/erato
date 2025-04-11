@@ -2,8 +2,9 @@ use crate::config::{
     FileStorageProviderConfig, StorageProviderAzBlobConfig, StorageProviderS3Config,
     StorageProviderSpecificConfig,
 };
-use eyre::Report;
+use eyre::{eyre, Report};
 use opendal::{Operator, Reader, Writer};
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct FileStorage {
@@ -92,5 +93,23 @@ impl FileStorage {
         let mut buffer = Vec::new();
         reader.read_into(&mut buffer, ..).await?;
         Ok(buffer)
+    }
+
+    /// Generate a pre-signed URL for downloading a file
+    /// The URL will be valid for the specified duration (defaulting to 1 hour if not specified)
+    pub async fn generate_presigned_download_url(
+        &self,
+        path: &str,
+        expires_in: Option<Duration>,
+    ) -> Result<String, Report> {
+        let duration = expires_in.unwrap_or_else(|| Duration::from_secs(3600)); // Default: 1 hour
+
+        // Check if the storage provider supports presigned URLs
+        if !self.opendal_operator.info().full_capability().presign_read {
+            return Err(eyre!("Storage provider does not support presigned URLs"));
+        }
+
+        let url = self.opendal_operator.presign_read(path, duration).await?;
+        Ok(url.uri().to_string())
     }
 }

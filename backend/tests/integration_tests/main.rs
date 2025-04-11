@@ -1,5 +1,6 @@
 #![allow(clippy::manual_strip)]
 
+use axum::http::StatusCode;
 use axum::{http, Router};
 use axum_test::multipart::MultipartForm;
 use axum_test::multipart::Part;
@@ -10,6 +11,7 @@ use erato::models::user::get_or_create_user;
 use erato::server::router::router;
 use erato::services::file_storage::FileStorage;
 use erato::state::AppState;
+use sea_orm::prelude::Uuid;
 use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
@@ -1073,6 +1075,14 @@ async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
         assert!(file["id"].as_str().is_some());
         assert!(file["filename"].as_str().is_some());
 
+        // Check that the file has a download URL
+        let download_url = file["download_url"].as_str().unwrap();
+        assert!(!download_url.is_empty(), "Download URL should not be empty");
+        assert!(
+            download_url.starts_with("http"),
+            "Download URL should be a valid URL"
+        );
+
         // Check that the filenames match one of our test files
         let filename = file["filename"].as_str().unwrap();
         assert!(filename == "test1.json" || filename == "test2.json");
@@ -1410,4 +1420,109 @@ async fn test_create_chat_file_upload_message_flow(pool: Pool<Postgres>) {
         2,
         "Should have user and assistant messages"
     );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_get_file_by_id(pool: Pool<Postgres>) {
+    // Set up the test environment
+    let app_config = test_app_config();
+    let app_state = test_app_state(app_config, pool);
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a mock JWT for authentication
+    let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
+
+    // First, create a chat to attach the file to
+    let create_chat_response = server
+        .post("/api/v1beta/me/chats")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({}))
+        .await;
+
+    create_chat_response.assert_status_ok();
+
+    let create_chat_json: Value = create_chat_response.json();
+    let chat_id = create_chat_json["chat_id"]
+        .as_str()
+        .expect("Expected chat_id in response");
+
+    // Create a file to upload
+    let file_content = json!({"test": "content"}).to_string();
+    let file_bytes = file_content.into_bytes();
+    let filename = "test_get_file.json";
+
+    // Create a multipart form with the file
+    let multipart_form = MultipartForm::new().add_part(
+        "file",
+        Part::bytes(file_bytes)
+            .file_name(filename)
+            .mime_type("application/json"),
+    );
+
+    // Upload the file
+    let upload_response = server
+        .post(&format!("/api/v1beta/me/files?chat_id={}", chat_id))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .multipart(multipart_form)
+        .await;
+
+    upload_response.assert_status_ok();
+    let upload_json: Value = upload_response.json();
+
+    // Get the file ID from the upload response
+    let file_id = upload_json["files"][0]["id"]
+        .as_str()
+        .expect("Expected file id in response");
+
+    // Test 1: Get file with valid ID
+    let get_file_response = server
+        .get(&format!("/api/v1beta/files/{}", file_id))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    get_file_response.assert_status_ok();
+    let file_json: Value = get_file_response.json();
+
+    // Verify the response has the correct file information
+    assert_eq!(file_json["id"].as_str().unwrap(), file_id);
+    assert_eq!(file_json["filename"].as_str().unwrap(), filename);
+
+    // Verify the download URL is present and valid
+    let download_url = file_json["download_url"].as_str().unwrap();
+    assert!(!download_url.is_empty(), "Download URL should not be empty");
+    assert!(
+        download_url.starts_with("http"),
+        "Download URL should be a valid URL"
+    );
+
+    // Test 2: Get file with non-existent ID
+    let nonexistent_id = Uuid::new_v4().to_string();
+    let get_nonexistent_response = server
+        .get(&format!("/api/v1beta/files/{}", nonexistent_id))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    // Should return 404 Not Found
+    assert_eq!(
+        get_nonexistent_response.status_code(),
+        StatusCode::NOT_FOUND
+    );
+
+    // Test 3: Get file with invalid ID format
+    let invalid_id = "not-a-uuid";
+    let get_invalid_response = server
+        .get(&format!("/api/v1beta/files/{}", invalid_id))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    // Should return 400 Bad Request
+    assert_eq!(get_invalid_response.status_code(), StatusCode::BAD_REQUEST);
 }
