@@ -188,6 +188,7 @@ pub struct RegenerateMessageRequest {
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
+#[allow(clippy::large_enum_variant)]
 pub enum RegenerateMessageStreamingResponseMessage {
     #[serde(rename = "message_complete")]
     /// Sent when the assistant's response has been saved in full.

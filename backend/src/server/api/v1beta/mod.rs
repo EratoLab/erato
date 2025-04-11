@@ -49,6 +49,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // Should at a later time use a more generic middleware that can use a non-me profile as a Subject
     let authenticated_routes = Router::new()
         .route("/chats/:chat_id/messages", get(chat_messages))
+        .route("/files/:file_id", get(get_file))
         .route_layer(middleware::from_fn_with_state(
             app_state,
             me_profile_middleware::user_profile_middleware,
@@ -75,7 +76,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         message_submit_sse,
         regenerate_message_sse,
         edit_message_sse,
-        create_chat
+        create_chat,
+        get_file
     ),
     components(schemas(
         Message,
@@ -176,6 +178,8 @@ pub struct ChatMessage {
     sibling_message_id: Option<String>,
     /// Whether this message is in the active thread
     is_message_in_active_thread: bool,
+    /// The IDs of the files that were used to generate this message
+    input_files_ids: Vec<String>,
 }
 
 /// Statistics for a list of chat messages
@@ -237,6 +241,8 @@ pub struct FileUploadItem {
     id: String,
     /// The original filename of the uploaded file
     filename: String,
+    /// Pre-signed URL for downloading the file directly from storage
+    download_url: String,
 }
 
 /// Response for file upload
@@ -342,6 +348,15 @@ pub async fn upload_file(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+        // Generate a pre-signed download URL
+        let download_url = file_storage_provider
+            .generate_presigned_download_url(&file_upload.file_storage_path, None)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to generate download URL: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
         tracing::info!(
             "User {} uploaded file '{}' with size {} bytes, assigned ID: {}",
             me_user.0.id,
@@ -354,6 +369,7 @@ pub async fn upload_file(
         uploaded_files.push(FileUploadItem {
             id: file_upload.id.to_string(),
             filename,
+            download_url,
         });
     }
 
@@ -381,6 +397,12 @@ impl ChatMessage {
             previous_message_id: msg.previous_message_id.map(|id| id.to_string()),
             sibling_message_id: msg.sibling_message_id.map(|id| id.to_string()),
             is_message_in_active_thread: msg.is_message_in_active_thread,
+            input_files_ids: msg
+                .input_file_uploads
+                .unwrap_or_default()
+                .iter()
+                .map(|id| id.to_string())
+                .collect(),
         })
     }
 }
@@ -515,11 +537,12 @@ pub async fn recent_chats(
         // For each chat, get its file uploads
         let chat_id = Uuid::parse_str(&chat.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        let file_uploads = models::file_upload::get_chat_file_uploads(
+        let file_uploads = models::file_upload::get_chat_file_uploads_with_urls(
             &app_state.db,
             &app_state.policy,
             &me_user.to_subject(),
             &chat_id,
+            &app_state.file_storage_providers,
         )
         .await
         .map_err(|e| {
@@ -533,6 +556,7 @@ pub async fn recent_chats(
             .map(|upload| FileUploadItem {
                 id: upload.id.to_string(),
                 filename: upload.filename,
+                download_url: upload.download_url,
             })
             .collect();
 
@@ -607,6 +631,60 @@ pub async fn create_chat(
 
     Ok(Json(CreateChatResponse {
         chat_id: chat.id.to_string(),
+    }))
+}
+
+/// Get a single file by its ID
+///
+/// This endpoint retrieves information about a specific file by its ID.
+#[utoipa::path(
+    get,
+    path = "/files/{file_id}",
+    params(
+        ("file_id" = String, Path, description = "The ID of the file to retrieve"),
+    ),
+    responses(
+        (status = OK, body = FileUploadItem, description = "Successfully retrieved the file"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = NOT_FOUND, description = "When the file doesn't exist or doesn't belong to the user"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn get_file(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Path(file_id): Path<String>,
+) -> Result<Json<FileUploadItem>, StatusCode> {
+    // Parse the file ID
+    let file_id = Uuid::parse_str(&file_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Get the file upload record with its download URL
+    let file_upload = models::file_upload::get_file_upload_with_url(
+        &app_state.db,
+        app_state.policy(),
+        &me_user.to_subject(),
+        &file_id,
+        &app_state.file_storage_providers,
+    )
+    .await
+    .map_err(|e| {
+        // If the error is about the file not being found, return 404
+        if e.to_string().contains("not found") {
+            StatusCode::NOT_FOUND
+        } else {
+            tracing::error!("Failed to get file upload by ID: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
+
+    // Convert to FileUploadItem and return
+    Ok(Json(FileUploadItem {
+        id: file_upload.id.to_string(),
+        filename: file_upload.filename,
+        download_url: file_upload.download_url,
     }))
 }
 
