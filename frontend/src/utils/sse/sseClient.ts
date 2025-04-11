@@ -109,31 +109,38 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
   abortController = new AbortController();
   const { signal } = abortController;
 
-  // Function to parse SSE stream from fetch
-  const readSSEStream = async (
+  // Helper async generator to iterate over stream reader (alternative structure)
+  async function* streamAsyncIterator(
     reader: ReadableStreamDefaultReader<Uint8Array>,
-  ) => {
+  ) {
+    try {
+      let result = await reader.read(); // Initial read before the loop
+      while (!result.done) {
+        // Loop condition based on 'done'
+        yield result.value; // Yield the current chunk
+        result = await reader.read(); // Read the next chunk at the end
+      }
+      // Loop naturally terminates when result.done is true
+    } finally {
+      reader.releaseLock(); // Ensure the lock is always released
+    }
+  }
+
+  // Function to parse SSE stream from fetch
+  const readSSEStream = async (stream: ReadableStream<Uint8Array>) => {
     let buffer = "";
-    let decoder = new TextDecoder();
+    const decoder = new TextDecoder();
+    const reader = stream.getReader(); // Get the reader
 
     try {
       console.log(
-        "[CHAT_FLOW] SSE Client - Stream connected, starting to read",
+        "[CHAT_FLOW] SSE Client - Stream connected, starting to read using async generator", // Updated log
       );
       isConnected = true;
       onOpen?.();
 
-      // Event processing loop
-      while (true) {
-        const { value, done } = await reader.read();
-
-        if (done) {
-          console.log("[CHAT_FLOW] SSE Client - Stream ended");
-          isConnected = false;
-          onClose?.();
-          break;
-        }
-
+      // Use for await...of on the async generator helper
+      for await (const value of streamAsyncIterator(reader)) {
         // Decode chunk and add to buffer
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
@@ -185,7 +192,12 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
           }
         }
       }
+      // Generator finishes when stream ends, reader lock released in generator's finally
+      console.log("[CHAT_FLOW] SSE Client - Stream ended (async generator)");
+      isConnected = false;
+      onClose?.();
     } catch (err) {
+      // Catch errors during stream processing or generator execution
       const error = err instanceof Error ? err : new Error(String(err));
       console.log("[CHAT_FLOW] SSE Client - Stream error:", error.message);
 
@@ -194,7 +206,8 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       Object.defineProperty(errorEvent, "error", { value: error });
 
       onError?.(errorEvent);
-      isConnected = false;
+      isConnected = false; // Ensure isConnected is false on error
+      // Note: reader lock should be released by the generator's finally block even on error
     }
   };
 
@@ -231,9 +244,8 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       console.log(
         "[CHAT_FLOW] SSE Client - Fetch successful, processing stream",
       );
-      // Read the stream
-      const reader = response.body.getReader();
-      await readSSEStream(reader);
+      // Read the stream using the updated function with the async generator
+      await readSSEStream(response.body); // Pass the stream directly
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         // This is just a normal abort, not an error
