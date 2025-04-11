@@ -33,6 +33,10 @@ export type ChatMessage = {
    */
   id: string;
   /**
+   * The IDs of the files that were used to generate this message
+   */
+  input_files_ids: string[];
+  /**
    * Whether this message is in the active thread
    */
   is_message_in_active_thread: boolean;
@@ -100,9 +104,61 @@ export type ChatMessagesResponse = {
 };
 
 /**
+ * Request to create a new chat without an initial message
+ */
+export type CreateChatRequest = Record<string, any>;
+
+/**
+ * Response for create_chat endpoint
+ */
+export type CreateChatResponse = {
+  /**
+   * The ID of the newly created chat
+   */
+  chat_id: string;
+};
+
+export type EditMessageRequest = {
+  /**
+   * The ID of the message that should be edited with a new response. It will be considered a sibling message to the new message.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  message_id: string;
+  /**
+   * The IDs of any files that should replace the input files. These files must already be uploaded to the file_uploads table.
+   *
+   * @example ["00000000-0000-0000-0000-000000000000"]
+   */
+  replace_input_files_ids?: string[];
+  /**
+   * The text of the message that should replace the user message.
+   *
+   * @example Hello, world!
+   */
+  replace_user_message: string;
+};
+
+export type EditMessageStreamingResponseMessage =
+  | (MessageSubmitStreamingResponseMessageComplete & {
+      message_type: "message_complete";
+    })
+  | (MessageSubmitStreamingResponseMessageTextDelta & {
+      message_type: "text_delta";
+    })
+  | (MessageSubmitStreamingResponseUserMessageSaved & {
+      message_type: "user_message_saved";
+    });
+
+/**
  * Response for file upload
  */
 export type FileUploadItem = {
+  /**
+   * Pre-signed URL for downloading the file directly from storage
+   */
+  download_url: string;
   /**
    * The original filename of the uploaded file
    */
@@ -128,6 +184,21 @@ export type Message = {
 };
 
 export type MessageSubmitRequest = {
+  /**
+   * The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
+   * This is useful for scenarios where you have created a chat first (e.g. for file uploads) before sending the first message.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  existing_chat_id?: void;
+  /**
+   * The IDs of any files attached to this message. These files must already be uploaded to the file_uploads table.
+   * The files should normally only be provided with the first message they appear in the chat. After that they can assumed to be part of the chat history.
+   *
+   * @example ["00000000-0000-0000-0000-000000000000"]
+   */
+  input_files_ids?: string[];
   /**
    * The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.
    *
@@ -194,6 +265,10 @@ export type MultipartFormFile = {
 };
 
 export type RecentChat = {
+  /**
+   * Files uploaded to this chat
+   */
+  file_uploads: FileUploadItem[];
   id: string;
   /**
    * Time of the last message in the chat.

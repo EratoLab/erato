@@ -213,12 +213,171 @@ export const useChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   });
 };
 
+export type GetFilePathParams = {
+  /**
+   * The ID of the file to retrieve
+   */
+  fileId: string;
+};
+
+export type GetFileError = Fetcher.ErrorWrapper<undefined>;
+
+export type GetFileVariables = {
+  pathParams: GetFilePathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * This endpoint retrieves information about a specific file by its ID.
+ */
+export const fetchGetFile = (
+  variables: GetFileVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.FileUploadItem,
+    GetFileError,
+    undefined,
+    {},
+    {},
+    GetFilePathParams
+  >({ url: "/api/v1beta/files/{fileId}", method: "get", ...variables, signal });
+
+/**
+ * This endpoint retrieves information about a specific file by its ID.
+ */
+export function getFileQuery(variables: GetFileVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.FileUploadItem>;
+};
+
+export function getFileQuery(
+  variables: GetFileVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.FileUploadItem>)
+    | reactQuery.SkipToken;
+};
+
+export function getFileQuery(
+  variables: GetFileVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/files/{fileId}",
+      operationId: "getFile",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchGetFile(variables, signal),
+  };
+}
+
+/**
+ * This endpoint retrieves information about a specific file by its ID.
+ */
+export const useSuspenseGetFile = <TData = Schemas.FileUploadItem,>(
+  variables: GetFileVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<Schemas.FileUploadItem, GetFileError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.FileUploadItem,
+    GetFileError,
+    TData
+  >({
+    ...getFileQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+/**
+ * This endpoint retrieves information about a specific file by its ID.
+ */
+export const useGetFile = <TData = Schemas.FileUploadItem,>(
+  variables: GetFileVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<Schemas.FileUploadItem, GetFileError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<Schemas.FileUploadItem, GetFileError, TData>({
+    ...getFileQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type CreateChatError = Fetcher.ErrorWrapper<undefined>;
+
+export type CreateChatVariables = {
+  body?: Schemas.CreateChatRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * This endpoint allows creating a new chat without requiring an initial message.
+ * This is useful for scenarios where you want to upload files before sending the first message.
+ */
+export const fetchCreateChat = (
+  variables: CreateChatVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.CreateChatResponse,
+    CreateChatError,
+    Schemas.CreateChatRequest,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/me/chats", method: "post", ...variables, signal });
+
+/**
+ * This endpoint allows creating a new chat without requiring an initial message.
+ * This is useful for scenarios where you want to upload files before sending the first message.
+ */
+export const useCreateChat = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.CreateChatResponse,
+      CreateChatError,
+      CreateChatVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.CreateChatResponse,
+    CreateChatError,
+    CreateChatVariables
+  >({
+    mutationFn: (variables: CreateChatVariables) =>
+      fetchCreateChat(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type UploadFileQueryParams = {
+  /**
+   * The chat ID to associate the file with.
+   */
+  chat_id: string;
+};
+
 export type UploadFileError = Fetcher.ErrorWrapper<undefined>;
 
 export type UploadFileRequestBody = Schemas.MultipartFormFile[];
 
 export type UploadFileVariables = {
   body?: UploadFileRequestBody;
+  queryParams: UploadFileQueryParams;
 } & V1betaApiContext["fetcherOptions"];
 
 /**
@@ -233,7 +392,7 @@ export const fetchUploadFile = (
     UploadFileError,
     UploadFileRequestBody,
     {},
-    {},
+    UploadFileQueryParams,
     {}
   >({ url: "/api/v1beta/me/files", method: "post", ...variables, signal });
 
@@ -258,6 +417,52 @@ export const useUploadFile = (
   >({
     mutationFn: (variables: UploadFileVariables) =>
       fetchUploadFile(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type EditMessageSseError = Fetcher.ErrorWrapper<undefined>;
+
+export type EditMessageSseVariables = {
+  body: Schemas.EditMessageRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchEditMessageSse = (
+  variables: EditMessageSseVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    EditMessageSseError,
+    Schemas.EditMessageRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/messages/editstream",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useEditMessageSse = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      EditMessageSseError,
+      EditMessageSseVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    EditMessageSseError,
+    EditMessageSseVariables
+  >({
+    mutationFn: (variables: EditMessageSseVariables) =>
+      fetchEditMessageSse(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
@@ -703,6 +908,11 @@ export type QueryOperation =
       path: "/api/v1beta/chats/{chatId}/messages";
       operationId: "chatMessages";
       variables: ChatMessagesVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/files/{fileId}";
+      operationId: "getFile";
+      variables: GetFileVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/profile";
