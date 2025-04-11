@@ -1264,3 +1264,150 @@ async fn collect_sse_messages(response: TestResponse) -> Vec<Event> {
 
     messages
 }
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_create_chat_file_upload_message_flow(pool: Pool<Postgres>) {
+    // Set up the test environment
+    let app_config = test_app_config();
+    let app_state = test_app_state(app_config, pool);
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a mock JWT for authentication
+    let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
+
+    // Step 1: Create a new chat without initial message
+    let create_chat_response = server
+        .post("/api/v1beta/me/chats")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({}))
+        .await;
+
+    // Verify the response status is OK
+    create_chat_response.assert_status_ok();
+
+    let create_chat_json: Value = create_chat_response.json();
+    let chat_id = create_chat_json["chat_id"]
+        .as_str()
+        .expect("Expected chat_id in response");
+
+    assert!(
+        !chat_id.is_empty(),
+        "Failed to extract chat_id from response"
+    );
+
+    // Step 2: Upload a file for the chat
+    // Create test file content
+    let file_content = json!({
+        "name": "test_document",
+        "content": "This is a test file for the chat message flow."
+    })
+    .to_string();
+
+    // Convert to owned Vec<u8> to satisfy 'static lifetime requirement
+    let file_bytes = file_content.into_bytes();
+
+    // Create a multipart form with the file
+    let multipart_form = MultipartForm::new().add_part(
+        "file",
+        Part::bytes(file_bytes)
+            .file_name("test_document.json")
+            .mime_type("application/json"),
+    );
+
+    // Make the request with the chat_id as a query parameter
+    let upload_response = server
+        .post(&format!("/api/v1beta/me/files?chat_id={}", chat_id))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .multipart(multipart_form)
+        .await;
+
+    // Verify the response
+    upload_response.assert_status_ok();
+    let upload_json: Value = upload_response.json();
+
+    // Check that we got a response with one file
+    let files = upload_json["files"]
+        .as_array()
+        .expect("Expected files array in response");
+    assert_eq!(files.len(), 1);
+
+    // Get the file ID
+    let file_id = files[0]["id"]
+        .as_str()
+        .expect("Expected file id in response");
+    assert!(!file_id.is_empty());
+
+    // Step 3: Send a message to the chat with the file attached
+    let message_request = json!({
+        "existing_chat_id": chat_id,
+        "user_message": "Here's a test file I'm sending",
+        "input_files_ids": [file_id]
+    });
+
+    let message_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+
+    message_response.assert_status_ok();
+
+    // Collect and analyze SSE messages
+    let messages = collect_sse_messages(message_response).await;
+
+    // Verify key events in the message stream
+
+    // We should NOT see a chat_created event (since we used an existing chat)
+    let has_chat_created = messages.iter().any(|e| e.event_type == "chat_created");
+    assert!(!has_chat_created, "Should not have a chat_created event");
+
+    // We should see a user_message_saved event
+    let has_user_message_saved = messages.iter().any(|e| {
+        if e.event_type == "user_message_saved" {
+            if let Ok(json) = serde_json::from_str::<Value>(&e.data) {
+                return json["message_type"] == "user_message_saved";
+            }
+        }
+        false
+    });
+    assert!(has_user_message_saved, "Missing user_message_saved event");
+
+    // We should see a message_complete event for the assistant's response
+    let has_message_complete = messages.iter().any(|e| {
+        if e.event_type == "message_complete" {
+            if let Ok(json) = serde_json::from_str::<Value>(&e.data) {
+                return json["message_type"] == "message_complete";
+            }
+        }
+        false
+    });
+    assert!(has_message_complete, "Missing message_complete event");
+
+    // Step 4: Verify we can retrieve the chat messages with the API
+    let messages_response = server
+        .get(&format!("/api/v1beta/chats/{}/messages", chat_id))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    messages_response.assert_status_ok();
+    let messages_json: Value = messages_response.json();
+
+    // Check we have both the user and assistant messages
+    let message_list = messages_json["messages"]
+        .as_array()
+        .expect("Expected messages array");
+    assert_eq!(
+        message_list.len(),
+        2,
+        "Should have user and assistant messages"
+    );
+}

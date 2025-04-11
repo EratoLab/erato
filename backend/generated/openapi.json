@@ -91,6 +91,47 @@
         ]
       }
     },
+    "/api/v1beta/me/chats": {
+      "post": {
+        "tags": [],
+        "summary": "Create a new chat without an initial message",
+        "description": "This endpoint allows creating a new chat without requiring an initial message.\nThis is useful for scenarios where you want to upload files before sending the first message.",
+        "operationId": "create_chat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully created a new chat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateChatResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/files": {
       "post": {
         "tags": [
@@ -521,6 +562,23 @@
           }
         }
       },
+      "CreateChatRequest": {
+        "type": "object",
+        "description": "Request to create a new chat without an initial message"
+      },
+      "CreateChatResponse": {
+        "type": "object",
+        "description": "Response for create_chat endpoint",
+        "required": [
+          "chat_id"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "description": "The ID of the newly created chat"
+          }
+        }
+      },
       "EditMessageRequest": {
         "type": "object",
         "required": [
@@ -674,6 +732,15 @@
           "user_message"
         ],
         "properties": {
+          "existing_chat_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.\nThis is useful for scenarios where you have created a chat first (e.g. for file uploads) before sending the first message.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          },
           "input_files_ids": {
             "type": "array",
             "items": {
