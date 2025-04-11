@@ -317,6 +317,7 @@ export function useChatMessaging(
         useMessagingStore.getState().streaming.currentMessageId;
 
       // Extract real message data from the backend
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
       const realMessageData = responseData.message || {}; // Handle missing message object
       const realMessageId =
         realMessageData.id || responseData.message_id || `msg-${Date.now()}`; // Fallback ID
@@ -438,6 +439,7 @@ export function useChatMessaging(
         });
 
         // Only update state if we actually changed something
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
         if (updatedAny) {
           useMessagingStore.setState((state) => ({
             ...state,
@@ -680,6 +682,7 @@ export function useChatMessaging(
                 onChatCreated?.(pendingChatIdRef.current);
                 pendingChatIdRef.current = null;
               }
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
             } else if (streaming.isStreaming) {
               // Abnormal close - streaming hadn't completed
               console.warn("[CHAT_FLOW] SSE connection closed unexpectedly");
@@ -736,9 +739,7 @@ export function useChatMessaging(
       setStreaming,
       streaming.content,
       streaming.isStreaming,
-      queryClient,
       addUserMessage,
-      clearUserMessages,
       clearCompletedUserMessages,
       processStreamEvent,
       findMostRecentAssistantMessageId,

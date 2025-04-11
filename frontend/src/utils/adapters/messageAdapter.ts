@@ -31,6 +31,7 @@ export function mapApiMessageToUiMessage(
     createdAt: apiMessage.created_at || new Date().toISOString(),
     authorId: apiMessage.role === "user" ? "user_id" : "assistant_id",
     previous_message_id:
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
       apiMessage.previous_message_id &&
       typeof apiMessage.previous_message_id === "string"
         ? apiMessage.previous_message_id

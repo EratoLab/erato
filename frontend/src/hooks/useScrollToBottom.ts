@@ -321,6 +321,7 @@ export function useScrollToBottom({
   // Helper function for managing container styles
   const updateContainerStyle = useCallback(
     (container: HTMLDivElement, styles: Partial<CSSStyleDeclaration>) => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
       if (!container) return;
 
       Object.entries(styles).forEach(([property, value]) => {

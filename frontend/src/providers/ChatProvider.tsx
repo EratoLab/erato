@@ -147,12 +147,14 @@ export function ChatProvider({
     if (process.env.NODE_ENV === "development") {
       console.log(
         "[CHAT_PROVIDER] Creating context with messages:",
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
         Object.keys(messages || {}).length,
         "messages from useChatMessaging",
       );
     }
 
     // Transform messages from useChatMessaging to include the "sender" field required by UI components
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
     const transformedMessages = Object.entries(messages || {}).reduce(
       (acc, [id, msg]) => {
         // Skip transformation for streaming messages if they're already being streamed
@@ -182,6 +184,7 @@ export function ChatProvider({
     const createMessageOrder = (
       messages: Record<string, ChatMessage>,
     ): string[] => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
       if (!messages || Object.keys(messages).length === 0) return [];
 
       // With the refetch pattern, we prioritize server ordering

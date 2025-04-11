@@ -50,8 +50,8 @@ export const DefaultMessageControls = ({
   isUserMessage,
 }: MessageControlsProps) => {
   // Support both isUserMessage (new) and messageType (legacy)
-  const isUser =
-    isUserMessage !== undefined ? isUserMessage : messageType === "user";
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
+  const isUser = isUserMessage ?? messageType === "user";
   const isOwnMessage = authorId === context.currentUserId;
   const isDialogOwner = context.currentUserId === context.dialogOwnerId;
 
