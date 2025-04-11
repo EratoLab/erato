@@ -4,7 +4,7 @@ pub mod message_streaming;
 
 use crate::db::entity_ext::messages;
 use crate::models;
-use crate::models::chat::get_recent_chats;
+use crate::models::chat::{get_or_create_chat, get_recent_chats};
 use crate::models::message::MessageSchema;
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
@@ -38,6 +38,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/regeneratestream", post(regenerate_message_sse))
         .route("/messages/editstream", post(edit_message_sse))
         .route("/recent_chats", get(recent_chats))
+        .route("/chats", post(create_chat))
         .route("/files", post(upload_file))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
@@ -73,7 +74,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         upload_file,
         message_submit_sse,
         regenerate_message_sse,
-        edit_message_sse
+        edit_message_sse,
+        create_chat
     ),
     components(schemas(
         Message,
@@ -90,7 +92,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         UserProfile,
         MessageSubmitRequest,
         EditMessageRequest,
-        EditMessageStreamingResponseMessage
+        EditMessageStreamingResponseMessage,
+        CreateChatRequest,
+        CreateChatResponse
     ))
 )]
 pub struct ApiV1ApiDoc;
@@ -552,6 +556,58 @@ pub async fn recent_chats(
     };
 
     Ok(Json(response))
+}
+
+/// Request to create a new chat without an initial message
+#[derive(Deserialize, ToSchema, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CreateChatRequest {
+    // Optional fields for future extensibility
+}
+
+/// Response for create_chat endpoint
+#[derive(Deserialize, ToSchema, Serialize)]
+pub struct CreateChatResponse {
+    /// The ID of the newly created chat
+    chat_id: String,
+}
+
+/// Create a new chat without an initial message
+///
+/// This endpoint allows creating a new chat without requiring an initial message.
+/// This is useful for scenarios where you want to upload files before sending the first message.
+#[utoipa::path(
+    post,
+    path = "/me/chats",
+    request_body = CreateChatRequest,
+    responses(
+        (status = OK, body = CreateChatResponse, description = "Successfully created a new chat"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn create_chat(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Json(_request): Json<CreateChatRequest>,
+) -> Result<Json<CreateChatResponse>, StatusCode> {
+    // Create a new chat
+    let (chat, _) = get_or_create_chat(
+        &app_state.db,
+        app_state.policy(),
+        &me_user.to_subject(),
+        None,
+        &me_user.0.id,
+    )
+    .await
+    .map_err(log_internal_server_error)?;
+
+    Ok(Json(CreateChatResponse {
+        chat_id: chat.id.to_string(),
+    }))
 }
 
 #[cfg(feature = "sentry")]

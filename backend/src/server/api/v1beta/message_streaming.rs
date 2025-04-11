@@ -1,6 +1,7 @@
 use crate::db::entity_ext::{chats, messages};
 use crate::models::chat::{
-    get_chat_by_message_id, get_or_create_chat_by_previous_message_id, ChatCreationStatus,
+    get_chat_by_message_id, get_or_create_chat, get_or_create_chat_by_previous_message_id,
+    ChatCreationStatus,
 };
 use crate::models::file_upload::get_file_upload_by_id;
 use crate::models::message::{
@@ -102,6 +103,10 @@ pub struct MessageSubmitRequest {
     #[schema(example = "00000000-0000-0000-0000-000000000000")]
     /// The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.
     previous_message_id: Option<Uuid>,
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
+    /// This is useful for scenarios where you have created a chat first (e.g. for file uploads) before sending the first message.
+    existing_chat_id: Option<Uuid>,
     #[schema(example = "Hello, world!")]
     /// The text of the message.
     #[allow(dead_code)]
@@ -289,32 +294,60 @@ async fn stream_get_or_create_chat<
     app_state: &AppState,
     me_user: &MeProfile,
     previous_message_id: Option<&Uuid>,
+    existing_chat_id: Option<&Uuid>,
 ) -> Result<(chats::Model, ChatCreationStatus), ()> {
-    // Get or create the chat using the previous message ID
-    let result = get_or_create_chat_by_previous_message_id(
-        &app_state.db,
-        app_state.policy(),
-        &me_user.to_subject(),
-        previous_message_id,
-        &me_user.0.id,
-    )
-    .await;
+    // If existing_chat_id is provided, use it directly
+    if let Some(existing_chat_id) = existing_chat_id {
+        // Get or create the chat using the existing chat ID
+        let result = get_or_create_chat(
+            &app_state.db,
+            app_state.policy(),
+            &me_user.to_subject(),
+            Some(existing_chat_id),
+            &me_user.0.id,
+        )
+        .await;
 
-    // Send chat created event if the chat was newly created
-    match result {
-        Ok((chat, chat_status)) => {
-            if chat_status == ChatCreationStatus::Created {
-                let inner_msg = MessageSubmitStreamingResponseChatCreated { chat_id: chat.id };
-                let chat_created: MSG = inner_msg.into();
-                chat_created.send_event(tx.clone()).await?;
+        match result {
+            Ok((chat, chat_status)) => {
+                // Even though we're using an existing chat, we don't need to emit a chat_created event
+                // as the client already knows about it
+                Ok((chat, chat_status))
             }
-            Ok((chat, chat_status))
+            Err(err) => {
+                let _ = tx
+                    .send(Err(err).wrap_err("Failed to get existing chat"))
+                    .await;
+                Err(())
+            }
         }
-        Err(err) => {
-            let _ = tx
-                .send(Err(err).wrap_err("Failed to get or create chat"))
-                .await;
-            Err(())
+    } else {
+        // Get or create the chat using the previous message ID
+        let result = get_or_create_chat_by_previous_message_id(
+            &app_state.db,
+            app_state.policy(),
+            &me_user.to_subject(),
+            previous_message_id,
+            &me_user.0.id,
+        )
+        .await;
+
+        // Send chat created event if the chat was newly created
+        match result {
+            Ok((chat, chat_status)) => {
+                if chat_status == ChatCreationStatus::Created {
+                    let inner_msg = MessageSubmitStreamingResponseChatCreated { chat_id: chat.id };
+                    let chat_created: MSG = inner_msg.into();
+                    chat_created.send_event(tx.clone()).await?;
+                }
+                Ok((chat, chat_status))
+            }
+            Err(err) => {
+                let _ = tx
+                    .send(Err(err).wrap_err("Failed to get or create chat"))
+                    .await;
+                Err(())
+            }
         }
     }
 }
@@ -700,6 +733,7 @@ pub async fn message_submit_sse(
                 &app_state,
                 &me_user,
                 request.previous_message_id.as_ref(),
+                request.existing_chat_id.as_ref(),
             )
             .await?;
 
