@@ -19,6 +19,10 @@ interface FileUploadState {
    */
   error: Error | null;
   /**
+   * Stores the chat ID created silently for file uploads
+   */
+  silentChatId: string | null;
+  /**
    * Set the uploading state
    */
   setUploading: (isUploading: boolean) => void;
@@ -38,6 +42,10 @@ interface FileUploadState {
    * Reset the state
    */
   reset: () => void;
+  /**
+   * Set the silent chat ID
+   */
+  setSilentChatId: (chatId: string | null) => void;
 }
 
 /**
@@ -47,6 +55,7 @@ const initialState = {
   uploadedFiles: [],
   isUploading: false,
   error: null,
+  silentChatId: null,
 };
 
 /**
@@ -67,4 +76,6 @@ export const useFileUploadStore = create<FileUploadState>((set) => ({
   clearFiles: () => set({ uploadedFiles: [] }),
 
   reset: () => set(initialState),
+
+  setSilentChatId: (chatId: string | null) => set({ silentChatId: chatId }),
 }));

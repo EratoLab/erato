@@ -1,6 +1,10 @@
 import clsx from "clsx";
 import React, { memo } from "react";
 
+import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
+import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
+import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+
 import { Avatar } from "../Feedback/Avatar";
 import { LoadingIndicator } from "../Feedback/LoadingIndicator";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
@@ -88,6 +92,15 @@ export const ChatMessage = memo(function ChatMessage({
 
           <MessageContent content={message.content} />
 
+          {/* Display attached files if any */}
+          {message.input_files_ids && message.input_files_ids.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {message.input_files_ids.map((fileId) => (
+                <AttachedFile key={fileId} fileId={fileId} />
+              ))}
+            </div>
+          )}
+
           {message.loading && (
             <div className="mt-2">
               <LoadingIndicator
@@ -114,6 +127,54 @@ export const ChatMessage = memo(function ChatMessage({
     </div>
   );
 });
+
+// Helper component to fetch and display a single attached file
+const AttachedFile = ({ fileId }: { fileId: string }) => {
+  const {
+    data: fileData,
+    isLoading,
+    error,
+  } = useGetFile(
+    { pathParams: { fileId } },
+    {
+      // Optional: configure react-query options like staleTime, cacheTime, etc.
+      staleTime: Infinity, // Assume file metadata doesn't change often
+    },
+  );
+
+  if (isLoading) {
+    return <div className="text-xs text-theme-fg-muted">Loading file...</div>;
+  }
+
+  if (error || !fileData) {
+    console.error(`Failed to load file ${fileId}:`, error);
+    return (
+      <div className="text-theme-fg-error text-xs">Error loading file</div>
+    );
+  }
+
+  return (
+    <InteractiveContainer
+      onClick={() => {
+        if (fileData.download_url) {
+          window.open(fileData.download_url, "_blank", "noopener,noreferrer");
+        }
+      }}
+      aria-label={`View attached file: ${fileData.filename}`}
+      className="cursor-pointer"
+      useDiv={true}
+    >
+      <FilePreviewButton
+        file={fileData}
+        onRemove={() => {}}
+        disabled={true}
+        showFileType={true}
+        showSize={true}
+        filenameTruncateLength={25}
+      />
+    </InteractiveContainer>
+  );
+};
 
 // Add display name for better debugging
 ChatMessage.displayName = "ChatMessage";

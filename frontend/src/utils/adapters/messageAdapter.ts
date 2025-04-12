@@ -9,6 +9,7 @@ export interface UiChatMessage extends Message {
   sender: string;
   authorId: string;
   previous_message_id?: string;
+  input_files_ids?: string[];
   loading?: {
     state: "typing" | "thinking" | "done" | "error";
     context?: string;
@@ -30,6 +31,7 @@ export function mapApiMessageToUiMessage(
     sender: apiMessage.role,
     createdAt: apiMessage.created_at || new Date().toISOString(),
     authorId: apiMessage.role === "user" ? "user_id" : "assistant_id",
+    input_files_ids: apiMessage.input_files_ids || undefined,
     previous_message_id:
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
       apiMessage.previous_message_id &&
@@ -64,6 +66,7 @@ export function mapMessageToUiMessage(message: Message): UiChatMessage {
     ...message,
     sender: message.role,
     authorId: message.role === "user" ? "user_id" : "assistant_id",
+    input_files_ids: message.input_files_ids || undefined,
   };
 }
 

@@ -25,7 +25,8 @@ interface UseChatInputHandlersResult {
   /** Factory function to create a submit handler with the current state */
   createSubmitHandler: (
     message: string,
-    onSendMessage: (message: string) => void,
+    attachedFiles: FileUploadItem[],
+    onSendMessage: (message: string, inputFileIds?: string[]) => void,
     isLoading: boolean,
     disabled: boolean,
     resetMessage: () => void,
@@ -47,6 +48,10 @@ export function useChatInputHandlers(
   // Handle uploaded files
   const handleFilesUploaded = useCallback(
     (files: FileUploadItem[]) => {
+      console.log(
+        "[ChatInputHandlers] handleFilesUploaded called with:",
+        files,
+      );
       setAttachedFiles((prevFiles) => {
         // Limit to maxFiles
         const combinedFiles = [...prevFiles, ...files];
@@ -57,6 +62,10 @@ export function useChatInputHandlers(
           handleFileAttachments(limitedFiles);
         }
 
+        console.log(
+          "[ChatInputHandlers] Updated attachedFiles state:",
+          limitedFiles,
+        );
         return limitedFiles;
       });
     },
@@ -69,6 +78,9 @@ export function useChatInputHandlers(
       const fileId =
         typeof fileIdOrFile === "string" ? fileIdOrFile : fileIdOrFile.id;
 
+      console.log(
+        `[ChatInputHandlers] handleRemoveFile called for ID: ${fileId}`,
+      );
       setAttachedFiles((prevFiles) => {
         const updatedFiles = prevFiles.filter((file) => file.id !== fileId);
 
@@ -77,6 +89,10 @@ export function useChatInputHandlers(
           handleFileAttachments(updatedFiles);
         }
 
+        console.log(
+          "[ChatInputHandlers] Updated attachedFiles state after removal:",
+          updatedFiles,
+        );
         return updatedFiles;
       });
     },
@@ -85,6 +101,7 @@ export function useChatInputHandlers(
 
   // Handle removing all files
   const handleRemoveAllFiles = useCallback(() => {
+    console.log("[ChatInputHandlers] handleRemoveAllFiles called");
     setAttachedFiles([]);
 
     // Notify parent component if handler provided
@@ -97,7 +114,8 @@ export function useChatInputHandlers(
   const createSubmitHandler = useCallback(
     (
       message: string,
-      onSendMessage: (message: string) => void,
+      attachedFiles: FileUploadItem[],
+      onSendMessage: (message: string, inputFileIds?: string[]) => void,
       isLoading: boolean,
       disabled: boolean,
       resetMessage: () => void,
@@ -110,15 +128,24 @@ export function useChatInputHandlers(
           return;
         }
 
-        // Check if there's a message to send
+        // Check if there's a message or files to send
         const trimmedMessage = message.trim();
-        if (trimmedMessage) {
-          onSendMessage(trimmedMessage);
+        const fileIds = attachedFiles.map((file) => file.id);
+
+        if (trimmedMessage || fileIds.length > 0) {
+          onSendMessage(
+            trimmedMessage,
+            fileIds.length > 0 ? fileIds : undefined,
+          );
           resetMessage();
+          // Optionally clear attached files after sending
+          // handleRemoveAllFiles(); // Uncomment if files should be cleared on send
         }
       };
     },
-    [],
+    [
+      /* handleRemoveAllFiles */
+    ], // Add handleRemoveAllFiles if uncommented above
   );
 
   return {

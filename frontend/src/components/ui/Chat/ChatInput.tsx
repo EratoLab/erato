@@ -18,7 +18,7 @@ import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas"
 import type { FileType } from "@/utils/fileTypes";
 
 interface ChatInputProps {
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, inputFileIds?: string[]) => void;
   onRegenerate?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
@@ -67,6 +67,7 @@ export const ChatInput = ({
   // Use our modernized file upload hook
   const {
     uploadFiles,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Part of hook return, might be used internally or later
     uploadedFiles,
     error: uploadError,
   } = useFileDropzone({
@@ -88,16 +89,22 @@ export const ChatInput = ({
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
 
+  // Log attachedFiles received from the hook
+  console.log("[ChatInput] Received attachedFiles from hook:", attachedFiles);
+
   // Create the submit handler
   const handleSubmit = createSubmitHandler(
     message,
-    (messageContent) => {
+    attachedFiles,
+    (messageContent, inputFileIds) => {
       console.log(
         "[CHAT_FLOW] ChatInput - Message submitted:",
         messageContent.substring(0, 20) +
           (messageContent.length > 20 ? "..." : ""),
+        "with files:",
+        inputFileIds,
       );
-      onSendMessage(messageContent);
+      onSendMessage(messageContent, inputFileIds);
     },
     isLoading || isStreaming,
     disabled,
@@ -129,6 +136,12 @@ export const ChatInput = ({
     !isStreaming &&
     !disabled &&
     !isUploading;
+
+  // Log just before rendering the component and its preview section
+  console.log(
+    "[ChatInput] Rendering component. Preview should render if attachedFiles > 0. attachedFiles:",
+    attachedFiles,
+  );
 
   return (
     <form
@@ -256,9 +269,8 @@ export const ChatInput = ({
                     }
                     // Use our modern file upload hook with proper typing
                     performFileUpload={async (files) => {
-                      await uploadFiles(files);
-                      // Return the currently uploaded files directly
-                      return uploadedFiles;
+                      // Directly return the result of uploadFiles
+                      return await uploadFiles(files);
                     }}
                     isUploading={isUploading}
                     uploadError={

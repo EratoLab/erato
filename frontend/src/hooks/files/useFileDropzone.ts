@@ -56,7 +56,7 @@ interface UseFileDropzoneResult {
   /** Clear uploaded files */
   clearFiles: () => void;
   /** Upload files manually */
-  uploadFiles: (files: File[]) => Promise<void>;
+  uploadFiles: (files: File[]) => Promise<FileUploadItem[] | undefined>;
 }
 
 /**
@@ -80,6 +80,7 @@ export function useFileDropzone({
     addFiles,
     setError,
     clearFiles,
+    setSilentChatId,
   } = useFileUploadStore();
 
   // Add create chat mutation for silent chat creation
@@ -115,6 +116,8 @@ export function useFileDropzone({
     async (files: File[]) => {
       if (disabled || isUploading || files.length === 0) return;
 
+      let uploadedItems: FileUploadItem[] | undefined;
+
       try {
         setUploading(true);
         setError(null);
@@ -130,11 +133,16 @@ export function useFileDropzone({
           const createChatResult = await createChatMutation.mutateAsync({
             body: {},
           });
+          console.log(
+            "[FILE_UPLOAD] Silent chat creation result:",
+            createChatResult,
+          );
           uploadChatId = createChatResult.chat_id;
-          if (onSilentChatCreated) {
-            onSilentChatCreated(uploadChatId);
-            console.log(`[FILE_UPLOAD] Created silent chat: ${uploadChatId}`);
-          }
+          // Set the silentChatId in the store
+          console.log(
+            `[FILE_UPLOAD] Setting silentChatId in store: ${uploadChatId}`,
+          );
+          setSilentChatId(uploadChatId);
         }
 
         // --- WORKAROUND START: Create FormData ---
@@ -161,6 +169,10 @@ export function useFileDropzone({
         try {
           // Use type assertion on the variables object for the call
           result = await fetchUploadFile(variables as UploadFileVariables);
+          console.log(
+            "[FILE_UPLOAD] File upload API call successful, result:",
+            result,
+          );
         } catch (uploadError) {
           console.error("Error calling fetchUploadFile:", uploadError);
           // Simplify error handling to satisfy linter
@@ -170,6 +182,7 @@ export function useFileDropzone({
         if (result.files.length > 0) {
           addFiles(result.files);
           onFilesUploaded?.(result.files);
+          uploadedItems = result.files; // Store the result
         }
       } catch (err) {
         console.error("Error uploading files (outer catch):", err);
@@ -181,6 +194,8 @@ export function useFileDropzone({
       } finally {
         setUploading(false);
       }
+
+      return uploadedItems; // Return the uploaded items
     },
     [
       disabled,
@@ -194,6 +209,7 @@ export function useFileDropzone({
       onFilesUploaded,
       setUploading,
       setError,
+      setSilentChatId,
     ],
   );
 

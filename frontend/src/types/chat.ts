@@ -8,6 +8,7 @@ export interface Message {
   content: string;
   role: "user" | "assistant" | "system";
   createdAt: string;
+  input_files_ids?: string[];
   status?: "sending" | "complete" | "error";
   previous_message_id?: string;
 }

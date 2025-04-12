@@ -4,7 +4,10 @@ import type { MessageAction } from "@/types/message-controls";
 
 interface UseChatActionsProps {
   switchSession: (sessionId: string) => void;
-  sendMessage: (content: string) => Promise<string | undefined>;
+  sendMessage: (
+    content: string,
+    inputFileIds?: string[],
+  ) => Promise<string | undefined>;
   onMessageAction?: (action: MessageAction) => void | Promise<void>;
 }
 
@@ -43,9 +46,9 @@ export function useChatActions({
   );
 
   const handleSendMessage = useCallback(
-    (message: string) => {
-      if (message.trim()) {
-        return sendMessage(message);
+    (message: string, inputFileIds?: string[]) => {
+      if (message.trim() || (inputFileIds && inputFileIds.length > 0)) {
+        return sendMessage(message, inputFileIds);
       }
       return Promise.resolve(undefined);
     },

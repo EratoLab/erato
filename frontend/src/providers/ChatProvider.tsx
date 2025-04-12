@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useMemo, useEffect, useState } from "react";
+import { createContext, useContext, useMemo, useEffect } from "react";
 
 import { useChatHistory, useChatMessaging } from "@/hooks/chat";
-import { useFileDropzone } from "@/hooks/files";
+import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
 import type {
@@ -45,12 +45,15 @@ interface ChatContextValue {
   streamingContent: string | null;
   isMessagingLoading: boolean;
   messagingError: Error | ChatMessagesError | null;
-  sendMessage: (content: string) => Promise<string | undefined>;
+  sendMessage: (
+    content: string,
+    inputFileIds?: string[],
+  ) => Promise<string | undefined>;
   cancelMessage: () => void;
   refetchMessages: () => Promise<unknown>;
 
   // File upload
-  uploadFiles: (files: File[]) => Promise<void>;
+  uploadFiles: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   isUploading: boolean;
   uploadError: Error | string | null;
   uploadedFiles: FileUploadItem[];
@@ -59,6 +62,9 @@ interface ChatContextValue {
   // Combined states
   isLoading: boolean;
   error: Error | ErrorWrapper<unknown> | null;
+
+  // New state from store
+  silentChatId: string | null;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -93,15 +99,18 @@ export function ChatProvider({
     isNewChatPending,
   } = useChatHistory();
 
+  // Get silentChatId directly from the store
+  const silentChatId = useFileUploadStore((state) => state.silentChatId);
+  const setStoreSilentChatId = useFileUploadStore(
+    (state) => state.setSilentChatId,
+  ); // Get setter to clear it
+
   // Add specific logging when currentChatId changes
   useEffect(() => {
     console.log(
       `[CHAT_FLOW] ChatProvider - currentChatId changed to: ${currentChatId ?? "null"}, newChatPending: ${isNewChatPending}`,
     );
   }, [currentChatId, isNewChatPending]);
-
-  // Add state to track silent chat ID created for uploads
-  const [silentChatId, setSilentChatId] = useState<string | null>(null);
 
   // Get the messaging functionality for the current chat
   const {
@@ -113,24 +122,27 @@ export function ChatProvider({
     sendMessage,
     cancelMessage,
     refetch: refetchMessages,
+    newlyCreatedChatId,
   } = useChatMessaging({
-    // Only pass the chatId if we're not creating a new chat
-    // This prevents unwanted reloads of previous chat data
     chatId: isNewChatPending ? null : currentChatId,
     silentChatId: silentChatId,
-    onChatCreated: (newChatId: string) => {
-      // Only log in development
-      if (process.env.NODE_ENV === "development") {
-        console.log("[CHAT_FLOW] Navigating to chat:", newChatId);
-      }
-
-      // Reset the silent chat ID since we're now navigating to a real chat
-      setSilentChatId(null);
-
-      // Directly navigate to the chat - the callback is only called when it's safe to do so
-      navigateToChat(newChatId);
-    },
   });
+
+  // Add Effect to handle navigation when a new chat is created and streaming stops
+  useEffect(() => {
+    if (newlyCreatedChatId && !isStreaming) {
+      console.log(
+        `[CHAT_PROVIDER] New chat created (${newlyCreatedChatId}) and streaming stopped. Navigating...`,
+      );
+      // Reset silent chat ID from store first
+      console.log("[CHAT_PROVIDER] Resetting silentChatId in store");
+      setStoreSilentChatId(null);
+      // Navigate
+      navigateToChat(newlyCreatedChatId);
+      // Note: useChatMessaging should clear its newlyCreatedChatId state internally
+      // when the hook re-runs due to navigateToChat changing the chatId prop.
+    }
+  }, [newlyCreatedChatId, isStreaming, navigateToChat, setStoreSilentChatId]);
 
   // Get file upload functionality
   const {
@@ -145,10 +157,9 @@ export function ChatProvider({
     chatId: currentChatId,
     onSilentChatCreated: (newChatId) => {
       console.log(
-        "[CHAT_PROVIDER] Silent chat created for file upload:",
+        "[CHAT_PROVIDER] Received onSilentChatCreated callback (unused now):",
         newChatId,
       );
-      setSilentChatId(newChatId);
     },
   });
 
@@ -246,6 +257,10 @@ export function ChatProvider({
       // Combined states
       isLoading,
       error,
+
+      // New state from store
+      silentChatId,
+      newlyCreatedChatId,
     };
   }, [
     // Chat history dependencies
@@ -278,6 +293,10 @@ export function ChatProvider({
     // Combined states
     isLoading,
     error,
+
+    // New state from store
+    silentChatId,
+    newlyCreatedChatId,
   ]);
 
   return (

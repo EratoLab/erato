@@ -30,10 +30,10 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
-// Add navigateToChat to the parameters
+// Remove onChatCreated from parameters
 interface UseChatMessagingParams {
   chatId: string | null;
-  onChatCreated?: (newChatId: string) => void;
+  // onChatCreated?: (newChatId: string) => void;
   silentChatId?: string | null;
 }
 
@@ -109,7 +109,7 @@ const useMessagingStore = create<MessagingStore>((set) => {
 
 export function useChatMessaging(
   chatIdOrParams: string | null | UseChatMessagingParams,
-  legacyOnChatCreated?: (newChatId: string) => void,
+  // legacyOnChatCreated?: (newChatId: string) => void, // Remove legacy param
 ) {
   // Support both old and new function signatures for backward compatibility
   const chatId =
@@ -117,10 +117,9 @@ export function useChatMessaging(
       ? chatIdOrParams
       : chatIdOrParams.chatId;
 
-  const onChatCreated =
-    typeof chatIdOrParams === "string" || chatIdOrParams === null
-      ? legacyOnChatCreated
-      : chatIdOrParams.onChatCreated;
+  // Remove onChatCreated extraction
+  // const onChatCreated =
+  //   ...
 
   const silentChatId =
     typeof chatIdOrParams === "string" || chatIdOrParams === null
@@ -135,12 +134,15 @@ export function useChatMessaging(
     resetStreaming,
     userMessages,
     addUserMessage,
-    clearUserMessages,
     clearCompletedUserMessages,
   } = useMessagingStore();
   const sseCleanupRef = useRef<(() => void) | null>(null);
   const isSubmittingRef = useRef(false);
-  const pendingChatIdRef = useRef<string | null>(null);
+  // Remove pendingChatIdRef, use state instead
+  // const pendingChatIdRef = useRef<string | null>(null);
+  const [newlyCreatedChatId, setNewlyCreatedChatId] = useState<string | null>(
+    null,
+  );
 
   // Log hook mounting and unmounting - keep this for debugging chat lifecycle
   useEffect(() => {
@@ -158,8 +160,8 @@ export function useChatMessaging(
     // Reset streaming state
     resetStreaming();
 
-    // Reset pending chat ID and ID mapping when chatId changes
-    pendingChatIdRef.current = null;
+    // Reset newly created chat ID state when hook mounts/chatId changes
+    setNewlyCreatedChatId(null);
 
     return () => {
       // Only log in development
@@ -355,35 +357,42 @@ export function useChatMessaging(
             queryKey: ["chatMessages", { chatId }],
           })
           .then(() => {
-            // This ensures we get fresh data before clearing temporary messages
             return chatMessagesQuery.refetch().then(() => {
-              // Only clear completed messages, preserving user messages still in sending state
               clearCompletedUserMessages();
+              // Call onChatCreated AFTER successful refetch and clear
+              if (newlyCreatedChatId) {
+                console.log(
+                  "[CHAT_FLOW] Message complete & refetched, navigating to pending chat:",
+                  newlyCreatedChatId,
+                );
+                // Don't reset here, let the hook re-mount handle it
+                // setNewlyCreatedChatId(null); // Clear ref after calling
+              }
             });
           });
-      }
-
-      // Handle navigation if needed
-      if (pendingChatIdRef.current) {
-        if (process.env.NODE_ENV === "development") {
+      } else {
+        // If no chatId (new chat), call immediately after setting streaming false
+        if (newlyCreatedChatId) {
           console.log(
-            "[CHAT_FLOW] Message complete, navigate to:",
-            pendingChatIdRef.current,
+            "[CHAT_FLOW] Message complete (new chat), navigating to pending chat:",
+            newlyCreatedChatId,
           );
+          // Don't reset here, let the hook re-mount handle it
+          // setNewlyCreatedChatId(null);
         }
-        onChatCreated?.(pendingChatIdRef.current);
       }
     },
     [
       chatId,
       queryClient,
       setStreaming,
-      onChatCreated,
+      newlyCreatedChatId,
       chatMessagesQuery,
       clearCompletedUserMessages,
     ],
   );
 
+  // Restore handleChatCreated callback
   const handleChatCreated = useCallback(
     (
       responseData: MessageSubmitStreamingResponseChatCreated & {
@@ -394,12 +403,12 @@ export function useChatMessaging(
         "chat_id" in responseData &&
         typeof responseData.chat_id === "string"
       ) {
-        pendingChatIdRef.current = responseData.chat_id;
+        // Set state instead of ref
+        setNewlyCreatedChatId(responseData.chat_id);
         if (process.env.NODE_ENV === "development") {
           console.log(
-            "[CHAT_FLOW] Chat created, ID stored:",
+            "[CHAT_FLOW] Chat created (via SSE), ID stored in state:",
             responseData.chat_id,
-            "- Will navigate after streaming",
           );
         }
       } else {
@@ -408,7 +417,7 @@ export function useChatMessaging(
         );
       }
     },
-    [],
+    [setNewlyCreatedChatId], // Add dependency
   );
 
   // Handle user message saved event
@@ -480,12 +489,12 @@ export function useChatMessaging(
             handleMessageComplete(responseData);
             break;
 
+          // Restore chat_created case
           case "chat_created":
             handleChatCreated(responseData);
             break;
 
           case "user_message_saved":
-            // Handle user message saved event
             handleUserMessageSaved(responseData);
             break;
 
@@ -562,11 +571,26 @@ export function useChatMessaging(
 
   // Send a message
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (
+      content: string,
+      inputFileIds?: string[],
+    ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingRef.current) {
         console.warn("[CHAT_FLOW] Preventing duplicate message submission");
-        return;
+        return undefined;
+      }
+
+      // ---> If using silentChatId, set the target navigation ID immediately <---
+      if (silentChatId) {
+        console.log(
+          `[useChatMessaging] Pre-setting newlyCreatedChatId to silentChatId: ${silentChatId}`,
+        );
+        setNewlyCreatedChatId(silentChatId);
+      }
+      // Ensure it's null otherwise before starting
+      else {
+        setNewlyCreatedChatId(null);
       }
 
       isSubmittingRef.current = true;
@@ -581,6 +605,7 @@ export function useChatMessaging(
         role: "user",
         createdAt: new Date(timestamp).toISOString(),
         status: "sending", // Indicate it's being sent
+        input_files_ids: inputFileIds, // Add file IDs to the optimistic message
       };
       addUserMessage(userMessage);
 
@@ -592,7 +617,7 @@ export function useChatMessaging(
       }
 
       try {
-        // Reset any previous streaming state
+        // Reset any previous streaming state FIRST
         resetStreaming();
 
         // Clean up any existing SSE connection
@@ -600,16 +625,6 @@ export function useChatMessaging(
           sseCleanupRef.current();
           sseCleanupRef.current = null;
         }
-
-        // Generate a temporary ID for the streaming message
-        const tempMessageId = `stream-${Date.now()}`;
-
-        // Update streaming state to indicate we're starting
-        setStreaming({
-          isStreaming: true,
-          currentMessageId: tempMessageId,
-          content: "",
-        });
 
         // Find the most recent assistant message to use as previous_message_id
         const previousMessageId = findMostRecentAssistantMessageId();
@@ -619,12 +634,17 @@ export function useChatMessaging(
           ? {
               user_message: content,
               previous_message_id: previousMessageId,
-              ...(silentChatId && { existing_chat_id: silentChatId }),
+              existing_chat_id: chatId ?? silentChatId ?? undefined, // Use existing ID if available
+              input_files_ids: inputFileIds, // Add file IDs to the request body
             }
           : {
               user_message: content,
-              ...(silentChatId && { existing_chat_id: silentChatId }),
+              existing_chat_id: chatId ?? silentChatId ?? undefined, // Use existing ID if available
+              input_files_ids: inputFileIds, // Add file IDs to the request body
             };
+
+        // ---> Add Log Here <---
+        console.log("[useChatMessaging] Sending requestBody:", requestBody);
 
         // Only log in development
         if (process.env.NODE_ENV === "development") {
@@ -671,35 +691,38 @@ export function useChatMessaging(
             console.log("[CHAT_FLOW] SSE connection opened");
           },
           onClose: () => {
-            // Reset submission flag
             isSubmittingRef.current = false;
 
             if (!streaming.isStreaming) {
-              // Normal close - refetch and then clear temporary messages
+              // If message_complete already handled navigation,
+              // newlyCreatedChatId will be null here.
+              // If not (e.g., stream closed before complete), we handle it.
               if (chatId) {
                 void chatMessagesQuery.refetch().then(() => {
-                  // Only clear completed messages to preserve user message
                   clearCompletedUserMessages();
+                  // Handle edge case: stream closed before complete, but chat was created
+                  if (newlyCreatedChatId) {
+                    console.log(
+                      "[CHAT_FLOW] SSE closed (existing chat), navigating to pending chat:",
+                      newlyCreatedChatId,
+                    );
+                    // Don't reset here, let the hook re-mount handle it
+                    // setNewlyCreatedChatId(null);
+                  }
                 });
               } else {
-                // For new chats, keep user messages
                 clearCompletedUserMessages();
-              }
-
-              // Check for pending chat navigation
-              if (pendingChatIdRef.current) {
-                if (process.env.NODE_ENV === "development") {
+                // Handle edge case: stream closed before complete, but chat was created
+                if (newlyCreatedChatId) {
                   console.log(
-                    "[CHAT_FLOW] SSE closed, navigating to pending chat:",
-                    pendingChatIdRef.current,
+                    "[CHAT_FLOW] SSE closed (new chat), navigating to pending chat:",
+                    newlyCreatedChatId,
                   );
+                  // Don't reset here, let the hook re-mount handle it
+                  // setNewlyCreatedChatId(null);
                 }
-                onChatCreated?.(pendingChatIdRef.current);
-                pendingChatIdRef.current = null;
               }
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
             } else if (streaming.isStreaming) {
-              // Abnormal close - streaming hadn't completed
               console.warn("[CHAT_FLOW] SSE connection closed unexpectedly");
               setLastError(new Error("SSE connection closed unexpectedly"));
 
@@ -725,6 +748,17 @@ export function useChatMessaging(
           body: JSON.stringify(requestBody),
         });
 
+        // Generate a temporary ID for the streaming message
+        const tempMessageId = `stream-${Date.now()}`;
+
+        // Update streaming state to indicate we're starting
+        setStreaming({
+          isStreaming: true,
+          currentMessageId: tempMessageId,
+          content: "",
+        });
+
+        // Return original value (streaming content or undefined)
         return streaming.content;
       } catch (error) {
         console.error("[CHAT_FLOW] Error in sendMessage:", error);
@@ -745,7 +779,8 @@ export function useChatMessaging(
         }
 
         isSubmittingRef.current = false; // Reset submission flag on error
-        throw error;
+        // Return undefined for non-successful paths
+        return undefined;
       }
     },
     [
@@ -758,9 +793,10 @@ export function useChatMessaging(
       clearCompletedUserMessages,
       processStreamEvent,
       findMostRecentAssistantMessageId,
-      onChatCreated,
-      chatMessagesQuery,
       silentChatId,
+      queryClient,
+      chatMessagesQuery,
+      setNewlyCreatedChatId,
     ],
   );
 
@@ -773,5 +809,6 @@ export function useChatMessaging(
     sendMessage,
     cancelMessage,
     refetch: chatMessagesQuery.refetch,
+    newlyCreatedChatId,
   };
 }

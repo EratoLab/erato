@@ -144,8 +144,11 @@ export const Chat = ({
 
   // Enhanced sendMessage handler that refreshes the sidebar after sending
   const handleSendMessage = useCallback(
-    (message: string) => {
-      logger.log("[CHAT_FLOW] Chat - handleSendMessage called");
+    (message: string, inputFileIds?: string[]) => {
+      logger.log(
+        "[CHAT_FLOW] Chat - handleSendMessage called with files:",
+        inputFileIds,
+      );
 
       // Scroll to bottom immediately when user sends a message
       if (scrollToBottomRef.current) {
@@ -154,7 +157,7 @@ export const Chat = ({
 
       // Send the message using the handler from useChatActions
       // Now baseHandleSendMessage returns a Promise we can chain with
-      baseHandleSendMessage(message)
+      baseHandleSendMessage(message, inputFileIds)
         .then(() => {
           logger.log("[CHAT_FLOW] Message sent, refreshing chats");
           return refreshChats();
@@ -180,7 +183,7 @@ export const Chat = ({
   // Handler for when the error boundary resets
   const handleErrorReset = useCallback(() => {
     // Refresh chats on error reset
-    void refreshChats();
+    void refreshChats(); // Ensure void is applied
   }, [refreshChats]);
 
   // Handle session select with void return type
