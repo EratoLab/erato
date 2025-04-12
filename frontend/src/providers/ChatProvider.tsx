@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useEffect } from "react";
+import { createContext, useContext, useMemo, useEffect, useState } from "react";
 
 import { useChatHistory, useChatMessaging } from "@/hooks/chat";
 import { useFileDropzone } from "@/hooks/files";
@@ -100,6 +100,9 @@ export function ChatProvider({
     );
   }, [currentChatId, isNewChatPending]);
 
+  // Add state to track silent chat ID created for uploads
+  const [silentChatId, setSilentChatId] = useState<string | null>(null);
+
   // Get the messaging functionality for the current chat
   const {
     messages,
@@ -114,11 +117,15 @@ export function ChatProvider({
     // Only pass the chatId if we're not creating a new chat
     // This prevents unwanted reloads of previous chat data
     chatId: isNewChatPending ? null : currentChatId,
+    silentChatId: silentChatId,
     onChatCreated: (newChatId: string) => {
       // Only log in development
       if (process.env.NODE_ENV === "development") {
         console.log("[CHAT_FLOW] Navigating to chat:", newChatId);
       }
+
+      // Reset the silent chat ID since we're now navigating to a real chat
+      setSilentChatId(null);
 
       // Directly navigate to the chat - the callback is only called when it's safe to do so
       navigateToChat(newChatId);
@@ -135,6 +142,14 @@ export function ChatProvider({
   } = useFileDropzone({
     acceptedFileTypes,
     multiple: true,
+    chatId: currentChatId,
+    onSilentChatCreated: (newChatId) => {
+      console.log(
+        "[CHAT_PROVIDER] Silent chat created for file upload:",
+        newChatId,
+      );
+      setSilentChatId(newChatId);
+    },
   });
 
   // Combine loading states and errors

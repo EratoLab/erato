@@ -79,11 +79,11 @@ importers:
         specifier: ^9.4.0
         version: 9.4.0
       '@openapi-codegen/cli':
-        specifier: ^3.0.0
-        version: 3.0.1(@swc/helpers@0.5.15)
+        specifier: ^3.1.0
+        version: 3.1.0(@swc/helpers@0.5.15)
       '@openapi-codegen/typescript':
-        specifier: ^11.0.0
-        version: 11.0.0
+        specifier: ^11.0.1
+        version: 11.0.1
       '@storybook/addon-a11y':
         specifier: ^8.5.3
         version: 8.5.3(storybook@8.5.3(prettier@3.5.0))(vitest@3.0.5(@types/node@20.17.17)(jiti@1.21.7)(jsdom@26.0.0)(msw@2.7.3(@types/node@20.17.17)(typescript@5.7.3))(terser@5.38.1)(yaml@2.7.0))
@@ -1305,23 +1305,23 @@ packages:
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
 
-  '@octokit/endpoint@10.1.2':
-    resolution: {integrity: sha512-XybpFv9Ms4hX5OCHMZqyODYqGTZ3H6K6Vva+M9LR7ib/xr1y1ZnlChYv9H680y77Vd/i/k+thXApeRASBQkzhA==}
+  '@octokit/endpoint@10.1.4':
+    resolution: {integrity: sha512-OlYOlZIsfEVZm5HCSR8aSg02T2lbUWOsCQoPKfTXJwDzcHQBrVBGdGXb89dv2Kw2ToZaRtudp8O3ZIYoaOjKlA==}
     engines: {node: '>= 18'}
 
-  '@octokit/openapi-types@23.0.1':
-    resolution: {integrity: sha512-izFjMJ1sir0jn0ldEKhZ7xegCTj/ObmEDlEfpFrx4k/JyZSMRHbO3/rBwgE7f3m2DHt+RrNGIVw4wSmwnm3t/g==}
+  '@octokit/openapi-types@25.0.0':
+    resolution: {integrity: sha512-FZvktFu7HfOIJf2BScLKIEYjDsw6RKc7rBJCdvCTfKsVnx2GEB/Nbzjr29DUdb7vQhlzS/j8qDzdditP0OC6aw==}
 
-  '@octokit/request-error@6.1.6':
-    resolution: {integrity: sha512-pqnVKYo/at0NuOjinrgcQYpEbv4snvP3bKMRqHaD9kIsk9u1LCpb2smHZi8/qJfgeNqLo5hNW4Z7FezNdEo0xg==}
+  '@octokit/request-error@6.1.8':
+    resolution: {integrity: sha512-WEi/R0Jmq+IJKydWlKDmryPcmdYSVjL3ekaiEL1L9eo1sUnqMJ+grqmC9cjk7CA7+b2/T397tO5d8YLOH3qYpQ==}
     engines: {node: '>= 18'}
 
-  '@octokit/request@9.2.0':
-    resolution: {integrity: sha512-kXLfcxhC4ozCnAXy2ff+cSxpcF0A1UqxjvYMqNuPIeOAzJbVWQ+dy5G2fTylofB/gTbObT8O6JORab+5XtA1Kw==}
+  '@octokit/request@9.2.3':
+    resolution: {integrity: sha512-Ma+pZU8PXLOEYzsWf0cn/gY+ME57Wq8f49WTXA8FMHp2Ps9djKw//xYJ1je8Hm0pR2lU9FUGeJRWOtxq6olt4w==}
     engines: {node: '>= 18'}
 
-  '@octokit/types@13.8.0':
-    resolution: {integrity: sha512-x7DjTIbEpEWXK99DMd01QfWy0hd5h4EN+Q7shkdKds3otGQP+oWE/y0A76i1OvH9fygo4ddvNf7ZvF0t78P98A==}
+  '@octokit/types@14.0.0':
+    resolution: {integrity: sha512-VVmZP0lEhbo2O1pdq63gZFiGCKkm8PPp8AUOijlwPO6hojEVjspA0MWKP7E4hbvGxzFKNqKr6p0IYtOH/Wf/zA==}
 
   '@open-draft/deferred-promise@2.2.0':
     resolution: {integrity: sha512-CecwLWx3rhxVQF6V4bAgPS5t+So2sTbPgAzafKkVizyi7tlwpcFpdFqq+wqF2OwNBmqFuu6tOyouTuxgpMfzmA==}
@@ -1332,12 +1332,12 @@ packages:
   '@open-draft/until@2.1.0':
     resolution: {integrity: sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg==}
 
-  '@openapi-codegen/cli@3.0.1':
-    resolution: {integrity: sha512-zWyMViluYZ6bO0ARlGMOmHsW92WRJDhh5y0PdPb3Awt9AZT0fglPc/CqXLD1rTA5h7Gh73W/5U4DKT22iceTDA==}
+  '@openapi-codegen/cli@3.1.0':
+    resolution: {integrity: sha512-w9OO+3rFKWkAdKfjnjBg5pisBAKXtZAbDPNTu46Vcd7yJH1JsMH9SDoyRN2vMZZIR4ir1pLMn8Oom9kzuTAFrQ==}
     hasBin: true
 
-  '@openapi-codegen/typescript@11.0.0':
-    resolution: {integrity: sha512-2EJ/EtweCPS2Eh2V7s0LSzvYTHnC1apbGxCwdBf8Q9icWDduXUNxPkaNRdMisdXhnuJcSoZ/493pEBzDcjIg7g==}
+  '@openapi-codegen/typescript@11.0.1':
+    resolution: {integrity: sha512-01WsAQeurbDtXryHJmeZh4h/piVwqUXuMq/uWzkVcSRDc/5Oz3nxTdPyF0YoVl6c0GSTLBuxolrsgWzFyk8Ngw==}
 
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
@@ -6696,28 +6696,28 @@ snapshots:
 
   '@nolyfill/is-core-module@1.0.39': {}
 
-  '@octokit/endpoint@10.1.2':
+  '@octokit/endpoint@10.1.4':
     dependencies:
-      '@octokit/types': 13.8.0
+      '@octokit/types': 14.0.0
       universal-user-agent: 7.0.2
 
-  '@octokit/openapi-types@23.0.1': {}
+  '@octokit/openapi-types@25.0.0': {}
 
-  '@octokit/request-error@6.1.6':
+  '@octokit/request-error@6.1.8':
     dependencies:
-      '@octokit/types': 13.8.0
+      '@octokit/types': 14.0.0
 
-  '@octokit/request@9.2.0':
+  '@octokit/request@9.2.3':
     dependencies:
-      '@octokit/endpoint': 10.1.2
-      '@octokit/request-error': 6.1.6
-      '@octokit/types': 13.8.0
+      '@octokit/endpoint': 10.1.4
+      '@octokit/request-error': 6.1.8
+      '@octokit/types': 14.0.0
       fast-content-type-parse: 2.0.1
       universal-user-agent: 7.0.2
 
-  '@octokit/types@13.8.0':
+  '@octokit/types@14.0.0':
     dependencies:
-      '@octokit/openapi-types': 23.0.1
+      '@octokit/openapi-types': 25.0.0
 
   '@open-draft/deferred-promise@2.2.0': {}
 
@@ -6728,10 +6728,10 @@ snapshots:
 
   '@open-draft/until@2.1.0': {}
 
-  '@openapi-codegen/cli@3.0.1(@swc/helpers@0.5.15)':
+  '@openapi-codegen/cli@3.1.0(@swc/helpers@0.5.15)':
     dependencies:
       '@clack/prompts': 0.9.1
-      '@octokit/request': 9.2.0
+      '@octokit/request': 9.2.3
       '@swc/core': 1.10.15(@swc/helpers@0.5.15)
       case: 1.6.3
       cli-highlight: 2.1.11
@@ -6746,12 +6746,12 @@ snapshots:
       swagger2openapi: 7.0.8
       tslib: 2.8.1
       typanion: 3.14.0
-      typescript: 4.8.2
+      typescript: 5.7.3
     transitivePeerDependencies:
       - '@swc/helpers'
       - encoding
 
-  '@openapi-codegen/typescript@11.0.0':
+  '@openapi-codegen/typescript@11.0.1':
     dependencies:
       case: 1.6.3
       lodash: 4.17.21

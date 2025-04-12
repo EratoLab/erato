@@ -82,7 +82,11 @@ export const useChats = <TData = ChatsResponse,>(
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useQuery<ChatsResponse, ChatsError, TData>({
-    ...chatsQuery(deepMerge(fetcherOptions, variables)),
+    ...chatsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
     ...options,
     ...queryOptions,
   });
@@ -207,7 +211,11 @@ export const useChatMessages = <TData = Schemas.ChatMessagesResponse,>(
     ChatMessagesError,
     TData
   >({
-    ...chatMessagesQuery(deepMerge(fetcherOptions, variables)),
+    ...chatMessagesQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
     ...options,
     ...queryOptions,
   });
@@ -309,7 +317,11 @@ export const useGetFile = <TData = Schemas.FileUploadItem,>(
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useQuery<Schemas.FileUploadItem, GetFileError, TData>({
-    ...getFileQuery(deepMerge(fetcherOptions, variables)),
+    ...getFileQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
     ...options,
     ...queryOptions,
   });
@@ -628,7 +640,11 @@ export const useProfile = <TData = Schemas.UserProfile,>(
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useQuery<Schemas.UserProfile, ProfileError, TData>({
-    ...profileQuery(deepMerge(fetcherOptions, variables)),
+    ...profileQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
     ...options,
     ...queryOptions,
   });
@@ -745,7 +761,11 @@ export const useRecentChats = <TData = Schemas.RecentChatsResponse,>(
     RecentChatsError,
     TData
   >({
-    ...recentChatsQuery(deepMerge(fetcherOptions, variables)),
+    ...recentChatsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
     ...options,
     ...queryOptions,
   });
@@ -822,7 +842,11 @@ export const useMessages = <TData = MessagesResponse,>(
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useQuery<MessagesResponse, MessagesError, TData>({
-    ...messagesQuery(deepMerge(fetcherOptions, variables)),
+    ...messagesQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
     ...options,
     ...queryOptions,
   });
@@ -892,7 +916,11 @@ export const useHealth = <TData = undefined,>(
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useQuery<undefined, HealthError, TData>({
-    ...healthQuery(deepMerge(fetcherOptions, variables)),
+    ...healthQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
     ...options,
     ...queryOptions,
   });

@@ -1,7 +1,10 @@
 import { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
-import { useUploadFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  useUploadFile,
+  useCreateChat,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
 
 import { useFileUploadStore } from "./useFileUploadStore";
@@ -21,6 +24,10 @@ interface UseFileDropzoneProps {
   disabled?: boolean;
   /** Callback when files are successfully uploaded */
   onFilesUploaded?: (files: FileUploadItem[]) => void;
+  /** Existing chat ID to use for uploads, if any */
+  chatId?: string | null;
+  /** Called when a chat is silently created for file uploads */
+  onSilentChatCreated?: (newChatId: string) => void;
 }
 
 interface UseFileDropzoneResult {
@@ -57,6 +64,8 @@ export function useFileDropzone({
   maxFiles = 5,
   disabled = false,
   onFilesUploaded,
+  chatId = null,
+  onSilentChatCreated,
 }: UseFileDropzoneProps): UseFileDropzoneResult {
   // Use the Zustand store for state management
   const {
@@ -74,6 +83,15 @@ export function useFileDropzone({
     onError: (error) => {
       console.error("File upload error:", error);
       setError(new Error("Failed to upload files"));
+      setUploading(false);
+    },
+  });
+
+  // Add create chat mutation for silent chat creation
+  const createChatMutation = useCreateChat({
+    onError: (error) => {
+      console.error("Failed to create chat for file upload:", error);
+      setError(new Error("Failed to prepare chat for file upload"));
       setUploading(false);
     },
   });
@@ -108,16 +126,44 @@ export function useFileDropzone({
 
         const filesToUpload = files.slice(0, multiple ? maxFiles : 1);
 
+        // Determine which chat ID to use for the upload
+        let uploadChatId = chatId;
+
+        // If no chatId exists, we need to create one silently first
+        if (!uploadChatId) {
+          console.log("[FILE_UPLOAD] Creating silent chat for file uploads");
+          const createChatResult = await createChatMutation.mutateAsync({
+            body: {}, // Empty request body
+          });
+
+          uploadChatId = createChatResult.chat_id;
+
+          // Notify parent component but don't trigger navigation
+          if (onSilentChatCreated) {
+            onSilentChatCreated(uploadChatId);
+            console.log(`[FILE_UPLOAD] Created silent chat: ${uploadChatId}`);
+          }
+        }
+
         // Add each file to the form data
         const uploadBodies = filesToUpload.map((file) => ({
           file,
           name: file.name,
         }));
 
-        // Upload the files using our API client
-        const result = await uploadFileMutation.mutateAsync({
-          body: uploadBodies,
-        });
+        // Upload the files using our API client with the chat ID
+        let result;
+        try {
+          result = await uploadFileMutation.mutateAsync({
+            body: uploadBodies,
+            queryParams: {
+              chat_id: uploadChatId,
+            },
+          });
+        } catch (uploadError) {
+          console.error("Error in file upload mutation:", uploadError);
+          throw uploadError; // Re-throw to be caught by the outer try-catch
+        }
 
         if (result.files.length > 0) {
           addFiles(result.files);
@@ -138,6 +184,9 @@ export function useFileDropzone({
       multiple,
       maxFiles,
       uploadFileMutation,
+      chatId,
+      createChatMutation,
+      onSilentChatCreated,
       addFiles,
       onFilesUploaded,
       setUploading,

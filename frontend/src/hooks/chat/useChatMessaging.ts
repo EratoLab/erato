@@ -34,6 +34,7 @@ import type { Message } from "@/types/chat";
 interface UseChatMessagingParams {
   chatId: string | null;
   onChatCreated?: (newChatId: string) => void;
+  silentChatId?: string | null;
 }
 
 // Streaming state
@@ -120,6 +121,11 @@ export function useChatMessaging(
     typeof chatIdOrParams === "string" || chatIdOrParams === null
       ? legacyOnChatCreated
       : chatIdOrParams.onChatCreated;
+
+  const silentChatId =
+    typeof chatIdOrParams === "string" || chatIdOrParams === null
+      ? null
+      : chatIdOrParams.silentChatId;
 
   const queryClient = useQueryClient();
   const [lastError, setLastError] = useState<Error | null>(null);
@@ -613,15 +619,24 @@ export function useChatMessaging(
           ? {
               user_message: content,
               previous_message_id: previousMessageId,
+              ...(silentChatId && { existing_chat_id: silentChatId }),
             }
           : {
               user_message: content,
+              ...(silentChatId && { existing_chat_id: silentChatId }),
             };
 
         // Only log in development
         if (process.env.NODE_ENV === "development") {
           console.log(
-            `[CHAT_FLOW] Creating SSE connection${chatId ? " (existing chat)" : " (new chat)"}`,
+            `[CHAT_FLOW] Creating SSE connection${
+              chatId
+                ? " (existing chat)"
+                : silentChatId
+                  ? " (using silent chat)"
+                  : " (new chat)"
+            }`,
+            silentChatId ? ` with silentChatId: ${silentChatId}` : "",
           );
         }
 
@@ -745,6 +760,7 @@ export function useChatMessaging(
       findMostRecentAssistantMessageId,
       onChatCreated,
       chatMessagesQuery,
+      silentChatId,
     ],
   );
 

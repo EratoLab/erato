@@ -130,7 +130,7 @@ export const Chat = ({
 
   // Use chat actions hook for handlers
   const {
-    handleSessionSelect,
+    // handleSessionSelect,
     handleSendMessage: baseHandleSendMessage,
     handleMessageAction,
   } = useChatActions({
