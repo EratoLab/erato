@@ -2,14 +2,18 @@ import { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
 import {
-  useUploadFile,
   useCreateChat,
+  fetchUploadFile,
+  type UploadFileVariables,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
 
 import { useFileUploadStore } from "./useFileUploadStore";
 
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  FileUploadItem,
+  FileUploadResponse,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 import type { FileRejection } from "react-dropzone";
 
@@ -78,15 +82,6 @@ export function useFileDropzone({
     clearFiles,
   } = useFileUploadStore();
 
-  // Use the generated API hook for file upload
-  const uploadFileMutation = useUploadFile({
-    onError: (error) => {
-      console.error("File upload error:", error);
-      setError(new Error("Failed to upload files"));
-      setUploading(false);
-    },
-  });
-
   // Add create chat mutation for silent chat creation
   const createChatMutation = useCreateChat({
     onError: (error) => {
@@ -129,40 +124,47 @@ export function useFileDropzone({
         // Determine which chat ID to use for the upload
         let uploadChatId = chatId;
 
-        // If no chatId exists, we need to create one silently first
+        // If no chatId exists, create one silently first
         if (!uploadChatId) {
           console.log("[FILE_UPLOAD] Creating silent chat for file uploads");
           const createChatResult = await createChatMutation.mutateAsync({
-            body: {}, // Empty request body
+            body: {},
           });
-
           uploadChatId = createChatResult.chat_id;
-
-          // Notify parent component but don't trigger navigation
           if (onSilentChatCreated) {
             onSilentChatCreated(uploadChatId);
             console.log(`[FILE_UPLOAD] Created silent chat: ${uploadChatId}`);
           }
         }
 
-        // Add each file to the form data
-        const uploadBodies = filesToUpload.map((file) => ({
-          file,
-          name: file.name,
-        }));
+        // --- WORKAROUND START: Create FormData ---
+        const formData = new FormData();
+        filesToUpload.forEach((file) => {
+          // Use the standard 'file' key expected by the backend/msw handler
+          formData.append("file", file, file.name);
+        });
+        // --- WORKAROUND END ---
 
-        // Upload the files using our API client with the chat ID
-        let result;
+        // Prepare variables for the fetch function
+        const variables = {
+          queryParams: {
+            chat_id: uploadChatId,
+          },
+          body: formData as unknown,
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        };
+
+        // Call fetchUploadFile directly, bypassing the problematic hook
+        let result: FileUploadResponse;
         try {
-          result = await uploadFileMutation.mutateAsync({
-            body: uploadBodies,
-            queryParams: {
-              chat_id: uploadChatId,
-            },
-          });
+          // Use type assertion on the variables object for the call
+          result = await fetchUploadFile(variables as UploadFileVariables);
         } catch (uploadError) {
-          console.error("Error in file upload mutation:", uploadError);
-          throw uploadError; // Re-throw to be caught by the outer try-catch
+          console.error("Error calling fetchUploadFile:", uploadError);
+          // Simplify error handling to satisfy linter
+          throw new Error(String(uploadError) || "Failed to upload files");
         }
 
         if (result.files.length > 0) {
@@ -170,9 +172,11 @@ export function useFileDropzone({
           onFilesUploaded?.(result.files);
         }
       } catch (err) {
-        console.error("Error uploading files:", err);
+        console.error("Error uploading files (outer catch):", err);
         setError(
-          err instanceof Error ? err : new Error("Failed to upload files"),
+          err instanceof Error
+            ? err
+            : new Error("An unknown error occurred during upload"),
         );
       } finally {
         setUploading(false);
@@ -183,7 +187,6 @@ export function useFileDropzone({
       isUploading,
       multiple,
       maxFiles,
-      uploadFileMutation,
       chatId,
       createChatMutation,
       onSilentChatCreated,
@@ -237,7 +240,7 @@ export function useFileDropzone({
     maxSize: getMaxFileSize(),
   });
 
-  // Format any dropzone validation errors or API errors
+  // Format any dropzone validation errors or manually set errors
   const error = uploadError ?? null;
 
   return {
