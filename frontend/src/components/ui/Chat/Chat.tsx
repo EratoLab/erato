@@ -1,8 +1,9 @@
 import clsx from "clsx";
 import React, { useCallback, useRef } from "react";
 
+import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useChatActions, useChatTransition } from "@/hooks/chat";
-import { useSidebar } from "@/hooks/ui/useSidebar";
+import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
 import { createLogger } from "@/utils/debugLogger";
@@ -12,7 +13,7 @@ import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 
-import type { ChatMessagesResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 import type {
   MessageAction,
@@ -122,12 +123,6 @@ export const Chat = ({
       }))
     : [];
 
-  // Define placeholder values for missing functionality
-  const hasOlderMessages = false;
-  const loadOlderMessages = () => {};
-  const apiMessagesResponse: ChatMessagesResponse | undefined = undefined;
-  const handleFileAttachments = () => {};
-
   // Use chat actions hook for handlers
   const {
     // handleSessionSelect,
@@ -231,6 +226,31 @@ export const Chat = ({
     }
   }, [onNewChat, createChat]);
 
+  // Use the file preview modal hook
+  const {
+    isPreviewModalOpen,
+    fileToPreview,
+    openPreviewModal,
+    closePreviewModal,
+  } = useFilePreviewModal();
+
+  // Restore placeholder definitions for props passed to MessageList
+  const hasOlderMessages = false;
+  const loadOlderMessages = () => {
+    logger.log("loadOlderMessages called (placeholder)");
+  };
+  const apiMessagesResponse = undefined;
+
+  // Restore a basic handleFileAttachments function needed by ChatInput
+  const handleFileAttachments = useCallback((files: FileUploadItem[]) => {
+    logger.log(
+      `handleFileAttachments in Chat.tsx called with: ${files.length} files. (Currently only enables button rendering)`,
+    );
+    // This function might be needed later if we want Chat.tsx
+    // to be aware of files attached in ChatInput before sending.
+    // For now, its presence enables the button in ChatInput.
+  }, []);
+
   return (
     <div className="flex size-full flex-col sm:flex-row">
       <ChatHistorySidebar
@@ -278,12 +298,15 @@ export const Chat = ({
             useVirtualization={useVirtualization}
             virtualizationThreshold={30}
             onScrollToBottomRef={handleMessageListRef}
+            onFilePreview={openPreviewModal}
           />
 
           <ChatInput
             onSendMessage={handleSendMessage}
             acceptedFileTypes={acceptedFileTypes}
+            onFilePreview={openPreviewModal}
             handleFileAttachments={handleFileAttachments}
+            chatId={currentChatId}
             className="p-2 sm:p-4"
             isLoading={chatLoading}
             showControls
@@ -293,6 +316,13 @@ export const Chat = ({
           />
         </div>
       </ChatErrorBoundary>
+
+      {/* Render the File Preview Modal */}
+      <FilePreviewModal
+        isOpen={isPreviewModalOpen}
+        onClose={closePreviewModal}
+        file={fileToPreview}
+      />
     </div>
   );
 };

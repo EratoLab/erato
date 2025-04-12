@@ -19,6 +19,7 @@ import { VirtualizedMessageList } from "./VirtualizedMessageList";
 import type {
   ChatMessagesResponse,
   UserProfile,
+  FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type {
@@ -141,6 +142,11 @@ export interface MessageListProps {
   onScrollToBottomRef?: (scrollToBottom: () => void) => void;
 
   /**
+   * Callback to open the file preview modal
+   */
+  onFilePreview?: (file: FileUploadItem) => void;
+
+  /**
    * Whether the chat is currently transitioning between sessions
    */
   isTransitioning?: boolean;
@@ -252,6 +258,7 @@ export const MessageList = memo<MessageListProps>(
     useVirtualization = false,
     virtualizationThreshold = 30,
     onScrollToBottomRef,
+    onFilePreview,
     isTransitioning,
   }) => {
     // Debug logging for rendering
@@ -466,6 +473,7 @@ export const MessageList = memo<MessageListProps>(
               controls={controls}
               controlsContext={controlsContext}
               onMessageAction={onMessageAction}
+              onFilePreview={onFilePreview}
             />
           ) : (
             <StandardMessageList
@@ -480,6 +488,7 @@ export const MessageList = memo<MessageListProps>(
               controls={controls}
               controlsContext={controlsContext}
               onMessageAction={onMessageAction}
+              onFilePreview={onFilePreview}
             />
           )}
         </div>

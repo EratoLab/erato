@@ -4,13 +4,17 @@ import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
 import { ChatMessage } from "../Chat/ChatMessage";
 
-import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  UserProfile,
+  FileUploadItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 
 // Enable/disable verbose debugging
 const ENABLE_VERBOSE_DEBUG = true;
@@ -27,6 +31,7 @@ export interface MessageItemProps {
   controlsContext: MessageControlsContext;
   onMessageAction: (action: MessageAction) => Promise<void>;
   className?: string;
+  onFilePreview?: (file: FileUploadItem) => void;
 }
 
 // Memoized message item component with custom comparison
@@ -44,6 +49,7 @@ export const MessageItem = memo<MessageItemProps>(
     controlsContext,
     onMessageAction,
     className,
+    onFilePreview,
   }) => {
     // Debug message loading state
     // useEffect(() => {
@@ -86,41 +92,34 @@ export const MessageItem = memo<MessageItemProps>(
           controls={Controls}
           controlsContext={controlsContext}
           onMessageAction={onMessageAction}
+          onFilePreview={onFilePreview}
         />
       </div>
     );
   },
-  // Custom comparison function to optimize rendering
+  // Custom comparison function
   (prevProps, nextProps) => {
-    // Always re-render if message ID changes
-    if (prevProps.messageId !== nextProps.messageId) return false;
+    // Basic shallow comparison for most props
+    const shallowEqual = Object.keys(nextProps).every((key) => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- necessary for dynamic comparison
+      return (
+        prevProps[key as keyof MessageItemProps] ===
+        nextProps[key as keyof MessageItemProps]
+      );
+    });
 
-    // Always re-render if isNew status changes
-    if (prevProps.isNew !== nextProps.isNew) return false;
+    // Deep comparison specifically for the message object, using UiChatMessage type assertion
+    const msgPrev = prevProps.message as UiChatMessage;
+    const msgNext = nextProps.message as UiChatMessage;
+    const messageEqual =
+      msgPrev.id === msgNext.id &&
+      msgPrev.content === msgNext.content &&
+      msgPrev.loading?.state === msgNext.loading?.state &&
+      // msgPrev.error === msgNext.error && // Error comparison might be tricky, skip for now
+      JSON.stringify(msgPrev.input_files_ids) ===
+        JSON.stringify(msgNext.input_files_ids);
 
-    const prevMessage = prevProps.message;
-    const nextMessage = nextProps.message;
-
-    // Re-render if content changes
-    if (prevMessage.content !== nextMessage.content) return false;
-
-    // Re-render if status changes
-    if (prevMessage.status !== nextMessage.status) {
-      if (ENABLE_VERBOSE_DEBUG) {
-        console.log(
-          `%c⚡ STATUS CHANGED for ${nextProps.messageId}`,
-          "background: #121; color: #f93; font-size: 12px; padding: 2px 6px; border-radius: 3px;",
-          {
-            from: prevMessage.status,
-            to: nextMessage.status,
-          },
-        );
-      }
-      return false;
-    }
-
-    // Otherwise, prevent re-render
-    return true;
+    return shallowEqual && messageEqual;
   },
 );
 

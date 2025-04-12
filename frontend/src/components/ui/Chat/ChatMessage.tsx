@@ -18,6 +18,7 @@ import type {
 } from "../../../types/message-controls";
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export interface ChatMessageProps {
   message: UiChatMessage;
@@ -44,6 +45,7 @@ export interface ChatMessageProps {
   controlsContext: MessageControlsContext;
   onMessageAction: (action: MessageAction) => void | Promise<void>;
   userProfile?: UserProfile;
+  onFilePreview?: (file: FileUploadItem) => void;
 }
 
 export const ChatMessage = memo(function ChatMessage({
@@ -56,6 +58,7 @@ export const ChatMessage = memo(function ChatMessage({
   controls: Controls = DefaultMessageControls,
   controlsContext,
   onMessageAction,
+  onFilePreview,
 }: ChatMessageProps) {
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
@@ -96,7 +99,11 @@ export const ChatMessage = memo(function ChatMessage({
           {message.input_files_ids && message.input_files_ids.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               {message.input_files_ids.map((fileId) => (
-                <AttachedFile key={fileId} fileId={fileId} />
+                <AttachedFile
+                  key={fileId}
+                  fileId={fileId}
+                  onFilePreview={onFilePreview}
+                />
               ))}
             </div>
           )}
@@ -129,7 +136,13 @@ export const ChatMessage = memo(function ChatMessage({
 });
 
 // Helper component to fetch and display a single attached file
-const AttachedFile = ({ fileId }: { fileId: string }) => {
+const AttachedFile = ({
+  fileId,
+  onFilePreview,
+}: {
+  fileId: string;
+  onFilePreview?: (file: FileUploadItem) => void;
+}) => {
   const {
     data: fileData,
     isLoading,
@@ -156,11 +169,13 @@ const AttachedFile = ({ fileId }: { fileId: string }) => {
   return (
     <InteractiveContainer
       onClick={() => {
-        if (fileData.download_url) {
+        if (onFilePreview && fileData) {
+          onFilePreview(fileData);
+        } else if (fileData?.download_url) {
           window.open(fileData.download_url, "_blank", "noopener,noreferrer");
         }
       }}
-      aria-label={`View attached file: ${fileData.filename}`}
+      aria-label={`Preview attached file: ${fileData.filename}`}
       className="cursor-pointer"
       useDiv={true}
     >

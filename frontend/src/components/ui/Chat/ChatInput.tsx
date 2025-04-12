@@ -1,6 +1,6 @@
 import { ArrowUpIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 
 import {
   FileUploadButton,
@@ -13,6 +13,7 @@ import { useChatContext } from "@/providers/ChatProvider";
 import { Button } from "../Controls/Button";
 import { Tooltip } from "../Controls/Tooltip";
 import { Alert } from "../Feedback/Alert";
+import { InteractiveContainer } from "../Container/InteractiveContainer";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
@@ -35,6 +36,10 @@ interface ChatInputProps {
   initialFiles?: FileUploadItem[];
   /** Show file type in previews */
   showFileTypes?: boolean;
+  // Add prop for preview callback
+  onFilePreview?: (file: FileUploadItem) => void;
+  // Add prop for current chat ID
+  chatId?: string | null;
 }
 
 /**
@@ -54,6 +59,10 @@ export const ChatInput = ({
   acceptedFileTypes = [],
   initialFiles = [],
   showFileTypes = false,
+  // Destructure the new prop
+  onFilePreview,
+  // Destructure chatId
+  chatId,
 }: ChatInputProps) => {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -76,6 +85,8 @@ export const ChatInput = ({
     maxFiles,
     disabled,
     onFilesUploaded: handleFileAttachments,
+    // Pass chatId to the hook
+    chatId: chatId,
   });
 
   // Use the custom hook for chat input handling
@@ -129,6 +140,37 @@ export const ChatInput = ({
     }
   }, [uploadError, setFileError]);
 
+  // Combine disabled states
+  const isDisabled = disabled || isUploading || isLoading || isStreaming;
+
+  // Helper to handle removing file by ID regardless of source type
+  const handleRemoveFileById = useCallback(
+    (fileIdOrFile: string | FileUploadItem | File) => {
+      let fileId: string | null = null;
+      if (typeof fileIdOrFile === "string") {
+        fileId = fileIdOrFile;
+      } else if (
+        fileIdOrFile &&
+        typeof fileIdOrFile === "object" &&
+        "id" in fileIdOrFile &&
+        typeof fileIdOrFile.id === "string"
+      ) {
+        fileId = fileIdOrFile.id; // Handle FileUploadItem
+      } // Browser File objects don't have IDs here, handleRemoveFile handles them
+
+      if (fileId) {
+        handleRemoveFile(fileId);
+      } else if (fileIdOrFile instanceof File) {
+        // If it's a browser File (e.g., from dropzone before upload ID), handleRemoveFile might need adjustment
+        // For now, assuming handleRemoveFile in the hook handles string IDs primarily
+        console.warn(
+          "[ChatInput] Attempted to remove non-uploaded file, not fully handled.",
+        );
+      }
+    },
+    [handleRemoveFile],
+  );
+
   // Determine if send button should be enabled
   const canSendMessage =
     (message.trim() || attachedFiles.length > 0) &&
@@ -172,28 +214,38 @@ export const ChatInput = ({
 
           {/* File attachments */}
           <div className="flex flex-wrap gap-2">
-            {attachedFiles.map((file) => (
-              <FilePreviewButton
-                key={file.id}
-                file={file}
-                onRemove={(fileIdOrFile) => {
-                  if (typeof fileIdOrFile === "string") {
-                    handleRemoveFile(fileIdOrFile);
-                  } else if (
-                    fileIdOrFile &&
-                    typeof fileIdOrFile === "object" &&
-                    "id" in fileIdOrFile &&
-                    typeof fileIdOrFile.id === "string"
-                  ) {
-                    handleRemoveFile(fileIdOrFile.id);
-                  }
-                }}
-                disabled={isUploading || isLoading || isStreaming || disabled}
-                showFileType={showFileTypes}
-                showSize={true}
-                filenameTruncateLength={25}
-              />
-            ))}
+            {attachedFiles.map((file) =>
+              // Wrap FilePreviewButton in InteractiveContainer if onFilePreview exists
+              onFilePreview ? (
+                <InteractiveContainer
+                  key={file.id}
+                  onClick={() => onFilePreview(file)}
+                  useDiv={true}
+                  className="cursor-pointer"
+                  aria-label={`Preview attachment ${file.filename}`}
+                >
+                  <FilePreviewButton
+                    file={file}
+                    onRemove={handleRemoveFileById} // Use helper
+                    disabled={isDisabled}
+                    showFileType={showFileTypes}
+                    showSize={true}
+                    filenameTruncateLength={25}
+                  />
+                </InteractiveContainer>
+              ) : (
+                // Original rendering if no preview handler
+                <FilePreviewButton
+                  key={file.id}
+                  file={file}
+                  onRemove={handleRemoveFileById} // Use helper
+                  disabled={isDisabled}
+                  showFileType={showFileTypes}
+                  showSize={true}
+                  filenameTruncateLength={25}
+                />
+              ),
+            )}
           </div>
         </div>
       )}
