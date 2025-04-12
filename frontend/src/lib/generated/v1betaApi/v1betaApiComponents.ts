@@ -395,6 +395,26 @@ export type UploadFileVariables = {
 /**
  * This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
  */
+/**
+ * WORKAROUND: This endpoint requires a multipart/form-data request.
+ * Despite the type signature suggesting `body?: Schemas.MultipartFormFile[]`, 
+ * the underlying fetcher expects a pre-constructed `FormData` object.
+ * 
+ * When calling this function, construct a `FormData` object manually,
+ * append your file(s) to it (e.g., `formData.append('file', myFile)`),
+ * and pass it as the `body` property in the `variables` object, using type casting:
+ * 
+ * ```ts
+ * const formData = new FormData();
+ * formData.append('file', myFile);
+ * const variables = {
+ *   queryParams: { chat_id: '...' },
+ *   body: formData as unknown, // Cast needed to bypass type mismatch
+ *   headers: { 'Content-Type': 'multipart/form-data' } // Header hint might be needed
+ * };
+ * const response = await fetchUploadFile(variables as UploadFileVariables);
+ * ```
+ */
 export const fetchUploadFile = (
   variables: UploadFileVariables,
   signal?: AbortSignal,

@@ -15,7 +15,9 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "coverage": "vitest run --coverage",
-    "codegen": "openapi-codegen gen v1betaApi",
+    "codegen:generate": "openapi-codegen gen v1betaApi",
+    "codegen:fix-types": "node scripts/fix-codegen-types.mjs",
+    "codegen": "pnpm codegen:generate && pnpm codegen:fix-types",
     "typecheck": "tsc --noEmit",
     "check": "pnpm lint:strict && pnpm typecheck"
   },

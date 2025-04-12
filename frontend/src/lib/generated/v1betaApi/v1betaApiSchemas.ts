@@ -43,7 +43,7 @@ export type ChatMessage = {
   /**
    * The ID of the previous message in the thread, if any
    */
-  previous_message_id?: void;
+  previous_message_id?: null | undefined;
   /**
    * Role of the message sender. May be on of "user", "assistant", "system"
    */
@@ -51,7 +51,7 @@ export type ChatMessage = {
   /**
    * The unique ID of the sibling message, if any
    */
-  sibling_message_id?: void;
+  sibling_message_id?: null | undefined;
   /**
    * When the message was last updated
    *
@@ -191,7 +191,7 @@ export type MessageSubmitRequest = {
    * @format uuid
    * @example 00000000-0000-0000-0000-000000000000
    */
-  existing_chat_id?: void;
+  existing_chat_id?: null | undefined;
   /**
    * The IDs of any files attached to this message. These files must already be uploaded to the file_uploads table.
    * The files should normally only be provided with the first message they appear in the chat. After that they can assumed to be part of the chat history.
@@ -205,7 +205,7 @@ export type MessageSubmitRequest = {
    * @format uuid
    * @example 00000000-0000-0000-0000-000000000000
    */
-  previous_message_id?: void;
+  previous_message_id?: null | undefined;
   /**
    * The text of the message.
    *
@@ -347,16 +347,16 @@ export type UserProfile = {
   /**
    * The user's email address. Shouldn't be used as a unique identifier, as it may change.
    */
-  email?: void;
+  email?: null | undefined;
   id: string;
   /**
    * The user's display name.
    */
-  name?: void;
+  name?: null | undefined;
   /**
    * The user's profile picture URL.
    */
-  picture?: void;
+  picture?: null | undefined;
   /**
    * The user's preferred language.
    *

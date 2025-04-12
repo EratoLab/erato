@@ -198,4 +198,85 @@ describe("API Client Tests", () => {
       }
     },
   );
+
+  // Test fetchUploadFile with multiple files
+  it("fetchUploadFile should handle multiple file uploads", async () => {
+    // 1. Define the mock response for multiple files
+    const mockResponse: FileUploadResponse = {
+      files: [
+        {
+          id: "mock-multi-id-1",
+          filename: "file1.txt",
+          download_url: "http://mock.download/mock-multi-id-1",
+        },
+        {
+          id: "mock-multi-id-2",
+          filename: "file2.png",
+          download_url: "http://mock.download/mock-multi-id-2",
+        },
+      ],
+    };
+
+    // Spy on and mock v1betaApiFetch just for this test
+    const fetchSpy = vi
+      .spyOn(fetcher, "v1betaApiFetch")
+      .mockResolvedValue(mockResponse); // Resolve with the multi-file response
+
+    // 2. Create multiple mock files
+    const mockFile1 = new File(["content1"], "file1.txt", {
+      type: "text/plain",
+    });
+    const mockFile2 = new File(["content2"], "file2.png", {
+      type: "image/png",
+    });
+
+    // 3. Manually create FormData and append multiple files with the same key
+    const formData = new FormData();
+    formData.append("file", mockFile1, mockFile1.name);
+    formData.append("file", mockFile2, mockFile2.name);
+
+    // 4. Prepare variables
+    const variables = {
+      queryParams: { chat_id: "multi-upload-chat" },
+      body: formData as unknown,
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    };
+
+    try {
+      // 5. Call the function
+      const response: FileUploadResponse = await fetchUploadFile(
+        variables as UploadFileVariables,
+      );
+
+      // 6. Assert the response came from the mock
+      expect(response).toEqual(mockResponse);
+      expect(response.files.length).toBe(2);
+      expect(response.files[0].filename).toBe("file1.txt");
+      expect(response.files[1].filename).toBe("file2.png");
+
+      // 7. Assert that the spy was called correctly
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const callOptions = fetchSpy.mock.calls[0][0];
+      expect(callOptions.url).toBe("/api/v1beta/me/files");
+      expect(callOptions.method).toBe("post");
+      expect(callOptions.body).toBeInstanceOf(FormData);
+      // Check that the FormData passed contains multiple entries for 'file'
+      const passedFormData = callOptions.body as FormData;
+      const passedFiles = passedFormData.getAll("file");
+      expect(passedFiles.length).toBe(2);
+      expect((passedFiles[0] as File).name).toBe("file1.txt");
+      expect((passedFiles[1] as File).name).toBe("file2.png");
+      expect(callOptions.queryParams).toEqual({ chat_id: "multi-upload-chat" });
+    } catch (error) {
+      console.error("fetchUploadFile (multiple) test failed:", error);
+      expect.fail(
+        `fetchUploadFile (multiple) threw an error: ${String(error)}`,
+      );
+    } finally {
+      // Restore the original implementation
+      fetchSpy.mockRestore();
+    }
+  });
 });
