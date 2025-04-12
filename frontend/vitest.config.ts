@@ -8,7 +8,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     include: ["**/*.test.{ts,tsx}"],
-    setupFiles: ["./src/test/setupTests.ts"],
+    setupFiles: ["./src/lib/setupTests.ts"],
     deps: {
       inline: ["@storybook/test"],
     },
