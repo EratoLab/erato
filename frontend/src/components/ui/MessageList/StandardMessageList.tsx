@@ -2,8 +2,11 @@ import React from "react";
 
 import { MessageItem } from "./MessageItem";
 
-import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
-import type { UserProfile } from "@/types/chat";
+import type {
+  UserProfile,
+  FileUploadItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Message } from "@/types/chat";
 import type {
   MessageAction,
   MessageControlsComponent,
@@ -11,7 +14,7 @@ import type {
 } from "@/types/message-controls";
 
 interface StandardMessageListProps {
-  messages: Record<string, ChatMessageType>;
+  messages: Record<string, Message>;
   visibleData: string[];
   isNewlyLoaded: (index: number) => boolean;
   getMessageClassName: (isNew: boolean) => string;
@@ -21,7 +24,8 @@ interface StandardMessageListProps {
   userProfile?: UserProfile;
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
-  onMessageAction: (action: MessageAction) => Promise<void>;
+  onMessageAction: (action: MessageAction) => Promise<boolean>;
+  onFilePreview?: (file: FileUploadItem) => void;
 }
 
 export const StandardMessageList: React.FC<StandardMessageListProps> = ({
@@ -36,6 +40,7 @@ export const StandardMessageList: React.FC<StandardMessageListProps> = ({
   controls,
   controlsContext,
   onMessageAction,
+  onFilePreview,
 }) => {
   return (
     <>
@@ -56,6 +61,7 @@ export const StandardMessageList: React.FC<StandardMessageListProps> = ({
             controls={controls}
             controlsContext={controlsContext}
             onMessageAction={onMessageAction}
+            onFilePreview={onFilePreview}
             className={getMessageClassName(isNew)}
           />
         );

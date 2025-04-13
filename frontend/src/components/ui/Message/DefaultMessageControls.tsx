@@ -4,60 +4,80 @@ import {
   ClipboardDocumentIcon,
   HandThumbUpIcon,
   HandThumbDownIcon,
-  ArrowPathIcon,
   PencilSquareIcon,
+  CheckIcon,
 } from "@heroicons/react/24/outline";
 import clsx from "clsx";
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
-import { MessageTimestamp } from "./MessageTimestamp";
-import { Button } from "../Controls/Button";
+import { Button } from "@/components/ui/Controls/Button";
+import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
+import { useProfile } from "@/hooks/useProfile";
+import { createLogger } from "@/utils/debugLogger";
 
 import type {
+  // MessageAction,
   MessageControlsProps,
-  MessageActionType,
-} from "../../../types/message-controls";
+} from "@/types/message-controls";
 
-/**
- * Safely ensures a valid Date object
- * Returns current date if input is invalid
- */
-const ensureValidDate = (dateInput: unknown): Date => {
-  if (dateInput instanceof Date) {
-    return isNaN(dateInput.getTime()) ? new Date() : dateInput;
-  }
-
-  try {
-    const dateObj = new Date(dateInput as string | number);
-    return isNaN(dateObj.getTime()) ? new Date() : dateObj;
-  } catch {
-    console.warn(
-      "Invalid date provided to DefaultMessageControls, using current date",
-    );
-    return new Date();
-  }
-};
+const logger = createLogger("UI", "DefaultMessageControls");
 
 export const DefaultMessageControls = ({
   messageId,
-  messageType,
+  // messageType,
   authorId,
+  createdAt,
   context,
   showOnHover = false,
   onAction,
   className,
-  createdAt,
+  isUserMessage,
 }: MessageControlsProps) => {
-  const isUser = messageType === "user";
-  const isOwnMessage = authorId === context.currentUserId;
-  const isDialogOwner = context.currentUserId === context.dialogOwnerId;
+  const [isCopied, setIsCopied] = useState(false);
+  const [feedbackState, setFeedbackState] = useState<
+    "liked" | "disliked" | null
+  >(null);
+  const profile = useProfile();
 
-  // Ensure createdAt is a valid Date object
-  const safeCreatedAt = ensureValidDate(createdAt);
+  const isOwnMessage = authorId === profile.profile?.id;
+  // const isDialogOwner = context.dialogOwnerId === profile.profile?.id;
 
-  const handleAction = (type: MessageActionType) => {
-    void onAction({ type, messageId });
-  };
+  useEffect(() => {
+    if (isCopied) {
+      const timer = setTimeout(() => {
+        setIsCopied(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isCopied]);
+
+  const handleAction = useCallback(
+    async (actionType: "copy" | "edit" | "like" | "dislike") => {
+      const success = await onAction({
+        type: actionType,
+        messageId,
+      });
+
+      if (success) {
+        if (actionType === "copy") {
+          setIsCopied(true);
+        } else if (actionType === "like") {
+          setFeedbackState("liked");
+        } else if (actionType === "dislike") {
+          setFeedbackState("disliked");
+        }
+        logger.log(`Action '${actionType}' succeeded for message ${messageId}`);
+      } else {
+        logger.log(`Action '${actionType}' failed for message ${messageId}`);
+      }
+    },
+    [onAction, messageId],
+  );
+
+  // Ensure safeCreatedAt is always a Date object
+  const safeCreatedAt =
+    createdAt instanceof Date ? createdAt : new Date(createdAt ?? Date.now());
+  const isUser = isUserMessage;
 
   return (
     <div
@@ -69,9 +89,16 @@ export const DefaultMessageControls = ({
     >
       <div className="flex items-center gap-2">
         <Button
-          onClick={() => handleAction("copy")}
+          disabled={isCopied}
+          onClick={() => void handleAction("copy")}
           variant="icon-only"
-          icon={<ClipboardDocumentIcon />}
+          icon={
+            isCopied ? (
+              <CheckIcon className="text-green-500" />
+            ) : (
+              <ClipboardDocumentIcon />
+            )
+          }
           size="sm"
           showOnHover={showOnHover}
           aria-label="Copy message"
@@ -80,47 +107,51 @@ export const DefaultMessageControls = ({
 
         {isUser && isOwnMessage && !context.isSharedDialog && (
           <Button
-            onClick={() => handleAction("edit")}
+            onClick={() => void handleAction("edit")}
             variant="icon-only"
             icon={<PencilSquareIcon />}
             size="sm"
             showOnHover={showOnHover}
             aria-label="Edit message"
             title="Edit message"
+            disabled={feedbackState !== null}
           />
         )}
 
         {!isUser && (
           <>
             <Button
-              onClick={() => handleAction("like")}
+              onClick={() => void handleAction("like")}
               variant="icon-only"
-              icon={<HandThumbUpIcon />}
+              icon={
+                feedbackState === "liked" ? (
+                  <CheckIcon className="text-green-500" />
+                ) : (
+                  <HandThumbUpIcon />
+                )
+              }
               size="sm"
               showOnHover={showOnHover}
               aria-label="Like message"
               title="Like message"
+              disabled={feedbackState !== null}
             />
             <Button
-              onClick={() => handleAction("dislike")}
+              onClick={() => void handleAction("dislike")}
               variant="icon-only"
-              icon={<HandThumbDownIcon />}
+              icon={
+                feedbackState === "disliked" ? (
+                  <CheckIcon className="text-red-500" />
+                ) : (
+                  <HandThumbDownIcon />
+                )
+              }
               size="sm"
               showOnHover={showOnHover}
               aria-label="Dislike message"
               title="Dislike message"
+              disabled={feedbackState !== null}
             />
-            {(isOwnMessage || isDialogOwner) && (
-              <Button
-                onClick={() => handleAction("rerun")}
-                variant="icon-only"
-                icon={<ArrowPathIcon />}
-                size="sm"
-                showOnHover={showOnHover}
-                aria-label="Regenerate response"
-                title="Regenerate response"
-              />
-            )}
           </>
         )}
       </div>
@@ -128,3 +159,5 @@ export const DefaultMessageControls = ({
     </div>
   );
 };
+
+DefaultMessageControls.displayName = "DefaultMessageControls";

@@ -13,7 +13,7 @@ interface LoadMoreButtonProps {
   /**
    * Whether messages are currently loading
    */
-  isLoading?: boolean;
+  isPending?: boolean;
 
   /**
    * Custom label for the button
@@ -37,37 +37,40 @@ interface LoadMoreButtonProps {
 }
 
 /**
- * A specialized button for loading more content in paginated lists
+ * Button for loading more messages
  */
-export const LoadMoreButton = memo<LoadMoreButtonProps>(
+export const LoadMoreButton = memo(
   ({
     onClick,
-    isLoading = false,
-    label = "Load more messages",
+    isPending = false,
+    label = "Load older messages",
     loadingLabel = "Loading...",
     className,
-    isSticky = true,
-  }) => (
-    <div
-      className={clsx(
-        isSticky && "sticky top-0 z-10",
-        "mt-2 flex justify-center py-4",
-        "after:absolute after:inset-x-0 after:bottom-0 after:-z-10 after:h-6 after:bg-gradient-to-b after:from-transparent after:to-theme-bg-secondary after:opacity-50 after:content-['']",
-        className,
-      )}
-    >
-      <Button
-        onClick={onClick}
-        disabled={isLoading}
-        variant="primary"
-        size="sm"
-        className="rounded-full px-4 shadow-md transition-all hover:shadow-lg"
-        icon={isLoading ? <SpinnerIcon size="sm" /> : undefined}
+    isSticky = false,
+  }: LoadMoreButtonProps) => {
+    return (
+      <div
+        className={clsx(
+          "flex w-full justify-center p-2",
+          {
+            "sticky top-0 z-10 bg-theme-bg": isSticky,
+          },
+          className,
+        )}
       >
-        {isLoading ? loadingLabel : label}
-      </Button>
-    </div>
-  ),
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onClick}
+          disabled={isPending}
+          className={clsx("rounded-full px-4")}
+          icon={isPending ? <SpinnerIcon size="sm" /> : undefined}
+        >
+          {isPending ? loadingLabel : label}
+        </Button>
+      </div>
+    );
+  },
 );
 
 LoadMoreButton.displayName = "LoadMoreButton";

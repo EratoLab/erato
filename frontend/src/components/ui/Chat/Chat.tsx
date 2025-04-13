@@ -1,23 +1,40 @@
 import clsx from "clsx";
-import React, { useCallback, useMemo, useState, useEffect } from "react";
+import React, { useCallback, useRef } from "react";
 
-import { useChatHistory } from "@/components/containers/ChatHistoryProvider";
-import { useChat } from "@/components/containers/ChatProvider";
-import { useSidebar } from "@/contexts/SidebarContext";
+import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
+import { useChatActions } from "@/hooks/chat";
+import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
+import { useChatContext } from "@/providers/ChatProvider";
+import { createLogger } from "@/utils/debugLogger";
 
-import { MessageList } from "../MessageList";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
+import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
+import { MessageList } from "../MessageList/MessageList";
 
+import type { ChatMessage } from "../MessageList/MessageList";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ChatSession } from "@/types/chat";
 import type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
-} from "../../../types/message-controls";
+} from "@/types/message-controls";
 import type { FileType } from "@/utils/fileTypes";
 
+// Create logger for this component
+const logger = createLogger("UI", "Chat");
+
 export interface ChatProps {
+  /**
+   * Messages to display
+   */
+  messages: Record<string, ChatMessage>;
+  /**
+   * Order of message IDs
+   */
+  messageOrder: string[];
   className?: string;
   /**
    * Layout configuration
@@ -36,7 +53,7 @@ export interface ChatProps {
    */
   showTimestamps?: boolean;
   // New unified handler
-  onMessageAction?: (action: MessageAction) => void | Promise<void>;
+  onMessageAction?: (action: MessageAction) => Promise<boolean>;
   // Context for controls
   controlsContext: MessageControlsContext;
   // Optional custom controls component
@@ -50,8 +67,6 @@ export interface ChatProps {
   acceptedFileTypes?: FileType[];
   /** Optional custom session select handler to override default behavior */
   customSessionSelect?: (sessionId: string) => void;
-  /** Flag to indicate if the chat is currently transitioning between sessions */
-  isTransitioning?: boolean;
 }
 
 /**
@@ -59,6 +74,8 @@ export interface ChatProps {
  * This is the top-level component that coordinates all chat-related components.
  */
 export const Chat = ({
+  messages,
+  messageOrder,
   className,
   layout = "default",
   maxWidth = 768,
@@ -74,164 +91,223 @@ export const Chat = ({
   onToggleCollapse: _onToggleCollapse,
   acceptedFileTypes,
   customSessionSelect,
-  isTransitioning = false,
 }: ChatProps) => {
   // Use the sidebar context
-  const sidebarContext = useSidebar();
+  const { isOpen: sidebarCollapsed, toggle: onToggleCollapse } = useSidebar();
 
-  // These values are guaranteed to exist from the context
-  const sidebarCollapsed = sidebarContext.collapsed;
-  const onToggleCollapse = sidebarContext.toggleCollapsed;
-
-  // Get chat data and actions from context providers
+  // Get chat data and actions from context provider
   const {
-    messages,
-    messageOrder,
     sendMessage,
-    isLoading: chatLoading,
-    hasOlderMessages,
-    loadOlderMessages,
-    apiMessagesResponse,
-    handleFileAttachments,
-    performFileUpload,
-    isUploadingFiles,
-    uploadError,
-  } = useChat();
+    isMessagingLoading: chatLoading,
+    chats: chatHistory,
+    currentChatId,
+    navigateToChat: switchSession,
+    deleteChat: deleteSession,
+    createNewChat: createChat,
+    isHistoryLoading: chatHistoryLoading,
+    historyError: chatHistoryError,
+    refetchHistory: refreshChats,
+  } = useChatContext();
+
   const { profile } = useProfile();
-  const {
-    sessions,
-    currentSessionId,
-    switchSession,
-    deleteSession,
-    isLoading: chatHistoryLoading,
-    error: chatHistoryError,
-  } = useChatHistory();
 
-  // Create a state to maintain previous messages during transitions
-  const [prevMessages, setPrevMessages] = useState<typeof messages>({});
-  const [prevMessageOrder, setPrevMessageOrder] = useState<string[]>([]);
+  // Convert the chat history data to the format expected by the sidebar
+  const sessions: ChatSession[] = Array.isArray(chatHistory)
+    ? chatHistory.map((chat) => ({
+        id: chat.id,
+        title: chat.title_by_summary || "New Chat", // Use title from API
+        updatedAt: chat.last_message_at || new Date().toISOString(), // Use last message timestamp
+        messages: [], // We don't need to populate messages here
+        metadata: {
+          lastMessage: {
+            content: chat.title_by_summary || "", // Reuse title as a preview if no actual message available
+            timestamp: chat.last_message_at || new Date().toISOString(),
+          },
+        },
+      }))
+    : [];
 
-  // Keep previous messages during transitions to prevent flickering
-  useEffect(() => {
-    if (Object.keys(messages).length > 0) {
-      setPrevMessages(messages);
-      setPrevMessageOrder(messageOrder);
-    }
-  }, [messages, messageOrder]);
+  // Use chat actions hook for handlers
+  const { handleSendMessage: baseHandleSendMessage, handleMessageAction } =
+    useChatActions({
+      switchSession,
+      sendMessage,
+      onMessageAction,
+    });
 
-  // Determine which messages to display - current or previous during transitions
-  const displayMessages = useMemo(() => {
-    return isTransitioning && Object.keys(messages).length === 0
-      ? prevMessages
-      : messages;
-  }, [isTransitioning, messages, prevMessages]);
-
-  const displayMessageOrder = useMemo(() => {
-    return isTransitioning && messageOrder.length === 0
-      ? prevMessageOrder
-      : messageOrder;
-  }, [isTransitioning, messageOrder, prevMessageOrder]);
-
-  // Use custom session select function or fall back to the default one
-  const handleSessionSelect = useCallback(
-    (sessionId: string) => {
-      if (customSessionSelect) {
-        customSessionSelect(sessionId);
-      } else {
-        switchSession(sessionId);
-      }
-    },
-    [customSessionSelect, switchSession],
-  );
-
-  // Wrap the sendMessage with a void handler for ChatInput
+  // Enhanced sendMessage handler that refreshes the sidebar after sending
   const handleSendMessage = useCallback(
-    (message: string) => {
-      void sendMessage(message);
+    (message: string, inputFileIds?: string[]) => {
+      logger.log(
+        "[CHAT_FLOW] Chat - handleSendMessage called with files:",
+        inputFileIds,
+      );
+
+      // Send the message using the handler from useChatActions
+      // Now baseHandleSendMessage returns a Promise we can chain with
+      baseHandleSendMessage(message, inputFileIds)
+        .then(() => {
+          logger.log("[CHAT_FLOW] Message sent, refreshing chats");
+          return refreshChats();
+        })
+        .catch((error) => {
+          logger.log("[CHAT_FLOW] Error sending message:", error);
+        });
     },
-    [sendMessage],
+    [baseHandleSendMessage, refreshChats],
   );
 
-  // Memoize message action handler
-  const handleMessageAction = useCallback(
-    async (action: MessageAction) => {
-      if (onMessageAction) {
-        await onMessageAction(action);
+  // Handler for when the error boundary resets
+  const handleErrorReset = useCallback(() => {
+    // Refresh chats on error reset
+    void refreshChats();
+  }, [refreshChats]);
+
+  // Handle session select with void return type
+  const handleSessionSelectWrapper = (sessionId: string) => {
+    logger.log(
+      `[CHAT_FLOW] Handling session select in Chat component for session: ${sessionId}`,
+    );
+    // Call handleSessionSelect or directly use switchSession if that's not working
+    if (customSessionSelect) {
+      customSessionSelect(sessionId);
+    } else {
+      logger.log(
+        `[CHAT_FLOW] Directly calling switchSession with ID: ${sessionId}`,
+      );
+      switchSession(sessionId);
+    }
+  };
+
+  // Handle deleting a session with void return type
+  const handleDeleteSession = (sessionId: string) => {
+    void deleteSession(sessionId);
+  };
+
+  // Function to capture the scrollToBottom from MessageList
+  const scrollToBottomRef = useRef<(() => void) | null>(null);
+  const handleMessageListRef = useCallback((scrollToBottom: () => void) => {
+    scrollToBottomRef.current = scrollToBottom;
+  }, []);
+
+  // Handle creating a new chat
+  const handleNewChat = useCallback(async () => {
+    logger.log("[CHAT_FLOW] New chat button clicked");
+
+    try {
+      if (onNewChat) {
+        // Use custom handler if provided
+        onNewChat();
+      } else {
+        // Otherwise use the default behavior from context
+        // Don't chain with then() - use await for cleaner flow
+        await createChat();
+        logger.log("[CHAT_FLOW] New chat creation completed");
       }
-    },
-    [onMessageAction],
-  );
+    } catch (error) {
+      logger.log("[CHAT_FLOW] Error creating new chat:", error);
+    }
+  }, [onNewChat, createChat]);
 
-  // Determine if we should use virtualization based on message count
-  const useVirtualization = useMemo(
-    () => displayMessageOrder.length > 30,
-    [displayMessageOrder.length],
-  );
+  // Use the file preview modal hook
+  const {
+    isPreviewModalOpen,
+    fileToPreview,
+    openPreviewModal,
+    closePreviewModal,
+  } = useFilePreviewModal();
 
-  // Define a constant for the page size
-  const messagePageSize = 6;
+  // Restore placeholder definitions for props passed to MessageList
+  const hasOlderMessages = false;
+  const loadOlderMessages = () => {
+    logger.log("loadOlderMessages called (placeholder)");
+  };
+  const apiMessagesResponse = undefined;
+
+  // Restore a basic handleFileAttachments function needed by ChatInput
+  const handleFileAttachments = useCallback((files: FileUploadItem[]) => {
+    logger.log(
+      `handleFileAttachments in Chat.tsx called with: ${files.length} files. (Currently only enables button rendering)`,
+    );
+    // This function might be needed later if we want Chat.tsx
+    // to be aware of files attached in ChatInput before sending.
+    // For now, its presence enables the button in ChatInput.
+  }, []);
 
   return (
     <div className="flex size-full flex-col sm:flex-row">
       <ChatHistorySidebar
         collapsed={sidebarCollapsed}
-        onNewChat={onNewChat}
+        onNewChat={() => {
+          void handleNewChat();
+        }}
         onToggleCollapse={onToggleCollapse}
         sessions={sessions}
-        currentSessionId={currentSessionId}
-        onSessionSelect={handleSessionSelect}
-        onSessionDelete={deleteSession}
-        isLoading={isTransitioning ? false : chatHistoryLoading}
-        error={chatHistoryError}
+        currentSessionId={currentChatId ?? ""}
+        onSessionSelect={handleSessionSelectWrapper}
+        onSessionDelete={handleDeleteSession}
+        showTimestamps={showTimestamps}
+        isLoading={chatHistoryLoading}
+        error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
         className="fixed inset-0 z-50 sm:relative sm:z-auto"
         userProfile={profile}
       />
-      <div
-        className={clsx(
-          "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
-          "sm:mt-0",
-          className,
-        )}
-        role="region"
-        aria-label="Chat conversation"
-      >
-        {/* Use the new MessageList component with virtualization */}
-        <MessageList
-          messages={displayMessages}
-          messageOrder={displayMessageOrder}
-          loadOlderMessages={loadOlderMessages}
-          hasOlderMessages={hasOlderMessages}
-          isLoading={isTransitioning ? false : chatLoading}
-          currentSessionId={currentSessionId}
-          apiMessagesResponse={apiMessagesResponse}
-          pageSize={messagePageSize}
-          maxWidth={maxWidth}
-          showTimestamps={showTimestamps}
-          showAvatars={showAvatars}
-          userProfile={profile}
-          controls={messageControls}
-          controlsContext={controlsContext}
-          onMessageAction={handleMessageAction}
-          className={layout}
-          useVirtualization={useVirtualization}
-          virtualizationThreshold={30}
-        />
+      <ChatErrorBoundary onReset={handleErrorReset}>
+        <div
+          className={clsx(
+            "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
+            "sm:mt-0",
+            className,
+          )}
+          role="region"
+          aria-label="Chat conversation"
+        >
+          {/* Use the MessageList component */}
+          <MessageList
+            messages={messages}
+            messageOrder={messageOrder}
+            loadOlderMessages={loadOlderMessages}
+            hasOlderMessages={hasOlderMessages}
+            isPending={chatLoading}
+            currentSessionId={currentChatId ?? ""}
+            apiMessagesResponse={apiMessagesResponse}
+            pageSize={6}
+            maxWidth={maxWidth}
+            showTimestamps={showTimestamps}
+            showAvatars={showAvatars}
+            userProfile={profile}
+            controls={messageControls}
+            controlsContext={controlsContext}
+            onMessageAction={handleMessageAction}
+            className={layout}
+            useVirtualization={messageOrder.length > 30}
+            virtualizationThreshold={30}
+            onScrollToBottomRef={handleMessageListRef}
+            onFilePreview={openPreviewModal}
+          />
 
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          acceptedFileTypes={acceptedFileTypes}
-          handleFileAttachments={handleFileAttachments}
-          className="p-2 sm:p-4"
-          isLoading={chatLoading}
-          showControls
-          onRegenerate={onRegenerate}
-          showFileTypes={true}
-          initialFiles={[]}
-          performFileUpload={performFileUpload}
-          isUploading={isUploadingFiles}
-          uploadError={uploadError}
-        />
-      </div>
+          <ChatInput
+            onSendMessage={handleSendMessage}
+            acceptedFileTypes={acceptedFileTypes}
+            onFilePreview={openPreviewModal}
+            handleFileAttachments={handleFileAttachments}
+            chatId={currentChatId}
+            className="p-2 sm:p-4"
+            isLoading={chatLoading}
+            showControls
+            onRegenerate={onRegenerate}
+            showFileTypes={true}
+            initialFiles={[]}
+          />
+        </div>
+      </ChatErrorBoundary>
+
+      {/* Render the File Preview Modal */}
+      <FilePreviewModal
+        isOpen={isPreviewModalOpen}
+        onClose={closePreviewModal}
+        file={fileToPreview}
+      />
     </div>
   );
 };

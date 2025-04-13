@@ -79,6 +79,7 @@ export class MockDataGenerator {
         overrides?.is_message_in_active_thread ?? true,
       previous_message_id: overrides?.previous_message_id,
       sibling_message_id: overrides?.sibling_message_id,
+      input_files_ids: overrides?.input_files_ids ?? [],
     };
   }
 
@@ -96,6 +97,7 @@ export class MockDataGenerator {
       title_by_summary:
         overrides?.title_by_summary ?? faker.company.catchPhrase(),
       last_message_at: overrides?.last_message_at ?? new Date().toISOString(),
+      file_uploads: overrides?.file_uploads ?? [],
     };
   }
 

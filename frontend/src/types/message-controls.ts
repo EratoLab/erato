@@ -1,33 +1,51 @@
 import type { ReactNode } from "react";
 
-export type MessageActionType = "copy" | "edit" | "like" | "dislike" | "rerun";
+/**
+ * Possible message actions a user can take
+ */
+export type MessageActionType =
+  | "copy"
+  | "delete"
+  | "edit"
+  | "regenerate"
+  | "share"
+  | "flag"
+  | "like"
+  | "dislike";
 
 export interface MessageAction {
   type: MessageActionType;
   messageId: string;
-  metadata?: Record<string, unknown>;
 }
 
+/**
+ * Context provided to message controls
+ */
 export interface MessageControlsContext {
+  currentUserId?: string;
+  dialogOwnerId?: string;
   isSharedDialog?: boolean;
-  currentUserId: string;
-  dialogOwnerId: string;
 }
 
+/**
+ * Props for message controls component
+ */
 export interface MessageControlsProps {
   messageId: string;
-  messageType: "user" | "assistant";
-  authorId: string;
-  createdAt: Date;
-
+  isUserMessage: boolean;
+  onAction: (action: MessageAction) => Promise<boolean>;
   context: MessageControlsContext;
+  // Additional properties used in DefaultMessageControls
+  messageType?: string;
+  authorId?: string;
+  createdAt?: string | Date;
   showOnHover?: boolean;
   className?: string;
-
-  onAction: (action: MessageAction) => void | Promise<void>;
-  renderIcon?: (type: MessageActionType) => ReactNode;
 }
 
-// Helper type for the controls component injection
-export type MessageControlsComponent =
-  React.ComponentType<MessageControlsProps>;
+/**
+ * Type for a component that displays message controls
+ */
+export type MessageControlsComponent = (
+  props: MessageControlsProps,
+) => ReactNode;

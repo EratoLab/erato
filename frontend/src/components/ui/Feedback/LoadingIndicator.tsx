@@ -1,7 +1,14 @@
 import clsx from "clsx";
 import React from "react";
 
-import type { LoadingState } from "@/types/chat";
+// Define loading state types locally
+export type LoadingState =
+  | "tool-calling"
+  | "reasoning"
+  | "typing"
+  | "thinking"
+  | "done"
+  | "error";
 
 interface LoadingIndicatorProps {
   state: LoadingState;

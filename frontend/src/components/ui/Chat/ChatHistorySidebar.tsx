@@ -1,14 +1,19 @@
-import useResizeObserver from "@react-hook/resize-observer";
 import clsx from "clsx";
-import React, { memo, useRef, useState } from "react";
+import React, { memo, useRef, useState, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
+
+import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { SidebarToggleIcon, EditIcon } from "../icons";
 
-import type { ChatSession, UserProfile } from "@/types/chat";
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ChatSession } from "@/types/chat";
+
+// Create logger for this component
+const logger = createLogger("UI", "ChatHistorySidebar");
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -25,6 +30,11 @@ export interface ChatHistorySidebarProps {
   onNewChat?: () => void;
   onToggleCollapse?: () => void;
   showTitle?: boolean;
+  /**
+   * Whether to show timestamps for chats
+   * @default true
+   */
+  showTimestamps?: boolean;
   sessions: ChatSession[];
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
@@ -65,7 +75,10 @@ const ChatHistoryHeader = memo<{
         </div>
         <div className="flex w-12 justify-center">
           <Button
-            onClick={onNewChat}
+            onClick={() => {
+              logger.log("[CHAT_FLOW] New chat button clicked in sidebar");
+              if (onNewChat) void onNewChat();
+            }}
             variant="sidebar-icon"
             icon={<EditIcon />}
             aria-label="New Chat"
@@ -109,6 +122,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     onNewChat,
     onToggleCollapse,
     showTitle = false,
+    showTimestamps = true,
     sessions,
     currentSessionId,
     onSessionSelect,
@@ -120,29 +134,48 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const ref = useRef<HTMLElement>(null);
     const [width, setWidth] = useState(minWidth);
 
-    useResizeObserver(ref, (entry) => {
-      setWidth(entry.contentRect.width);
-    });
+    // Only use ResizeObserver in the browser
+    const isBrowser = typeof window !== "undefined";
+
+    useEffect(() => {
+      if (isBrowser && ref.current) {
+        // Create observer manually to avoid SSR issues
+        const resizeObserver = new ResizeObserver((entries) => {
+          if (entries.length > 0) {
+            setWidth(entries[0].contentRect.width);
+          }
+        });
+
+        resizeObserver.observe(ref.current);
+
+        // Clean up
+        return () => {
+          resizeObserver.disconnect();
+        };
+      }
+    }, [isBrowser, ref]);
 
     // When not collapsed, set the sidebar width
     // When collapsed, we'll hide it completely with CSS
     const sidebarWidth = collapsed ? 0 : Math.max(width, minWidth);
 
     const handleSignOut = () => {
-      console.log("ChatHistorySidebar handleSignOut called");
+      if (!isBrowser) return;
+
+      logger.log("ChatHistorySidebar handleSignOut called");
       try {
         const signOutUrl = "/oauth2/sign_out";
-        console.log("Attempting to redirect to:", signOutUrl);
+        logger.log("Attempting to redirect to:", signOutUrl);
         window.location.href = signOutUrl;
 
         setTimeout(() => {
-          console.log("Fallback timeout triggered");
+          logger.log("Fallback timeout triggered");
           const fullUrl = `${process.env.NEXT_PUBLIC_API_ROOT_URL}${signOutUrl}`;
-          console.log("Attempting fallback redirect to:", fullUrl);
+          logger.log("Attempting fallback redirect to:", fullUrl);
           window.location.href = fullUrl;
         }, 1000);
       } catch (error) {
-        console.error("Failed to sign out:", error);
+        logger.log("Failed to sign out:", error);
       }
     };
 
@@ -190,6 +223,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   currentSessionId={currentSessionId}
                   onSessionSelect={onSessionSelect}
                   onSessionDelete={onSessionDelete}
+                  showTimestamps={showTimestamps}
                   className="flex-1 p-2"
                 />
               )}

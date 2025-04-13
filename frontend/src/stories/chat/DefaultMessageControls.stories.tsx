@@ -53,7 +53,10 @@ Default implementation of message controls with permission-based visibility.
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onAction: (action: MessageAction) => console.log("Action:", action),
+    onAction: async (action: MessageAction) => {
+      console.log("Action:", action);
+      return Promise.resolve(true);
+    },
   },
   decorators: [
     (Story) => (

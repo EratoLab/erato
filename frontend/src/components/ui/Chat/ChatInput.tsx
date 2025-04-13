@@ -1,13 +1,16 @@
-import { ArrowUpIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
+import { ArrowUpIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 
-import { useChat } from "@/components/containers/ChatProvider";
 import {
   FileUploadButton,
   FilePreviewButton,
 } from "@/components/ui/FileUpload";
+import { useFileDropzone } from "@/hooks/files";
+import { useChatInputHandlers } from "@/hooks/ui";
+import { useChatContext } from "@/providers/ChatProvider";
 
+import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { Tooltip } from "../Controls/Tooltip";
 import { Alert } from "../Feedback/Alert";
@@ -16,7 +19,7 @@ import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas"
 import type { FileType } from "@/utils/fileTypes";
 
 interface ChatInputProps {
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, inputFileIds?: string[]) => void;
   onRegenerate?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
@@ -33,12 +36,10 @@ interface ChatInputProps {
   initialFiles?: FileUploadItem[];
   /** Show file type in previews */
   showFileTypes?: boolean;
-  /** File upload function provided by the ChatProvider */
-  performFileUpload?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
-  /** Whether files are currently being uploaded */
-  isUploading?: boolean;
-  /** Any error that occurred during upload */
-  uploadError?: Error | null;
+  // Add prop for preview callback
+  onFilePreview?: (file: FileUploadItem) => void;
+  // Add prop for current chat ID
+  chatId?: string | null;
 }
 
 /**
@@ -46,9 +47,9 @@ interface ChatInputProps {
  */
 export const ChatInput = ({
   onSendMessage,
-  onRegenerate,
+  onRegenerate: _onRegenerate,
   handleFileAttachments,
-  isLoading = false,
+  isLoading: propIsLoading,
   disabled = false,
   className = "",
   placeholder = "Type a message...",
@@ -58,109 +59,68 @@ export const ChatInput = ({
   acceptedFileTypes = [],
   initialFiles = [],
   showFileTypes = false,
-  performFileUpload,
-  isUploading,
-  uploadError,
+  // Destructure the new prop
+  onFilePreview,
+  // Destructure chatId
+  chatId,
 }: ChatInputProps) => {
   const [message, setMessage] = useState("");
-  const [attachedFiles, setAttachedFiles] =
-    useState<FileUploadItem[]>(initialFiles);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const [uploadInProgress, setUploadInProgress] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Get file upload functionality from ChatProvider
+  // Get necessary state from context instead of useChat()
+  const { isStreaming, isMessagingLoading, isUploading } = useChatContext();
+
+  // Combine loading states
+  const isLoading = propIsLoading ?? isMessagingLoading;
+
+  // Use our modernized file upload hook
   const {
-    performFileUpload: chatProviderPerformFileUpload,
-    isUploadingFiles,
-    uploadError: chatProviderUploadError,
-  } = useChat();
+    uploadFiles,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Part of hook return, might be used internally or later
+    uploadedFiles,
+    error: uploadError,
+  } = useFileDropzone({
+    acceptedFileTypes,
+    multiple: maxFiles > 1,
+    maxFiles,
+    disabled,
+    onFilesUploaded: handleFileAttachments,
+    // Pass chatId to the hook
+    chatId: chatId,
+  });
 
-  // Handle form submission for sending a message
-  const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      if (
-        (message.trim() || attachedFiles.length > 0) &&
-        !isLoading &&
-        !disabled
-      ) {
-        onSendMessage(message.trim());
-        setMessage("");
-        // Clear attachments after sending message - files are now part of the message
-        setAttachedFiles([]);
-        // Notify parent component that files have been cleared
-        if (handleFileAttachments) {
-          handleFileAttachments([]);
-        }
-      }
+  // Use the custom hook for chat input handling
+  const {
+    attachedFiles,
+    fileError,
+    setFileError,
+    handleFilesUploaded,
+    handleRemoveFile,
+    handleRemoveAllFiles,
+    createSubmitHandler,
+  } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
+
+  // Log attachedFiles received from the hook
+  console.log("[ChatInput] Received attachedFiles from hook:", attachedFiles);
+
+  // Create the submit handler
+  const handleSubmit = createSubmitHandler(
+    message,
+    attachedFiles,
+    (messageContent, inputFileIds) => {
+      console.log(
+        "[CHAT_FLOW] ChatInput - Message submitted:",
+        messageContent.substring(0, 20) +
+          (messageContent.length > 20 ? "..." : ""),
+        "with files:",
+        inputFileIds,
+      );
+      onSendMessage(messageContent, inputFileIds);
     },
-    [
-      message,
-      attachedFiles.length,
-      isLoading,
-      disabled,
-      onSendMessage,
-      handleFileAttachments,
-    ],
+    isLoading || isStreaming,
+    disabled,
+    () => setMessage(""),
   );
-
-  // Handle files uploaded via the enhanced FileUpload component
-  const handleFilesUploaded = useCallback(
-    (files: FileUploadItem[]) => {
-      console.log("handleFilesUploaded");
-      setFileError(null);
-      setUploadInProgress(false);
-
-      // Limit to max files
-      const trimmedFiles = files.slice(0, maxFiles);
-
-      // Update state
-      setAttachedFiles(trimmedFiles);
-
-      // Notify parent component
-      if (handleFileAttachments) {
-        handleFileAttachments(trimmedFiles);
-      }
-    },
-    [maxFiles, handleFileAttachments],
-  );
-
-  // Remove a single file
-  const handleRemoveFile = useCallback(
-    (fileIdOrFile: string | File) => {
-      // We expect a string fileId in this context
-      if (typeof fileIdOrFile === "string") {
-        const fileId = fileIdOrFile;
-
-        setAttachedFiles((prev) => {
-          const updated = prev.filter((file) => file.id !== fileId);
-
-          // Notify parent component
-          if (handleFileAttachments) {
-            handleFileAttachments(updated);
-          }
-
-          return updated;
-        });
-
-        setFileError(null);
-      }
-    },
-    [handleFileAttachments],
-  );
-
-  // Remove all files
-  const handleRemoveAllFiles = useCallback(() => {
-    setAttachedFiles([]);
-
-    // Notify parent component
-    if (handleFileAttachments) {
-      handleFileAttachments([]);
-    }
-
-    setFileError(null);
-  }, [handleFileAttachments]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -173,23 +133,58 @@ export const ChatInput = ({
 
   // Handle file upload error if any
   useEffect(() => {
-    if (chatProviderUploadError) {
-      setFileError(`File upload error: ${chatProviderUploadError.message}`);
-      setUploadInProgress(false);
+    if (uploadError && uploadError instanceof Error) {
+      setFileError(`File upload error: ${uploadError.message}`);
+    } else if (uploadError && typeof uploadError === "string") {
+      setFileError(`File upload error: ${uploadError}`);
     }
-  }, [chatProviderUploadError]);
+  }, [uploadError, setFileError]);
 
-  // Update upload progress tracking from provider's state
-  useEffect(() => {
-    setUploadInProgress(isUploadingFiles);
-  }, [isUploadingFiles]);
+  // Combine disabled states
+  const isDisabled = disabled || isUploading || isLoading || isStreaming;
+
+  // Helper to handle removing file by ID regardless of source type
+  const handleRemoveFileById = useCallback(
+    (fileIdOrFile: string | FileUploadItem | File) => {
+      let fileId: string | null = null;
+      if (typeof fileIdOrFile === "string") {
+        fileId = fileIdOrFile;
+      } else if (
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        fileIdOrFile &&
+        typeof fileIdOrFile === "object" &&
+        "id" in fileIdOrFile &&
+        typeof fileIdOrFile.id === "string"
+      ) {
+        fileId = fileIdOrFile.id; // Handle FileUploadItem
+      } // Browser File objects don't have IDs here, handleRemoveFile handles them
+
+      if (fileId) {
+        handleRemoveFile(fileId);
+      } else if (fileIdOrFile instanceof File) {
+        // If it's a browser File (e.g., from dropzone before upload ID), handleRemoveFile might need adjustment
+        // For now, assuming handleRemoveFile in the hook handles string IDs primarily
+        console.warn(
+          "[ChatInput] Attempted to remove non-uploaded file, not fully handled.",
+        );
+      }
+    },
+    [handleRemoveFile],
+  );
 
   // Determine if send button should be enabled
   const canSendMessage =
     (message.trim() || attachedFiles.length > 0) &&
     !isLoading &&
+    !isStreaming &&
     !disabled &&
-    !uploadInProgress;
+    !isUploading;
+
+  // Log just before rendering the component and its preview section
+  console.log(
+    "[ChatInput] Rendering component. Preview should render if attachedFiles > 0. attachedFiles:",
+    attachedFiles,
+  );
 
   return (
     <form
@@ -220,17 +215,38 @@ export const ChatInput = ({
 
           {/* File attachments */}
           <div className="flex flex-wrap gap-2">
-            {attachedFiles.map((file) => (
-              <FilePreviewButton
-                key={file.id}
-                file={file}
-                onRemove={handleRemoveFile}
-                disabled={uploadInProgress || isLoading || disabled}
-                showFileType={showFileTypes}
-                showSize={true}
-                filenameTruncateLength={25}
-              />
-            ))}
+            {attachedFiles.map((file) =>
+              // Wrap FilePreviewButton in InteractiveContainer if onFilePreview exists
+              onFilePreview ? (
+                <InteractiveContainer
+                  key={file.id}
+                  onClick={() => onFilePreview(file)}
+                  useDiv={true}
+                  className="cursor-pointer"
+                  aria-label={`Preview attachment ${file.filename}`}
+                >
+                  <FilePreviewButton
+                    file={file}
+                    onRemove={handleRemoveFileById} // Use helper
+                    disabled={isDisabled}
+                    showFileType={showFileTypes}
+                    showSize={true}
+                    filenameTruncateLength={25}
+                  />
+                </InteractiveContainer>
+              ) : (
+                // Original rendering if no preview handler
+                <FilePreviewButton
+                  key={file.id}
+                  file={file}
+                  onRemove={handleRemoveFileById} // Use helper
+                  disabled={isDisabled}
+                  showFileType={showFileTypes}
+                  showSize={true}
+                  filenameTruncateLength={25}
+                />
+              ),
+            )}
           </div>
         </div>
       )}
@@ -270,7 +286,7 @@ export const ChatInput = ({
           placeholder={placeholder}
           maxLength={maxLength}
           rows={1}
-          disabled={isLoading || disabled || uploadInProgress}
+          disabled={isLoading || isStreaming || disabled || isUploading}
           className={clsx(
             "w-full resize-none overflow-hidden",
             "p-2 sm:px-3",
@@ -291,7 +307,6 @@ export const ChatInput = ({
                 {handleFileAttachments && (
                   <FileUploadButton
                     onFilesUploaded={(files) => {
-                      setUploadInProgress(true);
                       handleFilesUploaded(files);
                     }}
                     acceptedFileTypes={acceptedFileTypes}
@@ -301,27 +316,35 @@ export const ChatInput = ({
                     disabled={
                       attachedFiles.length >= maxFiles ||
                       isLoading ||
+                      isStreaming ||
                       disabled ||
-                      uploadInProgress
+                      isUploading
                     }
-                    performFileUpload={
-                      performFileUpload ?? chatProviderPerformFileUpload
+                    // Use our modern file upload hook with proper typing
+                    performFileUpload={async (files) => {
+                      // Directly return the result of uploadFiles
+                      return await uploadFiles(files);
+                    }}
+                    isUploading={isUploading}
+                    uploadError={
+                      uploadError instanceof Error ? uploadError : null
                     }
-                    isUploading={isUploading ?? isUploadingFiles}
-                    uploadError={uploadError ?? chatProviderUploadError}
                   />
                 )}
 
-                <Tooltip content="Regenerate response">
+                {/* Regenerate button removed */}
+                {/* <Tooltip content="Regenerate response">
                   <Button
-                    onClick={onRegenerate}
+                    onClick={_onRegenerate}
                     variant="icon-only"
                     size="sm"
                     icon={<ArrowPathIcon className="size-5" />}
                     aria-label="Regenerate response"
-                    disabled={isLoading || disabled || uploadInProgress}
+                    disabled={
+                      isLoading || isStreaming || disabled || isUploading
+                    }
                   />
-                </Tooltip>
+                </Tooltip> */}
               </>
             )}
           </div>

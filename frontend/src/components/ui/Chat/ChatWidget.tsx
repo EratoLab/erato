@@ -1,16 +1,17 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef } from "react";
+
+import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
-import { useChat } from "../../containers/ChatProvider";
-import { useMessageStream } from "../../containers/MessageStreamProvider";
+import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 
 import type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
 } from "../../../types/message-controls";
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Message } from "@/types/chat";
 
 interface ChatWidgetProps {
   className?: string;
@@ -19,9 +20,12 @@ interface ChatWidgetProps {
   showTimestamps?: boolean;
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
-  onMessageAction?: (action: MessageAction) => void | Promise<void>;
-  handleFileAttachments?: (files: FileUploadItem[]) => void;
+  onMessageAction?: (action: MessageAction) => Promise<boolean>;
+  onSendMessage: (message: string) => void;
   onRegenerate?: () => void;
+  messages: Message[];
+  isLoading?: boolean;
+  onErrorReset?: () => void;
 }
 
 export const ChatWidget: React.FC<ChatWidgetProps> = ({
@@ -32,55 +36,47 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   controls,
   controlsContext,
   onMessageAction,
-  handleFileAttachments,
+  onSendMessage,
   onRegenerate,
+  messages = [],
+  isLoading = false,
+  onErrorReset,
 }) => {
-  const { messages, messageOrder, sendMessage, isLoading } = useChat();
-  const { currentStreamingMessage } = useMessageStream();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messageOrder, currentStreamingMessage]);
-
   return (
-    <div
-      className={`flex h-full flex-col ${className}`}
-      role="region"
-      aria-label="Chat messages"
-    >
-      <div className="flex-1 overflow-y-auto p-4">
-        {messageOrder.map((messageId) => (
-          <ChatMessage
-            key={messageId}
-            message={messages[messageId]}
-            className="mb-4"
-            showAvatar={showAvatars}
-            showTimestamp={showTimestamps}
-            controls={controls}
-            controlsContext={controlsContext}
-            onMessageAction={onMessageAction ?? (() => {})}
-            showControlsOnHover={showControlsOnHover}
-          />
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
+    <ChatErrorBoundary onReset={onErrorReset}>
+      <div
+        className={`flex h-full flex-col ${className}`}
+        role="region"
+        aria-label="Chat messages"
+      >
+        <div className="flex-1 overflow-y-auto p-4">
+          {messages.map((message) => (
+            <ChatMessage
+              key={message.id}
+              message={mapMessageToUiMessage(message)}
+              className="mb-4"
+              showAvatar={showAvatars}
+              showTimestamp={showTimestamps}
+              controls={controls}
+              controlsContext={controlsContext}
+              onMessageAction={onMessageAction ?? (async () => false)}
+              showControlsOnHover={showControlsOnHover}
+            />
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
 
-      <ChatInput
-        onSendMessage={(message) => {
-          void sendMessage(message);
-        }}
-        handleFileAttachments={handleFileAttachments}
-        onRegenerate={onRegenerate}
-        className="border-t bg-white"
-        isLoading={isLoading}
-        showFileTypes={true}
-        initialFiles={[]}
-      />
-    </div>
+        <ChatInput
+          onSendMessage={onSendMessage}
+          onRegenerate={onRegenerate}
+          className="border-t bg-white"
+          isLoading={isLoading}
+          showFileTypes={true}
+          initialFiles={[]}
+        />
+      </div>
+    </ChatErrorBoundary>
   );
 };

@@ -1,9 +1,11 @@
 import clsx from "clsx";
 import { debounce } from "lodash";
-import React, { memo, useCallback, useMemo, useState, useEffect } from "react";
+import React, { memo, useCallback, useMemo, useEffect, useRef } from "react";
 
-import { usePaginatedData } from "@/hooks/usePaginatedData";
+import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
+import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
+import { createLogger, debugLog } from "@/utils/debugLogger";
 
 import { MessageListHeader } from "./MessageListHeader";
 import {
@@ -14,14 +16,32 @@ import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
 // import { ConversationIndicator } from "../Message/ConversationIndicator";
 
-import type { ChatMessagesResponse } from "../../../lib/generated/v1betaApi/v1betaApiSchemas";
-import type { ChatMessage as ChatMessageType } from "../../containers/ChatProvider";
-import type { UserProfile } from "@/types/chat";
+import type {
+  ChatMessagesResponse,
+  UserProfile,
+  FileUploadItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Message } from "@/types/chat";
 import type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+
+// Create logger for this component
+const logger = createLogger("UI", "MessageList");
+
+/**
+ * Type for chat message with loading state
+ */
+export interface ChatMessage extends Message {
+  sender: string;
+  authorId: string;
+  loading?: {
+    state: "typing" | "thinking" | "done" | "error";
+    context?: string;
+  };
+}
 
 // Import the split components
 
@@ -29,7 +49,7 @@ export interface MessageListProps {
   /**
    * Array of all messages in the conversation
    */
-  messages: Record<string, ChatMessageType>;
+  messages: Record<string, ChatMessage>;
 
   /**
    * Order of message IDs
@@ -49,7 +69,7 @@ export interface MessageListProps {
   /**
    * Whether messages are currently loading
    */
-  isLoading: boolean;
+  isPending: boolean;
 
   /**
    * The current chat/session ID
@@ -99,7 +119,7 @@ export interface MessageListProps {
   /**
    * Handler for message actions
    */
-  onMessageAction: (action: MessageAction) => Promise<void>;
+  onMessageAction: (action: MessageAction) => Promise<boolean>;
 
   /**
    * Custom CSS class for the message list container
@@ -115,6 +135,104 @@ export interface MessageListProps {
    * Threshold for when to use virtualization (number of messages)
    */
   virtualizationThreshold?: number;
+
+  /**
+   * Callback to expose the scrollToBottom function
+   */
+  onScrollToBottomRef?: (scrollToBottom: () => void) => void;
+
+  /**
+   * Callback to open the file preview modal
+   */
+  onFilePreview?: (file: FileUploadItem) => void;
+
+  /**
+   * Whether the chat is currently transitioning between sessions
+   */
+  isTransitioning?: boolean;
+}
+
+// Separate hook for managing message loading and streaming behavior
+function useMessageLoading({
+  messageOrder,
+  messages,
+  scrollToBottom,
+}: {
+  messageOrder: string[];
+  messages: Record<string, ChatMessage>;
+  scrollToBottom: () => void;
+}) {
+  // Track the last loading state to avoid unwanted scroll when message completes
+  const lastLoadingState = useRef<string | null>(null);
+  // Track the last streaming content length to avoid unnecessary scrolls
+  const lastContentLength = useRef<number>(0);
+
+  // Force scroll to bottom when a message is actively streaming
+  useEffect(() => {
+    // Check if the last message is from the assistant and is still loading
+    if (messageOrder.length > 0) {
+      const lastMessageId = messageOrder[messageOrder.length - 1];
+      const lastMessage = messages[lastMessageId];
+
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (lastMessage && lastMessage.sender === "assistant") {
+        // Only scroll if message is currently loading (typing/thinking)
+        if (
+          lastMessage.loading &&
+          (lastMessage.loading.state === "typing" ||
+            lastMessage.loading.state === "thinking")
+        ) {
+          // Only scroll on significant content changes to improve performance
+          // This reduces the number of scroll operations during rapid streaming
+          const contentLength = lastMessage.content.length;
+          if (contentLength - lastContentLength.current > 10) {
+            // Only scroll after 10 new chars
+            // Message is streaming, so scroll to bottom
+            debugLog(
+              "RENDER",
+              `Message ${lastMessageId} is streaming, scrolling to bottom`,
+              {
+                loadingState: lastMessage.loading.state,
+                contentLength: lastMessage.content.length,
+              },
+            );
+
+            // Update last content length reference
+            lastContentLength.current = contentLength;
+
+            // Update last loading state reference
+            lastLoadingState.current = lastMessage.loading.state;
+
+            // Scroll to bottom during active streaming
+            scrollToBottom();
+          }
+        }
+        // Don't scroll when message changes from loading to done
+        // This prevents the unwanted "scroll up and down" at the end
+      }
+    }
+  }, [messageOrder, messages, scrollToBottom]);
+}
+
+// Hook to manage loading more messages when near top
+function useLoadMoreOnScroll({
+  isNearTop: isNearTop,
+  hasOlderMessages: hasOlderMessages,
+  isPending: isPending,
+  handleLoadMore: handleLoadMore,
+}: {
+  isNearTop: boolean;
+  hasOlderMessages: boolean;
+  isPending: boolean;
+  handleLoadMore: () => void;
+}) {
+  // Update scroll position check when near the top
+  useEffect(() => {
+    if (isNearTop && hasOlderMessages && !isPending) {
+      logger.log("Near top, loading more messages");
+      handleLoadMore();
+    }
+  }, [isNearTop, hasOlderMessages, isPending, handleLoadMore]);
 }
 
 /**
@@ -126,7 +244,7 @@ export const MessageList = memo<MessageListProps>(
     messageOrder,
     loadOlderMessages,
     hasOlderMessages,
-    isLoading,
+    isPending,
     currentSessionId,
     apiMessagesResponse,
     pageSize = 6,
@@ -140,9 +258,16 @@ export const MessageList = memo<MessageListProps>(
     className,
     useVirtualization = false,
     virtualizationThreshold = 30,
+    onScrollToBottomRef,
+    onFilePreview,
+    isTransitioning,
   }) => {
-    // Measure container dimensions for virtualization
-    const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+    // Debug logging for rendering
+    // debugLog("RENDER", "MessageList rendering", {
+    //   messageCount: messageOrder.length,
+    //   hasLoadingMessage: messageOrder.some((id) => !!messages[id].loading),
+    //   loadingMessageIds: messageOrder.filter((id) => !!messages[id].loading),
+    // });
 
     // Use our custom hooks for scroll behavior and pagination
     const {
@@ -153,38 +278,32 @@ export const MessageList = memo<MessageListProps>(
       scrollToBottom,
     } = useScrollToBottom({
       enabled: true,
+      useSmoothScroll: true,
+      transitionDuration: 300,
+      isTransitioning: isPending || isTransitioning,
       deps: [
         messageOrder.length,
         currentSessionId,
-        // Add dependencies to detect content changes in the last message
-        // This ensures scrolling works during streaming
-        messageOrder.length > 0
+        // Only include loading state for active streaming, not for completion
+        // This ensures we don't trigger an unwanted scroll when loading completes
+        messageOrder.length > 0 &&
+        messages[messageOrder[messageOrder.length - 1]].loading &&
+        messages[messageOrder[messageOrder.length - 1]].loading?.state !==
+          "done"
           ? messages[messageOrder[messageOrder.length - 1]].content
-          : "",
-        messageOrder.length > 0
-          ? messages[messageOrder[messageOrder.length - 1]].loading
           : null,
       ],
     });
 
-    // Force scroll to bottom when a message is actively streaming
+    // Expose scrollToBottom function to parent component
     useEffect(() => {
-      // Check if the last message is from the assistant and is still loading
-      if (messageOrder.length > 0) {
-        const lastMessageId = messageOrder[messageOrder.length - 1];
-        const lastMessage = messages[lastMessageId];
-
-        if (
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          lastMessage &&
-          lastMessage.sender === "assistant" &&
-          !!lastMessage.loading
-        ) {
-          // Message is streaming, so scroll to bottom
-          scrollToBottom();
-        }
+      if (onScrollToBottomRef) {
+        onScrollToBottomRef(scrollToBottom);
       }
-    }, [messageOrder, messages, scrollToBottom]);
+    }, [onScrollToBottomRef, scrollToBottom]);
+
+    // Use the message loading hook
+    useMessageLoading({ messageOrder, messages, scrollToBottom });
 
     // Set up pagination for message data
     const { visibleData, hasMore, loadMore, isNewlyLoaded, paginationStats } =
@@ -199,45 +318,45 @@ export const MessageList = memo<MessageListProps>(
     // Add a message when user scrolls back down to new messages
     useEffect(() => {
       // Don't show any notification while loading or if no messages
-      if (isLoading || messageOrder.length === 0) return;
+      if (isPending || messageOrder.length === 0) return;
 
       // User was scrolled up but now scrolled back down, check if there are new messages
       if (isScrolledUp === false && visibleData.length < messageOrder.length) {
         // This is where you'd show a "new messages" indicator if desired
-        console.log("User scrolled back to see new messages");
+        logger.log("User scrolled back to see new messages");
       }
-    }, [isScrolledUp, isLoading, messageOrder.length, visibleData.length]);
+    }, [isScrolledUp, isPending, messageOrder.length, visibleData.length]);
 
     // Create debounced function with useMemo
     const debouncedLoadMore = useMemo(
       () =>
         debounce(() => {
-          if (isLoading) {
-            console.log("Skipping load more because already loading");
+          if (isPending) {
+            logger.log("Skipping load more because already loading");
             return;
           }
 
-          console.log("Load more triggered in MessageList");
+          logger.log("Load more triggered in MessageList");
 
           // For chat history (backward pagination), we only need to load from the API
           // Our hook is already configured to show all messages
           if (apiMessagesResponse?.stats.has_more || hasOlderMessages) {
-            console.log("Loading older messages from API");
+            logger.log("Loading older messages from API");
             loadOlderMessages();
           }
           // Only use the client-side pagination if we're not loading from API
           else if (hasMore) {
-            console.log("Loading more messages from client-side pagination");
+            logger.log("Loading more messages from client-side pagination");
             loadMore();
           } else {
-            console.log("No more messages to load");
+            logger.log("No more messages to load");
           }
         }, 300),
       [
         apiMessagesResponse?.stats.has_more,
         hasOlderMessages,
         hasMore,
-        isLoading,
+        isPending,
         loadOlderMessages,
         loadMore,
       ],
@@ -255,42 +374,15 @@ export const MessageList = memo<MessageListProps>(
       };
     }, [debouncedLoadMore]);
 
-    // Memoize derived values
-    const showLoadMoreButton = useMemo(() => {
-      // Show load more button only when the user is near the top of the message list
-      if (!isNearTop) return false;
+    // Calculate if we should use virtualization based on message count
+    const shouldUseVirtualization =
+      useVirtualization && messageOrder.length >= virtualizationThreshold;
 
-      // Get API pagination status
-      const hasMoreMessagesFromApi =
-        apiMessagesResponse?.stats.has_more ?? false;
-
-      // Only show load more when user is near the top AND there are more messages
-      const hasMoreLocalMessages = hasOlderMessages || hasMore;
-
-      // Show button only when there are more messages (API or client-side)
-      return hasMoreMessagesFromApi || hasMoreLocalMessages;
-    }, [apiMessagesResponse, hasOlderMessages, hasMore, isNearTop]);
-
-    const showBeginningIndicator = useMemo(() => {
-      // Only show the beginning indicator if:
-      // 1. API indicates no more messages are available
-      // 2. There are no more messages in client-side pagination
-      // 3. There are no more messages to load from the API
-      // 4. We have at least one message to display
-      const hasNoMoreMessagesFromApi =
-        apiMessagesResponse?.stats.has_more === false;
-      return (
-        !hasMore &&
-        !hasOlderMessages &&
-        hasNoMoreMessagesFromApi &&
-        messageOrder.length > 0
-      );
-    }, [apiMessagesResponse, hasMore, hasOlderMessages, messageOrder.length]);
-
-    const shouldUseVirtualization = useMemo(
-      () => useVirtualization && visibleData.length > virtualizationThreshold,
-      [useVirtualization, visibleData.length, virtualizationThreshold],
-    );
+    // Use our virtualization hook
+    const { containerSize } = useMessageListVirtualization({
+      containerRef,
+      shouldUseVirtualization,
+    });
 
     // Helper function to get CSS classes for message highlighting
     const getMessageClassName = useMessageClassNameHelper();
@@ -298,65 +390,74 @@ export const MessageList = memo<MessageListProps>(
     // Inject message animations
     useMessageAnimations();
 
-    // Update container dimensions for virtualization
-    useEffect(() => {
-      if (!containerRef.current || !useVirtualization) return;
+    // Use our hook for scroll events
+    useScrollEvents({
+      containerRef,
+      onScroll: checkScrollPosition,
+      deps: [apiMessagesResponse],
+    });
 
-      const updateSize = () => {
-        const { offsetWidth, offsetHeight } =
-          containerRef.current as HTMLDivElement;
-        setContainerSize({
-          width: offsetWidth || window.innerWidth,
-          height: offsetHeight || window.innerHeight,
-        });
-      };
+    // Use our hook to load more messages when scrolling to top
+    useLoadMoreOnScroll({
+      isNearTop,
+      hasOlderMessages,
+      isPending,
+      handleLoadMore,
+    });
 
-      // Initial size measurement
-      updateSize();
+    // Return the header component with load more button if needed
+    const renderMessageListHeader = useMemo(() => {
+      // Should show load more button if we have more messages and we're not already loading
+      const showLoadMoreButton =
+        (apiMessagesResponse?.stats.has_more ?? hasOlderMessages) &&
+        !isPending &&
+        messageOrder.length > 0;
 
-      // Update on resize
-      const resizeObserver = new ResizeObserver(debounce(updateSize, 100));
-      resizeObserver.observe(containerRef.current);
+      // Show beginning indicator when we've loaded all messages
+      const showBeginningIndicator =
+        !apiMessagesResponse?.stats.has_more &&
+        !hasOlderMessages &&
+        messageOrder.length > 0;
 
-      return () => {
-        resizeObserver.disconnect();
-      };
-    }, [containerRef, useVirtualization]);
+      return (
+        <MessageListHeader
+          showLoadMoreButton={showLoadMoreButton}
+          handleLoadMore={handleLoadMore}
+          isPending={isPending}
+          showBeginningIndicator={showBeginningIndicator}
+          paginationStats={paginationStats}
+        />
+      );
+    }, [
+      apiMessagesResponse?.stats.has_more,
+      hasOlderMessages,
+      isPending,
+      messageOrder.length,
+      handleLoadMore,
+      paginationStats,
+    ]);
 
-    // Update scroll position check after rendering
-    useEffect(() => {
-      if (containerRef.current) {
-        checkScrollPosition();
-      }
-    }, [visibleData.length, checkScrollPosition, containerRef]);
-
-    // Force check when we receive new messages from API
-    useEffect(() => {
-      if (containerRef.current && apiMessagesResponse) {
-        // Short delay to ensure DOM is updated
-        setTimeout(() => checkScrollPosition(), 100);
-      }
-    }, [apiMessagesResponse, checkScrollPosition, containerRef]);
+    // Add optimized container class based on state
+    const containerClass = useMemo(() => {
+      return clsx(
+        "flex-1 overflow-y-auto bg-theme-bg-secondary px-2 sm:px-4",
+        "space-y-4 p-4",
+        className,
+        // Apply transition properties without changing opacity
+        // This creates a smoother experience when content changes
+        "transition-[opacity,transform] duration-300 ease-in-out",
+        // Only change opacity when explicitly transitioning (not during normal message updates)
+        isTransitioning ? "opacity-0" : "opacity-100",
+      );
+    }, [className, isTransitioning]);
 
     return (
       <div
         ref={containerRef as React.RefObject<HTMLDivElement>}
-        className={clsx(
-          "flex-1 overflow-y-auto bg-theme-bg-secondary px-2 sm:px-4",
-          "space-y-4 p-4",
-          className,
-        )}
+        className={containerClass}
         data-testid="message-list"
       >
-        {/* Header components: load more button, beginning indicator, debug info */}
-        <MessageListHeader
-          showLoadMoreButton={showLoadMoreButton}
-          handleLoadMore={handleLoadMore}
-          isLoading={isLoading}
-          showBeginningIndicator={showBeginningIndicator}
-          apiMessagesResponse={apiMessagesResponse}
-          paginationStats={paginationStats}
-        />
+        {renderMessageListHeader}
         <div className={clsx("mx-auto w-full sm:w-5/6 md:w-4/5")}>
           {shouldUseVirtualization ? (
             <VirtualizedMessageList
@@ -372,6 +473,7 @@ export const MessageList = memo<MessageListProps>(
               controls={controls}
               controlsContext={controlsContext}
               onMessageAction={onMessageAction}
+              onFilePreview={onFilePreview}
             />
           ) : (
             <StandardMessageList
@@ -386,14 +488,10 @@ export const MessageList = memo<MessageListProps>(
               controls={controls}
               controlsContext={controlsContext}
               onMessageAction={onMessageAction}
+              onFilePreview={onFilePreview}
             />
           )}
-
-          {/* End of conversation indicator */}
-          {/* <ConversationIndicator type="end" /> */}
         </div>
-
-        {/* Message List - virtualized or standard based on settings and message count */}
       </div>
     );
   },

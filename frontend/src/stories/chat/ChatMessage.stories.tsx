@@ -62,8 +62,9 @@ A themeable chat message component with configurable controls.
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onMessageAction: (action: MessageAction) => {
+    onMessageAction: async (action: MessageAction) => {
       console.log("Message action:", action);
+      return true;
     },
   },
   tags: ["autodocs"],

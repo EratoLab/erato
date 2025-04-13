@@ -1,7 +1,9 @@
 import { action } from "@storybook/addon-actions";
 
 import { ChatInput } from "../components/ui/Chat/ChatInput";
+import { ChatProvider } from "../providers/ChatProvider";
 
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Meta, StoryObj } from "@storybook/react";
 
 // export const WithCustomTheme: Story = {
@@ -12,7 +14,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 //   },
 // };
 
-const meta = {
+const meta: Meta<typeof ChatInput> = {
   title: "UI/ChatInput",
   component: ChatInput,
   parameters: {
@@ -38,16 +40,18 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className="flex h-screen w-full items-center justify-center bg-theme-bg-primary p-0">
-        <div className="flex size-full items-center justify-center rounded-lg bg-theme-bg-tertiary p-4 shadow-lg md:w-4/5 lg:w-3/4 xl:w-2/3">
-          <div className="w-full max-w-full">
-            <Story />
+      <ChatProvider>
+        <div className="flex h-screen w-full items-center justify-center bg-theme-bg-primary p-0">
+          <div className="flex size-full items-center justify-center rounded-lg bg-theme-bg-tertiary p-4 shadow-lg md:w-4/5 lg:w-3/4 xl:w-2/3">
+            <div className="w-full max-w-full">
+              <Story />
+            </div>
           </div>
         </div>
-      </div>
+      </ChatProvider>
     ),
   ],
-} satisfies Meta<typeof ChatInput>;
+};
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -63,7 +67,7 @@ export const Default: Story = {
     handleFileAttachments: action("handle file attachments"),
     onRegenerate: action("regenerate"),
     showFileTypes: true,
-    initialFiles: [],
+    initialFiles: [] as FileUploadItem[],
   },
   parameters: {
     viewport: {
@@ -80,7 +84,7 @@ export const Loading: Story = {
     handleFileAttachments: action("handle file attachments"),
     onRegenerate: action("regenerate"),
     showFileTypes: true,
-    initialFiles: [],
+    initialFiles: [] as FileUploadItem[],
   },
 };
 
@@ -119,7 +123,7 @@ export const Mobile: Story = {
     handleFileAttachments: action("handle file attachments"),
     onRegenerate: action("regenerate"),
     showFileTypes: true,
-    initialFiles: [],
+    initialFiles: [] as FileUploadItem[],
   },
   parameters: {
     viewport: {
@@ -135,7 +139,7 @@ export const Tablet: Story = {
     handleFileAttachments: action("handle file attachments"),
     onRegenerate: action("regenerate"),
     showFileTypes: true,
-    initialFiles: [],
+    initialFiles: [] as FileUploadItem[],
   },
   parameters: {
     viewport: {

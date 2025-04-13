@@ -1,6 +1,6 @@
 import { LoadingIndicator } from "../../components/ui/Feedback/LoadingIndicator";
 
-import type { LoadingState } from "@/types/chat";
+import type { LoadingState } from "../../components/ui/Feedback/LoadingIndicator";
 import type { Meta, StoryObj } from "@storybook/react";
 
 const meta = {
@@ -24,7 +24,7 @@ Loading indicator that shows different states with contextual information.
   argTypes: {
     state: {
       control: "radio",
-      options: ["loading", "tool-calling", "reasoning"] as LoadingState[],
+      options: ["thinking", "tool-calling", "reasoning"] as LoadingState[],
       description: "Current loading state",
     },
     context: {
@@ -40,7 +40,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   args: {
-    state: "loading",
+    state: "thinking",
     context: "Processing request...",
   },
 };
@@ -61,7 +61,7 @@ export const Reasoning: Story = {
 
 export const WithoutContext: Story = {
   args: {
-    state: "loading",
+    state: "thinking",
   },
 };
 

@@ -5,7 +5,7 @@ import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
 
 import type { Meta, StoryObj } from "@storybook/react";
 
-const meta = {
+const meta: Meta<typeof ChatMessage> = {
   title: "CHAT/ChatMessage/Tests",
   component: ChatMessage,
   parameters: {
@@ -22,7 +22,7 @@ const meta = {
       },
     },
   },
-} satisfies Meta<typeof ChatMessage>;
+};
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -35,7 +35,7 @@ export const AccessibilityChecks: Story = {
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
     showTimestamp: true,
     showControlsOnHover: true,
   },
@@ -66,8 +66,9 @@ export const InteractionTest: Story = {
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onMessageAction: (action) => {
+    onMessageAction: async (action) => {
       console.log("Action triggered:", action);
+      return true;
     },
   },
   play: async ({ canvasElement }) => {
@@ -111,7 +112,7 @@ export const ResponsiveTest: Story = {
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -136,11 +137,12 @@ export const LoadingStateTest: Story = {
     message: {
       id: "1",
       content: "Processing",
+      role: "assistant",
+      createdAt: new Date().toISOString(),
       sender: "assistant",
-      createdAt: new Date(),
       authorId: "assistant_1",
       loading: {
-        state: "loading",
+        state: "thinking",
         context: "Test loading state",
       },
     },
@@ -149,7 +151,7 @@ export const LoadingStateTest: Story = {
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

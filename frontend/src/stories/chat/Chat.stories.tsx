@@ -6,18 +6,62 @@ import {
 } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { ChatProvider } from "../../components/containers/ChatProvider";
-import { MessageStreamProvider } from "../../components/containers/MessageStreamProvider";
-import { ProfileProvider } from "../../components/containers/ProfileProvider";
 import { Chat } from "../../components/ui/Chat/Chat";
-import { ChatHistoryContext } from "../../contexts/ChatHistoryContext";
-import { SidebarProvider } from "../../contexts/SidebarContext";
 import { MockDataGenerator } from "../../mocks/mockDataGenerator";
 
-import type { ChatMessage } from "../../components/containers/ChatProvider";
 import type { ChatSession } from "@/types/chat";
+import type { MessageAction } from "@/types/message-controls";
 import type { Meta, StoryObj } from "@storybook/react";
 import type { QueryKey } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+
+// Define ChatMessage type locally
+interface ChatMessage {
+  id: string;
+  content: string;
+  sender: "user" | "assistant" | "system";
+  createdAt: Date;
+  authorId: string;
+  role?: "user" | "assistant" | "system";
+}
+
+// Mock providers
+const ChatProvider = ({
+  children,
+  initialMessages: _initialMessages,
+  initialMessageOrder: _initialMessageOrder,
+}: {
+  children: ReactNode;
+  initialMessages?: Record<string, ChatMessage>;
+  initialMessageOrder?: string[];
+}) => {
+  return <>{children}</>;
+};
+
+const MessageStreamProvider = ({ children }: { children: ReactNode }) => {
+  return <>{children}</>;
+};
+
+const ProfileProvider = ({ children }: { children: ReactNode }) => {
+  return <>{children}</>;
+};
+
+const SidebarProvider = ({ children }: { children: ReactNode }) => {
+  return <>{children}</>;
+};
+
+// Create ChatHistoryContext
+const ChatHistoryContext = {
+  Provider: ({
+    children,
+    value: _value,
+  }: {
+    children: ReactNode;
+    value: unknown;
+  }) => {
+    return <>{children}</>;
+  },
+};
 
 // Extend the Window interface for our debugging property
 interface ExtendedWindow extends Window {
@@ -97,7 +141,7 @@ const transformApiMessagesToChat = (
 // Get the first chat for the default view
 const defaultChatId = mockData.chats[0].id;
 
-const meta = {
+const meta: Meta<typeof Chat> = {
   title: "Chat/Chat",
   component: Chat,
   parameters: {
@@ -157,8 +201,8 @@ const meta = {
             id: chat.id,
             title: chat.title_by_summary || "Untitled Chat",
             messages: [],
-            createdAt: new Date(), // Use current date for createdAt
-            updatedAt: ensureValidDate(chat.last_message_at),
+            createdAt: new Date().toISOString(), // Convert to string
+            updatedAt: ensureValidDate(chat.last_message_at).toISOString(), // Convert to string
           };
         }),
       );
@@ -277,7 +321,12 @@ const meta = {
         },
         hasMoreChats: false,
         isLoading: false,
+        isPending: false,
         error: undefined,
+        refreshChats: async () => {
+          action("refreshChats")();
+          return Promise.resolve();
+        },
       };
 
       return (
@@ -309,10 +358,10 @@ const meta = {
     showAvatars: { control: "boolean" },
     showTimestamps: { control: "boolean" },
   },
-} satisfies Meta<typeof Chat>;
+};
 
 export default meta;
-type Story = StoryObj<typeof Chat>;
+type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   args: {
@@ -324,7 +373,12 @@ export const Default: Story = {
       dialogOwnerId: mockData.profiles.user.id,
       isSharedDialog: false,
     },
-    onMessageAction: action("message action"),
+    onMessageAction: async (messageAction: MessageAction) => {
+      // Call the Storybook action logger
+      action("message action")(messageAction);
+      // Return true to satisfy the Promise<boolean> type
+      return true;
+    },
     onNewChat: action("new chat"),
     onRegenerate: action("regenerate"),
   },
