@@ -135,7 +135,7 @@ describe("useChatMessaging", () => {
       },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: vi.fn().mockResolvedValue({}),
     });
 
     mockUseMessageSubmitSse.mockReturnValue({
@@ -296,6 +296,10 @@ describe("useChatMessaging", () => {
       role: "user",
       createdAt: "2023-01-01T12:00:00.000Z",
       status: "complete",
+      input_files_ids: undefined,
+      previous_message_id: undefined,
+      sender: "user",
+      authorId: "user_id",
     });
 
     expect(result.current.messages[1]).toEqual({
@@ -304,6 +308,10 @@ describe("useChatMessaging", () => {
       role: "assistant",
       createdAt: "2023-01-01T12:01:00.000Z",
       status: "complete",
+      input_files_ids: undefined,
+      previous_message_id: undefined,
+      sender: "assistant",
+      authorId: "assistant_id",
     });
   });
 
@@ -437,7 +445,7 @@ describe("useChatMessaging", () => {
       },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: vi.fn().mockResolvedValue({}),
     });
 
     // Using .mockImplementation for mutateAsync so each test has a fresh function
@@ -1373,6 +1381,7 @@ describe("useChatMessaging", () => {
     const parsedBody = JSON.parse(options.body);
     expect(parsedBody).toEqual({
       user_message: testMessage,
+      existing_chat_id: "test-chat-id",
     });
 
     // Verify the same format is used in the mutation call
@@ -1465,6 +1474,7 @@ describe("useChatMessaging", () => {
     expect(parsedBody).toEqual({
       user_message: followUpMessage,
       previous_message_id: "assistant-msg-1", // Should reference the last assistant message
+      existing_chat_id: "test-chat-id",
     });
 
     // Verify mutation call includes the same parameters

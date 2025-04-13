@@ -48,12 +48,14 @@ interface StreamingState {
 interface MessagingStore {
   streaming: StreamingState;
   userMessages: Record<string, Message>; // Store user messages keyed by a temporary ID
+  error: Error | null; // <--- Add error state
   setStreaming: (state: Partial<StreamingState>) => void;
   resetStreaming: () => void;
   addUserMessage: (message: Message) => void;
   clearUserMessages: () => void;
   // New method to only clear messages that are not in sending state
   clearCompletedUserMessages: () => void;
+  setError: (error: Error | null) => void; // <--- Add setError action
 }
 
 // Initial streaming state
@@ -68,6 +70,7 @@ const useMessagingStore = create<MessagingStore>((set) => {
   return {
     streaming: initialStreamingState,
     userMessages: {},
+    error: null, // <--- Initialize error state
     setStreaming: (state) =>
       set((prev) => {
         return {
@@ -104,6 +107,7 @@ const useMessagingStore = create<MessagingStore>((set) => {
         return { ...prev, userMessages: filteredMessages };
       });
     },
+    setError: (error) => set({ error }), // <--- Implement setError
   };
 });
 
@@ -127,7 +131,6 @@ export function useChatMessaging(
       : chatIdOrParams.silentChatId;
 
   const queryClient = useQueryClient();
-  const [lastError, setLastError] = useState<Error | null>(null);
   const {
     streaming,
     setStreaming,
@@ -135,6 +138,8 @@ export function useChatMessaging(
     userMessages,
     addUserMessage,
     clearCompletedUserMessages,
+    error,
+    setError,
   } = useMessagingStore();
   const sseCleanupRef = useRef<(() => void) | null>(null);
   const isSubmittingRef = useRef(false);
@@ -666,9 +671,15 @@ export function useChatMessaging(
         // The SSE client will handle the POST request format
         sseCleanupRef.current = createSSEConnection(sseUrl, {
           onMessage: processStreamEvent,
-          onError: (error) => {
-            console.error("[CHAT_FLOW] SSE connection error:", error);
-            setLastError(new Error("SSE connection error"));
+          onError: (errorEvent) => {
+            // Use the actual event if it's an Error, otherwise create a generic one
+            const connectionError =
+              errorEvent instanceof Error
+                ? errorEvent
+                : new Error("SSE connection error");
+            console.error("[CHAT_FLOW] SSE connection error:", connectionError);
+            // Use setError from store
+            setError(connectionError);
 
             // Reset streaming state
             resetStreaming();
@@ -724,7 +735,8 @@ export function useChatMessaging(
               }
             } else if (streaming.isStreaming) {
               console.warn("[CHAT_FLOW] SSE connection closed unexpectedly");
-              setLastError(new Error("SSE connection closed unexpectedly"));
+              // Use setError from store
+              setError(new Error("SSE connection closed unexpectedly"));
 
               // Reset streaming state
               resetStreaming();
@@ -762,7 +774,7 @@ export function useChatMessaging(
         return streaming.content;
       } catch (error) {
         console.error("[CHAT_FLOW] Error in sendMessage:", error);
-        setLastError(
+        setError(
           error instanceof Error ? error : new Error("Failed to send message"),
         );
 
@@ -797,6 +809,7 @@ export function useChatMessaging(
       queryClient,
       chatMessagesQuery,
       setNewlyCreatedChatId,
+      setError,
     ],
   );
 
@@ -805,7 +818,7 @@ export function useChatMessaging(
     isLoading: chatMessagesQuery.isLoading,
     isStreaming: streaming.isStreaming,
     streamingContent: streaming.content,
-    error: lastError ?? chatMessagesQuery.error,
+    error: chatMessagesQuery.error || error,
     sendMessage,
     cancelMessage,
     refetch: chatMessagesQuery.refetch,
