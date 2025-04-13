@@ -119,7 +119,7 @@ export interface MessageListProps {
   /**
    * Handler for message actions
    */
-  onMessageAction: (action: MessageAction) => Promise<void>;
+  onMessageAction: (action: MessageAction) => Promise<boolean>;
 
   /**
    * Custom CSS class for the message list container

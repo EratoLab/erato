@@ -45,7 +45,7 @@ export const NoAvatar: Story = {
     message: ChatMessageFactory.samples.user,
     showAvatar: false,
     controlsContext: defaultControlsContext,
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
   parameters: {
     docs: {
@@ -61,7 +61,7 @@ export const NoTimestamp: Story = {
     message: ChatMessageFactory.samples.user,
     showTimestamp: false,
     controlsContext: defaultControlsContext,
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
   parameters: {
     docs: {
@@ -77,7 +77,7 @@ export const NarrowContainer: Story = {
     message: ChatMessageFactory.samples.longMessage,
     maxWidth: 400,
     controlsContext: defaultControlsContext,
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
   parameters: {
     docs: {
@@ -93,7 +93,7 @@ export const MessageSequence: Story = {
   args: {
     message: ChatMessageFactory.samples.user,
     controlsContext: defaultControlsContext,
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
   parameters: {
     docs: {
@@ -114,17 +114,17 @@ export const MessageSequence: Story = {
       <ChatMessage
         message={ChatMessageFactory.samples.user}
         controlsContext={defaultControlsContext}
-        onMessageAction={() => {}}
+        onMessageAction={async () => true}
       />
       <ChatMessage
         message={ChatMessageFactory.samples.assistant}
         controlsContext={defaultControlsContext}
-        onMessageAction={() => {}}
+        onMessageAction={async () => true}
       />
       <ChatMessage
         message={ChatMessageFactory.samples.longMessage}
         controlsContext={defaultControlsContext}
-        onMessageAction={() => {}}
+        onMessageAction={async () => true}
       />
     </>
   ),
@@ -136,7 +136,7 @@ export const MinimumWidth: Story = {
       content: "Short",
     }),
     controlsContext: defaultControlsContext,
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
   parameters: {
     docs: {
@@ -163,7 +163,7 @@ export const Loading: Story = {
       },
     },
     controlsContext: defaultControlsContext,
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
 };
 
@@ -182,7 +182,7 @@ export const ToolCalling: Story = {
       },
     },
     controlsContext: defaultControlsContext,
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
 };
 
@@ -201,6 +201,6 @@ export const Reasoning: Story = {
       },
     },
     controlsContext: defaultControlsContext,
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
 };

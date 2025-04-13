@@ -35,7 +35,7 @@ export const AccessibilityChecks: Story = {
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
     showTimestamp: true,
     showControlsOnHover: true,
   },
@@ -66,8 +66,9 @@ export const InteractionTest: Story = {
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onMessageAction: (action) => {
+    onMessageAction: async (action) => {
       console.log("Action triggered:", action);
+      return true;
     },
   },
   play: async ({ canvasElement }) => {
@@ -111,7 +112,7 @@ export const ResponsiveTest: Story = {
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -150,7 +151,7 @@ export const LoadingStateTest: Story = {
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onMessageAction: () => {},
+    onMessageAction: async () => true,
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

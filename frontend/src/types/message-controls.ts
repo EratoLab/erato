@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 /**
  * Possible message actions a user can take
  */
-export type MessageAction =
+export type MessageActionType =
   | "copy"
   | "delete"
   | "edit"
@@ -12,6 +12,11 @@ export type MessageAction =
   | "flag"
   | "like"
   | "dislike";
+
+export interface MessageAction {
+  type: MessageActionType;
+  messageId: string;
+}
 
 /**
  * Context provided to message controls
@@ -28,7 +33,7 @@ export interface MessageControlsContext {
 export interface MessageControlsProps {
   messageId: string;
   isUserMessage: boolean;
-  onAction: (action: MessageAction) => void | Promise<void>;
+  onAction: (action: MessageAction) => Promise<boolean>;
   context: MessageControlsContext;
   // Additional properties used in DefaultMessageControls
   messageType?: string;

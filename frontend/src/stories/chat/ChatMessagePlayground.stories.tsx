@@ -120,8 +120,9 @@ const StreamingPlayground = ({
         dialogOwnerId: "user_1",
         isSharedDialog: false,
       }}
-      onMessageAction={(action: MessageAction) => {
-        switch (action) {
+      onMessageAction={async (action: MessageAction) => {
+        // Switch on the action type
+        switch (action.type) {
           case "copy":
             console.log("copied");
             break;
@@ -146,6 +147,8 @@ const StreamingPlayground = ({
             });
             break;
         }
+        // Return true for successful handling in the story
+        return true;
       }}
     />
   );

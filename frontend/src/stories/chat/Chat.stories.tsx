@@ -10,6 +10,7 @@ import { Chat } from "../../components/ui/Chat/Chat";
 import { MockDataGenerator } from "../../mocks/mockDataGenerator";
 
 import type { ChatSession } from "@/types/chat";
+import type { MessageAction } from "@/types/message-controls";
 import type { Meta, StoryObj } from "@storybook/react";
 import type { QueryKey } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -372,7 +373,12 @@ export const Default: Story = {
       dialogOwnerId: mockData.profiles.user.id,
       isSharedDialog: false,
     },
-    onMessageAction: action("message action"),
+    onMessageAction: async (messageAction: MessageAction) => {
+      // Call the Storybook action logger
+      action("message action")(messageAction);
+      // Return true to satisfy the Promise<boolean> type
+      return true;
+    },
     onNewChat: action("new chat"),
     onRegenerate: action("regenerate"),
   },

@@ -292,26 +292,32 @@ export function useChatMessaging(
       });
     }
 
-    return Array.from(messageMap.values());
+    // Convert Map back to Record<string, Message>
+    return Object.fromEntries(messageMap.entries());
   }, [chatMessagesQuery.data, userMessages]);
 
   // Add the streaming message if it exists
   const messages = useMemo(() => {
-    const finalMessages = [...combinedMessages];
+    // Start with the combined messages object
+    const finalMessagesRecord: Record<string, Message> = {
+      ...combinedMessages,
+    };
+
     if (
       streaming.isStreaming &&
       streaming.currentMessageId &&
       streaming.content
     ) {
-      finalMessages.push({
+      // Add or update the streaming message in the record
+      finalMessagesRecord[streaming.currentMessageId] = {
         id: streaming.currentMessageId,
         content: streaming.content,
         role: "assistant",
         createdAt: new Date().toISOString(),
         status: "sending",
-      });
+      };
     }
-    return finalMessages;
+    return finalMessagesRecord;
   }, [combinedMessages, streaming]);
 
   // Handlers for different SSE event types
@@ -545,8 +551,8 @@ export function useChatMessaging(
   const findMostRecentAssistantMessageId = useCallback(() => {
     let previousMessageId: string | undefined = undefined;
 
-    // Gather all messages, including the ones in temporary store
-    const allVisibleMessages = [...messages];
+    // Convert the messages record to an array for processing
+    const allVisibleMessages = Object.values(messages);
 
     // Add any assistant messages from userMessages that aren't in the main array
     Object.values(userMessages).forEach((msg) => {
@@ -845,5 +851,15 @@ export function useChatMessaging(
     cancelMessage,
     refetch: chatMessagesQuery.refetch,
     newlyCreatedChatId,
+    messageOrder: useMemo(
+      () =>
+        Object.values(messages)
+          .sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          )
+          .map((m) => m.id),
+      [messages],
+    ),
   };
 }

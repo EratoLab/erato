@@ -7,9 +7,13 @@ import { Chat } from "@/components/ui/Chat/Chat";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useChatContext } from "@/providers/ChatProvider";
 
+import type { MessageAction } from "@/types/message-controls";
+
 export default function NewChatPage() {
   const router = useRouter();
-  const { isStreaming, currentChatId } = useChatContext();
+  // Get messages and order from context (will be empty for new chat)
+  const { isStreaming, currentChatId, messages, messageOrder } =
+    useChatContext();
   const setNewChatPending = useChatHistoryStore(
     (state) => state.setNewChatPending,
   );
@@ -70,7 +74,10 @@ export default function NewChatPage() {
           </button>
         </div>
       )} */}
+      {/* // Pass messages and order, using default empty values */}
       <Chat
+        messages={messages}
+        messageOrder={messageOrder}
         controlsContext={{
           currentUserId: "user1",
           dialogOwnerId: "user1",
@@ -81,9 +88,10 @@ export default function NewChatPage() {
         showTimestamps={true}
         layout="default"
         maxWidth={768}
-        onMessageAction={async (action) => {
+        onMessageAction={async (action: MessageAction) => {
           // Handle message actions here
           console.log("Message action:", action);
+          return true; // Return true to satisfy Promise<boolean>
         }}
       />
     </div>

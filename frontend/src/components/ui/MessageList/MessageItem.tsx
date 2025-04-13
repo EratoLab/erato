@@ -26,7 +26,7 @@ export interface MessageItemProps {
   userProfile?: UserProfile;
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
-  onMessageAction: (action: MessageAction) => Promise<void>;
+  onMessageAction: (action: MessageAction) => Promise<boolean>;
   className?: string;
   onFilePreview?: (file: FileUploadItem) => void;
 }

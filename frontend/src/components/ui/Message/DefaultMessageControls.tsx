@@ -6,16 +6,17 @@ import {
   HandThumbDownIcon,
   ArrowPathIcon,
   PencilSquareIcon,
+  CheckIcon,
 } from "@heroicons/react/24/outline";
 import clsx from "clsx";
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 import { MessageTimestamp } from "./MessageTimestamp";
 import { Button } from "../Controls/Button";
 
 import type {
   MessageControlsProps,
-  MessageAction,
+  MessageActionType,
 } from "../../../types/message-controls";
 
 /**
@@ -59,9 +60,36 @@ export const DefaultMessageControls = ({
   const safeCreatedAt = ensureValidDate(createdAt);
 
   // Handle message actions
-  const handleAction = (action: MessageAction) => {
-    void onAction(action);
+  const [isCopied, setIsCopied] = useState(false);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleAction = async (actionType: MessageActionType) => {
+    // Pass the full action object including the messageId
+    const success = await onAction({ type: actionType, messageId: _messageId });
+    if (actionType === "copy" && success) {
+      setIsCopied(true);
+      // Clear previous timeout if exists
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    }
   };
+
+  // Effect to reset the copy icon after a delay
+  useEffect(() => {
+    if (isCopied) {
+      copyTimeoutRef.current = setTimeout(() => {
+        setIsCopied(false);
+      }, 2000); // Reset after 2 seconds
+    }
+
+    // Cleanup timeout on unmount or if isCopied changes before timeout fires
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, [isCopied]);
 
   return (
     <div
@@ -73,9 +101,17 @@ export const DefaultMessageControls = ({
     >
       <div className="flex items-center gap-2">
         <Button
-          onClick={() => handleAction("copy")}
+          // Disable button briefly after successful copy
+          disabled={isCopied}
+          onClick={() => void handleAction("copy")}
           variant="icon-only"
-          icon={<ClipboardDocumentIcon />}
+          icon={
+            isCopied ? (
+              <CheckIcon className="text-green-500" />
+            ) : (
+              <ClipboardDocumentIcon />
+            )
+          }
           size="sm"
           showOnHover={showOnHover}
           aria-label="Copy message"
@@ -84,7 +120,7 @@ export const DefaultMessageControls = ({
 
         {isUser && isOwnMessage && !context.isSharedDialog && (
           <Button
-            onClick={() => handleAction("edit")}
+            onClick={() => void handleAction("edit")}
             variant="icon-only"
             icon={<PencilSquareIcon />}
             size="sm"
@@ -97,7 +133,7 @@ export const DefaultMessageControls = ({
         {!isUser && (
           <>
             <Button
-              onClick={() => handleAction("like")}
+              onClick={() => void handleAction("like")}
               variant="icon-only"
               icon={<HandThumbUpIcon />}
               size="sm"
@@ -106,7 +142,7 @@ export const DefaultMessageControls = ({
               title="Like message"
             />
             <Button
-              onClick={() => handleAction("dislike")}
+              onClick={() => void handleAction("dislike")}
               variant="icon-only"
               icon={<HandThumbDownIcon />}
               size="sm"
@@ -116,7 +152,7 @@ export const DefaultMessageControls = ({
             />
             {(isOwnMessage || isDialogOwner) && (
               <Button
-                onClick={() => handleAction("regenerate")}
+                onClick={() => void handleAction("regenerate")}
                 variant="icon-only"
                 icon={<ArrowPathIcon />}
                 size="sm"

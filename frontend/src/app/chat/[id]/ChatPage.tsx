@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Chat } from "@/components/ui/Chat/Chat";
+import { useChatTransition } from "@/hooks/chat";
 import { useChatContext } from "@/providers/ChatProvider";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -17,11 +18,8 @@ export default function ChatPage() {
   const [isTransitioning, setIsTransitioning] = useState(true);
 
   // Use our chat context
-  const {
-    // Remove unused variables - Chat component gets them from context
-    currentChatId,
-    navigateToChat,
-  } = useChatContext();
+  const { messages, messageOrder, currentChatId, navigateToChat } =
+    useChatContext();
 
   // Handle only the initial setting of chat ID and page refreshes
   useEffect(() => {
@@ -56,9 +54,18 @@ export default function ChatPage() {
     }
   }, [chatId, currentChatId, navigateToChat]);
 
+  // Use the chat transition hook here
+  const { displayMessages, displayMessageOrder } = useChatTransition({
+    messages,
+    messageOrder,
+    isTransitioning,
+  });
+
   return (
     <div className="flex size-full flex-col">
       <Chat
+        messages={displayMessages}
+        messageOrder={displayMessageOrder}
         controlsContext={{
           currentUserId: "user1",
           dialogOwnerId: "user1",
@@ -69,10 +76,40 @@ export default function ChatPage() {
         showTimestamps={true}
         layout="default"
         maxWidth={768}
-        isTransitioning={isTransitioning}
         onMessageAction={async (action) => {
-          // Handle message actions here
-          logger.log("Message action", action);
+          logger.log("Handling message action:", action);
+          if (action.type === "copy") {
+            const messageToCopy = displayMessages[action.messageId];
+            if (messageToCopy.content) {
+              try {
+                await navigator.clipboard.writeText(messageToCopy.content);
+                logger.log("Message content copied to clipboard");
+                console.log("Success: Copied to clipboard!"); // Temporary feedback
+
+                // Add haptic feedback if supported
+                if (typeof navigator.vibrate === "function") {
+                  navigator.vibrate(50); // Vibrate for 50ms
+                }
+
+                // TODO: Add a user-facing notification (e.g., toast)
+                return true; // Indicate success
+              } catch (err) {
+                console.error("Failed to copy message content:", err);
+                // TODO: Add user-facing error feedback
+                return false; // Indicate failure
+              }
+            } else {
+              console.warn(
+                "Could not find message content to copy for id:",
+                action.messageId,
+              );
+              return false; // Indicate failure
+            }
+          } else {
+            // Handle other actions (like, dislike, edit, etc.) if needed
+            logger.log(`Unhandled message action type: ${action.type}`);
+            return false; // Indicate failure for unhandled actions
+          }
         }}
       />
     </div>

@@ -4,6 +4,7 @@ import { ChatWidget } from "../components/ui/Chat/ChatWidget";
 import { DefaultMessageControls } from "../components/ui/Message/DefaultMessageControls";
 
 import type { Message } from "@/types/chat";
+import type { MessageAction } from "@/types/message-controls";
 import type { Meta, StoryObj } from "@storybook/react";
 
 const mockMessages: Message[] = [
@@ -57,7 +58,10 @@ export const Empty: Story = {
       isSharedDialog: false,
     },
     controls: DefaultMessageControls,
-    onMessageAction: action("message action"),
+    onMessageAction: async (msgAction: MessageAction) => {
+      action("message action")(msgAction);
+      return true;
+    },
   },
 };
 
@@ -73,7 +77,10 @@ export const WithConversation: Story = {
       isSharedDialog: false,
     },
     controls: DefaultMessageControls,
-    onMessageAction: action("message action"),
+    onMessageAction: async (msgAction: MessageAction) => {
+      action("message action")(msgAction);
+      return true;
+    },
   },
 };
 
@@ -89,6 +96,9 @@ export const Loading: Story = {
       isSharedDialog: false,
     },
     controls: DefaultMessageControls,
-    onMessageAction: action("message action"),
+    onMessageAction: async (msgAction: MessageAction) => {
+      action("message action")(msgAction);
+      return true;
+    },
   },
 };

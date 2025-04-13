@@ -2,17 +2,18 @@ import clsx from "clsx";
 import React, { useCallback, useRef } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
-import { useChatActions, useChatTransition } from "@/hooks/chat";
+import { useChatActions } from "@/hooks/chat";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
 import { createLogger } from "@/utils/debugLogger";
 
-import { MessageList } from "../MessageList";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
+import { MessageList } from "../MessageList/MessageList";
 
+import type { ChatMessage } from "../MessageList/MessageList";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 import type {
@@ -26,6 +27,14 @@ import type { FileType } from "@/utils/fileTypes";
 const logger = createLogger("UI", "Chat");
 
 export interface ChatProps {
+  /**
+   * Messages to display
+   */
+  messages: Record<string, ChatMessage>;
+  /**
+   * Order of message IDs
+   */
+  messageOrder: string[];
   className?: string;
   /**
    * Layout configuration
@@ -44,7 +53,7 @@ export interface ChatProps {
    */
   showTimestamps?: boolean;
   // New unified handler
-  onMessageAction?: (action: MessageAction) => void | Promise<void>;
+  onMessageAction?: (action: MessageAction) => Promise<boolean>;
   // Context for controls
   controlsContext: MessageControlsContext;
   // Optional custom controls component
@@ -58,8 +67,6 @@ export interface ChatProps {
   acceptedFileTypes?: FileType[];
   /** Optional custom session select handler to override default behavior */
   customSessionSelect?: (sessionId: string) => void;
-  /** Flag to indicate if the chat is currently transitioning between sessions */
-  isTransitioning?: boolean;
 }
 
 /**
@@ -67,6 +74,8 @@ export interface ChatProps {
  * This is the top-level component that coordinates all chat-related components.
  */
 export const Chat = ({
+  messages,
+  messageOrder,
   className,
   layout = "default",
   maxWidth = 768,
@@ -82,19 +91,14 @@ export const Chat = ({
   onToggleCollapse: _onToggleCollapse,
   acceptedFileTypes,
   customSessionSelect,
-  isTransitioning = false,
 }: ChatProps) => {
   // Use the sidebar context
   const { isOpen: sidebarCollapsed, toggle: onToggleCollapse } = useSidebar();
 
   // Get chat data and actions from context provider
   const {
-    // Chat messaging
-    messages,
-    messageOrder,
     sendMessage,
     isMessagingLoading: chatLoading,
-    // Chat history
     chats: chatHistory,
     currentChatId,
     navigateToChat: switchSession,
@@ -124,18 +128,12 @@ export const Chat = ({
     : [];
 
   // Use chat actions hook for handlers
-  const {
-    // handleSessionSelect,
-    handleSendMessage: baseHandleSendMessage,
-    handleMessageAction,
-  } = useChatActions({
-    switchSession,
-    sendMessage,
-    onMessageAction,
-  });
-
-  // Create a ref to store the scrollToBottom function from MessageList
-  const scrollToBottomRef = useRef<(() => void) | null>(null);
+  const { handleSendMessage: baseHandleSendMessage, handleMessageAction } =
+    useChatActions({
+      switchSession,
+      sendMessage,
+      onMessageAction,
+    });
 
   // Enhanced sendMessage handler that refreshes the sidebar after sending
   const handleSendMessage = useCallback(
@@ -144,11 +142,6 @@ export const Chat = ({
         "[CHAT_FLOW] Chat - handleSendMessage called with files:",
         inputFileIds,
       );
-
-      // Scroll to bottom immediately when user sends a message
-      if (scrollToBottomRef.current) {
-        scrollToBottomRef.current();
-      }
 
       // Send the message using the handler from useChatActions
       // Now baseHandleSendMessage returns a Promise we can chain with
@@ -164,21 +157,10 @@ export const Chat = ({
     [baseHandleSendMessage, refreshChats],
   );
 
-  // Use our transition hook to handle message transitions
-  const { displayMessages, displayMessageOrder, useVirtualization } =
-    useChatTransition({
-      messages,
-      messageOrder,
-      isTransitioning,
-    });
-
-  // Define a constant for the page size
-  const messagePageSize = 6;
-
   // Handler for when the error boundary resets
   const handleErrorReset = useCallback(() => {
     // Refresh chats on error reset
-    void refreshChats(); // Ensure void is applied
+    void refreshChats();
   }, [refreshChats]);
 
   // Handle session select with void return type
@@ -203,6 +185,7 @@ export const Chat = ({
   };
 
   // Function to capture the scrollToBottom from MessageList
+  const scrollToBottomRef = useRef<(() => void) | null>(null);
   const handleMessageListRef = useCallback((scrollToBottom: () => void) => {
     scrollToBottomRef.current = scrollToBottom;
   }, []);
@@ -264,7 +247,7 @@ export const Chat = ({
         onSessionSelect={handleSessionSelectWrapper}
         onSessionDelete={handleDeleteSession}
         showTimestamps={showTimestamps}
-        isLoading={isTransitioning ? false : chatHistoryLoading}
+        isLoading={chatHistoryLoading}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
         className="fixed inset-0 z-50 sm:relative sm:z-auto"
         userProfile={profile}
@@ -281,14 +264,14 @@ export const Chat = ({
         >
           {/* Use the MessageList component */}
           <MessageList
-            messages={displayMessages}
-            messageOrder={displayMessageOrder}
+            messages={messages}
+            messageOrder={messageOrder}
             loadOlderMessages={loadOlderMessages}
             hasOlderMessages={hasOlderMessages}
-            isPending={isTransitioning ? false : chatLoading}
+            isPending={chatLoading}
             currentSessionId={currentChatId ?? ""}
             apiMessagesResponse={apiMessagesResponse}
-            pageSize={messagePageSize}
+            pageSize={6}
             maxWidth={maxWidth}
             showTimestamps={showTimestamps}
             showAvatars={showAvatars}
@@ -297,7 +280,7 @@ export const Chat = ({
             controlsContext={controlsContext}
             onMessageAction={handleMessageAction}
             className={layout}
-            useVirtualization={useVirtualization}
+            useVirtualization={messageOrder.length > 30}
             virtualizationThreshold={30}
             onScrollToBottomRef={handleMessageListRef}
             onFilePreview={openPreviewModal}

@@ -24,7 +24,7 @@ interface StandardMessageListProps {
   userProfile?: UserProfile;
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
-  onMessageAction: (action: MessageAction) => Promise<void>;
+  onMessageAction: (action: MessageAction) => Promise<boolean>;
   onFilePreview?: (file: FileUploadItem) => void;
 }
 

@@ -8,7 +8,7 @@ interface UseChatActionsProps {
     content: string,
     inputFileIds?: string[],
   ) => Promise<string | undefined>;
-  onMessageAction?: (action: MessageAction) => void | Promise<void>;
+  onMessageAction?: (action: MessageAction) => Promise<boolean>;
 }
 
 export function useChatActions({
@@ -58,8 +58,9 @@ export function useChatActions({
   const handleMessageAction = useCallback(
     async (action: MessageAction) => {
       if (onMessageAction) {
-        await onMessageAction(action);
+        return await onMessageAction(action);
       }
+      return false;
     },
     [onMessageAction],
   );

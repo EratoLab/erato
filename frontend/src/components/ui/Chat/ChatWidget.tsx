@@ -20,7 +20,7 @@ interface ChatWidgetProps {
   showTimestamps?: boolean;
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
-  onMessageAction?: (action: MessageAction) => void | Promise<void>;
+  onMessageAction?: (action: MessageAction) => Promise<boolean>;
   onSendMessage: (message: string) => void;
   onRegenerate?: () => void;
   messages: Message[];
@@ -61,7 +61,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               showTimestamp={showTimestamps}
               controls={controls}
               controlsContext={controlsContext}
-              onMessageAction={onMessageAction ?? (() => {})}
+              onMessageAction={onMessageAction ?? (async () => false)}
               showControlsOnHover={showControlsOnHover}
             />
           ))}

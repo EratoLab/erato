@@ -45,7 +45,7 @@ export interface ChatMessageProps {
   // New props
   controls?: MessageControlsComponent;
   controlsContext: MessageControlsContext;
-  onMessageAction: (action: MessageAction) => void | Promise<void>;
+  onMessageAction: (action: MessageAction) => Promise<boolean>;
   userProfile?: UserProfile;
   onFilePreview?: (file: FileUploadItem) => void;
 }
