@@ -134,11 +134,22 @@ export function ChatProvider({
       console.log(
         `[CHAT_PROVIDER] New chat created (${newlyCreatedChatId}) and streaming stopped. Navigating...`,
       );
+
+      // Store the chat ID in a local variable to use in setTimeout
+      const chatIdToNavigateTo = newlyCreatedChatId;
+
       // Reset silent chat ID from store first
       console.log("[CHAT_PROVIDER] Resetting silentChatId in store");
       setStoreSilentChatId(null);
-      // Navigate
-      navigateToChat(newlyCreatedChatId);
+
+      // Add timeout to ensure all state updates and cleanup happen before navigation
+      setTimeout(() => {
+        console.log(
+          `[CHAT_PROVIDER] Navigating to new chat: ${chatIdToNavigateTo}`,
+        );
+        navigateToChat(chatIdToNavigateTo);
+      }, 100);
+
       // Note: useChatMessaging should clear its newlyCreatedChatId state internally
       // when the hook re-runs due to navigateToChat changing the chatId prop.
     }

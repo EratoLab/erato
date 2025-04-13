@@ -217,6 +217,15 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       console.log(
         `[CHAT_FLOW] SSE Client - Initiating ${method} fetch request`,
       );
+
+      // Add a guard to check if already aborted
+      if (signal.aborted) {
+        console.log(
+          "[CHAT_FLOW] SSE Client - Request already aborted before fetch",
+        );
+        return;
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -239,6 +248,15 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       if (!response.body) {
         console.log("[CHAT_FLOW] SSE Client - Error: Response has no body");
         throw new Error("Response has no body");
+      }
+
+      // Check if connection was aborted while fetching
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (signal.aborted) {
+        console.log(
+          "[CHAT_FLOW] SSE Client - Connection aborted after fetch but before reading stream",
+        );
+        return;
       }
 
       console.log(

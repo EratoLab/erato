@@ -221,15 +221,31 @@ export function useChatMessaging(
     }
   }, [resetStreaming, clearCompletedUserMessages, chatId, chatMessagesQuery]);
 
-  // Clean up any existing SSE connection on unmount
+  // Clean up any existing SSE connection on unmount or chatId change
   useEffect(() => {
+    console.log(
+      `[CHAT_FLOW] Setting up cleanup for chatId: ${chatId ?? "null"}`,
+    );
+
     return () => {
+      console.log(
+        `[CHAT_FLOW] Cleaning up SSE connection for chatId: ${chatId ?? "null"}`,
+      );
       if (sseCleanupRef.current) {
         sseCleanupRef.current();
         sseCleanupRef.current = null;
       }
+
+      // Reset submission flag on unmount to prevent stale state
+      isSubmittingRef.current = false;
+
+      // Reset streaming state
+      resetStreaming();
+
+      // Clear error on unmount
+      setError(null);
     };
-  }, []);
+  }, [chatId, resetStreaming, setError]);
 
   // Combine API messages and locally added user messages
   const combinedMessages = useMemo(() => {
@@ -627,8 +643,14 @@ export function useChatMessaging(
 
         // Clean up any existing SSE connection
         if (sseCleanupRef.current) {
+          console.log(
+            "[CHAT_FLOW] Closing previous SSE connection before creating a new one",
+          );
           sseCleanupRef.current();
           sseCleanupRef.current = null;
+
+          // Add a small delay to ensure proper cleanup
+          await new Promise((resolve) => setTimeout(resolve, 50));
         }
 
         // Find the most recent assistant message to use as previous_message_id
