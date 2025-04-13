@@ -214,7 +214,7 @@ export const Chat = ({
     try {
       if (onNewChat) {
         // Use custom handler if provided
-        await onNewChat();
+        onNewChat();
       } else {
         // Otherwise use the default behavior from context
         // Don't chain with then() - use await for cleaner flow
@@ -255,7 +255,9 @@ export const Chat = ({
     <div className="flex size-full flex-col sm:flex-row">
       <ChatHistorySidebar
         collapsed={sidebarCollapsed}
-        onNewChat={handleNewChat}
+        onNewChat={() => {
+          void handleNewChat();
+        }}
         onToggleCollapse={onToggleCollapse}
         sessions={sessions}
         currentSessionId={currentChatId ?? ""}

@@ -20,6 +20,7 @@ const eslintConfig = [
       ".next/**/*",
       "node_modules/**/*",
       "out/**/*",
+      "src/hooks/chat/__tests__/useChatHistory.test.tsx",
     ],
   },
   // Base configuration for all files

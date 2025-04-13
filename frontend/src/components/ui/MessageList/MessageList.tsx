@@ -174,6 +174,7 @@ function useMessageLoading({
       const lastMessageId = messageOrder[messageOrder.length - 1];
       const lastMessage = messages[lastMessageId];
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (lastMessage && lastMessage.sender === "assistant") {
         // Only scroll if message is currently loading (typing/thinking)
         if (
@@ -275,7 +276,6 @@ export const MessageList = memo<MessageListProps>(
       isNearTop,
       checkScrollPosition,
       scrollToBottom,
-      initiallyLoaded,
     } = useScrollToBottom({
       enabled: true,
       useSmoothScroll: true,

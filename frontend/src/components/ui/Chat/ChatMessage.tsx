@@ -16,9 +16,11 @@ import type {
   MessageControlsContext,
   MessageAction,
 } from "../../../types/message-controls";
-import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  UserProfile,
+  FileUploadItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export interface ChatMessageProps {
   message: UiChatMessage;
@@ -162,16 +164,17 @@ const AttachedFile = ({
   if (error || !fileData) {
     console.error(`Failed to load file ${fileId}:`, error);
     return (
-      <div className="text-theme-fg-error text-xs">Error loading file</div>
+      <div className="text-xs text-theme-error-fg">Error loading file</div>
     );
   }
 
   return (
     <InteractiveContainer
       onClick={() => {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (onFilePreview && fileData) {
           onFilePreview(fileData);
-        } else if (fileData?.download_url) {
+        } else if (fileData.download_url) {
           window.open(fileData.download_url, "_blank", "noopener,noreferrer");
         }
       }}

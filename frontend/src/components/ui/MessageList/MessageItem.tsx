@@ -16,9 +16,6 @@ import type {
 } from "@/types/message-controls";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 
-// Enable/disable verbose debugging
-const ENABLE_VERBOSE_DEBUG = true;
-
 export interface MessageItemProps {
   messageId: string;
   message: Message;
@@ -101,7 +98,6 @@ export const MessageItem = memo<MessageItemProps>(
   (prevProps, nextProps) => {
     // Basic shallow comparison for most props
     const shallowEqual = Object.keys(nextProps).every((key) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- necessary for dynamic comparison
       return (
         prevProps[key as keyof MessageItemProps] ===
         nextProps[key as keyof MessageItemProps]

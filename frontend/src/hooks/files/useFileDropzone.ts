@@ -69,7 +69,7 @@ export function useFileDropzone({
   disabled = false,
   onFilesUploaded,
   chatId = null,
-  onSilentChatCreated,
+  // onSilentChatCreated,
 }: UseFileDropzoneProps): UseFileDropzoneResult {
   // Use the Zustand store for state management
   const {
@@ -204,7 +204,7 @@ export function useFileDropzone({
       maxFiles,
       chatId,
       createChatMutation,
-      onSilentChatCreated,
+      // onSilentChatCreated,
       addFiles,
       onFilesUploaded,
       setUploading,

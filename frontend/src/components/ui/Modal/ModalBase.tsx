@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from "react";
 import clsx from "clsx";
+import React, { useEffect, useRef } from "react";
 
 interface ModalBaseProps {
   isOpen: boolean;
@@ -62,20 +62,27 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         className,
       )}
       onClick={handleOverlayClick}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={title ? "modal-title" : undefined}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          onClose();
+        }
+      }}
+      tabIndex={0}
+      role="button"
+      aria-label="Close modal overlay"
     >
       <div
         ref={modalRef}
         className={clsx(
-          "relative max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-lg bg-theme-bg-primary shadow-xl theme-transition",
+          "theme-transition relative max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-lg bg-theme-bg-primary shadow-xl",
           // Add default focus outline for accessibility
           "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
           contentClassName,
         )}
         // Make the content div focusable
         tabIndex={-1}
+        role="dialog"
+        aria-labelledby={title ? "modal-title" : undefined}
       >
         {/* Optional Header */}
         {title && (

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import React from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
@@ -39,10 +40,13 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   const renderPreview = () => {
     if (isImage && file.download_url) {
       return (
-        <img
+        <Image
           src={file.download_url}
           alt={`Preview of ${file.filename}`}
           className="mx-auto max-h-[75vh] max-w-full object-contain"
+          width={800}
+          height={600}
+          style={{ maxHeight: "75vh", objectFit: "contain" }}
         />
       );
     }

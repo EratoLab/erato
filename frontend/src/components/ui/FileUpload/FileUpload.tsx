@@ -242,6 +242,7 @@ export const FileUpload = memo<FileUploadProps>(
                     if (typeof fileIdOrFile === "string") {
                       handleRemoveFile(fileIdOrFile);
                     } else if (
+                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
                       fileIdOrFile &&
                       typeof fileIdOrFile === "object" &&
                       "id" in fileIdOrFile &&

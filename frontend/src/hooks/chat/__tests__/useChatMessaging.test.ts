@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import { renderHook, act } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
@@ -8,6 +10,7 @@ import {
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 // Import our patched version of Zustand for testing
+// eslint-disable-next-line import/order
 import zustandMock from "./zustandMock";
 
 // Mock Zustand with our testing version

@@ -11,7 +11,7 @@ function createZustandMock() {
 
   // Replace Zustand's create with our own version that tracks stores for reset
   const createImpl = zustand.create;
-  const create = ((stateCreator: any) => {
+  const create = ((stateCreator: unknown) => {
     const store = createImpl(stateCreator);
     const initialState = store.getState();
     storeResetFns.add(() => {

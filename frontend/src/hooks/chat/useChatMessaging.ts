@@ -733,6 +733,7 @@ export function useChatMessaging(
                   // setNewlyCreatedChatId(null);
                 }
               }
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             } else if (streaming.isStreaming) {
               console.warn("[CHAT_FLOW] SSE connection closed unexpectedly");
               // Use setError from store
@@ -796,20 +797,19 @@ export function useChatMessaging(
       }
     },
     [
-      chatId,
+      silentChatId,
+      addUserMessage,
       resetStreaming,
+      findMostRecentAssistantMessageId,
+      chatId,
+      processStreamEvent,
       setStreaming,
       streaming.content,
       streaming.isStreaming,
-      addUserMessage,
-      clearCompletedUserMessages,
-      processStreamEvent,
-      findMostRecentAssistantMessageId,
-      silentChatId,
-      queryClient,
-      chatMessagesQuery,
-      setNewlyCreatedChatId,
       setError,
+      chatMessagesQuery,
+      clearCompletedUserMessages,
+      newlyCreatedChatId,
     ],
   );
 
@@ -818,7 +818,7 @@ export function useChatMessaging(
     isLoading: chatMessagesQuery.isLoading,
     isStreaming: streaming.isStreaming,
     streamingContent: streaming.content,
-    error: chatMessagesQuery.error || error,
+    error: chatMessagesQuery.error ?? error,
     sendMessage,
     cancelMessage,
     refetch: chatMessagesQuery.refetch,

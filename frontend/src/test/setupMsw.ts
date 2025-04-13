@@ -138,7 +138,7 @@ export function createSSEStreamHandler(chatId: string, messageParts: string[]) {
           await writer.close();
         } catch (error) {
           console.error("Error in MSW stream handler:", error);
-          writer.abort(error as Error);
+          void writer.abort(error as Error);
         }
       };
 

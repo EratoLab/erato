@@ -43,6 +43,7 @@ export const handlers = [
     const response: Schemas.FileUploadItem = {
       id: fileId as string,
       filename: "test-file.txt",
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       download_url: `http://localhost/download/${fileId}`,
     };
     return HttpResponse.json(response);

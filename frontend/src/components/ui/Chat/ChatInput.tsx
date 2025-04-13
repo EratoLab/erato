@@ -10,10 +10,10 @@ import { useFileDropzone } from "@/hooks/files";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { useChatContext } from "@/providers/ChatProvider";
 
+import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { Tooltip } from "../Controls/Tooltip";
 import { Alert } from "../Feedback/Alert";
-import { InteractiveContainer } from "../Container/InteractiveContainer";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
@@ -150,6 +150,7 @@ export const ChatInput = ({
       if (typeof fileIdOrFile === "string") {
         fileId = fileIdOrFile;
       } else if (
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         fileIdOrFile &&
         typeof fileIdOrFile === "object" &&
         "id" in fileIdOrFile &&
