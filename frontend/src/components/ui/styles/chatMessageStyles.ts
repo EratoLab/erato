@@ -8,4 +8,5 @@ export const messageStyles = {
     assistant:
       "bg-[var(--theme-avatar-assistant-bg)] text-[var(--theme-avatar-assistant-fg)]",
   },
+  hover: "hover:bg-[var(--theme-messageItem-hover)]",
 } as const;

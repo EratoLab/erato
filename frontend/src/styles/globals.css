@@ -13,6 +13,9 @@
   --theme-bg-hover: #e5e7eb;
   --theme-bg-selected: #e5e7eb;
 
+  /* Message Item colors */
+  --theme-messageItem-hover: #f7f7f7;
+
   /* Foreground colors */
   --theme-fg-primary: #111827;
   --theme-fg-secondary: #374151;
@@ -66,6 +69,9 @@
     --theme-bg-accent: #374151; /* Monochrome accent */
     --theme-bg-hover: #4b5563;
     --theme-bg-selected: #374151; /* Monochrome selected */
+
+    /* Message Item colors */
+    --theme-messageItem-hover: #212121;
 
     /* Foreground colors */
     --theme-fg-primary: #f9fafb;

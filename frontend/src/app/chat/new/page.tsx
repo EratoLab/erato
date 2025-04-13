@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 import { Chat } from "@/components/ui/Chat/Chat";
+import { WelcomeScreen } from "@/components/ui/WelcomeScreen";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useChatContext } from "@/providers/ChatProvider";
 
@@ -64,17 +65,6 @@ export default function NewChatPage() {
 
   return (
     <div className="flex size-full flex-col">
-      {/* {isStreaming && (
-        <div className="flex h-12 items-center border-b px-4">
-          <button
-            onClick={cancelMessage}
-            className="ml-auto rounded bg-red-500 px-3 py-1 text-white"
-          >
-            Stop generating
-          </button>
-        </div>
-      )} */}
-      {/* // Pass messages and order, using default empty values */}
       <Chat
         messages={messages}
         messageOrder={messageOrder}
@@ -93,6 +83,7 @@ export default function NewChatPage() {
           console.log("Message action:", action);
           return true; // Return true to satisfy Promise<boolean>
         }}
+        emptyStateComponent={<WelcomeScreen />}
       />
     </div>
   );

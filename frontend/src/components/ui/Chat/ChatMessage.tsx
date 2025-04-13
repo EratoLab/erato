@@ -75,7 +75,7 @@ export const ChatMessage = memo(function ChatMessage({
       className={clsx(
         "group relative flex gap-4 rounded-lg p-4",
         "w-full min-w-[280px] shrink-0",
-        "hover:bg-theme-bg-accent",
+        messageStyles.hover,
         messageStyles.container[role],
         className,
       )}

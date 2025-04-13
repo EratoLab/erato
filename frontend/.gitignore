@@ -42,3 +42,7 @@ yarn-error.log*
 next-env.d.ts
 
 *storybook.log
+
+# Customer specific themes
+/customer-themes/
+/public/customer-themes/
