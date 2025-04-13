@@ -1,4 +1,4 @@
-import { ArrowUpIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
+import { ArrowUpIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 
@@ -47,7 +47,7 @@ interface ChatInputProps {
  */
 export const ChatInput = ({
   onSendMessage,
-  onRegenerate,
+  onRegenerate: _onRegenerate,
   handleFileAttachments,
   isLoading: propIsLoading,
   disabled = false,
@@ -332,9 +332,10 @@ export const ChatInput = ({
                   />
                 )}
 
-                <Tooltip content="Regenerate response">
+                {/* Regenerate button removed */}
+                {/* <Tooltip content="Regenerate response">
                   <Button
-                    onClick={onRegenerate}
+                    onClick={_onRegenerate}
                     variant="icon-only"
                     size="sm"
                     icon={<ArrowPathIcon className="size-5" />}
@@ -343,7 +344,7 @@ export const ChatInput = ({
                       isLoading || isStreaming || disabled || isUploading
                     }
                   />
-                </Tooltip>
+                </Tooltip> */}
               </>
             )}
           </div>
