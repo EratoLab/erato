@@ -23,27 +23,32 @@ export function Logo({
   const [fallbackPath, setFallbackPath] = useState<string>("");
 
   useEffect(() => {
-    // Use the environment variable directly for the customer name
     const customerName = process.env.NEXT_PUBLIC_CUSTOMER_NAME;
     const isDark = themeMode === "dark";
 
-    // Primary logo path based on customer name
-    if (customerName) {
-      // For custom themes, use the customer-specific path
-      setLogoPath(`/customer-themes/${customerName}/logo.svg`);
+    // Determine the base theme path - default to "custom-theme"
+    // If NEXT_PUBLIC_CUSTOMER_NAME is set, use "custom-theme/[name]"
+    let themePath = "/custom-theme";
 
-      // Set a fallback in case the primary logo fails to load
-      if (isDark) {
-        // Try light version as fallback for dark mode
-        setFallbackPath(`/customer-themes/${customerName}/logo.svg`);
-      } else {
-        // Fallback to a generic logo only if absolutely necessary
-        setFallbackPath("/vercel.svg");
-      }
+    // If we have a customer name and we're in development mode (for maintainer)
+    if (customerName) {
+      themePath = `/custom-theme/${customerName}`;
+    }
+
+    // Allow complete override of the path via env var if needed
+    if (process.env.NEXT_PUBLIC_THEME_PATH) {
+      themePath = process.env.NEXT_PUBLIC_THEME_PATH;
+    }
+
+    // Set the logo path based on the theme path
+    const primaryLogoPath = `${themePath}/logo.svg`;
+    setLogoPath(primaryLogoPath);
+
+    // Set fallback path
+    if (isDark) {
+      setFallbackPath(primaryLogoPath); // Fallback to light theme logo
     } else {
-      // Default paths if no custom theme
-      setLogoPath(isDark ? "/vercel.svg" : "/vercel.svg");
-      setFallbackPath("/vercel.svg");
+      setFallbackPath("/vercel.svg"); // Generic fallback
     }
   }, [themeMode]);
 

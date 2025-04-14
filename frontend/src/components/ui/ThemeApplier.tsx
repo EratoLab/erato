@@ -24,7 +24,7 @@ export function ThemeApplier() {
     const loadTheme = async () => {
       try {
         // Use the folder name directly for the path, not the theme name from theme.json
-        const themePath = `/customer-themes/${customerName}/theme.json`;
+        const themePath = `/custom-theme/${customerName}/theme.json`;
 
         // Load the theme data
         const themeData = await loadThemeFromPath(themePath);

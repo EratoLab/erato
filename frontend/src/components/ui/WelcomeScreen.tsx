@@ -39,7 +39,7 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
     const loadBranding = async () => {
       try {
         // Construct path with the folder name
-        const themePath = `/customer-themes/${customerName}/theme.json`;
+        const themePath = `/custom-theme/${customerName}/theme.json`;
 
         // Load the theme data
         const themeData = await loadThemeFromPath(themePath);

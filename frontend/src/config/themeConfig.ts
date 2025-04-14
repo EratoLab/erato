@@ -28,20 +28,25 @@ export interface ThemeLocationConfig {
  */
 export const defaultThemeConfig: ThemeLocationConfig = {
   themePaths: [
-    // 1. Environment variable override
+    // 1. Environment variable override for entire path
     process.env.NEXT_PUBLIC_THEME_CONFIG_PATH,
 
     // 2. Customer-specific theme based on environment variable
     process.env.NEXT_PUBLIC_CUSTOMER_NAME
-      ? `/customer-themes/${process.env.NEXT_PUBLIC_CUSTOMER_NAME}/theme.json`
+      ? `/custom-theme/${process.env.NEXT_PUBLIC_CUSTOMER_NAME}/theme.json`
       : null,
 
-    // 3. Fallback to default location
-    "/themes/custom-theme/theme.json",
+    // 3. Custom theme override path
+    process.env.NEXT_PUBLIC_THEME_PATH
+      ? `${process.env.NEXT_PUBLIC_THEME_PATH}/theme.json`
+      : null,
+
+    // 4. Fallback to default location (no customer subfolder)
+    "/custom-theme/theme.json",
   ],
 
   getLogoPath: (themeName, isDark) => {
-    // 1. Check environment variables first
+    // 1. Check environment variables first for complete path override
     if (isDark && process.env.NEXT_PUBLIC_LOGO_DARK_PATH) {
       return process.env.NEXT_PUBLIC_LOGO_DARK_PATH;
     }
@@ -50,15 +55,22 @@ export const defaultThemeConfig: ThemeLocationConfig = {
       return process.env.NEXT_PUBLIC_LOGO_PATH;
     }
 
-    // 2. If a theme is loaded, check theme-specific paths
-    if (themeName) {
+    // 2. Check for theme path override
+    if (process.env.NEXT_PUBLIC_THEME_PATH) {
       return isDark
-        ? `/customer-themes/${themeName}/logo-dark.svg`
-        : `/customer-themes/${themeName}/logo.svg`;
+        ? `${process.env.NEXT_PUBLIC_THEME_PATH}/logo-dark.svg`
+        : `${process.env.NEXT_PUBLIC_THEME_PATH}/logo.svg`;
     }
 
-    // 3. Default fallback logos
-    return isDark ? "/assets/logo-dark.svg" : "/assets/logo.svg";
+    // 3. If a customer name is specified, use customer-specific subfolder
+    if (process.env.NEXT_PUBLIC_CUSTOMER_NAME) {
+      return isDark
+        ? `/custom-theme/${process.env.NEXT_PUBLIC_CUSTOMER_NAME}/logo-dark.svg`
+        : `/custom-theme/${process.env.NEXT_PUBLIC_CUSTOMER_NAME}/logo.svg`;
+    }
+
+    // 4. Default to the root custom-theme folder (no customer subfolder)
+    return isDark ? "/custom-theme/logo-dark.svg" : "/custom-theme/logo.svg";
   },
 };
 

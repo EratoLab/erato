@@ -44,5 +44,6 @@ next-env.d.ts
 *storybook.log
 
 # Customer specific themes
-/customer-themes/
-/public/customer-themes/
+/public/custom-theme/*
+!/public/custom-theme/.gitkeep
+

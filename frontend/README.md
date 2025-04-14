@@ -190,7 +190,7 @@ The theme system uses a configuration-based approach that can be customized in s
 
 2. **Customer Themes Directory**:
 
-   - Place custom themes in the `/customer-themes/{customer-name}/` directory
+   - Place custom themes in the `/custom-theme/{customer-name}/` directory
    - This directory is git-ignored by default for customer-specific customizations
 
 3. **Default Location**:
@@ -235,8 +235,8 @@ Create a theme.json file with the following structure:
 You can also provide custom logos for your theme:
 
 1. Place your logo files in the same directory as your theme.json:
-   - `/customer-themes/{customer-name}/logo.svg` - Main logo
-   - `/customer-themes/{customer-name}/logo-dark.svg` - Dark mode logo (optional)
+   - `/custom-theme/{customer-name}/logo.svg` - Main logo
+   - `/custom-theme/{customer-name}/logo-dark.svg` - Dark mode logo (optional)
 
 ### Extending the Theme System
 
@@ -253,7 +253,7 @@ The theme system uses a configuration-based approach that can be extended:
 Mount your custom theme into the container:
 
 ```bash
-docker run -v ./my-theme:/app/customer-themes/my-customer your-app-image
+docker run -v ./my-theme:/app/custom-theme/my-customer your-app-image
 ```
 
 #### Kubernetes
