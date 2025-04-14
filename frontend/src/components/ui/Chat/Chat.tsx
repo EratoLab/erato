@@ -67,6 +67,8 @@ export interface ChatProps {
   acceptedFileTypes?: FileType[];
   /** Optional custom session select handler to override default behavior */
   customSessionSelect?: (sessionId: string) => void;
+  /** Optional custom component to show when there are no messages */
+  emptyStateComponent?: React.ReactNode;
 }
 
 /**
@@ -91,6 +93,7 @@ export const Chat = ({
   onToggleCollapse: _onToggleCollapse,
   acceptedFileTypes,
   customSessionSelect,
+  emptyStateComponent,
 }: ChatProps) => {
   // Use the sidebar context
   const { isOpen: sidebarCollapsed, toggle: onToggleCollapse } = useSidebar();
@@ -284,6 +287,7 @@ export const Chat = ({
             virtualizationThreshold={30}
             onScrollToBottomRef={handleMessageListRef}
             onFilePreview={openPreviewModal}
+            emptyStateComponent={emptyStateComponent}
           />
 
           <ChatInput

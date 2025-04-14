@@ -2,9 +2,13 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 
+import { ThemeApplier } from "@/components/ui/ThemeApplier";
 import { defaultTheme, darkTheme } from "@/config/theme";
+import { loadThemeConfig, defaultThemeConfig } from "@/config/themeConfig";
+import { deepMerge, type CustomThemeConfig } from "@/utils/themeUtils";
 
 import type { Theme } from "@/config/theme";
+import type { PropsWithChildren } from "react";
 
 export type ThemeMode = "light" | "dark";
 
@@ -12,6 +16,8 @@ type ThemeContextType = {
   theme: Theme;
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
+  isCustomTheme: boolean;
+  customThemeName?: string;
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -33,28 +39,68 @@ const getSavedTheme = (): ThemeMode => {
   return "light";
 };
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({ children }: PropsWithChildren) {
   const [themeMode, setThemeMode] = useState<ThemeMode>("light");
   const [theme, setTheme] = useState<Theme>(defaultTheme);
+  const [customThemeConfig, setCustomThemeConfig] =
+    useState<CustomThemeConfig | null>(null);
+  const [isCustomTheme, setIsCustomTheme] = useState(false);
 
-  // Initialize theme from saved settings
+  // Initialize theme from saved settings and try to load custom theme
   useEffect(() => {
     const savedMode = getSavedTheme();
     setThemeMode(savedMode);
+
+    // Load theme using the configuration module
+    const loadTheme = async () => {
+      const themeConfig = await loadThemeConfig(defaultThemeConfig);
+      if (themeConfig) {
+        setCustomThemeConfig(themeConfig);
+        setIsCustomTheme(true);
+      }
+    };
+
+    void loadTheme();
   }, []);
 
-  // Update theme when themeMode changes
+  // Update theme when themeMode or customThemeConfig changes
   useEffect(() => {
-    setTheme(themeMode === "dark" ? darkTheme : defaultTheme);
+    // Start with the appropriate base theme
+    let baseTheme = themeMode === "dark" ? darkTheme : defaultTheme;
+
+    // Apply custom theme overrides if available
+    if (customThemeConfig?.theme) {
+      // Select the appropriate theme mode
+      const customTheme =
+        themeMode === "dark"
+          ? customThemeConfig.theme.dark
+          : customThemeConfig.theme.light;
+
+      // Merge custom theme with base theme (keeping base as fallback)
+      if (customTheme) {
+        baseTheme = deepMerge(baseTheme, customTheme);
+      }
+    }
+
+    setTheme(baseTheme);
 
     // Save to localStorage
     if (typeof window !== "undefined") {
       localStorage.setItem("theme-mode", themeMode);
 
-      // Update data-theme attribute on document for potential CSS selectors
+      // Update data-theme attributes on document for potential CSS selectors
       document.documentElement.setAttribute("data-theme", themeMode);
+
+      if (customThemeConfig?.name) {
+        document.documentElement.setAttribute(
+          "data-theme-name",
+          customThemeConfig.name,
+        );
+      } else {
+        document.documentElement.removeAttribute("data-theme-name");
+      }
     }
-  }, [themeMode]);
+  }, [themeMode, customThemeConfig]);
 
   useEffect(() => {
     // Apply theme CSS variables
@@ -184,14 +230,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeMode(mode);
   };
 
+  const contextValue: ThemeContextType = {
+    theme,
+    themeMode,
+    setThemeMode: toggleTheme,
+    isCustomTheme,
+    customThemeName: customThemeConfig?.name,
+  };
+
   return (
-    <ThemeContext.Provider
-      value={{
-        theme,
-        themeMode,
-        setThemeMode: toggleTheme,
-      }}
-    >
+    <ThemeContext.Provider value={contextValue}>
+      <ThemeApplier />
       {children}
     </ThemeContext.Provider>
   );

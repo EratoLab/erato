@@ -150,6 +150,11 @@ export interface MessageListProps {
    * Whether the chat is currently transitioning between sessions
    */
   isTransitioning?: boolean;
+
+  /**
+   * Custom component to render when there are no messages
+   */
+  emptyStateComponent?: React.ReactNode;
 }
 
 // Separate hook for managing message loading and streaming behavior
@@ -261,6 +266,7 @@ export const MessageList = memo<MessageListProps>(
     onScrollToBottomRef,
     onFilePreview,
     isTransitioning,
+    emptyStateComponent,
   }) => {
     // Debug logging for rendering
     // debugLog("RENDER", "MessageList rendering", {
@@ -405,6 +411,9 @@ export const MessageList = memo<MessageListProps>(
       handleLoadMore,
     });
 
+    // Check if there are no messages to display
+    const showEmptyState = messageOrder.length === 0 && !isPending;
+
     // Return the header component with load more button if needed
     const renderMessageListHeader = useMemo(() => {
       // Should show load more button if we have more messages and we're not already loading
@@ -459,7 +468,11 @@ export const MessageList = memo<MessageListProps>(
       >
         {renderMessageListHeader}
         <div className={clsx("mx-auto w-full sm:w-5/6 md:w-4/5")}>
-          {shouldUseVirtualization ? (
+          {showEmptyState && emptyStateComponent ? (
+            <div className="flex h-full min-h-[300px] items-center justify-center">
+              {emptyStateComponent}
+            </div>
+          ) : shouldUseVirtualization ? (
             <VirtualizedMessageList
               messages={messages}
               visibleData={visibleData}

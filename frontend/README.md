@@ -172,3 +172,123 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Custom Theming
+
+This application supports custom theming to allow users to customize the look and feel without rebuilding the application.
+
+### Theme Configuration
+
+The theme system uses a configuration-based approach that can be customized in several ways:
+
+1. **Environment Variables**:
+
+   - `NEXT_PUBLIC_CUSTOMER_NAME`: Name of the customer folder (e.g., "trilux")
+   - `NEXT_PUBLIC_THEME_CONFIG_PATH`: Override path to theme.json file
+   - `NEXT_PUBLIC_LOGO_PATH`: Path to logo for light mode
+   - `NEXT_PUBLIC_LOGO_DARK_PATH`: Path to logo for dark mode
+
+2. **Customer Themes Directory**:
+
+   - Place custom themes in the `/custom-theme/{customer-name}/` directory
+   - This directory is git-ignored by default for customer-specific customizations
+
+3. **Default Location**:
+   - Fall back to `/themes/custom-theme/theme.json` if no other theme is found
+
+### Custom Theme Structure
+
+Create a theme.json file with the following structure:
+
+```json
+{
+  "name": "Custom Theme Name",
+  "theme": {
+    "light": {
+      "colors": {
+        "background": {
+          "primary": "#f8f9ff",
+          "secondary": "#eef1fa"
+        },
+        "foreground": {
+          "accent": "#4361ee"
+        }
+      }
+    },
+    "dark": {
+      "colors": {
+        "background": {
+          "primary": "#0f172a",
+          "secondary": "#1e293b"
+        },
+        "foreground": {
+          "accent": "#60a5fa"
+        }
+      }
+    }
+  }
+}
+```
+
+### Custom Logo Support
+
+You can also provide custom logos for your theme:
+
+1. Place your logo files in the same directory as your theme.json:
+   - `/custom-theme/{customer-name}/logo.svg` - Main logo
+   - `/custom-theme/{customer-name}/logo-dark.svg` - Dark mode logo (optional)
+
+### Extending the Theme System
+
+The theme system uses a configuration-based approach that can be extended:
+
+1. **Theme Location Configuration**: Modify the `themeConfig.ts` file to change how themes are located and loaded.
+
+2. **Logo Path Resolution**: The `getLogoPath` function in the configuration determines how logo paths are resolved.
+
+### Deployment Options
+
+#### Docker
+
+Mount your custom theme into the container:
+
+```bash
+docker run -v ./my-theme:/app/custom-theme/my-customer your-app-image
+```
+
+#### Kubernetes
+
+Use a ConfigMap and environment variables:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-theme-config
+data:
+  theme.json: |
+    {
+      "name": "Custom Theme",
+      "theme": {
+        "light": { ... },
+        "dark": { ... }
+      }
+    }
+```
+
+Then in your deployment:
+
+```yaml
+env:
+  - name: NEXT_PUBLIC_CUSTOMER_NAME
+    value: "my-customer"
+  - name: NEXT_PUBLIC_THEME_CONFIG_PATH
+    value: "/config/theme.json"
+volumeMounts:
+  - name: theme-config
+    mountPath: /app/config
+volumes:
+  - name: theme-config
+    configMap:
+      name: custom-theme-config
+```
