@@ -2,7 +2,7 @@ use crate::config::{
     FileStorageProviderConfig, StorageProviderAzBlobConfig, StorageProviderS3Config,
     StorageProviderSpecificConfig,
 };
-use eyre::{eyre, Report};
+use eyre::Report;
 use opendal::{Operator, Reader, Writer};
 use std::time::Duration;
 
@@ -105,9 +105,9 @@ impl FileStorage {
         let duration = expires_in.unwrap_or_else(|| Duration::from_secs(3600)); // Default: 1 hour
 
         // Check if the storage provider supports presigned URLs
-        if !self.opendal_operator.info().full_capability().presign_read {
-            return Err(eyre!("Storage provider does not support presigned URLs"));
-        }
+        // if !self.opendal_operator.info().full_capability().presign_read {
+        //     return Err(eyre!("Storage provider does not support presigned URLs"));
+        // }
 
         let url = self.opendal_operator.presign_read(path, duration).await?;
         Ok(url.uri().to_string())
