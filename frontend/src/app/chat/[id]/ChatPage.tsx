@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useDynamicParams } from "next-static-utils";
 import { useEffect, useRef, useState } from "react";
 
 import { Chat } from "@/components/ui/Chat/Chat";
@@ -12,8 +12,8 @@ import { createLogger } from "@/utils/debugLogger";
 const logger = createLogger("UI", "ChatPage");
 
 export default function ChatPage() {
-  const params = useParams();
-  const chatId = params.id as string;
+  const params = useDynamicParams();
+  const chatId = params.id;
   const isFirstRender = useRef(true);
   const [isTransitioning, setIsTransitioning] = useState(true);
 

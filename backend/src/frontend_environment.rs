@@ -3,9 +3,12 @@ pub use self::axum::serve_files_with_script;
 use lol_html::html_content::ContentType;
 use lol_html::{element, HtmlRewriter, Settings};
 use ordered_multimap::ListOrderedMultimap;
+use serde::Deserialize;
 use serde_json::Value;
 use std::fmt::Write;
+use std::fs;
 use std::io;
+use std::path::Path;
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -13,6 +16,48 @@ pub struct FrontedEnvironment(pub ListOrderedMultimap<String, Value>);
 
 #[derive(Debug, Clone)]
 pub struct FrontendBundlePath(pub String);
+
+#[derive(Debug, Deserialize)]
+struct ServerConfig {
+    rewrites: Vec<RewriteRule>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RewriteRule {
+    source: String,
+    destination: String,
+}
+
+fn load_server_config(bundle_path: String) -> Option<ServerConfig> {
+    let config_path = Path::new(&bundle_path).join("serve.json");
+    if !config_path.exists() {
+        return None;
+    }
+
+    match fs::read_to_string(config_path) {
+        Ok(contents) => serde_json::from_str(&contents).ok(),
+        Err(_) => None,
+    }
+}
+
+fn matches_rewrite_rule(path: &str, rule: &RewriteRule) -> bool {
+    let pattern_parts: Vec<&str> = rule.source.split('/').collect();
+    let path_parts: Vec<&str> = path.split('/').collect();
+
+    if pattern_parts.len() != path_parts.len() {
+        return false;
+    }
+
+    for (pattern, path_part) in pattern_parts.iter().zip(path_parts.iter()) {
+        if pattern.starts_with(':') {
+            continue; // This is a parameter, it matches anything
+        }
+        if pattern != path_part {
+            return false;
+        }
+    }
+    true
+}
 
 /// Rewrites HTML to inject a `<script>` tag (which contains global JS variables that act like environment variables)
 /// into the `<head>` tag.
@@ -54,6 +99,7 @@ pub fn inject_environment_script_tag(
 pub mod axum {
     use super::*;
     use ::axum::body::{Body, Bytes};
+
     use ::axum::http::{HeaderValue, Request};
     use ::axum::response::Response;
     use ::axum::{http, BoxError, Extension};
@@ -73,14 +119,43 @@ pub mod axum {
         let bundle_dir_path = PathBuf::from(frontend_bundle_path.0.clone())
             .canonicalize()
             .expect("Unable to normalize frontend bundle path");
-        let fallback_path = PathBuf::from(frontend_bundle_path.0)
+        let fallback_path = PathBuf::from(frontend_bundle_path.0.clone())
             .join("404.html")
             .canonicalize()
             .expect("Unable to normalize frontend bundle path");
-        let mut static_files_service =
-            ServeDir::new(bundle_dir_path).not_found_service(ServeFile::new(fallback_path));
 
-        let res = static_files_service.try_call(req).await.unwrap();
+        // Check if we have any rewrite rules that match
+        let path = req.uri().path().to_string();
+        let rewritten_path =
+            if let Some(server_config) = load_server_config(frontend_bundle_path.0.clone()) {
+                let matching_rule = server_config
+                    .rewrites
+                    .iter()
+                    .find(|rule| matches_rewrite_rule(&path, rule));
+                matching_rule.map(|rule| rule.destination.clone())
+            } else {
+                None
+            };
+
+        // Create the static files service with the rewritten path if applicable
+        let res = if let Some(rewritten_path) = rewritten_path {
+            let rewritten_file_path = PathBuf::from(frontend_bundle_path.0.clone())
+                .join(rewritten_path.trim_start_matches('/'))
+                .canonicalize()
+                .unwrap();
+            ServeFile::new(rewritten_file_path.clone())
+                .try_call(req)
+                .await
+                .unwrap()
+        } else {
+            ServeDir::new(bundle_dir_path)
+                .not_found_service(ServeFile::new(fallback_path))
+                .try_call(req)
+                .await
+                .unwrap()
+        };
+
+        // let res = static_files_service.try_call(req).await.unwrap();
 
         let headers = res.headers().clone();
         if headers.get(http::header::CONTENT_TYPE) == Some(&HeaderValue::from_static("text/html")) {
