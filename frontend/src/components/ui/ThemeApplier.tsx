@@ -31,8 +31,7 @@ export function ThemeApplier() {
         if (!themeData) return;
 
         const root = document.documentElement;
-        const mode = themeMode === "dark" ? "dark" : "light";
-        const colors = themeData.theme[mode]?.colors;
+        const colors = themeData.theme[themeMode]?.colors;
 
         if (!colors) return;
 

@@ -12,6 +12,8 @@ import type { PropsWithChildren } from "react";
 
 export type ThemeMode = "light" | "dark";
 
+export const THEME_MODE_LOCAL_STORAGE_KEY = "theme-mode";
+
 type ThemeContextType = {
   theme: Theme;
   themeMode: ThemeMode;
@@ -26,7 +28,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const getSavedTheme = (): ThemeMode => {
   if (typeof window === "undefined") return "light";
 
-  const savedTheme = localStorage.getItem("theme-mode");
+  const savedTheme = localStorage.getItem(THEME_MODE_LOCAL_STORAGE_KEY);
   if (savedTheme === "dark" || savedTheme === "light") {
     return savedTheme;
   }
@@ -40,7 +42,10 @@ const getSavedTheme = (): ThemeMode => {
 };
 
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const [themeMode, setThemeMode] = useState<ThemeMode>("light");
+  const savedOrDefaultThemeMode = getSavedTheme();
+  const [themeMode, setThemeMode] = useState<ThemeMode>(
+    savedOrDefaultThemeMode,
+  );
   const [theme, setTheme] = useState<Theme>(defaultTheme);
   const [customThemeConfig, setCustomThemeConfig] =
     useState<CustomThemeConfig | null>(null);
@@ -48,9 +53,6 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   // Initialize theme from saved settings and try to load custom theme
   useEffect(() => {
-    const savedMode = getSavedTheme();
-    setThemeMode(savedMode);
-
     // Load theme using the configuration module
     const loadTheme = async () => {
       const themeConfig = await loadThemeConfig(defaultThemeConfig);
@@ -86,8 +88,6 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
     // Save to localStorage
     if (typeof window !== "undefined") {
-      localStorage.setItem("theme-mode", themeMode);
-
       // Update data-theme attributes on document for potential CSS selectors
       document.documentElement.setAttribute("data-theme", themeMode);
 
@@ -227,6 +227,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   }, [theme]);
 
   const toggleTheme = (mode: ThemeMode) => {
+    localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, mode);
     setThemeMode(mode);
   };
 
