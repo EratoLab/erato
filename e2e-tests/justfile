@@ -1,0 +1,8 @@
+default:
+  just --list
+
+install:
+  pnpm install
+
+test:
+  pnpm exec playwright test
