@@ -2,7 +2,21 @@ default:
   just --list
 
 install:
-  pnpm install
+    pnpm install
 
 test:
-  pnpm exec playwright test
+    pnpm exec playwright test
+
+# Opens the Playwright test runner UI
+test_interactive:
+    pnpm exec playwright test --ui
+
+# Opens the Playwright recorder
+record_interactions:
+    pnpm exec playwright codegen
+
+format:
+    pnpm exec prettier . --write
+
+check-format:
+    pnpm exec prettier . --check
