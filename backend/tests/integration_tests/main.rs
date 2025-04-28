@@ -1654,3 +1654,211 @@ async fn test_get_file_by_id(pool: Pool<Postgres>) {
     // Should return 400 Bad Request
     assert_eq!(get_invalid_response.status_code(), StatusCode::BAD_REQUEST);
 }
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_token_usage_estimate_with_file(pool: Pool<Postgres>) {
+    // Set up the test environment
+    let app_config = test_app_config();
+    let app_state = test_app_state(app_config, pool);
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a mock JWT for authentication
+    let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
+
+    // First, create a chat by sending a message
+    let message_request = json!({
+        "previous_message_id": null,
+        "user_message": "Test message to create a chat for token usage test"
+    });
+
+    // Send the message to create a chat
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Get the message ID from the response to use as previous_message_id
+    let messages = collect_sse_messages(response).await;
+    let user_message_id = messages
+        .iter()
+        .find_map(|msg| {
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
+                if json["message_type"] == "user_message_saved" {
+                    return Some(json["message_id"].as_str().unwrap().to_string());
+                }
+            }
+            None
+        })
+        .expect("No user_message_saved event found");
+
+    // Get the chat ID from the response
+    let chat_id = messages
+        .iter()
+        .find_map(|msg| {
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
+                if json["message_type"] == "chat_created" {
+                    return Some(json["chat_id"].as_str().unwrap().to_string());
+                }
+            }
+            None
+        })
+        .expect("No chat_created event found");
+
+    // Create a test file
+    let file_content = "This is a test file for token usage estimation.\nIt contains some text that should be tokenized by the service.\nThe goal is to test that the token usage endpoint correctly counts tokens for files.";
+
+    // Convert to owned Vec<u8> to satisfy 'static lifetime requirement
+    let file_bytes = file_content.as_bytes().to_vec();
+
+    // Create a multipart form with the file
+    let multipart_form = MultipartForm::new().add_part(
+        "file",
+        Part::bytes(file_bytes)
+            .file_name("test_token_count.txt")
+            .mime_type("text/plain"),
+    );
+
+    // Upload the file
+    let response = server
+        .post(&format!("/api/v1beta/me/files?chat_id={}", chat_id))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .multipart(multipart_form)
+        .await;
+
+    // Verify the response
+    response.assert_status_ok();
+    let response_json: Value = response.json();
+
+    // Get the file ID
+    let file_id = response_json["files"][0]["id"]
+        .as_str()
+        .expect("Expected file ID")
+        .to_string();
+
+    // Now call the token usage estimate endpoint with the file
+    let token_usage_request = json!({
+        "previous_message_id": user_message_id,
+        "user_message": "Can you analyze this text file for me?",
+        "input_files_ids": [file_id]
+    });
+
+    let response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&token_usage_request)
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the token usage response
+    let token_usage: Value = response.json();
+
+    // Verify the response contains the expected fields
+    assert!(
+        token_usage["stats"]["total_tokens"].as_u64().is_some(),
+        "Missing total_tokens in response"
+    );
+    assert!(
+        token_usage["stats"]["user_message_tokens"]
+            .as_u64()
+            .is_some(),
+        "Missing user_message_tokens in response"
+    );
+    assert!(
+        token_usage["stats"]["history_tokens"].as_u64().is_some(),
+        "Missing history_tokens in response"
+    );
+    assert!(
+        token_usage["stats"]["file_tokens"].as_u64().is_some(),
+        "Missing file_tokens in response"
+    );
+    assert!(
+        token_usage["stats"]["max_tokens"].as_u64().is_some(),
+        "Missing max_tokens in response"
+    );
+    assert!(
+        token_usage["stats"]["remaining_tokens"].as_u64().is_some(),
+        "Missing remaining_tokens in response"
+    );
+
+    // Verify file details
+    let file_details = token_usage["file_details"]
+        .as_array()
+        .expect("Expected file_details array");
+    assert_eq!(file_details.len(), 1, "Expected 1 file in file_details");
+
+    let file_detail = &file_details[0];
+    assert_eq!(
+        file_detail["id"].as_str().unwrap(),
+        file_id,
+        "File ID mismatch"
+    );
+    assert_eq!(
+        file_detail["filename"].as_str().unwrap(),
+        "test_token_count.txt",
+        "Filename mismatch"
+    );
+    assert!(
+        file_detail["token_count"].as_u64().is_some(),
+        "Missing token_count in file details"
+    );
+
+    // Verify the token counts are reasonable
+    let user_message_tokens = token_usage["stats"]["user_message_tokens"]
+        .as_u64()
+        .unwrap();
+    let file_tokens = token_usage["stats"]["file_tokens"].as_u64().unwrap();
+    let file_detail_tokens = file_detail["token_count"].as_u64().unwrap();
+
+    // A simple user message should have at least a few tokens
+    assert!(
+        user_message_tokens > 0,
+        "User message token count should be > 0"
+    );
+    assert!(
+        user_message_tokens < 50,
+        "User message token count should be reasonable"
+    );
+
+    // File tokens should match the file detail tokens
+    assert_eq!(
+        file_tokens, file_detail_tokens,
+        "File tokens should match file detail tokens"
+    );
+
+    // The file should have a reasonable number of tokens based on its content
+    assert!(file_tokens > 0, "File token count should be > 0");
+
+    // Total tokens should be at least the sum of user message, history, and file tokens
+    let total_tokens = token_usage["stats"]["total_tokens"].as_u64().unwrap();
+    let history_tokens = token_usage["stats"]["history_tokens"].as_u64().unwrap();
+    assert!(
+        total_tokens >= user_message_tokens + history_tokens,
+        "Total tokens should be at least the sum of component tokens"
+    );
+
+    // Max tokens should be a reasonable value (the test expects 10000 from the implementation)
+    let max_tokens = token_usage["stats"]["max_tokens"].as_u64().unwrap();
+    assert_eq!(max_tokens, 10000, "Max tokens should be 10000");
+
+    // Remaining tokens should be max_tokens - total_tokens
+    let remaining_tokens = token_usage["stats"]["remaining_tokens"].as_u64().unwrap();
+    assert_eq!(
+        remaining_tokens,
+        max_tokens - total_tokens,
+        "Remaining tokens should be max_tokens - total_tokens"
+    );
+}

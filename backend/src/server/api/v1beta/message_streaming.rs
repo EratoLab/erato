@@ -607,8 +607,9 @@ pub async fn generate_chat_summary(
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileContentsForGeneration {
+    pub id: Uuid,
     pub filename: String,
     pub contents_as_text: String,
 }
@@ -688,6 +689,7 @@ async fn process_input_files(
                 );
                 tracing::debug!("Extracted text content: {}", text);
                 converted_files.push(FileContentsForGeneration {
+                    id: *file_id,
                     filename: file_upload.filename,
                     contents_as_text: text,
                 });

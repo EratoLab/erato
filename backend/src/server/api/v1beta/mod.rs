@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 pub mod me_profile_middleware;
 pub mod message_streaming;
+pub mod token_usage;
 
 use crate::db::entity_ext::messages;
 use crate::models;
@@ -51,6 +52,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/chats/:chat_id/messages", get(chat_messages))
         .route("/chats/:chat_id/archive", post(archive_chat_endpoint))
         .route("/files/:file_id", get(get_file))
+        .route(
+            "/token_usage/estimate",
+            post(token_usage::token_usage_estimate),
+        )
         .route_layer(middleware::from_fn_with_state(
             app_state,
             me_profile_middleware::user_profile_middleware,
@@ -79,7 +84,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         edit_message_sse,
         create_chat,
         get_file,
-        archive_chat_endpoint
+        archive_chat_endpoint,
+        token_usage::token_usage_estimate
     ),
     components(schemas(
         Message,
@@ -100,7 +106,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         CreateChatRequest,
         CreateChatResponse,
         ArchiveChatRequest,
-        ArchiveChatResponse
+        ArchiveChatResponse,
+        token_usage::TokenUsageRequest,
+        token_usage::TokenUsageStats,
+        token_usage::TokenUsageResponseFileItem,
+        token_usage::TokenUsageResponse
     ))
 )]
 pub struct ApiV1ApiDoc;
