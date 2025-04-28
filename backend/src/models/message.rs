@@ -340,6 +340,15 @@ pub struct InputMessage {
     pub content: MessageContent,
 }
 
+impl InputMessage {
+    pub fn full_text(&self) -> String {
+        match &self.content {
+            MessageContent::String(content) => content.to_string(),
+            MessageContent::Array(contents) => contents.join(" "),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerationInputMessages {
     pub(crate) messages: Vec<InputMessage>,
