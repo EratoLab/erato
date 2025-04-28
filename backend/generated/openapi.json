@@ -177,6 +177,64 @@
         ]
       }
     },
+    "/api/v1beta/me/chats/{chat_id}/archive": {
+      "post": {
+        "tags": [],
+        "summary": "Archive a chat",
+        "description": "This endpoint marks a chat as archived by setting its archived_at timestamp.\nArchived chats can be filtered out from the recent chats listing by default.",
+        "operationId": "archive_chat_endpoint",
+        "parameters": [
+          {
+            "name": "chat_id",
+            "in": "path",
+            "description": "The ID of the chat to archive",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully archived the chat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid chat ID format"
+          },
+          "401": {
+            "description": "User not authorized to archive this chat"
+          },
+          "404": {
+            "description": "Chat not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/files": {
       "post": {
         "tags": [
@@ -399,6 +457,15 @@
               "format": "int64",
               "minimum": 0
             }
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "description": "Whether to include archived chats in results. Defaults to false if not provided.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -483,6 +550,29 @@
   },
   "components": {
     "schemas": {
+      "ArchiveChatRequest": {
+        "type": "object",
+        "description": "Request to archive a chat"
+      },
+      "ArchiveChatResponse": {
+        "type": "object",
+        "description": "Response from the archive chat endpoint",
+        "required": [
+          "chat_id",
+          "archived_at"
+        ],
+        "properties": {
+          "archived_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The time when the chat was archived"
+          },
+          "chat_id": {
+            "type": "string",
+            "description": "The ID of the archived chat"
+          }
+        }
+      },
       "Chat": {
         "type": "object",
         "required": [

@@ -8,6 +8,7 @@ use sea_orm::prelude::*;
 use sea_orm::{
     ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QueryOrder, QuerySelect,
 };
+use sqlx::types::chrono::Utc;
 
 /// Indicates whether a chat was newly created or already existed
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,13 +123,21 @@ pub async fn get_recent_chats(
     owner_user_id: &str,
     limit: u64,
     offset: u64,
+    include_archived: bool,
 ) -> Result<(Vec<RecentChat>, ChatListStats), Report> {
     // Query the most recent chats for the user.
     // Query the chats belongin to a user, and join with the chats_latest_message view.
-    let chats: Vec<(chats::Model, Option<chats_latest_message::Model>)> = Chats::find()
+    let mut query = Chats::find()
         .filter(chats::Column::OwnerUserId.eq(owner_user_id))
         .find_also_related(chats_latest_message::Entity)
-        .filter(chats_latest_message::Column::LatestMessageId.is_not_null())
+        .filter(chats_latest_message::Column::LatestMessageId.is_not_null());
+
+    // Filter out archived chats if include_archived is false
+    if !include_archived {
+        query = query.filter(chats::Column::ArchivedAt.is_null());
+    }
+
+    let chats: Vec<(chats::Model, Option<chats_latest_message::Model>)> = query
         .order_by_desc(chats_latest_message::Column::LatestMessageAt)
         .limit(limit)
         .offset(offset)
@@ -138,12 +147,17 @@ pub async fn get_recent_chats(
     // Use our pagination utility to efficiently calculate the total count
     let (total_count, has_more) =
         pagination::calculate_total_count(offset, limit, chats.len(), || async {
-            Chats::find()
+            let mut count_query = Chats::find()
                 .filter(chats::Column::OwnerUserId.eq(owner_user_id))
                 .find_also_related(chats_latest_message::Entity)
-                .filter(chats_latest_message::Column::LatestMessageId.is_not_null())
-                .count(conn)
-                .await
+                .filter(chats_latest_message::Column::LatestMessageId.is_not_null());
+
+            // Apply same archived filter to count query
+            if !include_archived {
+                count_query = count_query.filter(chats::Column::ArchivedAt.is_null());
+            }
+
+            count_query.count(conn).await
         })
         .await?;
 
@@ -244,6 +258,36 @@ pub async fn update_chat_summary(
     // Update the chat
     let mut chat_active: chats::ActiveModel = chat.clone().into();
     chat_active.title_by_summary = ActiveValue::Set(Some(summary));
+
+    let updated_chat = chat_active.update(conn).await?;
+
+    Ok(updated_chat)
+}
+
+/// Archive a chat by setting its archived_at timestamp
+pub async fn archive_chat(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+) -> Result<chats::Model, Report> {
+    // Find the chat
+    let chat = Chats::find_by_id(*chat_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Chat with ID {} not found", chat_id))?;
+
+    // Authorize the user to update the chat
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat.id.to_string()),
+        Action::Update
+    )?;
+
+    // Update the chat
+    let mut chat_active: chats::ActiveModel = chat.clone().into();
+    chat_active.archived_at = ActiveValue::Set(Some(Utc::now().into()));
 
     let updated_chat = chat_active.update(conn).await?;
 

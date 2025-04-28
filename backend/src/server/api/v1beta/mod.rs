@@ -4,7 +4,7 @@ pub mod message_streaming;
 
 use crate::db::entity_ext::messages;
 use crate::models;
-use crate::models::chat::{get_or_create_chat, get_recent_chats};
+use crate::models::chat::{archive_chat, get_or_create_chat, get_recent_chats};
 use crate::models::message::MessageSchema;
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
@@ -49,6 +49,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // Should at a later time use a more generic middleware that can use a non-me profile as a Subject
     let authenticated_routes = Router::new()
         .route("/chats/:chat_id/messages", get(chat_messages))
+        .route("/chats/:chat_id/archive", post(archive_chat_endpoint))
         .route("/files/:file_id", get(get_file))
         .route_layer(middleware::from_fn_with_state(
             app_state,
@@ -77,7 +78,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         regenerate_message_sse,
         edit_message_sse,
         create_chat,
-        get_file
+        get_file,
+        archive_chat_endpoint
     ),
     components(schemas(
         Message,
@@ -96,7 +98,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         EditMessageRequest,
         EditMessageStreamingResponseMessage,
         CreateChatRequest,
-        CreateChatResponse
+        CreateChatResponse,
+        ArchiveChatRequest,
+        ArchiveChatResponse
     ))
 )]
 pub struct ApiV1ApiDoc;
@@ -491,7 +495,8 @@ pub async fn chat_messages(
     path = "/me/recent_chats", 
     params(
         ("limit" = Option<u64>, Query, description = "Maximum number of chats to return per page. Defaults to 30 if not provided. Larger values may impact performance."),
-        ("offset" = Option<u64>, Query, description = "Number of chats to skip for pagination. Defaults to 0 if not provided.")
+        ("offset" = Option<u64>, Query, description = "Number of chats to skip for pagination. Defaults to 0 if not provided."),
+        ("include_archived" = Option<bool>, Query, description = "Whether to include archived chats in results. Defaults to false if not provided.")
     ),
     responses(
         (status = OK, body = RecentChatsResponse, description = "Successfully retrieved chats with pagination metadata"),
@@ -515,6 +520,10 @@ pub async fn recent_chats(
         .get("offset")
         .and_then(|o| o.parse::<u64>().ok())
         .unwrap_or(0);
+    let include_archived = params
+        .get("include_archived")
+        .and_then(|a| a.parse::<bool>().ok())
+        .unwrap_or(false);
 
     // Get the user ID from the MeProfile
     let user_id = me_user.0.id.clone();
@@ -527,6 +536,7 @@ pub async fn recent_chats(
         &user_id,
         limit,
         offset,
+        include_archived,
     )
     .await
     .map_err(log_internal_server_error)?;
@@ -685,6 +695,81 @@ pub async fn get_file(
         id: file_upload.id.to_string(),
         filename: file_upload.filename,
         download_url: file_upload.download_url,
+    }))
+}
+
+/// Request to archive a chat
+#[derive(Deserialize, ToSchema, Serialize)]
+pub struct ArchiveChatRequest {
+    // Empty for now - using path parameter for chat_id
+}
+
+/// Response from the archive chat endpoint
+#[derive(Serialize, ToSchema)]
+pub struct ArchiveChatResponse {
+    /// The ID of the archived chat
+    chat_id: String,
+    /// The time when the chat was archived
+    archived_at: DateTime<FixedOffset>,
+}
+
+/// Archive a chat
+///
+/// This endpoint marks a chat as archived by setting its archived_at timestamp.
+/// Archived chats can be filtered out from the recent chats listing by default.
+#[utoipa::path(
+    post,
+    path = "/me/chats/{chat_id}/archive",
+    params(
+        ("chat_id" = String, Path, description = "The ID of the chat to archive")
+    ),
+    request_body = ArchiveChatRequest,
+    responses(
+        (status = OK, body = ArchiveChatResponse, description = "Successfully archived the chat"),
+        (status = BAD_REQUEST, description = "Invalid chat ID format"),
+        (status = NOT_FOUND, description = "Chat not found"),
+        (status = UNAUTHORIZED, description = "User not authorized to archive this chat"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn archive_chat_endpoint(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Path(chat_id): Path<String>,
+    Json(_request): Json<ArchiveChatRequest>,
+) -> Result<Json<ArchiveChatResponse>, StatusCode> {
+    // Parse the chat ID
+    let chat_id = Uuid::parse_str(&chat_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Archive the chat
+    let updated_chat = archive_chat(
+        &app_state.db,
+        app_state.policy(),
+        &me_user.to_subject(),
+        &chat_id,
+    )
+    .await
+    .map_err(|e| {
+        if e.to_string().contains("not found") {
+            StatusCode::NOT_FOUND
+        } else {
+            log_internal_server_error(e)
+        }
+    })?;
+
+    // Check if archived_at is set (it should be)
+    let archived_at = updated_chat.archived_at.ok_or_else(|| {
+        tracing::error!("Failed to archive chat: archived_at is None after update");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Return the response
+    Ok(Json(ArchiveChatResponse {
+        chat_id: updated_chat.id.to_string(),
+        archived_at,
     }))
 }
 

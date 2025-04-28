@@ -301,6 +301,7 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
     let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
 
     // Create two chats by submitting messages
+    let mut chat_ids = Vec::new();
     for i in 1..=2 {
         // Submit a message to create a new chat
         let message_request = json!({
@@ -318,7 +319,33 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
 
         // Verify the response status is OK
         response.assert_status_ok();
+
+        // Parse the response to get the chat ID
+        let response_text = response.text();
+        let lines: Vec<&str> = response_text.lines().collect();
+
+        // Find the chat_created event and extract the chat ID
+        for i in 0..lines.len() - 1 {
+            if lines[i] == "event: chat_created" {
+                let data_line = lines[i + 1];
+                if data_line.starts_with("data: ") {
+                    let data_json: Value = serde_json::from_str(&data_line[6..])
+                        .expect("Failed to parse chat_created data");
+
+                    let chat_id = data_json["chat_id"]
+                        .as_str()
+                        .expect("Expected chat_id to be a string")
+                        .to_string();
+
+                    chat_ids.push(chat_id);
+                    break;
+                }
+            }
+        }
     }
+
+    // Make sure we got both chat IDs
+    assert_eq!(chat_ids.len(), 2, "Expected to find 2 chat IDs");
 
     // Now query the recent_chats endpoint
     let response = server
@@ -384,6 +411,107 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
             "Chat is missing 'last_message_at' field"
         );
     }
+
+    // Archive one of the chats
+    let chat_to_archive = &chat_ids[0];
+    let archive_response = server
+        .post(&format!("/api/v1beta/chats/{}/archive", chat_to_archive))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({}))
+        .await;
+
+    // Verify the archive response status is OK
+    archive_response.assert_status_ok();
+
+    // Parse the archive response
+    let archive_body: Value = archive_response.json();
+    assert_eq!(
+        archive_body.get("chat_id").unwrap().as_str().unwrap(),
+        chat_to_archive,
+        "Archive response should include the archived chat ID"
+    );
+    assert!(
+        archive_body.get("archived_at").is_some(),
+        "Archive response should include the archived_at timestamp"
+    );
+
+    // Now query the recent_chats endpoint again, should only return the non-archived chat
+    let response = server
+        .get("/api/v1beta/me/recent_chats")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response body as JSON
+    let response_body: Value = response.json();
+
+    // Extract the chats array
+    let chats = response_body
+        .get("chats")
+        .expect("Response missing 'chats' field")
+        .as_array()
+        .expect("'chats' field is not an array");
+
+    // Verify we now have exactly 1 chat
+    assert_eq!(
+        chats.len(),
+        1,
+        "Expected 1 non-archived chat, got {}",
+        chats.len()
+    );
+
+    // Verify this is the correct chat (the non-archived one)
+    assert_eq!(
+        chats[0].get("id").unwrap().as_str().unwrap(),
+        chat_ids[1],
+        "The remaining chat should be the one we didn't archive"
+    );
+
+    // Now query with include_archived=true, should return both chats
+    let response = server
+        .get("/api/v1beta/me/recent_chats?include_archived=true")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response body as JSON
+    let response_body: Value = response.json();
+
+    // Extract the chats array
+    let chats = response_body
+        .get("chats")
+        .expect("Response missing 'chats' field")
+        .as_array()
+        .expect("'chats' field is not an array");
+
+    // Verify we have both chats again
+    assert_eq!(
+        chats.len(),
+        2,
+        "Expected 2 chats when including archived, got {}",
+        chats.len()
+    );
+
+    // Collect the chat IDs from the response
+    let response_chat_ids: Vec<String> = chats
+        .iter()
+        .map(|chat| chat.get("id").unwrap().as_str().unwrap().to_string())
+        .collect();
+
+    // Verify both chat IDs are included
+    assert!(
+        response_chat_ids.contains(&chat_ids[0]),
+        "Response should include the archived chat ID"
+    );
+    assert!(
+        response_chat_ids.contains(&chat_ids[1]),
+        "Response should include the non-archived chat ID"
+    );
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
