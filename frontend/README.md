@@ -33,9 +33,14 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## Environment Variables
 
-| Variable                   | Description          | Default                  |
-| -------------------------- | -------------------- | ------------------------ |
-| `NEXT_PUBLIC_API_ROOT_URL` | Backend API root URL | `http://localhost:3001/` |
+| Variable                        | Description          | Default                  |
+| ------------------------------- | -------------------- | ------------------------ |
+| `NEXT_PUBLIC_API_ROOT_URL`      | Backend API root URL | `http://localhost:3001/` |
+| `NEXT_PUBLIC_CUSTOMER_NAME`     | See theming docs     |                          |
+| `NEXT_PUBLIC_THEME_PATH`        | See theming docs     |                          |
+| `NEXT_PUBLIC_THEME_CONFIG_PATH` | See theming docs     |                          |
+| `NEXT_PUBLIC_LOGO_PATH`         | See theming docs     |                          |
+| `NEXT_PUBLIC_LOGO_DARK_PATH`    | See theming docs     |                          |
 
 ## Linting and Type Checking
 

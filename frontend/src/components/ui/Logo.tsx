@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState, useEffect } from "react";
 
+import { env } from "@/app/env";
 import { useTheme } from "@/components/providers/ThemeProvider";
 
 interface LogoProps {
@@ -23,7 +24,7 @@ export function Logo({
   const [fallbackPath, setFallbackPath] = useState<string>("");
 
   useEffect(() => {
-    const customerName = process.env.NEXT_PUBLIC_CUSTOMER_NAME;
+    const customerName = env().themeCustomerName;
     const isDark = themeMode === "dark";
 
     // Determine the base theme path - default to "custom-theme"
@@ -36,8 +37,9 @@ export function Logo({
     }
 
     // Allow complete override of the path via env var if needed
-    if (process.env.NEXT_PUBLIC_THEME_PATH) {
-      themePath = process.env.NEXT_PUBLIC_THEME_PATH;
+    const overrideThemePath = env().themePath;
+    if (overrideThemePath) {
+      themePath = overrideThemePath;
     }
 
     // Set the logo path based on the theme path

@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 
+import { env } from "@/app/env";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { Logo } from "@/components/ui/Logo";
 import { loadThemeFromPath } from "@/utils/themeUtils";
@@ -33,7 +34,7 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
     if (!isCustomTheme) return;
 
     // Get the customer name from environment variable
-    const customerName = process.env.NEXT_PUBLIC_CUSTOMER_NAME;
+    const customerName = env().themeCustomerName;
     if (!customerName) return;
 
     const loadBranding = async () => {

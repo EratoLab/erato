@@ -1,7 +1,10 @@
+"use client";
+
 import clsx from "clsx";
 import React, { memo, useRef, useState, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
+import { env } from "@/app/env";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
@@ -170,7 +173,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
         setTimeout(() => {
           logger.log("Fallback timeout triggered");
-          const fullUrl = `${process.env.NEXT_PUBLIC_API_ROOT_URL}${signOutUrl}`;
+          const fullUrl = `${env().apiRootUrl}${signOutUrl}`;
           logger.log("Attempting fallback redirect to:", fullUrl);
           window.location.href = fullUrl;
         }, 1000);

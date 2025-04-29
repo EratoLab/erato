@@ -2,6 +2,8 @@
  * Theme Configuration
  * Defines how custom themes are loaded and configured
  */
+import { env } from "@/app/env";
+
 import type { CustomThemeConfig } from "@/utils/themeUtils";
 
 /**
@@ -12,7 +14,7 @@ export interface ThemeLocationConfig {
    * List of paths to look for theme files in priority order
    * Paths can be static or derived from environment variables
    */
-  themePaths: Array<string | null | undefined>;
+  getThemePaths: () => Array<string | null | undefined>;
 
   /**
    * Function to determine logo paths based on theme name and mode
@@ -27,46 +29,46 @@ export interface ThemeLocationConfig {
  * Default theme configuration
  */
 export const defaultThemeConfig: ThemeLocationConfig = {
-  themePaths: [
-    // 1. Environment variable override for entire path
-    process.env.NEXT_PUBLIC_THEME_CONFIG_PATH,
+  getThemePaths: () => {
+    return [
+      // 1. Environment variable override for entire path
+      env().themeConfigPath,
 
-    // 2. Customer-specific theme based on environment variable
-    process.env.NEXT_PUBLIC_CUSTOMER_NAME
-      ? `/custom-theme/${process.env.NEXT_PUBLIC_CUSTOMER_NAME}/theme.json`
-      : null,
+      // 2. Customer-specific theme based on environment variable
+      env().themeCustomerName
+        ? `/custom-theme/${env().themeCustomerName}/theme.json`
+        : null,
 
-    // 3. Custom theme override path
-    process.env.NEXT_PUBLIC_THEME_PATH
-      ? `${process.env.NEXT_PUBLIC_THEME_PATH}/theme.json`
-      : null,
+      // 3. Custom theme override path
+      env().themePath ? `${env().themePath}/theme.json` : null,
 
-    // 4. Fallback to default location (no customer subfolder)
-    "/custom-theme/theme.json",
-  ],
+      // 4. Fallback to default location (no customer subfolder)
+      "/custom-theme/theme.json",
+    ];
+  },
 
   getLogoPath: (themeName, isDark) => {
     // 1. Check environment variables first for complete path override
-    if (isDark && process.env.NEXT_PUBLIC_LOGO_DARK_PATH) {
-      return process.env.NEXT_PUBLIC_LOGO_DARK_PATH;
+    const { themeLogoDarkPath, themeLogoPath, themePath, themeCustomerName } =
+      env();
+    if (isDark && themeLogoDarkPath) {
+      return themeLogoDarkPath;
     }
 
-    if (!isDark && process.env.NEXT_PUBLIC_LOGO_PATH) {
-      return process.env.NEXT_PUBLIC_LOGO_PATH;
+    if (!isDark && themeLogoPath) {
+      return themeLogoPath;
     }
 
     // 2. Check for theme path override
-    if (process.env.NEXT_PUBLIC_THEME_PATH) {
-      return isDark
-        ? `${process.env.NEXT_PUBLIC_THEME_PATH}/logo-dark.svg`
-        : `${process.env.NEXT_PUBLIC_THEME_PATH}/logo.svg`;
+    if (themePath) {
+      return isDark ? `${themePath}/logo-dark.svg` : `${themePath}/logo.svg`;
     }
 
     // 3. If a customer name is specified, use customer-specific subfolder
-    if (process.env.NEXT_PUBLIC_CUSTOMER_NAME) {
+    if (themeCustomerName) {
       return isDark
-        ? `/custom-theme/${process.env.NEXT_PUBLIC_CUSTOMER_NAME}/logo-dark.svg`
-        : `/custom-theme/${process.env.NEXT_PUBLIC_CUSTOMER_NAME}/logo.svg`;
+        ? `/custom-theme/${themeCustomerName}/logo-dark.svg`
+        : `/custom-theme/${themeCustomerName}/logo.svg`;
     }
 
     // 4. Default to the root custom-theme folder (no customer subfolder)
@@ -84,7 +86,7 @@ export async function loadThemeConfig(
 ): Promise<CustomThemeConfig | null> {
   try {
     // Try paths in priority order
-    const pathsToTry = config.themePaths.filter(Boolean) as string[];
+    const pathsToTry = config.getThemePaths().filter(Boolean) as string[];
 
     for (const path of pathsToTry) {
       try {
