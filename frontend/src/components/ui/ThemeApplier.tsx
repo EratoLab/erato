@@ -3,6 +3,7 @@
 
 import { useEffect } from "react";
 
+import { env } from "@/app/env";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { loadThemeFromPath } from "@/utils/themeUtils";
 
@@ -17,7 +18,7 @@ export function ThemeApplier() {
     if (!isCustomTheme) return;
 
     // Get the customer name from environment variable (lowercase folder name)
-    const customerName = process.env.NEXT_PUBLIC_CUSTOMER_NAME;
+    const customerName = env().themeCustomerName;
     if (!customerName) return;
 
     // Load the theme data
