@@ -96,6 +96,7 @@ pub struct RecentChat {
     pub title_by_summary: String,
     /// Time of the last message in the chat.
     pub last_message_at: DateTimeWithTimeZone,
+    pub archived_at: Option<DateTimeWithTimeZone>,
 }
 
 /// Statistics for a list of chats
@@ -189,6 +190,7 @@ pub async fn get_recent_chats(
                     .clone()
                     .unwrap_or_else(|| "Untitled Chat".to_string()),
                 last_message_at: latest_message.latest_message_at,
+                archived_at: chat.archived_at,
             }
         })
         .collect::<Vec<RecentChat>>();
