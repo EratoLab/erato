@@ -4,6 +4,27 @@
  * @version
  */
 /**
+ * Request to archive a chat
+ */
+export type ArchiveChatRequest = Record<string, any>;
+
+/**
+ * Response from the archive chat endpoint
+ */
+export type ArchiveChatResponse = {
+  /**
+   * The time when the chat was archived
+   *
+   * @format date-time
+   */
+  archived_at: string;
+  /**
+   * The ID of the archived chat
+   */
+  chat_id: string;
+};
+
+/**
  * @deprecated true
  */
 export type Chat = {
@@ -266,6 +287,12 @@ export type MultipartFormFile = {
 
 export type RecentChat = {
   /**
+   * When this chat was archived by the user.
+   *
+   * @format date-time
+   */
+  archived_at?: null | undefined;
+  /**
    * Files uploaded to this chat
    */
   file_uploads: FileUploadItem[];
@@ -342,6 +369,113 @@ export type RegenerateMessageStreamingResponseMessage =
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
     });
+
+export type TokenUsageRequest = {
+  /**
+   * The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  existing_chat_id?: null | undefined;
+  /**
+   * The IDs of any files attached to this message. These files must already be uploaded to the file_uploads table.
+   *
+   * @example ["00000000-0000-0000-0000-000000000000"]
+   */
+  input_files_ids?: string[];
+  /**
+   * The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  previous_message_id?: null | undefined;
+  /**
+   * The text of the message.
+   *
+   * @example Hello, world!
+   */
+  user_message: string;
+};
+
+/**
+ * Response for the token_usage_estimate endpoint
+ */
+export type TokenUsageResponse = {
+  /**
+   * Detailed token usage for each file
+   */
+  file_details: TokenUsageResponseFileItem[];
+  /**
+   * Overall statistics about token usage
+   */
+  stats: TokenUsageStats;
+};
+
+/**
+ * Token usage details for an individual file
+ */
+export type TokenUsageResponseFileItem = {
+  /**
+   * The original filename of the file
+   */
+  filename: string;
+  /**
+   * The unique ID of the file
+   */
+  id: string;
+  /**
+   * Number of tokens used for this file's content
+   *
+   * @minimum 0
+   */
+  token_count: number;
+};
+
+/**
+ * Token usage statistics for the request
+ */
+export type TokenUsageStats = {
+  /**
+   * Number of tokens in file contents
+   *
+   * @minimum 0
+   */
+  file_tokens: number;
+  /**
+   * Number of tokens in previous messages (chat history)
+   *
+   * @minimum 0
+   */
+  history_tokens: number;
+  /**
+   * The configured model's maximum token limit
+   *
+   * @format int32
+   * @minimum 0
+   */
+  max_tokens: number;
+  /**
+   * Remaining tokens available for the model response
+   *
+   * @format int32
+   * @minimum 0
+   */
+  remaining_tokens: number;
+  /**
+   * Total number of tokens in the request
+   *
+   * @minimum 0
+   */
+  total_tokens: number;
+  /**
+   * Number of tokens in the user message
+   *
+   * @minimum 0
+   */
+  user_message_tokens: number;
+};
 
 export type UserProfile = {
   /**

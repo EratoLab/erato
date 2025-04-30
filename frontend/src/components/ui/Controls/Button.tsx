@@ -1,8 +1,10 @@
 import clsx from "clsx";
 import React, { useCallback, useMemo } from "react";
 
+import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
+
 // Create a type for variants to improve type safety
-type ButtonVariant =
+export type ButtonVariant =
   | "primary"
   | "secondary"
   | "ghost"
@@ -25,6 +27,9 @@ interface ButtonProps
   "aria-checked"?: boolean | "true" | "false" | "mixed";
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   role?: string;
+  confirmAction?: boolean;
+  confirmTitle?: string;
+  confirmMessage?: string;
 }
 
 // Extract variant styles to a constant
@@ -82,21 +87,43 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       "aria-checked": ariaChecked,
       "aria-label": ariaLabel,
       role: explicitRole,
+      confirmAction,
+      confirmTitle = "Confirm Action",
+      confirmMessage = "Are you sure you want to proceed?",
       ...props
     },
     ref,
   ) => {
     const [isPressed, setIsPressed] = React.useState(false);
+    const [showConfirmDialog, setShowConfirmDialog] = React.useState(false);
 
     // Memoize the click handler
     const handleClick = useCallback(
       (e: React.MouseEvent<HTMLButtonElement>) => {
         setIsPressed(true);
         setTimeout(() => setIsPressed(false), 200);
+
+        if (confirmAction) {
+          e.stopPropagation();
+          setShowConfirmDialog(true);
+        } else {
+          onClick?.(e);
+        }
+      },
+      [onClick, confirmAction],
+    );
+
+    const handleConfirm = useCallback(
+      (e: React.MouseEvent<HTMLButtonElement>) => {
+        setShowConfirmDialog(false);
         onClick?.(e);
       },
       [onClick],
     );
+
+    const handleCancel = useCallback(() => {
+      setShowConfirmDialog(false);
+    }, []);
 
     // Update aria state memoization to handle both pressed and checked
     const ariaState = useMemo(() => {
@@ -149,24 +176,38 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     );
 
     return (
-      <button
-        ref={ref}
-        type={type}
-        onClick={handleClick}
-        data-pressed={isPressed}
-        {...ariaState}
-        aria-label={ariaLabel}
-        className={buttonClasses}
-        role={role}
-        {...props}
-      >
-        {icon && (
-          <span className={iconClasses} aria-hidden="true">
-            {icon}
-          </span>
+      <>
+        <button
+          ref={ref}
+          type={type}
+          onClick={handleClick}
+          data-pressed={isPressed}
+          {...ariaState}
+          aria-label={ariaLabel}
+          className={buttonClasses}
+          role={role}
+          {...props}
+        >
+          {icon && (
+            <span className={iconClasses} aria-hidden="true">
+              {icon}
+            </span>
+          )}
+          {children}
+        </button>
+
+        {/* Confirmation Dialog Triggered by Button */}
+        {confirmAction && (
+          <ConfirmationDialog
+            isOpen={showConfirmDialog}
+            onClose={handleCancel}
+            onConfirm={handleConfirm}
+            title={confirmTitle}
+            message={confirmMessage}
+            confirmButtonVariant={variant === "danger" ? "danger" : "primary"}
+          />
         )}
-        {children}
-      </button>
+      </>
     );
   },
 );

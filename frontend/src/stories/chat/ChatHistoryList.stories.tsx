@@ -52,7 +52,7 @@ export const Default: Story = {
     currentSessionId: "1",
     onSessionSelect: (sessionId: string) =>
       console.log("Selected session:", sessionId),
-    onSessionDelete: (sessionId: string) =>
+    onSessionArchive: (sessionId: string) =>
       console.log("Delete session:", sessionId),
     onShowDetails: (sessionId: string) =>
       console.log("Show details for session:", sessionId),

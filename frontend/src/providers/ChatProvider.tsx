@@ -34,7 +34,7 @@ interface ChatContextValue {
   isHistoryLoading: boolean;
   historyError: ChatsError | null;
   createNewChat: () => Promise<string>;
-  deleteChat: (chatId: string) => Promise<void>;
+  archiveChat: (chatId: string) => Promise<void>;
   navigateToChat: (chatId: string) => void;
   refetchHistory: () => Promise<unknown>;
 
@@ -93,7 +93,7 @@ export function ChatProvider({
     isLoading: isHistoryLoading,
     error: historyError,
     createNewChat,
-    deleteChat,
+    archiveChat,
     navigateToChat,
     refetch: refetchHistory,
     isNewChatPending,
@@ -243,7 +243,7 @@ export function ChatProvider({
       isHistoryLoading,
       historyError,
       createNewChat,
-      deleteChat,
+      archiveChat,
       navigateToChat,
       refetchHistory,
 
@@ -280,7 +280,7 @@ export function ChatProvider({
     isHistoryLoading,
     historyError,
     createNewChat,
-    deleteChat,
+    archiveChat,
     navigateToChat,
     refetchHistory,
 

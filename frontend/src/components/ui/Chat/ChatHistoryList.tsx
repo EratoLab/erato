@@ -3,7 +3,7 @@ import React, { memo } from "react";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
-import { Info, Trash } from "../icons";
+import { Info, LogOutIcon } from "../icons";
 
 import type { ChatSession } from "@/types/chat";
 
@@ -11,7 +11,7 @@ export interface ChatHistoryListProps {
   sessions: ChatSession[];
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
-  onSessionDelete?: (sessionId: string) => void;
+  onSessionArchive?: (sessionId: string) => void;
   onShowDetails?: (sessionId: string) => void;
   className?: string;
   /**
@@ -36,7 +36,7 @@ const ChatHistoryListItem = memo<{
   isActive: boolean;
   layout: "default" | "compact";
   onSelect: () => void;
-  onDelete?: () => void;
+  onArchive?: () => void;
   onShowDetails?: () => void;
   showTimestamps?: boolean;
 }>(
@@ -45,7 +45,7 @@ const ChatHistoryListItem = memo<{
     isActive,
     layout,
     onSelect,
-    onDelete,
+    onArchive,
     onShowDetails,
     showTimestamps = true,
   }) => (
@@ -71,10 +71,12 @@ const ChatHistoryListItem = memo<{
               onClick: onShowDetails ?? (() => {}),
             },
             {
-              label: "Delete",
-              icon: <Trash className="size-4" />,
-              onClick: onDelete ?? (() => {}),
-              variant: "danger",
+              label: "Archive",
+              icon: <LogOutIcon className="size-4" />,
+              onClick: onArchive ?? (() => {}),
+              confirmAction: true,
+              confirmTitle: "Confirm Archive",
+              confirmMessage: "Are you sure you want to archive this chat?",
             },
           ]}
         />
@@ -104,7 +106,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     sessions,
     currentSessionId,
     onSessionSelect,
-    onSessionDelete,
+    onSessionArchive,
     onShowDetails,
     className,
     layout = "default",
@@ -134,8 +136,8 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
               console.log(`[CHAT_FLOW] Session item click: ${session.id}`);
               onSessionSelect(session.id);
             }}
-            onDelete={
-              onSessionDelete ? () => onSessionDelete(session.id) : undefined
+            onArchive={
+              onSessionArchive ? () => onSessionArchive(session.id) : undefined
             }
             onShowDetails={
               onShowDetails ? () => onShowDetails(session.id) : undefined

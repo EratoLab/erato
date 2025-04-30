@@ -13,7 +13,10 @@ import { useClickOutside } from "@/hooks/useClickOutside";
 import { useKeyboard } from "@/hooks/useKeyboard";
 
 import { Button } from "./Button";
+import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
 import { MoreVertical } from "../icons";
+
+import type { ButtonVariant } from "./Button";
 
 export interface DropdownMenuItem {
   label: string;
@@ -22,6 +25,10 @@ export interface DropdownMenuItem {
   variant?: "default" | "danger";
   disabled?: boolean;
   shortcut?: string;
+  confirmAction?: boolean;
+  confirmTitle?: string;
+  confirmMessage?: string;
+  confirmButtonVariant?: ButtonVariant;
 }
 
 export interface DropdownMenuProps {
@@ -101,6 +108,8 @@ export const DropdownMenu = memo(
     });
     const menuRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
+    const [confirmingItem, setConfirmingItem] =
+      useState<DropdownMenuItem | null>(null);
 
     // Use React's useId hook for stable IDs across server/client
     const reactId = useId();
@@ -171,8 +180,15 @@ export const DropdownMenu = memo(
         e.preventDefault();
         e.stopPropagation();
 
-        setIsProcessingClick(true);
+        // If confirmation is needed, set the state and return
+        if (item.confirmAction) {
+          setConfirmingItem(item);
+          setIsOpen(false); // Close the dropdown immediately
+          return;
+        }
 
+        // Original behavior for non-confirmable items
+        setIsProcessingClick(true);
         if (clickTimeoutRef.current) {
           clearTimeout(clickTimeoutRef.current);
         }
@@ -180,16 +196,30 @@ export const DropdownMenu = memo(
         try {
           item.onClick();
         } finally {
+          // Close menu slightly delayed for non-confirm items
           clickTimeoutRef.current = setTimeout(() => {
             setIsProcessingClick(false);
             setIsOpen(false);
           }, 100);
         }
       },
-      [],
+      [], // Dependencies: setConfirmingItem, setIsProcessingClick, setIsOpen (implicitly via scope)
     );
 
-    useClickOutside(menuRef, closeMenu, isOpen);
+    const handleConfirmAction = useCallback(() => {
+      if (confirmingItem) {
+        // We might want setIsProcessingClick around this if onClick is async
+        confirmingItem.onClick(); // Execute the original action
+        setConfirmingItem(null); // Close the confirmation dialog
+        setIsOpen(false); // Close the dropdown menu
+      }
+    }, [confirmingItem]); // Dependency: setIsOpen (implicitly via scope)
+
+    const handleCancelConfirm = useCallback(() => {
+      setConfirmingItem(null); // Just close the confirmation dialog
+    }, []);
+
+    useClickOutside(menuRef, closeMenu, isOpen && confirmingItem === null); // Only close if confirm dialog isn't open
     useKeyboard({
       target: menuRef,
       enabled: isOpen,
@@ -229,10 +259,10 @@ export const DropdownMenu = memo(
     useEffect(() => {
       if (isOpen) {
         requestAnimationFrame(() => {
-          const firstItem = menuRef.current?.querySelector(
-            '[role="menuitem"]',
-          ) as HTMLElement;
-          firstItem.focus();
+          const firstItem = menuRef.current?.querySelector('[role="menuitem"]');
+          if (firstItem instanceof HTMLElement) {
+            firstItem.focus();
+          }
         });
       }
     }, [isOpen]);
@@ -317,6 +347,24 @@ export const DropdownMenu = memo(
           aria-controls={menuId}
         />
         {renderDropdown()}
+
+        {/* Render Confirmation Dialog if needed */}
+        {confirmingItem && (
+          <ConfirmationDialog
+            isOpen={true}
+            onClose={handleCancelConfirm}
+            onConfirm={handleConfirmAction}
+            title={confirmingItem.confirmTitle ?? "Confirm Action"}
+            message={
+              confirmingItem.confirmMessage ??
+              "Are you sure you want to proceed?"
+            }
+            confirmButtonVariant={
+              confirmingItem.confirmButtonVariant ??
+              (confirmingItem.variant === "danger" ? "danger" : "primary")
+            }
+          />
+        )}
       </div>
     );
   },
