@@ -92,6 +92,68 @@ export const useChats = <TData = ChatsResponse,>(
   });
 };
 
+export type ArchiveChatEndpointPathParams = {
+  /**
+   * The ID of the chat to archive
+   */
+  chatId: string;
+};
+
+export type ArchiveChatEndpointError = Fetcher.ErrorWrapper<undefined>;
+
+export type ArchiveChatEndpointVariables = {
+  body?: Schemas.ArchiveChatRequest;
+  pathParams: ArchiveChatEndpointPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * This endpoint marks a chat as archived by setting its archived_at timestamp.
+ * Archived chats can be filtered out from the recent chats listing by default.
+ */
+export const fetchArchiveChatEndpoint = (
+  variables: ArchiveChatEndpointVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ArchiveChatResponse,
+    ArchiveChatEndpointError,
+    Schemas.ArchiveChatRequest,
+    {},
+    {},
+    ArchiveChatEndpointPathParams
+  >({
+    url: "/api/v1beta/chats/{chatId}/archive",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * This endpoint marks a chat as archived by setting its archived_at timestamp.
+ * Archived chats can be filtered out from the recent chats listing by default.
+ */
+export const useArchiveChatEndpoint = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ArchiveChatResponse,
+      ArchiveChatEndpointError,
+      ArchiveChatEndpointVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ArchiveChatResponse,
+    ArchiveChatEndpointError,
+    ArchiveChatEndpointVariables
+  >({
+    mutationFn: (variables: ArchiveChatEndpointVariables) =>
+      fetchArchiveChatEndpoint(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ChatMessagesPathParams = {
   /**
    * The ID of the chat to get messages for
@@ -685,6 +747,10 @@ export type RecentChatsQueryParams = {
    * @minimum 0
    */
   offset?: number;
+  /**
+   * Whether to include archived chats in results. Defaults to false if not provided.
+   */
+  include_archived?: boolean;
 };
 
 export type RecentChatsError = Fetcher.ErrorWrapper<undefined>;
@@ -869,6 +935,52 @@ export const useMessages = <TData = MessagesResponse,>(
     ),
     ...options,
     ...queryOptions,
+  });
+};
+
+export type TokenUsageEstimateError = Fetcher.ErrorWrapper<undefined>;
+
+export type TokenUsageEstimateVariables = {
+  body: Schemas.TokenUsageRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchTokenUsageEstimate = (
+  variables: TokenUsageEstimateVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.TokenUsageResponse,
+    TokenUsageEstimateError,
+    Schemas.TokenUsageRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/token_usage/estimate",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useTokenUsageEstimate = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.TokenUsageResponse,
+      TokenUsageEstimateError,
+      TokenUsageEstimateVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.TokenUsageResponse,
+    TokenUsageEstimateError,
+    TokenUsageEstimateVariables
+  >({
+    mutationFn: (variables: TokenUsageEstimateVariables) =>
+      fetchTokenUsageEstimate(deepMerge(fetcherOptions, variables)),
+    ...options,
   });
 };
 

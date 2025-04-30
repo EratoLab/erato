@@ -17,7 +17,6 @@ export function useChat() {
     isLoading: isHistoryLoading,
     error: historyError,
     createNewChat,
-    deleteChat,
     navigateToChat,
     refetch: refetchHistory,
   } = useChatHistory();
@@ -45,7 +44,6 @@ export function useChat() {
       chats,
       currentChatId,
       createNewChat,
-      deleteChat,
       navigateToChat,
       refetchHistory,
 
@@ -65,7 +63,6 @@ export function useChat() {
       chats,
       currentChatId,
       createNewChat,
-      deleteChat,
       navigateToChat,
       refetchHistory,
       messages,

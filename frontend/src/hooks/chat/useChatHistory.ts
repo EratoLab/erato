@@ -8,7 +8,21 @@ import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { create } from "zustand";
 
-import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  useRecentChats,
+  useArchiveChatEndpoint,
+  recentChatsQuery,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
+// Import context and merge utility
+import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { deepMerge } from "@/lib/generated/v1betaApi/v1betaApiUtils";
+
+// Import the correct response type and the RecentChat type from schemas
+// No longer needed after switching to invalidateQueries:
+// import type {
+//   RecentChatsResponse,
+//   RecentChat,
+// } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface ChatHistoryState {
   currentChatId: string | null;
@@ -40,6 +54,8 @@ export const useChatHistoryStore = create<ChatHistoryState>((set) => {
 export function useChatHistory() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  // Get context to access fetcherOptions
+  const { fetcherOptions } = useV1betaApiContext();
   const {
     currentChatId,
     isNewChatPending,
@@ -47,8 +63,11 @@ export function useChatHistory() {
     setNewChatPending,
   } = useChatHistoryStore();
 
-  // Fetch chats using the generated API hook
+  // Fetch chats using the generated API hook (passing empty object directly)
   const { data, isLoading, error, refetch } = useRecentChats({});
+
+  // Generated hook for archiving a chat
+  const { mutateAsync: archiveChatMutation } = useArchiveChatEndpoint();
 
   // Extract chats from the response structure
   const chats = data?.chats ?? [];
@@ -105,25 +124,50 @@ export function useChatHistory() {
     }
   }, [router, setCurrentChatId, setNewChatPending]);
 
-  // Delete a chat
-  const deleteChat = useCallback(
+  // Archive a chat
+  const archiveChat = useCallback(
     async (chatId: string) => {
-      try {
-        // In a real implementation, this would call an API endpoint
-        // For now, just invalidate the query cache
-        await queryClient.invalidateQueries({ queryKey: ["chats"] });
+      // Replicate the key generation process used by the hook:
+      // 1. Merge fetcherOptions from context with base variables ({})
+      const mergedVariables = deepMerge(fetcherOptions, {}); // Inlined empty object
+      // 2. Get the query definition using the *merged* variables
+      const queryDefinition = recentChatsQuery(mergedVariables);
+      // 3. Extract the queryKey from the definition
+      const queryKey = queryDefinition.queryKey;
 
-        // If the deleted chat was the current one, navigate to the home page
+      try {
+        // Call the mutation
+        await archiveChatMutation({
+          pathParams: { chatId },
+          body: {}, // Send empty object as body
+        });
+
+        // Invalidate the query - React Query will refetch it automatically
+        // when components using it are active.
+        await queryClient.invalidateQueries({ queryKey }); // Use the generated key
+
+        // If the archived chat was the current one, navigate to the new chat page
         if (currentChatId === chatId) {
-          router.push("/");
-          setCurrentChatId(null);
+          setCurrentChatId(null); // Reset current chat ID in the store
+          router.replace("/chat/new"); // Navigate to the new chat page
         }
+        // If not the current chat, no navigation occurs.
       } catch (error) {
-        console.error("Failed to delete chat:", error);
-        throw error;
+        console.error(`Failed to archive chat ${chatId}:`, error);
+        // Consider adding error handling, e.g., show a notification
+        // If using optimistic updates, would need to revert changes here
+        throw error; // Re-throw error for potential handling upstream
       }
     },
-    [currentChatId, queryClient, router, setCurrentChatId],
+    // fetcherOptions is needed for queryKey generation
+    [
+      archiveChatMutation,
+      queryClient,
+      currentChatId,
+      router,
+      setCurrentChatId,
+      fetcherOptions, // Keep fetcherOptions
+    ],
   );
 
   return {
@@ -134,7 +178,7 @@ export function useChatHistory() {
     refetch,
     navigateToChat,
     createNewChat,
-    deleteChat,
+    archiveChat,
     isNewChatPending,
   };
 }

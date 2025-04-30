@@ -17,11 +17,12 @@ export default function ChatPage() {
   const isFirstRender = useRef(true);
   const [isTransitioning, setIsTransitioning] = useState(true);
 
-  // Use our chat context
   const { messages, messageOrder, currentChatId, navigateToChat } =
     useChatContext();
+  // Use our chat context
 
   // Handle only the initial setting of chat ID and page refreshes
+  // ? TODO: wtf?
   useEffect(() => {
     // Only on initial render or page refresh, sync with URL
     if (isFirstRender.current && chatId && chatId !== currentChatId) {
@@ -83,8 +84,6 @@ export default function ChatPage() {
             if (messageToCopy.content) {
               try {
                 await navigator.clipboard.writeText(messageToCopy.content);
-                logger.log("Message content copied to clipboard");
-                console.log("Success: Copied to clipboard!"); // Temporary feedback
 
                 // Add haptic feedback if supported
                 if (typeof navigator.vibrate === "function") {

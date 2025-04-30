@@ -44,7 +44,7 @@ export const AccessibilityTest: Story = {
     sessions: mockSessions,
     currentSessionId: "1",
     onSessionSelect: () => {},
-    onSessionDelete: () => {},
+    onSessionArchive: () => {},
     isLoading: false,
   },
   play: async ({ canvasElement }) => {
@@ -77,7 +77,7 @@ export const LoadingStateTest: Story = {
     sessions: [],
     currentSessionId: null,
     onSessionSelect: () => {},
-    onSessionDelete: () => {},
+    onSessionArchive: () => {},
     isLoading: true,
   },
   play: async ({ canvasElement }) => {
@@ -105,7 +105,7 @@ const CollapseTestComponent = () => {
       sessions={mockSessions}
       currentSessionId="1"
       onSessionSelect={() => {}}
-      onSessionDelete={() => {}}
+      onSessionArchive={() => {}}
       isLoading={false}
     />
   );
@@ -116,7 +116,7 @@ export const CollapseTest: Story = {
     sessions: mockSessions,
     currentSessionId: "1",
     onSessionSelect: () => {},
-    onSessionDelete: () => {},
+    onSessionArchive: () => {},
     isLoading: false,
     showTitle: true,
   },

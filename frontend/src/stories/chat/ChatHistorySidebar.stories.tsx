@@ -92,7 +92,7 @@ const InteractiveTemplate = (
       sessions={mockSessions}
       currentSessionId="1"
       onSessionSelect={(id) => action("Session selected")(id)}
-      onSessionDelete={(id) => action("Session deleted")(id)}
+      onSessionArchive={(id) => action("Session deleted")(id)}
       isLoading={false}
     />
   );
@@ -104,7 +104,7 @@ export const Interactive: Story = {
     sessions: mockSessions,
     currentSessionId: "1",
     onSessionSelect: action("Session selected"),
-    onSessionDelete: action("Session deleted"),
+    onSessionArchive: action("Session archived"),
     isLoading: false,
     showTitle: false,
   },
@@ -124,7 +124,7 @@ export const Default: Story = {
     sessions: mockSessions,
     currentSessionId: "1",
     onSessionSelect: action("Session selected"),
-    onSessionDelete: action("Session deleted"),
+    onSessionArchive: action("Session archived"),
     isLoading: false,
     showTitle: false,
   },
@@ -139,7 +139,7 @@ export const Collapsed: Story = {
     sessions: mockSessions,
     currentSessionId: "1",
     onSessionSelect: action("Session selected"),
-    onSessionDelete: action("Session deleted"),
+    onSessionArchive: action("Session archived"),
     isLoading: false,
   },
 };
@@ -152,7 +152,7 @@ export const WithTitle: Story = {
     sessions: mockSessions,
     currentSessionId: "1",
     onSessionSelect: action("Session selected"),
-    onSessionDelete: action("Session deleted"),
+    onSessionArchive: action("Session archived"),
     isLoading: false,
   },
 };
@@ -164,7 +164,7 @@ export const Loading: Story = {
     sessions: [],
     currentSessionId: null,
     onSessionSelect: action("Session selected"),
-    onSessionDelete: action("Session deleted"),
+    onSessionArchive: action("Session archived"),
     isLoading: true,
   },
 };
@@ -174,7 +174,7 @@ export const Empty: Story = {
     sessions: [],
     currentSessionId: null,
     onSessionSelect: action("Session selected"),
-    onSessionDelete: action("Session deleted"),
+    onSessionArchive: action("Session archived"),
     isLoading: false,
     showTitle: false,
   },

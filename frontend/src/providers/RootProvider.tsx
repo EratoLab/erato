@@ -1,8 +1,5 @@
 "use client";
 
-import { ApiProvider } from "@/components/providers/ApiProvider";
-import { ThemeProvider } from "@/components/providers/ThemeProvider";
-
 import { ChatProvider } from "./ChatProvider";
 import { ProfileProvider } from "./ProfileProvider";
 
@@ -25,14 +22,10 @@ export function RootProvider({
   acceptedFileTypes = [],
 }: RootProviderProps) {
   return (
-    <ApiProvider>
-      <ThemeProvider>
-        <ProfileProvider>
-          <ChatProvider acceptedFileTypes={acceptedFileTypes}>
-            {children}
-          </ChatProvider>
-        </ProfileProvider>
-      </ThemeProvider>
-    </ApiProvider>
+    <ProfileProvider>
+      <ChatProvider acceptedFileTypes={acceptedFileTypes}>
+        {children}
+      </ChatProvider>
+    </ProfileProvider>
   );
 }

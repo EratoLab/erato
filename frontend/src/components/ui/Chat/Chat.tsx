@@ -105,7 +105,7 @@ export const Chat = ({
     chats: chatHistory,
     currentChatId,
     navigateToChat: switchSession,
-    deleteChat: deleteSession,
+    archiveChat,
     createNewChat: createChat,
     isHistoryLoading: chatHistoryLoading,
     historyError: chatHistoryError,
@@ -182,9 +182,10 @@ export const Chat = ({
     }
   };
 
-  // Handle deleting a session with void return type
-  const handleDeleteSession = (sessionId: string) => {
-    void deleteSession(sessionId);
+  // Handle archiving a session
+  const handleArchiveSession = (sessionId: string) => {
+    // Use void to explicitly ignore the promise returned by archiveChat
+    void archiveChat(sessionId);
   };
 
   // Function to capture the scrollToBottom from MessageList
@@ -248,7 +249,7 @@ export const Chat = ({
         sessions={sessions}
         currentSessionId={currentChatId ?? ""}
         onSessionSelect={handleSessionSelectWrapper}
-        onSessionDelete={handleDeleteSession}
+        onSessionArchive={handleArchiveSession}
         showTimestamps={showTimestamps}
         isLoading={chatHistoryLoading}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}

@@ -41,7 +41,7 @@ export interface ChatHistorySidebarProps {
   sessions: ChatSession[];
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
-  onSessionDelete: (sessionId: string) => void;
+  onSessionArchive: (sessionId: string) => void;
   isLoading: boolean;
   error?: Error;
   userProfile?: UserProfile;
@@ -129,7 +129,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     sessions,
     currentSessionId,
     onSessionSelect,
-    onSessionDelete,
+    onSessionArchive,
     isLoading,
     error,
     userProfile,
@@ -165,16 +165,12 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const handleSignOut = () => {
       if (!isBrowser) return;
 
-      logger.log("ChatHistorySidebar handleSignOut called");
       try {
         const signOutUrl = "/oauth2/sign_out";
-        logger.log("Attempting to redirect to:", signOutUrl);
         window.location.href = signOutUrl;
 
         setTimeout(() => {
-          logger.log("Fallback timeout triggered");
           const fullUrl = `${env().apiRootUrl}${signOutUrl}`;
-          logger.log("Attempting fallback redirect to:", fullUrl);
           window.location.href = fullUrl;
         }, 1000);
       } catch (error) {
@@ -225,7 +221,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   sessions={sessions}
                   currentSessionId={currentSessionId}
                   onSessionSelect={onSessionSelect}
-                  onSessionDelete={onSessionDelete}
+                  onSessionArchive={onSessionArchive}
                   showTimestamps={showTimestamps}
                   className="flex-1 p-2"
                 />
