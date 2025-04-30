@@ -169,6 +169,8 @@ pub struct RecentChat {
     last_message_at: DateTime<FixedOffset>,
     /// Files uploaded to this chat
     file_uploads: Vec<FileUploadItem>,
+    /// When this chat was archived by the user.
+    archived_at: Option<DateTime<FixedOffset>>,
 }
 
 /// A message in a chat
@@ -585,6 +587,7 @@ pub async fn recent_chats(
             title_by_summary: chat.title_by_summary,
             last_message_at: chat.last_message_at,
             file_uploads: file_upload_items,
+            archived_at: chat.archived_at,
         });
     }
 
@@ -729,7 +732,7 @@ pub struct ArchiveChatResponse {
 /// Archived chats can be filtered out from the recent chats listing by default.
 #[utoipa::path(
     post,
-    path = "/me/chats/{chat_id}/archive",
+    path = "/chats/{chat_id}/archive",
     params(
         ("chat_id" = String, Path, description = "The ID of the chat to archive")
     ),
