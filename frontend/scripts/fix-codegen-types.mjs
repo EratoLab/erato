@@ -30,15 +30,20 @@ const fetchUploadFileJSDoc = `
 async function patchVoidTypes(filePath) {
   try {
     const content = await fs.readFile(filePath, "utf8");
+    const relativeFilePath = path.relative(process.cwd(), filePath);
+
     if (voidPattern.test(content)) {
+      console.log(`Found void types in: ${relativeFilePath}`);
       const newContent = content.replace(voidPattern, voidReplacement);
       if (newContent !== content) {
         await fs.writeFile(filePath, newContent, "utf8");
-        console.log(
-          `Patched void types in: ${path.relative(process.cwd(), filePath)}`,
-        );
+        console.log(`Patched void types in: ${relativeFilePath}`);
         return true; // Indicate change
+      } else {
+        console.log(`Void types already patched in: ${relativeFilePath}`);
       }
+    } else {
+      console.log(`No void types found in: ${relativeFilePath}`);
     }
   } catch (error) {
     console.error(`Error patching void types in ${filePath}:`, error);
@@ -51,10 +56,18 @@ async function addJSDocToFileUpload(filePath) {
     let content = await fs.readFile(filePath, "utf8");
     const markerIndex = content.indexOf(fetchUploadFileMarker);
 
-    if (
-      markerIndex !== -1 &&
-      !content.includes("WORKAROUND: This endpoint requires")
-    ) {
+    if (markerIndex !== -1) {
+      console.log(
+        `Found fetchUploadFile function in ${path.relative(process.cwd(), filePath)}`,
+      );
+
+      if (content.includes("WORKAROUND: This endpoint requires")) {
+        console.log(
+          `JSDoc for file upload already exists in ${path.relative(process.cwd(), filePath)}`,
+        );
+        return false; // No change needed
+      }
+
       // Find the start of the line containing the marker to insert before it
       const lineStartIndex = content.lastIndexOf("\n", markerIndex) + 1;
       const indentation =
@@ -76,6 +89,10 @@ async function addJSDocToFileUpload(filePath) {
         `Added JSDoc workaround notice to fetchUploadFile in: ${path.relative(process.cwd(), filePath)}`,
       );
       return true; // Indicate change
+    } else {
+      console.log(
+        `fetchUploadFile function not found in ${path.relative(process.cwd(), filePath)}`,
+      );
     }
   } catch (error) {
     console.error(`Error adding JSDoc to ${filePath}:`, error);

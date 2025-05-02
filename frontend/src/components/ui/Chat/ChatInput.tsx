@@ -2,17 +2,15 @@ import { ArrowUpIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 
-import {
-  FileUploadButton,
-  FilePreviewButton,
-} from "@/components/ui/FileUpload";
+import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
+import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
+import { useTokenManagement } from "@/hooks/chat";
 import { useFileDropzone } from "@/hooks/files";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { useChatContext } from "@/providers/ChatProvider";
 
-import { InteractiveContainer } from "../Container/InteractiveContainer";
+import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { Button } from "../Controls/Button";
-import { Tooltip } from "../Controls/Tooltip";
 import { Alert } from "../Feedback/Alert";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -40,6 +38,8 @@ interface ChatInputProps {
   onFilePreview?: (file: FileUploadItem) => void;
   // Add prop for current chat ID
   chatId?: string | null;
+  // Add prop for previous message ID
+  previousMessageId?: string | null;
 }
 
 /**
@@ -59,13 +59,15 @@ export const ChatInput = ({
   acceptedFileTypes = [],
   initialFiles = [],
   showFileTypes = false,
-  // Destructure the new prop
+  // Destructure the new props
   onFilePreview,
-  // Destructure chatId
   chatId,
+  previousMessageId,
 }: ChatInputProps) => {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Add state for file button processing
+  const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
 
   // Get necessary state from context instead of useChat()
   const { isStreaming, isMessagingLoading, isUploading } = useChatContext();
@@ -73,12 +75,23 @@ export const ChatInput = ({
   // Combine loading states
   const isLoading = propIsLoading ?? isMessagingLoading;
 
+  // Use our token management hook
+  const {
+    // Individual token limit states are not used directly but through isAnyTokenLimitExceeded
+    isAnyTokenLimitExceeded,
+    handleMessageTokenLimitExceeded,
+    handleFileTokenLimitExceeded,
+    resetTokenLimits,
+    resetTokenLimitsOnFileRemoval,
+  } = useTokenManagement();
+
   // Use our modernized file upload hook
   const {
-    uploadFiles,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Part of hook return, might be used internally or later
-    uploadedFiles,
-    error: uploadError,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    uploadedFiles: _uploadedFiles,
+    // Not using the error directly
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    error: _uploadError,
   } = useFileDropzone({
     acceptedFileTypes,
     multiple: maxFiles > 1,
@@ -108,6 +121,11 @@ export const ChatInput = ({
     message,
     attachedFiles,
     (messageContent, inputFileIds) => {
+      // Don't allow sending if token limit is exceeded
+      if (isAnyTokenLimitExceeded) {
+        return;
+      }
+
       console.log(
         "[CHAT_FLOW] ChatInput - Message submitted:",
         messageContent.substring(0, 20) +
@@ -131,45 +149,50 @@ export const ChatInput = ({
     }
   }, [message]);
 
-  // Handle file upload error if any
-  useEffect(() => {
-    if (uploadError && uploadError instanceof Error) {
-      setFileError(`File upload error: ${uploadError.message}`);
-    } else if (uploadError && typeof uploadError === "string") {
-      setFileError(`File upload error: ${uploadError}`);
-    }
-  }, [uploadError, setFileError]);
-
   // Combine disabled states
-  const isDisabled = disabled || isUploading || isLoading || isStreaming;
+  const isDisabled =
+    disabled ||
+    isUploading || // From context (drag & drop)
+    isLoading ||
+    isStreaming ||
+    isFileButtonProcessing; // From button callback
 
-  // Helper to handle removing file by ID regardless of source type
+  // Add token limit exceeded to disabled state for the send button
+  const isSendDisabled = isDisabled || isAnyTokenLimitExceeded;
+
+  // Enhanced file removal handler using token management hook
   const handleRemoveFileById = useCallback(
-    (fileIdOrFile: string | FileUploadItem | File) => {
-      let fileId: string | null = null;
-      if (typeof fileIdOrFile === "string") {
-        fileId = fileIdOrFile;
-      } else if (
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        fileIdOrFile &&
-        typeof fileIdOrFile === "object" &&
-        "id" in fileIdOrFile &&
-        typeof fileIdOrFile.id === "string"
-      ) {
-        fileId = fileIdOrFile.id; // Handle FileUploadItem
-      } // Browser File objects don't have IDs here, handleRemoveFile handles them
+    (fileId: string) => {
+      handleRemoveFile(fileId);
 
-      if (fileId) {
-        handleRemoveFile(fileId);
-      } else if (fileIdOrFile instanceof File) {
-        // If it's a browser File (e.g., from dropzone before upload ID), handleRemoveFile might need adjustment
-        // For now, assuming handleRemoveFile in the hook handles string IDs primarily
-        console.warn(
-          "[ChatInput] Attempted to remove non-uploaded file, not fully handled.",
-        );
-      }
+      // Reset token limits if this was the last file
+      resetTokenLimitsOnFileRemoval(
+        attachedFiles.length - 1,
+        message.trim().length,
+      );
     },
-    [handleRemoveFile],
+    [
+      handleRemoveFile,
+      attachedFiles.length,
+      message,
+      resetTokenLimitsOnFileRemoval,
+    ],
+  );
+
+  // Enhanced version of handleRemoveAllFiles that also resets token limits
+  const handleRemoveAllFilesWithTokenReset = useCallback(() => {
+    handleRemoveAllFiles();
+
+    // Reset token limits when all files are removed
+    resetTokenLimits(message.trim().length);
+  }, [handleRemoveAllFiles, resetTokenLimits, message]);
+
+  // Callback for file button processing state change
+  const handleFileButtonProcessingChange = useCallback(
+    (isProcessing: boolean) => {
+      setIsFileButtonProcessing(isProcessing);
+    },
+    [],
   );
 
   // Determine if send button should be enabled
@@ -178,7 +201,8 @@ export const ChatInput = ({
     !isLoading &&
     !isStreaming &&
     !disabled &&
-    !isUploading;
+    !isUploading &&
+    !isAnyTokenLimitExceeded;
 
   // Log just before rendering the component and its preview section
   console.log(
@@ -191,65 +215,26 @@ export const ChatInput = ({
       className={clsx("mx-auto mb-4 w-full sm:w-5/6 md:w-4/5", className)}
       onSubmit={handleSubmit}
     >
-      {/* File previews */}
-      {attachedFiles.length > 0 && (
-        <div className="mb-3">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-[var(--theme-fg-secondary)]">
-              Attachments ({attachedFiles.length}/{maxFiles})
-            </h3>
-            {attachedFiles.length > 1 && (
-              <Tooltip content="Remove all files">
-                <Button
-                  onClick={handleRemoveAllFiles}
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs"
-                  aria-label="Remove all attachments"
-                >
-                  Remove all
-                </Button>
-              </Tooltip>
-            )}
-          </div>
+      {/* Token usage warnings */}
+      <ChatInputTokenUsage
+        message={message}
+        attachedFiles={attachedFiles}
+        chatId={chatId}
+        previousMessageId={previousMessageId}
+        disabled={isDisabled}
+        onLimitExceeded={handleMessageTokenLimitExceeded}
+      />
 
-          {/* File attachments */}
-          <div className="flex flex-wrap gap-2">
-            {attachedFiles.map((file) =>
-              // Wrap FilePreviewButton in InteractiveContainer if onFilePreview exists
-              onFilePreview ? (
-                <InteractiveContainer
-                  key={file.id}
-                  onClick={() => onFilePreview(file)}
-                  useDiv={true}
-                  className="cursor-pointer"
-                  aria-label={`Preview attachment ${file.filename}`}
-                >
-                  <FilePreviewButton
-                    file={file}
-                    onRemove={handleRemoveFileById} // Use helper
-                    disabled={isDisabled}
-                    showFileType={showFileTypes}
-                    showSize={true}
-                    filenameTruncateLength={25}
-                  />
-                </InteractiveContainer>
-              ) : (
-                // Original rendering if no preview handler
-                <FilePreviewButton
-                  key={file.id}
-                  file={file}
-                  onRemove={handleRemoveFileById} // Use helper
-                  disabled={isDisabled}
-                  showFileType={showFileTypes}
-                  showSize={true}
-                  filenameTruncateLength={25}
-                />
-              ),
-            )}
-          </div>
-        </div>
-      )}
+      {/* File previews using our new component */}
+      <FileAttachmentsPreview
+        attachedFiles={attachedFiles}
+        maxFiles={maxFiles}
+        onRemoveFile={handleRemoveFileById}
+        onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
+        onFilePreview={onFilePreview}
+        disabled={isDisabled}
+        showFileTypes={showFileTypes}
+      />
 
       {/* File error message */}
       {fileError && (
@@ -283,7 +268,11 @@ export const ChatInput = ({
               handleSubmit(e);
             }
           }}
-          placeholder={placeholder}
+          placeholder={
+            isAnyTokenLimitExceeded
+              ? "Message exceeds token limit. Please reduce length or remove files."
+              : placeholder
+          }
           maxLength={maxLength}
           rows={1}
           disabled={isLoading || isStreaming || disabled || isUploading}
@@ -296,6 +285,8 @@ export const ChatInput = ({
             "disabled:cursor-not-allowed disabled:opacity-50",
             "max-h-[200px] min-h-[32px]",
             "text-base",
+            isAnyTokenLimitExceeded &&
+              "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
           )}
         />
 
@@ -303,12 +294,16 @@ export const ChatInput = ({
           <div className="flex items-center gap-1 sm:gap-2">
             {showControls && (
               <>
-                {/* File Upload Button */}
+                {/* File Upload Button with Token Check */}
                 {handleFileAttachments && (
-                  <FileUploadButton
-                    onFilesUploaded={(files) => {
-                      handleFilesUploaded(files);
-                    }}
+                  <FileUploadWithTokenCheck
+                    message={message}
+                    chatId={chatId}
+                    previousMessageId={previousMessageId}
+                    onFilesUploaded={handleFilesUploaded}
+                    onTokenLimitExceeded={handleFileTokenLimitExceeded}
+                    // Pass the callback for processing state
+                    onProcessingChange={handleFileButtonProcessingChange}
                     acceptedFileTypes={acceptedFileTypes}
                     multiple={maxFiles > 1}
                     iconOnly
@@ -318,33 +313,11 @@ export const ChatInput = ({
                       isLoading ||
                       isStreaming ||
                       disabled ||
-                      isUploading
-                    }
-                    // Use our modern file upload hook with proper typing
-                    performFileUpload={async (files) => {
-                      // Directly return the result of uploadFiles
-                      return await uploadFiles(files);
-                    }}
-                    isUploading={isUploading}
-                    uploadError={
-                      uploadError instanceof Error ? uploadError : null
+                      isUploading || // isUploading from context (drag & drop)
+                      isFileButtonProcessing // Add button processing state
                     }
                   />
                 )}
-
-                {/* Regenerate button removed */}
-                {/* <Tooltip content="Regenerate response">
-                  <Button
-                    onClick={_onRegenerate}
-                    variant="icon-only"
-                    size="sm"
-                    icon={<ArrowPathIcon className="size-5" />}
-                    aria-label="Regenerate response"
-                    disabled={
-                      isLoading || isStreaming || disabled || isUploading
-                    }
-                  />
-                </Tooltip> */}
               </>
             )}
           </div>
@@ -354,8 +327,12 @@ export const ChatInput = ({
             variant="secondary"
             size="sm"
             icon={<ArrowUpIcon className="size-5" />}
-            disabled={!canSendMessage}
-            aria-label="Send message"
+            disabled={!canSendMessage || isSendDisabled}
+            aria-label={
+              isAnyTokenLimitExceeded
+                ? "Cannot send: Token limit exceeded"
+                : "Send message"
+            }
           />
         </div>
       </div>

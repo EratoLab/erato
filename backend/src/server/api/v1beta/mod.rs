@@ -15,7 +15,7 @@ use crate::server::api::v1beta::message_streaming::{
     MessageSubmitStreamingResponseMessage,
 };
 use crate::state::AppState;
-use axum::extract::{Path, State};
+use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
@@ -44,7 +44,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             me_profile_middleware::user_profile_middleware,
-        ));
+        ))
+        .layer(DefaultBodyLimit::max(20 * 1024 * 1024));
 
     // authenticated routes that are not nested under /me
     // Should at a later time use a more generic middleware that can use a non-me profile as a Subject
