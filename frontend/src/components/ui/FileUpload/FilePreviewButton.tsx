@@ -39,7 +39,7 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
     showFileType = false,
     filenameTruncateLength,
   }) => {
-    // Handle the remove action
+    // Handle the remove action with proper file parameter
     const handleRemove = useCallback(() => {
       // For File objects, pass the file itself
       if ("name" in file) {
@@ -59,7 +59,11 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
         size="sm"
         icon={<XMarkIcon className="size-4" />}
         aria-label={`Remove ${(file as File).name || (file as FileUploadItem).filename}`}
-        onClick={handleRemove}
+        onClick={(e) => {
+          // Stop event propagation to prevent triggering parent container's click
+          e.stopPropagation();
+          handleRemove();
+        }}
         disabled={disabled}
         className="rounded-full p-1"
       />

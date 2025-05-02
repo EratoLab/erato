@@ -169,7 +169,12 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
   );
 
   // Handle removing the file
-  const handleRemove = () => {
+  const handleRemove = (e?: React.MouseEvent) => {
+    // Stop event propagation if this is triggered by an event
+    if (e) {
+      e.stopPropagation();
+    }
+
     if (!disabled) {
       onRemove(file);
     }
@@ -206,7 +211,7 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
         (removeButton ?? (
           <button
             type="button"
-            onClick={handleRemove}
+            onClick={(e) => handleRemove(e)}
             disabled={disabled}
             className={FILE_PREVIEW_STYLES.closeButton}
             aria-label={`Remove ${filename}`}

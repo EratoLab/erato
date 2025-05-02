@@ -97,8 +97,8 @@ export const getTokenEstimationQueryKey = (
     "tokenEstimation",
     normalizedMessage,
     sortedFileIds,
-    chatId || "",
-    previousMessageId || "",
+    chatId ?? "",
+    previousMessageId ?? "",
   ];
 };
 
@@ -274,6 +274,6 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
     estimateTokenUsageForFiles,
     lastEstimation,
     clearLastEstimation,
-    isLoading: lastEstimation?.isLoading || tokenUsageMutation.isPending,
+    isLoading: lastEstimation?.isLoading ?? tokenUsageMutation.isPending,
   };
 }
