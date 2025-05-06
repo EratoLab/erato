@@ -16,6 +16,7 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub policy: PolicyEngine,
     pub genai_client: GenaiClient,
+    pub system_prompt: Option<String>,
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
 }
@@ -24,6 +25,7 @@ impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let db = Database::connect(&config.database_url).await?;
         let policy = Self::build_policy()?;
+        let system_prompt = config.chat_provider.system_prompt.clone();
         let file_storage_providers = Self::build_file_storage_providers(&config)?;
         let genai_client = Self::build_genai_client(config.chat_provider)?;
 
@@ -31,6 +33,7 @@ impl AppState {
             db,
             policy,
             genai_client,
+            system_prompt,
             default_file_storage_provider: config.default_file_storage_provider,
             file_storage_providers,
         })

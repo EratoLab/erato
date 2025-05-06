@@ -55,6 +55,8 @@ pub struct ChatProviderConfig {
     // Additional request headers to be added to API requests.
     // E.g. 'api-key=XYZ'
     pub additional_request_headers: Option<Vec<String>>,
+    // Optional system prompt to use with the chat provider.
+    pub system_prompt: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]

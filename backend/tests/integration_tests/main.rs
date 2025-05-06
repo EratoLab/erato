@@ -82,6 +82,7 @@ pub fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppState {
         policy: AppState::build_policy().unwrap(),
         genai_client: AppState::build_genai_client(app_config.chat_provider).unwrap(),
         default_file_storage_provider: None,
+        system_prompt: None,
         file_storage_providers,
     }
 }

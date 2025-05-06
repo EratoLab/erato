@@ -216,6 +216,7 @@ async fn prepare_input_messages(
 ) -> Result<GenerationInputMessages, Report> {
     crate::models::message::get_generation_input_messages_by_previous_message_id(
         &app_state.db,
+        app_state.system_prompt.clone(),
         previous_message_id,
         Some(10),
         files_for_generation,
