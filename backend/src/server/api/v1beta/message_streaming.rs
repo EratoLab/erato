@@ -614,6 +614,12 @@ pub struct FileContentsForGeneration {
     pub contents_as_text: String,
 }
 
+// Remove null characters from a string, so that it may be saved in Postgres.
+// See https://github.com/EratoLab/erato/issues/145
+pub fn remove_null_characters(s: &str) -> String {
+    s.chars().filter(|&c| c != '\0').collect()
+}
+
 /// Process files attached to a message and extract their text content
 async fn process_input_files(
     tx: Sender<Result<Event, Report>>,
@@ -680,7 +686,8 @@ async fn process_input_files(
 
         // Use parser_core to extract text from the file
         match parser_core::parse(&file_bytes) {
-            Ok(text) => {
+            Ok(text_with_possible_escapes) => {
+                let text = remove_null_characters(&text_with_possible_escapes);
                 tracing::debug!(
                     "Successfully parsed file {}: {} (text length: {})",
                     file_upload.filename,
