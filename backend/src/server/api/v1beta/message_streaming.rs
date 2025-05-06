@@ -422,6 +422,7 @@ async fn prepare_chat_request(
     // TODO: Initial system message?
     let generation_input_messages = get_generation_input_messages_by_previous_message_id(
         &app_state.db,
+        app_state.system_prompt.clone(),
         previous_message_id,
         Some(10),
         new_input_files,

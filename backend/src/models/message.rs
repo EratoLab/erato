@@ -364,6 +364,7 @@ impl GenerationInputMessages {
 /// For now retrieves the last `n` (= default 10) messages in the chat to serve as input for generating the next message.
 pub async fn get_generation_input_messages_by_previous_message_id(
     conn: &DatabaseConnection,
+    system_prompt: Option<String>,
     previous_message_id: &Uuid,
     num_previous_messages: Option<usize>,
     new_generation_files: Vec<FileContentsForGeneration>,
@@ -390,6 +391,15 @@ pub async fn get_generation_input_messages_by_previous_message_id(
             current_message_id = prev_id;
         } else {
             break;
+        }
+    }
+    // If we are at the first message, we add the system prompt if it exists
+    if input_messages.len() == 1 {
+        if let Some(system_prompt) = system_prompt {
+            input_messages.push(InputMessage {
+                role: MessageRole::System,
+                content: MessageContent::String(system_prompt),
+            });
         }
     }
 
