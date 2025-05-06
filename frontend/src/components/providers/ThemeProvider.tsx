@@ -10,7 +10,7 @@ import { deepMerge, type CustomThemeConfig } from "@/utils/themeUtils";
 import type { Theme } from "@/config/theme";
 import type { PropsWithChildren } from "react";
 
-export type ThemeMode = "light" | "dark";
+export type ThemeMode = "light" | "dark" | "system";
 
 export const THEME_MODE_LOCAL_STORAGE_KEY = "theme-mode";
 
@@ -20,6 +20,7 @@ type ThemeContextType = {
   setThemeMode: (mode: ThemeMode) => void;
   isCustomTheme: boolean;
   customThemeName?: string;
+  effectiveTheme: "light" | "dark"; // The actual theme being applied (for UI indicators)
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -29,15 +30,29 @@ const getSavedTheme = (): ThemeMode => {
   if (typeof window === "undefined") return "light";
 
   const savedTheme = localStorage.getItem(THEME_MODE_LOCAL_STORAGE_KEY);
-  if (savedTheme === "dark" || savedTheme === "light") {
-    return savedTheme;
+  if (
+    savedTheme === "dark" ||
+    savedTheme === "light" ||
+    savedTheme === "system"
+  ) {
+    return savedTheme as ThemeMode;
   }
 
-  // Check system preference if no saved theme
-  if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+  return "system"; // Default to system if nothing saved
+};
+
+// Get the effective theme based on the selected mode and system preference
+const getEffectiveTheme = (mode: ThemeMode): "light" | "dark" => {
+  if (mode === "light") return "light";
+  if (mode === "dark") return "dark";
+
+  // For system mode, check the system preference
+  if (
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  ) {
     return "dark";
   }
-
   return "light";
 };
 
@@ -45,6 +60,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const savedOrDefaultThemeMode = getSavedTheme();
   const [themeMode, setThemeMode] = useState<ThemeMode>(
     savedOrDefaultThemeMode,
+  );
+  const [effectiveTheme, setEffectiveTheme] = useState<"light" | "dark">(
+    getEffectiveTheme(savedOrDefaultThemeMode),
   );
   const [theme, setTheme] = useState<Theme>(defaultTheme);
   const [customThemeConfig, setCustomThemeConfig] =
@@ -65,16 +83,44 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     void loadTheme();
   }, []);
 
-  // Update theme when themeMode or customThemeConfig changes
+  // Listen for system preference changes when in system mode
+  useEffect(() => {
+    if (themeMode !== "system") return;
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    // Update theme when system preference changes
+    const handleChange = (e: MediaQueryListEvent) => {
+      setEffectiveTheme(e.matches ? "dark" : "light");
+    };
+
+    // Add event listener
+    mediaQuery.addEventListener("change", handleChange);
+
+    // Initial check
+    setEffectiveTheme(mediaQuery.matches ? "dark" : "light");
+
+    // Cleanup
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, [themeMode]);
+
+  // Update effective theme when theme mode changes
+  useEffect(() => {
+    if (themeMode !== "system") {
+      setEffectiveTheme(themeMode);
+    }
+  }, [themeMode]);
+
+  // Update theme when effectiveTheme or customThemeConfig changes
   useEffect(() => {
     // Start with the appropriate base theme
-    let baseTheme = themeMode === "dark" ? darkTheme : defaultTheme;
+    let baseTheme = effectiveTheme === "dark" ? darkTheme : defaultTheme;
 
     // Apply custom theme overrides if available
     if (customThemeConfig?.theme) {
       // Select the appropriate theme mode
       const customTheme =
-        themeMode === "dark"
+        effectiveTheme === "dark"
           ? customThemeConfig.theme.dark
           : customThemeConfig.theme.light;
 
@@ -89,7 +135,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     // Save to localStorage
     if (typeof window !== "undefined") {
       // Update data-theme attributes on document for potential CSS selectors
-      document.documentElement.setAttribute("data-theme", themeMode);
+      document.documentElement.setAttribute("data-theme", effectiveTheme);
 
       if (customThemeConfig?.name) {
         document.documentElement.setAttribute(
@@ -100,7 +146,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
         document.documentElement.removeAttribute("data-theme-name");
       }
     }
-  }, [themeMode, customThemeConfig]);
+  }, [effectiveTheme, customThemeConfig]);
 
   useEffect(() => {
     // Apply theme CSS variables
@@ -237,6 +283,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setThemeMode: toggleTheme,
     isCustomTheme,
     customThemeName: customThemeConfig?.name,
+    effectiveTheme,
   };
 
   return (
