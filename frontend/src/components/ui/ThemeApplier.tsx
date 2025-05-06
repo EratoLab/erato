@@ -12,7 +12,7 @@ import { loadThemeFromPath } from "@/utils/themeUtils";
  * This is used to apply custom theme properties defined in theme.json
  */
 export function ThemeApplier() {
-  const { themeMode, isCustomTheme } = useTheme();
+  const { effectiveTheme, isCustomTheme } = useTheme();
 
   useEffect(() => {
     if (!isCustomTheme) return;
@@ -32,7 +32,7 @@ export function ThemeApplier() {
         if (!themeData) return;
 
         const root = document.documentElement;
-        const colors = themeData.theme[themeMode]?.colors;
+        const colors = themeData.theme[effectiveTheme]?.colors;
 
         if (!colors) return;
 
@@ -89,6 +89,7 @@ export function ThemeApplier() {
 
         // Apply custom avatar colors
         if (colors.avatar) {
+          // User avatar
           if (colors.avatar.user) {
             const user = colors.avatar.user;
             if (user.background)
@@ -96,6 +97,8 @@ export function ThemeApplier() {
             if (user.foreground)
               root.style.setProperty("--theme-avatar-user-fg", user.foreground);
           }
+
+          // Assistant avatar
           if (colors.avatar.assistant) {
             const assistant = colors.avatar.assistant;
             if (assistant.background)
@@ -170,7 +173,7 @@ export function ThemeApplier() {
     };
 
     void loadTheme();
-  }, [isCustomTheme, themeMode]);
+  }, [effectiveTheme, isCustomTheme]);
 
   // This component doesn't render anything
   return null;

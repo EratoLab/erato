@@ -14,7 +14,7 @@ import { useKeyboard } from "@/hooks/useKeyboard";
 
 import { Button } from "./Button";
 import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
-import { MoreVertical } from "../icons";
+import { MoreVertical, CheckIcon } from "../icons";
 
 import type { ButtonVariant } from "./Button";
 
@@ -29,6 +29,7 @@ export interface DropdownMenuItem {
   confirmTitle?: string;
   confirmMessage?: string;
   confirmButtonVariant?: ButtonVariant;
+  checked?: boolean;
 }
 
 export interface DropdownMenuProps {
@@ -82,6 +83,11 @@ const MenuItem = memo(
       {item.shortcut && (
         <span className="ml-auto text-xs text-theme-fg-muted">
           {item.shortcut}
+        </span>
+      )}
+      {item.checked && (
+        <span className="ml-auto text-theme-fg-primary">
+          <CheckIcon className="size-4" />
         </span>
       )}
     </button>

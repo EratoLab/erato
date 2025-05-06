@@ -3,7 +3,7 @@ import React, { memo } from "react";
 
 import { DropdownMenu } from "./DropdownMenu";
 import { Avatar } from "../Feedback/Avatar";
-import { LogOutIcon, SunIcon, MoonIcon } from "../icons";
+import { LogOutIcon, SunIcon, MoonIcon, ComputerIcon } from "../icons";
 
 import type { ThemeMode } from "@/components/providers/ThemeProvider";
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -34,16 +34,22 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
       ...(showThemeToggle && setThemeMode
         ? [
             {
-              label: themeMode === "light" ? "Dark mode" : "Light mode",
-              icon:
-                themeMode === "light" ? (
-                  <MoonIcon className="size-4" />
-                ) : (
-                  <SunIcon className="size-4" />
-                ),
-              onClick: () => {
-                setThemeMode(themeMode === "light" ? "dark" : "light");
-              },
+              label: "Light mode",
+              icon: <SunIcon className="size-4" />,
+              onClick: () => setThemeMode("light"),
+              checked: themeMode === "light",
+            },
+            {
+              label: "Dark mode",
+              icon: <MoonIcon className="size-4" />,
+              onClick: () => setThemeMode("dark"),
+              checked: themeMode === "dark",
+            },
+            {
+              label: "System theme",
+              icon: <ComputerIcon className="size-4" />,
+              onClick: () => setThemeMode("system"),
+              checked: themeMode === "system",
             },
           ]
         : []),
