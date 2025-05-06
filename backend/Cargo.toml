@@ -13,8 +13,8 @@ axum = { version = "0.7.9", features = ["macros"] }
 axum-extra = { version = "0.9.6", features = ["typed-header"] }
 headers = "0.4.0"
 tower-http = { version = "0.6.2" , features = ["fs", "cors"]}
-sea-orm = { version = "1.1.4" , features = ["runtime-tokio", "sqlx-postgres"]}
-sqlx = { version = "0.8.3", features=["postgres", "runtime-tokio"] }
+sea-orm = { version = "1.1.10" , features = ["runtime-tokio", "sqlx-postgres"]}
+sqlx = { version = "0.8.5", features=["postgres", "runtime-tokio"] }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
 tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
@@ -65,10 +65,6 @@ env_logger = "0.11.2"
 pretty_assertions = "1.4.0"
 ctor = "0.2.9"
 axum-test = "16.4.1"
-
-[patch.crates-io]
-# See https://github.com/EratoLab/erato/issues/78
-sqlx = { git = "https://github.com/launchbadge/sqlx.git", rev = "a92626d6cc1aef88b0036d633ed370f6f9129c32" }
 
 [features]
 default = ["sentry"]
