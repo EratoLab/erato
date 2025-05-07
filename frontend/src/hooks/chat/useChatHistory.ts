@@ -88,7 +88,7 @@ export function useChatHistory() {
 
       // Make sure we actually navigate to the chat URL using the router
       // Use replace to ensure a clean navigation
-      router.replace(`/chat/${chatId}`);
+      router.push(`/chat/${chatId}`);
     },
     [router, setCurrentChatId, isNewChatPending],
   );
