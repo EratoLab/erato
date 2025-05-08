@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useEffect } from "react";
+import { createContext, useContext, useMemo, useEffect, useState } from "react";
 
 import { useChatHistory, useChatMessaging } from "@/hooks/chat";
 import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
@@ -65,6 +65,10 @@ interface ChatContextValue {
 
   // New state from store
   silentChatId: string | null;
+
+  // New states for mount key logic
+  newChatCounter: number;
+  mountKey: string | number;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -92,12 +96,30 @@ export function ChatProvider({
     currentChatId,
     isLoading: isHistoryLoading,
     error: historyError,
-    createNewChat,
+    createNewChat: createNewChatFromHistory,
     archiveChat,
     navigateToChat,
     refetch: refetchHistory,
     isNewChatPending,
   } = useChatHistory();
+
+  const [newChatCounter, setNewChatCounter] = useState(0);
+
+  // Custom createNewChat that also increments the counter
+  const createNewChat = useMemo(() => {
+    return async () => {
+      setNewChatCounter((prev) => prev + 1);
+      // When a genuinely new chat is created, we expect a new mount key based on the counter.
+      // If an existing chat is loaded, and newChatCounter is 0, it uses chatId.
+      return createNewChatFromHistory();
+    };
+  }, [createNewChatFromHistory]);
+
+  // Calculate the mount key based on the amount of new chats created.
+  // This allows us to keep the chat component mounted across navigation.
+  const mountKey = useMemo(() => {
+    return `new-chat-session-${newChatCounter}`;
+  }, [newChatCounter]);
 
   // Get silentChatId directly from the store
   const silentChatId = useFileUploadStore((state) => state.silentChatId);
@@ -271,7 +293,10 @@ export function ChatProvider({
 
       // New state from store
       silentChatId,
-      newlyCreatedChatId,
+
+      // New states for mount key logic
+      newChatCounter,
+      mountKey,
     };
   }, [
     // Chat history dependencies
@@ -307,7 +332,10 @@ export function ChatProvider({
 
     // New state from store
     silentChatId,
-    newlyCreatedChatId,
+
+    // New states for mount key logic
+    newChatCounter,
+    mountKey,
   ]);
 
   return (
