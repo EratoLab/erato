@@ -334,6 +334,59 @@ pub async fn get_message_by_id(
     Ok(message)
 }
 
+pub async fn update_message_content(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    message_id: &Uuid,
+    new_content_text: String,
+) -> Result<messages::Model, Report> {
+    // Find the message to get its current raw_message and chat_id for authorization
+    let message = Messages::find_by_id(*message_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Message with ID {} not found for update", message_id))?;
+
+    // Authorize that the subject can update this message (part of submitting to chat)
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(message.chat_id.as_hyphenated().to_string()),
+        Action::SubmitMessage
+    )?;
+
+    let mut parsed_raw_message = MessageSchema::validate(&message.raw_message)?;
+    // Ensure it's an assistant message we are updating
+    if parsed_raw_message.role != MessageRole::Assistant {
+        return Err(eyre!(
+            "Attempted to update content of a non-assistant message"
+        ));
+    }
+
+    parsed_raw_message.content = MessageContent::String(new_content_text);
+    let updated_raw_message = parsed_raw_message.to_json()?;
+
+    let active_model = messages::ActiveModel {
+        id: ActiveValue::Set(*message_id),
+        raw_message: ActiveValue::Set(updated_raw_message),
+        ..Default::default() // Only update raw_message, preserve other fields
+    };
+
+    messages::Entity::update(active_model)
+        .filter(messages::Column::Id.eq(*message_id))
+        .exec(conn)
+        .await
+        .map_err(|e| eyre!("Failed to update message content: {}", e))?;
+
+    // Re-fetch the message to return the updated model
+    let updated_message_model = Messages::find_by_id(*message_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Message with ID {} not found after update", message_id))?;
+
+    Ok(updated_message_model)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputMessage {
     pub role: MessageRole,

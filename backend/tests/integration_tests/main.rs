@@ -271,10 +271,14 @@ async fn test_message_submit_stream(pool: Pool<Postgres>) {
         has_event_type("user_message_saved"),
         "No user_message_saved event received"
     );
+    assert!(
+        has_event_type("assistant_message_started"),
+        "No assistant_message_started event received"
+    );
     assert!(text_delta_count > 0, "No text_delta events received");
     assert!(
-        has_event_type("message_complete"),
-        "No message_complete event received"
+        has_event_type("assistant_message_completed"),
+        "No assistant_message_completed event received"
     );
 }
 
@@ -583,12 +587,12 @@ async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
     // Find the message_complete event and extract the message ID
     let mut first_message_id = String::new();
     for i in 0..lines.len() - 1 {
-        if lines[i] == "event: message_complete" {
+        if lines[i] == "event: assistant_message_completed" {
             // The data is on the next line, prefixed with "data: "
             let data_line = lines[i + 1];
             if data_line.starts_with("data: ") {
                 let data_json: Value = serde_json::from_str(&data_line[6..])
-                    .expect("Failed to parse message_complete data");
+                    .expect("Failed to parse assistant_message_completed data");
 
                 first_message_id = data_json["message_id"]
                     .as_str()
@@ -842,12 +846,12 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
     // Find the message_complete event and extract the assistant message ID
     let mut assistant_message_id = String::new();
     for i in 0..lines.len() - 1 {
-        if lines[i] == "event: message_complete" {
+        if lines[i] == "event: assistant_message_completed" {
             // The data is on the next line, prefixed with "data: "
             let data_line = lines[i + 1];
             if data_line.starts_with("data: ") {
                 let data_json: Value = serde_json::from_str(&data_line[6..])
-                    .expect("Failed to parse message_complete data");
+                    .expect("Failed to parse assistant_message_completed data");
 
                 assistant_message_id = data_json["message_id"]
                     .as_str()
@@ -904,12 +908,12 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
     // Find the message_complete event and extract the regenerated message ID
     let mut regenerated_message_id = String::new();
     for i in 0..lines.len() - 1 {
-        if lines[i] == "event: message_complete" {
+        if lines[i] == "event: assistant_message_completed" {
             // The data is on the next line, prefixed with "data: "
             let data_line = lines[i + 1];
             if data_line.starts_with("data: ") {
                 let data_json: Value = serde_json::from_str(&data_line[6..])
-                    .expect("Failed to parse message_complete data");
+                    .expect("Failed to parse assistant_message_completed data");
 
                 regenerated_message_id = data_json["message_id"]
                     .as_str()
@@ -1255,13 +1259,13 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
         .iter()
         .find_map(|msg| {
             if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
-                if json["message_type"] == "message_complete" {
+                if json["message_type"] == "assistant_message_completed" {
                     return Some(json["message_id"].as_str().unwrap().to_string());
                 }
             }
             None
         })
-        .expect("No message_complete event found");
+        .expect("No assistant_message_completed event found");
 
     // Now edit the message with a new user message
     let edited_message = "What is the capital of Spain?";
@@ -1296,12 +1300,12 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
         .iter()
         .find(|msg| {
             if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
-                json["message_type"] == "message_complete"
+                json["message_type"] == "assistant_message_completed"
             } else {
                 false
             }
         })
-        .expect("No message_complete event found");
+        .expect("No assistant_message_completed event found");
 
     // Get all messages for the chat to verify the edit worked correctly
     let chat_id = serde_json::from_str::<Value>(&message_complete.data)
@@ -1522,14 +1526,17 @@ async fn test_create_chat_file_upload_message_flow(pool: Pool<Postgres>) {
 
     // We should see a message_complete event for the assistant's response
     let has_message_complete = messages.iter().any(|e| {
-        if e.event_type == "message_complete" {
+        if e.event_type == "assistant_message_completed" {
             if let Ok(json) = serde_json::from_str::<Value>(&e.data) {
-                return json["message_type"] == "message_complete";
+                return json["message_type"] == "assistant_message_completed";
             }
         }
         false
     });
-    assert!(has_message_complete, "Missing message_complete event");
+    assert!(
+        has_message_complete,
+        "Missing assistant_message_completed event"
+    );
 
     // Step 4: Verify we can retrieve the chat messages with the API
     let messages_response = server
