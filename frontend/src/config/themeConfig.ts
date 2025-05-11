@@ -51,6 +51,7 @@ export const defaultThemeConfig: ThemeLocationConfig = {
     // 1. Check environment variables first for complete path override
     const { themeLogoDarkPath, themeLogoPath, themePath, themeCustomerName } =
       env();
+
     if (isDark && themeLogoDarkPath) {
       return themeLogoDarkPath;
     }
@@ -61,18 +62,25 @@ export const defaultThemeConfig: ThemeLocationConfig = {
 
     // 2. Check for theme path override
     if (themePath) {
-      return isDark ? `${themePath}/logo-dark.svg` : `${themePath}/logo.svg`;
+      const path = isDark
+        ? `${themePath}/logo-dark.svg`
+        : `${themePath}/logo.svg`;
+      return path;
     }
 
     // 3. If a customer name is specified, use customer-specific subfolder
     if (themeCustomerName) {
-      return isDark
+      const path = isDark
         ? `/custom-theme/${themeCustomerName}/logo-dark.svg`
         : `/custom-theme/${themeCustomerName}/logo.svg`;
+      return path;
     }
 
     // 4. Default to the root custom-theme folder (no customer subfolder)
-    return isDark ? "/custom-theme/logo-dark.svg" : "/custom-theme/logo.svg";
+    const defaultPath = isDark
+      ? "/custom-theme/logo-dark.svg"
+      : "/custom-theme/logo.svg";
+    return defaultPath;
   },
 };
 
