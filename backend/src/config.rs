@@ -31,6 +31,12 @@ pub struct AppConfig {
 
     // If present, will enable Sentry for error reporting.
     pub sentry_dsn: Option<String>,
+
+    // Additional values to inject into the frontend environment as global variables.
+    // This is a dictionary where each value can be a string or a map (string key, string value).
+    // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
+    #[serde(default)]
+    pub additional_frontend_environment: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]

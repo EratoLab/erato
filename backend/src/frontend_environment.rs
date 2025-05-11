@@ -12,6 +12,8 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
+///
+/// Values can be injected from AppConfig.additional_frontend_environment, and can be strings or maps (string key, string value).
 pub struct FrontedEnvironment(pub ListOrderedMultimap<String, Value>);
 
 #[derive(Debug, Clone)]
