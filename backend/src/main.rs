@@ -64,7 +64,7 @@ async fn main() -> Result<(), Report> {
         .layer(Extension(FrontendBundlePath(
             config.frontend_bundle_path.clone(),
         )))
-        .layer(Extension(build_frontend_environment()))
+        .layer(Extension(build_frontend_environment(&config)))
         .layer(CorsLayer::very_permissive())
         .with_state(state);
 
@@ -77,7 +77,7 @@ async fn main() -> Result<(), Report> {
     Ok(())
 }
 
-pub fn build_frontend_environment() -> FrontedEnvironment {
+pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
     let mut env = FrontedEnvironment::default();
 
     let api_root_url = "/api/".to_string();
@@ -88,6 +88,11 @@ pub fn build_frontend_environment() -> FrontedEnvironment {
     );
     env.0
         .insert("SOME_OBJECT".to_owned(), json!({ "foo": "bar" }));
+
+    // Inject additional_frontend_environment
+    for (key, value) in &config.additional_frontend_environment {
+        env.0.insert(key.clone(), value.clone());
+    }
 
     env
 }
