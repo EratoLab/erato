@@ -58,7 +58,7 @@ export function chatsQuery(variables: ChatsVariables | reactQuery.SkipToken) {
   };
 }
 
-export const useSuspenseChats = <TData = ChatsResponse>(
+export const useSuspenseChats = <TData = ChatsResponse,>(
   variables: ChatsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<ChatsResponse, ChatsError, TData>,
@@ -73,7 +73,7 @@ export const useSuspenseChats = <TData = ChatsResponse>(
   });
 };
 
-export const useChats = <TData = ChatsResponse>(
+export const useChats = <TData = ChatsResponse,>(
   variables: ChatsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<ChatsResponse, ChatsError, TData>,
@@ -233,7 +233,7 @@ export function chatMessagesQuery(
   };
 }
 
-export const useSuspenseChatMessages = <TData = Schemas.ChatMessagesResponse>(
+export const useSuspenseChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   variables: ChatMessagesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -256,7 +256,7 @@ export const useSuspenseChatMessages = <TData = Schemas.ChatMessagesResponse>(
   });
 };
 
-export const useChatMessages = <TData = Schemas.ChatMessagesResponse>(
+export const useChatMessages = <TData = Schemas.ChatMessagesResponse,>(
   variables: ChatMessagesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -348,7 +348,7 @@ export function getFileQuery(
 /**
  * This endpoint retrieves information about a specific file by its ID.
  */
-export const useSuspenseGetFile = <TData = Schemas.FileUploadItem>(
+export const useSuspenseGetFile = <TData = Schemas.FileUploadItem,>(
   variables: GetFileVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.FileUploadItem, GetFileError, TData>,
@@ -370,7 +370,7 @@ export const useSuspenseGetFile = <TData = Schemas.FileUploadItem>(
 /**
  * This endpoint retrieves information about a specific file by its ID.
  */
-export const useGetFile = <TData = Schemas.FileUploadItem>(
+export const useGetFile = <TData = Schemas.FileUploadItem,>(
   variables: GetFileVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.FileUploadItem, GetFileError, TData>,
@@ -459,13 +459,13 @@ export type UploadFileVariables = {
  */
 /**
  * WORKAROUND: This endpoint requires a multipart/form-data request.
- * Despite the type signature suggesting `body?: Schemas.MultipartFormFile[]`,
+ * Despite the type signature suggesting `body?: Schemas.MultipartFormFile[]`, 
  * the underlying fetcher expects a pre-constructed `FormData` object.
- *
+ * 
  * When calling this function, construct a `FormData` object manually,
  * append your file(s) to it (e.g., `formData.append('file', myFile)`),
  * and pass it as the `body` property in the `variables` object, using type casting:
- *
+ * 
  * ```ts
  * const formData = new FormData();
  * formData.append('file', myFile);
@@ -698,7 +698,7 @@ export function profileQuery(
   };
 }
 
-export const useSuspenseProfile = <TData = Schemas.UserProfile>(
+export const useSuspenseProfile = <TData = Schemas.UserProfile,>(
   variables: ProfileVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.UserProfile, ProfileError, TData>,
@@ -713,7 +713,7 @@ export const useSuspenseProfile = <TData = Schemas.UserProfile>(
   });
 };
 
-export const useProfile = <TData = Schemas.UserProfile>(
+export const useProfile = <TData = Schemas.UserProfile,>(
   variables: ProfileVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<Schemas.UserProfile, ProfileError, TData>,
@@ -807,7 +807,7 @@ export function recentChatsQuery(
   };
 }
 
-export const useSuspenseRecentChats = <TData = Schemas.RecentChatsResponse>(
+export const useSuspenseRecentChats = <TData = Schemas.RecentChatsResponse,>(
   variables: RecentChatsVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -830,7 +830,7 @@ export const useSuspenseRecentChats = <TData = Schemas.RecentChatsResponse>(
   });
 };
 
-export const useRecentChats = <TData = Schemas.RecentChatsResponse>(
+export const useRecentChats = <TData = Schemas.RecentChatsResponse,>(
   variables: RecentChatsVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
@@ -904,7 +904,7 @@ export function messagesQuery(
   };
 }
 
-export const useSuspenseMessages = <TData = MessagesResponse>(
+export const useSuspenseMessages = <TData = MessagesResponse,>(
   variables: MessagesVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<MessagesResponse, MessagesError, TData>,
@@ -919,7 +919,7 @@ export const useSuspenseMessages = <TData = MessagesResponse>(
   });
 };
 
-export const useMessages = <TData = MessagesResponse>(
+export const useMessages = <TData = MessagesResponse,>(
   variables: MessagesVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<MessagesResponse, MessagesError, TData>,
@@ -978,10 +978,8 @@ export const useTokenUsageEstimate = (
     TokenUsageEstimateError,
     TokenUsageEstimateVariables
   >({
-    mutationFn: (variables: TokenUsageEstimateVariables) => {
-      const combinedOptions = { ...fetcherOptions, ...variables };
-      return fetchTokenUsageEstimate(combinedOptions);
-    },
+    mutationFn: (variables: TokenUsageEstimateVariables) =>
+      fetchTokenUsageEstimate(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
@@ -1026,7 +1024,7 @@ export function healthQuery(variables: HealthVariables | reactQuery.SkipToken) {
   };
 }
 
-export const useSuspenseHealth = <TData = undefined>(
+export const useSuspenseHealth = <TData = undefined,>(
   variables: HealthVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, HealthError, TData>,
@@ -1041,7 +1039,7 @@ export const useSuspenseHealth = <TData = undefined>(
   });
 };
 
-export const useHealth = <TData = undefined>(
+export const useHealth = <TData = undefined,>(
   variables: HealthVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<undefined, HealthError, TData>,
