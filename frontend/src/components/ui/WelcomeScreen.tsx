@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Markdown from "react-markdown";
 
 import { env } from "@/app/env";
 import { useTheme } from "@/components/providers/ThemeProvider";
@@ -86,9 +87,16 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
         {branding.subtitle}
       </h2>
 
-      <p className="max-w-2xl text-lg text-theme-fg-muted">
-        {branding.description}
-      </p>
+      <div className="max-w-2xl text-lg text-theme-fg-muted">
+        <Markdown
+          components={{
+            li: ({ ...props }) => <li className="list-disc" {...props} />,
+            p: ({ ...props }) => <p className="mt-4" {...props} />,
+          }}
+        >
+          {branding.description}
+        </Markdown>
+      </div>
     </div>
   );
 }
