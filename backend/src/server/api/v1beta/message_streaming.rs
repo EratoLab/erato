@@ -759,19 +759,25 @@ pub async fn message_submit_sse(
         )
         .await?;
 
-        if chat_status == ChatCreationStatus::Created {
+        if chat_status == ChatCreationStatus::Created
+            || (chat_status == ChatCreationStatus::Existing
+                && request.previous_message_id.is_none())
+        {
             let app_state_clone = app_state.clone();
             let me_user_clone = me_user.clone();
             let chat_clone = chat.clone();
             let saved_user_message_clone = saved_user_message.clone();
             tokio::spawn(async move {
-                generate_chat_summary(
+                let summary_res = generate_chat_summary(
                     &app_state_clone,
                     &me_user_clone,
                     &chat_clone,
                     &saved_user_message_clone,
                 )
-                .await?;
+                .await;
+                if let Err(ref summary) = summary_res {
+                    capture_report(summary);
+                }
                 Ok::<(), Report>(())
             });
         }
