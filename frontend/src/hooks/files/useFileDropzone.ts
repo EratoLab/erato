@@ -197,13 +197,12 @@ export function useFileDropzone({
 
       return uploadedItems; // Return the uploaded items
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isUploading is handled separately
     [
       disabled,
-      isUploading,
       multiple,
       maxFiles,
       chatId,
-      createChatMutation,
       // onSilentChatCreated,
       addFiles,
       onFilesUploaded,

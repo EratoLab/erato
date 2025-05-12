@@ -1,3 +1,5 @@
+import { useMessagingStore } from "../store/messagingStore";
+
 import type { MessageSubmitStreamingResponseChatCreated } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -22,16 +24,29 @@ export const handleChatCreated = (
   setNewlyCreatedChatId: (chatId: string | null) => void,
 ): void => {
   if ("chat_id" in responseData && typeof responseData.chat_id === "string") {
+    console.log(
+      `[DEBUG_REDIRECT] handleChatCreated: Setting newlyCreatedChatId to: ${responseData.chat_id}`,
+    );
     setNewlyCreatedChatId(responseData.chat_id);
     if (process.env.NODE_ENV === "development") {
       console.log(
-        "[CHAT_FLOW] Chat created (via SSE), ID stored in state:",
+        "[DEBUG_REDIRECT] handleChatCreated: Received chat_created event with Chat ID:",
         responseData.chat_id,
+        "Full data:",
+        responseData,
       );
     }
+
+    // Set the awaiting flag in the store
+    useMessagingStore.getState().setAwaitingFirstStreamChunkForNewChat(true);
+    // Also set the newlyCreatedChatId in the store
+    useMessagingStore
+      .getState()
+      .setNewlyCreatedChatIdInStore(responseData.chat_id);
   } else {
     console.warn(
-      "[CHAT_FLOW] Received chat_created event without a valid chat_id",
+      "[DEBUG_REDIRECT] handleChatCreated: Received chat_created event without a valid chat_id. Payload:",
+      responseData,
     );
   }
 };

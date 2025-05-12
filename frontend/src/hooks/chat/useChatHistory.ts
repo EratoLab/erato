@@ -5,7 +5,7 @@
  */
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { create } from "zustand";
 
 import {
@@ -14,7 +14,7 @@ import {
   recentChatsQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 // Import context and merge utility
-import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+// import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
 import { deepMerge } from "@/lib/generated/v1betaApi/v1betaApiUtils";
 
 // Import the correct response type and the RecentChat type from schemas
@@ -54,8 +54,8 @@ export const useChatHistoryStore = create<ChatHistoryState>((set) => {
 export function useChatHistory() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  // Get context to access fetcherOptions
-  const { fetcherOptions } = useV1betaApiContext();
+  // Get context to access fetcherOptions - contextFetcherOptions removed as it was unused after introducing stableEmptyFetcherOptions
+  // const { fetcherOptions: contextFetcherOptions } = useV1betaApiContext();
   const {
     currentChatId,
     isNewChatPending,
@@ -69,8 +69,14 @@ export function useChatHistory() {
   // Generated hook for archiving a chat
   const { mutateAsync: archiveChatMutation } = useArchiveChatEndpoint();
 
-  // Extract chats from the response structure
-  const chats = data?.chats ?? [];
+  // Memoize the empty array reference
+  const emptyChats = useMemo(() => [], []);
+
+  // Create a stable empty object for fetcherOptions, reflecting what useV1betaApiContext currently returns
+  const stableEmptyFetcherOptions = useMemo(() => ({}), []);
+
+  // Extract chats from the response structure, defaulting to a stable empty array reference
+  const chats = data?.chats ?? emptyChats;
 
   // Navigate to a specific chat
   const navigateToChat = useCallback(
@@ -128,8 +134,8 @@ export function useChatHistory() {
   const archiveChat = useCallback(
     async (chatId: string) => {
       // Replicate the key generation process used by the hook:
-      // 1. Merge fetcherOptions from context with base variables ({})
-      const mergedVariables = deepMerge(fetcherOptions, {}); // Inlined empty object
+      // 1. Merge stableEmptyFetcherOptions with base variables ({})
+      const mergedVariables = deepMerge(stableEmptyFetcherOptions, {}); // Use stable reference
       // 2. Get the query definition using the *merged* variables
       const queryDefinition = recentChatsQuery(mergedVariables);
       // 3. Extract the queryKey from the definition
@@ -166,7 +172,7 @@ export function useChatHistory() {
       currentChatId,
       router,
       setCurrentChatId,
-      fetcherOptions, // Keep fetcherOptions
+      stableEmptyFetcherOptions, // Use stable reference in dependency array
     ],
   );
 

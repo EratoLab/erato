@@ -36,11 +36,15 @@ export const handleUserMessageSaved = (
     typeof serverConfirmedMessage.full_text !== "string"
   ) {
     console.warn(
-      "[CHAT_FLOW] 'user_message_saved' event received without sufficient message data:",
+      "[DEBUG_STREAMING] handleUserMessageSaved: 'user_message_saved' event received without sufficient message data:",
       responseData,
     );
     return;
   }
+
+  console.log(
+    `[DEBUG_STREAMING] handleUserMessageSaved: Processing event for server message ID: ${serverConfirmedMessage.id}, Content: "${serverConfirmedMessage.full_text.substring(0, 50)}..."`,
+  );
 
   useMessagingStore.setState((prevState) => {
     const newUserMessages = { ...prevState.userMessages };
@@ -70,8 +74,11 @@ export const handleUserMessageSaved = (
       newUserMessages[finalUserMessage.id] = finalUserMessage; // Add message with real ID
 
       if (process.env.NODE_ENV === "development") {
+        // console.log(
+        //   `[CHAT_FLOW] User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${finalUserMessage.content.substring(0, 50)}..."`,
+        // );
         console.log(
-          `[CHAT_FLOW] User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${finalUserMessage.content.substring(0, 50)}..."`,
+          `[DEBUG_STREAMING] handleUserMessageSaved: User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${finalUserMessage.content.substring(0, 50)}..."`,
         );
       }
       return { ...prevState, userMessages: newUserMessages };
@@ -79,14 +86,21 @@ export const handleUserMessageSaved = (
       // If no matching temp message found, log a warning.
       // This could happen if the message was cleared or if there's a mismatch.
       console.warn(
-        `[CHAT_FLOW] handleUserMessageSaved: No temporary user message found to update for content: "${serverConfirmedMessage.full_text.substring(0, 100)}...". This might happen if the message was cleared or if there is a data mismatch.`,
+        `[DEBUG_STREAMING] handleUserMessageSaved: No temporary user message found to update for content: "${serverConfirmedMessage.full_text.substring(0, 100)}...". This might happen if the message was cleared or if there is a data mismatch.`,
         "Server confirmed message:",
         serverConfirmedMessage,
-        "Current user messages:",
-        newUserMessages,
+        "Current user messages in store before update:",
+        prevState.userMessages, // Log the state before attempting update
       );
     }
     // If no temp message was found to replace, return the previous state unchanged
+    console.log(
+      "[DEBUG_STREAMING] handleUserMessageSaved: No matching temporary message found, returning previous state.",
+      {
+        serverContent: serverConfirmedMessage.full_text,
+        currentMessages: prevState.userMessages,
+      },
+    );
     return prevState;
   });
 };

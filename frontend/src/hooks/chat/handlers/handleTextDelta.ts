@@ -22,11 +22,31 @@ export const handleTextDelta = (
   // Update the streaming content by directly modifying the store state
   // This approach is more performant than using the setter functions
   // because it bypasses multiple state transformations that could cause UI lag
-  useMessagingStore.setState((state) => ({
-    ...state,
-    streaming: {
-      ...state.streaming,
-      content: state.streaming.content + responseData.new_text,
-    },
-  }));
+  if (process.env.NODE_ENV === "development") {
+    // Log only a snippet to avoid too much noise, or log less frequently
+    console.log(
+      `[DEBUG_STREAMING] handleTextDelta: Received delta: "${responseData.new_text ? responseData.new_text.substring(0, 30) + "..." : "[EMPTY_DELTA]"}", Current message ID in store: ${useMessagingStore.getState().streaming.currentMessageId}`,
+    );
+  }
+  useMessagingStore.setState((state) => {
+    if (process.env.NODE_ENV === "development") {
+      // Check if we are actually appending to the correct message
+      if (state.streaming.currentMessageId) {
+        console.log(
+          `[DEBUG_STORE] handleTextDelta: Appending to message ID ${state.streaming.currentMessageId}. Prev content length: ${state.streaming.content.length}, New delta: "${responseData.new_text}"`,
+        );
+      } else {
+        console.warn(
+          `[DEBUG_STORE] handleTextDelta: Attempted to append delta but no currentMessageId in store. Delta: "${responseData.new_text}"`,
+        );
+      }
+    }
+    return {
+      ...state,
+      streaming: {
+        ...state.streaming,
+        content: state.streaming.content + responseData.new_text,
+      },
+    };
+  });
 };

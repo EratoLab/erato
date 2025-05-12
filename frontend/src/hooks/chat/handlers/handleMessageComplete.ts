@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import { useMessagingStore } from "../store/messagingStore";
 
 import type { MessageSubmitStreamingResponseMessageComplete } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -17,11 +18,21 @@ export const handleMessageComplete = (
     message_type: "assistant_message_completed";
   },
 ): void => {
-  const { setStreaming, streaming: currentStreamingState } =
-    useMessagingStore.getState();
+  const initialStoreState = useMessagingStore.getState();
+  const { setStreaming, streaming: currentStreamingState } = initialStoreState;
+
+  const initialUserMessagesObject = initialStoreState.userMessages || {};
+  const initialUserMessagesArray = Object.values(initialUserMessagesObject);
+
+  console.log("[DEBUG_LOGGING] handleMessageComplete: BEGIN.", {
+    streamingState: JSON.stringify(currentStreamingState),
+    userMessagesCount: initialUserMessagesArray.length,
+    userMessages: JSON.stringify(initialUserMessagesArray),
+    fullInitialStore: JSON.stringify(initialStoreState), // Keep this for context if needed
+  });
 
   // Extract real message data from the backend
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+
   const realMessageData = responseData.message || {};
   // It's assumed that if 'assistant_message_completed' is received,
   // a valid message ID will be present in responseData.message.id or responseData.message_id.
@@ -32,18 +43,36 @@ export const handleMessageComplete = (
     currentStreamingState.content; // Fallback to current streaming content if somehow not in response
 
   if (process.env.NODE_ENV === "development") {
-    console.log(
-      "[CHAT_FLOW] Assistant message completed. Real ID:",
-      realMessageId,
-      "Final content snippet:",
-      finalContent.substring(0, 50),
-    );
+    // console.log(
+    //   "[CHAT_FLOW] Assistant message completed. Real ID:",
+    //   realMessageId,
+    //   "Final content snippet:",
+    //   finalContent.substring(0, 50),
+    // );
   }
 
   // Update streaming state to indicate completion
+  console.log(
+    `[DEBUG_STREAMING] handleMessageComplete: Setting streaming store. Real Message ID: ${realMessageId || null}, isStreaming: false, Final Content: "${finalContent.substring(0, 100)}..."`,
+  );
   setStreaming({
     isStreaming: false,
     content: finalContent,
     currentMessageId: realMessageId || null, // Update to real ID
   });
+
+  // Log state after setStreaming
+  const storeAfterSetStreaming = useMessagingStore.getState();
+  const finalUserMessagesObject = storeAfterSetStreaming.userMessages || {};
+  const finalUserMessagesArray = Object.values(finalUserMessagesObject);
+
+  console.log(
+    "[DEBUG_LOGGING] handleMessageComplete: END (after setStreaming).",
+    {
+      streamingState: JSON.stringify(storeAfterSetStreaming.streaming),
+      userMessagesCount: finalUserMessagesArray.length,
+      userMessages: JSON.stringify(finalUserMessagesArray),
+      fullStoreAfterSetStreaming: JSON.stringify(storeAfterSetStreaming), // Keep for context
+    },
+  );
 };

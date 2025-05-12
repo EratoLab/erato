@@ -1,6 +1,5 @@
 // No "use client" directive here, making this a Server Component by default
 
-import { ChatProvider } from "@/providers/ChatProvider";
 import { RootProvider } from "@/providers/RootProvider";
 
 import ChatPageStructure from "./ChatPageStructure.client"; // Import the client component
@@ -25,9 +24,7 @@ export default function ChatLayout({
   // The logger related to ChatPageStructure has moved to that file
   return (
     <RootProvider acceptedFileTypes={ACCEPTED_FILE_TYPES}>
-      <ChatProvider>
-        <ChatPageStructure>{children}</ChatPageStructure>
-      </ChatProvider>
+      <ChatPageStructure>{children}</ChatPageStructure>
     </RootProvider>
   );
 }
