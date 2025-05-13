@@ -162,8 +162,11 @@ export type EditMessageRequest = {
 };
 
 export type EditMessageStreamingResponseMessage =
+  | (MessageSubmitStreamingResponseAssistantMessageStarted & {
+      message_type: "assistant_message_started";
+    })
   | (MessageSubmitStreamingResponseMessageComplete & {
-      message_type: "message_complete";
+      message_type: "assistant_message_completed";
     })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
@@ -235,6 +238,13 @@ export type MessageSubmitRequest = {
   user_message: string;
 };
 
+export type MessageSubmitStreamingResponseAssistantMessageStarted = {
+  /**
+   * @format uuid
+   */
+  message_id: string;
+};
+
 export type MessageSubmitStreamingResponseChatCreated = {
   /**
    * @format uuid
@@ -249,8 +259,11 @@ export type MessageSubmitStreamingResponseMessage =
   | (MessageSubmitStreamingResponseUserMessageSaved & {
       message_type: "user_message_saved";
     })
+  | (MessageSubmitStreamingResponseAssistantMessageStarted & {
+      message_type: "assistant_message_started";
+    })
   | (MessageSubmitStreamingResponseMessageComplete & {
-      message_type: "message_complete";
+      message_type: "assistant_message_completed";
     })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
@@ -266,6 +279,10 @@ export type MessageSubmitStreamingResponseMessageComplete = {
 };
 
 export type MessageSubmitStreamingResponseMessageTextDelta = {
+  /**
+   * @format uuid
+   */
+  message_id: string;
   new_text: string;
 };
 
@@ -363,8 +380,11 @@ export type RegenerateMessageRequest = {
 };
 
 export type RegenerateMessageStreamingResponseMessage =
+  | (MessageSubmitStreamingResponseAssistantMessageStarted & {
+      message_type: "assistant_message_started";
+    })
   | (MessageSubmitStreamingResponseMessageComplete & {
-      message_type: "message_complete";
+      message_type: "assistant_message_completed";
     })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";

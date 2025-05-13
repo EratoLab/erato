@@ -797,6 +797,29 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseAssistantMessageStarted",
+                "description": "Sent when the assistant message entry has been created, before generation starts."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "assistant_message_started"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent when the assistant message entry has been created, before generation starts."
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessageComplete",
                 "description": "Sent when the assistant's response has been saved in full."
               },
@@ -809,7 +832,7 @@
                   "message_type": {
                     "type": "string",
                     "enum": [
-                      "message_complete"
+                      "assistant_message_completed"
                     ]
                   }
                 }
@@ -955,6 +978,18 @@
           }
         }
       },
+      "MessageSubmitStreamingResponseAssistantMessageStarted": {
+        "type": "object",
+        "required": [
+          "message_id"
+        ],
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "MessageSubmitStreamingResponseChatCreated": {
         "type": "object",
         "required": [
@@ -1018,6 +1053,29 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseAssistantMessageStarted",
+                "description": "Sent when the assistant message entry has been created, before generation starts."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "assistant_message_started"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent when the assistant message entry has been created, before generation starts."
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessageComplete",
                 "description": "Sent when the assistant's response has been saved in full."
               },
@@ -1030,7 +1088,7 @@
                   "message_type": {
                     "type": "string",
                     "enum": [
-                      "message_complete"
+                      "assistant_message_completed"
                     ]
                   }
                 }
@@ -1086,9 +1144,14 @@
       "MessageSubmitStreamingResponseMessageTextDelta": {
         "type": "object",
         "required": [
+          "message_id",
           "new_text"
         ],
         "properties": {
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "new_text": {
             "type": "string"
           }
@@ -1237,6 +1300,29 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseAssistantMessageStarted",
+                "description": "Sent when the assistant message entry has been created, before generation starts."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "assistant_message_started"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent when the assistant message entry has been created, before generation starts."
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessageComplete",
                 "description": "Sent when the assistant's response has been saved in full."
               },
@@ -1249,7 +1335,7 @@
                   "message_type": {
                     "type": "string",
                     "enum": [
-                      "message_complete"
+                      "assistant_message_completed"
                     ]
                   }
                 }

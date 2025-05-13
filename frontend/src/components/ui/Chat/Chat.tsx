@@ -226,7 +226,6 @@ export const Chat = ({
   const loadOlderMessages = () => {
     logger.log("loadOlderMessages called (placeholder)");
   };
-  const apiMessagesResponse = undefined;
 
   // Restore a basic handleFileAttachments function needed by ChatInput
   const handleFileAttachments = useCallback((files: FileUploadItem[]) => {
@@ -237,6 +236,12 @@ export const Chat = ({
     // to be aware of files attached in ChatInput before sending.
     // For now, its presence enables the button in ChatInput.
   }, []);
+
+  if (process.env.NODE_ENV === "development") {
+    console.log(
+      `[DEBUG_UI] Chat.tsx rendering. chatLoading: ${chatLoading}, currentChatId: ${currentChatId ?? ""}, sidebarCollapsed: ${sidebarCollapsed}, messagesCount: ${Object.keys(messages).length}`,
+    );
+  }
 
   return (
     <div className="flex size-full flex-col sm:flex-row">
@@ -274,7 +279,6 @@ export const Chat = ({
             hasOlderMessages={hasOlderMessages}
             isPending={chatLoading}
             currentSessionId={currentChatId ?? ""}
-            apiMessagesResponse={apiMessagesResponse}
             pageSize={6}
             maxWidth={maxWidth}
             showTimestamps={showTimestamps}
