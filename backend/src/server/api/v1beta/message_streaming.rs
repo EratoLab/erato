@@ -11,6 +11,7 @@ use crate::models::message::{
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::ChatMessage;
 use crate::services::file_storage::FileStorage;
+use crate::services::mcp_manager::convert_mcp_tools_to_genai_tools;
 use crate::state::AppState;
 use axum::extract::State;
 use axum::response::sse::Event;
@@ -20,7 +21,8 @@ use eyre::{eyre, Report};
 use eyre::{OptionExt, WrapErr};
 use futures::Stream;
 use genai::chat::{
-    ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatStreamEvent, StreamEnd,
+    ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatRole, ChatStreamEvent,
+    MessageContent, StreamChunk, StreamEnd,
 };
 use sea_orm::prelude::Uuid;
 #[cfg(feature = "sentry")]
@@ -471,8 +473,15 @@ async fn prepare_chat_request(
         new_input_files,
     )
     .await?;
-    let chat_request = generation_input_messages.clone().into_chat_request();
-    let chat_options = ChatOptions::default().with_capture_content(true);
+    let mut chat_request = generation_input_messages.clone().into_chat_request();
+    let chat_options = ChatOptions::default()
+        .with_capture_content(true)
+        .with_capture_tools(true);
+
+    let mcp_server_tools = app_state.mcp_servers.list_tools().await;
+
+    let tools = convert_mcp_tools_to_genai_tools(mcp_server_tools);
+    chat_request.tools = Some(tools);
 
     Ok((chat_request, chat_options, generation_input_messages))
 }
@@ -486,50 +495,106 @@ async fn stream_generate_chat_completion<
     chat_options: ChatOptions,
     assistant_message_id: Uuid,
 ) -> Result<StreamEnd, ()> {
-    let chat_stream = match app_state
-        .genai()
-        .exec_chat_stream("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
-        .await
-    {
-        Ok(stream) => stream,
-        Err(err) => {
-            let _ = tx
-                .send(Err(err).wrap_err("Failed to start chat stream with LLM provider"))
-                .await;
-            return Err(());
-        }
-    };
+    let max_tool_call_iterations = 15;
+    let mut unfinished_tool_calls = vec![];
+    let mut current_turn = 0;
+    let mut current_tool_call_count = 0;
 
-    let mut inner_stream = chat_stream.stream;
-    // Await until stream end
-    let mut stream_end: Option<StreamEnd> = None;
-    while let Some(result) = inner_stream.next().await {
-        match result {
-            Ok(message) => match message {
-                ChatStreamEvent::Chunk(chunk) => {
-                    let delta = MessageSubmitStreamingResponseMessageTextDelta {
-                        message_id: assistant_message_id,
-                        new_text: chunk.content,
-                    };
-                    let message: MSG = delta.into();
-                    message.send_event(tx.clone()).await?;
+    let mut current_turn_chat_request = chat_request.clone();
+    'loop_call_turns: loop {
+        // First work off open tool calls
+        let mut current_turn_tool_responses = vec![];
+        while let Some(unfinished_tool_call) = unfinished_tool_calls.pop() {
+            current_turn += 1;
+            tracing::debug!("Starting chat complation turn {}", current_turn);
+            if current_tool_call_count >= max_tool_call_iterations {
+                // TODO: Send error that tool call was aborted due to too many iterations
+                return Err(());
+            } else {
+                current_tool_call_count += 1;
+            }
+
+            let managed_tool_call = app_state
+                .mcp_servers
+                .convert_tool_call_to_managed_tool_call(unfinished_tool_call)
+                .await
+                .unwrap();
+            match app_state.mcp_servers.call_tool(managed_tool_call).await {
+                Ok(tool_call_result) => current_turn_tool_responses.push(tool_call_result),
+                Err(err) => {
+                    let _ = tx.send(Err(err).wrap_err("Failed to call tool")).await;
+                    return Err(());
                 }
-                ChatStreamEvent::End(end) => {
-                    stream_end = Some(end);
-                }
-                _ => {}
-            },
+            };
+        }
+        if !current_turn_tool_responses.is_empty() {
+            current_turn_chat_request.messages.push(GenAiChatMessage {
+                role: ChatRole::Tool,
+                content: MessageContent::ToolResponses(current_turn_tool_responses.clone()),
+            });
+        }
+
+        let chat_stream = match app_state
+            .genai()
+            .exec_chat_stream(
+                "PLACEHOLDER_MODEL",
+                current_turn_chat_request.clone(),
+                Some(&chat_options),
+            )
+            .await
+        {
+            Ok(stream) => stream,
             Err(err) => {
-                let _ = tx.send(Err(err).wrap_err("Error from chat stream")).await;
+                let _ = tx
+                    .send(Err(err).wrap_err("Failed to start chat stream with LLM provider"))
+                    .await;
                 return Err(());
             }
+        };
+
+        let mut inner_stream = chat_stream.stream;
+        // Await until stream end
+        let mut stream_end: Option<StreamEnd> = None;
+        while let Some(result) = inner_stream.next().await {
+            match result {
+                Ok(message) => match message {
+                    ChatStreamEvent::Chunk(StreamChunk::Content(content)) => {
+                        let delta = MessageSubmitStreamingResponseMessageTextDelta {
+                            message_id: assistant_message_id,
+                            new_text: content,
+                        };
+                        let message: MSG = delta.into();
+                        message.send_event(tx.clone()).await?;
+                    }
+                    ChatStreamEvent::End(end) => {
+                        stream_end = Some(end);
+                    }
+                    ChatStreamEvent::Start => {}
+                    _ => {}
+                },
+                Err(err) => {
+                    if let genai::Error::JsonValueExt(_) = err {
+                    } else {
+                        let _ = tx.send(Err(err).wrap_err("Error from chat stream")).await;
+                        return Err(());
+                    }
+                }
+            }
         }
-    }
-    if let Some(stream_end) = stream_end {
-        Ok(stream_end)
-    } else {
-        // TODO: Send error that stream ended without sending stream_end event
-        Err(())
+        if let Some(stream_end) = stream_end {
+            if !stream_end.captured_tools.is_empty() {
+                current_turn_chat_request.messages.push(GenAiChatMessage {
+                    role: ChatRole::Assistant,
+                    content: MessageContent::ToolCalls(stream_end.captured_tools.clone()),
+                });
+                unfinished_tool_calls.extend(stream_end.captured_tools.clone());
+            } else {
+                break 'loop_call_turns Ok(stream_end);
+            }
+        } else {
+            // TODO: Send error that stream ended without sending stream_end event
+            break 'loop_call_turns Err(());
+        }
     }
 }
 

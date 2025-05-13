@@ -16,6 +16,8 @@ use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 use std::collections::HashMap;
+use std::default::Default;
+use std::sync::Arc;
 use test_log::test;
 
 // Struct to represent SSE events
@@ -84,6 +86,7 @@ pub fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppState {
         default_file_storage_provider: None,
         system_prompt: None,
         file_storage_providers,
+        mcp_servers: Arc::new(Default::default()),
     }
 }
 // This is the main entry point for integration tests
