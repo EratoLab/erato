@@ -301,12 +301,12 @@ async fn test_message_submit_stream(pool: Pool<Postgres>) {
     let content_array = assistant_message_completed_event_data["content"]
         .as_array()
         .expect("Content should be an array");
-    assert!(!content_array.is_empty(), "Content array should not be empty");
-    let first_content_part = &content_array[0];
-    assert_eq!(
-        first_content_part["content_type"].as_str().unwrap(),
-        "text"
+    assert!(
+        !content_array.is_empty(),
+        "Content array should not be empty"
     );
+    let first_content_part = &content_array[0];
+    assert_eq!(first_content_part["content_type"].as_str().unwrap(), "text");
     assert!(first_content_part["text"].as_str().is_some());
 }
 
