@@ -6,7 +6,7 @@ pub mod token_usage;
 use crate::db::entity_ext::messages;
 use crate::models;
 use crate::models::chat::{archive_chat, get_or_create_chat, get_recent_chats};
-use crate::models::message::MessageSchema;
+use crate::models::message::{ContentPart, MessageSchema};
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
     __path_edit_message_sse, __path_message_submit_sse, __path_regenerate_message_sse,
@@ -184,7 +184,7 @@ pub struct ChatMessage {
     /// Role of the message sender. May be on of "user", "assistant", "system"
     role: String,
     /// The text content of the message
-    full_text: String,
+    content: Vec<ContentPart>,
     /// When the message was created
     created_at: DateTime<FixedOffset>,
     /// When the message was last updated
@@ -408,7 +408,7 @@ impl ChatMessage {
             id: msg.id.to_string(),
             chat_id: msg.chat_id.to_string(),
             role: parsed_message.role.to_string(),
-            full_text: parsed_message.full_text(),
+            content: parsed_message.content,
             created_at: msg.created_at,
             updated_at: msg.updated_at,
             previous_message_id: msg.previous_message_id.map(|id| id.to_string()),

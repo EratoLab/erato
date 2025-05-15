@@ -1,4 +1,4 @@
-use crate::models::message::{GenerationInputMessages, MessageContent, MessageRole};
+use crate::models::message::{ContentPart, GenerationInputMessages, MessageRole};
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
 use crate::state::AppState;
@@ -125,7 +125,7 @@ pub async fn token_usage_estimate(
                 .messages
                 .push(crate::models::message::InputMessage {
                     role: MessageRole::User,
-                    content: MessageContent::String(content),
+                    content: ContentPart::Text(content.into()),
                 });
         }
         messages
@@ -138,7 +138,7 @@ pub async fn token_usage_estimate(
                 .messages
                 .push(crate::models::message::InputMessage {
                     role: MessageRole::User,
-                    content: MessageContent::String(content),
+                    content: ContentPart::Text(content.into()),
                 });
         }
         messages
@@ -150,7 +150,7 @@ pub async fn token_usage_estimate(
         .messages
         .push(crate::models::message::InputMessage {
             role: MessageRole::User,
-            content: MessageContent::String(request.user_message.clone()),
+            content: ContentPart::Text(request.user_message.clone().into()),
         });
 
     // Calculate token counts using tiktoken

@@ -30,6 +30,7 @@ pub struct AppConfig {
     pub default_file_storage_provider: Option<String>,
 
     // A list of MCP servers that may be used in conjunction with the LLM providers.
+    #[serde(default)]
     pub mcp_servers: HashMap<String, McpServerConfig>,
 
     // If present, will enable Sentry for error reporting.

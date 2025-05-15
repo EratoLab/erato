@@ -1,13 +1,20 @@
-use crate::models::message::{GenerationInputMessages, InputMessage, MessageContent, MessageRole};
-use genai::chat::ChatMessage;
+use crate::models::message::{ContentPart, GenerationInputMessages, InputMessage, MessageRole};
 use genai::chat::ChatRequest;
+use genai::chat::ChatRole as GenAiChatRole;
 use genai::chat::MessageContent as GenAiMessageContent;
+use genai::chat::{ChatMessage, ToolResponse};
 
-impl From<MessageContent> for GenAiMessageContent {
-    fn from(content: MessageContent) -> Self {
+impl From<ContentPart> for GenAiMessageContent {
+    fn from(content: ContentPart) -> Self {
         match content {
-            MessageContent::String(text) => GenAiMessageContent::Text(text),
-            MessageContent::Array(texts) => GenAiMessageContent::Text(texts.join(" ")),
+            ContentPart::Text(text) => GenAiMessageContent::Text(text.into()),
+            ContentPart::ToolUse(tool_use) => {
+                GenAiMessageContent::ToolResponses(vec![ToolResponse {
+                    call_id: tool_use.tool_call_id,
+                    content: serde_json::to_string(&tool_use.output)
+                        .expect("Failed to serialize tool output"),
+                }])
+            }
         }
     }
 }
@@ -18,6 +25,10 @@ impl InputMessage {
             MessageRole::System => ChatMessage::system(self.content),
             MessageRole::User => ChatMessage::user(self.content),
             MessageRole::Assistant => ChatMessage::assistant(self.content),
+            MessageRole::Tool => ChatMessage {
+                role: GenAiChatRole::Tool,
+                content: self.content.into(),
+            },
         }
     }
 }

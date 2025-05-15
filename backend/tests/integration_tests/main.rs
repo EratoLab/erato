@@ -283,6 +283,31 @@ async fn test_message_submit_stream(pool: Pool<Postgres>) {
         has_event_type("assistant_message_completed"),
         "No assistant_message_completed event received"
     );
+
+    // Additionally, verify the content of the assistant_message_completed event
+    let assistant_message_completed_event_data = events
+        .iter()
+        .find_map(|event| {
+            let data = event.split("data:").nth(1).unwrap_or("").trim();
+            if let Ok(json) = serde_json::from_str::<Value>(data) {
+                if json["message_type"] == "assistant_message_completed" {
+                    return Some(json);
+                }
+            }
+            None
+        })
+        .expect("Could not find assistant_message_completed event data");
+
+    let content_array = assistant_message_completed_event_data["content"]
+        .as_array()
+        .expect("Content should be an array");
+    assert!(!content_array.is_empty(), "Content array should not be empty");
+    let first_content_part = &content_array[0];
+    assert_eq!(
+        first_content_part["content_type"].as_str().unwrap(),
+        "text"
+    );
+    assert!(first_content_part["text"].as_str().is_some());
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -714,17 +739,31 @@ async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
     );
 
     // Verify the content of the user messages
-    let user_message_texts: Vec<&str> = user_messages
+    let user_message_texts: Vec<String> = user_messages
         .iter()
-        .map(|msg| msg["full_text"].as_str().unwrap_or(""))
+        .map(|msg| {
+            msg["content"]
+                .as_array()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .filter_map(|part| {
+                    if part["content_type"].as_str() == Some("text") {
+                        part["text"].as_str().map(String::from)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join(" ")
+        })
         .collect();
 
     assert!(
-        user_message_texts.contains(&first_message),
+        user_message_texts.contains(&first_message.to_string()),
         "First user message not found"
     );
     assert!(
-        user_message_texts.contains(&second_message),
+        user_message_texts.contains(&second_message.to_string()),
         "Second user message not found"
     );
 
@@ -740,8 +779,12 @@ async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
             "Message is missing 'role' field"
         );
         assert!(
-            message.get("full_text").is_some(),
-            "Message is missing 'full_text' field"
+            message.get("content").is_some(),
+            "Message is missing 'content' field"
+        );
+        assert!(
+            message["content"].is_array(),
+            "Message content should be an array"
         );
         assert!(
             message.get("created_at").is_some(),
@@ -1033,7 +1076,19 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
 
     // Verify the active user message is the first message
     assert_eq!(
-        active_user_messages[0]["full_text"].as_str().unwrap_or(""),
+        active_user_messages[0]["content"]
+            .as_array()
+            .unwrap_or(&Vec::new())
+            .iter()
+            .filter_map(|part| {
+                if part["content_type"].as_str() == Some("text") {
+                    part["text"].as_str().map(String::from)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(" "),
         first_message,
         "Active user message does not match the first message"
     );
@@ -1068,26 +1123,56 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
     );
 
     // Verify that the first user message is in the active thread
-    let first_user_message = messages
+    let first_user_message_content = messages
         .iter()
-        .find(|msg| msg["full_text"].as_str().unwrap_or("") == first_message)
+        .find(|msg| {
+            let text_content = msg["content"]
+                .as_array()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .filter_map(|part| {
+                    if part["content_type"].as_str() == Some("text") {
+                        part["text"].as_str().map(String::from)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join(" ");
+            text_content == first_message
+        })
         .expect("First user message not found in messages list");
 
     assert!(
-        first_user_message["is_message_in_active_thread"]
+        first_user_message_content["is_message_in_active_thread"]
             .as_bool()
             .unwrap_or(false),
         "First user message should be in the active thread"
     );
 
     // Verify that the second user message is not in the active thread
-    let second_user_message = messages
+    let second_user_message_content = messages
         .iter()
-        .find(|msg| msg["full_text"].as_str().unwrap_or("") == second_message)
+        .find(|msg| {
+            let text_content = msg["content"]
+                .as_array()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .filter_map(|part| {
+                    if part["content_type"].as_str() == Some("text") {
+                        part["text"].as_str().map(String::from)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join(" ");
+            text_content == second_message
+        })
         .expect("Second user message not found in messages list");
 
     assert!(
-        !second_user_message["is_message_in_active_thread"]
+        !second_user_message_content["is_message_in_active_thread"]
             .as_bool()
             .unwrap_or(true),
         "Second user message should not be in the active thread"
@@ -1344,14 +1429,41 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
         .find(|msg| msg["role"].as_str().unwrap() == "user")
         .expect("No active user message found");
     assert_eq!(
-        active_user_message["full_text"].as_str().unwrap(),
+        active_user_message["content"]
+            .as_array()
+            .unwrap_or(&Vec::new())
+            .iter()
+            .filter_map(|part| {
+                if part["content_type"].as_str() == Some("text") {
+                    part["text"].as_str().map(String::from)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(" "),
         edited_message
     );
 
     // Verify the original message is marked as inactive
     let original_message = messages
         .iter()
-        .find(|msg| msg["full_text"].as_str().unwrap() == first_message)
+        .find(|msg| {
+            let text_content = msg["content"]
+                .as_array()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .filter_map(|part| {
+                    if part["content_type"].as_str() == Some("text") {
+                        part["text"].as_str().map(String::from)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join(" ");
+            text_content == first_message
+        })
         .expect("Original message not found");
     assert!(!original_message["is_message_in_active_thread"]
         .as_bool()

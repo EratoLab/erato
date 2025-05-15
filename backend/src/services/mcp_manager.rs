@@ -99,10 +99,11 @@ impl ClientHandler for ToolUpdaterHandler {
 
     async fn handle_process_error(
         &self,
-        error_message: String,
+        _error_message: String,
         _runtime: &dyn McpClient,
     ) -> Result<(), RpcError> {
-        tracing::error!(server_id = %self.server_id, error = %error_message, "MCP Process Error");
+        // NOTE: Very spammy and contains normal logs for the test server; Need to figure out a better strategy.
+        // tracing::error!(server_id = %self.server_id, error = %error_message, "MCP Process Error");
         // Err(RpcError::InternalError(format!("MCP process error: {}", error_message)))
         Ok(())
     }

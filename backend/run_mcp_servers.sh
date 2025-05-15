@@ -39,7 +39,7 @@ pids+=($!) # Add the PID of the last background command to the array
 # pids+=($!)
 
 echo "Script running. Press Ctrl+C to terminate all processes."
-echo "You can run an MCP inspector via `pnpx @modelcontextprotocol/inspector`"
+echo "You can run an MCP inspector via \`pnpx @modelcontextprotocol/inspector\`"
 
 # Wait for all background processes launched by this script
 wait "${pids[@]}"
