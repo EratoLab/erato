@@ -71,12 +71,12 @@ const ChatHistoryListItem = memo<{
               onClick: onShowDetails ?? (() => {}),
             },
             {
-              label: "Archive",
+              label: "Remove",
               icon: <LogOutIcon className="size-4" />,
               onClick: onArchive ?? (() => {}),
               confirmAction: true,
-              confirmTitle: "Confirm Archive",
-              confirmMessage: "Are you sure you want to archive this chat?",
+              confirmTitle: "Confirm Removal",
+              confirmMessage: "Are you sure you want to remove this chat?",
             },
           ]}
         />
