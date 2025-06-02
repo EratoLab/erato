@@ -110,9 +110,7 @@ export const DefaultMessageControls = ({
               showRawMarkdown ? "Show formatted" : "Show raw markdown"
             }
             title={showRawMarkdown ? "Show formatted" : "Show raw markdown"}
-            className={
-              showRawMarkdown ? "text-blue-600 dark:text-blue-400" : ""
-            }
+            className={showRawMarkdown ? "text-theme-fg-accent" : ""}
           />
         )}
 

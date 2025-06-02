@@ -155,6 +155,33 @@ export const Table: Story = {
   },
 };
 
+export const ThemedCodeBlocks: Story = {
+  args: {
+    content: `## Code with Theme-Aware Styling
+
+Light mode uses a light syntax theme, dark mode uses a dark theme:
+
+\`\`\`javascript
+// This code block adapts to your theme
+function greet(name) {
+  console.log(\`Hello, \${name}!\`);
+  return name.toUpperCase();
+}
+\`\`\`
+
+Inline \`code\` also uses theme colors.
+`,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Code blocks automatically switch between light and dark syntax highlighting based on the active theme.",
+      },
+    },
+  },
+};
+
 export const ComplexMarkdown: Story = {
   args: {
     content: `# Complex Markdown Example
