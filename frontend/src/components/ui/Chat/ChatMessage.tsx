@@ -95,7 +95,10 @@ export const ChatMessage = memo(function ChatMessage({
             </div>
           </div>
 
-          <MessageContent content={message.content} />
+          <MessageContent
+            content={message.content}
+            isStreaming={!!message.loading && message.loading.state !== "done"}
+          />
 
           {/* Display attached files if any */}
           {message.input_files_ids && message.input_files_ids.length > 0 && (
