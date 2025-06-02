@@ -9,6 +9,7 @@ import type { Components } from "react-markdown";
 interface MessageContentProps {
   content: string;
   isStreaming?: boolean;
+  showRaw?: boolean;
 }
 
 // Define custom components for react-markdown
@@ -81,10 +82,22 @@ const markdownComponents: Partial<Components> = {
 export const MessageContent = memo(function MessageContent({
   content,
   isStreaming = false,
+  showRaw = false,
 }: MessageContentProps) {
   // For streaming content, append a cursor if the content doesn't end with a newline
   const displayContent =
     isStreaming && !content.endsWith("\n") ? content + "▊" : content;
+
+  // If showing raw markdown, render as preformatted text
+  if (showRaw) {
+    return (
+      <article className="prose prose-slate dark:prose-invert max-w-none">
+        <pre className="whitespace-pre-wrap rounded-md bg-gray-100 p-4 font-mono text-sm dark:bg-gray-800">
+          <code>{displayContent}</code>
+        </pre>
+      </article>
+    );
+  }
 
   // Create dynamic components based on streaming state
   const components: Partial<Components> = {

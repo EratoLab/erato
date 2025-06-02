@@ -6,6 +6,7 @@ import {
   HandThumbDownIcon,
   PencilSquareIcon,
   CheckIcon,
+  CodeBracketIcon,
 } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import React, { useState, useEffect, useCallback } from "react";
@@ -22,6 +23,12 @@ import type {
 
 const logger = createLogger("UI", "DefaultMessageControls");
 
+interface ExtendedMessageControlsProps extends MessageControlsProps {
+  showFeedbackButtons?: boolean;
+  showRawMarkdown?: boolean;
+  onToggleRawMarkdown?: () => void;
+}
+
 export const DefaultMessageControls = ({
   messageId,
   // messageType,
@@ -33,7 +40,9 @@ export const DefaultMessageControls = ({
   className,
   isUserMessage,
   showFeedbackButtons = false,
-}: MessageControlsProps & { showFeedbackButtons?: boolean }) => {
+  showRawMarkdown = false,
+  onToggleRawMarkdown,
+}: ExtendedMessageControlsProps) => {
   const [isCopied, setIsCopied] = useState(false);
   const [feedbackState, setFeedbackState] = useState<
     "liked" | "disliked" | null
@@ -89,6 +98,24 @@ export const DefaultMessageControls = ({
       )}
     >
       <div className="flex items-center gap-2">
+        {/* Raw/Formatted toggle - always visible for any message */}
+        {onToggleRawMarkdown && (
+          <Button
+            onClick={onToggleRawMarkdown}
+            variant="icon-only"
+            icon={<CodeBracketIcon />}
+            size="sm"
+            showOnHover={showOnHover}
+            aria-label={
+              showRawMarkdown ? "Show formatted" : "Show raw markdown"
+            }
+            title={showRawMarkdown ? "Show formatted" : "Show raw markdown"}
+            className={
+              showRawMarkdown ? "text-blue-600 dark:text-blue-400" : ""
+            }
+          />
+        )}
+
         <Button
           disabled={isCopied}
           onClick={() => void handleAction("copy")}
