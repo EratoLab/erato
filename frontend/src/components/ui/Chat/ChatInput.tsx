@@ -53,7 +53,7 @@ export const ChatInput = ({
   disabled = false,
   className = "",
   placeholder = "Type a message...",
-  maxLength = 2000,
+  maxLength = 16000,
   showControls = true,
   maxFiles = 5,
   acceptedFileTypes = [],
@@ -277,7 +277,7 @@ export const ChatInput = ({
           rows={1}
           disabled={isLoading || isStreaming || disabled || isUploading}
           className={clsx(
-            "w-full resize-none overflow-hidden",
+            "w-full resize-none overflow-y-auto",
             "p-2 sm:px-3",
             "bg-transparent",
             "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
@@ -285,6 +285,7 @@ export const ChatInput = ({
             "disabled:cursor-not-allowed disabled:opacity-50",
             "max-h-[200px] min-h-[32px]",
             "text-base",
+            "scrollbar-auto-hide",
             isAnyTokenLimitExceeded &&
               "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
           )}

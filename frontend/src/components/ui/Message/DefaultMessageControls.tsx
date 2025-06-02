@@ -32,7 +32,8 @@ export const DefaultMessageControls = ({
   onAction,
   className,
   isUserMessage,
-}: MessageControlsProps) => {
+  showFeedbackButtons = false,
+}: MessageControlsProps & { showFeedbackButtons?: boolean }) => {
   const [isCopied, setIsCopied] = useState(false);
   const [feedbackState, setFeedbackState] = useState<
     "liked" | "disliked" | null
@@ -118,7 +119,7 @@ export const DefaultMessageControls = ({
           />
         )}
 
-        {!isUser && (
+        {!isUser && showFeedbackButtons && (
           <>
             <Button
               onClick={() => void handleAction("like")}
