@@ -101,3 +101,23 @@ export const SharedMessage: Story = {
     },
   },
 };
+
+export const HoverComparison: Story = {
+  args: {
+    ...UserMessage.args,
+    showControlsOnHover: true,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: `
+Demonstrates the improved hover effect on messages:
+- Light mode: Uses neutral.200 (#e5e7eb) for a subtle hover
+- Dark mode: Uses neutral.700 (#374151) for a gentle highlight
+
+The hover effect is now properly aligned with the theme's color scale, providing just enough contrast without being too bright or too subtle.
+        `,
+      },
+    },
+  },
+};

@@ -57,6 +57,7 @@ jobs:
 
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
+        working-directory: backend
 
       - name: "Install sqitch"
         run: sudo apt install -y sqitch
@@ -102,6 +103,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Install Rust toolchain"
         run: rustup component add clippy
+        working-directory: backend
       - name: "Setup test environment"
         working-directory: backend
         run: |

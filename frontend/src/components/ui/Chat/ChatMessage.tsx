@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import React, { memo } from "react";
+import React, { memo, useState } from "react";
 
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
 import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
@@ -65,6 +65,9 @@ export const ChatMessage = memo(function ChatMessage({
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
 
+  // Local state for raw markdown toggle
+  const [showRawMarkdown, setShowRawMarkdown] = useState(false);
+
   // Content validation
   if (!message.content && !message.loading) {
     return null;
@@ -95,7 +98,11 @@ export const ChatMessage = memo(function ChatMessage({
             </div>
           </div>
 
-          <MessageContent content={message.content} />
+          <MessageContent
+            content={message.content}
+            isStreaming={!!message.loading && message.loading.state !== "done"}
+            showRaw={showRawMarkdown}
+          />
 
           {/* Display attached files if any */}
           {message.input_files_ids && message.input_files_ids.length > 0 && (
@@ -119,17 +126,36 @@ export const ChatMessage = memo(function ChatMessage({
             </div>
           )}
           {showTimestamp && (
-            <Controls
-              messageId={message.id}
-              messageType={message.sender}
-              authorId={message.authorId}
-              createdAt={message.createdAt}
-              context={controlsContext}
-              showOnHover={showControlsOnHover}
-              onAction={onMessageAction}
-              className="z-10"
-              isUserMessage={isUser}
-            />
+            <div className="z-10">
+              {Controls === DefaultMessageControls ? (
+                <DefaultMessageControls
+                  messageId={message.id}
+                  messageType={message.sender}
+                  authorId={message.authorId}
+                  createdAt={message.createdAt}
+                  context={controlsContext}
+                  showOnHover={showControlsOnHover}
+                  onAction={onMessageAction}
+                  isUserMessage={isUser}
+                  showRawMarkdown={showRawMarkdown}
+                  onToggleRawMarkdown={() =>
+                    setShowRawMarkdown(!showRawMarkdown)
+                  }
+                />
+              ) : (
+                <Controls
+                  messageId={message.id}
+                  messageType={message.sender}
+                  authorId={message.authorId}
+                  createdAt={message.createdAt}
+                  context={controlsContext}
+                  showOnHover={showControlsOnHover}
+                  onAction={onMessageAction}
+                  className="z-10"
+                  isUserMessage={isUser}
+                />
+              )}
+            </div>
           )}
         </div>
       </div>
