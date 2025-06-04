@@ -1,7 +1,27 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import { useMessagingStore } from "../store/messagingStore";
 
-import type { MessageSubmitStreamingResponseMessageComplete } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  MessageSubmitStreamingResponseMessageComplete,
+  ContentPart,
+  ContentPartText,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+/**
+ * Extracts text content from ContentPart array
+ * @param content Array of ContentPart objects
+ * @returns Combined text from all text parts
+ */
+function extractTextFromContent(content: ContentPart[]): string {
+  if (!content || !Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .filter((part) => part.content_type === "text")
+    .map((part) => (part as ContentPartText).text)
+    .join("");
+}
 
 /**
  * Handles the 'assistant_message_completed' event from the streaming API response.
@@ -38,8 +58,8 @@ export const handleMessageComplete = (
   // a valid message ID will be present in responseData.message.id or responseData.message_id.
   const realMessageId = realMessageData.id || responseData.message_id;
   const finalContent =
-    realMessageData.full_text ||
-    responseData.full_text ||
+    extractTextFromContent(realMessageData.content || []) ||
+    extractTextFromContent(responseData.content || []) ||
     currentStreamingState.content; // Fallback to current streaming content if somehow not in response
 
   if (process.env.NODE_ENV === "development") {

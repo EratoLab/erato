@@ -741,6 +741,8 @@ async fn stream_generate_chat_completion<
             }
         }
         if let Some(stream_end) = stream_end {
+            #[allow(clippy::collapsible_match)]
+            #[allow(clippy::single_match)]
             if let Some(captured_content) = stream_end.clone().captured_content {
                 match captured_content {
                     MessageContent::Text(text) => {

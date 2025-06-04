@@ -1,7 +1,26 @@
 import { useMessagingStore } from "../store/messagingStore";
 
-import type { MessageSubmitStreamingResponseUserMessageSaved } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { Message } from "@/types/chat";
+import type {
+  MessageSubmitStreamingResponseUserMessageSaved,
+  ContentPart,
+  ContentPartText,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+/**
+ * Extracts text content from ContentPart array
+ * @param content Array of ContentPart objects (optional)
+ * @returns Combined text from all text parts
+ */
+function extractTextFromContent(content?: ContentPart[] | null): string {
+  if (!content || !Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .filter((part) => part.content_type === "text")
+    .map((part) => (part as ContentPartText).text)
+    .join("");
+}
 
 /**
  * Handles the 'user_message_saved' event from the streaming API response.
@@ -24,26 +43,30 @@ import type { Message } from "@/types/chat";
  *                       object with the details of the saved user message.
  * @returns void
  */
-export const handleUserMessageSaved = (
+export function handleUserMessageSaved(
   responseData: MessageSubmitStreamingResponseUserMessageSaved & {
     message_type: "user_message_saved";
   },
-): void => {
+): void {
   const serverConfirmedMessage = responseData.message;
+  const serverConfirmedMessageContent = extractTextFromContent(
+    serverConfirmedMessage.content,
+  );
 
+  // Validation: serverConfirmedMessage should have expected structure
   if (
     !serverConfirmedMessage.id ||
-    typeof serverConfirmedMessage.full_text !== "string"
+    typeof serverConfirmedMessageContent !== "string"
   ) {
-    console.warn(
-      "[DEBUG_STREAMING] handleUserMessageSaved: 'user_message_saved' event received without sufficient message data:",
+    console.error(
+      "[DEBUG_STREAMING] handleUserMessageSaved: Invalid server-confirmed message structure:",
       responseData,
     );
     return;
   }
 
   console.log(
-    `[DEBUG_STREAMING] handleUserMessageSaved: Processing event for server message ID: ${serverConfirmedMessage.id}, Content: "${serverConfirmedMessage.full_text.substring(0, 50)}..."`,
+    `[DEBUG_STREAMING] handleUserMessageSaved: Server confirmed user message. Message ID: ${serverConfirmedMessage.id}, Content: "${serverConfirmedMessageContent.substring(0, 50)}..."`,
   );
 
   useMessagingStore.setState((prevState) => {
@@ -53,7 +76,7 @@ export const handleUserMessageSaved = (
     const tempMessage = Object.values(newUserMessages).find(
       (msg) =>
         msg.role === "user" &&
-        msg.content === serverConfirmedMessage.full_text &&
+        msg.content === serverConfirmedMessageContent &&
         msg.status === "sending",
     );
 
@@ -62,21 +85,18 @@ export const handleUserMessageSaved = (
       delete newUserMessages[tempMessageKeyToDelete]; // Remove message with temp ID
 
       // Construct the final message object using server data
-      const finalUserMessage: Message = {
+      const finalUserMessage = {
         id: serverConfirmedMessage.id,
-        content: serverConfirmedMessage.full_text,
+        content: serverConfirmedMessageContent,
         role: serverConfirmedMessage.role as "user", // Role from server, cast as "user"
         createdAt: serverConfirmedMessage.created_at,
-        status: "complete", // Message is saved, so status is complete
+        status: "complete" as const, // Message is saved, so status is complete
         input_files_ids: serverConfirmedMessage.input_files_ids,
       };
 
       newUserMessages[finalUserMessage.id] = finalUserMessage; // Add message with real ID
 
       if (process.env.NODE_ENV === "development") {
-        // console.log(
-        //   `[CHAT_FLOW] User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${finalUserMessage.content.substring(0, 50)}..."`,
-        // );
         console.log(
           `[DEBUG_STREAMING] handleUserMessageSaved: User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${finalUserMessage.content.substring(0, 50)}..."`,
         );
@@ -86,7 +106,7 @@ export const handleUserMessageSaved = (
       // If no matching temp message found, log a warning.
       // This could happen if the message was cleared or if there's a mismatch.
       console.warn(
-        `[DEBUG_STREAMING] handleUserMessageSaved: No temporary user message found to update for content: "${serverConfirmedMessage.full_text.substring(0, 100)}...". This might happen if the message was cleared or if there is a data mismatch.`,
+        `[DEBUG_STREAMING] handleUserMessageSaved: No temporary user message found to update for content: "${serverConfirmedMessageContent.substring(0, 100)}...". This might happen if the message was cleared or if there is a data mismatch.`,
         "Server confirmed message:",
         serverConfirmedMessage,
         "Current user messages in store before update:",
@@ -97,10 +117,10 @@ export const handleUserMessageSaved = (
     console.log(
       "[DEBUG_STREAMING] handleUserMessageSaved: No matching temporary message found, returning previous state.",
       {
-        serverContent: serverConfirmedMessage.full_text,
+        serverContent: serverConfirmedMessageContent,
         currentMessages: prevState.userMessages,
       },
     );
     return prevState;
   });
-};
+}
