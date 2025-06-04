@@ -11,6 +11,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use serde_json::{to_value, Value as JsonValue};
 use std::fmt;
+use utoipa::ToSchema;
 
 /// Role of the message author
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -19,6 +20,7 @@ pub enum MessageRole {
     System,
     User,
     Assistant,
+    Tool,
 }
 
 impl fmt::Display for MessageRole {
@@ -27,16 +29,52 @@ impl fmt::Display for MessageRole {
             MessageRole::System => write!(f, "system"),
             MessageRole::User => write!(f, "user"),
             MessageRole::Assistant => write!(f, "assistant"),
+            MessageRole::Tool => write!(f, "tool"),
         }
     }
 }
 
-/// Content of a message, which can be either a string or an array of strings
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum MessageContent {
-    String(String),
-    Array(Vec<String>),
+#[derive(Serialize, Deserialize, ToSchema, Clone, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallStatus {
+    InProgress,
+    Success,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ToolUse {
+    pub tool_call_id: String,
+    pub status: ToolCallStatus,
+    pub tool_name: String,
+    pub progress_message: Option<String>,
+    pub input: Option<JsonValue>,
+    pub output: Option<JsonValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "content_type")]
+pub enum ContentPart {
+    Text(ContentPartText),
+    ToolUse(ToolUse),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartText {
+    pub text: String,
+}
+
+impl From<ContentPartText> for String {
+    fn from(content: ContentPartText) -> Self {
+        content.text
+    }
+}
+
+impl From<String> for ContentPartText {
+    fn from(text: String) -> Self {
+        ContentPartText { text }
+    }
 }
 
 /// Statistics for a list of messages
@@ -63,7 +101,7 @@ pub struct MessageListStats {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageSchema {
     /// The contents of the message, can be a string or array of strings
-    pub content: MessageContent,
+    pub content: Vec<ContentPart>,
 
     /// The role of the message author (system or user)
     pub role: MessageRole,
@@ -90,10 +128,14 @@ impl MessageSchema {
     }
 
     pub fn full_text(&self) -> String {
-        match &self.content {
-            MessageContent::String(content) => content.to_string(),
-            MessageContent::Array(contents) => contents.join(" "),
-        }
+        self.content
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::Text(text) => Some(text.text.as_str()),
+                ContentPart::ToolUse(_) => None,
+            })
+            .collect::<Vec<&str>>()
+            .join(" ")
     }
 }
 
@@ -339,7 +381,7 @@ pub async fn update_message_content(
     policy: &PolicyEngine,
     subject: &Subject,
     message_id: &Uuid,
-    new_content_text: String,
+    new_content_parts: Vec<ContentPart>,
 ) -> Result<messages::Model, Report> {
     // Find the message to get its current raw_message and chat_id for authorization
     let message = Messages::find_by_id(*message_id)
@@ -363,7 +405,7 @@ pub async fn update_message_content(
         ));
     }
 
-    parsed_raw_message.content = MessageContent::String(new_content_text);
+    parsed_raw_message.content = new_content_parts;
     let updated_raw_message = parsed_raw_message.to_json()?;
 
     let active_model = messages::ActiveModel {
@@ -387,17 +429,20 @@ pub async fn update_message_content(
     Ok(updated_message_model)
 }
 
+/// One input message for an LLM generation.
+/// In contrast to the `Message` model, which bundles multiple individual LLM messages, this is closer
+/// to the native format of the LLM.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputMessage {
     pub role: MessageRole,
-    pub content: MessageContent,
+    pub content: ContentPart,
 }
 
 impl InputMessage {
     pub fn full_text(&self) -> String {
         match &self.content {
-            MessageContent::String(content) => content.to_string(),
-            MessageContent::Array(contents) => contents.join(" "),
+            ContentPart::Text(content) => content.text.to_string(),
+            ContentPart::ToolUse(_) => String::new(),
         }
     }
 }
@@ -435,10 +480,12 @@ pub async fn get_generation_input_messages_by_previous_message_id(
             .ok_or_else(|| eyre!("Message with ID {} not found", current_message_id))?;
 
         let parsed_raw_message = MessageSchema::validate(&message.raw_message)?;
-        input_messages.push(InputMessage {
-            role: parsed_raw_message.role,
-            content: parsed_raw_message.content,
-        });
+        for content_part in parsed_raw_message.content {
+            input_messages.push(InputMessage {
+                role: parsed_raw_message.role.clone(),
+                content: content_part,
+            });
+        }
 
         if let Some(prev_id) = message.previous_message_id {
             current_message_id = prev_id;
@@ -451,7 +498,9 @@ pub async fn get_generation_input_messages_by_previous_message_id(
         if let Some(system_prompt) = system_prompt {
             input_messages.push(InputMessage {
                 role: MessageRole::System,
-                content: MessageContent::String(system_prompt),
+                content: ContentPart::Text(ContentPartText {
+                    text: system_prompt,
+                }),
             });
         }
     }
@@ -469,7 +518,7 @@ pub async fn get_generation_input_messages_by_previous_message_id(
 
         input_messages.push(InputMessage {
             role: MessageRole::User,
-            content: MessageContent::String(content),
+            content: ContentPart::Text(ContentPartText { text: content }),
         });
     }
 

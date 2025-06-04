@@ -6,7 +6,8 @@
     "deploy/0004_add_view_for_last_message_at.sql",
     "deploy/0005_adjust_message_lineage.sql",
     "deploy/0006_add_chats_summary_and_archived.sql",
-    "deploy/0007_add_file_uploads_table.sql"
+    "deploy/0007_add_file_uploads_table.sql",
+    "deploy/0008_alter_messages_raw_message_structure_to_array.sql"
   ],
-  "latest_change": "2aa2044c734d2221b200f2559b19c668080e22e2"
+  "latest_change": "cd96851e67d149e2a2489cf26461b54b2f37665a"
 }

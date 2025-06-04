@@ -9,6 +9,10 @@ import { useState } from "react";
 import { Chat } from "../../components/ui/Chat/Chat";
 import { MockDataGenerator } from "../../mocks/mockDataGenerator";
 
+import type {
+  ContentPart,
+  ContentPartText,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 import type { MessageAction } from "@/types/message-controls";
 import type { Meta, StoryObj } from "@storybook/react";
@@ -113,6 +117,22 @@ const createTestQueryClient = () =>
 // Generate mock data using our reusable generator
 const mockData = MockDataGenerator.createMockDataset(5, 5);
 
+/**
+ * Extracts text content from ContentPart array
+ * @param content Array of ContentPart objects (optional)
+ * @returns Combined text from all text parts
+ */
+function extractTextFromContent(content?: ContentPart[] | null): string {
+  if (!content || !Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .filter((part) => part.content_type === "text")
+    .map((part) => (part as ContentPartText).text)
+    .join("");
+}
+
 // Transform API messages to the format expected by ChatProvider
 const transformApiMessagesToChat = (
   apiMessages: (typeof mockData.messages)[string],
@@ -125,7 +145,7 @@ const transformApiMessagesToChat = (
 
     chatMessages[apiMsg.id] = {
       id: apiMsg.id,
-      content: apiMsg.full_text,
+      content: extractTextFromContent(apiMsg.content),
       sender: apiMsg.role as "user" | "assistant",
       createdAt,
       authorId:

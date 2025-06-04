@@ -29,6 +29,10 @@ pub struct AppConfig {
     // The default file storage provider to use.
     pub default_file_storage_provider: Option<String>,
 
+    // A list of MCP servers that may be used in conjunction with the LLM providers.
+    #[serde(default)]
+    pub mcp_servers: HashMap<String, McpServerConfig>,
+
     // If present, will enable Sentry for error reporting.
     pub sentry_dsn: Option<String>,
 
@@ -37,6 +41,38 @@ pub struct AppConfig {
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
     #[serde(default)]
     pub additional_frontend_environment: HashMap<String, serde_json::Value>,
+}
+
+impl AppConfig {
+    /// Separate builder, so we can also add overrides in tests.
+    pub fn config_schema_builder() -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+        let builder = Config::builder()
+            .set_default("environment", "development")?
+            .set_default("http_host", "127.0.0.1")?
+            .set_default("http_port", "3130")?
+            .set_default("frontend_bundle_path", "./public")?
+            .add_source(config::File::with_name("erato.toml").required(false))
+            .add_source(
+                Environment::default()
+                    .try_parsing(true)
+                    .separator("__")
+                    .list_separator(" ")
+                    .with_list_parse_key("chat_provider.additional_request_parameters")
+                    .with_list_parse_key("chat_provider.additional_request_headers"),
+            );
+        Ok(builder)
+    }
+
+    pub fn config_schema() -> Result<Config, ConfigError> {
+        let builder = Self::config_schema_builder()?;
+        builder.build()
+    }
+
+    pub fn new() -> Result<Self, ConfigError> {
+        let schema = Self::config_schema()?;
+        // You can deserialize (and thus freeze) the entire configuration as
+        schema.try_deserialize()
+    }
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
@@ -63,6 +99,34 @@ pub struct ChatProviderConfig {
     pub additional_request_headers: Option<Vec<String>>,
     // Optional system prompt to use with the chat provider.
     pub system_prompt: Option<String>,
+}
+
+impl ChatProviderConfig {
+    /// Parses the additional_request_parameters into a HashMap of key-value pairs
+    pub fn additional_request_parameters_map(&self) -> HashMap<String, String> {
+        let mut params = HashMap::new();
+        if let Some(param_vec) = &self.additional_request_parameters {
+            for param in param_vec {
+                if let Some((key, value)) = param.split_once('=') {
+                    params.insert(key.trim().to_string(), value.trim().to_string());
+                }
+            }
+        }
+        params
+    }
+
+    /// Parses the additional_request_headers into a HashMap of key-value pairs
+    pub fn additional_request_headers_map(&self) -> HashMap<String, String> {
+        let mut headers = HashMap::new();
+        if let Some(header_vec) = &self.additional_request_headers {
+            for header in header_vec {
+                if let Some((key, value)) = header.split_once('=') {
+                    headers.insert(key.trim().to_string(), value.trim().to_string());
+                }
+            }
+        }
+        headers
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
@@ -159,62 +223,14 @@ impl StorageProviderSpecificConfigMerged {
     }
 }
 
-impl AppConfig {
-    /// Separate builder, so we can also add overrides in tests.
-    pub fn config_schema_builder() -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-        let builder = Config::builder()
-            .set_default("environment", "development")?
-            .set_default("http_host", "127.0.0.1")?
-            .set_default("http_port", "3130")?
-            .set_default("frontend_bundle_path", "./public")?
-            .add_source(config::File::with_name("erato.toml").required(false))
-            .add_source(
-                Environment::default()
-                    .try_parsing(true)
-                    .separator("__")
-                    .list_separator(" ")
-                    .with_list_parse_key("chat_provider.additional_request_parameters")
-                    .with_list_parse_key("chat_provider.additional_request_headers"),
-            );
-        Ok(builder)
-    }
-
-    pub fn config_schema() -> Result<Config, ConfigError> {
-        let builder = Self::config_schema_builder()?;
-        builder.build()
-    }
-
-    pub fn new() -> Result<Self, ConfigError> {
-        let schema = Self::config_schema()?;
-        // You can deserialize (and thus freeze) the entire configuration as
-        schema.try_deserialize()
-    }
-}
-
-impl ChatProviderConfig {
-    /// Parses the additional_request_parameters into a HashMap of key-value pairs
-    pub fn additional_request_parameters_map(&self) -> HashMap<String, String> {
-        let mut params = HashMap::new();
-        if let Some(param_vec) = &self.additional_request_parameters {
-            for param in param_vec {
-                if let Some((key, value)) = param.split_once('=') {
-                    params.insert(key.trim().to_string(), value.trim().to_string());
-                }
-            }
-        }
-        params
-    }
-
-    /// Parses the additional_request_headers into a HashMap of key-value pairs
-    pub fn additional_request_headers_map(&self) -> HashMap<String, String> {
-        let mut headers = HashMap::new();
-        if let Some(header_vec) = &self.additional_request_headers {
-            for header in header_vec {
-                if let Some((key, value)) = header.split_once('=') {
-                    headers.insert(key.trim().to_string(), value.trim().to_string());
-                }
-            }
-        }
-        headers
-    }
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct McpServerConfig {
+    // The type of transport that the MCP server uses.
+    // Right now the only valid value is `sse`.
+    pub transport_type: String,
+    // Url of the server.
+    // For `transport_type = "sse"`, this will conventionally end with `/sse`.
+    pub url: String,
+    // For `transport_type = "sse"`, these static headers will be sent with every request.
+    pub http_headers: Option<HashMap<String, String>>,
 }

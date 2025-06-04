@@ -8,3 +8,4 @@
 0005_adjust_message_lineage 2025-03-05T09:23:41Z System Administrator <root@Maxs-Laptop.local> # Adjust message lineage
 0006_add_chats_summary_and_archived 2025-03-06T14:44:54Z System Administrator <root@Maxs-Laptop.local> # Add chats summary and archived
 0007_add_file_uploads_table 2025-04-04T20:54:15Z System Administrator <root@Maxs-Laptop.local> # Add file_uploads table
+0008_alter_messages_raw_message_structure_to_array 2025-05-15T22:36:56Z System Administrator <root@Maxs-Laptop.local> # Alter messages raw_message structure to array

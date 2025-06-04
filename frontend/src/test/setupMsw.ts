@@ -90,10 +90,16 @@ export function createSSEStreamHandler(chatId: string, messageParts: string[]) {
                   id: "user-msg-123",
                   chat_id: chatId,
                   role: "user",
-                  full_text: userMessage,
+                  content: [
+                    {
+                      content_type: "text",
+                      text: userMessage,
+                    },
+                  ],
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString(),
                   is_message_in_active_thread: true,
+                  input_files_ids: [],
                 },
               })}\n\n`,
             ),
@@ -108,7 +114,9 @@ export function createSSEStreamHandler(chatId: string, messageParts: string[]) {
               encoder.encode(
                 `data: ${JSON.stringify({
                   message_type: "text_delta",
+                  message_id: "assistant-msg-456",
                   new_text: messageParts[i],
+                  content_index: 0,
                 })}\n\n`,
               ),
             );
@@ -119,17 +127,28 @@ export function createSSEStreamHandler(chatId: string, messageParts: string[]) {
           await writer.write(
             encoder.encode(
               `data: ${JSON.stringify({
-                message_type: "message_complete",
+                message_type: "assistant_message_completed",
                 message_id: "assistant-msg-456",
-                full_text: accumulatedText,
+                content: [
+                  {
+                    content_type: "text",
+                    text: accumulatedText,
+                  },
+                ],
                 message: {
                   id: "assistant-msg-456",
                   chat_id: chatId,
                   role: "assistant",
-                  full_text: accumulatedText,
+                  content: [
+                    {
+                      content_type: "text",
+                      text: accumulatedText,
+                    },
+                  ],
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString(),
                   is_message_in_active_thread: true,
+                  input_files_ids: [],
                 },
               })}\n\n`,
             ),

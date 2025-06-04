@@ -20,7 +20,12 @@ export const handlers = [
           id: "msg1",
           chat_id: chatId as string,
           role: "user",
-          full_text: "Hello",
+          content: [
+            {
+              content_type: "text",
+              text: "Hello",
+            },
+          ],
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           is_message_in_active_thread: true,

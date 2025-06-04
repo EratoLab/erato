@@ -1,6 +1,7 @@
 use crate::config::{AppConfig, ChatProviderConfig};
 use crate::policy::engine::PolicyEngine;
 use crate::services::file_storage::FileStorage;
+use crate::services::mcp_manager::McpServers;
 use eyre::Report;
 use genai::adapter::AdapterKind;
 use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
@@ -10,6 +11,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use sea_orm::{Database, DatabaseConnection};
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
@@ -19,6 +21,7 @@ pub struct AppState {
     pub system_prompt: Option<String>,
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
+    pub mcp_servers: Arc<McpServers>,
 }
 
 impl AppState {
@@ -27,7 +30,8 @@ impl AppState {
         let policy = Self::build_policy()?;
         let system_prompt = config.chat_provider.system_prompt.clone();
         let file_storage_providers = Self::build_file_storage_providers(&config)?;
-        let genai_client = Self::build_genai_client(config.chat_provider)?;
+        let genai_client = Self::build_genai_client(config.chat_provider.clone())?;
+        let mcp_servers = Arc::new(McpServers::new(&config).await?);
 
         Ok(Self {
             db,
@@ -36,6 +40,7 @@ impl AppState {
             system_prompt,
             default_file_storage_provider: config.default_file_storage_provider,
             file_storage_providers,
+            mcp_servers,
         })
     }
 

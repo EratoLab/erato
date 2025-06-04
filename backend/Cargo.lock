@@ -1402,6 +1402,7 @@ dependencies = [
  "eyre",
  "futures",
  "futures-macro",
+ "futures-util",
  "genai",
  "headers",
  "http-body",
@@ -1414,6 +1415,10 @@ dependencies = [
  "pretty_assertions",
  "regorus",
  "reqwest",
+ "reqwest-eventsource",
+ "rust-mcp-schema",
+ "rust-mcp-sdk",
+ "rust-mcp-transport",
  "sea-orm",
  "sentry",
  "sentry-backtrace",
@@ -1424,12 +1429,14 @@ dependencies = [
  "sqlx",
  "synonym",
  "test-log",
+ "thiserror 2.0.12",
  "tiktoken-rs",
  "tokio",
  "tokio-stream",
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "url",
  "utoipa",
  "utoipa-axum",
  "utoipa-scalar",
@@ -1738,7 +1745,7 @@ dependencies = [
 [[package]]
 name = "genai"
 version = "0.1.24-WIP"
-source = "git+https://github.com/EratoLab/rust-genai.git?rev=ad7c3a1b70b7629e76719843427652192520a281#ad7c3a1b70b7629e76719843427652192520a281"
+source = "git+https://github.com/EratoLab/rust-genai.git?rev=e92ed0b5053bdb8411ac83fd8d9ca499832d6a24#e92ed0b5053bdb8411ac83fd8d9ca499832d6a24"
 dependencies = [
  "bytes",
  "derive_more 2.0.1",
@@ -1751,6 +1758,7 @@ dependencies = [
  "serde_with",
  "tokio",
  "tokio-stream",
+ "tracing",
  "value-ext",
 ]
 
@@ -2594,7 +2602,7 @@ dependencies = [
  "memchr",
  "mime",
  "selectors",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -3189,7 +3197,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b7cafe60d6cf8e62e1b9b2ea516a089c008945bb5a275416789e7db0bc199dc"
 dependencies = [
  "memchr",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "ucd-trie",
 ]
 
@@ -3602,7 +3610,7 @@ dependencies = [
  "rustc-hash 2.1.1",
  "rustls",
  "socket2",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "tokio",
  "tracing",
 ]
@@ -3621,7 +3629,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "tinyvec",
  "tracing",
  "web-time",
@@ -4000,7 +4008,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "359fc315ed556eb0e42ce74e76f4b1cd807b50fa6307f3de4e51f92dbe86e2d5"
 dependencies = [
  "lazy_static",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -4122,6 +4130,47 @@ dependencies = [
  "cfg-if",
  "ordered-multimap",
  "trim-in-place",
+]
+
+[[package]]
+name = "rust-mcp-schema"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "868d31d0ae0376ba45786eac9058771da06839e83bb961ac7e5997ab3910f086"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rust-mcp-sdk"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0948d498301f9b26e20b4b0a3a82493e18edc98270d05e47cfa0b33cbd1ed1f"
+dependencies = [
+ "async-trait",
+ "futures",
+ "rust-mcp-schema",
+ "rust-mcp-transport",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+]
+
+[[package]]
+name = "rust-mcp-transport"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f1ec45715ca770c07ecf083d6c8b662362f4b655c5936d5506e55e98473eb6e"
+dependencies = [
+ "async-trait",
+ "futures",
+ "rust-mcp-schema",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
 ]
 
 [[package]]
@@ -4330,7 +4379,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "strum",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "time",
  "tracing",
  "url",
@@ -4548,18 +4597,18 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02fc4265df13d6fa1d00ecff087228cc0a2b5f3c0e87e258d8b94a156e984c70"
+checksum = "5f0e2c6ed6606019b4e29e69dbaba95b11854410e5347d525002456dbbb786b6"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a9bf7cf98d04a2b28aead066b7496853d4779c9cc183c440dbac457641e19a0"
+checksum = "5b0276cf7f2c73365f7157c8123c21cd9a50fbbd844757af28ca1f5925fc2a00"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4568,9 +4617,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.138"
+version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d434192e7da787e94a6ea7e9670b26a036d0ca41e0b7efb2676dd32bae872949"
+checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
 dependencies = [
  "itoa",
  "memchr",
@@ -4700,6 +4749,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
+name = "signal-hook-registry"
+version = "1.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9203b8055f63a2a00e2f593bb0510367fe707d7ff1e5c872de2f537b339e5410"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "signature"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4729,7 +4787,7 @@ checksum = "297f631f50729c8c99b84667867963997ec0b50f32b2a7dbcab828ef0541e8bb"
 dependencies = [
  "num-bigint",
  "num-traits",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "time",
 ]
 
@@ -4835,7 +4893,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "smallvec",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "time",
  "tokio",
  "tokio-stream",
@@ -4923,7 +4981,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "time",
  "tracing",
  "uuid",
@@ -4966,7 +5024,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "time",
  "tracing",
  "uuid",
@@ -4993,7 +5051,7 @@ dependencies = [
  "serde",
  "serde_urlencoded",
  "sqlx-core",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "time",
  "tracing",
  "url",
@@ -5203,11 +5261,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.11"
+version = "2.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
+checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
 dependencies = [
- "thiserror-impl 2.0.11",
+ "thiserror-impl 2.0.12",
 ]
 
 [[package]]
@@ -5223,9 +5281,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.11"
+version = "2.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
+checksum = "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5344,7 +5402,9 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.52.0",
@@ -6473,7 +6533,7 @@ dependencies = [
  "memchr",
  "pbkdf2",
  "sha1",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "time",
  "xz2",
  "zeroize",

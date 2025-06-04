@@ -6,6 +6,7 @@ import type {
   UserProfile,
   RecentChatsResponse,
   ChatMessagesResponse,
+  ContentPartText,
 } from "../lib/generated/v1betaApi/v1betaApiSchemas";
 import type { QueryClient } from "@tanstack/react-query";
 
@@ -14,6 +15,21 @@ import type { QueryClient } from "@tanstack/react-query";
  * that matches the API response types
  */
 export class MockDataGenerator {
+  /**
+   * Generate a unique ID
+   */
+  private static generateId(): string {
+    return `msg_${faker.string.uuid()}`;
+  }
+
+  /**
+   * Generate realistic English text instead of Lorem Ipsum
+   */
+  private static generateRealisticText(): string {
+    // Assistant messages are more formal and informative
+    return `${faker.hacker.phrase()} ${faker.company.catchPhrase()}`;
+  }
+
   /**
    * Generate a mock user profile
    */
@@ -43,43 +59,39 @@ export class MockDataGenerator {
   }
 
   /**
-   * Generate a mock chat message
+   * Creates a realistic mock chat message
+   * @param chatId The ID of the chat this message belongs to
+   * @param role The role of the message sender
+   * @param overrides Optional properties to override
+   * @returns A mock ChatMessage
    */
-  static createChatMessage(
+  static createMockChatMessage(
     chatId: string,
     role: "user" | "assistant" | "system" = "user",
     overrides?: Partial<ChatMessage>,
   ): ChatMessage {
-    const messageId = overrides?.id ?? `msg_${faker.string.uuid()}`;
-    const now = new Date();
-
-    // Generate realistic English text instead of Lorem Ipsum
-    const generateRealisticText = () => {
-      if (role === "assistant") {
-        // Assistant messages are more formal and informative
-        return `${faker.hacker.phrase()} ${faker.company.catchPhrase()}`;
-      } else {
-        // User messages are more conversational
-        return `${faker.word.words(10)}. ${faker.hacker.phrase()}`;
-      }
-    };
-
-    // Ensure we have valid dates
-    const createdAt = overrides?.created_at ?? now.toISOString();
-    const updatedAt = overrides?.updated_at ?? now.toISOString();
+    const messageText =
+      overrides?.content?.[0]?.content_type === "text"
+        ? (overrides.content[0] as ContentPartText).text
+        : this.generateRealisticText();
 
     return {
-      id: messageId,
+      id: this.generateId(),
       chat_id: chatId,
-      role: role,
-      full_text: overrides?.full_text ?? generateRealisticText(),
-      created_at: createdAt,
-      updated_at: updatedAt,
-      is_message_in_active_thread:
-        overrides?.is_message_in_active_thread ?? true,
-      previous_message_id: overrides?.previous_message_id,
-      sibling_message_id: overrides?.sibling_message_id,
-      input_files_ids: overrides?.input_files_ids ?? [],
+      role,
+      content: [
+        {
+          content_type: "text",
+          text: messageText,
+        },
+      ],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      input_files_ids: [],
+      is_message_in_active_thread: true,
+      previous_message_id: null,
+      sibling_message_id: null,
+      ...overrides,
     };
   }
 
@@ -129,7 +141,7 @@ export class MockDataGenerator {
           messageDate.getMinutes() - (messagesPerChat - j),
         );
 
-        const message = this.createChatMessage(chatId, role, {
+        const message = this.createMockChatMessage(chatId, role, {
           id: `msg_${chatId}_${j + 1}`,
           created_at: messageDate.toISOString(),
           updated_at: messageDate.toISOString(),

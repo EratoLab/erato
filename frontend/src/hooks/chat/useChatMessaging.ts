@@ -424,6 +424,24 @@ export function useChatMessaging(
             });
             break;
 
+          case "tool_call_proposed":
+            console.log(
+              "[DEBUG_STREAMING] processStreamEvent: tool_call_proposed event received. Full payload:",
+              responseData,
+            );
+            // TODO: Add tool call UI support in future implementation
+            // For now, just log to prevent unhandled event errors
+            break;
+
+          case "tool_call_update":
+            console.log(
+              "[DEBUG_STREAMING] processStreamEvent: tool_call_update event received. Full payload:",
+              responseData,
+            );
+            // TODO: Add tool call UI support in future implementation
+            // For now, just log to prevent unhandled event errors
+            break;
+
           default:
             console.log(
               "[DEBUG_STREAMING] processStreamEvent: Received unhandled SSE message. Full payload:",
