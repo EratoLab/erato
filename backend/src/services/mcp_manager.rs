@@ -1,5 +1,5 @@
 use crate::config::AppConfig;
-use crate::services::mcp_servers_stdio::new_mcp_proxy_stdio_transport;
+use crate::services::mcp_servers_sse::new_mcp_proxy_sse_transport;
 use async_trait::async_trait;
 use eyre::{eyre, Report};
 use genai::chat::Tool as GenaiTool;
@@ -10,12 +10,14 @@ use rust_mcp_schema::{
 };
 use rust_mcp_sdk::{
     mcp_client::{client_runtime::create_client, ClientHandler, ClientRuntime},
-    McpClient, TransportOptions,
+    McpClient,
 };
+use rust_mcp_transport::ClientSseTransportOptions;
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::info;
 
 // Entry now holds the ClientRuntime
 struct McpServerEntry {
@@ -117,8 +119,10 @@ impl McpServers {
         for (id, server_config) in &config.mcp_servers {
             tracing::info!(server_id = %id, url = %server_config.url, "Creating transport and runtime");
 
-            let transport_result =
-                new_mcp_proxy_stdio_transport(server_config, Some(TransportOptions::default()));
+            let transport_result = new_mcp_proxy_sse_transport(
+                server_config,
+                Some(ClientSseTransportOptions::default()),
+            );
             let tools_storage = Arc::new(Mutex::new(Vec::new()));
             let mut client_runtime: Option<Arc<ClientRuntime>> = None;
             let creation_error: Option<String>;
@@ -234,6 +238,10 @@ impl McpServers {
                                     .ok();
                             }
                         }
+                        info!(
+                            "Finished connecting and initializing MCP client for server {}",
+                            server_id
+                        );
                     });
                 } else {
                     // Should not happen if creation_error_opt was None, but handle defensively
