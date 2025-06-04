@@ -40,15 +40,15 @@ export type ChatMessage = {
    */
   chat_id: string;
   /**
+   * The text content of the message
+   */
+  content: ContentPart[];
+  /**
    * When the message was created
    *
    * @format date-time
    */
   created_at: string;
-  /**
-   * The text content of the message
-   */
-  full_text: string;
   /**
    * The unique ID of the message
    */
@@ -124,6 +124,18 @@ export type ChatMessagesResponse = {
   stats: ChatMessageStats;
 };
 
+export type ContentPart =
+  | (ContentPartText & {
+      content_type: "text";
+    })
+  | (ToolUse & {
+      content_type: "tool_use";
+    });
+
+export type ContentPartText = {
+  text: string;
+};
+
 /**
  * Request to create a new chat without an initial message
  */
@@ -170,6 +182,12 @@ export type EditMessageStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
+    })
+  | (MessageSubmitStreamingResponseToolCallProposed & {
+      message_type: "tool_call_proposed";
+    })
+  | (MessageSubmitStreamingResponseToolCallUpdate & {
+      message_type: "tool_call_update";
     })
   | (MessageSubmitStreamingResponseUserMessageSaved & {
       message_type: "user_message_saved";
@@ -267,10 +285,16 @@ export type MessageSubmitStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
+    })
+  | (MessageSubmitStreamingResponseToolCallProposed & {
+      message_type: "tool_call_proposed";
+    })
+  | (MessageSubmitStreamingResponseToolCallUpdate & {
+      message_type: "tool_call_update";
     });
 
 export type MessageSubmitStreamingResponseMessageComplete = {
-  full_text: string;
+  content: ContentPart[];
   message: ChatMessage;
   /**
    * @format uuid
@@ -280,10 +304,45 @@ export type MessageSubmitStreamingResponseMessageComplete = {
 
 export type MessageSubmitStreamingResponseMessageTextDelta = {
   /**
+   * @minimum 0
+   */
+  content_index: number;
+  /**
    * @format uuid
    */
   message_id: string;
   new_text: string;
+};
+
+export type MessageSubmitStreamingResponseToolCallProposed = {
+  /**
+   * @minimum 0
+   */
+  content_index: number;
+  input?: null | Value;
+  /**
+   * @format uuid
+   */
+  message_id: string;
+  tool_call_id: string;
+  tool_name: string;
+};
+
+export type MessageSubmitStreamingResponseToolCallUpdate = {
+  /**
+   * @minimum 0
+   */
+  content_index: number;
+  input?: null | Value;
+  /**
+   * @format uuid
+   */
+  message_id: string;
+  output?: null | Value;
+  progress_message?: null | undefined;
+  status: ToolCallStatus;
+  tool_call_id: string;
+  tool_name: string;
 };
 
 export type MessageSubmitStreamingResponseUserMessageSaved = {
@@ -388,6 +447,12 @@ export type RegenerateMessageStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
+    })
+  | (MessageSubmitStreamingResponseToolCallProposed & {
+      message_type: "tool_call_proposed";
+    })
+  | (MessageSubmitStreamingResponseToolCallUpdate & {
+      message_type: "tool_call_update";
     });
 
 export type TokenUsageRequest = {
@@ -497,6 +562,17 @@ export type TokenUsageStats = {
   user_message_tokens: number;
 };
 
+export type ToolCallStatus = "in_progress" | "success" | "error";
+
+export type ToolUse = {
+  input?: null | Value;
+  output?: null | Value;
+  progress_message?: null | undefined;
+  status: ToolCallStatus;
+  tool_call_id: string;
+  tool_name: string;
+};
+
 export type UserProfile = {
   /**
    * The user's email address. Shouldn't be used as a unique identifier, as it may change.
@@ -525,3 +601,5 @@ export type UserProfile = {
    */
   preferred_language: string;
 };
+
+export type Value = void;
