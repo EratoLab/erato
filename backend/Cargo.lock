@@ -659,9 +659,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.9.0"
+version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "325918d6fe32f23b19878fe4b34794ae41fc19ddbe53b10571a4874d44ffd39b"
+checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "bytesize"
@@ -2061,9 +2061,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hyper"
-version = "1.5.2"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "256fb8d4bd6413123cc9d91832d78325c48ff41677595be797d90f42969beae0"
+checksum = "cc2b571658e38e0c01b1fdca3bbbe93c00d3d71693ff2770043f8c29bc7d6f80"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -4134,9 +4134,9 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-schema"
-version = "0.4.0"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "868d31d0ae0376ba45786eac9058771da06839e83bb961ac7e5997ab3910f086"
+checksum = "4c9966340f5104a8d22b6c2db8901f8626a0f737820a385db3ffbb29b1f6ae0f"
 dependencies = [
  "serde",
  "serde_json",
@@ -4144,33 +4144,39 @@ dependencies = [
 
 [[package]]
 name = "rust-mcp-sdk"
-version = "0.2.4"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0948d498301f9b26e20b4b0a3a82493e18edc98270d05e47cfa0b33cbd1ed1f"
+checksum = "edbc126903df8ba1cb99a56b18b95875b34a24f81d05575ebb5eddc4c3293322"
 dependencies = [
  "async-trait",
  "futures",
+ "hyper",
  "rust-mcp-schema",
  "rust-mcp-transport",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
 name = "rust-mcp-transport"
-version = "0.2.1"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f1ec45715ca770c07ecf083d6c8b662362f4b655c5936d5506e55e98473eb6e"
+checksum = "1195b57bfe37111460b44e1624a6552c7378749195709d104d28fc5b1ef59f9c"
 dependencies = [
  "async-trait",
+ "bytes",
  "futures",
+ "reqwest",
  "rust-mcp-schema",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-stream",
+ "tracing",
 ]
 
 [[package]]
