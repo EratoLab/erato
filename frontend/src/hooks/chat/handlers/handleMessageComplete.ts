@@ -79,6 +79,7 @@ export const handleMessageComplete = (
     isStreaming: false,
     content: finalContent,
     currentMessageId: realMessageId || null, // Update to real ID
+    toolCalls: {}, // Clear tool calls when message is completed
   });
 
   // Log state after setStreaming

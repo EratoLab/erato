@@ -27,6 +27,7 @@ interface ExtendedMessageControlsProps extends MessageControlsProps {
   showFeedbackButtons?: boolean;
   showRawMarkdown?: boolean;
   onToggleRawMarkdown?: () => void;
+  _hasToolCalls?: boolean;
 }
 
 export const DefaultMessageControls = ({
@@ -42,6 +43,7 @@ export const DefaultMessageControls = ({
   showFeedbackButtons = false,
   showRawMarkdown = false,
   onToggleRawMarkdown,
+  _hasToolCalls = false,
 }: ExtendedMessageControlsProps) => {
   const [isCopied, setIsCopied] = useState(false);
   const [feedbackState, setFeedbackState] = useState<
@@ -181,6 +183,8 @@ export const DefaultMessageControls = ({
           </>
         )}
       </div>
+
+      {/* Timestamp */}
       <MessageTimestamp createdAt={safeCreatedAt} />
     </div>
   );

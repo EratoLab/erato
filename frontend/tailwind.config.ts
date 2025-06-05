@@ -27,6 +27,7 @@ export default {
           },
           border: {
             DEFAULT: "var(--theme-border)",
+            primary: "var(--theme-border-primary)",
             strong: "var(--theme-border-strong)",
             focus: "var(--theme-border-focus)",
           },

@@ -567,7 +567,7 @@ export type ToolCallStatus = "in_progress" | "success" | "error";
 export type ToolUse = {
   input?: null | Value;
   output?: null | Value;
-  progress_message?: null | undefined;
+  progress_message?: string;
   status: ToolCallStatus;
   tool_call_id: string;
   tool_name: string;

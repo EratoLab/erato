@@ -3,6 +3,8 @@ import React, { memo, useState } from "react";
 
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
 import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
+import { ToolCallDisplay } from "@/components/ui/ToolCall";
+import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { Avatar } from "../Feedback/Avatar";
@@ -65,6 +67,16 @@ export const ChatMessage = memo(function ChatMessage({
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
 
+  // Get streaming state to check for tool calls
+  const { streaming } = useMessagingStore();
+  const hasToolCalls = Object.keys(streaming.toolCalls).length > 0;
+  const isStreamingMessage =
+    streaming.isStreaming && streaming.currentMessageId === message.id;
+
+  // Check if message has completed tool calls
+  const hasCompletedToolCalls =
+    message.toolCalls && message.toolCalls.length > 0;
+
   // Local state for raw markdown toggle
   const [showRawMarkdown, setShowRawMarkdown] = useState(false);
 
@@ -117,11 +129,26 @@ export const ChatMessage = memo(function ChatMessage({
             </div>
           )}
 
+          {/* Display completed tool calls - always shown if they exist */}
+          {message.toolCalls && message.toolCalls.length > 0 && (
+            <ToolCallDisplay
+              toolCalls={message.toolCalls}
+              defaultExpanded={false}
+              allowToggle={true}
+            />
+          )}
+
           {message.loading && (
             <div className="mt-2">
               <LoadingIndicator
                 state={message.loading.state}
                 context={message.loading.context}
+                // Pass tool calls if this is the streaming assistant message
+                toolCalls={
+                  !isUser && isStreamingMessage && hasToolCalls
+                    ? streaming.toolCalls
+                    : undefined
+                }
               />
             </div>
           )}
@@ -141,6 +168,7 @@ export const ChatMessage = memo(function ChatMessage({
                   onToggleRawMarkdown={() =>
                     setShowRawMarkdown(!showRawMarkdown)
                   }
+                  _hasToolCalls={hasCompletedToolCalls}
                 />
               ) : (
                 <Controls

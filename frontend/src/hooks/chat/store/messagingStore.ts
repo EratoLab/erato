@@ -1,12 +1,28 @@
 import { create } from "zustand";
 
+import type {
+  Value,
+  ToolCallStatus,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
+
+// Tool call tracking types
+export interface ToolCall {
+  id: string;
+  name: string;
+  status: "proposed" | ToolCallStatus;
+  input?: Value | null;
+  output?: Value | null;
+  progress_message?: string | null;
+}
 
 // Streaming state
 export interface StreamingState {
   isStreaming: boolean;
   currentMessageId: string | null;
   content: string;
+  // Add tool call tracking
+  toolCalls: Record<string, ToolCall>; // keyed by tool_call_id
 }
 
 // Add user messages to the store
@@ -32,6 +48,7 @@ export const initialStreamingState: StreamingState = {
   isStreaming: false,
   currentMessageId: null,
   content: "",
+  toolCalls: {},
 };
 
 // Create a store for messaging state
