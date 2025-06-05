@@ -1,3 +1,8 @@
+import {
+  extractToolCallsFromContent,
+  type UiToolCall,
+} from "./toolCallAdapter";
+
 import type {
   ChatMessage as ApiChatMessage,
   ContentPart,
@@ -18,6 +23,7 @@ export interface UiChatMessage extends Message {
     state: "typing" | "thinking" | "done" | "error";
     context?: string;
   };
+  toolCalls?: UiToolCall[];
 }
 
 /**
@@ -44,6 +50,8 @@ function extractTextFromContent(content?: ContentPart[] | null): string {
 export function mapApiMessageToUiMessage(
   apiMessage: ApiChatMessage,
 ): UiChatMessage {
+  const toolCalls = extractToolCallsFromContent(apiMessage.content);
+
   return {
     id: apiMessage.id || `temp-api-${Date.now()}`,
     content: extractTextFromContent(apiMessage.content),
@@ -60,6 +68,7 @@ export function mapApiMessageToUiMessage(
         ? apiMessage.previous_message_id
         : undefined,
     status: "complete",
+    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
   };
 }
 

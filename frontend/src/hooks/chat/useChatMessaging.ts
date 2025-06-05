@@ -29,6 +29,8 @@ import { handleAssistantMessageStarted } from "./handlers/handleAssistantMessage
 import { handleChatCreated } from "./handlers/handleChatCreated";
 import { handleMessageComplete as externalHandleMessageComplete } from "./handlers/handleMessageComplete";
 import { handleTextDelta } from "./handlers/handleTextDelta";
+import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
+import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
 import { handleUserMessageSaved } from "./handlers/handleUserMessageSaved";
 import { useMessagingStore } from "./store/messagingStore";
 
@@ -429,8 +431,7 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: tool_call_proposed event received. Full payload:",
               responseData,
             );
-            // TODO: Add tool call UI support in future implementation
-            // For now, just log to prevent unhandled event errors
+            handleToolCallProposed(responseData);
             break;
 
           case "tool_call_update":
@@ -438,8 +439,7 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: tool_call_update event received. Full payload:",
               responseData,
             );
-            // TODO: Add tool call UI support in future implementation
-            // For now, just log to prevent unhandled event errors
+            handleToolCallUpdate(responseData);
             break;
 
           default:
