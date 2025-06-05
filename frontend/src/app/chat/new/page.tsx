@@ -19,7 +19,9 @@ export default function NewChatPage() {
   const redirectedRef = useRef(false);
 
   useEffect(() => {
-    logger.log("NewChatPage mounted - resetting new chat pending flag");
+    logger.log(
+      "[DEBUG_REDIRECT] NewChatPage mounted - resetting new chat pending flag to false",
+    );
     setNewChatPending(false);
   }, [setNewChatPending]);
 

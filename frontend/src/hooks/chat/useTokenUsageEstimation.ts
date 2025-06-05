@@ -191,10 +191,13 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
         // Prepare request body
         const requestBody: TokenUsageRequest = {
           user_message: message,
-          input_files_ids: inputFileIds,
         };
 
         // Add optional properties if they have values
+        if (inputFileIds && inputFileIds.length > 0) {
+          requestBody.input_files_ids = inputFileIds;
+        }
+
         if (chatId) {
           (requestBody as Record<string, unknown>).existing_chat_id = chatId;
         }

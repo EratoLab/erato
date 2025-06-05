@@ -138,14 +138,12 @@ export function useChatInputHandlers(
             fileIds.length > 0 ? fileIds : undefined,
           );
           resetMessage();
-          // Optionally clear attached files after sending
-          // handleRemoveAllFiles(); // Uncomment if files should be cleared on send
+          // Clear attached files after sending
+          handleRemoveAllFiles();
         }
       };
     },
-    [
-      /* handleRemoveAllFiles */
-    ], // Add handleRemoveAllFiles if uncommented above
+    [handleRemoveAllFiles], // handleRemoveAllFiles dependency for clearing files after send
   );
 
   return {
