@@ -18,6 +18,9 @@ import type { Message } from "@/types/chat";
 import type { FileType } from "@/utils/fileTypes";
 import type { ReactNode } from "react";
 
+// Constants
+const NAVIGATION_DELAY_MS = 100; // Small delay to ensure state updates are processed before navigation
+
 // Define the ChatMessage type used by UI components
 interface ChatMessage extends Message {
   sender: string;
@@ -202,7 +205,7 @@ export function ChatProvider({
           `[DEBUG_REDIRECT] ChatProvider: Clearing newlyCreatedChatIdFromStore (${chatIdToNavigateTo}) from store after navigation attempt.`,
         );
         setNewlyCreatedChatIdInStore(null);
-      }, 100);
+      }, NAVIGATION_DELAY_MS);
     }
   }, [
     newlyCreatedChatIdFromStore,

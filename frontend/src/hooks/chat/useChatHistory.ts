@@ -84,7 +84,7 @@ export function useChatHistory() {
       // If a new chat navigation is pending, don't override the current chat ID
       if (isNewChatPending) {
         console.log(
-          `[DEBUG_REDIRECT] [BUG] navigateToChat BLOCKED: Cannot navigate to ${chatId} because isNewChatPending is true. This might be the file upload redirect bug!`,
+          `[DEBUG_REDIRECT] navigateToChat BLOCKED: Navigation to ${chatId} is prevented because isNewChatPending is true. This is expected behavior during certain operations.`,
         );
         return;
       }
