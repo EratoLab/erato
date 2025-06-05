@@ -1,6 +1,6 @@
-"use client";
+// "use client"; // Removed
 
-import Image from "next/image";
+// import Image from "next/image"; // Removed Next.js Image import
 import { useState, useEffect } from "react";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
@@ -38,7 +38,7 @@ export function Logo({
   }
 
   return (
-    <Image
+    <img // Changed from Image to img
       src={logoPath}
       alt={alt}
       width={width}

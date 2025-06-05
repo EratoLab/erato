@@ -1,13 +1,17 @@
 import type { Config } from "tailwindcss";
+import defaultTheme from "tailwindcss/defaultTheme";
 
 export default {
   content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Geist Variable', ...defaultTheme.fontFamily.sans],
+        mono: ['Geist Mono Variable', ...defaultTheme.fontFamily.mono],
+      },
       colors: {
         theme: {
           bg: {

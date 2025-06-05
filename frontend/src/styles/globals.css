@@ -3,6 +3,28 @@
 @tailwind utilities;
 
 @layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  html,
+  body {
+    overflow: hidden; /* Keep this to prevent body scrolling */
+  }
+
+  body {
+    color: var(--theme-fg-primary);
+    background: var(--theme-bg-primary);
+    overscroll-behavior: none;
+  }
+
+  /* #root no longer needs to be a flex container here, 
+     as its immediate child in App.tsx will handle the main screen layout */
+
   /* Color scheme for native scrollbar styling */
   :root {
     color-scheme: light;

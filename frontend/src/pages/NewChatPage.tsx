@@ -1,6 +1,4 @@
-"use client";
-
-import { useRouter, usePathname } from "next/navigation";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useRef } from "react";
 
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
@@ -10,8 +8,10 @@ import { createLogger } from "@/utils/debugLogger";
 const logger = createLogger("UI", "NewChatPage");
 
 export default function NewChatPage() {
-  const router = useRouter();
-  const pathname = usePathname();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
+
   const { isStreaming, currentChatId } = useChatContext();
   const setNewChatPending = useChatHistoryStore(
     (state) => state.setNewChatPending,
@@ -36,13 +36,13 @@ export default function NewChatPage() {
         `NewChatPage - currentChatId is now ${currentChatId}. Updating URL from /chat/new.`,
       );
       redirectedRef.current = true;
-      router.replace(`/chat/${currentChatId}`);
+      navigate(`/chat/${currentChatId}`, { replace: true });
     }
 
     if (!currentChatId && pathname === "/chat/new") {
       redirectedRef.current = false; // Reset if we are back on new chat page and ID is null
     }
-  }, [currentChatId, router, isStreaming, pathname]);
+  }, [currentChatId, navigate, isStreaming, pathname]);
 
-  return null; // The ChatLayout handles UI
-}
+  return null; // The ChatLayout (to be created) handles UI
+} 

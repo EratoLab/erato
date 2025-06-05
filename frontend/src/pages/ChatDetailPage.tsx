@@ -1,15 +1,13 @@
-"use client";
-
-import { useDynamicParams } from "next-static-utils";
+import { useParams } from "react-router-dom";
 import { useEffect } from "react";
 
 import { useChatContext } from "@/providers/ChatProvider";
 import { createLogger } from "@/utils/debugLogger";
 
-const logger = createLogger("UI", "ChatPage(ID)");
+const logger = createLogger("UI", "ChatDetailPage(ID)");
 
-export default function ChatPage() {
-  const params = useDynamicParams();
+export default function ChatDetailPage() {
+  const params = useParams<{ id: string }>(); // Get id from route parameters
   const chatIdFromUrl = params.id;
 
   const { currentChatId, navigateToChat } = useChatContext();
@@ -18,7 +16,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (chatIdFromUrl && chatIdFromUrl !== currentChatId) {
       logger.log(
-        `ChatPage [id]: URL chatId (${chatIdFromUrl}) differs from context (${currentChatId ?? "null"}). Syncing context.`,
+        `ChatDetailPage [id]: URL chatId (${chatIdFromUrl}) differs from context (${currentChatId ?? "null"}). Syncing context.`,
       );
       // Navigate to the chatId that was newly set in state
       navigateToChat(chatIdFromUrl);
@@ -27,5 +25,5 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatIdFromUrl, navigateToChat]);
 
-  return null; // The ChatLayout handles UI
-}
+  return null; // The ChatLayout (to be created) handles UI
+} 

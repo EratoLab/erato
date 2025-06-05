@@ -1,6 +1,4 @@
-"use client";
-
-import { usePathname } from "next/navigation";
+import { useLocation } from "react-router-dom";
 import { useEffect, useRef } from "react";
 
 import { Chat } from "@/components/ui/Chat/Chat";
@@ -24,7 +22,8 @@ export default function ChatPageStructure({
     currentChatId,
     mountKey,
   } = useChatContext();
-  const pathname = usePathname();
+  const location = useLocation();
+  const pathname = location.pathname;
   const prevChatIdRef = useRef<string | null | undefined>(currentChatId);
 
   useEffect(() => {

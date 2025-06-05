@@ -1,7 +1,3 @@
-"use client";
-
-export const dynamic = "force-static";
-
 export type Env = {
   apiRootUrl: string;
   themeCustomerName: string | null;
@@ -25,36 +21,32 @@ declare global {
 
 export const env = (): Env => {
   const apiRootUrl =
-    process.env.NEXT_PUBLIC_API_ROOT_URL ?? window.API_ROOT_URL;
+    import.meta.env.VITE_API_ROOT_URL ?? window.API_ROOT_URL;
   if (!apiRootUrl) {
-    throw new Error("API_ROOT_URL not set");
+    throw new Error("API_ROOT_URL not set (checked VITE_API_ROOT_URL and window.API_ROOT_URL)");
   }
   let customerName =
-    process.env.NEXT_PUBLIC_CUSTOMER_NAME ?? window.THEME_CUSTOMER_NAME ?? null;
+    import.meta.env.VITE_CUSTOMER_NAME ?? window.THEME_CUSTOMER_NAME ?? null;
   if (customerName === "") {
     customerName = null;
   }
   let themePath =
-    process.env.NEXT_PUBLIC_THEME_PATH ?? window.THEME_PATH ?? null;
+    import.meta.env.VITE_THEME_PATH ?? window.THEME_PATH ?? null;
   if (themePath === "") {
     themePath = null;
   }
   let themeConfigPath =
-    process.env.NEXT_PUBLIC_THEME_CONFIG_PATH ??
-    window.THEME_CONFIG_PATH ??
-    null;
+    import.meta.env.VITE_THEME_CONFIG_PATH ?? window.THEME_CONFIG_PATH ?? null;
   if (themeConfigPath === "") {
     themeConfigPath = null;
   }
   let themeLogoPath =
-    process.env.NEXT_PUBLIC_LOGO_PATH ?? window.THEME_LOGO_PATH ?? null;
+    import.meta.env.VITE_LOGO_PATH ?? window.THEME_LOGO_PATH ?? null;
   if (themeLogoPath === "") {
     themeLogoPath = null;
   }
   let themeLogoDarkPath =
-    process.env.NEXT_PUBLIC_LOGO_DARK_PATH ??
-    window.THEME_LOGO_DARK_PATH ??
-    null;
+    import.meta.env.VITE_LOGO_DARK_PATH ?? window.THEME_LOGO_DARK_PATH ?? null;
   if (themeLogoDarkPath === "") {
     themeLogoDarkPath = null;
   }
