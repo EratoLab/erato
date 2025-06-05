@@ -84,12 +84,14 @@ export function useChatHistory() {
       // If a new chat navigation is pending, don't override the current chat ID
       if (isNewChatPending) {
         console.log(
-          `[CHAT_FLOW] Not setting currentChatId to ${chatId} because a new chat is pending`,
+          `[DEBUG_REDIRECT] navigateToChat BLOCKED: Navigation to ${chatId} is prevented because isNewChatPending is true. This is expected behavior during certain operations.`,
         );
         return;
       }
 
-      console.log(`[CHAT_FLOW] Navigating to chat: ${chatId}`);
+      console.log(
+        `[DEBUG_REDIRECT] navigateToChat: Successfully navigating to chat: ${chatId}`,
+      );
       setCurrentChatId(chatId);
 
       // Make sure we actually navigate to the chat URL using the router
@@ -102,9 +104,12 @@ export function useChatHistory() {
   // Create a new chat and navigate to it
   const createNewChat = useCallback(async () => {
     try {
-      console.log("[CHAT_FLOW] Creating new chat - resetting currentChatId");
+      console.log(
+        "[DEBUG_REDIRECT] Creating new chat - resetting currentChatId",
+      );
 
       // Set the pending flag first to prevent unwanted changes to currentChatId
+      console.log("[DEBUG_REDIRECT] Setting isNewChatPending to TRUE");
       setNewChatPending(true);
 
       // Reset the current chat ID
@@ -125,6 +130,9 @@ export function useChatHistory() {
     } catch (error) {
       console.error("Failed to create new chat:", error);
       // Reset the pending flag if there's an error
+      console.log(
+        "[DEBUG_REDIRECT] Error in createNewChat - setting isNewChatPending to FALSE",
+      );
       setNewChatPending(false);
       throw error;
     }

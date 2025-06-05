@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { createContext, useContext, useMemo, useEffect, useState } from "react";
@@ -16,6 +17,9 @@ import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas"
 import type { Message } from "@/types/chat";
 import type { FileType } from "@/utils/fileTypes";
 import type { ReactNode } from "react";
+
+// Constants
+const NAVIGATION_DELAY_MS = 100; // Small delay to ensure state updates are processed before navigation
 
 // Define the ChatMessage type used by UI components
 interface ChatMessage extends Message {
@@ -185,17 +189,23 @@ export function ChatProvider({
       );
       setStoreSilentChatId(null);
 
+      // Also clear uploaded files since we're navigating to the new chat
+      console.log(
+        "[DEBUG_REDIRECT] ChatProvider: Clearing uploaded files before navigation.",
+      );
+      clearUploadedFiles();
+
       setTimeout(() => {
         console.log(
-          `[DEBUG_REDIRECT] ChatProvider: Navigating to new chat (inside setTimeout): ${chatIdToNavigateTo}`,
+          `[DEBUG_REDIRECT] ChatProvider: About to call navigateToChat for: ${chatIdToNavigateTo}. Current isNewChatPending: ${isNewChatPending}`,
         );
         navigateToChat(chatIdToNavigateTo);
         // Clear newlyCreatedChatId from store after navigation attempt
         console.log(
-          `[DEBUG_REDIRECT] ChatProvider: Clearing newlyCreatedChatIdFromStore (${chatIdToNavigateTo}) from store after navigation.`,
+          `[DEBUG_REDIRECT] ChatProvider: Clearing newlyCreatedChatIdFromStore (${chatIdToNavigateTo}) from store after navigation attempt.`,
         );
         setNewlyCreatedChatIdInStore(null);
-      }, 100);
+      }, NAVIGATION_DELAY_MS);
     }
   }, [
     newlyCreatedChatIdFromStore,

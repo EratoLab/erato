@@ -72,6 +72,8 @@ export function useChatMessaging(
     clearCompletedUserMessages,
     error,
     setError,
+    setNewlyCreatedChatIdInStore,
+    setAwaitingFirstStreamChunkForNewChat,
   } = useMessagingStore();
   const sseCleanupRef = useRef<(() => void) | null>(null);
   const isSubmittingRef = useRef(false);
@@ -520,6 +522,16 @@ export function useChatMessaging(
           `[DEBUG_REDIRECT] sendMessage: Pre-setting newlyCreatedChatId to silentChatId: ${silentChatId}`,
         );
         setNewlyCreatedChatId(silentChatId);
+        // CRITICAL: Also set the store value for navigation logic in ChatProvider
+        console.log(
+          `[DEBUG_REDIRECT] sendMessage: Also setting store newlyCreatedChatIdInStore to: ${silentChatId}`,
+        );
+        setNewlyCreatedChatIdInStore(silentChatId);
+        // CRITICAL: Set awaiting flag to prevent premature navigation before streaming starts
+        console.log(
+          `[DEBUG_REDIRECT] sendMessage: Setting isAwaitingFirstStreamChunkForNewChat to true to delay navigation`,
+        );
+        setAwaitingFirstStreamChunkForNewChat(true);
       }
       // Ensure it's null otherwise before starting
       else {
@@ -527,6 +539,8 @@ export function useChatMessaging(
           `[DEBUG_REDIRECT] sendMessage: Setting newlyCreatedChatId to null (no silentChatId). Current newlyCreatedChatId: ${newlyCreatedChatId}`,
         );
         setNewlyCreatedChatId(null);
+        // Also clear the store value
+        setNewlyCreatedChatIdInStore(null);
       }
 
       isSubmittingRef.current = true;
@@ -754,6 +768,8 @@ export function useChatMessaging(
       processStreamEvent,
       setError,
       handleRefetchAndClear,
+      setNewlyCreatedChatIdInStore,
+      setAwaitingFirstStreamChunkForNewChat,
     ],
   );
 
