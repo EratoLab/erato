@@ -168,7 +168,7 @@ export const ChatMessage = memo(function ChatMessage({
                   onToggleRawMarkdown={() =>
                     setShowRawMarkdown(!showRawMarkdown)
                   }
-                  _hasToolCalls={hasCompletedToolCalls}
+                  hasToolCalls={hasCompletedToolCalls}
                 />
               ) : (
                 <Controls

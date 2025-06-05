@@ -13,7 +13,7 @@ export interface ToolCall {
   status: "proposed" | ToolCallStatus;
   input?: Value | null;
   output?: Value | null;
-  progress_message?: string | null;
+  progressMessage?: string | null;
 }
 
 // Streaming state

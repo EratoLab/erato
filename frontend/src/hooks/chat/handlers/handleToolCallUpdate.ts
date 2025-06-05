@@ -1,5 +1,6 @@
 import { useMessagingStore } from "../store/messagingStore";
 
+import type { ToolCall } from "../store/messagingStore";
 import type { MessageSubmitStreamingResponseToolCallUpdate } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -48,21 +49,23 @@ export const handleToolCallUpdate = (
       );
     }
 
+    // Update the tool call with the latest data
+    const updatedToolCall: ToolCall = {
+      id: responseData.tool_call_id,
+      name: responseData.tool_name,
+      status: responseData.status,
+      input: responseData.input ?? null,
+      output: responseData.output ?? null,
+      progressMessage: responseData.progress_message,
+    };
+
     return {
       ...state,
       streaming: {
         ...state.streaming,
         toolCalls: {
           ...state.streaming.toolCalls,
-          [responseData.tool_call_id]: {
-            ...existingToolCall,
-            id: responseData.tool_call_id,
-            name: responseData.tool_name,
-            status: responseData.status,
-            input: responseData.input ?? existingToolCall.input,
-            output: responseData.output,
-            progress_message: responseData.progress_message,
-          },
+          [responseData.tool_call_id]: updatedToolCall,
         },
       },
     };

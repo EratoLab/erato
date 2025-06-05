@@ -27,7 +27,8 @@ interface ExtendedMessageControlsProps extends MessageControlsProps {
   showFeedbackButtons?: boolean;
   showRawMarkdown?: boolean;
   onToggleRawMarkdown?: () => void;
-  _hasToolCalls?: boolean;
+
+  hasToolCalls?: boolean;
 }
 
 export const DefaultMessageControls = ({
@@ -43,7 +44,8 @@ export const DefaultMessageControls = ({
   showFeedbackButtons = false,
   showRawMarkdown = false,
   onToggleRawMarkdown,
-  _hasToolCalls = false,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  hasToolCalls = false,
 }: ExtendedMessageControlsProps) => {
   const [isCopied, setIsCopied] = useState(false);
   const [feedbackState, setFeedbackState] = useState<

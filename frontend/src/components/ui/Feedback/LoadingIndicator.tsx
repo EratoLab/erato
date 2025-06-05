@@ -56,10 +56,10 @@ const ToolCallIndicator = ({ toolCall }: { toolCall: ToolCall }) => {
         {getStatusIcon()}
       </span>
       <span className="font-medium">{toolCall.name}</span>
-      {toolCall.progress_message && (
-        <span className="text-theme-fg-muted">
-          - {toolCall.progress_message}
-        </span>
+      {toolCall.progressMessage && (
+        <div className="text-xs text-theme-fg-muted">
+          - {toolCall.progressMessage}
+        </div>
       )}
     </div>
   );
