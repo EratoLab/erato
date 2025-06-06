@@ -10,6 +10,7 @@ const config: StorybookConfig = {
     "@storybook/addon-themes",
     "@storybook/addon-a11y",
     "@storybook/addon-storysource",
+    "@storybook/addon-actions",
   ],
   framework: {
     name: "@storybook/nextjs",
