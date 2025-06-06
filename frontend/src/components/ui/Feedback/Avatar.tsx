@@ -8,20 +8,22 @@ import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export interface AvatarProps {
   userProfile?: UserProfile;
+  // true = user
+  // false = assistant
   userOrAssistant?: boolean;
   size?: "sm" | "md" | "lg";
   className?: string;
 }
 
 export const Avatar = React.memo<AvatarProps>(
-  ({ userProfile, userOrAssistant = false, size = "md", className }) => {
+  ({ userProfile, userOrAssistant, size = "md", className }) => {
     const uiProfile = useMemo(
       () => mapApiUserProfileToUiProfile(userProfile),
       [userProfile],
     );
 
     const getInitials = () => {
-      if (userOrAssistant) {
+      if (typeof userOrAssistant !== "undefined" && !userOrAssistant) {
         return "A"; // 'A' for Assistant
       }
       if (uiProfile?.name) {
@@ -47,7 +49,7 @@ export const Avatar = React.memo<AvatarProps>(
       <div
         className={clsx(
           "relative flex shrink-0 items-center justify-center rounded-full",
-          userOrAssistant
+          !userOrAssistant
             ? "bg-theme-avatar-assistant-bg text-theme-avatar-assistant-fg"
             : "bg-theme-avatar-user-bg text-theme-avatar-user-fg",
           sizeClasses[size],

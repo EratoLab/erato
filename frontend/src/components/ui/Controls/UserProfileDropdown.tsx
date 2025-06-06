@@ -72,6 +72,7 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
           triggerIcon={
             <Avatar
               userProfile={userProfile}
+              userOrAssistant={true}
               size="sm"
               className="theme-transition cursor-pointer hover:opacity-80"
             />
