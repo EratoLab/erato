@@ -584,7 +584,11 @@ async fn prepare_chat_request(
     let mcp_server_tools = app_state.mcp_servers.list_tools().await;
 
     let tools = convert_mcp_tools_to_genai_tools(mcp_server_tools);
-    chat_request.tools = Some(tools);
+    if !tools.is_empty() {
+        chat_request.tools = Some(tools);
+    } else {
+        tracing::trace!("Not adding empty list of tools, as that may lead to hallucinated tools");
+    }
 
     Ok((chat_request, chat_options, generation_input_messages))
 }
