@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
+    "build:local": "next-static-utils generate serve && next build && cp serve.edited.json out/serve.json",
     "start": "next start",
     "lint": "next lint",
     "lint:strict": "eslint --max-warnings=0 .",

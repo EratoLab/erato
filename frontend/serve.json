@@ -1,10 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/chat/new",
-      "destination": "/chat/new.html"
-    },
-    {
       "source": "/chat/:id",
       "destination": "/chat/next-static-fallback.html"
     }
