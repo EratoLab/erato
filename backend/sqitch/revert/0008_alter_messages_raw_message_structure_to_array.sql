@@ -6,7 +6,7 @@ UPDATE messages
 SET raw_message = jsonb_set(
     raw_message,
     '{content}',
-    (raw_message->'content'->0->>'text')::jsonb -- Extract text from the first ContentPart and cast to JSONB string
+    to_jsonb(raw_message->'content'->0->>'text') -- Convert the text to a proper JSONB string
 )
 WHERE
     jsonb_typeof(raw_message->'content') = 'array' -- Ensure 'content' is an array
