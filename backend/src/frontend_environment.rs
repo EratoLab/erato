@@ -105,7 +105,6 @@ pub mod axum {
     use ::axum::http::{HeaderValue, Request};
     use ::axum::response::Response;
     use ::axum::{http, BoxError, Extension};
-    use ::axum_extra::headers::HeaderName;
     use http_body_util::combinators::UnsyncBoxBody;
     use http_body_util::BodyExt;
     use std::convert::Infallible;
@@ -178,8 +177,19 @@ pub mod axum {
                     })
                     .boxed_unsync()
             });
+            // Remove content-length, as we are extending the body, and with the smaller original content-length,
+            // some clients stop reading before the end of the response.
+            res.headers_mut().remove(http::header::CONTENT_LENGTH);
+            // Prevent caching, or otherwise Cache might prevent proper auth.
+            res.headers_mut().insert(
+                http::header::CACHE_CONTROL,
+                HeaderValue::from_static("no-cache, no-store, must-revalidate, private"),
+            );
             res.headers_mut()
-                .remove(HeaderName::from_static("content-length"));
+                .insert(http::header::PRAGMA, HeaderValue::from_static("no-cache"));
+            res.headers_mut()
+                .insert(http::header::EXPIRES, HeaderValue::from_static("0"));
+
             Ok(res)
         } else {
             Ok(res.map(|body| body.map_err(Into::into).boxed_unsync()))
