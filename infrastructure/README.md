@@ -1,6 +1,6 @@
-# Peknow Infrastructure
+# Erato Infrastructure & deployment
 
-This directory contains the Kubernetes infrastructure configuration for the Peknow application, including Helm charts and local development environment setup.
+This directory contains the Kubernetes infrastructure configuration for the Erato application, including Helm charts and local development environment setup.
 
 ## Prerequisites
 
@@ -14,8 +14,8 @@ This directory contains the Kubernetes infrastructure configuration for the Pekn
 ```
 infrastructure/
 ├── charts/             # Helm charts
-│   └── peknow/         # Main application chart
-├── k3d/                # k3d configuration
+│   └── erato/         # Main application chart
+├── k3d/                # k3d configuration for running a local k3d cluster with erato deployed
 └── scripts/            # Setup and utility scripts
 ```
 
@@ -34,32 +34,31 @@ infrastructure/
 
 3. Verify the installation:
    ```bash
-   kubectl get pods -n peknow
+   kubectl get pods -n erato
    ```
 
 ## Accessing the Application
 
-- Frontend: http://peknow.local
-- API: http://peknow.local/api
+- Frontend: http://app.erato.internal
 
 ## Development Workflow
 
 1. Build and push images to local registry:
    ```bash
-   docker build -t k3d-registry.localhost:5000/peknow/backend:latest ./backend
-   docker push k3d-registry.localhost:5000/peknow/backend:latest
+   docker build -t k3d-registry.localhost:5000/erato/backend:latest ./backend
+   docker push k3d-registry.localhost:5000/erato/backend:latest
    ```
 
 2. Update deployment:
    ```bash
-   helm upgrade peknow ./charts/peknow -n peknow
+   helm upgrade erato ./charts/erato -n erato
    ```
 
 ## Cleaning Up
 
 To delete the local development cluster:
 ```bash
-k3d cluster delete peknow-dev
+k3d cluster delete erato-dev
 ```
 
 ## Configuration
