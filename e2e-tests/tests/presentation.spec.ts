@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import Sharp from "sharp";
+import { TAG_CI } from "./tags";
 
 /**
  * Analyzes a screenshot buffer to determine if it shows a light or dark theme
@@ -58,7 +59,10 @@ async function analyzeThemeFromScreenshot(screenshotBuffer) {
   };
 }
 
-const expectIsLightPage = async (page, expectMessage = "Page should be light") => {
+const expectIsLightPage = async (
+  page,
+  expectMessage = "Page should be light",
+) => {
   // HACK: Replace with better way to check if rendering is setteled
   await page.waitForTimeout(500);
   const buffer = await page.screenshot();
@@ -66,7 +70,10 @@ const expectIsLightPage = async (page, expectMessage = "Page should be light") =
   expect(analysisResult.theme, expectMessage).toBe("light");
 };
 
-const expectIsDarkPage = async (page, expectMessage = "Page should be light") => {
+const expectIsDarkPage = async (
+  page,
+  expectMessage = "Page should be light",
+) => {
   // HACK: Replace with better way to check if rendering is setteled
   await page.waitForTimeout(500);
   const buffer = await page.screenshot();
@@ -74,56 +81,70 @@ const expectIsDarkPage = async (page, expectMessage = "Page should be light") =>
   expect(analysisResult.theme, expectMessage).toBe("dark");
 };
 
-test("Can login and see dark mode by default", async ({ page }) => {
-  await page.emulateMedia({ colorScheme: "dark" });
-  await page.goto("/");
+test(
+  "Can login and see dark mode by default",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto("/");
 
-  await page.getByRole("button", { name: "Sign in with Dex" }).click();
-  await page.waitForURL((url) => url.pathname.includes("auth"));
-  // await page.getByRole('textbox', { name: 'email address' }).click();
-  await page
-    .getByRole("textbox", { name: "email address" })
-    .fill("admin@example.com");
-  await page.getByRole("textbox", { name: "Password" }).fill("admin");
-  await page.getByRole("textbox", { name: "Password" }).press("Enter");
-  await page.getByRole("button", { name: "Grant Access" }).click();
+    await page.getByRole("button", { name: "Sign in with" }).click();
+    await page.waitForURL((url) => url.pathname.includes("auth"));
+    // await page.getByRole('textbox', { name: 'email address' }).click();
+    await page
+      .getByRole("textbox", { name: "email address" })
+      .fill("admin@example.com");
+    await page.getByRole("textbox", { name: "Password" }).fill("admin");
+    await page.getByRole("textbox", { name: "Password" }).press("Enter");
+    await page.getByRole("button", { name: "Grant Access" }).click();
 
-  await expect(
-    page.getByRole("textbox", { name: "Type a message..." }),
-  ).toBeVisible();
-  await expectIsDarkPage(page, "Page should be dark by default");
-  // Toggle to light and check if it persists after reload
-  await page.getByRole("button", { name: "expand sidebar" }).click();
-  await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("menuitem", { name: "Light mode" }).click();
-  await expectIsLightPage(page, "Page should switch to light after selecting light mode");
-  await page.reload();
-  await expectIsLightPage(page, "Page should stay light after reload");
-});
+    await expect(
+      page.getByRole("textbox", { name: "Type a message..." }),
+    ).toBeVisible();
+    await expectIsDarkPage(page, "Page should be dark by default");
+    // Toggle to light and check if it persists after reload
+    await page.getByRole("button", { name: "expand sidebar" }).click();
+    await page.locator("button").filter({ hasText: "A" }).click();
+    await page.getByRole("menuitem", { name: "Light mode" }).click();
+    await expectIsLightPage(
+      page,
+      "Page should switch to light after selecting light mode",
+    );
+    await page.reload();
+    await expectIsLightPage(page, "Page should stay light after reload");
+  },
+);
 
-test("Can login and see light mode by default", async ({ page }) => {
-  await page.emulateMedia({ colorScheme: "light" });
-  await page.goto("/");
+test(
+  "Can login and see light mode by default",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/");
 
-  await page.getByRole("button", { name: "Sign in with Dex" }).click();
-  await page.waitForURL((url) => url.pathname.includes("auth"));
-  // await page.getByRole('textbox', { name: 'email address' }).click();
-  await page
-    .getByRole("textbox", { name: "email address" })
-    .fill("admin@example.com");
-  await page.getByRole("textbox", { name: "Password" }).fill("admin");
-  await page.getByRole("textbox", { name: "Password" }).press("Enter");
-  await page.getByRole("button", { name: "Grant Access" }).click();
+    await page.getByRole("button", { name: "Sign in with" }).click();
+    await page.waitForURL((url) => url.pathname.includes("auth"));
+    // await page.getByRole('textbox', { name: 'email address' }).click();
+    await page
+      .getByRole("textbox", { name: "email address" })
+      .fill("admin@example.com");
+    await page.getByRole("textbox", { name: "Password" }).fill("admin");
+    await page.getByRole("textbox", { name: "Password" }).press("Enter");
+    await page.getByRole("button", { name: "Grant Access" }).click();
 
-  await expect(
-    page.getByRole("textbox", { name: "Type a message..." }),
-  ).toBeVisible();
-  await expectIsLightPage(page, "Page should be light by default");
-  // Toggle to light and check if it persists after reload
-  await page.getByRole("button", { name: "expand sidebar" }).click();
-  await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("menuitem", { name: "Dark mode" }).click();
-  await expectIsDarkPage(page, "Page should switch to dark after selecting dark mode");
-  await page.reload();
-  await expectIsDarkPage(page, "Page should stay dark after reload");
-});
+    await expect(
+      page.getByRole("textbox", { name: "Type a message..." }),
+    ).toBeVisible();
+    await expectIsLightPage(page, "Page should be light by default");
+    // Toggle to light and check if it persists after reload
+    await page.getByRole("button", { name: "expand sidebar" }).click();
+    await page.locator("button").filter({ hasText: "A" }).click();
+    await page.getByRole("menuitem", { name: "Dark mode" }).click();
+    await expectIsDarkPage(
+      page,
+      "Page should switch to dark after selecting dark mode",
+    );
+    await page.reload();
+    await expectIsDarkPage(page, "Page should stay dark after reload");
+  },
+);
