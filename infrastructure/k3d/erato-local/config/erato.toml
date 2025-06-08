@@ -1,0 +1,4 @@
+# NOTE: This currently doesn't point to a deployment inside erato-local
+[file_storage_providers.minio]
+provider_kind = "s3"
+config = { endpoint = "http://localhost:9000", region = "us-east-1", bucket = "erato-storage", access_key_id = "erato-app-user", secret_access_key = "erato-app-password" }
