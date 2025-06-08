@@ -17,6 +17,9 @@ erato:
       # NOTE: This currently points nowhere
       - name: CHAT_PROVIDER__BASE_URL
         value: "http://localhost:11434/v1/"
+    configFile:
+      secretName: erato-local-erato-toml-secret
+      secretKey: erato.toml
   
   oauth2Proxy:
     enabled: true
@@ -32,10 +35,10 @@ erato:
       client_id = "erato-app"
       client_secret = "ZXJhdG8tc2VjcmV0"  # Replace in production
       skip_oidc_discovery = true
-      oidc_issuer_url = "http://erato-dex.erato.svc.cluster.local:5556"
+      oidc_issuer_url = "http://erato-local-dex.erato-local-ns.svc.cluster.local:5556"
       login_url = "http://dex.erato.internal/auth"
-      redeem_url = "http://erato-dex.erato.svc.cluster.local:5556/token"
-      oidc_jwks_url = "http://erato-dex.erato.svc.cluster.local:5556/keys"
+      redeem_url = "http://erato-local-dex.erato-local-ns.svc.cluster.local:5556/token"
+      oidc_jwks_url = "http://erato-local-dex.erato-local-ns.svc.cluster.local:5556/keys"
       redirect_url = "http://app.erato.internal/oauth2/callback"
       skip_auth_regex = ["^/health", "^/metrics"]
       pass_authorization_header = true
@@ -45,15 +48,14 @@ erato:
       insecure_oidc_skip_issuer_verification = true
 
   postgresql:
-    # set postgresql.enabled to be false to disable deploy of a PostgreSQL database and use an
-    # existing external PostgreSQL database
     enabled: false
-
-    # If postgresql.enabled is falsse, you can set the following values to connect to an existing
-    # external PostgreSQL database
     external:
       connectionString:
-        value: "postgresql://eratouser:eratopw@host.k3d.internal:5432/erato"
+        valueFrom:
+          secretKeyRef:
+            # This will be created by the postgres-cluster.yaml template
+            name: erato-local-postgres-app
+            key: uri
 
 dex:
   enabled: true
@@ -87,3 +89,13 @@ dex:
       hash: "$2y$10$EI3YbB3STkWvAzAyZ/fU/ehRT6M5ActxvZS9rZ1fXmTV2zxYNgUaK" # password: admin
       username: "admin"
       userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"
+
+# Main chart values
+postgresql:
+  enabled: true
+  instances: 1
+  image:
+    repository: ghcr.io/cloudnative-pg/postgresql
+    tag: "17.2"
+  storage:
+    size: 2Gi
