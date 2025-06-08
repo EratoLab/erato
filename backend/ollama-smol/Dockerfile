@@ -1,9 +1,9 @@
-FROM ollama/ollama:0.5.12
+FROM ollama/ollama:0.9.0
 
 # Pull the image
 RUN ollama serve & \
     sleep 5 && \
-    ollama pull smollm2:135m && \
+    ollama pull qwen3:0.6b && \
     ollama pull nomic-embed-text:137m-v1.5-fp16 && \
     pkill ollama
 
