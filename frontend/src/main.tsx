@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+
 import AppRoutes from './App'; // App.tsx now exports AppRoutes
 import './styles/globals.css'; // Corrected path to global stylesheet
 

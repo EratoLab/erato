@@ -57,10 +57,11 @@ export const Avatar = React.memo<AvatarProps>(
         )}
       >
         {uiProfile?.avatarUrl && !userOrAssistant ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img // Changed from Image to img
             src={uiProfile.avatarUrl}
             alt="User avatar"
-            className="rounded-full object-cover w-full h-full" // Added w-full h-full
+            className="size-full rounded-full object-cover" // Added w-full h-full
             // Removed Next.js specific props: fill, sizes
           />
         ) : (

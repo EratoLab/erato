@@ -1,5 +1,5 @@
-import { useLocation } from "react-router-dom";
 import { useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 
 import { Chat } from "@/components/ui/Chat/Chat";
 import { WelcomeScreen } from "@/components/ui/WelcomeScreen";

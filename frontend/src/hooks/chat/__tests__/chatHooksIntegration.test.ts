@@ -1,5 +1,4 @@
 import { renderHook, act } from "@testing-library/react";
-import { useRouter } from "next/navigation";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import {
@@ -12,8 +11,9 @@ import { useChatHistory } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
 
 // Mock dependencies
+const mockUseRouter = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
+  useRouter: mockUseRouter,
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
@@ -30,7 +30,6 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 // Mock implementations
-const mockUseRouter = useRouter as unknown as ReturnType<typeof vi.fn>;
 const mockUseChats = useChats as unknown as ReturnType<typeof vi.fn>;
 const mockUseChatMessages = useChatMessages as unknown as ReturnType<
   typeof vi.fn

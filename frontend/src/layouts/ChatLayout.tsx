@@ -1,8 +1,8 @@
 import { Outlet } from "react-router-dom";
 
+import ChatPageStructure from "@/app/chat/ChatPageStructure.client";
 import { RootProvider } from "@/providers/RootProvider";
 // Assuming ChatPageStructure.client.tsx is in src/app/chat/
-import ChatPageStructure from "@/app/chat/ChatPageStructure.client";
 
 import type { FileType } from "@/utils/fileTypes";
 

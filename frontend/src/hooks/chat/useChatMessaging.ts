@@ -383,9 +383,11 @@ export function useChatMessaging(
     }
 
     // Check if the real message (with same ID) already exists in API data
-    const realMessageExists = !!combinedMessages[streaming.currentMessageId];
+    const realMessageExists: boolean =
+      !!combinedMessages[streaming.currentMessageId];
 
     // If real message exists, don't add streaming version (API version takes precedence)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (realMessageExists) {
       if (process.env.NODE_ENV === "development") {
         console.log(

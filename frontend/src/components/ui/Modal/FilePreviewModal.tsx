@@ -40,6 +40,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   const renderPreview = () => {
     if (isImage && file.download_url) {
       return (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={file.download_url}
           alt={`Preview of ${file.filename}`}

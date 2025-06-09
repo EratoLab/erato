@@ -3,7 +3,7 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { useChatMessaging } from "@/hooks/chat/useChatMessaging";
 
-import ChatPage from "../[id]/ChatPage";
+import ChatPageStructure from "../ChatPageStructure.client";
 import "@testing-library/jest-dom";
 
 // Mock necessary hooks and components
@@ -122,7 +122,11 @@ describe("ChatPage", () => {
   });
 
   it("renders the chat page with messages", () => {
-    render(<ChatPage />);
+    render(
+      <ChatPageStructure>
+        <div />
+      </ChatPageStructure>,
+    );
 
     // Check that the chat widget is rendered
     expect(screen.getByTestId("chat-widget")).toBeInTheDocument();
@@ -140,7 +144,11 @@ describe("ChatPage", () => {
   });
 
   it("handles sending a message", async () => {
-    render(<ChatPage />);
+    render(
+      <ChatPageStructure>
+        <div />
+      </ChatPageStructure>,
+    );
 
     // Click the send button
     fireEvent.click(screen.getByTestId("send-button"));
@@ -161,7 +169,11 @@ describe("ChatPage", () => {
       cancelMessage: vi.fn(),
     }));
 
-    render(<ChatPage />);
+    render(
+      <ChatPageStructure>
+        <div />
+      </ChatPageStructure>,
+    );
 
     // Check loading state
     expect(screen.getByTestId("loading-state").textContent).toBe("Loading");
@@ -179,7 +191,11 @@ describe("ChatPage", () => {
       cancelMessage: vi.fn(),
     }));
 
-    render(<ChatPage />);
+    render(
+      <ChatPageStructure>
+        <div />
+      </ChatPageStructure>,
+    );
 
     // Check that the stop generating button is shown
     expect(screen.getByText("Stop generating")).toBeInTheDocument();
