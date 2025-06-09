@@ -33,6 +33,7 @@ import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
 import { handleUserMessageSaved } from "./handlers/handleUserMessageSaved";
 import { useMessagingStore } from "./store/messagingStore";
+import { useExplicitNavigation } from "./useExplicitNavigation";
 
 import type { MessageSubmitStreamingResponseMessage } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
@@ -83,17 +84,35 @@ export function useChatMessaging(
     null,
   );
 
+  // Add explicit navigation hook
+  const explicitNav = useExplicitNavigation();
+
   // Log hook mounting and unmounting - keep this for debugging chat lifecycle
   useEffect(() => {
     const currentChatId = chatId; // Capture chatId for cleanup
+    const isInTransition =
+      useMessagingStore.getState().isInNavigationTransition;
+
     // Only log in development
     if (process.env.NODE_ENV === "development") {
       // console.log(
       //   `[CHAT_FLOW_LIFECYCLE] useChatMessaging mounted for chatId: ${currentChatId ?? "null"}`,
       // );
       console.log(
-        `[DEBUG_STREAMING] useChatMessaging mounted. chatId: ${currentChatId ?? "null"}, silentChatId: ${silentChatId ?? "null"}`,
+        `[DEBUG_STREAMING] useChatMessaging mounted. chatId: ${currentChatId ?? "null"}, silentChatId: ${silentChatId ?? "null"}, isInTransition: ${isInTransition}`,
       );
+    }
+
+    // Skip state reset during navigation transition to preserve optimistic state
+    if (isInTransition) {
+      console.log(
+        "[DEBUG_STREAMING] Skipping state reset during navigation transition to preserve optimistic state.",
+      );
+      return () => {
+        console.log(
+          `[DEBUG_STREAMING] useChatMessaging cleanup skipped during transition. chatId: ${currentChatId ?? "null"}`,
+        );
+      };
     }
 
     // Only clear completed messages to preserve user messages during navigation
@@ -151,6 +170,10 @@ export function useChatMessaging(
     async (options: { invalidate?: boolean; logContext: string }) => {
       const { invalidate = false, logContext } = options;
 
+      // Don't clear optimistic state during navigation transition
+      const isInTransition =
+        useMessagingStore.getState().isInNavigationTransition;
+
       if (chatId) {
         if (process.env.NODE_ENV === "development") {
           console.log(
@@ -164,7 +187,21 @@ export function useChatMessaging(
         }
         // Ensure refetch happens before clearing messages, especially if invalidation occurred
         await chatMessagesQuery.refetch();
-        clearCompletedUserMessages();
+
+        // Only clear user messages during navigation transitions or new chat creation
+        // For existing chats, let the merge handle deduplication naturally
+        if (isInTransition) {
+          console.log(
+            `[DEBUG_STREAMING] ${logContext}: Skipping clearCompletedUserMessages during navigation transition`,
+          );
+        } else if (logContext.includes("completed") && chatId) {
+          console.log(
+            `[DEBUG_STREAMING] ${logContext}: Skipping clearCompletedUserMessages for existing chat to prevent message drop`,
+          );
+        } else {
+          clearCompletedUserMessages();
+        }
+
         if (newlyCreatedChatId && process.env.NODE_ENV === "development") {
           console.log(
             `[DEBUG_REDIRECT] ${logContext} & refetched, relevant for pending chat: ${newlyCreatedChatId}`,
@@ -176,7 +213,20 @@ export function useChatMessaging(
             `[DEBUG_STREAMING] ${logContext}, no active chatId for refetch.`,
           );
         }
-        clearCompletedUserMessages();
+
+        // Only clear user messages during navigation transitions or new chat creation
+        if (isInTransition) {
+          console.log(
+            `[DEBUG_STREAMING] ${logContext}: Skipping clearCompletedUserMessages during navigation transition`,
+          );
+        } else if (logContext.includes("completed")) {
+          console.log(
+            `[DEBUG_STREAMING] ${logContext}: Skipping clearCompletedUserMessages for new chat completion to prevent message drop`,
+          );
+        } else {
+          clearCompletedUserMessages();
+        }
+
         if (newlyCreatedChatId && process.env.NODE_ENV === "development") {
           console.log(
             `[DEBUG_REDIRECT] ${logContext} (new chat without active chatId for refetch), relevant for pending chat: ${newlyCreatedChatId}`,
@@ -191,6 +241,10 @@ export function useChatMessaging(
 
   // For backward compatibility with tests
   const cancelMessage = useCallback(() => {
+    // Don't clear optimistic state during navigation transition
+    const isInTransition =
+      useMessagingStore.getState().isInNavigationTransition;
+
     // Clean up any existing SSE connection
     if (sseCleanupRef.current) {
       sseCleanupRef.current();
@@ -203,12 +257,22 @@ export function useChatMessaging(
     // Refetch first to ensure we have latest server data before clearing messages
     if (chatId) {
       void chatMessagesQuery.refetch().then(() => {
-        // Use the improved clearing method to preserve user messages during transition
-        clearCompletedUserMessages();
+        if (!isInTransition) {
+          clearCompletedUserMessages();
+        } else {
+          console.log(
+            "[DEBUG_STREAMING] cancelMessage: Skipping clearCompletedUserMessages during navigation transition",
+          );
+        }
       });
     } else {
-      // If no chatId, we can use the improved clearing method
-      clearCompletedUserMessages();
+      if (!isInTransition) {
+        clearCompletedUserMessages();
+      } else {
+        console.log(
+          "[DEBUG_STREAMING] cancelMessage: Skipping clearCompletedUserMessages during navigation transition",
+        );
+      }
     }
 
     // Reset the submission flag
@@ -231,6 +295,17 @@ export function useChatMessaging(
     const capturedChatIdForCleanup = chatId; // Capture chatId for the cleanup function
 
     return () => {
+      const isInTransition =
+        useMessagingStore.getState().isInNavigationTransition;
+
+      // Skip SSE cleanup during navigation transition to preserve connection
+      if (isInTransition) {
+        console.log(
+          `[DEBUG_STREAMING] SSE Cleanup skipped during navigation transition for chatId: ${capturedChatIdForCleanup ?? "null"}`,
+        );
+        return;
+      }
+
       // console.log(
       //   `[CHAT_FLOW_LIFECYCLE_DEBUG] Running cleanup for capturedChatId: ${capturedChatIdForCleanup ?? "null"}. Current sseCleanupRef.current is ${sseCleanupRef.current ? "set" : "null"}.`,
       // );
@@ -293,16 +368,9 @@ export function useChatMessaging(
 
   // Add the streaming message if it exists
   const messages = useMemo(() => {
-    // If not streaming OR if we are technically streaming but don't have the ID of the message yet
-    // (e.g., assistant_message_started hasn't arrived or been processed),
-    // then there's no streaming message to add.
-    if (!streaming.isStreaming || !streaming.currentMessageId) {
-      if (
-        process.env.NODE_ENV === "development" &&
-        streaming.isStreaming &&
-        !streaming.currentMessageId
-      ) {
-        // This case means isStreaming is true, but currentMessageId is not yet set.
+    // If no streaming message ID, just return combined messages
+    if (!streaming.currentMessageId) {
+      if (process.env.NODE_ENV === "development" && streaming.isStreaming) {
         console.log(
           "[DEBUG_STREAMING] useChatMessaging messages useMemo: isStreaming is true, but currentMessageId is not yet set. Returning combinedMessages.",
           {
@@ -314,16 +382,30 @@ export function useChatMessaging(
       return combinedMessages;
     }
 
-    // If we are streaming and have a currentMessageId, we should include the streaming message.
-    // The content might be empty initially, but the message placeholder itself is important.
+    // Check if the real message (with same ID) already exists in API data
+    const realMessageExists = !!combinedMessages[streaming.currentMessageId];
+
+    // If real message exists, don't add streaming version (API version takes precedence)
+    if (realMessageExists) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          "[DEBUG_STREAMING] useChatMessaging messages useMemo: Real message exists in API data, using API version.",
+          {
+            messageId: streaming.currentMessageId,
+            combinedMessagesCount: Object.keys(combinedMessages).length,
+          },
+        );
+      }
+      return combinedMessages;
+    }
+
+    // Keep showing streaming message (even if streaming completed) until real message arrives
     if (process.env.NODE_ENV === "development") {
       console.log(
-        "[DEBUG_STREAMING] useChatMessaging messages useMemo: Actively streaming. Constructing/updating streaming message.",
+        `[DEBUG_STREAMING] useChatMessaging messages useMemo: ${streaming.isStreaming ? "Actively streaming" : "Streaming completed, keeping placeholder"}. Constructing/updating streaming message.`,
         {
           streamingState: streaming,
-          // Check if it was already in combinedMessages (it shouldn't be for a new stream, but good for logging)
-          messageIdExistedInCombined:
-            !!combinedMessages[streaming.currentMessageId],
+          realMessageExists,
         },
       );
     }
@@ -332,15 +414,13 @@ export function useChatMessaging(
       ...combinedMessages,
     };
 
-    // Add or update the streaming assistant message.
-    // If streaming.content is empty, it's the initial shell.
-    // If streaming.content has text, it's an update.
+    // Add or update the streaming assistant message as placeholder
     finalMessagesRecord[streaming.currentMessageId] = {
       id: streaming.currentMessageId,
       content: streaming.content || "", // Ensure content is at least an empty string
       role: "assistant",
       createdAt: new Date().toISOString(), // This will change, but it's for a temp display
-      status: "sending",
+      status: streaming.isStreaming ? "sending" : "complete", // Update status when streaming completes
     };
     return finalMessagesRecord;
   }, [combinedMessages, streaming]);
@@ -415,8 +495,8 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_completed event. Full payload:",
               responseData,
             );
-            // Call the new external handler to update store
-            externalHandleMessageComplete(responseData);
+            // Call the new external handler to update store and trigger explicit navigation
+            externalHandleMessageComplete(responseData, explicitNav);
 
             // Use the new utility for refetch and clear
             console.log(
@@ -467,6 +547,7 @@ export function useChatMessaging(
       setNewlyCreatedChatId, // for handleChatCreated
       // External handlers (handleChatCreated, handleUserMessageSaved, etc.) are stable imports
       handleRefetchAndClear, // Added dependency
+      explicitNav, // Added explicit navigation dependency
     ],
   );
 

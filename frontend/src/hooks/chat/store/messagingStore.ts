@@ -32,6 +32,7 @@ export interface MessagingStore {
   error: Error | null; // <--- Add error state
   isAwaitingFirstStreamChunkForNewChat: boolean; // New state for pre-navigation hold
   newlyCreatedChatId: string | null; // To store the ID of a newly created chat
+  isInNavigationTransition: boolean; // Flag to preserve state during explicit navigation
   setStreaming: (state: Partial<StreamingState>) => void;
   resetStreaming: () => void;
   addUserMessage: (message: Message) => void;
@@ -41,6 +42,7 @@ export interface MessagingStore {
   setError: (error: Error | null) => void; // <--- Add setError action
   setAwaitingFirstStreamChunkForNewChat: (isAwaiting: boolean) => void; // Action for the new state
   setNewlyCreatedChatIdInStore: (chatId: string | null) => void; // Action for newlyCreatedChatId
+  setNavigationTransition: (inTransition: boolean) => void; // Action for navigation transition flag
 }
 
 // Initial streaming state
@@ -59,6 +61,7 @@ export const useMessagingStore = create<MessagingStore>((set) => {
     error: null, // <--- Initialize error state
     isAwaitingFirstStreamChunkForNewChat: false, // Initialize new state
     newlyCreatedChatId: null, // Initialize newlyCreatedChatId
+    isInNavigationTransition: false, // Initialize navigation transition flag
     setStreaming: (update) =>
       set((prev) => {
         const newState = { ...prev.streaming, ...update };
@@ -189,6 +192,22 @@ export const useMessagingStore = create<MessagingStore>((set) => {
         return {
           ...prev,
           newlyCreatedChatId: chatId,
+        };
+      }),
+    setNavigationTransition: (inTransition) =>
+      set((prev) => {
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            "[DEBUG_STORE] messagingStore: setNavigationTransition called.",
+            {
+              prevIsInNavigationTransition: prev.isInNavigationTransition,
+              newIsInNavigationTransition: inTransition,
+            },
+          );
+        }
+        return {
+          ...prev,
+          isInNavigationTransition: inTransition,
         };
       }),
   };
