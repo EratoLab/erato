@@ -1,5 +1,5 @@
-import { useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useChatContext } from "@/providers/ChatProvider";
@@ -36,7 +36,7 @@ export default function NewChatPage() {
         `NewChatPage - currentChatId is now ${currentChatId}. Updating URL from /chat/new.`,
       );
       redirectedRef.current = true;
-      navigate(`/chat/${currentChatId}`, { replace: true });
+      navigate(`/chat/${currentChatId}`);
     }
 
     if (!currentChatId && pathname === "/chat/new") {
@@ -45,4 +45,4 @@ export default function NewChatPage() {
   }, [currentChatId, navigate, isStreaming, pathname]);
 
   return null; // The ChatLayout (to be created) handles UI
-} 
+}
