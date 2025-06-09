@@ -14,4 +14,4 @@ export default function HomePage() {
       <div className="animate-pulse text-lg">Redirecting to chat...</div>
     </div>
   );
-} 
+}

@@ -1,10 +1,14 @@
 import { renderHook, type RenderHookResult } from "@testing-library/react";
-import { act } from "react";
+import { act, type ReactNode } from "react";
+import { createElement } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import {
   useChatMessages,
   useMessageSubmitSse,
+  useRecentChats,
+  useArchiveChatEndpoint,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { server } from "@/test/setupMsw";
 import { createSSEConnection } from "@/utils/sse/sseClient";
@@ -20,6 +24,8 @@ vi.mock("@/utils/sse/sseClient", () => ({
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useChatMessages: vi.fn(),
   useMessageSubmitSse: vi.fn(),
+  useRecentChats: vi.fn(),
+  useArchiveChatEndpoint: vi.fn(),
 }));
 
 // Mock React Query client
@@ -35,12 +41,21 @@ const mockUseChatMessages = useChatMessages as unknown as ReturnType<
 const mockUseMessageSubmitSse = useMessageSubmitSse as unknown as ReturnType<
   typeof vi.fn
 >;
+const mockUseRecentChats = useRecentChats as unknown as ReturnType<
+  typeof vi.fn
+>;
+const mockUseArchiveChatEndpoint =
+  useArchiveChatEndpoint as unknown as ReturnType<typeof vi.fn>;
 const mockCreateSSEConnection = createSSEConnection as unknown as ReturnType<
   typeof vi.fn
 >;
 
 // Define type for hook results
 type ChatMessagingHookResult = ReturnType<typeof useChatMessaging>;
+
+// Test wrapper with Router context
+const TestWrapper = ({ children }: { children: ReactNode }) =>
+  createElement(MemoryRouter, { initialEntries: ["/chat/test"] }, children);
 
 describe("useChatMessaging with direct mocking", () => {
   // Store references to rendered hook results to clean up after each test
@@ -73,6 +88,17 @@ describe("useChatMessaging with direct mocking", () => {
       isError: false,
       error: null,
     });
+
+    mockUseRecentChats.mockReturnValue({
+      data: { chats: [] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    mockUseArchiveChatEndpoint.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+    });
   });
 
   afterEach(() => {
@@ -104,7 +130,9 @@ describe("useChatMessaging with direct mocking", () => {
     });
 
     // Render the hook with a chat ID
-    hookResult = renderHook(() => useChatMessaging("test-chat-id"));
+    hookResult = renderHook(() => useChatMessaging("test-chat-id"), {
+      wrapper: TestWrapper,
+    });
     const { result } = hookResult;
 
     // Initial checks
@@ -183,7 +211,9 @@ describe("useChatMessaging with direct mocking", () => {
     });
 
     // Render with a different chat ID to ensure clean state
-    hookResult = renderHook(() => useChatMessaging("different-chat-id"));
+    hookResult = renderHook(() => useChatMessaging("different-chat-id"), {
+      wrapper: TestWrapper,
+    });
     const { result } = hookResult;
 
     // Verify initial state is clean

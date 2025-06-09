@@ -26,4 +26,4 @@ export default function ChatLayout() {
       </ChatPageStructure>
     </RootProvider>
   );
-} 
+}
