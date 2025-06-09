@@ -41,6 +41,7 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
     const loadBranding = async () => {
       try {
         // Construct path with the folder name
+        // eslint-disable-next-line lingui/no-unlocalized-strings
         const themePath = `/custom-theme/${customerName}/theme.json`;
 
         // Load the theme data

@@ -131,6 +131,7 @@ export function useChatHistory() {
       navigate("/chat/new", { replace: true }); // Replaced router.replace with navigate
 
       // Return a temporary ID - the actual chat ID will be created when the first message is sent
+
       return `temp-${Date.now()}`;
     } catch (error) {
       console.error("Failed to create new chat:", error);

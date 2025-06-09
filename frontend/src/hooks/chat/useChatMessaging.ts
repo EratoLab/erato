@@ -708,6 +708,7 @@ export function useChatMessaging(
         }
 
         // Create a direct SSE connection for streaming
+        // eslint-disable-next-line lingui/no-unlocalized-strings
         const sseUrl = `/api/v1beta/me/messages/submitstream`;
 
         // The SSE client will handle the POST request format

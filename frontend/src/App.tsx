@@ -1,3 +1,7 @@
+/* eslint-disable lingui/no-unlocalized-strings */
+import { t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react";
+import { Trans } from "@lingui/react/macro";
 import React, { useEffect } from "react";
 import { Routes, Route, Link, Outlet, Navigate } from "react-router-dom";
 
@@ -12,21 +16,36 @@ import NewChatPage from "./pages/NewChatPage";
 
 // Placeholder for other actual pages/components if needed
 const AboutPage = () => (
-  <div>
-    About Page <Link to="/">Go Home</Link>
+  <div className="p-8">
+    <h1 className="mb-4 text-2xl font-bold">
+      <Trans id="about.title">About Page</Trans>
+    </h1>
+    <Link to="/" className="text-blue-500 underline hover:text-blue-700">
+      <Trans id="navigation.goHome">Go Home</Trans>
+    </Link>
   </div>
 ); // Keep for now or remove if not used
+
 const NotFoundPage = () => (
-  <div>
-    404 - Page Not Found <Link to="/">Go Home</Link>
+  <div className="flex h-screen items-center justify-center">
+    <div className="text-center">
+      <h1 className="mb-4 text-4xl font-bold text-gray-800">
+        <Trans id="error.404.title">404 - Page Not Found</Trans>
+      </h1>
+      <Link to="/" className="text-blue-500 underline hover:text-blue-700">
+        <Trans id="navigation.goHome">Go Home</Trans>
+      </Link>
+    </div>
   </div>
 );
 
 // Main App Shell (Global Layout - for things outside ChatLayout or other specific layouts)
 function App() {
+  const { _ } = useLingui();
+
   useEffect(() => {
-    document.title = "LLM Chat";
-  }, []);
+    document.title = _(t`LLM Chat`);
+  }, [_]);
 
   return (
     <ClientProviders>

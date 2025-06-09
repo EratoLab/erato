@@ -2,6 +2,7 @@
 
 import { ApiProvider } from "./ApiProvider";
 import { ThemeProvider } from "./ThemeProvider";
+import { I18nProvider } from "../../providers/I18nProvider";
 
 import type { PropsWithChildren } from "react";
 
@@ -13,9 +14,11 @@ export function ClientProviders({ children }: PropsWithChildren) {
   return (
     <ApiProvider>
       <ThemeProvider>
-        <div className="flex h-screen min-h-screen bg-theme-bg-primary">
-          {children}
-        </div>
+        <I18nProvider>
+          <div className="flex h-screen min-h-screen bg-theme-bg-primary">
+            {children}
+          </div>
+        </I18nProvider>
       </ThemeProvider>
     </ApiProvider>
   );
