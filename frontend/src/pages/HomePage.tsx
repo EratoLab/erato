@@ -1,15 +1,13 @@
-"use client";
-
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function HomePage() {
-  const router = useRouter();
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Redirect to the new chat page
-    router.replace("/chat/new");
-  }, [router]);
+    navigate("/chat/new", { replace: true });
+  }, [navigate]);
 
   return (
     <div className="flex h-screen items-center justify-center">

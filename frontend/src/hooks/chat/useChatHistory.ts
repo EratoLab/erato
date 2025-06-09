@@ -4,8 +4,9 @@
  * Provides a clean interface for fetching, navigating and managing chat history.
  */
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation"; // Removed Next.js router
 import { useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom"; // Added React Router navigate
 import { create } from "zustand";
 
 import {
@@ -52,7 +53,8 @@ export const useChatHistoryStore = create<ChatHistoryState>((set) => {
 });
 
 export function useChatHistory() {
-  const router = useRouter();
+  // const router = useRouter(); // Removed Next.js router
+  const navigate = useNavigate(); // Added React Router navigate
   const queryClient = useQueryClient();
   // Get context to access fetcherOptions - contextFetcherOptions removed as it was unused after introducing stableEmptyFetcherOptions
   // const { fetcherOptions: contextFetcherOptions } = useV1betaApiContext();
@@ -96,9 +98,11 @@ export function useChatHistory() {
 
       // Make sure we actually navigate to the chat URL using the router
       // Use replace to ensure a clean navigation
-      router.push(`/chat/${chatId}`);
+      // router.push(`/chat/${chatId}`);
+      navigate(`/chat/${chatId}`); // Replaced router.push with navigate
     },
-    [router, setCurrentChatId, isNewChatPending],
+    // [router, setCurrentChatId, isNewChatPending],
+    [navigate, setCurrentChatId, isNewChatPending], // Updated dependency array
   );
 
   // Create a new chat and navigate to it
@@ -123,7 +127,8 @@ export function useChatHistory() {
 
       // For more reliable navigation with Next.js App Router, use replace instead of push
       // This prevents issues with the router queue and history management
-      router.replace("/chat/new");
+      // router.replace("/chat/new");
+      navigate("/chat/new", { replace: true }); // Replaced router.replace with navigate
 
       // Return a temporary ID - the actual chat ID will be created when the first message is sent
       return `temp-${Date.now()}`;
@@ -136,7 +141,7 @@ export function useChatHistory() {
       setNewChatPending(false);
       throw error;
     }
-  }, [router, setCurrentChatId, setNewChatPending]);
+  }, [navigate, setCurrentChatId, setNewChatPending]); // Updated dependency array
 
   // Archive a chat
   const archiveChat = useCallback(
@@ -163,7 +168,8 @@ export function useChatHistory() {
         // If the archived chat was the current one, navigate to the new chat page
         if (currentChatId === chatId) {
           setCurrentChatId(null); // Reset current chat ID in the store
-          router.replace("/chat/new"); // Navigate to the new chat page
+          // router.replace("/chat/new"); // Navigate to the new chat page
+          navigate("/chat/new", { replace: true }); // Replaced router.replace with navigate
         }
         // If not the current chat, no navigation occurs.
       } catch (error) {
@@ -178,7 +184,8 @@ export function useChatHistory() {
       archiveChatMutation,
       queryClient,
       currentChatId,
-      router,
+      // router,
+      navigate, // Updated dependency array
       setCurrentChatId,
       stableEmptyFetcherOptions, // Use stable reference in dependency array
     ],

@@ -10,11 +10,10 @@ WORKDIR /app
 
 FROM base AS build
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
-# This patches a file in the node_modules folder to make it work with the next-static-utils package
-RUN pnpm next-static-utils generate serve
 RUN pnpm run build
 
 # Final stage - empty image with just the static files
 FROM scratch
 COPY --from=build /app/out /public 
+COPY --from=build /app/out/index.html /public/404.html
 COPY --from=build /app/serve.edited.json /public/serve.json

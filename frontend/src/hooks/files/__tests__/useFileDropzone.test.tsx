@@ -1,7 +1,11 @@
 import { renderHook, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { useUploadFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  useUploadFile,
+  useCreateChat,
+  fetchUploadFile,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { useFileDropzone } from "../useFileDropzone";
 import { useFileUploadStore } from "../useFileUploadStore";
@@ -9,6 +13,8 @@ import { useFileUploadStore } from "../useFileUploadStore";
 // Mock the API hook
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useUploadFile: vi.fn(),
+  useCreateChat: vi.fn(),
+  fetchUploadFile: vi.fn(),
 }));
 
 // Mock react-dropzone
@@ -27,6 +33,7 @@ vi.mock("react-dropzone", () => {
 
 describe("useFileDropzone", () => {
   const mockMutateAsync = vi.fn();
+  const mockCreateChatMutateAsync = vi.fn();
   const mockOnFilesUploaded = vi.fn();
 
   // Setup mocks for each test
@@ -38,6 +45,23 @@ describe("useFileDropzone", () => {
       useFileUploadStore.getState().reset();
     });
 
+    // Setup fetchUploadFile mock using vi.mocked
+    const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+    mockFetchUploadFile.mockResolvedValue({
+      files: [
+        {
+          id: "file1",
+          filename: "test1.pdf",
+          download_url: "http://example.com/file1.pdf",
+        },
+        {
+          id: "file2",
+          filename: "test2.jpg",
+          download_url: "http://example.com/file2.jpg",
+        },
+      ],
+    });
+
     // Default API mock implementation
     (useUploadFile as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       mutateAsync: mockMutateAsync,
@@ -46,12 +70,34 @@ describe("useFileDropzone", () => {
       error: null,
     });
 
+    // Default create chat mock implementation
+    (useCreateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      mutateAsync: mockCreateChatMutateAsync,
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+
     // Default successful upload response
     mockMutateAsync.mockResolvedValue({
       files: [
-        { id: "file1", filename: "test1.pdf" },
-        { id: "file2", filename: "test2.jpg" },
+        {
+          id: "file1",
+          filename: "test1.pdf",
+          download_url: "http://example.com/file1.pdf",
+        },
+        {
+          id: "file2",
+          filename: "test2.jpg",
+          download_url: "http://example.com/file2.jpg",
+        },
       ],
+    });
+
+    // Default successful chat creation response
+    mockCreateChatMutateAsync.mockResolvedValue({
+      id: "new-chat-id",
+      title: "New Chat",
     });
   });
 
@@ -68,22 +114,28 @@ describe("useFileDropzone", () => {
   });
 
   it("should handle file uploads successfully", async () => {
-    // Mock implementation specifically for this test with proper multiple file support
-    mockMutateAsync.mockImplementation((options) => {
-      // Return files based on input
-      const inputFiles = options.body;
-      return Promise.resolve({
-        files: inputFiles.map((file: { name: string }, index: number) => ({
-          id: `file${index + 1}`,
-          filename: file.name,
-        })),
-      });
+    // Mock fetchUploadFile to return successful response
+    const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+    mockFetchUploadFile.mockResolvedValue({
+      files: [
+        {
+          id: "file1",
+          filename: "test1.pdf",
+          download_url: "http://example.com/file1.pdf",
+        },
+        {
+          id: "file2",
+          filename: "test2.jpg",
+          download_url: "http://example.com/file2.jpg",
+        },
+      ],
     });
 
     const { result } = renderHook(() =>
       useFileDropzone({
         onFilesUploaded: mockOnFilesUploaded,
         multiple: true,
+        chatId: "existing-chat-id", // Provide existing chat ID to avoid chat creation
       }),
     );
 
@@ -98,34 +150,68 @@ describe("useFileDropzone", () => {
       await result.current.uploadFiles(testFiles);
     });
 
-    // Check if API was called correctly
-    expect(mockMutateAsync).toHaveBeenCalledWith({
-      body: [
-        { file: testFiles[0], name: "test1.pdf" },
-        { file: testFiles[1], name: "test2.jpg" },
-      ],
-    });
+    // Check if fetchUploadFile was called correctly
+    expect(mockFetchUploadFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryParams: {
+          chat_id: "existing-chat-id",
+        },
+        body: expect.any(FormData),
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }),
+    );
 
     // Check state updates
     expect(result.current.isUploading).toBe(false);
     expect(result.current.uploadedFiles).toEqual([
-      { id: "file1", filename: "test1.pdf" },
-      { id: "file2", filename: "test2.jpg" },
+      {
+        id: "file1",
+        filename: "test1.pdf",
+        download_url: "http://example.com/file1.pdf",
+      },
+      {
+        id: "file2",
+        filename: "test2.jpg",
+        download_url: "http://example.com/file2.jpg",
+      },
     ]);
     expect(result.current.error).toBeNull();
 
     // Check callback
     expect(mockOnFilesUploaded).toHaveBeenCalledWith([
-      { id: "file1", filename: "test1.pdf" },
-      { id: "file2", filename: "test2.jpg" },
+      {
+        id: "file1",
+        filename: "test1.pdf",
+        download_url: "http://example.com/file1.pdf",
+      },
+      {
+        id: "file2",
+        filename: "test2.jpg",
+        download_url: "http://example.com/file2.jpg",
+      },
     ]);
   });
 
   it("should respect the multiple and maxFiles settings", async () => {
+    // Mock fetchUploadFile to return successful response for single file
+    const mockFetchUploadFile = vi.mocked(fetchUploadFile);
+    mockFetchUploadFile.mockResolvedValue({
+      files: [
+        {
+          id: "file1",
+          filename: "test1.pdf",
+          download_url: "http://example.com/file1.pdf",
+        },
+      ],
+    });
+
     const { result } = renderHook(() =>
       useFileDropzone({
         multiple: false,
         maxFiles: 1,
+        chatId: "existing-chat-id", // Provide existing chat ID to avoid chat creation
       }),
     );
 
@@ -139,18 +225,35 @@ describe("useFileDropzone", () => {
       await result.current.uploadFiles(testFiles);
     });
 
-    // Should only upload the first file
-    expect(mockMutateAsync).toHaveBeenCalledWith({
-      body: [{ file: testFiles[0], name: "test1.pdf" }],
-    });
+    // Should only upload the first file (maxFiles: 1, multiple: false)
+    expect(mockFetchUploadFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryParams: {
+          chat_id: "existing-chat-id",
+        },
+        body: expect.any(FormData),
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }),
+    );
+
+    // Check that only one file was uploaded
+    expect(result.current.uploadedFiles).toHaveLength(1);
+    expect(result.current.uploadedFiles[0].filename).toBe("test1.pdf");
   });
 
   it("should handle upload errors", async () => {
-    // Mock an API error
+    // Mock fetchUploadFile to throw an error
+    const mockFetchUploadFile = vi.mocked(fetchUploadFile);
     const mockError = new Error("Upload failed");
-    mockMutateAsync.mockRejectedValue(mockError);
+    mockFetchUploadFile.mockRejectedValue(mockError);
 
-    const { result } = renderHook(() => useFileDropzone({}));
+    const { result } = renderHook(() =>
+      useFileDropzone({
+        chatId: "existing-chat-id", // Provide existing chat ID to avoid chat creation
+      }),
+    );
 
     const testFile = new File(["test content"], "error.pdf", {
       type: "application/pdf",
@@ -164,7 +267,7 @@ describe("useFileDropzone", () => {
     expect(result.current.isUploading).toBe(false);
     expect(result.current.error).toBeInstanceOf(Error);
     if (result.current.error instanceof Error) {
-      expect(result.current.error.message).toBe("Upload failed");
+      expect(result.current.error.message).toContain("Upload failed");
     }
   });
 

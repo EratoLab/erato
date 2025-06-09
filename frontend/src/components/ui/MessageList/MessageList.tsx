@@ -5,7 +5,6 @@ import React, { memo, useCallback, useMemo, useEffect, useRef } from "react";
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
-import { createLogger, debugLog } from "@/utils/debugLogger";
 
 import { MessageListHeader } from "./MessageListHeader";
 import {
@@ -27,9 +26,6 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
-
-// Create logger for this component
-const logger = createLogger("UI", "MessageList");
 
 /**
  * Type for chat message with loading state
@@ -171,37 +167,36 @@ function useMessageLoading({
   const lastLoadingState = useRef<string | null>(null);
   // Track the last streaming content length to avoid unnecessary scrolls
   const lastContentLength = useRef<number>(0);
+  // Track the current message ID to reset content length when message changes
+  const lastMessageId = useRef<string | null>(null);
 
   // Force scroll to bottom when a message is actively streaming
   useEffect(() => {
     // Check if the last message is from the assistant and is still loading
     if (messageOrder.length > 0) {
-      const lastMessageId = messageOrder[messageOrder.length - 1];
-      const lastMessage = messages[lastMessageId];
+      const currentLastMessageId = messageOrder[messageOrder.length - 1];
+      const lastMessage = messages[currentLastMessageId];
+
+      // Reset content length if this is a new message
+      if (lastMessageId.current !== currentLastMessageId) {
+        lastContentLength.current = 0;
+        lastMessageId.current = currentLastMessageId;
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (lastMessage && lastMessage.sender === "assistant") {
-        // Only scroll if message is currently loading (typing/thinking)
+        // Only scroll if message is loading or just completed (typing/thinking/done)
         if (
           lastMessage.loading &&
           (lastMessage.loading.state === "typing" ||
-            lastMessage.loading.state === "thinking")
+            lastMessage.loading.state === "thinking" ||
+            lastMessage.loading.state === "done")
         ) {
           // Only scroll on significant content changes to improve performance
           // This reduces the number of scroll operations during rapid streaming
           const contentLength = lastMessage.content.length;
           if (contentLength - lastContentLength.current > 10) {
             // Only scroll after 10 new chars
-            // Message is streaming, so scroll to bottom
-            debugLog(
-              "RENDER",
-              `Message ${lastMessageId} is streaming, scrolling to bottom`,
-              {
-                loadingState: lastMessage.loading.state,
-                contentLength: lastMessage.content.length,
-              },
-            );
-
             // Update last content length reference
             lastContentLength.current = contentLength;
 
@@ -234,7 +229,6 @@ function useLoadMoreOnScroll({
   // Update scroll position check when near the top
   useEffect(() => {
     if (isNearTop && hasOlderMessages && !isPending) {
-      logger.log("Near top, loading more messages");
       handleLoadMore();
     }
   }, [isNearTop, hasOlderMessages, isPending, handleLoadMore]);
@@ -275,6 +269,16 @@ export const MessageList = memo<MessageListProps>(
     //   loadingMessageIds: messageOrder.filter((id) => !!messages[id].loading),
     // });
 
+    const lastMessageLoadingContent = useMemo(() => {
+      const result =
+        messageOrder.length > 0 &&
+        messages[messageOrder[messageOrder.length - 1]].loading
+          ? messages[messageOrder[messageOrder.length - 1]].content
+          : null;
+
+      return result;
+    }, [messageOrder, messages]);
+
     // Use our custom hooks for scroll behavior and pagination
     const {
       containerRef,
@@ -287,18 +291,7 @@ export const MessageList = memo<MessageListProps>(
       useSmoothScroll: true,
       transitionDuration: 300,
       isTransitioning: isPending || isTransitioning,
-      deps: [
-        messageOrder.length,
-        currentSessionId,
-        // Only include loading state for active streaming, not for completion
-        // This ensures we don't trigger an unwanted scroll when loading completes
-        messageOrder.length > 0 &&
-        messages[messageOrder[messageOrder.length - 1]].loading &&
-        messages[messageOrder[messageOrder.length - 1]].loading?.state !==
-          "done"
-          ? messages[messageOrder[messageOrder.length - 1]].content
-          : null,
-      ],
+      deps: [messageOrder.length, currentSessionId, lastMessageLoadingContent],
     });
 
     // Expose scrollToBottom function to parent component
@@ -329,7 +322,6 @@ export const MessageList = memo<MessageListProps>(
       // User was scrolled up but now scrolled back down, check if there are new messages
       if (isScrolledUp === false && visibleData.length < messageOrder.length) {
         // This is where you'd show a "new messages" indicator if desired
-        logger.log("User scrolled back to see new messages");
       }
     }, [isScrolledUp, isPending, messageOrder.length, visibleData.length]);
 
@@ -338,24 +330,17 @@ export const MessageList = memo<MessageListProps>(
       () =>
         debounce(() => {
           if (isPending) {
-            logger.log("Skipping load more because already loading");
             return;
           }
-
-          logger.log("Load more triggered in MessageList");
 
           // For chat history (backward pagination), we only need to load from the API
           // Our hook is already configured to show all messages
           if (apiMessagesResponse?.stats.has_more || hasOlderMessages) {
-            logger.log("Loading older messages from API");
             loadOlderMessages();
           }
           // Only use the client-side pagination if we're not loading from API
           else if (hasMore) {
-            logger.log("Loading more messages from client-side pagination");
             loadMore();
-          } else {
-            logger.log("No more messages to load");
           }
         }, 300),
       [

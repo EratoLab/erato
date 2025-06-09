@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import { useMessagingStore } from "../store/messagingStore";
 
+import type { useExplicitNavigation } from "../useExplicitNavigation";
 import type {
   MessageSubmitStreamingResponseMessageComplete,
   ContentPart,
@@ -32,11 +33,13 @@ function extractTextFromContent(content: ContentPart[]): string {
  *
  * @param responseData - The data from the 'assistant_message_completed' SSE event.
  *                       It should contain the final message details, including its real ID.
+ * @param explicitNav - Optional explicit navigation handler for triggering navigation
  */
 export const handleMessageComplete = (
   responseData: MessageSubmitStreamingResponseMessageComplete & {
     message_type: "assistant_message_completed";
   },
+  explicitNav?: ReturnType<typeof useExplicitNavigation>,
 ): void => {
   const initialStoreState = useMessagingStore.getState();
   const { setStreaming, streaming: currentStreamingState } = initialStoreState;
@@ -96,4 +99,20 @@ export const handleMessageComplete = (
       fullStoreAfterSetStreaming: JSON.stringify(storeAfterSetStreaming), // Keep for context
     },
   );
+
+  // Add explicit navigation logic
+  if (explicitNav) {
+    const store = useMessagingStore.getState();
+    const newlyCreatedChatId = store.newlyCreatedChatId;
+
+    if (
+      newlyCreatedChatId &&
+      explicitNav.shouldNavigateFromNewChat(newlyCreatedChatId)
+    ) {
+      console.log(
+        `[EXPLICIT_NAV] Message completed, triggering navigation to: ${newlyCreatedChatId}`,
+      );
+      explicitNav.performNavigation(newlyCreatedChatId, "message_completed");
+    }
+  }
 };

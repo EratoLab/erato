@@ -1,25 +1,42 @@
 import { renderHook, act } from "@testing-library/react";
-import { useRouter } from "next/navigation";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import {
   useChats,
   useChatMessages,
   useMessageSubmitSse,
+  useRecentChats,
+  useArchiveChatEndpoint,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { createSSEConnection } from "@/utils/sse/sseClient";
 
-import { useChatHistory } from "../useChatHistory";
+import { useChatHistory, useChatHistoryStore } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
 
-// Mock dependencies
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
+// Mock SSE Client
+vi.mock("@/utils/sse/sseClient", () => ({
+  createSSEConnection: vi.fn(),
 }));
+
+// Mock React Router hooks
+const mockNavigate = vi.fn();
+const mockLocation = { pathname: "/chat/test" };
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    useLocation: () => mockLocation,
+  };
+});
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useChats: vi.fn(),
   useChatMessages: vi.fn(),
   useMessageSubmitSse: vi.fn(),
+  useRecentChats: vi.fn(),
+  useArchiveChatEndpoint: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -30,7 +47,6 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 // Mock implementations
-const mockUseRouter = useRouter as unknown as ReturnType<typeof vi.fn>;
 const mockUseChats = useChats as unknown as ReturnType<typeof vi.fn>;
 const mockUseChatMessages = useChatMessages as unknown as ReturnType<
   typeof vi.fn
@@ -38,6 +54,11 @@ const mockUseChatMessages = useChatMessages as unknown as ReturnType<
 const mockUseMessageSubmitSse = useMessageSubmitSse as unknown as ReturnType<
   typeof vi.fn
 >;
+const mockUseRecentChats = useRecentChats as unknown as ReturnType<
+  typeof vi.fn
+>;
+const mockUseArchiveChatEndpoint =
+  useArchiveChatEndpoint as unknown as ReturnType<typeof vi.fn>;
 
 describe("Chat hooks integration", () => {
   // Mock chat data
@@ -50,7 +71,12 @@ describe("Chat hooks integration", () => {
   const mockMessagesChat1 = [
     {
       id: "msg1",
-      full_text: "Hello from chat 1",
+      content: [
+        {
+          content_type: "text",
+          text: "Hello from chat 1",
+        },
+      ],
       role: "user",
       created_at: "2023-01-01T12:00:00.000Z",
       chat_id: "chat1",
@@ -59,7 +85,12 @@ describe("Chat hooks integration", () => {
     },
     {
       id: "msg2",
-      full_text: "Hi there",
+      content: [
+        {
+          content_type: "text",
+          text: "Hi there",
+        },
+      ],
       role: "assistant",
       created_at: "2023-01-01T12:01:00.000Z",
       chat_id: "chat1",
@@ -72,7 +103,12 @@ describe("Chat hooks integration", () => {
   const mockMessagesChat2 = [
     {
       id: "msg3",
-      full_text: "Different chat message",
+      content: [
+        {
+          content_type: "text",
+          text: "Different chat message",
+        },
+      ],
       role: "user",
       created_at: "2023-01-02T12:00:00.000Z",
       chat_id: "chat2",
@@ -80,11 +116,6 @@ describe("Chat hooks integration", () => {
       is_message_in_active_thread: true,
     },
   ];
-
-  // Mock router
-  const mockRouter = {
-    push: vi.fn(),
-  };
 
   // Mock mutation function
   const mockMutateAsync = vi.fn().mockImplementation(async () => {
@@ -95,14 +126,30 @@ describe("Chat hooks integration", () => {
     // Reset mocks
     vi.clearAllMocks();
 
-    // Default mock implementations
-    mockUseRouter.mockReturnValue(mockRouter);
+    // Setup SSE mock to return a cleanup function
+    vi.mocked(createSSEConnection).mockReturnValue(() => {
+      console.log("[TEST] SSE connection cleanup called");
+    });
 
+    // Default mock implementations
     mockUseChats.mockReturnValue({
       data: mockChats,
       isLoading: false,
       error: null,
       refetch: vi.fn(),
+    });
+
+    // Mock useRecentChats for useChatHistory
+    mockUseRecentChats.mockReturnValue({
+      data: { chats: mockChats },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    // Mock useArchiveChatEndpoint for useChatHistory
+    mockUseArchiveChatEndpoint.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({}),
     });
 
     // By default, return chat1 messages
@@ -130,7 +177,7 @@ describe("Chat hooks integration", () => {
   });
 
   it("should navigate between chats and load appropriate messages", async () => {
-    // Render the chat history hook
+    // Render the chat history hook with router context
     const { result: historyResult } = renderHook(() => useChatHistory());
 
     // Initially we should have the list of chats
@@ -141,8 +188,8 @@ describe("Chat hooks integration", () => {
       historyResult.current.navigateToChat("chat1");
     });
 
-    // The router should have been called to navigate to that chat
-    expect(mockRouter.push).toHaveBeenCalledWith("/chat/chat1");
+    // The navigate function should have been called
+    expect(mockNavigate).toHaveBeenCalledWith("/chat/chat1");
 
     // Verify the current chat ID is set
     expect(historyResult.current.currentChatId).toBe("chat1");
@@ -153,10 +200,12 @@ describe("Chat hooks integration", () => {
     );
 
     // Should have chat1 messages
-    expect(messagingResult1.current.messages).toHaveLength(2);
-    expect(messagingResult1.current.messages[0].content).toBe(
-      "Hello from chat 1",
-    );
+    expect(messagingResult1.current.messageOrder).toHaveLength(2);
+    expect(
+      messagingResult1.current.messages[
+        messagingResult1.current.messageOrder[0]
+      ].content,
+    ).toBe("Hello from chat 1");
 
     // Now, mock that we're getting chat2 messages
     mockUseChatMessages.mockReturnValue({
@@ -179,8 +228,8 @@ describe("Chat hooks integration", () => {
       historyResult.current.navigateToChat("chat2");
     });
 
-    // The router should have been called to navigate to that chat
-    expect(mockRouter.push).toHaveBeenCalledWith("/chat/chat2");
+    // The navigate function should have been called
+    expect(mockNavigate).toHaveBeenCalledWith("/chat/chat2");
 
     // Verify the current chat ID is updated
     expect(historyResult.current.currentChatId).toBe("chat2");
@@ -191,10 +240,12 @@ describe("Chat hooks integration", () => {
     );
 
     // Should have chat2 messages
-    expect(messagingResult2.current.messages).toHaveLength(1);
-    expect(messagingResult2.current.messages[0].content).toBe(
-      "Different chat message",
-    );
+    expect(messagingResult2.current.messageOrder).toHaveLength(1);
+    expect(
+      messagingResult2.current.messages[
+        messagingResult2.current.messageOrder[0]
+      ].content,
+    ).toBe("Different chat message");
   });
 
   it("should create a new chat and send a message", async () => {
@@ -214,7 +265,7 @@ describe("Chat hooks integration", () => {
       refetch: vi.fn(),
     });
 
-    // Render the chat history hook
+    // Render the chat history hook with router context
     const { result: historyResult } = renderHook(() => useChatHistory());
 
     // Create a new chat
@@ -223,7 +274,12 @@ describe("Chat hooks integration", () => {
     });
 
     // Should navigate to new chat page
-    expect(mockRouter.push).toHaveBeenCalledWith("/chat/new");
+    expect(mockNavigate).toHaveBeenCalledWith("/chat/new", { replace: true });
+
+    // Manually reset the isNewChatPending flag as would happen in real navigation
+    await act(async () => {
+      useChatHistoryStore.getState().setNewChatPending(false);
+    });
 
     // Simulate that we've been redirected to a specific chat ID
     // This would happen in the actual app flow after a successful chat creation
@@ -244,12 +300,21 @@ describe("Chat hooks integration", () => {
       await messagingResult.current.sendMessage("First message in new chat");
     });
 
-    // Verify the message was sent with the correct parameters
-    expect(mockMutateAsync).toHaveBeenCalledWith({
-      body: {
-        user_message: "First message in new chat",
-      },
-    });
+    // Verify the SSE connection was created for message sending
+    expect(vi.mocked(createSSEConnection)).toHaveBeenCalledWith(
+      "/api/v1beta/me/messages/submitstream",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("First message in new chat"),
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+        onMessage: expect.any(Function),
+        onError: expect.any(Function),
+        onClose: expect.any(Function),
+        onOpen: expect.any(Function),
+      }),
+    );
 
     // At this point in a real app, the API would respond with streaming data
     // and the message would be added to the chat

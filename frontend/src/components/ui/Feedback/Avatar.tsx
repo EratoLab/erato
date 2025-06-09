@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import Image from "next/image";
+// import Image from "next/image"; // Removed Next.js Image import
 import React, { useMemo } from "react";
 
 import { mapApiUserProfileToUiProfile } from "@/utils/adapters/userProfileAdapter";
@@ -57,12 +57,12 @@ export const Avatar = React.memo<AvatarProps>(
         )}
       >
         {uiProfile?.avatarUrl && !userOrAssistant ? (
-          <Image
+          // eslint-disable-next-line @next/next/no-img-element
+          <img // Changed from Image to img
             src={uiProfile.avatarUrl}
             alt="User avatar"
-            className="rounded-full object-cover"
-            fill
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="size-full rounded-full object-cover" // Added w-full h-full
+            // Removed Next.js specific props: fill, sizes
           />
         ) : (
           <span>{getInitials()}</span>

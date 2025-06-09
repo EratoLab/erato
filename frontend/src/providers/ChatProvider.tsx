@@ -1,10 +1,8 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { createContext, useContext, useMemo, useEffect, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 
 import { useChatHistory, useChatMessaging } from "@/hooks/chat";
-import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
@@ -18,8 +16,7 @@ import type { Message } from "@/types/chat";
 import type { FileType } from "@/utils/fileTypes";
 import type { ReactNode } from "react";
 
-// Constants
-const NAVIGATION_DELAY_MS = 100; // Small delay to ensure state updates are processed before navigation
+// Constants removed - no longer needed for explicit navigation
 
 // Define the ChatMessage type used by UI components
 interface ChatMessage extends Message {
@@ -128,16 +125,6 @@ export function ChatProvider({
 
   // Get silentChatId directly from the store
   const silentChatId = useFileUploadStore((state) => state.silentChatId);
-  const setStoreSilentChatId = useFileUploadStore(
-    (state) => state.setSilentChatId,
-  ); // Get setter to clear it
-
-  // Add specific logging when currentChatId changes
-  useEffect(() => {
-    console.log(
-      `[DEBUG_REDIRECT] ChatProvider - currentChatId changed to: ${currentChatId ?? "null"}, newChatPending: ${isNewChatPending}`,
-    );
-  }, [currentChatId, isNewChatPending]);
 
   // Get the messaging functionality for the current chat
   const {
@@ -154,66 +141,9 @@ export function ChatProvider({
     silentChatId: silentChatId,
   });
 
-  // Get newlyCreatedChatId from the store
-  const newlyCreatedChatIdFromStore = useMessagingStore(
-    (state) => state.newlyCreatedChatId,
-  );
-  const setNewlyCreatedChatIdInStore = useMessagingStore(
-    (state) => state.setNewlyCreatedChatIdInStore,
-  );
+  // Removed newlyCreatedChatId store access - now handled in explicit navigation
 
-  // Add Effect to handle navigation when a new chat is created and streaming stops
-  useEffect(() => {
-    const storeIsStreaming = useMessagingStore.getState().streaming.isStreaming;
-    const storeIsAwaitingFirstChunk =
-      useMessagingStore.getState().isAwaitingFirstStreamChunkForNewChat;
-
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `[DEBUG_REDIRECT] ChatProvider: Navigation check. newlyCreatedChatIdFromStore: ${newlyCreatedChatIdFromStore}, hookIsStreaming: ${isStreaming}, storeIsStreaming: ${storeIsStreaming}, storeIsAwaitingFirstChunk: ${storeIsAwaitingFirstChunk}`,
-      );
-    }
-    if (
-      newlyCreatedChatIdFromStore &&
-      !isStreaming &&
-      !storeIsAwaitingFirstChunk
-    ) {
-      console.log(
-        `[DEBUG_REDIRECT] ChatProvider: Navigating due to newlyCreatedChatIdFromStore: ${newlyCreatedChatIdFromStore}, !hookIsStreaming (${isStreaming}), and !storeIsAwaitingFirstChunk (${storeIsAwaitingFirstChunk}).`,
-      );
-
-      const chatIdToNavigateTo = newlyCreatedChatIdFromStore;
-
-      console.log(
-        "[DEBUG_REDIRECT] ChatProvider: Resetting silentChatId in store before navigation.",
-      );
-      setStoreSilentChatId(null);
-
-      // Also clear uploaded files since we're navigating to the new chat
-      console.log(
-        "[DEBUG_REDIRECT] ChatProvider: Clearing uploaded files before navigation.",
-      );
-      clearUploadedFiles();
-
-      setTimeout(() => {
-        console.log(
-          `[DEBUG_REDIRECT] ChatProvider: About to call navigateToChat for: ${chatIdToNavigateTo}. Current isNewChatPending: ${isNewChatPending}`,
-        );
-        navigateToChat(chatIdToNavigateTo);
-        // Clear newlyCreatedChatId from store after navigation attempt
-        console.log(
-          `[DEBUG_REDIRECT] ChatProvider: Clearing newlyCreatedChatIdFromStore (${chatIdToNavigateTo}) from store after navigation attempt.`,
-        );
-        setNewlyCreatedChatIdInStore(null);
-      }, NAVIGATION_DELAY_MS);
-    }
-  }, [
-    newlyCreatedChatIdFromStore,
-    isStreaming,
-    navigateToChat,
-    setStoreSilentChatId,
-    setNewlyCreatedChatIdInStore,
-  ]);
+  // Removed automatic navigation logic - now handled explicitly in message completion
 
   // Get file upload functionality
   const {
@@ -226,11 +156,8 @@ export function ChatProvider({
     acceptedFileTypes,
     multiple: true,
     chatId: currentChatId,
-    onSilentChatCreated: (newChatId) => {
-      console.log(
-        "[CHAT_PROVIDER] Received onSilentChatCreated callback (unused now):",
-        newChatId,
-      );
+    onSilentChatCreated: () => {
+      // Callback no longer needed for explicit navigation
     },
   });
 
@@ -238,252 +165,27 @@ export function ChatProvider({
   const isLoading = isHistoryLoading || isMessagingLoading;
   const error = historyError ?? messagingError;
 
-  // Add useEffect hooks to log dependency changes for contextValue's useMemo
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log("[CHAT_PROVIDER_DEPS] chats changed:", chats);
-  //   }
-  // }, [chats]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] currentChatId (for context deps) changed:",
-  //     //   currentChatId,
-  //     // );
-  //   }
-  // }, [currentChatId]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] isHistoryLoading changed:",
-  //     //   isHistoryLoading,
-  //     // );
-  //   }
-  // }, [isHistoryLoading]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log("[CHAT_PROVIDER_DEPS] historyError changed:", historyError);
-  //   }
-  // }, [historyError]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] createNewChat changed (should be stable)",
-  //     // );
-  //   }
-  // }, [createNewChat]); // createNewChat is memoized, should not change often
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] archiveChat changed (should be stable)",
-  //     // );
-  //   }
-  // }, [archiveChat]); // archiveChat is from a hook, likely stable
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] navigateToChat changed (should be stable)",
-  //     // );
-  //   }
-  // }, [navigateToChat]); // navigateToChat is from a hook, likely stable
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] refetchHistory changed (should be stable)",
-  //     // );
-  //   }
-  // }, [refetchHistory]); // refetchHistory is from a hook, likely stable
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log("[CHAT_PROVIDER_DEPS] messages changed:", messages);
-  //   }
-  // }, [messages]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] isMessagingLoading changed:",
-  //     //   isMessagingLoading,
-  //     // );
-  //   }
-  // }, [isMessagingLoading]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log("[CHAT_PROVIDER_DEPS] isStreaming changed:", isStreaming);
-  //   }
-  // }, [isStreaming]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] streamingContent changed:",
-  //     //   streamingContent,
-  //     // );
-  //   }
-  // }, [streamingContent]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] messagingError changed:",
-  //     //   messagingError,
-  //     // );
-  //   }
-  // }, [messagingError]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] sendMessage changed (should be stable)",
-  //     // );
-  //   }
-  // }, [sendMessage]); // sendMessage is from a hook, likely stable
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] cancelMessage changed (should be stable)",
-  //     // );
-  //   }
-  // }, [cancelMessage]); // cancelMessage is from a hook, likely stable
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] refetchMessages changed (should be stable)",
-  //     // );
-  //   }
-  // }, [refetchMessages]); // refetchMessages is from a hook, likely stable
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] uploadFiles changed (should be stable)",
-  //     // );
-  //   }
-  // }, [uploadFiles]); // uploadFiles is from a hook, likely stable
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log("[CHAT_PROVIDER_DEPS] isUploading changed:", isUploading);
-  //   }
-  // }, [isUploading]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log("[CHAT_PROVIDER_DEPS] uploadedFiles changed:", uploadedFiles);
-  //   }
-  // }, [uploadedFiles]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log("[CHAT_PROVIDER_DEPS] uploadError changed:", uploadError);
-  //   }
-  // }, [uploadError]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] clearUploadedFiles changed (should be stable)",
-  //     // );
-  //   }
-  // }, [clearUploadedFiles]); // clearUploadedFiles is from a hook, likely stable
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] isLoading derived state changed:",
-  //     //   isLoading,
-  //     // );
-  //   }
-  // }, [isLoading]); // This is a derived state, will change if its constituents change
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log("[CHAT_PROVIDER_DEPS] error derived state changed:", error);
-  //   }
-  // }, [error]); // This is a derived state, will change if its constituents change
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log("[CHAT_PROVIDER_DEPS] silentChatId changed:", silentChatId);
-  //     console.log(
-  //       "[DEBUG_REDIRECT] ChatProvider: silentChatId from store changed to:",
-  //       silentChatId,
-  //     );
-  //   }
-  // }, [silentChatId]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log(
-  //     //   "[CHAT_PROVIDER_DEPS] newChatCounter changed:",
-  //     //   newChatCounter,
-  //     // );
-  //     console.log(
-  //       "[DEBUG_REDIRECT] ChatProvider: newChatCounter changed to:",
-  //       newChatCounter,
-  //     );
-  //   }
-  // }, [newChatCounter]);
-
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === "development") {
-  //     // console.log("[CHAT_PROVIDER_DEPS] mountKey changed:", mountKey);
-  //     console.log(
-  //       "[DEBUG_REDIRECT] ChatProvider: mountKey changed to:",
-  //       mountKey,
-  //     );
-  //   }
-  // }, [mountKey]);
-
   // Memoize the context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => {
-    // Debug log to track message lifecycle
-    if (process.env.NODE_ENV === "development") {
-      const storeStreamingState = useMessagingStore.getState().streaming;
-      console.log("[DEBUG_STREAMING] ChatProvider: Creating contextValue.", {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        inputMessagesCount: Object.keys(messages || {}).length,
-        hookIsStreaming: isStreaming,
-        hookStreamingContent: streamingContent
-          ? streamingContent.substring(0, 50) + "..."
-          : null,
-        storeIsStreaming: storeStreamingState.isStreaming,
-        storeCurrentMessageId: storeStreamingState.currentMessageId,
-        storeStreamingContent: storeStreamingState.content
-          ? storeStreamingState.content.substring(0, 50) + "..."
-          : null,
-        currentChatIdFromProvider: currentChatId, // Log currentChatId here too
-      });
-    }
-
     // Transform messages from useChatMessaging to include the "sender" field required by UI components
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
     const transformedMessages = Object.entries(messages || {}).reduce(
       (acc, [id, msg]) => {
-        // Skip transformation for streaming messages if they're already being streamed
-        // This prevents unnecessary processing during high-frequency updates
-        if (
-          isStreaming &&
-          msg.status === "sending" &&
-          msg.role === "assistant"
-        ) {
+        // Check if this is a streaming message (either actively streaming or completed but waiting for real message)
+        const isStreamingMessage =
+          msg.role === "assistant" &&
+          ((isStreaming && msg.status === "sending") || // Actively streaming
+            (!isStreaming &&
+              msg.status === "complete" &&
+              msg.id.includes("temp-"))); // Streaming completed but placeholder
+
+        if (isStreamingMessage) {
           acc[id] = {
             ...msg,
             sender: msg.role,
             authorId: "assistant_id",
             loading: {
-              state: "typing",
+              state: isStreaming ? "typing" : "done", // Keep loading state for auto-scroll
             },
           };
         } else {
@@ -500,9 +202,6 @@ export function ChatProvider({
     ): string[] => {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
       if (!messagesToOrder || Object.keys(messagesToOrder).length === 0) {
-        console.log(
-          "[DEBUG_STREAMING] ChatProvider createMessageOrder: No messages to order.",
-        );
         return [];
       }
 
@@ -513,25 +212,11 @@ export function ChatProvider({
         const dateB = new Date(messagesToOrder[b].createdAt);
         return dateA.getTime() - dateB.getTime();
       });
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          "[DEBUG_STREAMING] ChatProvider createMessageOrder: Ordered IDs count:",
-          orderedIds.length,
-        );
-      }
       return orderedIds;
     };
 
     // Create the message order
     const orderedMessageIds = createMessageOrder(transformedMessages);
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        "[DEBUG_STREAMING] ChatProvider contextValue: Transformed messages count:",
-        Object.keys(transformedMessages).length,
-        "Ordered IDs count:",
-        orderedMessageIds.length,
-      );
-    }
 
     return {
       // Chat history

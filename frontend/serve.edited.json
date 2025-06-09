@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/chat/new",
-      "destination": "/chat/new.html"
+      "destination": "index.html"
     },
     {
       "source": "/chat/:id",
-      "destination": "/chat/next-static-fallback.html"
+      "destination": "index.html"
     }
   ]
 }
