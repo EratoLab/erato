@@ -1,4 +1,5 @@
 import { i18n } from "@lingui/core";
+import { detect, fromNavigator } from "@lingui/detect-locale";
 
 export const defaultLocale = "en";
 export const supportedLocales = ["en", "de", "fr"];
@@ -8,26 +9,22 @@ export function getValidLocale(locale: string): string {
   return supportedLocales.includes(locale) ? locale : defaultLocale;
 }
 
-// Simple browser locale detection
+// Browser locale detection without persistence
 function detectLocale(): string {
-  // Deactivate for now, as it's too strongly persisted.
-  // Check localStorage first
-  // const stored = localStorage.getItem("locale");
-  // if (stored && supportedLocales.includes(stored)) {
-  //   return stored;
-  // }
+  // Use Lingui's detect with browser-only strategies:
+  // 1. browser language (navigator.language)
+  // 2. fallback to default
+  const detectedLocale = detect(
+    fromNavigator(), // Check browser language
+    () => defaultLocale, // Fallback
+  );
 
-  // Check browser language
-  const browserLang = navigator.language.split("-")[0]; // Get language code only (e.g., "en" from "en-US")
-  if (supportedLocales.includes(browserLang)) {
-    return browserLang;
-  }
-
-  // Fallback to default
-  return defaultLocale;
+  // Validate the detected locale against our supported locales
+  // detect() can return null, so we handle that case
+  return getValidLocale(detectedLocale ?? defaultLocale);
 }
 
-// Dynamic catalog loading
+// Dynamic catalog loading (session-only, no persistence)
 export async function dynamicActivate(locale: string) {
   const validLocale = getValidLocale(locale);
 
@@ -37,8 +34,7 @@ export async function dynamicActivate(locale: string) {
       locale: validLocale,
       messages,
     });
-    // Save to localStorage for persistence
-    localStorage.setItem("locale", validLocale);
+    // Note: No localStorage persistence - locale only active for current session
   } catch (error) {
     console.warn(
       `Failed to load locale ${validLocale}, falling back to ${defaultLocale}`,
@@ -52,7 +48,6 @@ export async function dynamicActivate(locale: string) {
         locale: defaultLocale,
         messages,
       });
-      localStorage.setItem("locale", defaultLocale);
     }
   }
 }
@@ -62,5 +57,8 @@ export function initializeI18n() {
   const detectedLocale = detectLocale();
   return dynamicActivate(detectedLocale);
 }
+
+// Export detection function for testing
+export { detectLocale };
 
 export { i18n };

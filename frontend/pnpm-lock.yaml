@@ -14,6 +14,9 @@ importers:
       '@lingui/core':
         specifier: ^5.3.2
         version: 5.3.2(@lingui/babel-plugin-lingui-macro@5.3.2(babel-plugin-macros@3.1.0)(typescript@5.7.3))(babel-plugin-macros@3.1.0)
+      '@lingui/detect-locale':
+        specifier: ^5.3.2
+        version: 5.3.2
       '@lingui/react':
         specifier: ^5.3.2
         version: 5.3.2(@lingui/babel-plugin-lingui-macro@5.3.2(babel-plugin-macros@3.1.0)(typescript@5.7.3))(babel-plugin-macros@3.1.0)(react@19.0.0)
@@ -1588,6 +1591,10 @@ packages:
         optional: true
       babel-plugin-macros:
         optional: true
+
+  '@lingui/detect-locale@5.3.2':
+    resolution: {integrity: sha512-UNZcl7k84uHIfOojlP7SKglRsB3I4pUcCDyn2fJvViMjAWWlFSiXWWNPro51GX2uwOGAqad0Uu1yQ8j8pzo5AA==}
+    engines: {node: '>=20.0.0'}
 
   '@lingui/format-po@5.3.2':
     resolution: {integrity: sha512-YZxk0CqdTNV6Mwo/PRsx4SHoNxfGEMEK6OHDk42/MGJiUQ6/Od6+2qlAW5z9TvapHnzWbDbU3EdBcqLvgD7Rqw==}
@@ -7922,6 +7929,8 @@ snapshots:
     optionalDependencies:
       '@lingui/babel-plugin-lingui-macro': 5.3.2(babel-plugin-macros@3.1.0)(typescript@5.7.3)
       babel-plugin-macros: 3.1.0
+
+  '@lingui/detect-locale@5.3.2': {}
 
   '@lingui/format-po@5.3.2(typescript@5.7.3)':
     dependencies:
