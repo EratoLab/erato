@@ -1,6 +1,5 @@
 // import Image from "next/image"; // Removed Next.js Image import
 import { t } from "@lingui/core/macro";
-import React from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
@@ -8,6 +7,7 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { ModalBase } from "./ModalBase";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type React from "react";
 
 interface FilePreviewModalProps {
   isOpen: boolean;
@@ -41,7 +41,6 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   const renderPreview = () => {
     if (isImage && file.download_url) {
       return (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={file.download_url}
           alt={`${t`Preview of`} ${file.filename}`}

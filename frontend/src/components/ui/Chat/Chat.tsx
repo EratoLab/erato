@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, { useCallback, useRef } from "react";
+import { useCallback, useRef } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useChatActions } from "@/hooks/chat";
@@ -23,6 +23,7 @@ import type {
   MessageControlsContext,
 } from "@/types/message-controls";
 import type { FileType } from "@/utils/fileTypes";
+import type React from "react";
 
 // Create logger for this component
 const logger = createLogger("UI", "Chat");

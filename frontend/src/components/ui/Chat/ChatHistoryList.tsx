@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, { memo } from "react";
+import { memo } from "react";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";

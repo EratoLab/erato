@@ -1,11 +1,11 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React from "react";
 
 import { Alert } from "../Feedback/Alert";
 
 import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type { TokenUsageStats } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type React from "react";
 
 interface TokenUsageWarningProps {
   /** Token usage estimation result */

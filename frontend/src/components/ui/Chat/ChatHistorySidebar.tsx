@@ -2,7 +2,7 @@
 
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, { memo, useRef, useState, useEffect } from "react";
+import { memo, useRef, useState, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { env } from "@/app/env";

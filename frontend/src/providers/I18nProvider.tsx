@@ -1,7 +1,9 @@
 import { I18nProvider as LinguiI18nProvider } from "@lingui/react";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { i18n, initializeI18n } from "@/lib/i18n";
+
+import type React from "react";
 
 interface I18nProviderProps {
   children: React.ReactNode;

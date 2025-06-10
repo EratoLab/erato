@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import React, { useCallback, memo, useEffect } from "react";
+import { useCallback, memo, useEffect } from "react";
 
 import { useFileDropzone } from "@/hooks/files";
 import { FILE_TYPES } from "@/utils/fileTypes";

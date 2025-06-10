@@ -4,7 +4,7 @@
  * Extends the standard FileUpload component with token usage checking
  */
 import { t } from "@lingui/core/macro";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 
@@ -12,6 +12,7 @@ import { FileUploadButton } from "./FileUploadButton";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
+import type React from "react";
 
 interface FileUploadWithTokenCheckProps {
   /** Current message text to use for token estimation */

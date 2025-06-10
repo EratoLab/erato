@@ -1,7 +1,7 @@
 import { ArrowUpIcon } from "@heroicons/react/24/outline";
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
@@ -88,10 +88,8 @@ export const ChatInput = ({
 
   // Use our modernized file upload hook
   const {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     uploadedFiles: _uploadedFiles,
     // Not using the error directly
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     error: _uploadError,
   } = useFileDropzone({
     acceptedFileTypes,

@@ -4,12 +4,15 @@ import { FlatCompat } from "@eslint/eslintrc";
 import typescriptParser from "@typescript-eslint/parser";
 import typescriptPlugin from "@typescript-eslint/eslint-plugin";
 import linguiPlugin from "eslint-plugin-lingui";
+import importPlugin from "eslint-plugin-import";
+import js from "@eslint/js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const compat = new FlatCompat({
   baseDirectory: __dirname,
+  recommendedConfig: js.configs.recommended,
 });
 
 /** @type {import('eslint').Linter.FlatConfig[]} */
@@ -19,19 +22,80 @@ const eslintConfig = [
       "src/lib/generated/**/*",
       "src/locales/**/*.ts", // Ignore generated Lingui translation files
       // "src/stories/**/*",
-      ".next/**/*",
+      ".next/**/*", // Old Next.js build directory
+      "dist/**/*", // Vite build output
       "node_modules/**/*",
       "out/**/*",
       "src/hooks/chat/__tests__/useChatHistory.test.tsx",
     ],
   },
-  // Base configuration for all files
+  // Base configuration for all files - Updated for Vite/React instead of Next.js
   ...compat.extends(
-    "next/core-web-vitals",
+    "eslint:recommended",
+    "plugin:react/recommended",
+    "plugin:react/jsx-runtime", // For React 17+ JSX transform
     "plugin:react-hooks/recommended",
     "plugin:jsx-a11y/recommended",
     "plugin:tailwindcss/recommended",
   ),
+
+  // Global browser environment configuration
+  {
+    languageOptions: {
+      globals: {
+        // Browser globals
+        window: "readonly",
+        document: "readonly",
+        console: "readonly",
+        localStorage: "readonly",
+        sessionStorage: "readonly",
+        fetch: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        requestAnimationFrame: "readonly",
+        navigator: "readonly",
+
+        // Node.js globals for scripts and configs
+        process: "readonly",
+        global: "readonly",
+        __dirname: "readonly",
+        require: "readonly",
+        module: "readonly",
+
+        // Testing globals
+        describe: "readonly",
+        it: "readonly",
+        test: "readonly",
+        expect: "readonly",
+        beforeEach: "readonly",
+        afterEach: "readonly",
+        beforeAll: "readonly",
+        afterAll: "readonly",
+        jest: "readonly",
+
+        // TypeScript/React globals
+        React: "readonly",
+        JSX: "readonly",
+        NodeJS: "readonly",
+        HTMLElement: "readonly",
+      },
+    },
+    settings: {
+      react: {
+        version: "detect", // Automatically detect React version
+      },
+      "import/resolver": {
+        typescript: {
+          alwaysTryTypes: true,
+        },
+        node: {
+          extensions: [".js", ".jsx", ".ts", ".tsx"],
+        },
+      },
+    },
+  },
 
   // Storybook configuration - less strict
   {
@@ -73,13 +137,21 @@ const eslintConfig = [
     },
     plugins: {
       "@typescript-eslint": typescriptPlugin,
+      import: importPlugin,
     },
     rules: {
       // Basic TypeScript rules
       "@typescript-eslint/no-unused-vars": [
         "error",
-        { argsIgnorePattern: "^_" },
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          // Allow unused parameters in function signatures (common in interfaces/types)
+          args: "none",
+        },
       ],
+      // Turn off base rule in favor of TypeScript rule
+      "no-unused-vars": "off",
       "@typescript-eslint/explicit-module-boundary-types": "off",
       "@typescript-eslint/no-explicit-any": "error",
 

@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { debounce } from "lodash";
-import React, { memo, useCallback, useMemo, useEffect, useRef } from "react";
+import { memo, useCallback, useMemo, useEffect, useRef } from "react";
 
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
@@ -26,6 +26,7 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+import type React from "react";
 
 /**
  * Type for chat message with loading state

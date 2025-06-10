@@ -59,7 +59,6 @@ export const Avatar = React.memo<AvatarProps>(
         aria-label={!userOrAssistant ? t`Assistant avatar` : t`User avatar`}
       >
         {uiProfile?.avatarUrl && !userOrAssistant ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img // Changed from Image to img
             src={uiProfile.avatarUrl}
             alt={t`User avatar`}

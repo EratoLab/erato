@@ -1,6 +1,6 @@
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { t } from "@lingui/core/macro";
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 
 import { FILE_TYPES } from "@/utils/fileTypes";
 
@@ -8,6 +8,7 @@ import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
+import type React from "react";
 
 /**
  * Type that can represent either a browser File or a server-side FileUploadItem

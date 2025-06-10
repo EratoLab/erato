@@ -1,5 +1,7 @@
 import { Preview } from "@storybook/react";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "../src/styles/globals.css";
 import {
   ThemeProvider,
@@ -10,12 +12,105 @@ import { defaultTheme, darkTheme } from "../src/config/theme";
 import { themes as storybookThemes } from "@storybook/theming";
 import type { Decorator } from "@storybook/react";
 
+// I18n imports
+import { i18n } from "@lingui/core";
+import { I18nProvider } from "@lingui/react";
+
 // Add type checking for themes
 declare module "@storybook/react" {
   interface Parameters {
     theme?: any;
+    locale?: string;
   }
 }
+
+// Supported locales for Storybook
+const SUPPORTED_LOCALES = {
+  en: "English",
+  de: "Deutsch",
+  fr: "Français",
+};
+
+// Mock navigator.language for Storybook
+const mockNavigatorLanguage = (locale: string) => {
+  // Store original navigator if it exists
+  const originalNavigator = window.navigator;
+
+  // Create a new navigator object with mocked language
+  Object.defineProperty(window, "navigator", {
+    value: {
+      ...originalNavigator,
+      language: locale,
+      languages: [locale, "en"],
+    },
+    writable: true,
+    configurable: true,
+  });
+};
+
+// I18n Provider Component for Storybook
+const I18nProviderWrapper: React.FC<{
+  children: React.ReactNode;
+  locale: string;
+}> = ({ children, locale }) => {
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadLocale = async () => {
+      setIsLoading(true);
+
+      // Mock navigator.language for the selected locale
+      mockNavigatorLanguage(locale);
+
+      try {
+        // Load the selected locale messages (compiled .ts files)
+        const { messages } = await import(`../src/locales/${locale}/messages`);
+        i18n.load(locale, messages);
+        i18n.activate(locale);
+      } catch {
+        console.warn(`Failed to load locale ${locale}, falling back to en`);
+        try {
+          const { messages } = await import(`../src/locales/en/messages`);
+          i18n.load("en", messages);
+          i18n.activate("en");
+        } catch {
+          // If all else fails, use empty messages
+          i18n.load("en", {});
+          i18n.activate("en");
+        }
+      }
+
+      setIsLoading(false);
+    };
+
+    loadLocale();
+  }, [locale]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[200px] items-center justify-center">
+        <div className="text-lg text-gray-600">
+          Loading locale:{" "}
+          {SUPPORTED_LOCALES[locale as keyof typeof SUPPORTED_LOCALES]}...
+        </div>
+      </div>
+    );
+  }
+
+  return <I18nProvider i18n={i18n}>{children}</I18nProvider>;
+};
+
+// I18n Decorator for Storybook
+const withI18n: Decorator = (Story, context) => {
+  const { globals } = context;
+  const locale = globals.locale || "en";
+
+  return (
+    <I18nProviderWrapper locale={locale}>
+      <Story />
+    </I18nProviderWrapper>
+  );
+};
 
 // Component to sync Storybook's theme selection with ThemeProvider
 const ThemeSynchronizer: React.FC<{
@@ -70,6 +165,35 @@ const withThemeBackground: Decorator = (Story, context) => {
     <ThemeBackground selectedTheme={selectedTheme}>
       <Story />
     </ThemeBackground>
+  );
+};
+
+// Router decorator to provide React Router context
+const withRouter: Decorator = (Story) => {
+  return (
+    <MemoryRouter initialEntries={["/"]}>
+      <Story />
+    </MemoryRouter>
+  );
+};
+
+// QueryClient decorator to provide React Query context
+const withQueryClient: Decorator = (Story) => {
+  // Create a new QueryClient instance for each story to avoid caching issues
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false, // Disable retries in Storybook for faster feedback
+        staleTime: 0, // Don't cache data in Storybook
+        gcTime: 0, // Don't keep data in garbage collection
+      },
+    },
+  });
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Story />
+    </QueryClientProvider>
   );
 };
 
@@ -129,6 +253,21 @@ const preview: Preview = {
         showName: true,
       },
     },
+    locale: {
+      name: "Locale",
+      description: "Global locale for internationalization",
+      defaultValue: "en",
+      toolbar: {
+        icon: "globe",
+        items: [
+          { value: "en", title: "🇺🇸 English" },
+          { value: "de", title: "🇩🇪 Deutsch" },
+          { value: "fr", title: "🇫🇷 Français" },
+        ],
+        showName: true,
+        dynamicTitle: true,
+      },
+    },
   },
   parameters: {
     controls: {
@@ -164,6 +303,15 @@ const preview: Preview = {
     },
   },
   decorators: [
+    // Apply Router context first (needed for components using useNavigate)
+    withRouter,
+
+    // Apply QueryClient context second (needed for React Query hooks)
+    withQueryClient,
+
+    // Apply i18n context third (before theme)
+    withI18n,
+
     // Apply theme background based on selected theme
     withThemeBackground,
 

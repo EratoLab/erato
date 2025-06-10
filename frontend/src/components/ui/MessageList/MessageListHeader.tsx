@@ -1,5 +1,4 @@
 import { t } from "@lingui/core/macro";
-import React from "react";
 
 import { ConversationIndicator } from "../Message/ConversationIndicator";
 import { LoadMoreButton } from "../Message/LoadMoreButton";
