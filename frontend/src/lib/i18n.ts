@@ -10,11 +10,12 @@ export function getValidLocale(locale: string): string {
 
 // Simple browser locale detection
 function detectLocale(): string {
+  // Deactivate for now, as it's too strongly persisted.
   // Check localStorage first
-  const stored = localStorage.getItem("locale");
-  if (stored && supportedLocales.includes(stored)) {
-    return stored;
-  }
+  // const stored = localStorage.getItem("locale");
+  // if (stored && supportedLocales.includes(stored)) {
+  //   return stored;
+  // }
 
   // Check browser language
   const browserLang = navigator.language.split("-")[0]; // Get language code only (e.g., "en" from "en-US")
