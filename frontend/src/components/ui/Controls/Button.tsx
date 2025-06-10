@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { useCallback, useMemo } from "react";
 
@@ -88,8 +89,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       "aria-label": ariaLabel,
       role: explicitRole,
       confirmAction,
-      confirmTitle = "Confirm Action",
-      confirmMessage = "Are you sure you want to proceed?",
+      confirmTitle = t`Confirm Action`,
+      confirmMessage = t`Are you sure you want to proceed?`,
       ...props
     },
     ref,
@@ -212,4 +213,5 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 Button.displayName = "Button";

@@ -8,6 +8,7 @@ import {
   CheckIcon,
   CodeBracketIcon,
 } from "@heroicons/react/24/outline";
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { useState, useEffect, useCallback } from "react";
 
@@ -111,9 +112,9 @@ export const DefaultMessageControls = ({
             size="sm"
             showOnHover={showOnHover}
             aria-label={
-              showRawMarkdown ? "Show formatted" : "Show raw markdown"
+              showRawMarkdown ? t`Show formatted` : t`Show raw markdown`
             }
-            title={showRawMarkdown ? "Show formatted" : "Show raw markdown"}
+            title={showRawMarkdown ? t`Show formatted` : t`Show raw markdown`}
             className={showRawMarkdown ? "text-theme-fg-accent" : ""}
           />
         )}
@@ -131,8 +132,8 @@ export const DefaultMessageControls = ({
           }
           size="sm"
           showOnHover={showOnHover}
-          aria-label="Copy message"
-          title="Copy message"
+          aria-label={t`Copy message`}
+          title={t`Copy message`}
         />
 
         {isUser && isOwnMessage && !context.isSharedDialog && (
@@ -142,8 +143,8 @@ export const DefaultMessageControls = ({
             icon={<PencilSquareIcon />}
             size="sm"
             showOnHover={showOnHover}
-            aria-label="Edit message"
-            title="Edit message"
+            aria-label={t`Edit message`}
+            title={t`Edit message`}
             disabled={feedbackState !== null}
           />
         )}
@@ -162,8 +163,8 @@ export const DefaultMessageControls = ({
               }
               size="sm"
               showOnHover={showOnHover}
-              aria-label="Like message"
-              title="Like message"
+              aria-label={t`Like message`}
+              title={t`Like message`}
               disabled={feedbackState !== null}
             />
             <Button
@@ -178,8 +179,8 @@ export const DefaultMessageControls = ({
               }
               size="sm"
               showOnHover={showOnHover}
-              aria-label="Dislike message"
-              title="Dislike message"
+              aria-label={t`Dislike message`}
+              title={t`Dislike message`}
               disabled={feedbackState !== null}
             />
           </>
@@ -192,4 +193,5 @@ export const DefaultMessageControls = ({
   );
 };
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 DefaultMessageControls.displayName = "DefaultMessageControls";

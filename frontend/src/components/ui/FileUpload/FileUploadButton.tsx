@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import React, { useState, memo, Suspense } from "react";
 import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
@@ -25,7 +26,7 @@ export interface FileUploadButtonLoadingProps {
  * Loading state for file upload button
  */
 export const FileUploadButtonLoading = memo<FileUploadButtonLoadingProps>(
-  ({ className = "", label = "Uploading file" }) => (
+  ({ className = "", label = t`Uploading file` }) => (
     <Button
       disabled
       className={className}
@@ -57,6 +58,7 @@ export const FileUploadButtonLoading = memo<FileUploadButtonLoadingProps>(
   ),
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 FileUploadButtonLoading.displayName = "FileUploadButtonLoading";
 
 /**
@@ -79,7 +81,7 @@ export const FileUploadButtonError = memo<FileUploadButtonErrorProps>(
       variant="danger"
       className={className}
       title={error.message}
-      aria-label={`Error: ${error.message}`}
+      aria-label={`${t`Error:`} ${error.message}`}
     >
       <svg
         className="size-5 text-[var(--theme-error-fg)]"
@@ -98,6 +100,7 @@ export const FileUploadButtonError = memo<FileUploadButtonErrorProps>(
   ),
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 FileUploadButtonError.displayName = "FileUploadButtonError";
 
 /**
@@ -134,7 +137,7 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
     onFilesUploaded,
     acceptedFileTypes = [],
     multiple = false,
-    label = "Attach File",
+    label = t`Attach File`,
     className = "",
     disabled = false,
     iconOnly = true,
@@ -215,6 +218,7 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 FileUploadButtonInner.displayName = "FileUploadButtonInner";
 
 /**
@@ -240,4 +244,5 @@ export const FileUploadButton = memo<FileUploadButtonProps>((props) => {
   );
 });
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 FileUploadButton.displayName = "FileUploadButton";

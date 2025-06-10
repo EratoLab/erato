@@ -58,7 +58,7 @@ export const MessageContent = memo(function MessageContent({
             customStyle={{
               margin: "1rem 0",
               background: "var(--theme-bg-tertiary)",
-              fontSize: "0.875rem",
+              fontSize: "0.875rem", // eslint-disable-line lingui/no-unlocalized-strings
             }}
           >
             {String(children).replace(/\n$/, "")}

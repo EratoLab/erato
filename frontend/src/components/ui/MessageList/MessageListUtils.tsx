@@ -28,6 +28,7 @@ export const useMessageAnimations = () => {
     if (!document.getElementById("message-animations")) {
       const style = document.createElement("style");
       style.id = "message-animations";
+      // eslint-disable-next-line lingui/no-unlocalized-strings
       style.innerHTML = `
         @keyframes fadeIn {
           from { opacity: 0.7; transform: translateY(-8px); }

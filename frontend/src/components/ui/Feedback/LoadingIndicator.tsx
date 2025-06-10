@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React from "react";
 
@@ -85,11 +86,11 @@ export const LoadingIndicator = ({
   const getStateLabel = () => {
     switch (state) {
       case "tool-calling":
-        return "Using tools";
+        return t`Using tools`;
       case "reasoning":
-        return "Thinking";
+        return t`Thinking`;
       default:
-        return "Loading";
+        return t`Loading`;
     }
   };
 
@@ -98,7 +99,7 @@ export const LoadingIndicator = ({
     return (
       <div className={clsx("space-y-2", className)}>
         <div className="text-xs font-medium text-theme-fg-muted">
-          Tool usage:
+          {t`Tool usage:`}
         </div>
         <div className="space-y-1">
           {Object.values(toolCalls).map((toolCall) => (

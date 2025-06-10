@@ -1,4 +1,5 @@
 // import Image from "next/image"; // Removed Next.js Image import
+import { t } from "@lingui/core/macro";
 import React from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
@@ -43,7 +44,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={file.download_url}
-          alt={`Preview of ${file.filename}`}
+          alt={`${t`Preview of`} ${file.filename}`}
           className="mx-auto max-h-[75vh] max-w-full object-contain"
         />
       );
@@ -53,7 +54,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
       return (
         <iframe
           src={file.download_url}
-          title={`Preview of ${file.filename}`}
+          title={`${t`Preview of`} ${file.filename}`}
           className="h-[75vh] w-full border-0"
         />
       );
@@ -62,14 +63,15 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     return (
       <div className="text-center">
         <Alert type="info" className="mb-4">
-          Preview is not available for this file type.
+          {t`Preview is not available for this file type.`}
         </Alert>
         {file.download_url && (
           <Button
+            // eslint-disable-next-line lingui/no-unlocalized-strings
             onClick={() => window.open(file.download_url, "_blank")}
             variant="primary"
           >
-            Download File
+            {t`Download File`}
           </Button>
         )}
       </div>
@@ -80,7 +82,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     <ModalBase
       isOpen={isOpen}
       onClose={onClose}
-      title={`Preview: ${file.filename}`}
+      title={`${t`Preview:`} ${file.filename}`}
       // Adjust size for preview content
       contentClassName={canPreview ? "max-w-4xl" : "max-w-md"}
     >
@@ -89,4 +91,5 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   );
 };
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 FilePreviewModal.displayName = "FilePreviewModal";

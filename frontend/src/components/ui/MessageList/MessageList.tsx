@@ -439,6 +439,7 @@ export const MessageList = memo<MessageListProps>(
         className,
         // Apply transition properties without changing opacity
         // This creates a smoother experience when content changes
+        // eslint-disable-next-line lingui/no-unlocalized-strings
         "transition-[opacity,transform] duration-300 ease-in-out",
         // Only change opacity when explicitly transitioning (not during normal message updates)
         isTransitioning ? "opacity-0" : "opacity-100",
@@ -495,4 +496,5 @@ export const MessageList = memo<MessageListProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 MessageList.displayName = "MessageList";

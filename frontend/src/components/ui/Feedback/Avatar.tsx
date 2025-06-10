@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 // import Image from "next/image"; // Removed Next.js Image import
 import React, { useMemo } from "react";
@@ -55,12 +56,13 @@ export const Avatar = React.memo<AvatarProps>(
           sizeClasses[size],
           className,
         )}
+        aria-label={!userOrAssistant ? t`Assistant avatar` : t`User avatar`}
       >
         {uiProfile?.avatarUrl && !userOrAssistant ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img // Changed from Image to img
             src={uiProfile.avatarUrl}
-            alt="User avatar"
+            alt={t`User avatar`}
             className="size-full rounded-full object-cover" // Added w-full h-full
             // Removed Next.js specific props: fill, sizes
           />
@@ -72,4 +74,5 @@ export const Avatar = React.memo<AvatarProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 Avatar.displayName = "Avatar";

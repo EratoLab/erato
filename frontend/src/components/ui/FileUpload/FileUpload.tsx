@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import React, { useCallback, memo, useEffect } from "react";
 
 import { useFileDropzone } from "@/hooks/files";
@@ -65,8 +66,8 @@ export const FileUpload = memo<FileUploadProps>(
     onFilesUploaded,
     acceptedFileTypes = [],
     multiple = false,
-    buttonLabel = "Upload Files",
-    dropZoneText = "Drag files here or click to upload",
+    buttonLabel = t`Upload Files`,
+    dropZoneText = t`Drag files here or click to upload`,
     className = "",
     disabled = false,
     maxFiles = 5,
@@ -185,15 +186,15 @@ export const FileUpload = memo<FileUploadProps>(
               <p className={DROP_ZONE_STYLES.text}>
                 {isDragActive
                   ? isDragAccept
-                    ? "Drop files to upload..."
-                    : "Some files won't be accepted..."
+                    ? t`Drop files to upload...`
+                    : t`Some files won't be accepted...`
                   : dropZoneText}
               </p>
               {!isDragActive && (
                 <p className="mt-2 text-xs text-[var(--theme-fg-muted)]">
                   {acceptedFileTypes.length > 0
-                    ? `Accepted types: ${acceptedFileTypes.map((type) => FILE_TYPES[type].displayName).join(", ")}`
-                    : "All file types accepted"}
+                    ? `${t`Accepted types:`} ${acceptedFileTypes.map((type) => FILE_TYPES[type].displayName).join(", ")}`
+                    : t`All file types accepted`}
                 </p>
               )}
             </div>
@@ -219,7 +220,7 @@ export const FileUpload = memo<FileUploadProps>(
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-[var(--theme-fg-secondary)]">
-                Uploaded Files ({enhancedUploadedFiles.length}/{maxFiles})
+                {t`Uploaded Files`} ({enhancedUploadedFiles.length}/{maxFiles})
               </h3>
               {enhancedUploadedFiles.length > 1 && (
                 <Button
@@ -228,7 +229,7 @@ export const FileUpload = memo<FileUploadProps>(
                   onClick={handleClearFiles}
                   className="text-[var(--theme-fg-muted)] hover:text-[var(--theme-fg)]"
                 >
-                  Clear All
+                  {t`Clear All`}
                 </Button>
               )}
             </div>
@@ -264,4 +265,5 @@ export const FileUpload = memo<FileUploadProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 FileUpload.displayName = "FileUpload";

@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { memo, useRef, useState, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -62,7 +63,7 @@ const ChatHistoryHeader = memo<{
           variant="sidebar-icon"
           icon={<SidebarToggleIcon />}
           className="rotate-180"
-          aria-label="collapse sidebar"
+          aria-label={t`collapse sidebar`}
           aria-expanded="true"
         />
       </div>
@@ -72,7 +73,7 @@ const ChatHistoryHeader = memo<{
         <div className="flex flex-1 items-center">
           {showTitle && (
             <h2 className="font-semibold text-theme-fg-primary">
-              Chat History
+              {t`Chat History`}
             </h2>
           )}
         </div>
@@ -84,7 +85,7 @@ const ChatHistoryHeader = memo<{
             }}
             variant="sidebar-icon"
             icon={<EditIcon />}
-            aria-label="New Chat"
+            aria-label={t`New Chat`}
           />
         </div>
       </>
@@ -92,6 +93,7 @@ const ChatHistoryHeader = memo<{
   </div>
 ));
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryHeader.displayName = "ChatHistoryHeader";
 
 const ChatHistoryFooter = memo<{
@@ -108,11 +110,12 @@ const ChatHistoryFooter = memo<{
   </div>
 ));
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryFooter.displayName = "ChatHistoryFooter";
 
 const ErrorDisplay = ({ error }: { error: Error }) => (
   <div className="flex flex-col items-center justify-center p-4 text-theme-error-fg">
-    <p className="font-medium">Something went wrong</p>
+    <p className="font-medium">{t`Something went wrong`}</p>
     <p className="text-sm">{error.message}</p>
   </div>
 );
@@ -166,7 +169,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       if (!isBrowser) return;
 
       try {
-        const signOutUrl = "/oauth2/sign_out";
+        const signOutUrl = "/oauth2/sign_out"; // eslint-disable-line lingui/no-unlocalized-strings
         window.location.href = signOutUrl;
 
         setTimeout(() => {
@@ -189,7 +192,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 variant="sidebar-icon"
                 icon={<SidebarToggleIcon />}
                 className="border border-theme-border bg-theme-bg-sidebar shadow-md"
-                aria-label="expand sidebar"
+                aria-label={t`expand sidebar`}
                 aria-expanded="false"
               />
             </div>
@@ -238,4 +241,5 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistorySidebar.displayName = "ChatHistorySidebar";

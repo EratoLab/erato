@@ -3,7 +3,7 @@
  */
 export const BUTTON_STYLES = {
   base: "inline-flex items-center rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus-ring)] theme-transition",
-  iconOnly: "justify-center p-1.5",
+  iconOnly: "justify-center p-1.5", // eslint-disable-line lingui/no-unlocalized-strings
   withLabel: "gap-2 px-4 py-2",
   default:
     "bg-[var(--theme-bg-secondary)] text-[var(--theme-fg-secondary)] hover:bg-[var(--theme-bg-hover)]",

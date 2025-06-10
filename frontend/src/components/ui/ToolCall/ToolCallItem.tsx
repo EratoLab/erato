@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { useState } from "react";
 
@@ -25,19 +26,19 @@ export const ToolCallItem: React.FC<ToolCallItemProps> = ({
       icon: "✓",
       color: "text-green-600",
       bgColor: "bg-green-50",
-      label: "Success",
+      label: t`Success`,
     },
     error: {
       icon: "✗",
       color: "text-red-600",
       bgColor: "bg-red-50",
-      label: "Error",
+      label: t`Error`,
     },
     in_progress: {
       icon: "⏳",
       color: "text-yellow-600",
       bgColor: "bg-yellow-50",
-      label: "In Progress",
+      label: t`In Progress`,
     },
   };
 
@@ -66,9 +67,9 @@ export const ToolCallItem: React.FC<ToolCallItemProps> = ({
           className="text-xs text-theme-fg-muted hover:text-theme-fg-secondary"
           type="button"
           aria-expanded={showDetails}
-          aria-label={`${showDetails ? "Hide" : "Show"} details for ${toolCall.name}`}
+          aria-label={`${showDetails ? t`Hide` : t`Show`} ${t`details for`} ${toolCall.name}`}
         >
-          {showDetails ? "Hide details" : "Show details"}
+          {showDetails ? t`Hide details` : t`Show details`}
         </button>
       </div>
 

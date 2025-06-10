@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { memo, useState } from "react";
 
@@ -96,7 +97,7 @@ export const ChatMessage = memo(function ChatMessage({
       )}
       role="log"
       aria-live="polite"
-      aria-label={`${isUser ? "Your" : "Assistant"} message`}
+      aria-label={`${isUser ? t`Your` : t`Assistant`} ${t`message`}`}
     >
       <div className="flex w-full gap-6">
         {showAvatar && (
@@ -106,7 +107,7 @@ export const ChatMessage = memo(function ChatMessage({
         <div className="min-w-0 flex-1 break-words">
           <div className="flex items-start justify-between">
             <div className="mb-1 text-sm font-semibold text-theme-fg-primary">
-              {isUser ? "You" : "Assistant"}
+              {isUser ? t`You` : t`Assistant`}
             </div>
           </div>
 
@@ -212,13 +213,15 @@ const AttachedFile = ({
   );
 
   if (isLoading) {
-    return <div className="text-xs text-theme-fg-muted">Loading file...</div>;
+    return (
+      <div className="text-xs text-theme-fg-muted">{t`Loading file...`}</div>
+    );
   }
 
   if (error || !fileData) {
     console.error(`Failed to load file ${fileId}:`, error);
     return (
-      <div className="text-xs text-theme-error-fg">Error loading file</div>
+      <div className="text-xs text-theme-error-fg">{t`Error loading file`}</div>
     );
   }
 
@@ -229,10 +232,10 @@ const AttachedFile = ({
         if (onFilePreview && fileData) {
           onFilePreview(fileData);
         } else if (fileData.download_url) {
-          window.open(fileData.download_url, "_blank", "noopener,noreferrer");
+          window.open(fileData.download_url, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
         }
       }}
-      aria-label={`Preview attached file: ${fileData.filename}`}
+      aria-label={`${t`Preview attached file:`} ${fileData.filename}`}
       className="cursor-pointer"
       useDiv={true}
     >
@@ -249,4 +252,5 @@ const AttachedFile = ({
 };
 
 // Add display name for better debugging
+// eslint-disable-next-line lingui/no-unlocalized-strings
 ChatMessage.displayName = "ChatMessage";

@@ -401,6 +401,9 @@ const eslintConfig = [
             "calc\\(",
             "var\\(--",
 
+            // CSS custom property names (CSS variables)
+            "^--[a-zA-Z][a-zA-Z0-9-]*$", // CSS custom properties like "--theme-focus-ring"
+
             // React/Next.js directives
             "^use client$",
             "^use server$",

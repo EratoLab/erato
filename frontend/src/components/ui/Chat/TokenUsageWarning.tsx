@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React from "react";
 
@@ -41,17 +42,17 @@ export const TokenUsageWarning: React.FC<TokenUsageWarningProps> = ({
 
   // Determine alert type based on token usage level
   let alertType: "info" | "warning" | "error" = "info";
-  let title = "Token Usage";
+  let title = t`Token Usage`;
 
   if (exceedsLimit) {
     alertType = "error";
-    title = "Token Limit Exceeded";
+    title = t`Token Limit Exceeded`;
   } else if (isCriticallyClose) {
     alertType = "error";
-    title = "Approaching Token Limit";
+    title = t`Approaching Token Limit`;
   } else if (isApproachingLimit) {
     alertType = "warning";
-    title = "Approaching Token Limit";
+    title = t`Approaching Token Limit`;
   }
 
   // Format percentage for display
@@ -61,12 +62,16 @@ export const TokenUsageWarning: React.FC<TokenUsageWarningProps> = ({
   let message = "";
 
   if (exceedsLimit) {
-    message = `This message exceeds the token limit of ${stats.max_tokens.toLocaleString()}. Please reduce the message length or remove attached files.`;
+    const maxTokensFormatted = stats.max_tokens.toLocaleString();
+    message = t`This message exceeds the token limit of ${maxTokensFormatted}. Please reduce the message length or remove attached files.`;
   } else if (isCriticallyClose || isApproachingLimit) {
-    message = `This message is using ${percentUsed}% of the available token limit (${stats.total_tokens.toLocaleString()} of ${stats.max_tokens.toLocaleString()}).`;
+    const totalTokensFormatted = stats.total_tokens.toLocaleString();
+    const maxTokensFormatted = stats.max_tokens.toLocaleString();
+    message = t`This message is using ${percentUsed}% of the available token limit (${totalTokensFormatted} of ${maxTokensFormatted}).`;
 
     if (stats.file_tokens > 0) {
-      message += ` File attachments account for ${stats.file_tokens.toLocaleString()} tokens.`;
+      const fileTokensFormatted = stats.file_tokens.toLocaleString();
+      message += t` File attachments account for ${fileTokensFormatted} tokens.`;
     }
   }
 

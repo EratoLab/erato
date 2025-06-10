@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 "use client";
 
+import { t } from "@lingui/core/macro";
 import { useEffect } from "react";
 
 import { env } from "@/app/env";
@@ -25,6 +26,7 @@ export function ThemeApplier() {
     const loadTheme = async () => {
       try {
         // Use the folder name directly for the path, not the theme name from theme.json
+        // eslint-disable-next-line lingui/no-unlocalized-strings
         const themePath = `/custom-theme/${customerName}/theme.json`;
 
         // Load the theme data
@@ -168,7 +170,7 @@ export function ThemeApplier() {
           }
         }
       } catch (error) {
-        console.error("Error loading theme:", error);
+        console.error(t`Error loading theme:`, error);
       }
     };
 

@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import React from "react";
 
 import { ModalBase } from "./ModalBase";
@@ -22,8 +23,8 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   onConfirm,
   title,
   message,
-  confirmButtonText = "Confirm",
-  cancelButtonText = "Cancel",
+  confirmButtonText = t`Confirm`,
+  cancelButtonText = t`Cancel`,
   confirmButtonVariant = "primary",
 }) => {
   if (!isOpen) {
@@ -47,14 +48,14 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
           <Button
             variant="secondary"
             onClick={onClose} // Use onClose directly
-            aria-label="Cancel action"
+            aria-label={t`Cancel action`}
           >
             {cancelButtonText}
           </Button>
           <Button
             variant={confirmButtonVariant}
             onClick={onConfirm} // Use onConfirm directly
-            aria-label="Confirm action"
+            aria-label={t`Confirm action`}
           >
             {confirmButtonText}
           </Button>
@@ -64,4 +65,5 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   );
 };
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 ConfirmationDialog.displayName = "ConfirmationDialog";

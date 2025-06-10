@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React from "react";
 
@@ -25,7 +26,7 @@ export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
           isError ? "text-red-600" : "text-theme-fg-secondary",
         )}
       >
-        {isError ? "Error Output" : "Output"}
+        {isError ? t`Error Output` : t`Output`}
       </div>
       <div className={clsx({ "opacity-75": isError })}>
         <JsonDisplay data={output} />

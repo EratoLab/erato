@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { memo } from "react";
 
@@ -22,7 +23,7 @@ interface SpinnerIconProps {
  * A reusable spinner icon component for loading states
  */
 export const SpinnerIcon = memo<SpinnerIconProps>(
-  ({ size = "md", className, srText = "Loading..." }) => {
+  ({ size = "md", className, srText = t`Loading...` }) => {
     const sizeClasses = {
       sm: "h-3 w-3",
       md: "h-4 w-4",
@@ -46,4 +47,5 @@ export const SpinnerIcon = memo<SpinnerIconProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 SpinnerIcon.displayName = "SpinnerIcon";

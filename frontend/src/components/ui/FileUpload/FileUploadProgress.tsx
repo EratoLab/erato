@@ -32,4 +32,5 @@ export const FileUploadProgress = memo<FileUploadProgressProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 FileUploadProgress.displayName = "FileUploadProgress";

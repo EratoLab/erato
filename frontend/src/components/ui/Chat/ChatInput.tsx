@@ -1,4 +1,5 @@
 import { ArrowUpIcon } from "@heroicons/react/24/outline";
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 
@@ -52,7 +53,7 @@ export const ChatInput = ({
   isLoading: propIsLoading,
   disabled = false,
   className = "",
-  placeholder = "Type a message...",
+  placeholder = t`Type a message...`,
   maxLength = 16000,
   showControls = true,
   maxFiles = 5,
@@ -270,7 +271,7 @@ export const ChatInput = ({
           }}
           placeholder={
             isAnyTokenLimitExceeded
-              ? "Message exceeds token limit. Please reduce length or remove files."
+              ? t`Message exceeds token limit. Please reduce length or remove files.`
               : placeholder
           }
           maxLength={maxLength}
@@ -331,8 +332,8 @@ export const ChatInput = ({
             disabled={!canSendMessage || isSendDisabled}
             aria-label={
               isAnyTokenLimitExceeded
-                ? "Cannot send: Token limit exceeded"
-                : "Send message"
+                ? t`Cannot send: Token limit exceeded`
+                : t`Send message`
             }
           />
         </div>

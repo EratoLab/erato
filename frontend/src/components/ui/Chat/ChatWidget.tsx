@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import React, { useRef } from "react";
 
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
@@ -49,7 +50,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       <div
         className={`flex h-full flex-col ${className}`}
         role="region"
-        aria-label="Chat messages"
+        aria-label={t`Chat messages`}
       >
         <div className="flex-1 overflow-y-auto p-4">
           {messages.map((message) => (

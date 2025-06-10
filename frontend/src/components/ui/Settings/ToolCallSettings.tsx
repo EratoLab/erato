@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React from "react";
 
@@ -32,7 +33,7 @@ export const ToolCallSettings: React.FC<ToolCallSettingsProps> = ({
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-theme-fg-primary">
-          Tool Call Display
+          {t`Tool Call Display`}
         </h3>
       </div>
 
@@ -57,7 +58,7 @@ export const ToolCallSettings: React.FC<ToolCallSettingsProps> = ({
               )}
             />
             <span className="text-sm text-theme-fg-secondary">
-              Show tool calls
+              {t`Show tool calls`}
             </span>
           </label>
         </div>
@@ -83,7 +84,7 @@ export const ToolCallSettings: React.FC<ToolCallSettingsProps> = ({
               )}
             />
             <span className="text-sm text-theme-fg-secondary">
-              Expand by default
+              {t`Expand by default`}
             </span>
           </label>
         </div>
@@ -91,8 +92,7 @@ export const ToolCallSettings: React.FC<ToolCallSettingsProps> = ({
 
       {/* Help Text */}
       <div className="text-xs text-theme-fg-muted">
-        Tool calls show how the assistant used external tools to generate
-        responses.
+        {t`Tool calls show how the assistant used external tools to generate responses.`}
       </div>
     </div>
   );

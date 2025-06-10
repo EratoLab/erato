@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { memo } from "react";
 
@@ -43,8 +44,8 @@ export const LoadMoreButton = memo(
   ({
     onClick,
     isPending = false,
-    label = "Load older messages",
-    loadingLabel = "Loading...",
+    label = t`Load older messages`,
+    loadingLabel = t`Loading...`,
     className,
     isSticky = false,
   }: LoadMoreButtonProps) => {
@@ -73,4 +74,5 @@ export const LoadMoreButton = memo(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 LoadMoreButton.displayName = "LoadMoreButton";

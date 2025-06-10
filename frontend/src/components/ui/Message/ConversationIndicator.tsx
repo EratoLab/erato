@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { memo } from "react";
 
@@ -26,11 +27,11 @@ export const ConversationIndicator = memo<ConversationIndicatorProps>(
     const getDefaultText = () => {
       switch (type) {
         case "beginning":
-          return "Beginning of conversation";
+          return t`Beginning of conversation`;
         case "end":
-          return "End of conversation";
+          return t`End of conversation`;
         case "empty":
-          return "No messages yet";
+          return t`No messages yet`;
         default:
           return "";
       }
@@ -49,4 +50,5 @@ export const ConversationIndicator = memo<ConversationIndicatorProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 ConversationIndicator.displayName = "ConversationIndicator";
