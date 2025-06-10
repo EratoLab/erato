@@ -1,0 +1,25 @@
+project_id: "YOUR_PROJECT_ID" # Replace with your actual Crowdin project ID
+api_token_env: CROWDIN_PERSONAL_TOKEN
+
+preserve_hierarchy: true
+
+files:
+  - source: /src/locales/en/messages.po
+    translation: /src/locales/%two_letters_code%/messages.po
+    languages_mapping:
+      two_letters_code:
+        de: de
+        fr: fr
+
+# Optional: Configure which files to ignore
+ignore:
+  - /node_modules/**
+  - /out/**
+  - /dist/**
+  - /.next/**
+  - /src/locales/**/messages.ts # Ignore compiled TypeScript files
+
+# Optional: Translation progress settings
+translation_progress:
+  - min_approved_count: 1
+  - min_translated_count: 1
