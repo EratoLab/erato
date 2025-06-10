@@ -116,17 +116,29 @@ export function useChatMessaging(
       };
     }
 
-    // Only clear completed messages to preserve user messages during navigation
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `[DEBUG_STORE] useChatMessaging (${currentChatId ?? "null"}) effect: About to call clearCompletedUserMessages. Current userMessages count: ${Object.keys(useMessagingStore.getState().userMessages).length}`,
-      );
-    }
-    clearCompletedUserMessages();
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `[DEBUG_STORE] useChatMessaging (${currentChatId ?? "null"}) effect: Called clearCompletedUserMessages. New userMessages count: ${Object.keys(useMessagingStore.getState().userMessages).length}`,
-      );
+    // CRITICAL FIX: When chatId is null (e.g., after archiving), clear ALL user messages
+    // to ensure clean state. For existing chats, only clear completed messages.
+    if (!currentChatId) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `[DEBUG_STORE] useChatMessaging (null chatId) effect: Clearing ALL user messages for clean state. Current userMessages count: ${Object.keys(useMessagingStore.getState().userMessages).length}`,
+        );
+      }
+      // Clear all user messages when chatId is null (e.g., new chat or after archiving)
+      useMessagingStore.getState().clearUserMessages();
+    } else {
+      // Only clear completed messages to preserve user messages during navigation for existing chats
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `[DEBUG_STORE] useChatMessaging (${currentChatId}) effect: About to call clearCompletedUserMessages. Current userMessages count: ${Object.keys(useMessagingStore.getState().userMessages).length}`,
+        );
+      }
+      clearCompletedUserMessages();
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `[DEBUG_STORE] useChatMessaging (${currentChatId}) effect: Called clearCompletedUserMessages. New userMessages count: ${Object.keys(useMessagingStore.getState().userMessages).length}`,
+        );
+      }
     }
 
     // Reset streaming state
@@ -352,6 +364,17 @@ export function useChatMessaging(
 
   // Combine API messages and locally added user messages
   const combinedMessages = useMemo(() => {
+    // CRITICAL FIX: When chatId is null (e.g., after archiving), immediately return empty state
+    // to prevent showing stale messages from the previous chat
+    if (!chatId) {
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          "[DEBUG_STREAMING] combinedMessages: chatId is null, returning empty message state to prevent stale data",
+        );
+      }
+      return {};
+    }
+
     const apiMsgs: Message[] =
       chatMessagesQuery.data?.messages.map(mapApiMessageToUiMessage) ?? [];
 
