@@ -7,10 +7,10 @@ import {
 } from "@heroicons/react/24/outline";
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React from "react";
 
 import { Button } from "../Controls/Button";
 
+import type React from "react";
 import type { ReactNode } from "react";
 
 export type AlertType = "error" | "warning" | "info" | "success";

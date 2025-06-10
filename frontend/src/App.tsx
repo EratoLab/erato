@@ -1,6 +1,6 @@
 /* eslint-disable lingui/no-unlocalized-strings */
 import { Trans } from "@lingui/react/macro";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { Routes, Route, Link, Outlet, Navigate } from "react-router-dom";
 
 import { ClientProviders } from "./components/providers/ClientProviders";

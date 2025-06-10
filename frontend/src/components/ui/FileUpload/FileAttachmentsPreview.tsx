@@ -1,6 +1,5 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React from "react";
 
 import { FilePreviewButton } from "./FilePreviewButton";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
@@ -8,6 +7,7 @@ import { Button } from "../Controls/Button";
 import { Tooltip } from "../Controls/Tooltip";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type React from "react";
 
 export interface FileAttachmentsPreviewProps {
   /** Array of file attachments to preview */

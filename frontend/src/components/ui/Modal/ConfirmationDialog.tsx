@@ -1,10 +1,10 @@
 import { t } from "@lingui/core/macro";
-import React from "react";
 
 import { ModalBase } from "./ModalBase";
 import { Button } from "../Controls/Button"; // Assuming ButtonVariant is exported
 
 import type { ButtonVariant } from "../Controls/Button";
+import type React from "react";
 
 interface ConfirmationDialogProps {
   isOpen: boolean;

@@ -1,6 +1,5 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React from "react";
 
 import type { ToolCall } from "@/hooks/chat/store/messagingStore";
 

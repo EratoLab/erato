@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import React, { useRef } from "react";
+import { useRef } from "react";
 
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
@@ -13,6 +13,7 @@ import type {
   MessageControlsContext,
 } from "../../../types/message-controls";
 import type { Message } from "@/types/chat";
+import type React from "react";
 
 interface ChatWidgetProps {
   className?: string;

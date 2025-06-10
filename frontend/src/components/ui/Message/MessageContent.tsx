@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import { memo } from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {

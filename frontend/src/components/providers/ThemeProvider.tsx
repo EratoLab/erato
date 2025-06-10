@@ -1,7 +1,7 @@
 /* eslint-disable lingui/no-unlocalized-strings */
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 import { ThemeApplier } from "@/components/ui/ThemeApplier";
 import { defaultTheme, darkTheme } from "@/config/theme";

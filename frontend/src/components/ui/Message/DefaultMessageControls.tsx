@@ -10,7 +10,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
@@ -45,7 +45,7 @@ export const DefaultMessageControls = ({
   showFeedbackButtons = false,
   showRawMarkdown = false,
   onToggleRawMarkdown,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
   hasToolCalls = false,
 }: ExtendedMessageControlsProps) => {
   const [isCopied, setIsCopied] = useState(false);

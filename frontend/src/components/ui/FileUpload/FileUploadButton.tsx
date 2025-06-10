@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import React, { useState, memo, Suspense } from "react";
+import { useState, memo, Suspense } from "react";
 import { useDropzone } from "react-dropzone";
 import { ErrorBoundary } from "react-error-boundary";
 

@@ -75,9 +75,7 @@ const mockSessions: ChatSession[] = [
 ];
 
 // Interactive story with state management
-const InteractiveTemplate = (
-  args: React.ComponentProps<typeof ChatHistorySidebar>,
-) => {
+const InteractiveTemplate = (args: Story["args"]) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (

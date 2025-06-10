@@ -21,13 +21,33 @@ msgstr " (more available)"
 msgid " File attachments account for {fileTokensFormatted} tokens."
 msgstr " File attachments account for {fileTokensFormatted} tokens."
 
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:119
+msgid "• Change browser language in settings and refresh"
+msgstr "• Change browser language in settings and refresh"
+
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:122
+msgid "• Check that UI updates immediately when locale changes"
+msgstr "• Check that UI updates immediately when locale changes"
+
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:108
+msgid "• Click locale buttons to test switching languages (session only)"
+msgstr "• Click locale buttons to test switching languages (session only)"
+
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:127
+msgid "• Note: Locale changes are not persisted across page refreshes"
+msgstr "• Note: Locale changes are not persisted across page refreshes"
+
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:113
+msgid "• Use \"Reset to Browser Detection\" to test fresh detection"
+msgstr "• Use \"Reset to Browser Detection\" to test fresh detection"
+
 #. js-lingui-explicit-id
-#: src/App.tsx:33
+#: src/App.tsx:31
 msgid "error.404.title"
 msgstr "404 - Page Not Found"
 
 #. js-lingui-explicit-id
-#: src/App.tsx:21
+#: src/App.tsx:19
 msgid "about.title"
 msgstr "About Page"
 
@@ -73,6 +93,10 @@ msgstr "Attachments"
 #: src/components/ui/Message/ConversationIndicator.tsx:30
 msgid "Beginning of conversation"
 msgstr "Beginning of conversation"
+
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:56
+msgid "Browser Language:"
+msgstr "Browser Language:"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx:27
 msgid "Cancel"
@@ -144,9 +168,17 @@ msgstr "Copy message"
 msgid "Dark mode"
 msgstr "Dark mode"
 
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:63
+msgid "Default Locale:"
+msgstr "Default Locale:"
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx:70
 msgid "details for"
 msgstr "details for"
+
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:49
+msgid "Detected Locale:"
+msgstr "Detected Locale:"
 
 #: src/components/ui/Message/DefaultMessageControls.tsx:182
 #: src/components/ui/Message/DefaultMessageControls.tsx:183
@@ -215,8 +247,8 @@ msgid "File"
 msgstr "File"
 
 #. js-lingui-explicit-id
-#: src/App.tsx:24
-#: src/App.tsx:36
+#: src/App.tsx:22
+#: src/App.tsx:34
 msgid "navigation.goHome"
 msgstr "Go Home"
 
@@ -227,6 +259,10 @@ msgstr "Hide"
 #: src/components/ui/ToolCall/ToolCallItem.tsx:72
 msgid "Hide details"
 msgstr "Hide details"
+
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:104
+msgid "How to Test:"
+msgstr "How to Test:"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx:41
 msgid "In Progress"
@@ -249,10 +285,6 @@ msgstr "Light mode"
 msgid "Like message"
 msgstr "Like message"
 
-#: src/App.tsx:47
-msgid "LLM Chat"
-msgstr "LLM Chat"
-
 #: src/components/ui/Message/LoadMoreButton.tsx:47
 msgid "Load older messages"
 msgstr "Load older messages"
@@ -269,6 +301,10 @@ msgstr "Loading file..."
 #: src/components/ui/Feedback/SpinnerIcon.tsx:26
 msgid "Loading..."
 msgstr "Loading..."
+
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:43
+msgid "Locale Detection Test"
+msgstr "Locale Detection Test"
 
 #: src/components/ui/Logo.tsx:21
 msgid "Logo"
@@ -352,6 +388,10 @@ msgstr "Remove all attachments"
 msgid "Remove all files"
 msgstr "Remove all files"
 
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:98
+msgid "Reset to Browser Detection"
+msgstr "Reset to Browser Detection"
+
 #: src/components/ui/Chat/ChatInput.tsx:336
 msgid "Send message"
 msgstr "Send message"
@@ -410,9 +450,17 @@ msgstr "Success"
 msgid "successful"
 msgstr "successful"
 
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:70
+msgid "Supported Locales:"
+msgstr "Supported Locales:"
+
 #: src/components/ui/Controls/UserProfileDropdown.tsx:50
 msgid "System theme"
 msgstr "System theme"
+
+#: src/components/ui/Settings/LocaleDetectionTest.tsx:78
+msgid "Test Locale Changes:"
+msgstr "Test Locale Changes:"
 
 #: src/components/ui/Feedback/LoadingIndicator.tsx:91
 msgid "Thinking"

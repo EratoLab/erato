@@ -1,10 +1,11 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, { useState } from "react";
+import { useState } from "react";
 
 import { ToolCallItem } from ".";
 
 import type { UiToolCall } from "@/utils/adapters/toolCallAdapter";
+import type React from "react";
 
 export interface ToolCallDisplayProps {
   toolCalls?: UiToolCall[];

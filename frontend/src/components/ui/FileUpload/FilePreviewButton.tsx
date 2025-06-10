@@ -1,6 +1,6 @@
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { t } from "@lingui/core/macro";
-import React, { memo, useCallback } from "react";
+import { memo, useCallback } from "react";
 
 import { FilePreviewBase, type FileResource } from "./FilePreviewBase";
 import { Button } from "../Controls/Button";

@@ -1,5 +1,3 @@
-import React from "react";
-
 import { MessageItem } from "./MessageItem";
 
 import type {
@@ -12,6 +10,7 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+import type React from "react";
 
 interface StandardMessageListProps {
   messages: Record<string, Message>;

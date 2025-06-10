@@ -1,7 +1,8 @@
 import { t } from "@lingui/core/macro";
-import React from "react";
 
 import { JsonDisplay } from "./JsonDisplay";
+
+import type React from "react";
 
 export interface ToolCallInputProps {
   input: unknown;

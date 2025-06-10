@@ -1,10 +1,11 @@
 "use client";
 
 import { t } from "@lingui/core/macro";
-import React from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { Button } from "../Controls/Button";
+
+import type React from "react";
 
 export interface ChatErrorBoundaryProps {
   children: React.ReactNode;

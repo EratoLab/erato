@@ -1,8 +1,9 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React from "react";
 
 import { JsonDisplay } from "./JsonDisplay";
+
+import type React from "react";
 
 export interface ToolCallOutputProps {
   output: unknown;

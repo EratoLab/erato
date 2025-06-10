@@ -1,13 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, {
-  useState,
-  useRef,
-  useCallback,
-  memo,
-  useEffect,
-  useId,
-} from "react";
+import { useState, useRef, useCallback, memo, useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 
 import { useClickOutside } from "@/hooks/useClickOutside";
@@ -18,6 +11,7 @@ import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
 import { MoreVertical, CheckIcon } from "../icons";
 
 import type { ButtonVariant } from "./Button";
+import type React from "react";
 
 export interface DropdownMenuItem {
   label: string;

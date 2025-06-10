@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, { memo } from "react";
+import { memo } from "react";
 
 import { Button } from "../Controls/Button";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";

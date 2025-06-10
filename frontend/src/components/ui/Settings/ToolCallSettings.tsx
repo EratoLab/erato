@@ -1,8 +1,9 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React from "react";
 
 import { useToolCallSettings } from "@/hooks/useToolCallSettings";
+
+import type React from "react";
 
 export interface ToolCallSettingsProps {
   className?: string;

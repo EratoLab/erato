@@ -3,6 +3,7 @@ import { expect, within, userEvent } from "@storybook/test";
 import { ChatMessageFactory } from "./mockData";
 import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
 
+import type { MessageAction } from "@/types/message-controls";
 import type { Meta, StoryObj } from "@storybook/react";
 
 const meta: Meta<typeof ChatMessage> = {
@@ -66,7 +67,7 @@ export const InteractionTest: Story = {
       dialogOwnerId: "user_1",
       isSharedDialog: false,
     },
-    onMessageAction: async (action) => {
+    onMessageAction: async (action: MessageAction) => {
       console.log("Action triggered:", action);
       return true;
     },

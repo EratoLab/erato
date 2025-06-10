@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import { useCallback } from "react";
 
 import { MessageItem } from "./MessageItem";
 
@@ -12,6 +12,7 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+import type React from "react";
 
 interface VirtualizedMessageListProps {
   messages: Record<string, Message>;

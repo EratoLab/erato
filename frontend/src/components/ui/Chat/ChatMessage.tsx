@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, { memo, useState } from "react";
+import { memo, useState } from "react";
 
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
 import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";

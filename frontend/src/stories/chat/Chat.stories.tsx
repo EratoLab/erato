@@ -24,16 +24,14 @@ interface ChatMessage {
   id: string;
   content: string;
   sender: "user" | "assistant" | "system";
-  createdAt: Date;
+  createdAt: string;
   authorId: string;
-  role?: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system";
 }
 
 // Mock providers
 const ChatProvider = ({
   children,
-  initialMessages: _initialMessages,
-  initialMessageOrder: _initialMessageOrder,
 }: {
   children: ReactNode;
   initialMessages?: Record<string, ChatMessage>;
@@ -56,13 +54,7 @@ const SidebarProvider = ({ children }: { children: ReactNode }) => {
 
 // Create ChatHistoryContext
 const ChatHistoryContext = {
-  Provider: ({
-    children,
-    value: _value,
-  }: {
-    children: ReactNode;
-    value: unknown;
-  }) => {
+  Provider: ({ children }: { children: ReactNode; value: unknown }) => {
     return <>{children}</>;
   },
 };
@@ -147,11 +139,12 @@ const transformApiMessagesToChat = (
       id: apiMsg.id,
       content: extractTextFromContent(apiMsg.content),
       sender: apiMsg.role as "user" | "assistant",
-      createdAt,
+      createdAt: createdAt.toISOString(),
       authorId:
         apiMsg.role === "user"
           ? mockData.profiles.user.id
           : mockData.profiles.assistant.id,
+      role: apiMsg.role as "user" | "assistant" | "system",
     };
   });
 
@@ -403,9 +396,22 @@ export const Default: Story = {
     onRegenerate: action("regenerate"),
   },
   render: function Wrapper(args) {
+    // Get the messages and message order from the context
+    const selectedChatMessages = transformApiMessagesToChat(
+      mockData.messages[defaultChatId],
+    );
+    const selectedMessageOrder = mockData.messages[defaultChatId].map(
+      (msg) => msg.id,
+    );
+
     return (
       <SidebarProvider>
-        <Chat {...args} />
+        <Chat
+          {...args}
+          messages={selectedChatMessages}
+          messageOrder={selectedMessageOrder}
+          controlsContext={args.controlsContext}
+        />
       </SidebarProvider>
     );
   },
