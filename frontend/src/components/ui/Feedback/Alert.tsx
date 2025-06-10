@@ -5,6 +5,7 @@ import {
   ExclamationCircleIcon,
   CheckCircleIcon,
 } from "@heroicons/react/24/outline";
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React from "react";
 
@@ -92,7 +93,7 @@ export const Alert: React.FC<AlertProps> = ({
           className="-mr-1 -mt-1 shrink-0"
           onClick={onDismiss}
           icon={<XMarkIcon className="size-4" />}
-          aria-label="Dismiss"
+          aria-label={t`Dismiss`}
         />
       )}
     </div>

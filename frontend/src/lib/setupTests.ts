@@ -1,7 +1,14 @@
-import { beforeAll, afterEach, afterAll } from "vitest";
 import "@testing-library/jest-dom";
+import { i18n } from "@lingui/core";
+import { beforeAll, afterEach, afterAll } from "vitest";
+
+import { messages as enMessages } from "@/locales/en/messages";
 
 import { server } from "./mocks/server";
+
+// Initialize i18n for all tests
+i18n.load("en", enMessages);
+i18n.activate("en");
 
 // Polyfill ResizeObserver for tests
 global.ResizeObserver = class ResizeObserver {

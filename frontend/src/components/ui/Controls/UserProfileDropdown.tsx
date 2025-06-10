@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { clsx } from "clsx";
 import React, { memo } from "react";
 
@@ -34,19 +35,19 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
       ...(showThemeToggle && setThemeMode
         ? [
             {
-              label: "Light mode",
+              label: t`Light mode`,
               icon: <SunIcon className="size-4" />,
               onClick: () => setThemeMode("light"),
               checked: themeMode === "light",
             },
             {
-              label: "Dark mode",
+              label: t`Dark mode`,
               icon: <MoonIcon className="size-4" />,
               onClick: () => setThemeMode("dark"),
               checked: themeMode === "dark",
             },
             {
-              label: "System theme",
+              label: t`System theme`,
               icon: <ComputerIcon className="size-4" />,
               onClick: () => setThemeMode("system"),
               checked: themeMode === "system",
@@ -54,7 +55,7 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
           ]
         : []),
       {
-        label: "Sign out",
+        label: t`Sign out`,
         icon: <LogOutIcon className="size-4" />,
         onClick: onSignOut,
       },
@@ -83,4 +84,5 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 UserProfileDropdown.displayName = "UserProfileDropdown";

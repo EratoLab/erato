@@ -1,13 +1,20 @@
+import { i18n } from "@lingui/core";
+import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { useChatMessaging } from "@/hooks/chat/useChatMessaging";
+import { messages as enMessages } from "@/locales/en/messages";
 import { useChatContext } from "@/providers/ChatProvider";
 
 import ChatPageStructure from "../ChatPageStructure.client";
 import "@testing-library/jest-dom";
+
+// Initialize i18n for tests
+i18n.load("en", enMessages);
+i18n.activate("en");
 
 // Mock necessary hooks and components
 vi.mock("next/navigation", () => ({
@@ -181,7 +188,9 @@ const TestWrapper = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>{children}</MemoryRouter>
+      <I18nProvider i18n={i18n}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </I18nProvider>
     </QueryClientProvider>
   );
 };

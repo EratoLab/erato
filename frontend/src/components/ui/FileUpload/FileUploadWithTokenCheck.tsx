@@ -3,6 +3,7 @@
  *
  * Extends the standard FileUpload component with token usage checking
  */
+import { t } from "@lingui/core/macro";
 import React, { useEffect } from "react";
 
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
@@ -55,7 +56,7 @@ export const FileUploadWithTokenCheck: React.FC<
   onTokenLimitExceeded,
   acceptedFileTypes = [],
   multiple = false,
-  label = "Upload Files",
+  label = t`Upload Files`,
   iconOnly = false,
   maxFiles = 5,
   className = "",

@@ -1,6 +1,7 @@
 // "use client"; // Removed
 
 // import Image from "next/image"; // Removed Next.js Image import
+import { t } from "@lingui/core/macro";
 import { useState, useEffect } from "react";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
@@ -17,7 +18,7 @@ export function Logo({
   className,
   width = 120,
   height = 40,
-  alt = "Logo",
+  alt = t`Logo`,
 }: LogoProps) {
   const { effectiveTheme, customThemeName } = useTheme();
   const [logoPath, setLogoPath] = useState<string>("");

@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { useCallback, useRef } from "react";
 
@@ -118,7 +119,7 @@ export const Chat = ({
   const sessions: ChatSession[] = Array.isArray(chatHistory)
     ? chatHistory.map((chat) => ({
         id: chat.id,
-        title: chat.title_by_summary || "New Chat", // Use title from API
+        title: chat.title_by_summary || t`New Chat`, // Use title from API
         updatedAt: chat.last_message_at || new Date().toISOString(), // Use last message timestamp
         messages: [], // We don't need to populate messages here
         metadata: {
@@ -269,7 +270,7 @@ export const Chat = ({
             className,
           )}
           role="region"
-          aria-label="Chat conversation"
+          aria-label={t`Chat conversation`}
         >
           {/* Use the MessageList component */}
           <MessageList

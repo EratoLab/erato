@@ -1,4 +1,5 @@
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import { t } from "@lingui/core/macro";
 import React, { memo, useCallback } from "react";
 
 import { FilePreviewBase, type FileResource } from "./FilePreviewBase";
@@ -58,7 +59,7 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
         variant="ghost"
         size="sm"
         icon={<XMarkIcon className="size-4" />}
-        aria-label={`Remove ${(file as File).name || (file as FileUploadItem).filename}`}
+        aria-label={`${t`Remove`} ${(file as File).name || (file as FileUploadItem).filename}`}
         onClick={(e) => {
           // Stop event propagation to prevent triggering parent container's click
           e.stopPropagation();
@@ -85,4 +86,5 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 FilePreviewButton.displayName = "FilePreviewButton";

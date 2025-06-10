@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { useEffect, useRef } from "react";
 
@@ -69,7 +70,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       }}
       tabIndex={0}
       role="button"
-      aria-label="Close modal overlay"
+      aria-label={t`Close modal overlay`}
     >
       <div
         ref={modalRef}
@@ -97,7 +98,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
             <button
               onClick={onClose}
               className="absolute right-3 top-3 rounded-full p-1 text-theme-fg-muted hover:bg-theme-bg-secondary focus:outline-none focus:ring-2 focus:ring-blue-500"
-              aria-label="Close modal"
+              aria-label={t`Close modal`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -124,4 +125,5 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   );
 };
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 ModalBase.displayName = "ModalBase";

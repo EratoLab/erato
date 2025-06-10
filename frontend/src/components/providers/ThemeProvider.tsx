@@ -1,3 +1,4 @@
+/* eslint-disable lingui/no-unlocalized-strings */
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";

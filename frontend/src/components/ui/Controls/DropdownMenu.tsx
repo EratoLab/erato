@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, {
   useState,
@@ -94,6 +95,7 @@ const MenuItem = memo(
   ),
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 MenuItem.displayName = "MenuItem";
 
 export const DropdownMenu = memo(
@@ -347,7 +349,7 @@ export const DropdownMenu = memo(
             setIsOpen(!isOpen);
           }}
           icon={triggerIcon}
-          aria-label="Open menu"
+          aria-label={t`Open menu`}
           aria-expanded={isOpen}
           aria-haspopup="true"
           aria-controls={menuId}
@@ -360,10 +362,10 @@ export const DropdownMenu = memo(
             isOpen={true}
             onClose={handleCancelConfirm}
             onConfirm={handleConfirmAction}
-            title={confirmingItem.confirmTitle ?? "Confirm Action"}
+            title={confirmingItem.confirmTitle ?? t`Confirm Action`}
             message={
               confirmingItem.confirmMessage ??
-              "Are you sure you want to proceed?"
+              t`Are you sure you want to proceed?`
             }
             confirmButtonVariant={
               confirmingItem.confirmButtonVariant ??
@@ -376,4 +378,5 @@ export const DropdownMenu = memo(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 DropdownMenu.displayName = "DropdownMenu";

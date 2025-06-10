@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import React from "react";
 
 import { ConversationIndicator } from "../Message/ConversationIndicator";
@@ -38,7 +39,7 @@ export const MessageListHeader = ({
       {/* Debug info in development */}
       {process.env.NODE_ENV === "development" && (
         <div className="sticky right-0 top-0 z-50 text-right text-xs opacity-50">
-          Showing{" "}
+          {t`Showing`}{" "}
           {apiMessagesResponse
             ? Math.min(
                 apiMessagesResponse.stats.current_offset +
@@ -46,9 +47,10 @@ export const MessageListHeader = ({
                 apiMessagesResponse.stats.total_count,
               )
             : paginationStats.displayed}{" "}
-          of {apiMessagesResponse?.stats.total_count ?? paginationStats.total}{" "}
-          messages
-          {apiMessagesResponse?.stats.has_more && " (more available)"}
+          {t`of`}{" "}
+          {apiMessagesResponse?.stats.total_count ?? paginationStats.total}{" "}
+          {t`messages`}
+          {apiMessagesResponse?.stats.has_more && t` (more available)`}
         </div>
       )}
     </div>

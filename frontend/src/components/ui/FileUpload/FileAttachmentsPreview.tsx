@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React from "react";
 
@@ -55,19 +56,19 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
     <div className={clsx("mb-3", className)}>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-medium text-[var(--theme-fg-secondary)]">
-          Attachments ({attachedFiles.length}/{maxFiles})
+          {t`Attachments`} ({attachedFiles.length}/{maxFiles})
         </h3>
         {attachedFiles.length > 1 && (
-          <Tooltip content="Remove all files">
+          <Tooltip content={t`Remove all files`}>
             <Button
               onClick={onRemoveAllFiles}
               variant="ghost"
               size="sm"
               className="text-xs"
-              aria-label="Remove all attachments"
+              aria-label={t`Remove all attachments`}
               disabled={disabled}
             >
-              Remove all
+              {t`Remove all`}
             </Button>
           </Tooltip>
         )}
@@ -83,7 +84,7 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
               onClick={() => onFilePreview(file)}
               useDiv={true}
               className="cursor-pointer"
-              aria-label={`Preview attachment ${file.filename}`}
+              aria-label={`${t`Preview attachment`} ${file.filename}`}
             >
               <FilePreviewButton
                 file={file}

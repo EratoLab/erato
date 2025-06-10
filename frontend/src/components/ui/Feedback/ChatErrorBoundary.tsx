@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@lingui/core/macro";
 import React from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
@@ -37,14 +38,14 @@ const ChatErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
         </svg>
       </div>
       <h3 className="text-lg font-medium text-[var(--theme-fg-strong)]">
-        Chat Error
+        {t`Chat Error`}
       </h3>
       <p className="max-w-md text-center text-sm text-[var(--theme-fg-muted)]">
         {error.message ||
-          "Something went wrong while loading the chat interface."}
+          t`Something went wrong while loading the chat interface.`}
       </p>
       <Button onClick={resetErrorBoundary} variant="primary" className="mt-4">
-        Try Again
+        {t`Try Again`}
       </Button>
     </div>
   );

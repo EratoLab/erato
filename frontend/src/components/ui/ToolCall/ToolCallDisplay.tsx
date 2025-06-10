@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { useState } from "react";
 
@@ -73,12 +74,12 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
             : undefined
         }
         aria-expanded={allowToggle ? isExpanded : undefined}
-        aria-label={`Tool calls (${toolCalls.length} total, ${successCount} successful, ${errorCount} failed)`}
+        aria-label={`${t`Tool calls`} (${toolCalls.length} ${t`total`}, ${successCount} ${t`successful`}, ${errorCount} ${t`failed`})`}
       >
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
             <span className="text-xs font-medium text-theme-fg-secondary">
-              🔧 Tool Calls
+              🔧 {t`Tool Calls`}
             </span>
             <span className="rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs font-medium text-theme-fg-accent">
               {toolCalls.length}

@@ -119,4 +119,5 @@ export const MessageItem = memo<MessageItemProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 MessageItem.displayName = "MessageItem";

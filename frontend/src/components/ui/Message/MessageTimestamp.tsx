@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
 import React, { memo, useEffect, useState } from "react";
@@ -40,7 +41,7 @@ const ensureValidDate = (dateInput: unknown): Date => {
     return isNaN(dateObj.getTime()) ? new Date() : dateObj;
   } catch {
     console.warn(
-      "Invalid date provided to MessageTimestamp, using current date",
+      t`Invalid date provided to MessageTimestamp, using current date`,
     );
     return new Date();
   }
@@ -59,8 +60,8 @@ export const MessageTimestamp = memo(function MessageTimestamp({
   const [timeString, setTimeString] = useState(() =>
     displayStyle === "time"
       ? safeCreatedAt.toLocaleTimeString(undefined, {
-          hour: "2-digit",
-          minute: "2-digit",
+          hour: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
+          minute: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
         })
       : formatDistanceToNow(safeCreatedAt, {
           addSuffix: true,
@@ -76,8 +77,8 @@ export const MessageTimestamp = memo(function MessageTimestamp({
     setTimeString(
       displayStyle === "time"
         ? safeCreatedAt.toLocaleTimeString(undefined, {
-            hour: "2-digit",
-            minute: "2-digit",
+            hour: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
+            minute: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
           })
         : formatDistanceToNow(safeCreatedAt, {
             addSuffix: true,

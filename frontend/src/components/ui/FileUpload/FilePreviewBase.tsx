@@ -1,4 +1,5 @@
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import { t } from "@lingui/core/macro";
 import React, { useMemo } from "react";
 
 import { FILE_TYPES } from "@/utils/fileTypes";
@@ -164,7 +165,7 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
   const FileIcon = useMemo(() => FILE_TYPES[fileType].icon, [fileType]);
   const iconColor = useMemo(() => FILE_TYPES[fileType].iconColor, [fileType]);
   const typeDisplayName = useMemo(
-    () => FILE_TYPES[fileType].displayName || "File",
+    () => FILE_TYPES[fileType].displayName || t`File`,
     [fileType],
   );
 
@@ -214,7 +215,7 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
             onClick={(e) => handleRemove(e)}
             disabled={disabled}
             className={FILE_PREVIEW_STYLES.closeButton}
-            aria-label={`Remove ${filename}`}
+            aria-label={`${t`Remove`} ${filename}`}
           >
             <XMarkIcon className="size-4" />
           </button>
@@ -223,4 +224,5 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
   );
 };
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 FilePreviewBase.displayName = "FilePreviewBase";

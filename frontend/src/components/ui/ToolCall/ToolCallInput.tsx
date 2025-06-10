@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import React from "react";
 
 import { JsonDisplay } from "./JsonDisplay";
@@ -17,7 +18,7 @@ export const ToolCallInput: React.FC<ToolCallInputProps> = ({
   return (
     <div className={className}>
       <div className="mb-2 text-xs font-medium text-theme-fg-secondary">
-        Input Parameters
+        {t`Input Parameters`}
       </div>
       <JsonDisplay data={input} />
     </div>

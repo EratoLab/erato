@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import React, { memo } from "react";
 
@@ -61,22 +62,22 @@ const ChatHistoryListItem = memo<{
     >
       <div className="flex items-center justify-between gap-2">
         <span className="truncate font-medium">
-          {session.title || "New Chat"}
+          {session.title || t`New Chat`}
         </span>
         <DropdownMenu
           items={[
             {
-              label: "Show Details",
+              label: t`Show Details`,
               icon: <Info className="size-4" />,
               onClick: onShowDetails ?? (() => {}),
             },
             {
-              label: "Remove",
+              label: t`Remove`,
               icon: <LogOutIcon className="size-4" />,
               onClick: onArchive ?? (() => {}),
               confirmAction: true,
-              confirmTitle: "Confirm Removal",
-              confirmMessage: "Are you sure you want to remove this chat?",
+              confirmTitle: t`Confirm Removal`,
+              confirmMessage: t`Are you sure you want to remove this chat?`,
             },
           ]}
         />
@@ -99,6 +100,7 @@ const ChatHistoryListItem = memo<{
   ),
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryListItem.displayName = "ChatHistoryListItem";
 
 export const ChatHistoryList = memo<ChatHistoryListProps>(
@@ -149,6 +151,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
   },
 );
 
+// eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryList.displayName = "ChatHistoryList";
 
 export const ChatHistoryListSkeleton = ({

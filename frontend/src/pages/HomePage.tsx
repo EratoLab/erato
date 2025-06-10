@@ -1,3 +1,4 @@
+import { Trans } from "@lingui/react/macro";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -11,7 +12,9 @@ export default function HomePage() {
 
   return (
     <div className="flex h-screen items-center justify-center">
-      <div className="animate-pulse text-lg">Redirecting to chat...</div>
+      <div className="animate-pulse text-lg">
+        <Trans id="home.redirecting">Redirecting to chat...</Trans>
+      </div>
     </div>
   );
 }
