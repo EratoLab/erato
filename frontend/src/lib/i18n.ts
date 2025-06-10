@@ -32,7 +32,7 @@ export async function dynamicActivate(locale: string) {
   const validLocale = getValidLocale(locale);
 
   try {
-    const { messages } = await import(`../locales/${validLocale}/messages`);
+    const { messages } = await import(`../locales/${validLocale}/messages.po`);
     i18n.loadAndActivate({
       locale: validLocale,
       messages,
@@ -45,7 +45,9 @@ export async function dynamicActivate(locale: string) {
       error,
     );
     if (validLocale !== defaultLocale) {
-      const { messages } = await import(`../locales/${defaultLocale}/messages`);
+      const { messages } = await import(
+        `../locales/${defaultLocale}/messages.po`
+      );
       i18n.loadAndActivate({
         locale: defaultLocale,
         messages,
