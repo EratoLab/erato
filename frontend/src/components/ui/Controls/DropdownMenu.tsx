@@ -339,6 +339,7 @@ export const DropdownMenu = memo(
           size="sm"
           variant="ghost"
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             setIsOpen(!isOpen);
           }}

@@ -65,6 +65,18 @@ test(
 
     // Verify that the new chat session appears in the sidebar
     const sidebar = page.getByRole("complementary");
-    await expect(sidebar.locator(`[data-chat-id="${chatId}"]`)).toBeVisible();
+    const chatSessionLink = sidebar.locator(`[data-chat-id="${chatId}"]`);
+    await expect(chatSessionLink).toBeVisible();
+
+    // Verify that ctrl-clicking the link opens a new tab
+    const newPagePromise = page.context().waitForEvent("page");
+    await chatSessionLink.click({ modifiers: ["ControlOrMeta"] });
+    const newPage = await newPagePromise;
+    const newPageTextbox = newPage.getByRole("textbox", {
+      name: "Type a message...",
+    });
+    await expect(newPageTextbox).toBeVisible();
+    expect(newPage.url()).toContain(`/chat/${chatId}`);
+    await newPage.close();
   },
 );
