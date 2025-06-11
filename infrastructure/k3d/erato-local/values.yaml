@@ -24,6 +24,7 @@ erato:
     configFile:
       secretName: erato-local-erato-toml-secret
       secretKey: erato.toml
+      useAlt: false
   
   oauth2Proxy:
     enabled: true
