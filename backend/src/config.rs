@@ -91,6 +91,7 @@ pub struct ChatProviderConfig {
     // Should likely end with `/v1/`
     // E.g. 'http://localhost:11434/v1/'
     pub base_url: Option<String>,
+    pub api_key: Option<String>,
     // Additional request parameters to be added to API requests.
     // E.g. 'api-version=2024-10-21'
     pub additional_request_parameters: Option<Vec<String>>,

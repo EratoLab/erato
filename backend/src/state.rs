@@ -98,8 +98,14 @@ impl AppState {
 
         let genai_client = genai::ClientBuilder::default()
             .with_reqwest(custom_client)
-            .with_service_target_resolver(ServiceTargetResolver::from_resolver_fn(move |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
-                let ServiceTarget { mut endpoint, .. } = service_target;
+            .with_service_target_resolver(ServiceTargetResolver::from_resolver_fn(move |_service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
+                let adapter_kind = match config.provider_kind.as_str() {
+                    "ollama" => Ok(AdapterKind::Ollama),
+                    "openai" => Ok(AdapterKind::OpenAI),
+                    _ => Err(genai::resolver::Error::Custom("Unknown provider kind".to_string()))
+                }?;
+
+                let mut endpoint = default_endpoint(adapter_kind);
 
                 if let Some(base_url) = base_url.clone() {
                     let mut url_str = base_url;
@@ -126,13 +132,11 @@ impl AppState {
                 }
 
                 // TODO: Allow specifying auth in config
-                let auth = AuthData::from_single("PLACEHOLDER");
+                let mut auth = AuthData::from_single("PLACEHOLDER");
+                if let Some(api_key) = config.api_key.clone() {
+                    auth = AuthData::from_single(api_key);
+                }
 
-                let adapter_kind = match config.provider_kind.as_str() {
-                    "ollama" => Ok(AdapterKind::Ollama),
-                    "openai" => Ok(AdapterKind::OpenAI),
-                    _ => Err(genai::resolver::Error::Custom("Unknown provider kind".to_string()))
-                }?;
                 let model = ModelIden::new(adapter_kind, config.model_name.clone());
                 Ok(ServiceTarget { endpoint, auth, model })
             },
@@ -149,5 +153,13 @@ impl AppState {
             file_storage_providers.insert(provider_config_id.clone(), provider);
         }
         Ok(file_storage_providers)
+    }
+}
+
+pub fn default_endpoint(kind: AdapterKind) -> Endpoint {
+    match kind {
+        AdapterKind::OpenAI => Endpoint::from_static("https://api.openai.com/v1/"),
+        AdapterKind::Ollama => Endpoint::from_static("http://localhost:11434/v1/"),
+        _ => unimplemented!("Default endpoint not implemented for this adapter kind"),
     }
 }
