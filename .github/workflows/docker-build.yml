@@ -350,7 +350,8 @@ jobs:
         run: |
           ./scripts/setup-dev.sh --wait --chart-dep-update \
             --erato-image-repository ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }} \
-            --erato-image-tag ${{ env.SHA_TAG }}-amd64
+            --erato-image-tag ${{ env.SHA_TAG }}-amd64 \
+            --api-key "${{ secrets.E2E_OPENAI_API_KEY }}"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4

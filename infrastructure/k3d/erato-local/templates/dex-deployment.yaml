@@ -17,6 +17,8 @@ spec:
       labels:
         app.kubernetes.io/name: {{ .Release.Name }}-dex
         app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        reloader.stakater.com/auto: "true"
     spec:
       containers:
         - name: dex

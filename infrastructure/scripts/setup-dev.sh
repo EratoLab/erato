@@ -7,10 +7,12 @@ ERATO_IMAGE_TAG="latest"
 BUILD_LOCAL=false
 HELM_SET_ARGS=""
 CHART_DEP_UPDATE=false
+USE_ALT_ERATO_TOML=false
+API_KEY=""
 
 # Function to display script usage
 usage() {
-    echo "Usage: $0 [--wait] [--build-local] [--erato-image-repository <repo>] [--erato-image-tag <tag>] [--chart-dep-update]"
+    echo "Usage: $0 [--wait] [--build-local] [--erato-image-repository <repo>] [--erato-image-tag <tag>] [--chart-dep-update] [--use-alt-erato-toml] [--api-key <key>]"
     exit 1
 }
 
@@ -22,6 +24,12 @@ while [[ "$#" -gt 0 ]]; do
         --erato-image-repository) ERATO_IMAGE_REPOSITORY="$2"; shift ;;
         --erato-image-tag) ERATO_IMAGE_TAG="$2"; shift ;;
         --chart-dep-update) CHART_DEP_UPDATE=true ;;
+        --use-alt-erato-toml) USE_ALT_ERATO_TOML=true ;;
+        --api-key)
+            API_KEY="$2"
+            USE_ALT_ERATO_TOML=true
+            shift
+            ;;
         -h|--help) usage ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac
@@ -132,6 +140,25 @@ if [ "$BUILD_LOCAL" = true ]; then
     
     # Override helm arguments to use the locally built image
     HELM_SET_ARGS="--set erato.backend.image.repository=k3d-registry.localhost:5000/${COMBINED_IMAGE_PATH} --set erato.backend.image.tag=${BUILD_TAG}"
+fi
+
+# Handle alt erato.toml
+if [ "$USE_ALT_ERATO_TOML" = true ]; then
+    ALT_TOML_PATH="${CHART_PATH}/config/erato.alt.toml"
+    if [[ -n "$API_KEY" ]]; then
+        echo "Generating ${ALT_TOML_PATH} from template..."
+        TEMPLATE_PATH="${CHART_PATH}/config/erato.alt.template.toml"
+        sed "s|<API_KEY>|${API_KEY}|" "${TEMPLATE_PATH}" > "${ALT_TOML_PATH}"
+    fi
+
+    if [ ! -f "$ALT_TOML_PATH" ]; then
+        echo "Error: --use-alt-erato-toml is set, but ${ALT_TOML_PATH} does not exist."
+        echo "Please create it or use --api-key to generate it."
+        exit 1
+    fi
+
+    HELM_SET_ARGS="$HELM_SET_ARGS --set erato.backend.configFile.useAlt=true"
+    HELM_SET_ARGS="$HELM_SET_ARGS --set erato.backend.configFile.secretKey=erato.alt.toml"
 fi
 
 # Install nginx ingress controller
