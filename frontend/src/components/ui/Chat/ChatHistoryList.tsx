@@ -59,6 +59,7 @@ const ChatHistoryListItem = memo<{
         "hover:bg-theme-bg-hover",
         layout === "compact" ? "gap-0.5" : "gap-2",
       )}
+      data-chat-id={session.id}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="truncate font-medium">

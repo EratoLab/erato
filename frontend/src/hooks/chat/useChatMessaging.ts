@@ -16,6 +16,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
+import { useChatHistory } from "@/hooks";
 import { useChatMessages } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import {
@@ -164,6 +165,7 @@ export function useChatMessaging(
       refetchOnWindowFocus: true,
     },
   );
+  const { refetch: refetchChatHistory } = useChatHistory();
 
   // --- Define handleRefetchAndClear callback ---
   const handleRefetchAndClear = useCallback(
@@ -173,6 +175,8 @@ export function useChatMessaging(
       // Don't clear optimistic state during navigation transition
       const isInTransition =
         useMessagingStore.getState().isInNavigationTransition;
+      // Refetch chat message history.
+      await refetchChatHistory();
 
       if (chatId) {
         if (process.env.NODE_ENV === "development") {
@@ -235,7 +239,13 @@ export function useChatMessaging(
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chatId, newlyCreatedChatId, queryClient, clearCompletedUserMessages],
+    [
+      chatId,
+      newlyCreatedChatId,
+      queryClient,
+      clearCompletedUserMessages,
+      refetchChatHistory,
+    ],
   );
   // --- End of handleRefetchAndClear callback ---
 
