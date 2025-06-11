@@ -13,14 +13,6 @@ erato:
       repository: harbor.imassage.me/erato/app
       tag: "latest"
       pullPolicy: Always
-    extraEnvVars:
-      - name: CHAT_PROVIDER__PROVIDER_KIND
-        value: "ollama"
-      - name: CHAT_PROVIDER__MODEL_NAME
-        value: "smollm2:135m"
-      # NOTE: This currently points nowhere
-      - name: CHAT_PROVIDER__BASE_URL
-        value: "http://localhost:11434/v1/"
     configFile:
       secretName: erato-local-erato-toml-secret
       secretKey: erato.toml

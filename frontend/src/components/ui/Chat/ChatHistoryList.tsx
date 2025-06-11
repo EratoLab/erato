@@ -50,53 +50,68 @@ const ChatHistoryListItem = memo<{
     onShowDetails,
     showTimestamps = true,
   }) => (
-    <InteractiveContainer
-      onClick={onSelect}
-      useDiv={true}
-      className={clsx(
-        "flex flex-col rounded-lg px-4 py-3 text-left",
-        isActive && "bg-theme-bg-selected",
-        "hover:bg-theme-bg-hover",
-        layout === "compact" ? "gap-0.5" : "gap-2",
-      )}
+    <a
+      href={`/chat/${session.id}`}
+      onClick={(e) => {
+        // Allow cmd/ctrl-click to open in new tab
+        if (e.metaKey || e.ctrlKey) {
+          return;
+        }
+        // Prevent default navigation for normal clicks
+        e.preventDefault();
+        onSelect();
+      }}
+      className="block"
+      aria-label={session.title || t`New Chat`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate font-medium">
-          {session.title || t`New Chat`}
-        </span>
-        <DropdownMenu
-          items={[
-            {
-              label: t`Show Details`,
-              icon: <Info className="size-4" />,
-              onClick: onShowDetails ?? (() => {}),
-            },
-            {
-              label: t`Remove`,
-              icon: <LogOutIcon className="size-4" />,
-              onClick: onArchive ?? (() => {}),
-              confirmAction: true,
-              confirmTitle: t`Confirm Removal`,
-              confirmMessage: t`Are you sure you want to remove this chat?`,
-            },
-          ]}
-        />
-      </div>
-      {layout !== "compact" && (
-        <>
-          {session.metadata?.lastMessage && (
-            <p className="truncate text-sm text-theme-fg-secondary">
-              {session.metadata.lastMessage.content}
-            </p>
-          )}
-          {showTimestamps && session.updatedAt && (
-            <p className="text-xs text-theme-fg-secondary">
-              {new Date(session.updatedAt).toLocaleString()}
-            </p>
-          )}
-        </>
-      )}
-    </InteractiveContainer>
+      <InteractiveContainer
+        useDiv={true}
+        className={clsx(
+          "flex flex-col rounded-lg px-4 py-3 text-left",
+          isActive && "bg-theme-bg-selected",
+          "hover:bg-theme-bg-hover",
+          layout === "compact" ? "gap-0.5" : "gap-2",
+        )}
+        data-chat-id={session.id}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate font-medium">
+            {session.title || t`New Chat`}
+          </span>
+          <DropdownMenu
+            items={[
+              {
+                label: t`Show Details`,
+                icon: <Info className="size-4" />,
+                onClick: onShowDetails ?? (() => {}),
+              },
+              {
+                label: t`Remove`,
+                icon: <LogOutIcon className="size-4" />,
+                onClick: onArchive ?? (() => {}),
+                confirmAction: true,
+                confirmTitle: t`Confirm Removal`,
+                confirmMessage: t`Are you sure you want to remove this chat?`,
+              },
+            ]}
+          />
+        </div>
+        {layout !== "compact" && (
+          <>
+            {session.metadata?.lastMessage && (
+              <p className="truncate text-sm text-theme-fg-secondary">
+                {session.metadata.lastMessage.content}
+              </p>
+            )}
+            {showTimestamps && session.updatedAt && (
+              <p className="text-xs text-theme-fg-secondary">
+                {new Date(session.updatedAt).toLocaleString()}
+              </p>
+            )}
+          </>
+        )}
+      </InteractiveContainer>
+    </a>
   ),
 );
 
