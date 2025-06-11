@@ -6,7 +6,18 @@ export const supportedLocales = ["en", "de", "fr"];
 
 // Validate detected locale
 export function getValidLocale(locale: string): string {
-  return supportedLocales.includes(locale) ? locale : defaultLocale;
+  // Exact match
+  if (supportedLocales.includes(locale)) {
+    return locale;
+  }
+  // Partial match on BCP-47 language tag. For example, "en-US" will match "en".
+  else if (locale.length > 2 && supportedLocales.includes(locale.slice(0, 2))) {
+    return locale.slice(0, 2);
+  }
+  // Fallback
+  else {
+    return defaultLocale;
+  }
 }
 
 // Browser locale detection without persistence
