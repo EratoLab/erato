@@ -275,6 +275,8 @@ export const ChatInput = ({
           maxLength={maxLength}
           rows={1}
           disabled={isLoading || isStreaming || disabled || isUploading}
+          tabIndex={0}
+          autoFocus={true} // eslint-disable-line jsx-a11y/no-autofocus -- The chat input is the main interactive element on the page.
           className={clsx(
             "w-full resize-none overflow-y-auto",
             "p-2 sm:px-3",

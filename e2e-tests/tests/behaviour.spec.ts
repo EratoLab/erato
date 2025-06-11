@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { TAG_CI } from "./tags";
 
 // Needs to be implemented
-test.skip(
+test(
   "Can open new chat page and input is focused",
   { tag: TAG_CI },
   async ({ page }) => {
