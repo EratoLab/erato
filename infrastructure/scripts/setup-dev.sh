@@ -6,10 +6,11 @@ ERATO_IMAGE_REPOSITORY="harbor.imassage.me/erato/app"
 ERATO_IMAGE_TAG="latest"
 BUILD_LOCAL=false
 HELM_SET_ARGS=""
+CHART_DEP_UPDATE=false
 
 # Function to display script usage
 usage() {
-    echo "Usage: $0 [--wait] [--build-local] [--erato-image-repository <repo>] [--erato-image-tag <tag>]"
+    echo "Usage: $0 [--wait] [--build-local] [--erato-image-repository <repo>] [--erato-image-tag <tag>] [--chart-dep-update]"
     exit 1
 }
 
@@ -20,6 +21,7 @@ while [[ "$#" -gt 0 ]]; do
         --build-local) BUILD_LOCAL=true ;;
         --erato-image-repository) ERATO_IMAGE_REPOSITORY="$2"; shift ;;
         --erato-image-tag) ERATO_IMAGE_TAG="$2"; shift ;;
+        --chart-dep-update) CHART_DEP_UPDATE=true ;;
         -h|--help) usage ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac
@@ -28,6 +30,7 @@ done
 
 
 CLUSTER_NAME="erato-dev"
+ERATO_CHART_PATH="./charts/erato"
 CHART_PATH="./k3d/erato-local"
 
 # Host configuration
@@ -67,6 +70,13 @@ kubectl -n kube-system wait --for=condition=Available deployment/coredns --timeo
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo add cnpg https://cloudnative-pg.github.io/charts
 # helm repo update
+
+if [ "$CHART_DEP_UPDATE" = true ]; then
+    echo "Updating chart dependencies..."
+    helm repo update
+    helm dependency update "$ERATO_CHART_PATH"
+    helm dependency update "$CHART_PATH"
+fi
 
 if [[ -n "$ERATO_IMAGE_REPOSITORY" ]]; then
     HELM_SET_ARGS="$HELM_SET_ARGS --set erato.backend.image.repository=$ERATO_IMAGE_REPOSITORY"
