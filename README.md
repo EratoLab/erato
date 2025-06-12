@@ -26,3 +26,7 @@ To update the requirements to their latest version:
 ```bash
 git submodule update --remote .requirements
 ```
+
+## License
+
+Erato is distributed under the [AGPL-3.0-only](./LICENSE) license.
