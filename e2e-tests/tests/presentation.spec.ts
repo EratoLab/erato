@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import Sharp from "sharp";
 import { TAG_CI } from "./tags";
+import { login } from "./shared";
 
 /**
  * Analyzes a screenshot buffer to determine if it shows a light or dark theme
@@ -88,15 +89,7 @@ test(
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/");
 
-    await page.getByRole("button", { name: "Sign in with" }).click();
-    await page.waitForURL((url) => url.pathname.includes("auth"));
-    // await page.getByRole('textbox', { name: 'email address' }).click();
-    await page
-      .getByRole("textbox", { name: "email address" })
-      .fill("admin@example.com");
-    await page.getByRole("textbox", { name: "Password" }).fill("admin");
-    await page.getByRole("textbox", { name: "Password" }).press("Enter");
-    await page.getByRole("button", { name: "Grant Access" }).click();
+    await login(page, "admin@example.com");
 
     await expect(
       page.getByRole("textbox", { name: "Type a message..." }),
@@ -122,15 +115,7 @@ test(
     await page.emulateMedia({ colorScheme: "light" });
     await page.goto("/");
 
-    await page.getByRole("button", { name: "Sign in with" }).click();
-    await page.waitForURL((url) => url.pathname.includes("auth"));
-    // await page.getByRole('textbox', { name: 'email address' }).click();
-    await page
-      .getByRole("textbox", { name: "email address" })
-      .fill("admin@example.com");
-    await page.getByRole("textbox", { name: "Password" }).fill("admin");
-    await page.getByRole("textbox", { name: "Password" }).press("Enter");
-    await page.getByRole("button", { name: "Grant Access" }).click();
+    await login(page, "admin@example.com");
 
     await expect(
       page.getByRole("textbox", { name: "Type a message..." }),
@@ -159,15 +144,7 @@ test(
     const page = await context.newPage();
     await page.goto("/");
 
-    await page.getByRole("button", { name: "Sign in with" }).click();
-    await page.waitForURL((url) => url.pathname.includes("auth"));
-    // await page.getByRole('textbox', { name: 'email address' }).click();
-    await page
-      .getByRole("textbox", { name: "email address" })
-      .fill("admin@example.com");
-    await page.getByRole("textbox", { name: "Password" }).fill("admin");
-    await page.getByRole("textbox", { name: "Password" }).press("Enter");
-    await page.getByRole("button", { name: "Grant Access" }).click();
+    await login(page, "admin@example.com");
 
     await expect(
       page.getByRole("textbox", { name: "Nachricht eingeben..." }),

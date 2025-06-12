@@ -1,5 +1,4 @@
 use crate::config::{AppConfig, ChatProviderConfig};
-use crate::policy::engine::PolicyEngine;
 use crate::services::file_storage::FileStorage;
 use crate::services::mcp_manager::McpServers;
 use eyre::Report;
@@ -16,7 +15,6 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct AppState {
     pub db: DatabaseConnection,
-    pub policy: PolicyEngine,
     pub genai_client: GenaiClient,
     pub system_prompt: Option<String>,
     pub default_file_storage_provider: Option<String>,
@@ -27,7 +25,6 @@ pub struct AppState {
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let db = Database::connect(&config.database_url).await?;
-        let policy = Self::build_policy()?;
         let system_prompt = config.chat_provider.system_prompt.clone();
         let file_storage_providers = Self::build_file_storage_providers(&config)?;
         let genai_client = Self::build_genai_client(config.chat_provider.clone())?;
@@ -35,7 +32,6 @@ impl AppState {
 
         Ok(Self {
             db,
-            policy,
             genai_client,
             system_prompt,
             default_file_storage_provider: config.default_file_storage_provider,
@@ -44,16 +40,8 @@ impl AppState {
         })
     }
 
-    pub fn policy(&self) -> &PolicyEngine {
-        &self.policy
-    }
-
     pub fn genai(&self) -> &GenaiClient {
         &self.genai_client
-    }
-
-    pub fn build_policy() -> Result<PolicyEngine, Report> {
-        PolicyEngine::new()
     }
 
     pub fn default_file_storage_provider(&self) -> &FileStorage {

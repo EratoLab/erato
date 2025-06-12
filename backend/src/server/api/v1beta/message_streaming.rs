@@ -9,6 +9,7 @@ use crate::models::message::{
     ContentPart, GenerationInputMessages, MessageSchema, ToolCallStatus as MessageToolCallStatus,
     ToolUse,
 };
+use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::ChatMessage;
 use crate::services::file_storage::FileStorage;
@@ -439,6 +440,7 @@ async fn stream_get_or_create_chat<
 >(
     tx: Sender<Result<Event, Report>>,
     app_state: &AppState,
+    policy: &PolicyEngine,
     me_user: &MeProfile,
     previous_message_id: Option<&Uuid>,
     existing_chat_id: Option<&Uuid>,
@@ -448,7 +450,7 @@ async fn stream_get_or_create_chat<
         // Get or create the chat using the existing chat ID
         let result = get_or_create_chat(
             &app_state.db,
-            app_state.policy(),
+            policy,
             &me_user.to_subject(),
             Some(existing_chat_id),
             &me_user.0.id,
@@ -472,7 +474,7 @@ async fn stream_get_or_create_chat<
         // Get or create the chat using the previous message ID
         let result = get_or_create_chat_by_previous_message_id(
             &app_state.db,
-            app_state.policy(),
+            policy,
             &me_user.to_subject(),
             previous_message_id,
             &me_user.0.id,
@@ -499,11 +501,13 @@ async fn stream_get_or_create_chat<
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn stream_save_user_message<
     MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseUserMessageSaved>,
 >(
     tx: Sender<Result<Event, Report>>,
     app_state: &AppState,
+    policy: &PolicyEngine,
     me_user: &MeProfile,
     chat: &chats::Model,
     previous_message_id: Option<&Uuid>,
@@ -521,7 +525,7 @@ async fn stream_save_user_message<
 
     let saved_user_message = match submit_message(
         &app_state.db,
-        app_state.policy(),
+        policy,
         &me_user.to_subject(),
         &chat.id,
         user_message,
@@ -778,6 +782,7 @@ async fn stream_update_assistant_message_completion<
 >(
     tx: Sender<Result<Event, Report>>,
     app_state: &AppState,
+    policy: &PolicyEngine,
     final_content_parts: Vec<ContentPart>,
     me_user: &MeProfile,
     assistant_message_id: Uuid,
@@ -785,7 +790,7 @@ async fn stream_update_assistant_message_completion<
     // Update the assistant message in the database
     let updated_assistant_message = match crate::models::message::update_message_content(
         &app_state.db,
-        app_state.policy(),
+        policy,
         &me_user.to_subject(),
         &assistant_message_id,
         final_content_parts.clone(),
@@ -820,12 +825,15 @@ async fn stream_update_assistant_message_completion<
     .into();
     message_completed_event.send_event(tx.clone()).await?;
 
+    policy.invalidate_data().await;
+
     Ok(())
 }
 
 /// Generate a summary of the chat, based on the first message to the chat.
 pub async fn generate_chat_summary(
     app_state: &AppState,
+    policy: &PolicyEngine,
     me_user: &MeProfile,
     chat: &chats::Model,
     first_message: &messages::Model,
@@ -858,7 +866,7 @@ pub async fn generate_chat_summary(
     // Update the chat with the generated summary
     crate::models::chat::update_chat_summary(
         &app_state.db,
-        &app_state.policy,
+        policy,
         &me_user.to_subject(),
         &chat.id,
         summary,
@@ -886,6 +894,7 @@ pub fn remove_null_characters(s: &str) -> String {
 async fn process_input_files(
     tx: Sender<Result<Event, Report>>,
     app_state: &AppState,
+    policy: &PolicyEngine,
     me_user: &MeProfile,
     input_files_ids: &[Uuid],
 ) -> Result<Vec<FileContentsForGeneration>, ()> {
@@ -894,7 +903,7 @@ async fn process_input_files(
         // Get the file upload record
         let file_upload = match get_file_upload_by_id(
             &app_state.db,
-            app_state.policy(),
+            policy,
             &me_user.to_subject(),
             file_id,
         )
@@ -991,6 +1000,7 @@ async fn process_input_files(
 )]
 pub async fn message_submit_sse(
     State(app_state): State<AppState>,
+    Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
     Json(request): Json<MessageSubmitRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, Report>>> {
@@ -1003,15 +1013,27 @@ pub async fn message_submit_sse(
             stream_get_or_create_chat::<MessageSubmitStreamingResponseMessage>(
                 tx.clone(),
                 &app_state,
+                &policy,
                 &me_user,
                 request.previous_message_id.as_ref(),
                 request.existing_chat_id.as_ref(),
             )
             .await?;
 
+        if chat_status == ChatCreationStatus::Created {
+            let policy_rebuild = policy.rebuild_data(&app_state.db).await;
+            if let Err(err) = policy_rebuild {
+                let _ = tx
+                    .send(Err(err).wrap_err("Failed to rebuild policy data"))
+                    .await;
+                return Err(());
+            }
+        }
+
         let saved_user_message = stream_save_user_message::<MessageSubmitStreamingResponseMessage>(
             tx.clone(),
             &app_state,
+            &policy,
             &me_user,
             &chat,
             request.previous_message_id.as_ref(),
@@ -1025,12 +1047,14 @@ pub async fn message_submit_sse(
                 && request.previous_message_id.is_none())
         {
             let app_state_clone = app_state.clone();
+            let policy_clone = policy.clone();
             let me_user_clone = me_user.clone();
             let chat_clone = chat.clone();
             let saved_user_message_clone = saved_user_message.clone();
             tokio::spawn(async move {
                 let summary_res = generate_chat_summary(
                     &app_state_clone,
+                    &policy_clone,
                     &me_user_clone,
                     &chat_clone,
                     &saved_user_message_clone,
@@ -1043,8 +1067,14 @@ pub async fn message_submit_sse(
             });
         }
 
-        let files_for_generation =
-            process_input_files(tx.clone(), &app_state, &me_user, &request.input_files_ids).await?;
+        let files_for_generation = process_input_files(
+            tx.clone(),
+            &app_state,
+            &policy,
+            &me_user,
+            &request.input_files_ids,
+        )
+        .await?;
         let prepare_chat_request_res = prepare_chat_request(
             &app_state,
             &saved_user_message.id,
@@ -1066,7 +1096,7 @@ pub async fn message_submit_sse(
 
         let initial_assistant_message = match submit_message(
             &app_state.db,
-            app_state.policy(),
+            &policy,
             &me_user.to_subject(),
             &chat.id,
             empty_assistant_message_json,
@@ -1109,6 +1139,7 @@ pub async fn message_submit_sse(
         stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
             tx.clone(),
             &app_state,
+            &policy,
             end,
             &me_user,
             initial_assistant_message.id,
@@ -1149,6 +1180,7 @@ pub async fn message_submit_sse(
 pub async fn regenerate_message_sse(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     Json(request): Json<RegenerateMessageRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, Report>>> {
     // Create a channel for sending events
@@ -1159,7 +1191,7 @@ pub async fn regenerate_message_sse(
         // Get the current message in order to get previous message ID
         let current_message_res = get_message_by_id(
             &app_state.db,
-            &app_state.policy,
+            &policy,
             &me_user.to_subject(),
             &request.current_message_id,
         )
@@ -1179,7 +1211,7 @@ pub async fn regenerate_message_sse(
         // Get the previous message in order to get the chat + required message content
         let previous_message_res = get_message_by_id(
             &app_state.db,
-            &app_state.policy,
+            &policy,
             &me_user.to_subject(),
             &current_message
                 .previous_message_id
@@ -1200,7 +1232,7 @@ pub async fn regenerate_message_sse(
 
         let chat_res = get_chat_by_message_id(
             &app_state.db,
-            &app_state.policy,
+            &policy,
             &me_user.to_subject(),
             &request.current_message_id,
         )
@@ -1218,10 +1250,12 @@ pub async fn regenerate_message_sse(
         let files_for_generation = process_input_files(
             tx.clone(),
             &app_state,
+            &policy,
             &me_user,
             &input_files_for_previous_message,
         )
         .await?;
+
         let prepare_chat_request_res = prepare_chat_request(
             &app_state,
             &previous_message.id,
@@ -1237,9 +1271,10 @@ pub async fn regenerate_message_sse(
 
         // ---- SAVE INITIAL EMPTY ASSISTANT MESSAGE (for regeneration) ----
         let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
+
         let initial_assistant_message = match submit_message(
             &app_state.db,
-            app_state.policy(),
+            &policy,
             &me_user.to_subject(),
             &chat.id,
             empty_assistant_message_json,
@@ -1285,6 +1320,7 @@ pub async fn regenerate_message_sse(
         stream_update_assistant_message_completion::<RegenerateMessageStreamingResponseMessage>(
             tx.clone(),
             &app_state,
+            &policy,
             end,
             &me_user,
             initial_assistant_message.id,
@@ -1325,6 +1361,7 @@ pub async fn regenerate_message_sse(
 pub async fn edit_message_sse(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     Json(request): Json<EditMessageRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, Report>>> {
     // Create a channel for sending events
@@ -1335,7 +1372,7 @@ pub async fn edit_message_sse(
         // Get the message to edit to get its chat and previous message
         let message_to_edit_res = get_message_by_id(
             &app_state.db,
-            &app_state.policy,
+            &policy,
             &me_user.to_subject(),
             &request.message_id,
         )
@@ -1349,7 +1386,7 @@ pub async fn edit_message_sse(
         // Get the previous message (user message) to get the chat + required message content
         let previous_message_res = get_message_by_id(
             &app_state.db,
-            &app_state.policy,
+            &policy,
             &me_user.to_subject(),
             &message_to_edit
                 .previous_message_id
@@ -1364,7 +1401,7 @@ pub async fn edit_message_sse(
 
         let chat_res = get_chat_by_message_id(
             &app_state.db,
-            &app_state.policy,
+            &policy,
             &me_user.to_subject(),
             &request.message_id,
         )
@@ -1387,7 +1424,7 @@ pub async fn edit_message_sse(
 
         let saved_user_message = match submit_message(
             &app_state.db,
-            app_state.policy(),
+            &policy,
             &me_user.to_subject(),
             &chat.id,
             user_message,
@@ -1431,6 +1468,7 @@ pub async fn edit_message_sse(
         let files_for_generation = process_input_files(
             tx.clone(),
             &app_state,
+            &policy,
             &me_user,
             &request.replace_input_files_ids,
         )
@@ -1452,7 +1490,7 @@ pub async fn edit_message_sse(
         let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
         let initial_assistant_message = match submit_message(
             &app_state.db,
-            app_state.policy(),
+            &policy,
             &me_user.to_subject(),
             &chat.id,
             empty_assistant_message_json,
@@ -1495,6 +1533,7 @@ pub async fn edit_message_sse(
         stream_update_assistant_message_completion::<EditMessageStreamingResponseMessage>(
             tx.clone(),
             &app_state,
+            &policy,
             end,
             &me_user,
             initial_assistant_message.id,
