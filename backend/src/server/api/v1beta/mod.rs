@@ -7,6 +7,7 @@ use crate::db::entity_ext::messages;
 use crate::models;
 use crate::models::chat::{archive_chat, get_or_create_chat, get_recent_chats};
 use crate::models::message::{ContentPart, MessageSchema};
+use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
     __path_edit_message_sse, __path_message_submit_sse, __path_regenerate_message_sse,
@@ -289,6 +290,7 @@ pub struct FileUploadResponse {
 pub async fn upload_file(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
     mut multipart: Multipart,
 ) -> Result<Json<FileUploadResponse>, StatusCode> {
@@ -352,7 +354,7 @@ pub async fn upload_file(
         // Store the file metadata in the database
         let file_upload = models::file_upload::create_file_upload(
             &app_state.db,
-            app_state.policy(),
+            &policy,
             &me_user.to_subject(),
             &chat_id,
             filename.clone(),
@@ -457,11 +459,14 @@ pub async fn chats() -> Json<Vec<Chat>> {
 pub async fn chat_messages(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     Path(chat_id): Path<String>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<ChatMessagesResponse>, StatusCode> {
     // Parse the chat ID
     let chat_id = Uuid::parse_str(&chat_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    policy.rebuild_data_if_needed_req(&app_state.db).await?;
 
     // Parse pagination parameters
     let limit = params.get("limit").and_then(|l| l.parse::<u64>().ok());
@@ -471,7 +476,7 @@ pub async fn chat_messages(
     // Get the messages for this chat
     let (messages, stats) = models::message::get_chat_messages(
         &app_state.db,
-        app_state.policy(),
+        &policy,
         &me_user.to_subject(),
         &chat_id,
         limit,
@@ -522,6 +527,7 @@ pub async fn chat_messages(
 pub async fn recent_chats(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<RecentChatsResponse>, StatusCode> {
     // Parse limit and offset from query parameters, with defaults
@@ -538,13 +544,21 @@ pub async fn recent_chats(
         .and_then(|a| a.parse::<bool>().ok())
         .unwrap_or(false);
 
+    policy
+        .rebuild_data_if_needed(&app_state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to rebuild policy data: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
     // Get the user ID from the MeProfile
     let user_id = me_user.0.id.clone();
 
     // Call the get_recent_chats function
     let (model_chats, stats) = get_recent_chats(
         &app_state.db,
-        &app_state.policy,
+        &policy,
         &me_user.to_subject(),
         &user_id,
         limit,
@@ -562,7 +576,7 @@ pub async fn recent_chats(
 
         let file_uploads = models::file_upload::get_chat_file_uploads_with_urls(
             &app_state.db,
-            &app_state.policy,
+            &policy,
             &me_user.to_subject(),
             &chat_id,
             &app_state.file_storage_providers,
@@ -640,12 +654,13 @@ pub struct CreateChatResponse {
 pub async fn create_chat(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     Json(_request): Json<CreateChatRequest>,
 ) -> Result<Json<CreateChatResponse>, StatusCode> {
     // Create a new chat
     let (chat, _) = get_or_create_chat(
         &app_state.db,
-        app_state.policy(),
+        &policy,
         &me_user.to_subject(),
         None,
         &me_user.0.id,
@@ -680,6 +695,7 @@ pub async fn create_chat(
 pub async fn get_file(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     Path(file_id): Path<String>,
 ) -> Result<Json<FileUploadItem>, StatusCode> {
     // Parse the file ID
@@ -688,7 +704,7 @@ pub async fn get_file(
     // Get the file upload record with its download URL
     let file_upload = models::file_upload::get_file_upload_with_url(
         &app_state.db,
-        app_state.policy(),
+        &policy,
         &me_user.to_subject(),
         &file_id,
         &app_state.file_storage_providers,
@@ -752,27 +768,33 @@ pub struct ArchiveChatResponse {
 pub async fn archive_chat_endpoint(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     Path(chat_id): Path<String>,
     Json(_request): Json<ArchiveChatRequest>,
 ) -> Result<Json<ArchiveChatResponse>, StatusCode> {
     // Parse the chat ID
     let chat_id = Uuid::parse_str(&chat_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
+    policy
+        .rebuild_data_if_needed(&app_state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to rebuild policy data: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
     // Archive the chat
-    let updated_chat = archive_chat(
-        &app_state.db,
-        app_state.policy(),
-        &me_user.to_subject(),
-        &chat_id,
-    )
-    .await
-    .map_err(|e| {
-        if e.to_string().contains("not found") {
-            StatusCode::NOT_FOUND
-        } else {
-            log_internal_server_error(e)
-        }
-    })?;
+    let updated_chat = archive_chat(&app_state.db, &policy, &me_user.to_subject(), &chat_id)
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                log_internal_server_error(e)
+            }
+        })?;
+
+    policy.invalidate_data().await;
 
     // Check if archived_at is set (it should be)
     let archived_at = updated_chat.archived_at.ok_or_else(|| {

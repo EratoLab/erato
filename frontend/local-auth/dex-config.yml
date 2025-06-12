@@ -24,3 +24,33 @@ staticPasswords:
     hash: "$2y$10$EI3YbB3STkWvAzAyZ/fU/ehRT6M5ActxvZS9rZ1fXmTV2zxYNgUaK" # password: admin
     username: "user"
     userID: "08a8684b-db88-4b73-90a9-3cd1661f5467"
+
+  - email: "user01@example.com"
+    hash: "$2y$10$EI3YbB3STkWvAzAyZ/fU/ehRT6M5ActxvZS9rZ1fXmTV2zxYNgUaK" # password: admin
+    username: "user"
+    userID: "08a8684b-db88-4b73-90a9-3cd166100001"
+
+  - email: "user02@example.com"
+    hash: "$2y$10$EI3YbB3STkWvAzAyZ/fU/ehRT6M5ActxvZS9rZ1fXmTV2zxYNgUaK" # password: admin
+    username: "user"
+    userID: "08a8684b-db88-4b73-90a9-3cd166100002"
+
+  - email: "user03@example.com"
+    hash: "$2y$10$EI3YbB3STkWvAzAyZ/fU/ehRT6M5ActxvZS9rZ1fXmTV2zxYNgUaK" # password: admin
+    username: "user"
+    userID: "08a8684b-db88-4b73-90a9-3cd166100003"
+
+  - email: "user04@example.com"
+    hash: "$2y$10$EI3YbB3STkWvAzAyZ/fU/ehRT6M5ActxvZS9rZ1fXmTV2zxYNgUaK" # password: admin
+    username: "user"
+    userID: "08a8684b-db88-4b73-90a9-3cd166100004"
+
+  - email: "user05@example.com"
+    hash: "$2y$10$EI3YbB3STkWvAzAyZ/fU/ehRT6M5ActxvZS9rZ1fXmTV2zxYNgUaK" # password: admin
+    username: "user"
+    userID: "08a8684b-db88-4b73-90a9-3cd166100005"
+
+  - email: "user06@example.com"
+    hash: "$2y$10$EI3YbB3STkWvAzAyZ/fU/ehRT6M5ActxvZS9rZ1fXmTV2zxYNgUaK" # password: admin
+    username: "user"
+    userID: "08a8684b-db88-4b73-90a9-3cd166100006"

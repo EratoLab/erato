@@ -1,4 +1,5 @@
 use crate::models::message::{ContentPart, GenerationInputMessages, MessageRole};
+use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
 use crate::state::AppState;
@@ -83,21 +84,26 @@ pub struct TokenUsageResponse {
 pub async fn token_usage_estimate(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     Json(request): Json<TokenUsageRequest>,
 ) -> Result<Json<TokenUsageResponse>, (axum::http::StatusCode, String)> {
     // Process files to get their text content
-    let files_for_generation =
-        match process_input_files_for_token_count(&app_state, &me_user, &request.input_files_ids)
-            .await
-        {
-            Ok(files) => files,
-            Err(err) => {
-                return Err((
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to process input files: {}", err),
-                ));
-            }
-        };
+    let files_for_generation = match process_input_files_for_token_count(
+        &app_state,
+        &me_user,
+        &policy,
+        &request.input_files_ids,
+    )
+    .await
+    {
+        Ok(files) => files,
+        Err(err) => {
+            return Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to process input files: {}", err),
+            ));
+        }
+    };
 
     // Get the input messages based on the previous message ID
     let input_messages = if let Some(prev_msg_id) = request.previous_message_id {
@@ -227,6 +233,7 @@ async fn prepare_input_messages(
 async fn process_input_files_for_token_count(
     app_state: &AppState,
     me_user: &MeProfile,
+    policy: &PolicyEngine,
     input_files_ids: &[Uuid],
 ) -> Result<Vec<FileContentsForGeneration>, Report> {
     let mut converted_files = vec![];
@@ -234,7 +241,7 @@ async fn process_input_files_for_token_count(
         // Get the file upload record
         let file_upload = crate::models::file_upload::get_file_upload_by_id(
             &app_state.db,
-            app_state.policy(),
+            policy,
             &me_user.to_subject(),
             file_id,
         )

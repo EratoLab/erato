@@ -60,7 +60,7 @@ pub fn test_app_config() -> AppConfig {
     config_schema.try_deserialize().unwrap()
 }
 
-pub fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppState {
+pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppState {
     let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
     let mut file_storage_providers = HashMap::new();
 
@@ -80,8 +80,7 @@ pub fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppState {
     file_storage_providers.insert("local_minio".to_owned(), provider);
 
     AppState {
-        db,
-        policy: AppState::build_policy().unwrap(),
+        db: db.clone(),
         genai_client: AppState::build_genai_client(app_config.chat_provider).unwrap(),
         default_file_storage_provider: None,
         system_prompt: None,
@@ -144,7 +143,7 @@ async fn test_user_without_email(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_profile_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool);
+    let app_state = test_app_state(test_app_config(), pool).await;
 
     // Create a test user
     let issuer = "http://0.0.0.0:5556";
@@ -189,7 +188,7 @@ async fn test_profile_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_message_submit_stream(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool);
+    let app_state = test_app_state(test_app_config(), pool).await;
 
     // Create a test user
     let issuer = "http://0.0.0.0:5556";
@@ -313,8 +312,7 @@ async fn test_message_submit_stream(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_config = test_app_config();
-    let app_state = test_app_state(app_config, pool);
+    let app_state = test_app_state(test_app_config(), pool).await;
 
     // Create a test user
     let issuer = "http://0.0.0.0:5556";
@@ -550,8 +548,7 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_config = test_app_config();
-    let app_state = test_app_state(app_config, pool);
+    let app_state = test_app_state(test_app_config(), pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -804,8 +801,7 @@ async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_config = test_app_config();
-    let app_state = test_app_state(app_config, pool);
+    let app_state = test_app_state(test_app_config(), pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -1182,8 +1178,7 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_config = test_app_config();
-    let app_state = test_app_state(app_config, pool);
+    let app_state = test_app_state(test_app_config(), pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -1313,8 +1308,7 @@ async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_edit_message_stream(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_config = test_app_config();
-    let app_state = test_app_state(app_config, pool);
+    let app_state = test_app_state(test_app_config(), pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -1526,8 +1520,7 @@ async fn collect_sse_messages(response: TestResponse) -> Vec<Event> {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_create_chat_file_upload_message_flow(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_config = test_app_config();
-    let app_state = test_app_state(app_config, pool);
+    let app_state = test_app_state(test_app_config(), pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -1676,8 +1669,7 @@ async fn test_create_chat_file_upload_message_flow(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_get_file_by_id(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_config = test_app_config();
-    let app_state = test_app_state(app_config, pool);
+    let app_state = test_app_state(test_app_config(), pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -1781,8 +1773,7 @@ async fn test_get_file_by_id(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_token_usage_estimate_with_file(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_config = test_app_config();
-    let app_state = test_app_state(app_config, pool);
+    let app_state = test_app_state(test_app_config(), pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()

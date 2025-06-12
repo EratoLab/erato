@@ -2,12 +2,12 @@ use serde::{Deserialize, Serialize};
 use synonym::Synonym;
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all_fields = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum SubjectKind {
     User,
 }
 
-#[derive(Synonym)]
+#[derive(Synonym, Serialize)]
 pub struct SubjectId(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,7 +39,7 @@ pub enum ResourceKind {
     Message,
 }
 
-#[derive(Synonym)]
+#[derive(Synonym, Serialize)]
 pub struct ResourceId(pub String);
 
 impl ResourceId {

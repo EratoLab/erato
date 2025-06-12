@@ -60,6 +60,11 @@ pub async fn get_or_create_chat(
     }
 }
 
+/// Get all chats from the database.
+pub async fn get_all_chats(conn: &DatabaseConnection) -> Result<Vec<chats::Model>, Report> {
+    Ok(Chats::find().all(conn).await?)
+}
+
 /// Convenience method to get or create a chat based on a previous message ID.
 ///
 /// If the message ID is provided, it will find the chat that the message belongs to.
@@ -163,18 +168,19 @@ pub async fn get_recent_chats(
         .await?;
 
     // Should already be filtered to the correct user, but make sure to authorize.
-    let authorized_chats: Vec<_> = chats
-        .iter()
-        .filter(|(chat, _)| {
-            authorize!(
-                policy,
-                subject,
-                &Resource::Chat(chat.id.to_string()),
-                Action::Read
-            )
-            .is_ok()
-        })
-        .collect();
+    let mut authorized_chats = Vec::new();
+    for (chat, latest_message) in chats.iter() {
+        if authorize!(
+            policy,
+            subject,
+            &Resource::Chat(chat.id.to_string()),
+            Action::Read
+        )
+        .is_ok()
+        {
+            authorized_chats.push((chat, latest_message));
+        }
+    }
 
     let recent_chats = authorized_chats
         .iter()
