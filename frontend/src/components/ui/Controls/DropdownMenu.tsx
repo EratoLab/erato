@@ -282,6 +282,7 @@ export const DropdownMenu = memo(
 
       const content = (
         <div
+          ref={menuRef}
           id={menuId}
           className={clsx(
             "fixed w-48 rounded-md shadow-lg",
@@ -333,7 +334,7 @@ export const DropdownMenu = memo(
     };
 
     return (
-      <div className={clsx("relative inline-block", className)} ref={menuRef}>
+      <div className={clsx("relative inline-block", className)}>
         <Button
           ref={buttonRef}
           size="sm"

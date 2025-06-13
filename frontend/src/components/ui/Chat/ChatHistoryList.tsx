@@ -78,23 +78,31 @@ const ChatHistoryListItem = memo<{
           <span className="truncate font-medium">
             {session.title || t`New Chat`}
           </span>
-          <DropdownMenu
-            items={[
-              {
-                label: t`Show Details`,
-                icon: <Info className="size-4" />,
-                onClick: onShowDetails ?? (() => {}),
-              },
-              {
-                label: t`Remove`,
-                icon: <LogOutIcon className="size-4" />,
-                onClick: onArchive ?? (() => {}),
-                confirmAction: true,
-                confirmTitle: t`Confirm Removal`,
-                confirmMessage: t`Are you sure you want to remove this chat?`,
-              },
-            ]}
-          />
+          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
+          <div
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <DropdownMenu
+              items={[
+                {
+                  label: t`Show Details`,
+                  icon: <Info className="size-4" />,
+                  onClick: onShowDetails ?? (() => {}),
+                },
+                {
+                  label: t`Remove`,
+                  icon: <LogOutIcon className="size-4" />,
+                  onClick: onArchive ?? (() => {}),
+                  confirmAction: true,
+                  confirmTitle: t`Confirm Removal`,
+                  confirmMessage: t`Are you sure you want to remove this chat?`,
+                },
+              ]}
+            />
+          </div>
         </div>
         {layout !== "compact" && (
           <>
