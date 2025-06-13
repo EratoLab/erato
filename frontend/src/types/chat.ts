@@ -21,6 +21,7 @@ export interface ChatSessionMetadata {
     timestamp: string;
     sender?: "user" | "assistant" | "system";
   };
+  fileCount?: number;
 }
 
 export interface ChatSession {

@@ -128,6 +128,7 @@ export const Chat = ({
             content: chat.title_by_summary || "", // Reuse title as a preview if no actual message available
             timestamp: chat.last_message_at || new Date().toISOString(),
           },
+          fileCount: chat.file_uploads.length,
         },
       }))
     : [];
