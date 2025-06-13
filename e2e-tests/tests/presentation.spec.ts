@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import Sharp from "sharp";
 import { TAG_CI } from "./tags";
-import { login } from "./shared";
+import { chatIsReadyToChat, login } from "./shared";
 
 /**
  * Analyzes a screenshot buffer to determine if it shows a light or dark theme
@@ -90,10 +90,8 @@ test(
     await page.goto("/");
 
     await login(page, "admin@example.com");
+    await chatIsReadyToChat(page);
 
-    await expect(
-      page.getByRole("textbox", { name: "Type a message..." }),
-    ).toBeVisible();
     await expectIsDarkPage(page, "Page should be dark by default");
     // Toggle to light and check if it persists after reload
     await page.getByRole("button", { name: "expand sidebar" }).click();
@@ -116,10 +114,8 @@ test(
     await page.goto("/");
 
     await login(page, "admin@example.com");
+    await chatIsReadyToChat(page);
 
-    await expect(
-      page.getByRole("textbox", { name: "Type a message..." }),
-    ).toBeVisible();
     await expectIsLightPage(page, "Page should be light by default");
     // Toggle to light and check if it persists after reload
     await page.getByRole("button", { name: "expand sidebar" }).click();

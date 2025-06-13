@@ -9,10 +9,7 @@ test(
     await page.goto("/");
 
     await login(page, "admin@example.com");
-
-    await expect(
-      page.getByRole("textbox", { name: "Type a message..." }),
-    ).toBeVisible();
+    await chatIsReadyToChat(page);
 
     // Start waiting for file chooser before clicking the button
     const fileChooserPromise = page.waitForEvent("filechooser");
@@ -34,6 +31,7 @@ test(
     await page.goto("/");
 
     await login(page, "admin@example.com");
+    await chatIsReadyToChat(page);
 
     const textbox = page.getByRole("textbox", { name: "Type a message..." });
     await expect(textbox).toBeVisible();
@@ -43,7 +41,7 @@ test(
     await textbox.fill("Please write a short poem about the sun");
     await textbox.press("Enter");
 
-    await chatIsReadyToChat(page);
+    await chatIsReadyToChat(page, { expectAssistantResponse: true });
 
     // Verify that the URL is a chat URL and save the chat ID
     await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/);
