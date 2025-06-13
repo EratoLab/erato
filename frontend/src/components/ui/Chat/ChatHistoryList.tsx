@@ -1,10 +1,13 @@
 import { t } from "@lingui/core/macro";
+import { Plural } from "@lingui/react/macro";
 import clsx from "clsx";
 import { memo } from "react";
 
+import { MessageTimestamp } from "@/components/ui";
+
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
-import { Info, LogOutIcon } from "../icons";
+import { LogOutIcon } from "../icons";
 
 import type { ChatSession } from "@/types/chat";
 
@@ -67,10 +70,10 @@ const ChatHistoryListItem = memo<{
       <InteractiveContainer
         useDiv={true}
         className={clsx(
-          "flex flex-col rounded-lg px-4 py-3 text-left",
+          "flex flex-col rounded-lg px-3 py-1.5 pr-1.5 text-left",
           isActive && "bg-theme-bg-selected",
           "hover:bg-theme-bg-hover",
-          layout === "compact" ? "gap-0.5" : "gap-2",
+          layout === "compact" ? "gap-0.5" : "gap-1",
         )}
         data-chat-id={session.id}
       >
@@ -88,11 +91,6 @@ const ChatHistoryListItem = memo<{
             <DropdownMenu
               items={[
                 {
-                  label: t`Show Details`,
-                  icon: <Info className="size-4" />,
-                  onClick: onShowDetails ?? (() => {}),
-                },
-                {
                   label: t`Remove`,
                   icon: <LogOutIcon className="size-4" />,
                   onClick: onArchive ?? (() => {}),
@@ -106,14 +104,24 @@ const ChatHistoryListItem = memo<{
         </div>
         {layout !== "compact" && (
           <>
-            {session.metadata?.lastMessage && (
-              <p className="truncate text-sm text-theme-fg-secondary">
-                {session.metadata.lastMessage.content}
-              </p>
-            )}
+            <p
+              className={clsx(
+                "truncate text-xs",
+                session.metadata?.fileCount == 0
+                  ? "text-theme-fg-muted"
+                  : "text-theme-fg-secondary",
+              )}
+            >
+              <Plural
+                value={session.metadata?.fileCount ?? 0}
+                _0="No files"
+                one="# file"
+                other="# files"
+              />
+            </p>
             {showTimestamps && session.updatedAt && (
               <p className="text-xs text-theme-fg-secondary">
-                {new Date(session.updatedAt).toLocaleString()}
+                <MessageTimestamp createdAt={new Date(session.updatedAt)} />
               </p>
             )}
           </>

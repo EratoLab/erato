@@ -13,13 +13,18 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/components/ui/MessageList/MessageListHeader.tsx:53
+#: src/components/ui/MessageList/MessageListHeader.tsx:52
 msgid " (more available)"
 msgstr " (more available)"
 
 #: src/components/ui/Chat/TokenUsageWarning.tsx:74
 msgid " File attachments account for {fileTokensFormatted} tokens."
 msgstr " File attachments account for {fileTokensFormatted} tokens."
+
+#. placeholder {0}: session.metadata?.fileCount ?? 0
+#: src/components/ui/Chat/ChatHistoryList.tsx:114
+msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
+msgstr "{0, plural, =0 {No files} one {# file} other {# files}}"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx:119
 msgid "• Change browser language in settings and refresh"
@@ -64,12 +69,12 @@ msgstr "All file types accepted"
 msgid "Approaching Token Limit"
 msgstr "Approaching Token Limit"
 
-#: src/components/ui/Controls/DropdownMenu.tsx:368
+#: src/components/ui/Controls/DropdownMenu.tsx:365
 #: src/components/ui/Controls/Button.tsx:93
 msgid "Are you sure you want to proceed?"
 msgstr "Are you sure you want to proceed?"
 
-#: src/components/ui/Chat/ChatHistoryList.tsx:80
+#: src/components/ui/Chat/ChatHistoryList.tsx:98
 msgid "Are you sure you want to remove this chat?"
 msgstr "Are you sure you want to remove this chat?"
 
@@ -110,11 +115,11 @@ msgstr "Cancel action"
 msgid "Cannot send: Token limit exceeded"
 msgstr "Cannot send: Token limit exceeded"
 
-#: src/components/ui/Chat/Chat.tsx:273
+#: src/components/ui/Chat/Chat.tsx:275
 msgid "Chat conversation"
 msgstr "Chat conversation"
 
-#: src/components/ui/Feedback/ChatErrorBoundary.tsx:41
+#: src/components/ui/Feedback/ChatErrorBoundary.tsx:42
 msgid "Chat Error"
 msgstr "Chat Error"
 
@@ -122,7 +127,7 @@ msgstr "Chat Error"
 msgid "Chat History"
 msgstr "Chat History"
 
-#: src/components/ui/Chat/ChatWidget.tsx:53
+#: src/components/ui/Chat/ChatWidget.tsx:54
 msgid "Chat messages"
 msgstr "Chat messages"
 
@@ -130,11 +135,11 @@ msgstr "Chat messages"
 msgid "Clear All"
 msgstr "Clear All"
 
-#: src/components/ui/Modal/ModalBase.tsx:101
+#: src/components/ui/Modal/ModalBase.tsx:103
 msgid "Close modal"
 msgstr "Close modal"
 
-#: src/components/ui/Modal/ModalBase.tsx:73
+#: src/components/ui/Modal/ModalBase.tsx:75
 msgid "Close modal overlay"
 msgstr "Close modal overlay"
 
@@ -150,12 +155,12 @@ msgstr "Confirm"
 msgid "Confirm action"
 msgstr "Confirm action"
 
-#: src/components/ui/Controls/DropdownMenu.tsx:365
+#: src/components/ui/Controls/DropdownMenu.tsx:362
 #: src/components/ui/Controls/Button.tsx:92
 msgid "Confirm Action"
 msgstr "Confirm Action"
 
-#: src/components/ui/Chat/ChatHistoryList.tsx:79
+#: src/components/ui/Chat/ChatHistoryList.tsx:97
 msgid "Confirm Removal"
 msgstr "Confirm Removal"
 
@@ -172,7 +177,7 @@ msgstr "Dark mode"
 msgid "Default Locale:"
 msgstr "Default Locale:"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:70
+#: src/components/ui/ToolCall/ToolCallItem.tsx:71
 msgid "details for"
 msgstr "details for"
 
@@ -189,7 +194,7 @@ msgstr "Dislike message"
 msgid "Dismiss"
 msgstr "Dismiss"
 
-#: src/components/ui/Modal/FilePreviewModal.tsx:74
+#: src/components/ui/Modal/FilePreviewModal.tsx:73
 msgid "Download File"
 msgstr "Download File"
 
@@ -210,7 +215,7 @@ msgstr "Edit message"
 msgid "End of conversation"
 msgstr "End of conversation"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:35
+#: src/components/ui/ToolCall/ToolCallItem.tsx:36
 msgid "Error"
 msgstr "Error"
 
@@ -222,7 +227,7 @@ msgstr "Error loading file"
 msgid "Error loading theme:"
 msgstr "Error loading theme:"
 
-#: src/components/ui/ToolCall/ToolCallOutput.tsx:29
+#: src/components/ui/ToolCall/ToolCallOutput.tsx:30
 msgid "Error Output"
 msgstr "Error Output"
 
@@ -230,7 +235,7 @@ msgstr "Error Output"
 msgid "Error:"
 msgstr "Error:"
 
-#: src/components/ui/Settings/ToolCallSettings.tsx:87
+#: src/components/ui/Settings/ToolCallSettings.tsx:88
 msgid "Expand by default"
 msgstr "Expand by default"
 
@@ -238,11 +243,11 @@ msgstr "Expand by default"
 msgid "expand sidebar"
 msgstr "expand sidebar"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx:77
+#: src/components/ui/ToolCall/ToolCallDisplay.tsx:78
 msgid "failed"
 msgstr "failed"
 
-#: src/components/ui/FileUpload/FilePreviewBase.tsx:168
+#: src/components/ui/FileUpload/FilePreviewBase.tsx:169
 msgid "File"
 msgstr "File"
 
@@ -252,11 +257,11 @@ msgstr "File"
 msgid "navigation.goHome"
 msgstr "Go Home"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:70
+#: src/components/ui/ToolCall/ToolCallItem.tsx:71
 msgid "Hide"
 msgstr "Hide"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:72
+#: src/components/ui/ToolCall/ToolCallItem.tsx:73
 msgid "Hide details"
 msgstr "Hide details"
 
@@ -264,11 +269,11 @@ msgstr "Hide details"
 msgid "How to Test:"
 msgstr "How to Test:"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:41
+#: src/components/ui/ToolCall/ToolCallItem.tsx:42
 msgid "In Progress"
 msgstr "In Progress"
 
-#: src/components/ui/ToolCall/ToolCallInput.tsx:21
+#: src/components/ui/ToolCall/ToolCallInput.tsx:22
 msgid "Input Parameters"
 msgstr "Input Parameters"
 
@@ -289,7 +294,7 @@ msgstr "Like message"
 msgid "Load older messages"
 msgstr "Load older messages"
 
-#: src/components/ui/Feedback/LoadingIndicator.tsx:93
+#: src/components/ui/Feedback/LoadingIndicator.tsx:92
 msgid "Loading"
 msgstr "Loading"
 
@@ -314,17 +319,18 @@ msgstr "Logo"
 msgid "message"
 msgstr "message"
 
-#: src/components/ui/Chat/ChatInput.tsx:274
+#: src/components/ui/Chat/ChatInput.tsx:272
 msgid "Message exceeds token limit. Please reduce length or remove files."
 msgstr "Message exceeds token limit. Please reduce length or remove files."
 
-#: src/components/ui/MessageList/MessageListHeader.tsx:52
+#: src/components/ui/MessageList/MessageListHeader.tsx:51
 msgid "messages"
 msgstr "messages"
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx:88
-#: src/components/ui/Chat/ChatHistoryList.tsx:65
-#: src/components/ui/Chat/Chat.tsx:122
+#: src/components/ui/Chat/ChatHistoryList.tsx:67
+#: src/components/ui/Chat/ChatHistoryList.tsx:81
+#: src/components/ui/Chat/Chat.tsx:123
 msgid "New Chat"
 msgstr "New Chat"
 
@@ -332,15 +338,15 @@ msgstr "New Chat"
 msgid "No messages yet"
 msgstr "No messages yet"
 
-#: src/components/ui/MessageList/MessageListHeader.tsx:50
+#: src/components/ui/MessageList/MessageListHeader.tsx:49
 msgid "of"
 msgstr "of"
 
-#: src/components/ui/Controls/DropdownMenu.tsx:352
+#: src/components/ui/Controls/DropdownMenu.tsx:349
 msgid "Open menu"
 msgstr "Open menu"
 
-#: src/components/ui/ToolCall/ToolCallOutput.tsx:29
+#: src/components/ui/ToolCall/ToolCallOutput.tsx:30
 msgid "Output"
 msgstr "Output"
 
@@ -352,16 +358,16 @@ msgstr "Preview attached file:"
 msgid "Preview attachment"
 msgstr "Preview attachment"
 
-#: src/components/ui/Modal/FilePreviewModal.tsx:66
+#: src/components/ui/Modal/FilePreviewModal.tsx:65
 msgid "Preview is not available for this file type."
 msgstr "Preview is not available for this file type."
 
-#: src/components/ui/Modal/FilePreviewModal.tsx:47
-#: src/components/ui/Modal/FilePreviewModal.tsx:57
+#: src/components/ui/Modal/FilePreviewModal.tsx:46
+#: src/components/ui/Modal/FilePreviewModal.tsx:56
 msgid "Preview of"
 msgstr "Preview of"
 
-#: src/components/ui/Modal/FilePreviewModal.tsx:85
+#: src/components/ui/Modal/FilePreviewModal.tsx:84
 msgid "Preview:"
 msgstr "Preview:"
 
@@ -371,8 +377,8 @@ msgid "home.redirecting"
 msgstr "Redirecting to chat..."
 
 #: src/components/ui/FileUpload/FilePreviewButton.tsx:62
-#: src/components/ui/FileUpload/FilePreviewBase.tsx:218
-#: src/components/ui/Chat/ChatHistoryList.tsx:75
+#: src/components/ui/FileUpload/FilePreviewBase.tsx:219
+#: src/components/ui/Chat/ChatHistoryList.tsx:93
 msgid "Remove"
 msgstr "Remove"
 
@@ -396,17 +402,13 @@ msgstr "Reset to Browser Detection"
 msgid "Send message"
 msgstr "Send message"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:70
+#: src/components/ui/ToolCall/ToolCallItem.tsx:71
 msgid "Show"
 msgstr "Show"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:72
+#: src/components/ui/ToolCall/ToolCallItem.tsx:73
 msgid "Show details"
 msgstr "Show details"
-
-#: src/components/ui/Chat/ChatHistoryList.tsx:70
-msgid "Show Details"
-msgstr "Show Details"
 
 #: src/components/ui/Message/DefaultMessageControls.tsx:115
 #: src/components/ui/Message/DefaultMessageControls.tsx:117
@@ -418,11 +420,11 @@ msgstr "Show formatted"
 msgid "Show raw markdown"
 msgstr "Show raw markdown"
 
-#: src/components/ui/Settings/ToolCallSettings.tsx:61
+#: src/components/ui/Settings/ToolCallSettings.tsx:62
 msgid "Show tool calls"
 msgstr "Show tool calls"
 
-#: src/components/ui/MessageList/MessageListHeader.tsx:42
+#: src/components/ui/MessageList/MessageListHeader.tsx:41
 msgid "Showing"
 msgstr "Showing"
 
@@ -438,15 +440,15 @@ msgstr "Some files won't be accepted..."
 msgid "Something went wrong"
 msgstr "Something went wrong"
 
-#: src/components/ui/Feedback/ChatErrorBoundary.tsx:45
+#: src/components/ui/Feedback/ChatErrorBoundary.tsx:46
 msgid "Something went wrong while loading the chat interface."
 msgstr "Something went wrong while loading the chat interface."
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:29
+#: src/components/ui/ToolCall/ToolCallItem.tsx:30
 msgid "Success"
 msgstr "Success"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx:77
+#: src/components/ui/ToolCall/ToolCallDisplay.tsx:78
 msgid "successful"
 msgstr "successful"
 
@@ -462,7 +464,7 @@ msgstr "System theme"
 msgid "Test Locale Changes:"
 msgstr "Test Locale Changes:"
 
-#: src/components/ui/Feedback/LoadingIndicator.tsx:91
+#: src/components/ui/Feedback/LoadingIndicator.tsx:90
 msgid "Thinking"
 msgstr "Thinking"
 
@@ -482,31 +484,31 @@ msgstr "Token Limit Exceeded"
 msgid "Token Usage"
 msgstr "Token Usage"
 
-#: src/components/ui/Settings/ToolCallSettings.tsx:36
+#: src/components/ui/Settings/ToolCallSettings.tsx:37
 msgid "Tool Call Display"
 msgstr "Tool Call Display"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx:77
+#: src/components/ui/ToolCall/ToolCallDisplay.tsx:78
 msgid "Tool calls"
 msgstr "Tool calls"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx:82
+#: src/components/ui/ToolCall/ToolCallDisplay.tsx:83
 msgid "Tool Calls"
 msgstr "Tool Calls"
 
-#: src/components/ui/Settings/ToolCallSettings.tsx:95
+#: src/components/ui/Settings/ToolCallSettings.tsx:96
 msgid "Tool calls show how the assistant used external tools to generate responses."
 msgstr "Tool calls show how the assistant used external tools to generate responses."
 
-#: src/components/ui/Feedback/LoadingIndicator.tsx:102
+#: src/components/ui/Feedback/LoadingIndicator.tsx:101
 msgid "Tool usage:"
 msgstr "Tool usage:"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx:77
+#: src/components/ui/ToolCall/ToolCallDisplay.tsx:78
 msgid "total"
 msgstr "total"
 
-#: src/components/ui/Feedback/ChatErrorBoundary.tsx:48
+#: src/components/ui/Feedback/ChatErrorBoundary.tsx:49
 msgid "Try Again"
 msgstr "Try Again"
 
@@ -514,7 +516,7 @@ msgstr "Try Again"
 msgid "Type a message..."
 msgstr "Type a message..."
 
-#: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx:59
+#: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx:60
 #: src/components/ui/FileUpload/FileUpload.tsx:69
 msgid "Upload Files"
 msgstr "Upload Files"
@@ -528,11 +530,11 @@ msgid "Uploading file"
 msgstr "Uploading file"
 
 #: src/components/ui/Feedback/Avatar.tsx:59
-#: src/components/ui/Feedback/Avatar.tsx:65
+#: src/components/ui/Feedback/Avatar.tsx:64
 msgid "User avatar"
 msgstr "User avatar"
 
-#: src/components/ui/Feedback/LoadingIndicator.tsx:89
+#: src/components/ui/Feedback/LoadingIndicator.tsx:88
 msgid "Using tools"
 msgstr "Using tools"
 

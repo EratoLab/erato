@@ -344,6 +344,7 @@ export const DropdownMenu = memo(
             e.stopPropagation();
             setIsOpen(!isOpen);
           }}
+          className={"flex items-center justify-center"}
           icon={triggerIcon}
           aria-label={t`Open menu`}
           aria-expanded={isOpen}
