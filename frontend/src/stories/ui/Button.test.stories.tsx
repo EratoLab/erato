@@ -1,8 +1,8 @@
-import { PlusIcon } from "@heroicons/react/24/outline";
 import { expect, userEvent, within } from "@storybook/test";
 import { useState } from "react";
 
 import { Button } from "../../components/ui/Controls/Button";
+import { PlusIcon } from "../../components/ui/icons";
 
 import type { Meta, StoryObj } from "@storybook/react";
 

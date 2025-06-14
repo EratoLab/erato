@@ -1,9 +1,9 @@
-import { XMarkIcon } from "@heroicons/react/24/outline";
 import { t } from "@lingui/core/macro";
 import { memo, useCallback } from "react";
 
 import { FilePreviewBase, type FileResource } from "./FilePreviewBase";
 import { Button } from "../Controls/Button";
+import { CloseIcon } from "../icons";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -58,7 +58,7 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
       <Button
         variant="ghost"
         size="sm"
-        icon={<XMarkIcon className="size-4" />}
+        icon={<CloseIcon className="size-4" />}
         aria-label={`${t`Remove`} ${(file as File).name || (file as FileUploadItem).filename}`}
         onClick={(e) => {
           // Stop event propagation to prevent triggering parent container's click

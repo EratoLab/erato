@@ -1,4 +1,3 @@
-import { ArrowUpIcon } from "@heroicons/react/24/outline";
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -10,6 +9,7 @@ import { useFileDropzone } from "@/hooks/files";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { useChatContext } from "@/providers/ChatProvider";
 
+import { ArrowUpIcon } from "../icons";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";

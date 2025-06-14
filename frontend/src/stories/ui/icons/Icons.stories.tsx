@@ -18,13 +18,14 @@ const meta = {
     docs: {
       description: {
         component: `
-Feather-based SVG icons used throughout the chat interface.
+Iconoir-based SVG icons used throughout the chat interface.
 
 ## Technical Notes
-- SVG icons with consistent 24x24 viewBox
+- SVG icons with consistent 24x24 viewBox (Iconoir design system)
 - Inherits current text color via currentColor
-- Configurable stroke width and size via className
+- Configurable stroke width and size via className and props
 - Optimized for crisp rendering at small sizes
+- Tree-shakeable and performance optimized
         `,
       },
     },

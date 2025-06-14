@@ -1,14 +1,14 @@
-import {
-  XMarkIcon,
-  ExclamationTriangleIcon,
-  InformationCircleIcon,
-  ExclamationCircleIcon,
-  CheckCircleIcon,
-} from "@heroicons/react/24/outline";
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 
 import { Button } from "../Controls/Button";
+import {
+  CloseIcon,
+  WarningIcon,
+  Info,
+  WarningCircleIcon,
+  CheckCircleIcon,
+} from "../icons";
 
 import type React from "react";
 import type { ReactNode } from "react";
@@ -49,16 +49,16 @@ export const Alert: React.FC<AlertProps> = ({
     error: {
       container:
         "bg-theme-error-bg text-theme-error-fg border-theme-error-border",
-      icon: <ExclamationCircleIcon className="size-5" />,
+      icon: <WarningCircleIcon className="size-5" />,
     },
     warning: {
       container:
         "bg-theme-warning-bg text-theme-warning-fg border-theme-warning-border",
-      icon: <ExclamationTriangleIcon className="size-5" />,
+      icon: <WarningIcon className="size-5" />,
     },
     info: {
       container: "bg-theme-info-bg text-theme-info-fg border-theme-info-border",
-      icon: <InformationCircleIcon className="size-5" />,
+      icon: <Info className="size-5" />,
     },
     success: {
       container:
@@ -92,7 +92,7 @@ export const Alert: React.FC<AlertProps> = ({
           size="sm"
           className="-mr-1 -mt-1 shrink-0"
           onClick={onDismiss}
-          icon={<XMarkIcon className="size-4" />}
+          icon={<CloseIcon className="size-4" />}
           aria-label={t`Dismiss`}
         />
       )}

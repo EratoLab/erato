@@ -2,6 +2,8 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useEffect, useRef } from "react";
 
+import { CloseIcon } from "../icons";
+
 import type React from "react";
 
 interface ModalBaseProps {
@@ -102,20 +104,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
               className="absolute right-3 top-3 rounded-full p-1 text-theme-fg-muted hover:bg-theme-bg-secondary focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label={t`Close modal`}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="size-6"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <CloseIcon className="size-6" />
             </button>
           </div>
         )}
