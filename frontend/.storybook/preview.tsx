@@ -64,13 +64,17 @@ const I18nProviderWrapper: React.FC<{
 
       try {
         // Load the selected locale messages (compiled .ts files)
-        const { messages } = await import(`../src/locales/${locale}/messages`);
+        const { messages } = await import(
+          /* @vite-ignore */ `../src/locales/${locale}/messages`
+        );
         i18n.load(locale, messages);
         i18n.activate(locale);
       } catch {
         console.warn(`Failed to load locale ${locale}, falling back to en`);
         try {
-          const { messages } = await import(`../src/locales/en/messages`);
+          const { messages } = await import(
+            /* @vite-ignore */ `../src/locales/en/messages`
+          );
           i18n.load("en", messages);
           i18n.activate("en");
         } catch {
