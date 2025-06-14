@@ -45,31 +45,67 @@ pub struct AppConfig {
 
 impl AppConfig {
     /// Separate builder, so we can also add overrides in tests.
-    pub fn config_schema_builder() -> Result<ConfigBuilder<DefaultState>, ConfigError> {
-        let builder = Config::builder()
+    ///
+    /// # Arguments
+    ///
+    /// * `config_file_paths` - An optional ordered list of paths to configuration files. If this is `Some`, auto-discovery is disabled.
+    /// * `auto_discover_config_files` - A boolean flag to enable or disable auto-discovery of `erato.toml` and `*.auto.erato.toml` files.
+    pub fn config_schema_builder(
+        config_file_paths: Option<Vec<String>>,
+        auto_discover_config_files: bool,
+    ) -> Result<ConfigBuilder<DefaultState>, ConfigError> {
+        let mut builder = Config::builder()
             .set_default("environment", "development")?
             .set_default("http_host", "127.0.0.1")?
             .set_default("http_port", "3130")?
-            .set_default("frontend_bundle_path", "./public")?
-            .add_source(config::File::with_name("erato.toml").required(false))
-            .add_source(
-                Environment::default()
-                    .try_parsing(true)
-                    .separator("__")
-                    .list_separator(" ")
-                    .with_list_parse_key("chat_provider.additional_request_parameters")
-                    .with_list_parse_key("chat_provider.additional_request_headers"),
-            );
+            .set_default("frontend_bundle_path", "./public")?;
+
+        let config_files_to_load: Vec<String> = if let Some(paths) = config_file_paths {
+            paths
+        } else if auto_discover_config_files {
+            if let Ok(entries) = std::fs::read_dir(".") {
+                let mut discovered_paths: Vec<String> = entries
+                    .filter_map(Result::ok)
+                    .map(|e| e.path())
+                    .filter(|p| p.is_file())
+                    .filter_map(|p| p.file_name().and_then(|s| s.to_str().map(String::from)))
+                    .filter(|s| s == "erato.toml" || s.ends_with(".auto.erato.toml"))
+                    .collect();
+                discovered_paths.sort();
+                discovered_paths
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+
+        for path in &config_files_to_load {
+            println!("Loading config from: {}", path);
+            builder = builder.add_source(config::File::with_name(path).required(false));
+        }
+
+        builder = builder.add_source(
+            Environment::default()
+                .try_parsing(true)
+                .separator("__")
+                .list_separator(" ")
+                .with_list_parse_key("chat_provider.additional_request_parameters")
+                .with_list_parse_key("chat_provider.additional_request_headers"),
+        );
         Ok(builder)
     }
 
-    pub fn config_schema() -> Result<Config, ConfigError> {
-        let builder = Self::config_schema_builder()?;
+    pub fn config_schema(
+        config_file_paths: Option<Vec<String>>,
+        auto_discover_config_files: bool,
+    ) -> Result<Config, ConfigError> {
+        let builder = Self::config_schema_builder(config_file_paths, auto_discover_config_files)?;
         builder.build()
     }
 
-    pub fn new() -> Result<Self, ConfigError> {
-        let schema = Self::config_schema()?;
+    pub fn new_for_app(config_file_paths: Option<Vec<String>>) -> Result<Self, ConfigError> {
+        let schema = Self::config_schema(config_file_paths, true)?;
         // You can deserialize (and thus freeze) the entire configuration as
         schema.try_deserialize()
     }
