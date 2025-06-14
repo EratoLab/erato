@@ -45,7 +45,7 @@ fn set_test_db_url() {
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./sqitch/deploy");
 
 pub fn test_app_config() -> AppConfig {
-    let mut builder = AppConfig::config_schema_builder().unwrap();
+    let mut builder = AppConfig::config_schema_builder(None, true).unwrap();
     builder = builder
         .set_override("chat_provider.provider_kind", "ollama")
         .unwrap();

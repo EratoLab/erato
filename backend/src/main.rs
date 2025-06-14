@@ -27,7 +27,7 @@ async fn main() -> Result<(), Report> {
         }
     }
 
-    let config = AppConfig::new()?;
+    let config = AppConfig::new_for_app(None)?;
 
     let mut _sentry_guard = None;
     setup_sentry(
