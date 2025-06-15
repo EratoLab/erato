@@ -5,7 +5,7 @@ import { Button } from "../Controls/Button";
 import {
   CloseIcon,
   WarningIcon,
-  Info,
+  InfoIcon,
   WarningCircleIcon,
   CheckCircleIcon,
 } from "../icons";
@@ -58,7 +58,7 @@ export const Alert: React.FC<AlertProps> = ({
     },
     info: {
       container: "bg-theme-info-bg text-theme-info-fg border-theme-info-border",
-      icon: <Info className="size-5" />,
+      icon: <InfoIcon className="size-5" />,
     },
     success: {
       container:

@@ -186,7 +186,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
         <div className="relative h-full">
           {/* Absolutely positioned toggle button when collapsed */}
           {collapsed && (
-            <div className="absolute left-4 top-4 z-30">
+            <div className="absolute left-2 top-2 z-30">
               <Button
                 onClick={onToggleCollapse}
                 variant="sidebar-icon"

@@ -8,7 +8,7 @@ import {
   ThumbDownIcon,
   RerunIcon,
   MoreVertical,
-  Info,
+  InfoIcon,
   Trash,
   SidebarToggleIcon,
   LogOutIcon,
@@ -133,7 +133,7 @@ const ALL_ICONS = {
   // Feedback & Status
   ThumbUpIcon,
   ThumbDownIcon,
-  Info,
+  InfoIcon,
   WarningIcon,
   ErrorIcon,
   WarningCircleIcon,
@@ -313,7 +313,7 @@ const ThemeAwarenessComponent = () => {
             <h4 className="font-medium">Muted/Secondary</h4>
             <div className="flex gap-2 opacity-60">
               <MoreVertical className="size-6" />
-              <Info className="size-6" />
+              <InfoIcon className="size-6" />
               <CodeIcon className="size-6" />
             </div>
           </div>

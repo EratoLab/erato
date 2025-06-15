@@ -26,6 +26,12 @@ import {
   Timer,
   Hourglass,
   Brain,
+  Page,
+  MediaImage,
+  Archive,
+  MusicNote,
+  MediaVideo,
+  MultiplePages,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -62,9 +68,13 @@ export const MoreVertical = ({ className, ...props }: IconProps) => (
   <MoreVert className={className} {...props} />
 );
 
-export const Info = ({ className, ...props }: IconProps) => (
+export const InfoIcon = ({ className, ...props }: IconProps) => (
   <InfoCircle className={className} {...props} />
 );
+
+// Keep Info for backward compatibility but mark as deprecated
+/** @deprecated Use InfoIcon instead for consistency */
+export const Info = InfoIcon;
 
 export const Trash = ({ className, ...props }: IconProps) => (
   <IconoirTrash className={className} {...props} />
@@ -153,6 +163,31 @@ export const BrainIcon = ({ className, ...props }: IconProps) => (
   <Brain className={className} {...props} />
 );
 
+// File type icons
+export const PageIcon = ({ className, ...props }: IconProps) => (
+  <Page className={className} {...props} />
+);
+
+export const MediaImageIcon = ({ className, ...props }: IconProps) => (
+  <MediaImage className={className} {...props} />
+);
+
+export const ArchiveIcon = ({ className, ...props }: IconProps) => (
+  <Archive className={className} {...props} />
+);
+
+export const MusicNoteIcon = ({ className, ...props }: IconProps) => (
+  <MusicNote className={className} {...props} />
+);
+
+export const MediaVideoIcon = ({ className, ...props }: IconProps) => (
+  <MediaVideo className={className} {...props} />
+);
+
+export const MultiplePagesIcon = ({ className, ...props }: IconProps) => (
+  <MultiplePages className={className} {...props} />
+);
+
 // Direct re-exports for convenience (maintaining Iconoir naming)
 export {
   Copy,
@@ -176,6 +211,12 @@ export {
   WarningCircle,
   CheckCircle,
   Code,
+  Page,
+  MediaImage,
+  Archive,
+  MusicNote,
+  MediaVideo,
+  MultiplePages,
 };
 
 // Export the IconProps type for use in other components

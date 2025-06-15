@@ -6,7 +6,7 @@ import {
   MusicNote,
   MediaVideo,
   MultiplePages,
-} from "iconoir-react";
+} from "../components/ui/icons";
 
 /**
  * Supported file types in the application
@@ -53,7 +53,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     extensions: ["pdf"],
     mimeTypes: ["application/pdf"],
     maxSize: 10 * 1024 * 1024, // 10MB
-    icon: Page,
+    icon: MultiplePages,
     iconColor: "rgb(244, 63, 94)", // rose-500
     enabled: true,
   },
