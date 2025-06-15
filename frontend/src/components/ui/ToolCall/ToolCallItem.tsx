@@ -2,6 +2,8 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState } from "react";
 
+import { CheckIcon, ErrorIcon, TimerIcon } from "@/components/ui/icons";
+
 import { ToolCallInput } from "./ToolCallInput";
 import { ToolCallOutput } from "./ToolCallOutput";
 
@@ -24,19 +26,19 @@ export const ToolCallItem: React.FC<ToolCallItemProps> = ({
 
   const statusConfig = {
     success: {
-      icon: "✓",
+      icon: <CheckIcon className="size-3" />,
       color: "text-green-600",
       bgColor: "bg-green-50",
       label: t`Success`,
     },
     error: {
-      icon: "✗",
+      icon: <ErrorIcon className="size-3" />,
       color: "text-red-600",
       bgColor: "bg-red-50",
       label: t`Error`,
     },
     in_progress: {
-      icon: "⏳",
+      icon: <TimerIcon className="size-3" />,
       color: "text-yellow-600",
       bgColor: "bg-yellow-50",
       label: t`In Progress`,
@@ -52,7 +54,7 @@ export const ToolCallItem: React.FC<ToolCallItemProps> = ({
         <div className="flex items-center gap-2">
           <div
             className={clsx(
-              "rounded-full px-2 py-1 text-xs font-medium",
+              "flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium",
               config.bgColor,
               config.color,
             )}

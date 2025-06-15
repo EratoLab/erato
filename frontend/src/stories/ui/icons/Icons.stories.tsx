@@ -485,9 +485,7 @@ export const AccessibilityTesting: Story = {
 
         <div className="space-y-6">
           <div className="rounded-lg border border-theme-border p-4">
-            <h4 className="mb-3 font-medium">
-              ✅ Decorative Icons (aria-hidden)
-            </h4>
+            <h4 className="mb-3 font-medium">Decorative Icons (aria-hidden)</h4>
             <div className="flex items-center gap-3">
               <CopyIcon className="size-5" aria-hidden="true" />
               <span>Copy this text</span>
@@ -499,9 +497,7 @@ export const AccessibilityTesting: Story = {
           </div>
 
           <div className="rounded-lg border border-theme-border p-4">
-            <h4 className="mb-3 font-medium">
-              ✅ Semantic Icons (with labels)
-            </h4>
+            <h4 className="mb-3 font-medium">Semantic Icons (with labels)</h4>
             <div className="flex gap-4">
               <Button
                 variant="icon-only"
@@ -525,7 +521,7 @@ export const AccessibilityTesting: Story = {
           </div>
 
           <div className="rounded-lg border border-theme-border p-4">
-            <h4 className="mb-3 font-medium">✅ Status Icons (with roles)</h4>
+            <h4 className="mb-3 font-medium">Status Icons (with roles)</h4>
             <div className="space-y-2">
               <div
                 className="flex items-center gap-2"

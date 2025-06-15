@@ -14,9 +14,9 @@ const meta = {
 Loading indicator that shows different states with contextual information.
 
 ## States
-- Loading (⏳): Default loading state
-- Tool Calling (🔧): When using external tools
-- Reasoning (💭): When processing information
+- Loading: Default loading state with timer icon
+- Tool Calling: When using external tools with tools icon
+- Reasoning: When processing information with brain icon
         `,
       },
     },

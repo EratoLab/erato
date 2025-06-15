@@ -21,6 +21,11 @@ import {
   WarningCircle,
   CheckCircle,
   Code,
+  Tools,
+  Settings,
+  Timer,
+  Hourglass,
+  Brain,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -125,6 +130,27 @@ export const CheckCircleIcon = ({ className, ...props }: IconProps) => (
 
 export const CodeIcon = ({ className, ...props }: IconProps) => (
   <Code className={className} {...props} />
+);
+
+// Emoji replacement icons
+export const ToolsIcon = ({ className, ...props }: IconProps) => (
+  <Tools className={className} {...props} />
+);
+
+export const SettingsIcon = ({ className, ...props }: IconProps) => (
+  <Settings className={className} {...props} />
+);
+
+export const TimerIcon = ({ className, ...props }: IconProps) => (
+  <Timer className={className} {...props} />
+);
+
+export const HourglassIcon = ({ className, ...props }: IconProps) => (
+  <Hourglass className={className} {...props} />
+);
+
+export const BrainIcon = ({ className, ...props }: IconProps) => (
+  <Brain className={className} {...props} />
 );
 
 // Direct re-exports for convenience (maintaining Iconoir naming)
