@@ -1,6 +1,15 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 
+import {
+  ToolsIcon,
+  SettingsIcon,
+  CheckCircleIcon,
+  ErrorIcon,
+  TimerIcon,
+  BrainIcon,
+} from "@/components/ui/icons";
+
 import type { ToolCall } from "@/hooks/chat/store/messagingStore";
 
 // Define loading state types locally
@@ -25,15 +34,15 @@ const ToolCallIndicator = ({ toolCall }: { toolCall: ToolCall }) => {
   const getStatusIcon = () => {
     switch (toolCall.status) {
       case "proposed":
-        return "🔧";
+        return <ToolsIcon className="size-4" />;
       case "in_progress":
-        return "⚙️";
+        return <SettingsIcon className="size-4" />;
       case "success":
-        return "✅";
+        return <CheckCircleIcon className="size-4" />;
       case "error":
-        return "❌";
+        return <ErrorIcon className="size-4" />;
       default:
-        return "🔧";
+        return <ToolsIcon className="size-4" />;
     }
   };
 
@@ -52,9 +61,7 @@ const ToolCallIndicator = ({ toolCall }: { toolCall: ToolCall }) => {
 
   return (
     <div className={clsx("flex items-center gap-2 text-sm", getStatusColor())}>
-      <span role="img" aria-hidden="true">
-        {getStatusIcon()}
-      </span>
+      <span aria-hidden="true">{getStatusIcon()}</span>
       <span className="font-medium">{toolCall.name}</span>
       {toolCall.progressMessage && (
         <div className="text-xs text-theme-fg-muted">
@@ -74,11 +81,11 @@ export const LoadingIndicator = ({
   const getStateIcon = () => {
     switch (state) {
       case "tool-calling":
-        return "🔧";
+        return <ToolsIcon className="size-4" />;
       case "reasoning":
-        return "💭";
+        return <BrainIcon className="size-4" />;
       default:
-        return "⏳";
+        return <TimerIcon className="size-4" />;
     }
   };
 
@@ -118,9 +125,7 @@ export const LoadingIndicator = ({
         className,
       )}
     >
-      <span role="img" aria-hidden="true">
-        {getStateIcon()}
-      </span>
+      <span aria-hidden="true">{getStateIcon()}</span>
       <span>{getStateLabel()}</span>
       {context && <span className="text-theme-fg-muted">{context}</span>}
     </div>

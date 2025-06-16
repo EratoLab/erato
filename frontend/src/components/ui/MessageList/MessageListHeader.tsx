@@ -37,7 +37,7 @@ export const MessageListHeader = ({
 
       {/* Debug info in development */}
       {process.env.NODE_ENV === "development" && (
-        <div className="sticky right-0 top-0 z-50 text-right text-xs opacity-50">
+        <div className="sticky right-0 top-12 z-10 text-right text-xs opacity-50">
           {t`Showing`}{" "}
           {apiMessagesResponse
             ? Math.min(

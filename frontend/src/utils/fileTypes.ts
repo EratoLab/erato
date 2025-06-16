@@ -1,15 +1,12 @@
 import {
-  DocumentIcon,
-  PhotoIcon,
-  DocumentTextIcon,
-  DocumentChartBarIcon,
-  ArchiveBoxIcon,
-  CodeBracketIcon,
-  TableCellsIcon,
-  MusicalNoteIcon,
-  FilmIcon,
-  PresentationChartBarIcon,
-} from "@heroicons/react/24/solid";
+  Page,
+  MediaImage,
+  Archive,
+  Code,
+  MusicNote,
+  MediaVideo,
+  MultiplePages,
+} from "../components/ui/icons";
 
 /**
  * Supported file types in the application
@@ -56,7 +53,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     extensions: ["pdf"],
     mimeTypes: ["application/pdf"],
     maxSize: 10 * 1024 * 1024, // 10MB
-    icon: DocumentChartBarIcon,
+    icon: MultiplePages,
     iconColor: "rgb(244, 63, 94)", // rose-500
     enabled: true,
   },
@@ -75,7 +72,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     ],
     mimeTypes: ["image/*"],
     maxSize: 5 * 1024 * 1024, // 5MB
-    icon: PhotoIcon,
+    icon: MediaImage,
     iconColor: "rgb(59, 130, 246)", // blue-500
     enabled: true,
   },
@@ -89,7 +86,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/vnd.oasis.opendocument.text",
     ],
     maxSize: 20 * 1024 * 1024, // 20MB
-    icon: DocumentTextIcon,
+    icon: Page,
     iconColor: "rgb(79, 70, 229)", // indigo-500
     enabled: true,
   },
@@ -103,7 +100,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/vnd.oasis.opendocument.spreadsheet",
     ],
     maxSize: 20 * 1024 * 1024, // 20MB
-    icon: TableCellsIcon,
+    icon: Page,
     iconColor: "rgb(16, 185, 129)", // emerald-500
     enabled: true,
   },
@@ -116,7 +113,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/vnd.oasis.opendocument.presentation",
     ],
     maxSize: 30 * 1024 * 1024, // 30MB
-    icon: PresentationChartBarIcon,
+    icon: MultiplePages,
     iconColor: "rgb(245, 158, 11)", // amber-500
     enabled: true,
   },
@@ -125,7 +122,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     extensions: ["txt", "md", "markdown"],
     mimeTypes: ["text/plain", "text/markdown"],
     maxSize: 2 * 1024 * 1024, // 2MB
-    icon: DocumentTextIcon,
+    icon: Page,
     iconColor: "rgb(107, 114, 128)", // gray-500
     enabled: true,
   },
@@ -150,7 +147,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     ],
     mimeTypes: ["text/javascript", "application/json", "text/html", "text/css"],
     maxSize: 2 * 1024 * 1024, // 2MB
-    icon: CodeBracketIcon,
+    icon: Code,
     iconColor: "rgb(124, 58, 237)", // violet-600
     enabled: true,
   },
@@ -164,7 +161,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/gzip",
     ],
     maxSize: 50 * 1024 * 1024, // 50MB
-    icon: ArchiveBoxIcon,
+    icon: Archive,
     iconColor: "rgb(202, 138, 4)", // yellow-600
     enabled: true,
   },
@@ -173,7 +170,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     extensions: ["mp3", "wav", "ogg", "m4a", "flac"],
     mimeTypes: ["audio/*"],
     maxSize: 30 * 1024 * 1024, // 30MB
-    icon: MusicalNoteIcon,
+    icon: MusicNote,
     iconColor: "rgb(219, 39, 119)", // pink-600
     enabled: true,
   },
@@ -182,7 +179,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     extensions: ["mp4", "avi", "mov", "webm", "mkv"],
     mimeTypes: ["video/*"],
     maxSize: 100 * 1024 * 1024, // 100MB
-    icon: FilmIcon,
+    icon: MediaVideo,
     iconColor: "rgb(220, 38, 38)", // red-600
     enabled: true,
   },
@@ -190,7 +187,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     displayName: "File",
     extensions: [],
     mimeTypes: [],
-    icon: DocumentIcon,
+    icon: Page,
     iconColor: "rgb(107, 114, 128)", // gray-500
     enabled: true,
   },

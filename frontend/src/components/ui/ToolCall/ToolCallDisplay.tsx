@@ -2,6 +2,8 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState } from "react";
 
+import { ToolsIcon, CheckIcon, ErrorIcon } from "@/components/ui/icons";
+
 import { ToolCallItem } from ".";
 
 import type { UiToolCall } from "@/utils/adapters/toolCallAdapter";
@@ -79,8 +81,9 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       >
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
-            <span className="text-xs font-medium text-theme-fg-secondary">
-              🔧 {t`Tool Calls`}
+            <span className="flex items-center gap-1 text-xs font-medium text-theme-fg-secondary">
+              <ToolsIcon className="size-3" />
+              {t`Tool Calls`}
             </span>
             <span className="rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs font-medium text-theme-fg-accent">
               {toolCalls.length}
@@ -88,13 +91,15 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
           </div>
           <div className="flex items-center gap-1">
             {successCount > 0 && (
-              <span className="rounded-full bg-theme-success-bg px-1.5 py-0.5 text-xs font-medium text-theme-success-fg">
-                ✓ {successCount}
+              <span className="flex items-center gap-1 rounded-full bg-theme-success-bg px-1.5 py-0.5 text-xs font-medium text-theme-success-fg">
+                <CheckIcon className="size-3" />
+                {successCount}
               </span>
             )}
             {errorCount > 0 && (
-              <span className="rounded-full bg-theme-error-bg px-1.5 py-0.5 text-xs font-medium text-theme-error-fg">
-                ✗ {errorCount}
+              <span className="flex items-center gap-1 rounded-full bg-theme-error-bg px-1.5 py-0.5 text-xs font-medium text-theme-error-fg">
+                <ErrorIcon className="size-3" />
+                {errorCount}
               </span>
             )}
           </div>

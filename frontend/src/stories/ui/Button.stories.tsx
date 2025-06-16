@@ -1,13 +1,12 @@
+import { Button } from "../../components/ui/Controls/Button";
 import {
   ArrowUpIcon,
   PlusIcon,
-  ArrowPathIcon,
-  ClipboardDocumentIcon,
-  HandThumbUpIcon,
-  HandThumbDownIcon,
-} from "@heroicons/react/24/outline";
-
-import { Button } from "../../components/ui/Controls/Button";
+  RerunIcon,
+  CopyIcon,
+  ThumbUpIcon,
+  ThumbDownIcon,
+} from "../../components/ui/icons";
 
 import type { Meta, StoryObj } from "@storybook/react";
 
@@ -99,28 +98,23 @@ export const Sizes: Story = {
 export const MessageControls: Story = {
   render: () => (
     <div className="flex items-center gap-2">
+      <Button size="sm" variant="ghost" icon={<CopyIcon />} aria-label="Copy" />
       <Button
         size="sm"
         variant="ghost"
-        icon={<ClipboardDocumentIcon />}
-        aria-label="Copy"
-      />
-      <Button
-        size="sm"
-        variant="ghost"
-        icon={<HandThumbUpIcon />}
+        icon={<ThumbUpIcon />}
         aria-label="Like"
       />
       <Button
         size="sm"
         variant="ghost"
-        icon={<HandThumbDownIcon />}
+        icon={<ThumbDownIcon />}
         aria-label="Dislike"
       />
       <Button
         size="sm"
         variant="ghost"
-        icon={<ArrowPathIcon />}
+        icon={<RerunIcon />}
         aria-label="Regenerate"
       />
     </div>
@@ -133,7 +127,7 @@ export const ChatControls: Story = {
       <Button size="sm" variant="secondary" icon={<PlusIcon />}>
         New Chat
       </Button>
-      <Button size="sm" variant="secondary" icon={<ArrowPathIcon />}>
+      <Button size="sm" variant="secondary" icon={<RerunIcon />}>
         Regenerate
       </Button>
     </div>

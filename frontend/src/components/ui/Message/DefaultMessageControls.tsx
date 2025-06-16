@@ -1,13 +1,5 @@
 "use client";
 
-import {
-  ClipboardDocumentIcon,
-  HandThumbUpIcon,
-  HandThumbDownIcon,
-  PencilSquareIcon,
-  CheckIcon,
-  CodeBracketIcon,
-} from "@heroicons/react/24/outline";
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState, useEffect, useCallback } from "react";
@@ -16,6 +8,15 @@ import { Button } from "@/components/ui/Controls/Button";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { useProfile } from "@/hooks/useProfile";
 import { createLogger } from "@/utils/debugLogger";
+
+import {
+  CopyIcon,
+  ThumbUpIcon,
+  ThumbDownIcon,
+  EditIcon,
+  CheckIcon,
+  CodeIcon,
+} from "../icons";
 
 import type {
   // MessageAction,
@@ -108,7 +109,7 @@ export const DefaultMessageControls = ({
           <Button
             onClick={onToggleRawMarkdown}
             variant="icon-only"
-            icon={<CodeBracketIcon />}
+            icon={<CodeIcon />}
             size="sm"
             showOnHover={showOnHover}
             aria-label={
@@ -124,11 +125,7 @@ export const DefaultMessageControls = ({
           onClick={() => void handleAction("copy")}
           variant="icon-only"
           icon={
-            isCopied ? (
-              <CheckIcon className="text-green-500" />
-            ) : (
-              <ClipboardDocumentIcon />
-            )
+            isCopied ? <CheckIcon className="text-green-500" /> : <CopyIcon />
           }
           size="sm"
           showOnHover={showOnHover}
@@ -140,7 +137,7 @@ export const DefaultMessageControls = ({
           <Button
             onClick={() => void handleAction("edit")}
             variant="icon-only"
-            icon={<PencilSquareIcon />}
+            icon={<EditIcon />}
             size="sm"
             showOnHover={showOnHover}
             aria-label={t`Edit message`}
@@ -158,7 +155,7 @@ export const DefaultMessageControls = ({
                 feedbackState === "liked" ? (
                   <CheckIcon className="text-green-500" />
                 ) : (
-                  <HandThumbUpIcon />
+                  <ThumbUpIcon />
                 )
               }
               size="sm"
@@ -174,7 +171,7 @@ export const DefaultMessageControls = ({
                 feedbackState === "disliked" ? (
                   <CheckIcon className="text-red-500" />
                 ) : (
-                  <HandThumbDownIcon />
+                  <ThumbDownIcon />
                 )
               }
               size="sm"

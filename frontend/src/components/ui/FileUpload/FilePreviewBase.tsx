@@ -1,9 +1,9 @@
-import { XMarkIcon } from "@heroicons/react/24/outline";
 import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
 import { FILE_TYPES } from "@/utils/fileTypes";
 
+import { CloseIcon } from "../icons";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -218,7 +218,7 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
             className={FILE_PREVIEW_STYLES.closeButton}
             aria-label={`${t`Remove`} ${filename}`}
           >
-            <XMarkIcon className="size-4" />
+            <CloseIcon className="size-4" />
           </button>
         ))}
     </div>
