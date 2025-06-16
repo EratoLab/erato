@@ -32,11 +32,13 @@ describe("i18n Locale Detection (No Persistence)", () => {
       expect(getValidLocale("en")).toBe("en");
       expect(getValidLocale("de")).toBe("de");
       expect(getValidLocale("fr")).toBe("fr");
+      expect(getValidLocale("pl")).toBe("pl");
+      expect(getValidLocale("es")).toBe("es");
     });
 
     it("should return default locale for unsupported locales", () => {
-      expect(getValidLocale("es")).toBe(defaultLocale);
       expect(getValidLocale("ja")).toBe(defaultLocale);
+      expect(getValidLocale("zh")).toBe(defaultLocale);
       expect(getValidLocale("invalid")).toBe(defaultLocale);
     });
 
@@ -71,7 +73,7 @@ describe("i18n Locale Detection (No Persistence)", () => {
 
     it("should validate detected locale against supported locales", () => {
       // Mock detect to return unsupported locale
-      mockedDetect.mockReturnValue("es"); // Spanish not in supportedLocales
+      mockedDetect.mockReturnValue("ja"); // Japanese not in supportedLocales
 
       const result = detectLocale();
 
@@ -123,6 +125,8 @@ describe("i18n Locale Detection (No Persistence)", () => {
         { detected: "en", expected: "en", _description: "English browser" },
         { detected: "de", expected: "de", _description: "German browser" },
         { detected: "fr", expected: "fr", _description: "French browser" },
+        { detected: "pl", expected: "pl", _description: "Polish browser" },
+        { detected: "es", expected: "es", _description: "Spanish browser" },
         {
           detected: "en-US",
           expected: defaultLocale,
@@ -177,7 +181,7 @@ describe("i18n Locale Detection (No Persistence)", () => {
 describe("i18n Module Exports", () => {
   it("should export expected constants", () => {
     expect(defaultLocale).toBe("en");
-    expect(supportedLocales).toEqual(["en", "de", "fr"]);
+    expect(supportedLocales).toEqual(["en", "de", "fr", "pl", "es"]);
   });
 
   it("should export detection function", () => {

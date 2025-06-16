@@ -29,6 +29,8 @@ const SUPPORTED_LOCALES = {
   en: "English",
   de: "Deutsch",
   fr: "Français",
+  pl: "Polski",
+  es: "Español",
 };
 
 // Mock navigator.language for Storybook
@@ -267,6 +269,8 @@ const preview: Preview = {
           { value: "en", title: "🇺🇸 English" },
           { value: "de", title: "🇩🇪 Deutsch" },
           { value: "fr", title: "🇫🇷 Français" },
+          { value: "pl", title: "🇵🇱 Polski" },
+          { value: "es", title: "🇪🇸 Español" },
         ],
         showName: true,
         dynamicTitle: true,
