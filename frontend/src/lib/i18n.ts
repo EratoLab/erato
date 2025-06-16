@@ -2,7 +2,7 @@ import { i18n } from "@lingui/core";
 import { detect, fromNavigator } from "@lingui/detect-locale";
 
 export const defaultLocale = "en";
-export const supportedLocales = ["en", "de", "fr"];
+export const supportedLocales = ["en", "de", "fr", "pl", "es"];
 
 // Validate detected locale
 export function getValidLocale(locale: string): string {
