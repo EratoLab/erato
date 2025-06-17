@@ -32,6 +32,7 @@ import {
   MusicNote,
   MediaVideo,
   MultiplePages,
+  Search,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -102,6 +103,10 @@ export const ComputerIcon = ({ className, ...props }: IconProps) => (
 
 export const PlusIcon = ({ className, ...props }: IconProps) => (
   <Plus className={className} {...props} />
+);
+
+export const SearchIcon = ({ className, ...props }: IconProps) => (
+  <Search className={className} {...props} />
 );
 
 export const CheckIcon = ({ className, ...props }: IconProps) => (
@@ -217,6 +222,7 @@ export {
   MusicNote,
   MediaVideo,
   MultiplePages,
+  Search,
 };
 
 // Export the IconProps type for use in other components

@@ -420,7 +420,11 @@ msgstr "Remove all files"
 msgid "Reset to Browser Detection"
 msgstr "Reset to Browser Detection"
 
-#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Chat/ChatHistorySidebar.tsx:90
+msgid "Search"
+msgstr "Search"
+
+#: src/components/ui/Chat/ChatInput.tsx:336
 msgid "Send message"
 msgstr "Send message"
 

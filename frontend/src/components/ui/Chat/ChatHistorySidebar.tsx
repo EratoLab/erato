@@ -11,7 +11,7 @@ import { createLogger } from "@/utils/debugLogger";
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
-import { SidebarToggleIcon, EditIcon } from "../icons";
+import { SidebarToggleIcon, EditIcon, SearchIcon } from "../icons";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
@@ -80,12 +80,12 @@ const ChatHistoryHeader = memo<{
         <div className="flex w-12 justify-center">
           <Button
             onClick={() => {
-              logger.log("[CHAT_FLOW] New chat button clicked in sidebar");
-              if (onNewChat) void onNewChat();
+              logger.log("[CHAT_FLOW] Search button clicked in sidebar");
+              // TODO: Add search functionality later
             }}
             variant="sidebar-icon"
-            icon={<EditIcon />}
-            aria-label={t`New Chat`}
+            icon={<SearchIcon />}
+            aria-label={t`Search`}
           />
         </div>
       </>
@@ -95,6 +95,33 @@ const ChatHistoryHeader = memo<{
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryHeader.displayName = "ChatHistoryHeader";
+
+const NewChatOption = memo<{
+  onNewChat?: () => void;
+  collapsed: boolean;
+}>(({ onNewChat, collapsed }) => {
+  if (collapsed) return null;
+
+  return (
+    <div className="border-b border-theme-border p-2">
+      <Button
+        onClick={() => {
+          logger.log("[CHAT_FLOW] New chat option clicked");
+          if (onNewChat) void onNewChat();
+        }}
+        variant="ghost"
+        className="flex w-full items-center justify-start gap-2 px-3 py-2 text-left hover:bg-theme-bg-hover"
+        aria-label={t`New Chat`}
+      >
+        <EditIcon className="size-4" />
+        <span>{t`New Chat`}</span>
+      </Button>
+    </div>
+  );
+});
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+NewChatOption.displayName = "NewChatOption";
 
 const ChatHistoryFooter = memo<{
   userProfile?: UserProfile;
@@ -214,6 +241,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               onToggleCollapse={onToggleCollapse}
               showTitle={showTitle}
             />
+            <NewChatOption onNewChat={onNewChat} collapsed={collapsed} />
             <div className="flex min-h-0 flex-1 flex-col">
               {error ? (
                 <ErrorDisplay error={error} />
