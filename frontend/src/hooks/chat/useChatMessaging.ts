@@ -116,16 +116,29 @@ export function useChatMessaging(
       };
     }
 
-    // CRITICAL FIX: When chatId is null (e.g., after archiving), clear ALL user messages
+    // CRITICAL FIX: When chatId is null, distinguish between new chat and after archiving
     // to ensure clean state. For existing chats, only clear completed messages.
     if (!currentChatId) {
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          `[DEBUG_STORE] useChatMessaging (null chatId) effect: Clearing ALL user messages for clean state. Current userMessages count: ${Object.keys(useMessagingStore.getState().userMessages).length}`,
-        );
+      const currentUserMessages = useMessagingStore.getState().userMessages;
+      const hasLocalMessages = Object.keys(currentUserMessages).length > 0;
+
+      if (!hasLocalMessages) {
+        // After archiving scenario: no local messages, clear everything for clean state
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `[DEBUG_STORE] useChatMessaging (null chatId, no local messages) effect: Clearing ALL user messages for clean state after archiving.`,
+          );
+        }
+        useMessagingStore.getState().clearUserMessages();
+      } else {
+        // New chat scenario: has local optimistic messages, preserve them
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `[DEBUG_STORE] useChatMessaging (null chatId, has local messages) effect: Preserving optimistic user messages for new chat. Count: ${Object.keys(currentUserMessages).length}`,
+          );
+        }
+        // Don't clear user messages - let them show as optimistic UI
       }
-      // Clear all user messages when chatId is null (e.g., new chat or after archiving)
-      useMessagingStore.getState().clearUserMessages();
     } else {
       // Only clear completed messages to preserve user messages during navigation for existing chats
       if (process.env.NODE_ENV === "development") {
@@ -364,22 +377,38 @@ export function useChatMessaging(
 
   // Combine API messages and locally added user messages
   const combinedMessages = useMemo(() => {
-    // CRITICAL FIX: When chatId is null (e.g., after archiving), immediately return empty state
-    // to prevent showing stale messages from the previous chat
+    // Convert locally stored user messages to Message[] array
+    const localUserMsgs = Object.values(userMessages);
+
+    // When chatId is null, we need to distinguish between:
+    // 1. Empty state after archiving (no local messages) - return empty
+    // 2. New chat state (has local optimistic messages) - include them
     if (!chatId) {
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          "[DEBUG_STREAMING] combinedMessages: chatId is null, returning empty message state to prevent stale data",
-        );
+      if (localUserMsgs.length === 0) {
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            "[DEBUG_STREAMING] combinedMessages: chatId is null and no local messages, returning empty state to prevent stale data",
+          );
+        }
+        return {};
+      } else {
+        // New chat scenario: show optimistic user messages even without chatId
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            "[DEBUG_STREAMING] combinedMessages: chatId is null but has local optimistic messages, including them for new chat",
+            {
+              localMessages: localUserMsgs.length,
+              userMessagesState: userMessages,
+            },
+          );
+        }
+        // Return only local messages for new chat
+        return mergeDisplayMessages([], localUserMsgs);
       }
-      return {};
     }
 
     const apiMsgs: Message[] =
       chatMessagesQuery.data?.messages.map(mapApiMessageToUiMessage) ?? [];
-
-    // Convert locally stored user messages to Message[] array
-    const localUserMsgs = Object.values(userMessages);
 
     // Use the new utility for merging messages
     const merged = mergeDisplayMessages(apiMsgs, localUserMsgs);

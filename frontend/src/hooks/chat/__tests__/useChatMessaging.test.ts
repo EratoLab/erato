@@ -11,12 +11,89 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
-// Import our patched version of Zustand for testing
-// eslint-disable-next-line import/order
-import zustandMock from "./zustandMock";
+// Mock Zustand for testing
+vi.mock("zustand", async () => {
+  const { act } = await import("@testing-library/react");
+  const { afterEach, beforeEach, vi } = await import("vitest");
 
-// Mock Zustand with our testing version
-vi.mock("zustand", () => zustandMock);
+  const actualZustand = await vi.importActual("zustand");
+
+  // Store reset functions
+  const storeResetFns = new Set<() => void>();
+
+  const createUncurried = <T>(stateCreator: StateCreator<T>) => {
+    const store = (actualZustand.create as any)(stateCreator);
+    const initialState = store.getInitialState() || store.getState();
+
+    console.log("MOCK: Created store with initial state:", initialState);
+
+    storeResetFns.add(() => {
+      console.log("MOCK: Resetting store to initial state:", initialState);
+      store.setState(initialState, true);
+    });
+
+    return store;
+  };
+
+  const resetAllStores = () => {
+    console.log(`MOCK: Resetting ${storeResetFns.size} stores`);
+    act(() => {
+      storeResetFns.forEach((resetFn) => {
+        try {
+          resetFn();
+        } catch (error) {
+          console.error("MOCK: Error resetting store:", error);
+        }
+      });
+    });
+  };
+
+  beforeEach(() => {
+    resetAllStores();
+  });
+
+  afterEach(() => {
+    resetAllStores();
+  });
+
+  return {
+    ...actualZustand,
+    create: (<T>(stateCreator?: StateCreator<T>) => {
+      console.log("MOCK: zustand create called");
+
+      if (typeof stateCreator === "function") {
+        return createUncurried(stateCreator);
+      }
+
+      return createUncurried;
+    }) as typeof actualZustand.create,
+    createStore: (<T>(stateCreator?: StateCreator<T>) => {
+      console.log("MOCK: zustand createStore called");
+
+      if (typeof stateCreator === "function") {
+        const store = (actualZustand.createStore as any)(stateCreator);
+        const initialState = store.getInitialState() || store.getState();
+
+        storeResetFns.add(() => {
+          store.setState(initialState, true);
+        });
+
+        return store;
+      }
+
+      return (<T>(stateCreator: StateCreator<T>) => {
+        const store = (actualZustand.createStore as any)(stateCreator);
+        const initialState = store.getInitialState() || store.getState();
+
+        storeResetFns.add(() => {
+          store.setState(initialState, true);
+        });
+
+        return store;
+      }) as typeof actualZustand.createStore;
+    }) as typeof actualZustand.createStore,
+  };
+});
 
 // Mock the SSE client module
 vi.mock("@/utils/sse/sseClient", () => {
@@ -36,6 +113,7 @@ vi.mock("@/utils/sse/sseClient", () => {
 import { useChatMessaging } from "../useChatMessaging";
 
 import type { ReactNode } from "react";
+import type { StateCreator } from "zustand";
 
 // Mock dependencies
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
@@ -504,5 +582,58 @@ describe("useChatMessaging", () => {
 
     // Should reset streaming state
     expect(result.current.isStreaming).toBe(false);
+  });
+
+  it("should show optimistic user message immediately in new chat (null chatId)", async () => {
+    // Mock for new chat scenario - no API messages, no loading
+    mockUseChatMessages.mockReturnValueOnce({
+      data: undefined, // No API data for new chat
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    // Render hook with null chatId (new chat)
+    const { result } = renderHook(() => useChatMessaging(null), {
+      wrapper: TestWrapper,
+    });
+
+    // Initially should have no messages
+    expect(Object.keys(result.current.messages)).toHaveLength(0);
+
+    // Send a message (this creates optimistic user message)
+    await act(async () => {
+      await result.current.sendMessage("Hello new chat!");
+    });
+
+    // Should now show the optimistic user message even with null chatId
+    expect(Object.keys(result.current.messages)).toHaveLength(1);
+    expect(result.current.messageOrder).toHaveLength(1);
+
+    // Check the optimistic message content
+    const messageId = result.current.messageOrder[0];
+    const message = result.current.messages[messageId];
+    expect(message.content).toBe("Hello new chat!");
+    expect(message.role).toBe("user");
+    expect(message.status).toBe("sending");
+  });
+
+  it("should return empty messages when chatId is null and no local messages (after archiving)", () => {
+    // Mock for post-archive scenario - no API messages, no loading
+    mockUseChatMessages.mockReturnValueOnce({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    // Render hook with null chatId and no local messages (archive scenario)
+    const { result } = renderHook(() => useChatMessaging(null), {
+      wrapper: TestWrapper,
+    });
+
+    // Should have no messages (empty state after archiving)
+    expect(Object.keys(result.current.messages)).toHaveLength(0);
+    expect(result.current.messageOrder).toHaveLength(0);
   });
 });
