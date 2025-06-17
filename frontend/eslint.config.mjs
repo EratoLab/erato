@@ -521,6 +521,83 @@ const eslintConfig = [
       "lingui/no-trans-inside-trans": "error",
     },
   },
+
+  // Test files configuration - more lenient rules for testing needs
+  {
+    files: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "src/**/*.spec.ts",
+      "src/**/*.spec.tsx",
+      "src/**/__tests__/**/*",
+      "src/**/__mocks__/**/*",
+      "src/**/test/**/*",
+      "src/**/tests/**/*",
+    ],
+    languageOptions: {
+      parser: typescriptParser,
+      parserOptions: {
+        project: "./tsconfig.json",
+        ecmaFeatures: { jsx: true },
+        ecmaVersion: 2020,
+        sourceType: "module",
+      },
+    },
+    plugins: {
+      "@typescript-eslint": typescriptPlugin,
+      import: importPlugin,
+    },
+    rules: {
+      // Allow any types in test files for mocking purposes
+      "@typescript-eslint/no-explicit-any": "off",
+
+      // Allow import() type annotations in test mocks
+      "@typescript-eslint/consistent-type-imports": "off",
+
+      // More lenient rules for test files
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          args: "none",
+        },
+      ],
+      "@typescript-eslint/explicit-module-boundary-types": "off",
+      "@typescript-eslint/no-floating-promises": "off", // Tests often have floating promises
+      "@typescript-eslint/unbound-method": "off", // Common in test mocks
+      "@typescript-eslint/no-non-null-assertion": "off", // Sometimes needed in tests
+
+      // Keep important safety rules even in tests
+      "@typescript-eslint/no-unnecessary-type-assertion": "error",
+      "@typescript-eslint/await-thenable": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+
+      // React rules still apply
+      "react/prop-types": "off",
+      "react/jsx-uses-react": "off",
+      "react/react-in-jsx-scope": "off",
+
+      // Import rules with relaxed ordering for test files
+      "import/no-duplicates": "error",
+      "import/order": [
+        "warn",
+        {
+          groups: [
+            "builtin",
+            "external",
+            "internal",
+            ["parent", "sibling"],
+            "index",
+            "object",
+            "type",
+          ],
+          "newlines-between": "always",
+          alphabetize: { order: "asc" },
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;
