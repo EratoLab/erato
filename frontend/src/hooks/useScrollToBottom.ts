@@ -177,13 +177,21 @@ export function useScrollToBottom({
     // Consider user near top if they're within 50px of the top of the message list
     const nearTop = distanceFromTop < 50;
 
-    // Update state with new values
-    dispatch({ type: "SET_SCROLLED_UP", value: scrolledUp });
+    // If user was scrolled up but is now at the bottom, re-enable auto-scroll
+    // This allows users to manually scroll to bottom to resume auto-scroll
+    if (isUserScrolledUp && !scrolledUp) {
+      // User has manually scrolled back to bottom, reset scroll state to re-enable auto-scroll
+      dispatch({ type: "SCROLL_TO_BOTTOM" });
+    } else {
+      // Update state with new values
+      dispatch({ type: "SET_SCROLLED_UP", value: scrolledUp });
+    }
+
     dispatch({ type: "SET_NEAR_TOP", value: nearTop });
 
     // Also update the UI state for backward compatibility
     setIsScrolledUp(scrolledUp);
-  }, [scrollUpThreshold]);
+  }, [scrollUpThreshold, isUserScrolledUp]);
 
   // Memoized implementation of smooth scrolling
   const smoothScrollToBottom = useCallback(() => {

@@ -159,10 +159,12 @@ function useMessageLoading({
   messageOrder,
   messages,
   scrollToBottom,
+  isScrolledUp,
 }: {
   messageOrder: string[];
   messages: Record<string, ChatMessage>;
   scrollToBottom: () => void;
+  isScrolledUp: boolean;
 }) {
   // Track the last loading state to avoid unwanted scroll when message completes
   const lastLoadingState = useRef<string | null>(null);
@@ -204,15 +206,18 @@ function useMessageLoading({
             // Update last loading state reference
             lastLoadingState.current = lastMessage.loading.state;
 
-            // Scroll to bottom during active streaming
-            scrollToBottom();
+            // Only scroll to bottom during active streaming if user hasn't scrolled up
+            // This allows user to interrupt auto-scroll by scrolling up
+            if (!isScrolledUp) {
+              scrollToBottom();
+            }
           }
         }
         // Don't scroll when message changes from loading to done
         // This prevents the unwanted "scroll up and down" at the end
       }
     }
-  }, [messageOrder, messages, scrollToBottom]);
+  }, [messageOrder, messages, scrollToBottom, isScrolledUp]);
 }
 
 // Hook to manage loading more messages when near top
@@ -303,7 +308,7 @@ export const MessageList = memo<MessageListProps>(
     }, [onScrollToBottomRef, scrollToBottom]);
 
     // Use the message loading hook
-    useMessageLoading({ messageOrder, messages, scrollToBottom });
+    useMessageLoading({ messageOrder, messages, scrollToBottom, isScrolledUp });
 
     // Set up pagination for message data
     const { visibleData, hasMore, loadMore, isNewlyLoaded, paginationStats } =
