@@ -46,6 +46,49 @@ interface UseChatMessagingParams {
   silentChatId?: string | null;
 }
 
+/**
+ * Helper function to determine the null chatId scenario and handle accordingly
+ * Returns an object indicating the scenario and whether to clear/preserve messages
+ */
+function handleNullChatIdScenario(
+  userMessages: Record<string, Message>,
+  logContext: string,
+): {
+  scenario: "new_chat" | "post_archive";
+  shouldClearMessages: boolean;
+  hasLocalMessages: boolean;
+} {
+  const hasLocalMessages = Object.keys(userMessages).length > 0;
+
+  if (!hasLocalMessages) {
+    // After archiving scenario: no local messages, clear everything for clean state
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[DEBUG_STORE] ${logContext}: Null chatId with no local messages - post-archive scenario, clearing for clean state.`,
+      );
+    }
+    return {
+      // eslint-disable-next-line lingui/no-unlocalized-strings
+      scenario: "post_archive",
+      shouldClearMessages: true,
+      hasLocalMessages,
+    };
+  } else {
+    // New chat scenario: has local optimistic messages, preserve them
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[DEBUG_STORE] ${logContext}: Null chatId with local messages - new chat scenario, preserving optimistic messages. Count: ${Object.keys(userMessages).length}`,
+      );
+    }
+    return {
+      // eslint-disable-next-line lingui/no-unlocalized-strings
+      scenario: "new_chat",
+      shouldClearMessages: false,
+      hasLocalMessages,
+    };
+  }
+}
+
 export function useChatMessaging(
   chatIdOrParams: string | null | UseChatMessagingParams,
   // legacyOnChatCreated?: (newChatId: string) => void, // Remove legacy param
@@ -120,25 +163,16 @@ export function useChatMessaging(
     // to ensure clean state. For existing chats, only clear completed messages.
     if (!currentChatId) {
       const currentUserMessages = useMessagingStore.getState().userMessages;
-      const hasLocalMessages = Object.keys(currentUserMessages).length > 0;
+      const { shouldClearMessages } = handleNullChatIdScenario(
+        currentUserMessages,
+        // eslint-disable-next-line lingui/no-unlocalized-strings
+        "useChatMessaging mount effect",
+      );
 
-      if (!hasLocalMessages) {
-        // After archiving scenario: no local messages, clear everything for clean state
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            `[DEBUG_STORE] useChatMessaging (null chatId, no local messages) effect: Clearing ALL user messages for clean state after archiving.`,
-          );
-        }
+      if (shouldClearMessages) {
         useMessagingStore.getState().clearUserMessages();
-      } else {
-        // New chat scenario: has local optimistic messages, preserve them
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            `[DEBUG_STORE] useChatMessaging (null chatId, has local messages) effect: Preserving optimistic user messages for new chat. Count: ${Object.keys(currentUserMessages).length}`,
-          );
-        }
-        // Don't clear user messages - let them show as optimistic UI
       }
+      // Don't clear user messages for new chat scenario - let them show as optimistic UI
     } else {
       // Only clear completed messages to preserve user messages during navigation for existing chats
       if (process.env.NODE_ENV === "development") {
@@ -380,22 +414,20 @@ export function useChatMessaging(
     // Convert locally stored user messages to Message[] array
     const localUserMsgs = Object.values(userMessages);
 
-    // When chatId is null, we need to distinguish between:
-    // 1. Empty state after archiving (no local messages) - return empty
-    // 2. New chat state (has local optimistic messages) - include them
+    // When chatId is null, use shared helper to determine scenario
     if (!chatId) {
-      if (localUserMsgs.length === 0) {
-        if (process.env.NODE_ENV === "development") {
-          console.log(
-            "[DEBUG_STREAMING] combinedMessages: chatId is null and no local messages, returning empty state to prevent stale data",
-          );
-        }
+      const { scenario } = handleNullChatIdScenario(
+        userMessages,
+        "combinedMessages",
+      );
+
+      if (scenario === "post_archive") {
         return {};
       } else {
         // New chat scenario: show optimistic user messages even without chatId
         if (process.env.NODE_ENV === "development") {
           console.log(
-            "[DEBUG_STREAMING] combinedMessages: chatId is null but has local optimistic messages, including them for new chat",
+            "[DEBUG_STREAMING] combinedMessages: New chat scenario with optimistic messages",
             {
               localMessages: localUserMsgs.length,
               userMessagesState: userMessages,

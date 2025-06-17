@@ -13,7 +13,7 @@ const createUncurried = <T>(
   stateCreator: ZustandExportedTypes.StateCreator<T>,
 ) => {
   const store = actualCreate(stateCreator);
-  const initialState = store.getInitialState();
+  const initialState = store.getInitialState() ?? store.getState();
   storeResetFns.add(() => {
     store.setState(initialState, true);
   });
@@ -24,8 +24,6 @@ const createUncurried = <T>(
 export const create = (<T>(
   stateCreator?: ZustandExportedTypes.StateCreator<T>,
 ) => {
-  console.log("zustand create mock");
-
   // to support curried version of create
   if (typeof stateCreator === "function") {
     return createUncurried(stateCreator);
@@ -39,7 +37,7 @@ const createStoreUncurried = <T>(
   stateCreator: ZustandExportedTypes.StateCreator<T>,
 ) => {
   const store = actualCreateStore(stateCreator);
-  const initialState = store.getInitialState();
+  const initialState = store.getInitialState() ?? store.getState();
   storeResetFns.add(() => {
     store.setState(initialState, true);
   });
@@ -50,8 +48,6 @@ const createStoreUncurried = <T>(
 export const createStore = (<T>(
   stateCreator?: ZustandExportedTypes.StateCreator<T>,
 ) => {
-  console.log("zustand createStore mock");
-
   // to support curried version of createStore
   if (typeof stateCreator === "function") {
     return createStoreUncurried(stateCreator);

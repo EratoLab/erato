@@ -14,7 +14,7 @@ import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 // Mock Zustand for testing
 vi.mock("zustand", async () => {
   const { act } = await import("@testing-library/react");
-  const { afterEach, beforeEach, vi } = await import("vitest");
+  const { afterEach, vi } = await import("vitest");
 
   const actualZustand = await vi.importActual("zustand");
 
@@ -25,10 +25,7 @@ vi.mock("zustand", async () => {
     const store = (actualZustand.create as any)(stateCreator);
     const initialState = store.getInitialState() || store.getState();
 
-    console.log("MOCK: Created store with initial state:", initialState);
-
     storeResetFns.add(() => {
-      console.log("MOCK: Resetting store to initial state:", initialState);
       store.setState(initialState, true);
     });
 
@@ -36,7 +33,6 @@ vi.mock("zustand", async () => {
   };
 
   const resetAllStores = () => {
-    console.log(`MOCK: Resetting ${storeResetFns.size} stores`);
     act(() => {
       storeResetFns.forEach((resetFn) => {
         try {
@@ -48,10 +44,6 @@ vi.mock("zustand", async () => {
     });
   };
 
-  beforeEach(() => {
-    resetAllStores();
-  });
-
   afterEach(() => {
     resetAllStores();
   });
@@ -59,8 +51,6 @@ vi.mock("zustand", async () => {
   return {
     ...actualZustand,
     create: (<T>(stateCreator?: StateCreator<T>) => {
-      console.log("MOCK: zustand create called");
-
       if (typeof stateCreator === "function") {
         return createUncurried(stateCreator);
       }
@@ -68,8 +58,6 @@ vi.mock("zustand", async () => {
       return createUncurried;
     }) as typeof actualZustand.create,
     createStore: (<T>(stateCreator?: StateCreator<T>) => {
-      console.log("MOCK: zustand createStore called");
-
       if (typeof stateCreator === "function") {
         const store = (actualZustand.createStore as any)(stateCreator);
         const initialState = store.getInitialState() || store.getState();
