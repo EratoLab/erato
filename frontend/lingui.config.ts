@@ -1,4 +1,5 @@
 import { defineConfig } from "@lingui/cli";
+import { formatter as poFormatter } from "@lingui/format-po";
 
 export default defineConfig({
   sourceLocale: "en",
@@ -11,5 +12,6 @@ export default defineConfig({
     },
   ],
   compileNamespace: "ts", // Generate TypeScript files
-  format: "po", // Use industry-standard PO format
+  // Use industry-standard PO format
+  format: poFormatter({ lineNumbers: false }),
 });

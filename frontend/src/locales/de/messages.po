@@ -13,535 +13,535 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/components/ui/MessageList/MessageListHeader.tsx:52
+#: src/components/ui/MessageList/MessageListHeader.tsx
 msgid " (more available)"
 msgstr " (weitere verfügbar)"
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx:74
+#: src/components/ui/Chat/TokenUsageWarning.tsx
 msgid " File attachments account for {fileTokensFormatted} tokens."
 msgstr " Dateianhänge beanspruchen {fileTokensFormatted} Token."
 
 #. placeholder {0}: session.metadata?.fileCount ?? 0
-#: src/components/ui/Chat/ChatHistoryList.tsx:114
+#: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
 msgstr "{0, plural, =0 {Keine Dateien} one {# Datei} other {# Dateien}}"
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:119
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"
 msgstr ""
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:122
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Check that UI updates immediately when locale changes"
 msgstr ""
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:108
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Click locale buttons to test switching languages (session only)"
 msgstr ""
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:127
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Note: Locale changes are not persisted across page refreshes"
 msgstr ""
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:113
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Use \"Reset to Browser Detection\" to test fresh detection"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/App.tsx:31
+#: src/App.tsx
 msgid "error.404.title"
 msgstr "404 - Seite nicht gefunden"
 
 #. js-lingui-explicit-id
-#: src/App.tsx:19
+#: src/App.tsx
 msgid "about.title"
 msgstr "Über uns"
 
-#: src/components/ui/FileUpload/FileUpload.tsx:196
+#: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
 msgstr "Akzeptierte Dateitypen:"
 
-#: src/components/ui/FileUpload/FileUpload.tsx:197
+#: src/components/ui/FileUpload/FileUpload.tsx
 msgid "All file types accepted"
 msgstr "Alle Dateitypen akzeptiert"
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx:52
-#: src/components/ui/Chat/TokenUsageWarning.tsx:55
+#: src/components/ui/Chat/TokenUsageWarning.tsx
+#: src/components/ui/Chat/TokenUsageWarning.tsx
 msgid "Approaching Token Limit"
 msgstr "Token-Limit wird erreicht"
 
-#: src/components/ui/Controls/DropdownMenu.tsx:365
-#: src/components/ui/Controls/Button.tsx:93
+#: src/components/ui/Controls/DropdownMenu.tsx
+#: src/components/ui/Controls/Button.tsx
 msgid "Are you sure you want to proceed?"
 msgstr "Möchten Sie wirklich fortfahren?"
 
-#: src/components/ui/Chat/ChatHistoryList.tsx:98
+#: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "Are you sure you want to remove this chat?"
 msgstr "Möchten Sie diesen Chat wirklich entfernen?"
 
-#: src/components/ui/Chat/ChatMessage.tsx:100
-#: src/components/ui/Chat/ChatMessage.tsx:110
+#: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "Assistant"
 msgstr "Assistent"
 
-#: src/components/ui/Feedback/Avatar.tsx:59
+#: src/components/ui/Feedback/Avatar.tsx
 msgid "Assistant avatar"
 msgstr "Assistent-Avatar"
 
-#: src/components/ui/FileUpload/FileUploadButton.tsx:140
+#: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "Attach File"
 msgstr "Datei anhängen"
 
-#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx:59
+#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 msgid "Attachments"
 msgstr "Anhänge"
 
-#: src/components/ui/Message/ConversationIndicator.tsx:30
+#: src/components/ui/Message/ConversationIndicator.tsx
 msgid "Beginning of conversation"
 msgstr "Gesprächsanfang"
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:56
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Browser Language:"
 msgstr ""
 
-#: src/components/ui/Modal/ConfirmationDialog.tsx:27
+#: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Cancel"
 msgstr "Abbrechen"
 
-#: src/components/ui/Modal/ConfirmationDialog.tsx:51
+#: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Cancel action"
 msgstr "Aktion abbrechen"
 
-#: src/components/ui/Chat/ChatInput.tsx:335
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Cannot send: Token limit exceeded"
 msgstr "Senden nicht möglich: Token-Limit überschritten"
 
-#: src/components/ui/Chat/Chat.tsx:275
+#: src/components/ui/Chat/Chat.tsx
 msgid "Chat conversation"
 msgstr "Chat-Unterhaltung"
 
-#: src/components/ui/Feedback/ChatErrorBoundary.tsx:42
+#: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Chat Error"
 msgstr "Chat-Fehler"
 
-#: src/components/ui/Chat/ChatHistorySidebar.tsx:76
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "Chat History"
 msgstr "Chat-Verlauf"
 
-#: src/components/ui/Chat/ChatWidget.tsx:54
+#: src/components/ui/Chat/ChatWidget.tsx
 msgid "Chat messages"
 msgstr "Chat-Nachrichten"
 
-#: src/components/ui/FileUpload/FileUpload.tsx:232
+#: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Clear All"
 msgstr "Alle löschen"
 
-#: src/components/ui/Modal/ModalBase.tsx:103
+#: src/components/ui/Modal/ModalBase.tsx
 msgid "Close modal"
 msgstr "Dialog schließen"
 
-#: src/components/ui/Modal/ModalBase.tsx:75
+#: src/components/ui/Modal/ModalBase.tsx
 msgid "Close modal overlay"
 msgstr "Dialog-Overlay schließen"
 
-#: src/components/ui/Chat/ChatHistorySidebar.tsx:66
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "collapse sidebar"
 msgstr "Seitenleiste einklappen"
 
-#: src/components/ui/Modal/ConfirmationDialog.tsx:26
+#: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Confirm"
 msgstr "Bestätigen"
 
-#: src/components/ui/Modal/ConfirmationDialog.tsx:58
+#: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Confirm action"
 msgstr "Aktion bestätigen"
 
-#: src/components/ui/Controls/DropdownMenu.tsx:362
-#: src/components/ui/Controls/Button.tsx:92
+#: src/components/ui/Controls/DropdownMenu.tsx
+#: src/components/ui/Controls/Button.tsx
 msgid "Confirm Action"
 msgstr "Aktion bestätigen"
 
-#: src/components/ui/Chat/ChatHistoryList.tsx:97
+#: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "Confirm Removal"
 msgstr "Entfernung bestätigen"
 
-#: src/components/ui/Message/DefaultMessageControls.tsx:135
-#: src/components/ui/Message/DefaultMessageControls.tsx:136
+#: src/components/ui/Message/DefaultMessageControls.tsx
+#: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "Copy message"
 msgstr "Nachricht kopieren"
 
-#: src/components/ui/Controls/UserProfileDropdown.tsx:44
+#: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Dark mode"
 msgstr "Dunkler Modus"
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:63
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Default Locale:"
 msgstr ""
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:71
+#: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "details for"
 msgstr "Details für"
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:49
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Detected Locale:"
 msgstr ""
 
-#: src/components/ui/Message/DefaultMessageControls.tsx:182
-#: src/components/ui/Message/DefaultMessageControls.tsx:183
+#: src/components/ui/Message/DefaultMessageControls.tsx
+#: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "Dislike message"
 msgstr "Nachricht ablehnen"
 
-#: src/components/ui/Feedback/Alert.tsx:96
+#: src/components/ui/Feedback/Alert.tsx
 msgid "Dismiss"
 msgstr "Schließen"
 
-#: src/components/ui/Modal/FilePreviewModal.tsx:73
+#: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Download File"
 msgstr "Datei herunterladen"
 
-#: src/components/ui/FileUpload/FileUpload.tsx:70
+#: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Drag files here or click to upload"
 msgstr "Dateien hierher ziehen oder zum Hochladen klicken"
 
-#: src/components/ui/FileUpload/FileUpload.tsx:189
+#: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Drop files to upload..."
 msgstr "Dateien zum Hochladen loslassen..."
 
-#: src/components/ui/Message/DefaultMessageControls.tsx:146
-#: src/components/ui/Message/DefaultMessageControls.tsx:147
+#: src/components/ui/Message/DefaultMessageControls.tsx
+#: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "Edit message"
 msgstr "Nachricht bearbeiten"
 
-#: src/components/ui/Message/ConversationIndicator.tsx:32
+#: src/components/ui/Message/ConversationIndicator.tsx
 msgid "End of conversation"
 msgstr "Gesprächsende"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:36
+#: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Error"
 msgstr "Fehler"
 
-#: src/components/ui/Chat/ChatMessage.tsx:224
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "Error loading file"
 msgstr "Fehler beim Laden der Datei"
 
-#: src/components/ui/ThemeApplier.tsx:173
+#: src/components/ui/ThemeApplier.tsx
 msgid "Error loading theme:"
 msgstr "Fehler beim Laden des Themes:"
 
-#: src/components/ui/ToolCall/ToolCallOutput.tsx:30
+#: src/components/ui/ToolCall/ToolCallOutput.tsx
 msgid "Error Output"
 msgstr "Fehlerausgabe"
 
-#: src/components/ui/FileUpload/FileUploadButton.tsx:84
+#: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "Error:"
 msgstr "Fehler:"
 
-#: src/components/ui/Settings/ToolCallSettings.tsx:88
+#: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Expand by default"
 msgstr "Standardmäßig erweitern"
 
-#: src/components/ui/Chat/ChatHistorySidebar.tsx:195
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "expand sidebar"
 msgstr "Seitenleiste erweitern"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx:78
+#: src/components/ui/ToolCall/ToolCallDisplay.tsx
 msgid "failed"
 msgstr "fehlgeschlagen"
 
-#: src/components/ui/FileUpload/FilePreviewBase.tsx:169
+#: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
 msgstr "Datei"
 
 #. js-lingui-explicit-id
-#: src/App.tsx:22
-#: src/App.tsx:34
+#: src/App.tsx
+#: src/App.tsx
 msgid "navigation.goHome"
 msgstr "Zur Startseite"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:71
+#: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Hide"
 msgstr "Ausblenden"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:73
+#: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Hide details"
 msgstr "Details ausblenden"
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:104
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "How to Test:"
 msgstr ""
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:42
+#: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "In Progress"
 msgstr "In Bearbeitung"
 
-#: src/components/ui/ToolCall/ToolCallInput.tsx:22
+#: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "Input Parameters"
 msgstr "Eingabeparameter"
 
-#: src/components/ui/Message/MessageTimestamp.tsx:44
+#: src/components/ui/Message/MessageTimestamp.tsx
 msgid "Invalid date provided to MessageTimestamp, using current date"
 msgstr "Ungültiges Datum für MessageTimestamp bereitgestellt, aktuelles Datum wird verwendet"
 
-#: src/components/ui/Controls/UserProfileDropdown.tsx:38
+#: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Light mode"
 msgstr "Heller Modus"
 
-#: src/components/ui/Message/DefaultMessageControls.tsx:166
-#: src/components/ui/Message/DefaultMessageControls.tsx:167
+#: src/components/ui/Message/DefaultMessageControls.tsx
+#: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "Like message"
 msgstr "Nachricht gefällt mir"
 
-#: src/components/ui/Message/LoadMoreButton.tsx:47
+#: src/components/ui/Message/LoadMoreButton.tsx
 msgid "Load older messages"
 msgstr "Ältere Nachrichten laden"
 
-#: src/components/ui/Feedback/LoadingIndicator.tsx:92
+#: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Loading"
 msgstr "Laden"
 
-#: src/components/ui/Chat/ChatMessage.tsx:217
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "Loading file..."
 msgstr "Datei wird geladen..."
 
-#: src/components/ui/Message/LoadMoreButton.tsx:48
-#: src/components/ui/Feedback/SpinnerIcon.tsx:26
+#: src/components/ui/Message/LoadMoreButton.tsx
+#: src/components/ui/Feedback/SpinnerIcon.tsx
 msgid "Loading..."
 msgstr "Laden..."
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:43
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Locale Detection Test"
 msgstr ""
 
-#: src/components/ui/Logo.tsx:21
+#: src/components/ui/Logo.tsx
 msgid "Logo"
 msgstr "Logo"
 
-#: src/components/ui/Chat/ChatMessage.tsx:100
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "message"
 msgstr "Nachricht"
 
-#: src/components/ui/Chat/ChatInput.tsx:272
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Message exceeds token limit. Please reduce length or remove files."
 msgstr "Nachricht überschreitet Token-Limit. Bitte kürzen Sie die Nachricht oder entfernen Sie Dateien."
 
-#: src/components/ui/MessageList/MessageListHeader.tsx:51
+#: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "messages"
 msgstr "Nachrichten"
 
-#: src/components/ui/Chat/ChatHistorySidebar.tsx:88
-#: src/components/ui/Chat/ChatHistoryList.tsx:67
-#: src/components/ui/Chat/ChatHistoryList.tsx:81
-#: src/components/ui/Chat/Chat.tsx:123
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/Chat/Chat.tsx
 msgid "New Chat"
 msgstr "Neuer Chat"
 
-#: src/components/ui/Message/ConversationIndicator.tsx:34
+#: src/components/ui/Message/ConversationIndicator.tsx
 msgid "No messages yet"
 msgstr "Noch keine Nachrichten"
 
-#: src/components/ui/MessageList/MessageListHeader.tsx:49
+#: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "of"
 msgstr "von"
 
-#: src/components/ui/Controls/DropdownMenu.tsx:349
+#: src/components/ui/Controls/DropdownMenu.tsx
 msgid "Open menu"
 msgstr "Menü öffnen"
 
-#: src/components/ui/ToolCall/ToolCallOutput.tsx:30
+#: src/components/ui/ToolCall/ToolCallOutput.tsx
 msgid "Output"
 msgstr "Ausgabe"
 
-#: src/components/ui/Chat/ChatMessage.tsx:238
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "Preview attached file:"
 msgstr "Angehängte Datei anzeigen:"
 
-#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx:87
+#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 msgid "Preview attachment"
 msgstr "Anhang anzeigen"
 
-#: src/components/ui/Modal/FilePreviewModal.tsx:65
+#: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Preview is not available for this file type."
 msgstr "Vorschau ist für diesen Dateityp nicht verfügbar."
 
-#: src/components/ui/Modal/FilePreviewModal.tsx:46
-#: src/components/ui/Modal/FilePreviewModal.tsx:56
+#: src/components/ui/Modal/FilePreviewModal.tsx
+#: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Preview of"
 msgstr "Vorschau von"
 
-#: src/components/ui/Modal/FilePreviewModal.tsx:84
+#: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Preview:"
 msgstr "Vorschau:"
 
 #. js-lingui-explicit-id
-#: src/pages/HomePage.tsx:16
+#: src/pages/HomePage.tsx
 msgid "home.redirecting"
 msgstr "Weiterleitung zum Chat..."
 
-#: src/components/ui/FileUpload/FilePreviewButton.tsx:62
-#: src/components/ui/FileUpload/FilePreviewBase.tsx:219
-#: src/components/ui/Chat/ChatHistoryList.tsx:93
+#: src/components/ui/FileUpload/FilePreviewButton.tsx
+#: src/components/ui/FileUpload/FilePreviewBase.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "Remove"
 msgstr "Entfernen"
 
-#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx:71
+#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 msgid "Remove all"
 msgstr "Alle entfernen"
 
-#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx:68
+#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 msgid "Remove all attachments"
 msgstr "Alle Anhänge entfernen"
 
-#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx:62
+#: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 msgid "Remove all files"
 msgstr "Alle Dateien entfernen"
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:98
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Reset to Browser Detection"
 msgstr ""
 
-#: src/components/ui/Chat/ChatInput.tsx:336
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Send message"
 msgstr "Nachricht senden"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:71
+#: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show"
 msgstr "Anzeigen"
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:73
+#: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show details"
 msgstr "Details anzeigen"
 
-#: src/components/ui/Message/DefaultMessageControls.tsx:115
-#: src/components/ui/Message/DefaultMessageControls.tsx:117
+#: src/components/ui/Message/DefaultMessageControls.tsx
+#: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "Show formatted"
 msgstr "Formatiert anzeigen"
 
-#: src/components/ui/Message/DefaultMessageControls.tsx:115
-#: src/components/ui/Message/DefaultMessageControls.tsx:117
+#: src/components/ui/Message/DefaultMessageControls.tsx
+#: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "Show raw markdown"
 msgstr "Rohes Markdown anzeigen"
 
-#: src/components/ui/Settings/ToolCallSettings.tsx:62
+#: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Show tool calls"
 msgstr "Tool-Aufrufe anzeigen"
 
-#: src/components/ui/MessageList/MessageListHeader.tsx:41
+#: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "Showing"
 msgstr "Anzeige"
 
-#: src/components/ui/Controls/UserProfileDropdown.tsx:58
+#: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Sign out"
 msgstr "Abmelden"
 
-#: src/components/ui/FileUpload/FileUpload.tsx:190
+#: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Some files won't be accepted..."
 msgstr "Einige Dateien werden nicht akzeptiert..."
 
-#: src/components/ui/Chat/ChatHistorySidebar.tsx:118
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "Something went wrong"
 msgstr "Etwas ist schiefgelaufen"
 
-#: src/components/ui/Feedback/ChatErrorBoundary.tsx:46
+#: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Something went wrong while loading the chat interface."
 msgstr "Beim Laden der Chat-Oberfläche ist ein Fehler aufgetreten."
 
-#: src/components/ui/ToolCall/ToolCallItem.tsx:30
+#: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
 msgstr "Erfolgreich"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx:78
+#: src/components/ui/ToolCall/ToolCallDisplay.tsx
 msgid "successful"
 msgstr "erfolgreich"
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:70
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Supported Locales:"
 msgstr ""
 
-#: src/components/ui/Controls/UserProfileDropdown.tsx:50
+#: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "System theme"
 msgstr "System-Theme"
 
-#: src/components/ui/Settings/LocaleDetectionTest.tsx:78
+#: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Test Locale Changes:"
 msgstr ""
 
-#: src/components/ui/Feedback/LoadingIndicator.tsx:90
+#: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Thinking"
 msgstr "Denkt nach"
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx:66
+#: src/components/ui/Chat/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
 msgstr "Diese Nachricht überschreitet das Token-Limit von {maxTokensFormatted}. Bitte kürzen Sie die Nachricht oder entfernen Sie angehängte Dateien."
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx:70
+#: src/components/ui/Chat/TokenUsageWarning.tsx
 msgid "This message is using {percentUsed}% of the available token limit ({totalTokensFormatted} of {maxTokensFormatted})."
 msgstr "Diese Nachricht verwendet {percentUsed}% des verfügbaren Token-Limits ({totalTokensFormatted} von {maxTokensFormatted})."
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx:49
+#: src/components/ui/Chat/TokenUsageWarning.tsx
 msgid "Token Limit Exceeded"
 msgstr "Token-Limit überschritten"
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx:45
+#: src/components/ui/Chat/TokenUsageWarning.tsx
 msgid "Token Usage"
 msgstr "Token-Verbrauch"
 
-#: src/components/ui/Settings/ToolCallSettings.tsx:37
+#: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Tool Call Display"
 msgstr "Tool-Aufruf-Anzeige"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx:78
+#: src/components/ui/ToolCall/ToolCallDisplay.tsx
 msgid "Tool calls"
 msgstr "Tool-Aufrufe"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx:83
+#: src/components/ui/ToolCall/ToolCallDisplay.tsx
 msgid "Tool Calls"
 msgstr "Tool-Aufrufe"
 
-#: src/components/ui/Settings/ToolCallSettings.tsx:96
+#: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Tool calls show how the assistant used external tools to generate responses."
 msgstr "Tool-Aufrufe zeigen, wie der Assistent externe Tools zur Antwortgenerierung verwendet hat."
 
-#: src/components/ui/Feedback/LoadingIndicator.tsx:101
+#: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Tool usage:"
 msgstr "Tool-Verwendung:"
 
-#: src/components/ui/ToolCall/ToolCallDisplay.tsx:78
+#: src/components/ui/ToolCall/ToolCallDisplay.tsx
 msgid "total"
 msgstr "gesamt"
 
-#: src/components/ui/Feedback/ChatErrorBoundary.tsx:49
+#: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Try Again"
 msgstr "Erneut versuchen"
 
-#: src/components/ui/Chat/ChatInput.tsx:56
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Type a message..."
 msgstr "Nachricht eingeben..."
 
-#: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx:60
-#: src/components/ui/FileUpload/FileUpload.tsx:69
+#: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
+#: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Upload Files"
 msgstr "Dateien hochladen"
 
-#: src/components/ui/FileUpload/FileUpload.tsx:223
+#: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Uploaded Files"
 msgstr "Hochgeladene Dateien"
 
-#: src/components/ui/FileUpload/FileUploadButton.tsx:29
+#: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "Uploading file"
 msgstr "Datei wird hochgeladen"
 
-#: src/components/ui/Feedback/Avatar.tsx:59
-#: src/components/ui/Feedback/Avatar.tsx:64
+#: src/components/ui/Feedback/Avatar.tsx
+#: src/components/ui/Feedback/Avatar.tsx
 msgid "User avatar"
 msgstr "Benutzer-Avatar"
 
-#: src/components/ui/Feedback/LoadingIndicator.tsx:88
+#: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Using tools"
 msgstr "Tools werden verwendet"
 
-#: src/components/ui/Chat/ChatMessage.tsx:110
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "You"
 msgstr "Sie"
 
-#: src/components/ui/Chat/ChatMessage.tsx:100
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "Your"
 msgstr "Ihre"
