@@ -47,3 +47,5 @@ next-env.d.ts
 /public/custom-theme/*
 !/public/custom-theme/.gitkeep
 
+# Compiled translation files
+src/locales/**/*.ts
