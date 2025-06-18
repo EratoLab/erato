@@ -4,14 +4,16 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { memo, useRef, useState, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
+import { useNavigate } from "react-router-dom";
 
 import { env } from "@/app/env";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
+import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
-import { SidebarToggleIcon, EditIcon, SearchIcon } from "../icons";
+import { SidebarToggleIcon, SearchIcon, PlusIcon } from "../icons";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
@@ -49,11 +51,11 @@ export interface ChatHistorySidebarProps {
 }
 
 const ChatHistoryHeader = memo<{
-  onNewChat?: () => void;
+  onSearch?: () => void;
   collapsed: boolean;
   onToggleCollapse?: () => void;
   showTitle?: boolean;
-}>(({ onNewChat, collapsed, onToggleCollapse, showTitle }) => (
+}>(({ onSearch, collapsed, onToggleCollapse, showTitle }) => (
   <div className="flex border-b border-theme-border p-2">
     {/* Only show the toggle button when not collapsed */}
     {!collapsed && (
@@ -81,7 +83,7 @@ const ChatHistoryHeader = memo<{
           <Button
             onClick={() => {
               logger.log("[CHAT_FLOW] Search button clicked in sidebar");
-              // TODO: Add search functionality later
+              if (onSearch) void onSearch();
             }}
             variant="sidebar-icon"
             icon={<SearchIcon />}
@@ -96,32 +98,26 @@ const ChatHistoryHeader = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryHeader.displayName = "ChatHistoryHeader";
 
-const NewChatOption = memo<{
+const NewChatItem = memo<{
   onNewChat?: () => void;
-  collapsed: boolean;
-}>(({ onNewChat, collapsed }) => {
-  if (collapsed) return null;
-
-  return (
-    <div className="border-b border-theme-border p-2">
-      <Button
-        onClick={() => {
-          logger.log("[CHAT_FLOW] New chat option clicked");
-          if (onNewChat) void onNewChat();
-        }}
-        variant="ghost"
-        className="flex w-full items-center justify-start gap-2 px-3 py-2 text-left hover:bg-theme-bg-hover"
-        aria-label={t`New Chat`}
-      >
-        <EditIcon className="size-4" />
-        <span>{t`New Chat`}</span>
-      </Button>
-    </div>
-  );
-});
+}>(({ onNewChat }) => (
+  <div className="px-2 py-1">
+    <InteractiveContainer
+      useDiv={true}
+      onClick={() => {
+        logger.log("[CHAT_FLOW] New chat item clicked");
+        if (onNewChat) void onNewChat();
+      }}
+      className="flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-theme-bg-hover"
+    >
+      <PlusIcon className="size-4 text-theme-fg-secondary" />
+      <span className="font-medium text-theme-fg-primary">{t`New Chat`}</span>
+    </InteractiveContainer>
+  </div>
+));
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
-NewChatOption.displayName = "NewChatOption";
+NewChatItem.displayName = "NewChatItem";
 
 const ChatHistoryFooter = memo<{
   userProfile?: UserProfile;
@@ -166,6 +162,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
   }) => {
     const ref = useRef<HTMLElement>(null);
     const [width, setWidth] = useState(minWidth);
+    const navigate = useNavigate();
 
     // Only use ResizeObserver in the browser
     const isBrowser = typeof window !== "undefined";
@@ -208,6 +205,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       }
     };
 
+    const handleSearchClick = () => {
+      logger.log("[CHAT_FLOW] Navigating to search page");
+      navigate("/search");
+    };
+
     return (
       <ErrorBoundary FallbackComponent={ErrorDisplay}>
         <div className="relative h-full">
@@ -236,13 +238,16 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             )}
           >
             <ChatHistoryHeader
-              onNewChat={onNewChat}
+              onSearch={handleSearchClick}
               collapsed={collapsed}
               onToggleCollapse={onToggleCollapse}
               showTitle={showTitle}
             />
-            <NewChatOption onNewChat={onNewChat} collapsed={collapsed} />
             <div className="flex min-h-0 flex-1 flex-col">
+              {/* New Chat Item */}
+              <NewChatItem onNewChat={onNewChat} />
+
+              {/* Chat History */}
               {error ? (
                 <ErrorDisplay error={error} />
               ) : isLoading ? (
@@ -254,7 +259,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   onSessionSelect={onSessionSelect}
                   onSessionArchive={onSessionArchive}
                   showTimestamps={showTimestamps}
-                  className="flex-1 p-2"
+                  className="flex-1 px-0 pt-0"
                 />
               )}
             </div>

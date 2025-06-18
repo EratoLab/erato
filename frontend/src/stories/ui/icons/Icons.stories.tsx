@@ -25,7 +25,6 @@ import {
   WarningCircleIcon,
   CheckCircleIcon,
   CodeIcon,
-  SearchIcon,
 } from "../../../components/ui/icons";
 
 import type { Meta, StoryObj } from "@storybook/react";
@@ -130,7 +129,6 @@ const ALL_ICONS = {
   CheckIcon,
   CloseIcon,
   ArrowUpIcon,
-  SearchIcon,
 
   // Feedback & Status
   ThumbUpIcon,

@@ -11,6 +11,7 @@ import { useChatContext } from "@/providers/ChatProvider";
 
 import ChatPageStructure from "../ChatPageStructure.client";
 
+
 import "@testing-library/jest-dom";
 
 // Initialize i18n for tests

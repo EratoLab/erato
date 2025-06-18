@@ -105,10 +105,6 @@ export const PlusIcon = ({ className, ...props }: IconProps) => (
   <Plus className={className} {...props} />
 );
 
-export const SearchIcon = ({ className, ...props }: IconProps) => (
-  <Search className={className} {...props} />
-);
-
 export const CheckIcon = ({ className, ...props }: IconProps) => (
   <Check className={className} {...props} />
 );
@@ -191,6 +187,10 @@ export const MediaVideoIcon = ({ className, ...props }: IconProps) => (
 
 export const MultiplePagesIcon = ({ className, ...props }: IconProps) => (
   <MultiplePages className={className} {...props} />
+);
+
+export const SearchIcon = ({ className, ...props }: IconProps) => (
+  <Search className={className} {...props} />
 );
 
 // Direct re-exports for convenience (maintaining Iconoir naming)
