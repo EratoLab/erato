@@ -370,6 +370,7 @@ jobs:
           echo "BASE_URL=https://app.erato.internal" > .env
           pnpm install
           pnpm exec playwright install --with-deps
+          ./scripts/generate_test_files.sh
 
       - name: Run e2e tests
         working-directory: ./e2e-tests
