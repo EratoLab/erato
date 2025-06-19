@@ -49,3 +49,4 @@ next-env.d.ts
 
 # Compiled translation files
 src/locales/**/*.ts
+src/locales/**/*.json

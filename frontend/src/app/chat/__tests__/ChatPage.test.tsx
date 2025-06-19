@@ -1,4 +1,4 @@
-import { i18n } from "@lingui/core";
+import { i18n, Messages } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { useChatMessaging } from "@/hooks/chat/useChatMessaging";
-import { messages as enMessages } from "@/locales/en/messages";
+import { messages as enMessages } from "@/locales/en/messages.json";
 import { useChatContext } from "@/providers/ChatProvider";
 
 import ChatPageStructure from "../ChatPageStructure.client";
@@ -14,7 +14,7 @@ import ChatPageStructure from "../ChatPageStructure.client";
 import "@testing-library/jest-dom";
 
 // Initialize i18n for tests
-i18n.load("en", enMessages);
+i18n.load("en", enMessages as unknown as Messages);
 i18n.activate("en");
 
 // Mock necessary hooks and components

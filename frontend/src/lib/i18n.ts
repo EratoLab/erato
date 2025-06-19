@@ -1,6 +1,8 @@
 import { i18n } from "@lingui/core";
 import { detect, fromNavigator } from "@lingui/detect-locale";
 
+import { env } from "@/app/env";
+
 export const defaultLocale = "en";
 export const supportedLocales = ["en", "de", "fr", "pl", "es"];
 
@@ -59,6 +61,26 @@ export async function dynamicActivate(locale: string) {
         locale: defaultLocale,
         messages,
       });
+    }
+  }
+  // Additionally try to load custom-theme translations
+  const customThemePath = env().themeCustomerName;
+  if (customThemePath) {
+    try {
+      const { messages } = await (
+        await fetch(
+          `/custom-theme/${customThemePath}/locales/${validLocale}/messages.json`,
+        )
+      ).json();
+      i18n.loadAndActivate({
+        locale: validLocale,
+        messages,
+      });
+    } catch (error) {
+      console.warn(
+        `Failed to load locale ${validLocale} for custom theme.`,
+        error,
+      );
     }
   }
 }
