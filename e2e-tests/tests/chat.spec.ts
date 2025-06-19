@@ -80,6 +80,9 @@ test(
     const filePath = "test-files/big-file-100mb.pdf";
     await fileChooser.setFiles(filePath);
 
-    await expect(page.getByText("File is too large")).toBeVisible();
+    await expect(page.getByText("File is too large")).toBeVisible({
+      // Increased timeout, as uploading a 100MB file can take a while
+      timeout: 30000,
+    });
   },
 );
