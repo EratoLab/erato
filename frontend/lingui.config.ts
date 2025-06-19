@@ -10,8 +10,13 @@ export default defineConfig({
       include: ["src"],
       exclude: ["**/node_modules/**", "**/out/**", "**/.next/**", "**/test/**"],
     },
+    {
+      path: "<rootDir>/public/custom-theme/{name}/locales/{locale}/messages",
+      include: ["<rootDir>/public/custom-theme/{name}/"],
+      exclude: ["**/node_modules/**", "**/out/**", "**/.next/**", "**/test/**"],
+    },
   ],
-  compileNamespace: "ts", // Generate TypeScript files
+  compileNamespace: "json", // Generate JSON files, as those can be more easily loaded dynamically for the custom-theme
   // Use industry-standard PO format
   format: poFormatter({ lineNumbers: false }),
 });
