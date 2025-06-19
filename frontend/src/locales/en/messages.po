@@ -300,6 +300,13 @@ msgstr "Light mode"
 msgid "Like message"
 msgstr "Like message"
 
+#. js-lingui-explicit-id
+#: src/pages/NewChatPage.tsx
+#: src/pages/HomePage.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "branding.page_title_suffix"
+msgstr "LLM Chat"
+
 #: src/components/ui/Message/LoadMoreButton.tsx
 msgid "Load older messages"
 msgstr "Load older messages"
@@ -336,6 +343,11 @@ msgstr "Message exceeds token limit. Please reduce length or remove files."
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "messages"
 msgstr "messages"
+
+#. js-lingui-explicit-id
+#: src/pages/NewChatPage.tsx
+msgid "navigation.page.new_chat"
+msgstr "New chat"
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx

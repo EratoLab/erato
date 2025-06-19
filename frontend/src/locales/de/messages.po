@@ -300,6 +300,13 @@ msgstr "Heller Modus"
 msgid "Like message"
 msgstr "Nachricht gefällt mir"
 
+#. js-lingui-explicit-id
+#: src/pages/NewChatPage.tsx
+#: src/pages/HomePage.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "branding.page_title_suffix"
+msgstr ""
+
 #: src/components/ui/Message/LoadMoreButton.tsx
 msgid "Load older messages"
 msgstr "Ältere Nachrichten laden"
@@ -336,6 +343,11 @@ msgstr "Nachricht überschreitet Token-Limit. Bitte kürzen Sie die Nachricht od
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "messages"
 msgstr "Nachrichten"
+
+#. js-lingui-explicit-id
+#: src/pages/NewChatPage.tsx
+msgid "navigation.page.new_chat"
+msgstr ""
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx

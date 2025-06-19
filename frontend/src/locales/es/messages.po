@@ -300,6 +300,13 @@ msgstr "Modo claro"
 msgid "Like message"
 msgstr "Me gusta el mensaje"
 
+#. js-lingui-explicit-id
+#: src/pages/NewChatPage.tsx
+#: src/pages/HomePage.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "branding.page_title_suffix"
+msgstr ""
+
 #: src/components/ui/Message/LoadMoreButton.tsx
 msgid "Load older messages"
 msgstr "Cargar mensajes más antiguos"
@@ -336,6 +343,11 @@ msgstr "El mensaje excede el límite de tokens. Por favor, reduzca la longitud o
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "messages"
 msgstr "mensajes"
+
+#. js-lingui-explicit-id
+#: src/pages/NewChatPage.tsx
+msgid "navigation.page.new_chat"
+msgstr ""
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
