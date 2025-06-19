@@ -6,7 +6,7 @@ erato:
     annotations:
       nginx.ingress.kubernetes.io/proxy-buffer-size: 8k
       nginx.ingress.kubernetes.io/proxy-buffers-number: '4'
-      nginx.ingress.kubernetes.io/proxy-body-size: 50m
+      nginx.ingress.kubernetes.io/proxy-body-size: 0
 
   backend:
     image:

@@ -64,6 +64,11 @@ msgstr "Akzeptierte Dateitypen:"
 msgid "All file types accepted"
 msgstr "Alle Dateitypen akzeptiert"
 
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
+msgid "upload.error.unknown"
+msgstr ""
+
 #: src/components/ui/Chat/TokenUsageWarning.tsx
 #: src/components/ui/Chat/TokenUsageWarning.tsx
 msgid "Approaching Token Limit"
@@ -250,6 +255,11 @@ msgstr "fehlgeschlagen"
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
 msgstr "Datei"
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
+msgid "upload.error.tooLarge"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/App.tsx

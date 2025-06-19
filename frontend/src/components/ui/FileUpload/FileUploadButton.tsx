@@ -63,6 +63,7 @@ export const FileUploadButtonError = memo<FileUploadButtonErrorProps>(
       title={error.message}
       aria-label={`${t`Error:`} ${error.message}`}
     >
+      {error.message}
       <ErrorIcon className="size-5 text-[var(--theme-error-fg)]" />
     </Button>
   ),

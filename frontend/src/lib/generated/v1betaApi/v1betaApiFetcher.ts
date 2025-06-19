@@ -4,7 +4,8 @@ const baseUrl = ""; // TODO add your baseUrl
 
 export type ErrorWrapper<TError> =
   | TError
-  | { status: "unknown"; payload: string };
+  | { status: "unknown"; payload: string }
+  | { status: "413"; payload: string };
 
 export type V1betaApiFetcherOptions<
   TBody,
@@ -80,13 +81,20 @@ export async function v1betaApiFetch<
       try {
         error = await response.json();
       } catch (e) {
-        error = {
-          status: "unknown" as const,
-          payload:
-            e instanceof Error
-              ? `Unexpected error (${e.message})`
-              : "Unexpected error",
-        };
+        if (response.status === 413) {
+          error = {
+            status: "413",
+            payload: "Request entity too large",
+          };
+        } else {
+          error = {
+            status: "unknown" as const,
+            payload:
+                e instanceof Error
+                    ? `Unexpected error (${e.message})`
+                    : "Unexpected error",
+          };
+        }
       }
     } else if (response.headers.get("content-type")?.includes("json")) {
       return await response.json();
