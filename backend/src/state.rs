@@ -20,6 +20,7 @@ pub struct AppState {
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
     pub mcp_servers: Arc<McpServers>,
+    pub config: AppConfig,
 }
 
 impl AppState {
@@ -34,9 +35,10 @@ impl AppState {
             db,
             genai_client,
             system_prompt,
-            default_file_storage_provider: config.default_file_storage_provider,
+            default_file_storage_provider: config.default_file_storage_provider.clone(),
             file_storage_providers,
             mcp_servers,
+            config,
         })
     }
 

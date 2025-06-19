@@ -29,10 +29,24 @@ use sentry::{event_from_error, Hub};
 use serde::{Deserialize, Serialize};
 use sqlx::types::{chrono, Uuid};
 use std::error::Error;
+use tower_http::limit::RequestBodyLimitLayer;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 
+const DEFAULT_MAX_BODY_LIMIT_BYTES: usize = 20 * 1024 * 1024; // 20MB
+
 pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
+    let max_upload_size = app_state
+        .config
+        .max_upload_size_bytes()
+        .map(|v| v as usize)
+        .unwrap_or(DEFAULT_MAX_BODY_LIMIT_BYTES);
+
+    tracing::debug!(
+        "Configured max file size: {}KB",
+        max_upload_size as u64 / 1024
+    );
+
     // build our application with a route
     let me_routes = Router::new()
         .route("/profile", get(profile))
@@ -46,7 +60,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             app_state.clone(),
             me_profile_middleware::user_profile_middleware,
         ))
-        .layer(DefaultBodyLimit::max(20 * 1024 * 1024));
+        // RequestBodyLimitLayer is used in addition to DefaultBodyLimit,
+        // so we can already return a 413 error if we see a Content-Length that is too large.
+        .layer(RequestBodyLimitLayer::new(max_upload_size))
+        .layer(DefaultBodyLimit::max(max_upload_size));
 
     // authenticated routes that are not nested under /me
     // Should at a later time use a more generic middleware that can use a non-me profile as a Subject
@@ -323,8 +340,8 @@ pub async fn upload_file(
         let content_type = field.content_type().map(|s| s.to_string());
 
         let mut data = field.bytes().await.map_err(|e| {
-            tracing::error!("Failed to read file data: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
+            tracing::error!("Failed to read file data: {} - {}", e, e.status());
+            e.status()
         })?;
         let size_bytes = data.len();
 

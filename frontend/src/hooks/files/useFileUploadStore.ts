@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import type { UploadError } from "./errors";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -17,7 +18,7 @@ interface FileUploadState {
   /**
    * Error message if upload failed
    */
-  error: Error | null;
+  error: UploadError | null;
   /**
    * Stores the chat ID created silently for file uploads
    */
@@ -33,7 +34,7 @@ interface FileUploadState {
   /**
    * Set error state
    */
-  setError: (error: Error | null) => void;
+  setError: (error: UploadError | null) => void;
   /**
    * Clear all uploaded files
    */
@@ -71,7 +72,7 @@ export const useFileUploadStore = create<FileUploadState>((set) => ({
       uploadedFiles: [...state.uploadedFiles, ...files],
     })),
 
-  setError: (error: Error | null) => set({ error }),
+  setError: (error: UploadError | null) => set({ error }),
 
   clearFiles: () => set({ uploadedFiles: [] }),
 

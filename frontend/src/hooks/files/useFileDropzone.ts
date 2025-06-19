@@ -8,6 +8,12 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
 
+import {
+  UploadTooLargeError,
+  UploadUnknownError,
+  type UploadError,
+  isUploadTooLarge,
+} from "./errors";
 import { useFileUploadStore } from "./useFileUploadStore";
 
 import type {
@@ -48,7 +54,7 @@ interface UseFileDropzoneResult {
   /** Open the file dialog programmatically */
   open: () => void;
   /** Error message from dropzone validation or upload */
-  error: Error | string | null;
+  error: UploadError | null;
   /** Uploaded files */
   uploadedFiles: FileUploadItem[];
   /** Whether an upload is in progress */
@@ -87,7 +93,10 @@ export function useFileDropzone({
   const createChatMutation = useCreateChat({
     onError: (error) => {
       console.error("Failed to create chat for file upload:", error);
-      setError(new Error("Failed to prepare chat for file upload"));
+      setError(
+        // eslint-disable-next-line lingui/no-unlocalized-strings
+        new UploadUnknownError("Failed to prepare chat for file upload"),
+      );
       setUploading(false);
     },
   });
@@ -175,8 +184,17 @@ export function useFileDropzone({
           );
         } catch (uploadError) {
           console.error("Error calling fetchUploadFile:", uploadError);
-          // Simplify error handling to satisfy linter
-          throw new Error(String(uploadError) || "Failed to upload files");
+
+          // Check for fetch-like error with status
+          if (isUploadTooLarge(uploadError)) {
+            throw new UploadTooLargeError();
+          }
+
+          // Fallback to unknown error
+          throw new UploadUnknownError(
+            // eslint-disable-next-line lingui/no-unlocalized-strings
+            String(uploadError) || "Failed to upload files",
+          );
         }
 
         if (result.files.length > 0) {
@@ -186,11 +204,11 @@ export function useFileDropzone({
         }
       } catch (err) {
         console.error("Error uploading files (outer catch):", err);
-        setError(
-          err instanceof Error
-            ? err
-            : new Error("An unknown error occurred during upload"),
-        );
+        const isKnownError =
+          err instanceof UploadTooLargeError ||
+          err instanceof UploadUnknownError;
+
+        setError(isKnownError ? err : new UploadUnknownError());
       } finally {
         setUploading(false);
       }
@@ -224,7 +242,7 @@ export function useFileDropzone({
           return `${file.name}: ${errors.map((e) => e.message).join(", ")}`;
         });
 
-        setError(new Error(`Invalid files: ${errorMessages.join("; ")}`));
+        setError(new UploadUnknownError(errorMessages.join("; ")));
         return;
       }
 

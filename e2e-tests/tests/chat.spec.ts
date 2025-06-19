@@ -62,3 +62,24 @@ test(
     await newPage.close();
   },
 );
+
+test(
+  "Uploading a file that is too large shows an error",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.goto("/");
+
+    await login(page, "admin@example.com");
+    await chatIsReadyToChat(page);
+
+    // Start waiting for file chooser before clicking the button
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByLabel("Upload Files").click();
+    const fileChooser = await fileChooserPromise;
+
+    const filePath = "test-files/big-file-100mb.pdf";
+    await fileChooser.setFiles(filePath);
+
+    await expect(page.getByText("File is too large")).toBeVisible();
+  },
+);

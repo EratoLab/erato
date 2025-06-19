@@ -109,6 +109,15 @@ impl AppConfig {
         // You can deserialize (and thus freeze) the entire configuration as
         schema.try_deserialize()
     }
+
+    /// Returns the maximum configured file upload size in bytes, if any.
+    pub fn max_upload_size_bytes(&self) -> Option<u64> {
+        self.file_storage_providers
+            .values()
+            .filter_map(|p| p.max_upload_size_kb)
+            .max()
+            .map(|kb| kb * 1024)
+    }
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
@@ -177,6 +186,9 @@ pub struct FileStorageProviderConfig {
     // - "azblob" - Azure Blob Storage
     pub provider_kind: String,
     pub config: StorageProviderSpecificConfigMerged,
+    // The maximum file size that may be uploaded in kilobytes.
+    #[serde(default)]
+    pub max_upload_size_kb: Option<u64>,
 }
 
 impl FileStorageProviderConfig {

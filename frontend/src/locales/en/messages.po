@@ -64,6 +64,11 @@ msgstr "Accepted types:"
 msgid "All file types accepted"
 msgstr "All file types accepted"
 
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
+msgid "upload.error.unknown"
+msgstr "An unknown error occurred during upload. Please reload the page and try again."
+
 #: src/components/ui/Chat/TokenUsageWarning.tsx
 #: src/components/ui/Chat/TokenUsageWarning.tsx
 msgid "Approaching Token Limit"
@@ -250,6 +255,11 @@ msgstr "failed"
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
 msgstr "File"
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
+msgid "upload.error.tooLarge"
+msgstr "File is too large. Please reload the page and try a smaller file."
 
 #. js-lingui-explicit-id
 #: src/App.tsx
