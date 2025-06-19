@@ -1,6 +1,5 @@
 /* eslint-disable lingui/no-unlocalized-strings */
 import { Trans } from "@lingui/react/macro";
-import { useEffect } from "react";
 import { Routes, Route, Link, Outlet, Navigate } from "react-router-dom";
 
 import { ClientProviders } from "./components/providers/ClientProviders";
@@ -39,10 +38,6 @@ const NotFoundPage = () => (
 
 // Main App Shell (Global Layout - for things outside ChatLayout or other specific layouts)
 function App() {
-  useEffect(() => {
-    document.title = "LLM Chat";
-  }, []);
-
   return (
     <ClientProviders>
       <Outlet />

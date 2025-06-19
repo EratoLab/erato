@@ -300,6 +300,13 @@ msgstr "Tryb jasny"
 msgid "Like message"
 msgstr "Lubię wiadomość"
 
+#. js-lingui-explicit-id
+#: src/pages/NewChatPage.tsx
+#: src/pages/HomePage.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "branding.page_title_suffix"
+msgstr ""
+
 #: src/components/ui/Message/LoadMoreButton.tsx
 msgid "Load older messages"
 msgstr "Załaduj starsze wiadomości"
@@ -336,6 +343,11 @@ msgstr "Wiadomość przekracza limit tokenów. Proszę skrócić lub usunąć pl
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "messages"
 msgstr "wiadomości"
+
+#. js-lingui-explicit-id
+#: src/pages/NewChatPage.tsx
+msgid "navigation.page.new_chat"
+msgstr ""
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx

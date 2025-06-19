@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { Plural } from "@lingui/react/macro";
 import clsx from "clsx";
-import { memo } from "react";
+import { memo, useEffect } from "react";
 
 import { MessageTimestamp } from "@/components/ui";
 
@@ -146,6 +146,17 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     isLoading = false,
     showTimestamps = true,
   }) => {
+    const currentSession = sessions.find((s) => s.id === currentSessionId);
+    const currentSessionTitle = currentSession?.title;
+
+    useEffect(() => {
+      if (typeof currentSessionTitle === "undefined") {
+        return;
+      }
+      const pageTitle = t({ id: "branding.page_title_suffix" });
+      document.title = `${currentSessionTitle} - ${pageTitle}`;
+    }, [currentSessionTitle]);
+
     if (isLoading) {
       return <ChatHistoryListSkeleton layout={layout} />;
     }
