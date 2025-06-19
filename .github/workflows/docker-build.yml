@@ -85,7 +85,7 @@ jobs:
         if: success() || failure()
         run: pnpm exec prettier . --check
 
-      - name: "next.js lint"
+      - name: "Frontend lint"
         working-directory: ./frontend
         if: success() || failure()
         run: pnpm run lint
@@ -150,6 +150,100 @@ jobs:
       - name: "Check if OpenAPI spec is up to date"
         working-directory: backend
         run: cargo run --bin gen-openapi -- --check
+
+  test-frontend:
+    timeout-minutes: 10
+    name: "test frontend"
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      # Setup section
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Source of truth is at /frontend/package.json -> "packageManager" field.
+          version: 9.15.5
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          # Source of truth is at /frontend/.node-version
+          node-version: '22.10.0'
+          cache: 'pnpm'
+          cache-dependency-path: './frontend/pnpm-lock.yaml'
+
+      - name: "Install frontend packages"
+        working-directory: ./frontend
+        run: pnpm install
+
+      - name: "Setup frontend tests"
+        working-directory: ./frontend
+        run: pnpm run i18n:compile
+
+      - name: "Run frontend tests"
+        working-directory: ./frontend
+        run: pnpm exec vitest run
+
+  test-e2e:
+    name: "test e2e"
+    needs: [build-and-push-amd64]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Install k3d
+        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+      - name: Spin up k3d cluster for tests
+        working-directory: ./infrastructure
+        run: |
+          ./scripts/setup-dev.sh --wait --chart-dep-update \
+            --erato-image-repository ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }} \
+            --erato-image-tag ${{ env.SHA_TAG }}-amd64 \
+            --api-key "${{ secrets.E2E_OPENAI_API_KEY }}"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.10.0'
+          cache: 'pnpm'
+          cache-dependency-path: './e2e-tests/pnpm-lock.yaml'
+
+      - name: Setup e2e tests
+        working-directory: ./e2e-tests
+        run: |
+          echo "BASE_URL=https://app.erato.internal" > .env
+          pnpm install
+          pnpm exec playwright install --with-deps
+          ./scripts/generate_test_files.sh
+
+      - name: Run e2e tests
+        working-directory: ./e2e-tests
+        run: |
+          pnpm exec playwright test --retries 2 --trace on
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: e2e-tests/playwright-report/
+          retention-days: 30 
 
   build-and-push-helm-chart-dev:
     runs-on: ubuntu-22.04
@@ -323,64 +417,3 @@ jobs:
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }} \
             ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
-
-  e2e-tests:
-    name: "e2e tests"
-    needs: [build-and-push-amd64]
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Log in to Harbor registry
-        uses: docker/login-action@v1
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
-
-      - name: Install k3d
-        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-
-      - name: Spin up k3d cluster for tests
-        working-directory: ./infrastructure
-        run: |
-          ./scripts/setup-dev.sh --wait --chart-dep-update \
-            --erato-image-repository ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }} \
-            --erato-image-tag ${{ env.SHA_TAG }}-amd64 \
-            --api-key "${{ secrets.E2E_OPENAI_API_KEY }}"
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.5
-      - name: "Setup Node.js"
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.10.0'
-          cache: 'pnpm'
-          cache-dependency-path: './e2e-tests/pnpm-lock.yaml'
-
-      - name: Setup e2e tests
-        working-directory: ./e2e-tests
-        run: |
-          echo "BASE_URL=https://app.erato.internal" > .env
-          pnpm install
-          pnpm exec playwright install --with-deps
-          ./scripts/generate_test_files.sh
-
-      - name: Run e2e tests
-        working-directory: ./e2e-tests
-        run: |
-          pnpm exec playwright test --retries 2 --trace on
-
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: e2e-tests/playwright-report/
-          retention-days: 30 
