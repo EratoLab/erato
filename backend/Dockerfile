@@ -1,5 +1,7 @@
+# cargo-chef version = 0.1.71
+# Rust version = 1.87.0 - Should be kept up-to-date with rust-toolchain.toml
 # Bookworm = Debian 12 -> LTS support until 2028
-FROM lukemathwalker/cargo-chef:0.1.71-rust-1.84.0-bookworm AS chef
+FROM lukemathwalker/cargo-chef:0.1.71-rust-1.87.0-bookworm AS chef
 WORKDIR /app
 
 FROM chef AS planner
