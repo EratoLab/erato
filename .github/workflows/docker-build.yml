@@ -123,33 +123,48 @@ jobs:
     name: "test backend"
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
+
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v1
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: "Setup test environment"
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend test image
+        uses: docker/build-push-action@v6.15.0
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.test
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-test-amd64
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:test-buildcache-amd64
+          cache-to: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:test-buildcache-amd64,mode=max
+
+      - name: "Setup test services"
         working-directory: backend
         run: |
-          curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
-          chmod +x mc
-          sudo mv mc /usr/local/bin/
-          
-          sudo add-apt-repository ppa:alex-p/tesseract-ocr5
-          sudo apt-get update && sudo apt-get install -y libtesseract-dev libleptonica-dev libclang-dev
-          
           ./run_postgres.sh
           ./run_minio.sh
           ./run_ollama_smol.sh
           cp erato.template.toml erato.toml
-      # Should be kept in sync with `justfile` -> `install_clis`
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest@0.9.88,sea-orm-cli@1.1.4
+
       - name: "Run tests"
-        working-directory: backend
-        run: cargo nextest run --retries 2
+        run: |
+          docker run --rm --network host \
+            -v "$(pwd)/backend/erato.toml:/app/erato.toml" \
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-test-amd64 \
+            cargo nextest run --retries 2
       - name: "Check if OpenAPI spec is up to date"
-        working-directory: backend
-        run: cargo run --bin gen-openapi -- --check
+        run: |
+          docker run --rm --network host \
+            -v "$(pwd)/backend/erato.toml:/app/erato.toml" \
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-test-amd64 \
+            cargo run --bin gen-openapi -- --check
 
   test-frontend:
     timeout-minutes: 10

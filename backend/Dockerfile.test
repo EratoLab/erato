@@ -1,0 +1,34 @@
+FROM lukemathwalker/cargo-chef:0.1.71-rust-1.84.0-bookworm AS chef
+WORKDIR /app
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+# Install system dependencies for building
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libtesseract-dev \
+    libleptonica-dev \
+    libclang-dev \
+    # For minio client
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install minio client
+RUN curl -O https://dl.min.io/client/mc/release/linux-amd64/mc && \
+    chmod +x mc && \
+    mv mc /usr/local/bin/
+
+# Should be kept in sync with `justfile` -> `install_clis`
+# We install with `cargo install` here to make it available in the container
+RUN cargo install cargo-nextest --version 0.9.88 --locked && \
+    cargo install sea-orm-cli --version 1.1.4 --locked
+
+COPY --from=planner /app/recipe.json recipe.json
+# Build dependencies - this is the caching Docker layer!
+RUN cargo chef cook --recipe-path recipe.json
+
+# Copy application code
+COPY . . 
