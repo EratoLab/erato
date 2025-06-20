@@ -100,12 +100,13 @@ jobs:
     name: "cargo clippy"
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Install Rust toolchain"
         run: rustup component add clippy
         working-directory: backend
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: "true"
+          workspaces: "./backend -> target"
       - name: "Setup test environment"
         working-directory: backend
         run: |
@@ -123,9 +124,14 @@ jobs:
     name: "test backend"
     steps:
       - uses: actions/checkout@v4
+      - name: "Install Rust toolchain"
+        # Should trigger rustup toolchain install mechanism with rust-toolchain.toml
+        run: cargo --help
+        working-directory: backend
       - uses: Swatinem/rust-cache@v2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-all-crates: "true"
+          workspaces: "./backend -> target"
       - name: "Setup test environment"
         working-directory: backend
         run: |
