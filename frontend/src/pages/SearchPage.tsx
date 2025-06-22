@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useState, useCallback, useEffect, useMemo } from "react";
 
+import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { SearchIcon, CloseIcon } from "@/components/ui/icons";
 import { useChatContext } from "@/providers/ChatProvider";
 import { createLogger } from "@/utils/debugLogger";
@@ -56,7 +57,6 @@ export default function SearchPage() {
           chatTitle: chat.title_by_summary || t`New Chat`,
           messageContent: chat.title_by_summary || t`New Chat`,
           timestamp: chat.last_message_at || new Date().toISOString(),
-          context: `${chat.file_uploads.length} files`,
         }),
       )
       .sort(
@@ -105,12 +105,16 @@ export default function SearchPage() {
     void handleSearch(debouncedSearchQuery);
   }, [debouncedSearchQuery, handleSearch]);
 
-  // Initialize with recent chats
+  // Initialize with recent chats only when there's no search query
   useEffect(() => {
-    if (searchResults.length === 0 && recentChats.length > 0) {
+    if (
+      searchQuery.trim() === "" &&
+      searchResults.length === 0 &&
+      recentChats.length > 0
+    ) {
       setSearchResults(recentChats);
     }
-  }, [recentChats, searchResults.length]);
+  }, [recentChats, searchResults.length, searchQuery]);
 
   const clearSearch = () => {
     setSearchQuery("");
@@ -118,8 +122,11 @@ export default function SearchPage() {
   };
 
   const handleResultClick = (result: SearchResult) => {
-    logger.log("Search result clicked:", result);
-    // Navigate to the chat
+    // Defensive check to prevent click handler issues
+    if (!result.chatId) {
+      return;
+    }
+
     navigateToChat(result.chatId);
   };
 
@@ -141,7 +148,13 @@ export default function SearchPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  clearSearch();
+                }
+              }}
               placeholder={t`Search chat titles...`}
+              autoFocus={true} // eslint-disable-line jsx-a11y/no-autofocus -- The search input is the main interactive element on the search page.
               className="w-full rounded-xl border border-theme-border bg-theme-bg-secondary px-12 py-4 text-lg text-theme-fg-primary placeholder:text-theme-fg-muted focus:border-theme-border-focus focus:outline-none focus:ring-2 focus:ring-theme-focus"
             />
             {searchQuery && (
@@ -214,15 +227,14 @@ export default function SearchPage() {
                     className="block cursor-pointer rounded-lg border border-theme-border bg-theme-bg-primary p-4 transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus:ring-2 focus:ring-theme-focus"
                     aria-label={result.chatTitle}
                   >
-                    <div className="flex items-center justify-between">
-                      <h3 className="line-clamp-1 font-medium text-theme-fg-primary">
+                    <div className="flex items-center gap-4">
+                      <h3 className="line-clamp-1 min-w-0 flex-1 font-medium text-theme-fg-primary">
                         {result.chatTitle}
                       </h3>
-                      <div className="flex items-center gap-3 text-xs text-theme-fg-muted">
-                        {result.context && <span>{result.context}</span>}
-                        <span>
-                          {new Date(result.timestamp).toLocaleDateString()}
-                        </span>
+                      <div className="shrink-0 text-xs text-theme-fg-muted">
+                        <MessageTimestamp
+                          createdAt={new Date(result.timestamp)}
+                        />
                       </div>
                     </div>
                   </a>

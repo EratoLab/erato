@@ -4,7 +4,7 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { memo, useRef, useState, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 import { env } from "@/app/env";
 import { createLogger } from "@/utils/debugLogger";
@@ -55,7 +55,8 @@ const ChatHistoryHeader = memo<{
   collapsed: boolean;
   onToggleCollapse?: () => void;
   showTitle?: boolean;
-}>(({ onSearch, collapsed, onToggleCollapse, showTitle }) => (
+  isOnSearchPage?: boolean;
+}>(({ onSearch, collapsed, onToggleCollapse, showTitle, isOnSearchPage }) => (
   <div className="flex border-b border-theme-border p-2">
     {/* Only show the toggle button when not collapsed */}
     {!collapsed && (
@@ -80,26 +81,36 @@ const ChatHistoryHeader = memo<{
           )}
         </div>
         <div className="flex w-12 justify-center">
-          <a
-            href="/search"
-            onClick={(e) => {
-              // Allow cmd/ctrl-click to open in new tab
-              if (e.metaKey || e.ctrlKey) {
-                return;
-              }
-              // Prevent default navigation for normal clicks
-              e.preventDefault();
-              logger.log("[CHAT_FLOW] Search button clicked in sidebar");
-              if (onSearch) void onSearch();
-            }}
-            aria-label={t`Search`}
-          >
+          {isOnSearchPage ? (
             <Button
               variant="sidebar-icon"
               icon={<SearchIcon />}
               aria-label={t`Search`}
+              disabled={true}
+              className="cursor-not-allowed opacity-50"
             />
-          </a>
+          ) : (
+            <a
+              href="/search"
+              onClick={(e) => {
+                // Allow cmd/ctrl-click to open in new tab
+                if (e.metaKey || e.ctrlKey) {
+                  return;
+                }
+                // Prevent default navigation for normal clicks
+                e.preventDefault();
+                logger.log("[CHAT_FLOW] Search button clicked in sidebar");
+                if (onSearch) void onSearch();
+              }}
+              aria-label={t`Search`}
+            >
+              <Button
+                variant="sidebar-icon"
+                icon={<SearchIcon />}
+                aria-label={t`Search`}
+              />
+            </a>
+          )}
         </div>
       </>
     )}
@@ -174,6 +185,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const ref = useRef<HTMLElement>(null);
     const [width, setWidth] = useState(minWidth);
     const navigate = useNavigate();
+    const location = useLocation();
+    const isOnSearchPage = location.pathname === "/search";
 
     // Only use ResizeObserver in the browser
     const isBrowser = typeof window !== "undefined";
@@ -253,6 +266,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               collapsed={collapsed}
               onToggleCollapse={onToggleCollapse}
               showTitle={showTitle}
+              isOnSearchPage={isOnSearchPage}
             />
             <div className="flex min-h-0 flex-1 flex-col">
               {/* New Chat Item */}

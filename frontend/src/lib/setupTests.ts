@@ -8,7 +8,6 @@ import { server } from "./mocks/server";
 
 import type { Messages } from "@lingui/core";
 
-
 // Initialize i18n for all tests
 i18n.load("en", enMessages as unknown as Messages);
 i18n.activate("en");
