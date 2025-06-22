@@ -123,16 +123,6 @@ export default function SearchPage() {
     navigateToChat(result.chatId);
   };
 
-  const handleResultKeyDown = (
-    e: React.KeyboardEvent,
-    result: SearchResult,
-  ) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      handleResultClick(result);
-    }
-  };
-
   const resultsCount = searchResults.length;
   const isShowingRecent = !searchQuery.trim();
 
@@ -209,13 +199,20 @@ export default function SearchPage() {
 
               <div className="grid gap-3">
                 {searchResults.map((result) => (
-                  <div
+                  <a
                     key={result.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleResultClick(result)}
-                    onKeyDown={(e) => handleResultKeyDown(e, result)}
-                    className="cursor-pointer rounded-lg border border-theme-border bg-theme-bg-primary p-4 transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus:ring-2 focus:ring-theme-focus"
+                    href={`/chat/${result.chatId}`}
+                    onClick={(e) => {
+                      // Allow cmd/ctrl-click to open in new tab
+                      if (e.metaKey || e.ctrlKey) {
+                        return;
+                      }
+                      // Prevent default navigation for normal clicks
+                      e.preventDefault();
+                      handleResultClick(result);
+                    }}
+                    className="block cursor-pointer rounded-lg border border-theme-border bg-theme-bg-primary p-4 transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus:ring-2 focus:ring-theme-focus"
+                    aria-label={result.chatTitle}
                   >
                     <div className="flex items-center justify-between">
                       <h3 className="line-clamp-1 font-medium text-theme-fg-primary">
@@ -228,7 +225,7 @@ export default function SearchPage() {
                         </span>
                       </div>
                     </div>
-                  </div>
+                  </a>
                 ))}
               </div>
             </div>

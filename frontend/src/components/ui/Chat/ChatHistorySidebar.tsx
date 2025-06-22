@@ -13,7 +13,7 @@ import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
-import { SidebarToggleIcon, SearchIcon, PlusIcon } from "../icons";
+import { SidebarToggleIcon, SearchIcon, EditIcon } from "../icons";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
@@ -80,15 +80,26 @@ const ChatHistoryHeader = memo<{
           )}
         </div>
         <div className="flex w-12 justify-center">
-          <Button
-            onClick={() => {
+          <a
+            href="/search"
+            onClick={(e) => {
+              // Allow cmd/ctrl-click to open in new tab
+              if (e.metaKey || e.ctrlKey) {
+                return;
+              }
+              // Prevent default navigation for normal clicks
+              e.preventDefault();
               logger.log("[CHAT_FLOW] Search button clicked in sidebar");
               if (onSearch) void onSearch();
             }}
-            variant="sidebar-icon"
-            icon={<SearchIcon />}
             aria-label={t`Search`}
-          />
+          >
+            <Button
+              variant="sidebar-icon"
+              icon={<SearchIcon />}
+              aria-label={t`Search`}
+            />
+          </a>
         </div>
       </>
     )}
@@ -110,7 +121,7 @@ const NewChatItem = memo<{
       }}
       className="flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-theme-bg-hover"
     >
-      <PlusIcon className="size-4 text-theme-fg-secondary" />
+      <EditIcon className="size-4 text-theme-fg-secondary" />
       <span className="font-medium text-theme-fg-primary">{t`New Chat`}</span>
     </InteractiveContainer>
   </div>
@@ -246,6 +257,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             <div className="flex min-h-0 flex-1 flex-col">
               {/* New Chat Item */}
               <NewChatItem onNewChat={onNewChat} />
+
+              {/* Divider */}
+              <div className="mx-2 my-1 border-t border-theme-border" />
 
               {/* Chat History */}
               {error ? (
