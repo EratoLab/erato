@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 "use client";
 
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 
@@ -18,9 +20,6 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
   const [branding, setBranding] = useState<{
     enabled: boolean;
     logoSize: "small" | "medium" | "large";
-    title: string;
-    subtitle: string;
-    description: string;
   } | null>(null);
 
   // Size mapping for logo dimensions
@@ -76,16 +75,21 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
         <Logo
           width={logoSize.width}
           height={logoSize.height}
-          alt={branding.title}
+          alt={t({
+            id: "branding.welcomeScreen.title",
+            message: "Welcome to AI Assistant",
+          })}
         />
       </div>
 
       <h1 className="mb-4 text-2xl font-bold text-theme-fg-primary">
-        {branding.title}
+        <Trans id="branding.welcomeScreen.title">Welcome to AI Assistant</Trans>
       </h1>
 
       <h2 className="mb-6 text-xl text-theme-fg-secondary">
-        {branding.subtitle}
+        <Trans id="branding.welcomeScreen.subtitle">
+          Get expert help with your questions
+        </Trans>
       </h2>
 
       <div className="max-w-2xl text-lg text-theme-fg-muted">
@@ -95,7 +99,11 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
             p: ({ ...props }) => <p className="mt-4" {...props} />,
           }}
         >
-          {branding.description}
+          {t({
+            id: "branding.welcomeScreen.description",
+            message:
+              "Ask questions and get helpful responses from our AI assistant.",
+          })}
         </Markdown>
       </div>
     </div>

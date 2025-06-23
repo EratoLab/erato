@@ -42,15 +42,47 @@ export async function dynamicActivate(locale: string) {
   const validLocale = getValidLocale(locale);
 
   try {
-    const { messages } = await import(`../locales/${validLocale}/messages.po`);
+    // Load main locale messages
+    const { messages: mainMessages } = await import(
+      `../locales/${validLocale}/messages.po`
+    );
+
+    // Try to load custom-theme translations and merge them
+    let customThemePath: string | null = null;
+    try {
+      customThemePath = env().themeCustomerName;
+    } catch {
+      // Environment not fully configured, skip custom theme loading
+    }
+    let mergedMessages = mainMessages;
+
+    if (customThemePath) {
+      try {
+        const themeUrl = `/custom-theme/${customThemePath}/locales/${validLocale}/messages.json`;
+        const response = await fetch(themeUrl);
+        if (response.ok) {
+          const { messages: customMessages } = await response.json();
+          // Merge custom theme messages with main messages
+          // Custom theme messages take precedence for overlapping keys
+          mergedMessages = { ...mainMessages, ...customMessages };
+        }
+      } catch (error) {
+        console.warn(
+          `[i18n] Failed to load custom theme locale ${validLocale}, using main translations only.`,
+          error,
+        );
+        // Continue with main messages only
+      }
+    }
+
     i18n.loadAndActivate({
       locale: validLocale,
-      messages,
+      messages: mergedMessages,
     });
     // Note: No localStorage persistence - locale only active for current session
   } catch (error) {
-    console.warn(
-      `Failed to load locale ${validLocale}, falling back to ${defaultLocale}`,
+    console.error(
+      `[i18n] Failed to load locale ${validLocale}, falling back to ${defaultLocale}`,
       error,
     );
     if (validLocale !== defaultLocale) {
@@ -61,26 +93,6 @@ export async function dynamicActivate(locale: string) {
         locale: defaultLocale,
         messages,
       });
-    }
-  }
-  // Additionally try to load custom-theme translations
-  const customThemePath = env().themeCustomerName;
-  if (customThemePath) {
-    try {
-      const { messages } = await (
-        await fetch(
-          `/custom-theme/${customThemePath}/locales/${validLocale}/messages.json`,
-        )
-      ).json();
-      i18n.loadAndActivate({
-        locale: validLocale,
-        messages,
-      });
-    } catch (error) {
-      console.warn(
-        `Failed to load locale ${validLocale} for custom theme.`,
-        error,
-      );
     }
   }
 }

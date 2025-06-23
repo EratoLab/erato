@@ -567,3 +567,18 @@ msgstr "Ty"
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "Your"
 msgstr "Twoja"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WelcomeScreen.tsx
+msgid "branding.welcomeScreen.title"
+msgstr "Witamy w Asystencie AI"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WelcomeScreen.tsx
+msgid "branding.welcomeScreen.subtitle"
+msgstr "Uzyskaj ekspercką pomoc w swoich pytaniach"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WelcomeScreen.tsx
+msgid "branding.welcomeScreen.description"
+msgstr "Zadawaj pytania i otrzymuj pomocne odpowiedzi od naszego asystenta AI."
