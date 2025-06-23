@@ -18,9 +18,6 @@ export interface CustomThemeConfig {
     welcomeScreen?: {
       enabled: boolean;
       logoSize: "small" | "medium" | "large";
-      title: string;
-      subtitle: string;
-      description: string;
     };
   };
 }

@@ -1,6 +1,6 @@
 # Chat Frontend
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a [Vite](https://vitejs.dev) + [React](https://react.dev) project with TypeScript.
 
 ## Getting Started
 
@@ -27,20 +27,39 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+You can start editing the app by modifying files in the `src/` directory. The page auto-updates as you edit files.
 
 ## Environment Variables
 
-| Variable                        | Description          | Default                  |
-| ------------------------------- | -------------------- | ------------------------ |
-| `NEXT_PUBLIC_API_ROOT_URL`      | Backend API root URL | `http://localhost:3001/` |
-| `NEXT_PUBLIC_CUSTOMER_NAME`     | See theming docs     |                          |
-| `NEXT_PUBLIC_THEME_PATH`        | See theming docs     |                          |
-| `NEXT_PUBLIC_THEME_CONFIG_PATH` | See theming docs     |                          |
-| `NEXT_PUBLIC_LOGO_PATH`         | See theming docs     |                          |
-| `NEXT_PUBLIC_LOGO_DARK_PATH`    | See theming docs     |                          |
+The application supports environment variables with a dual-source system: variables can be provided either as Vite environment variables (prefixed with `VITE_`) or injected from the backend via window globals.
+
+| Variable                 | Description                 | Window Fallback               | Required |
+| ------------------------ | --------------------------- | ----------------------------- | -------- |
+| `VITE_API_ROOT_URL`      | Backend API root URL        | `window.API_ROOT_URL`         | Yes      |
+| `VITE_CUSTOMER_NAME`     | Customer name for theming   | `window.THEME_CUSTOMER_NAME`  | No       |
+| `VITE_THEME_PATH`        | Custom theme path           | `window.THEME_PATH`           | No       |
+| `VITE_THEME_CONFIG_PATH` | Path to theme configuration | `window.THEME_CONFIG_PATH`    | No       |
+| `VITE_LOGO_PATH`         | Path to logo (light mode)   | `window.THEME_LOGO_PATH`      | No       |
+| `VITE_LOGO_DARK_PATH`    | Path to logo (dark mode)    | `window.THEME_LOGO_DARK_PATH` | No       |
+
+### Usage
+
+You can set these variables in several ways:
+
+1. **Environment file**: Create a `.env` or `.env.local` file in the frontend directory:
+
+```bash
+VITE_API_ROOT_URL=http://localhost:4180/api/
+VITE_CUSTOMER_NAME=my-customer
+```
+
+2. **Backend injection**: The backend can inject these values via window globals (see `frontend_environment.rs`).
+
+3. **Build time**: Set them when building:
+
+```bash
+VITE_API_ROOT_URL=https://api.example.com pnpm build
+```
 
 ## Linting and Type Checking
 
@@ -48,7 +67,7 @@ The project uses ESLint with enhanced TypeScript type checking to catch potentia
 
 ### Available Commands
 
-- `pnpm run lint` - Standard linting using Next.js defaults
+- `pnpm run lint` - Standard linting using ESLint configuration
 - `pnpm run lint:strict` - Strict linting that includes type checking
 - `pnpm run lint:fix` - Try to automatically fix linting issues
 - `pnpm run typecheck` - Run TypeScript type checking only
@@ -165,18 +184,15 @@ useEffect(() => {
 
 ## Learn More
 
-To learn more about Next.js, take a look at the following resources:
+To learn more about the technologies used in this project:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [Vite Documentation](https://vitejs.dev/guide/) - learn about Vite's features and configuration
+- [React Documentation](https://react.dev/learn) - learn React concepts and patterns
+- [TypeScript Handbook](https://www.typescriptlang.org/docs/) - learn TypeScript
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This application is designed to be deployed as a static site that communicates with a backend API. The backend can inject configuration via window globals, making it suitable for containerized deployments.
 
 ## Custom Theming
 
@@ -188,10 +204,10 @@ The theme system uses a configuration-based approach that can be customized in s
 
 1. **Environment Variables**:
 
-   - `NEXT_PUBLIC_CUSTOMER_NAME`: Name of the customer folder (e.g., "trilux")
-   - `NEXT_PUBLIC_THEME_CONFIG_PATH`: Override path to theme.json file
-   - `NEXT_PUBLIC_LOGO_PATH`: Path to logo for light mode
-   - `NEXT_PUBLIC_LOGO_DARK_PATH`: Path to logo for dark mode
+   - `VITE_CUSTOMER_NAME`: Name of the customer folder (e.g., "trilux")
+   - `VITE_THEME_CONFIG_PATH`: Override path to theme.json file
+   - `VITE_LOGO_PATH`: Path to logo for light mode
+   - `VITE_LOGO_DARK_PATH`: Path to logo for dark mode
 
 2. **Customer Themes Directory**:
 
@@ -285,9 +301,9 @@ Then in your deployment:
 
 ```yaml
 env:
-  - name: NEXT_PUBLIC_CUSTOMER_NAME
+  - name: VITE_CUSTOMER_NAME
     value: "my-customer"
-  - name: NEXT_PUBLIC_THEME_CONFIG_PATH
+  - name: VITE_THEME_CONFIG_PATH
     value: "/config/theme.json"
 volumeMounts:
   - name: theme-config
