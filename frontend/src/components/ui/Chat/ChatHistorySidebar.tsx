@@ -287,7 +287,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   onSessionSelect={onSessionSelect}
                   onSessionArchive={onSessionArchive}
                   showTimestamps={showTimestamps}
-                  className="flex-1 px-0 pt-0"
+                  className="flex-1 p-2"
                 />
               )}
             </div>
