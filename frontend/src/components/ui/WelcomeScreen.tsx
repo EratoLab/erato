@@ -97,6 +97,17 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
           components={{
             li: ({ ...props }) => <li className="list-disc" {...props} />,
             p: ({ ...props }) => <p className="mt-4" {...props} />,
+            a: ({ href, children, ...props }) => (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="theme-transition text-theme-fg-accent underline hover:opacity-40"
+                {...props}
+              >
+                {children}
+              </a>
+            ),
           }}
         >
           {t({
