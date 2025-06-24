@@ -50,3 +50,5 @@ next-env.d.ts
 # Compiled translation files
 src/locales/**/*.ts
 src/locales/**/*.json
+public/custom-theme/**/locales/**/*.ts
+public/custom-theme/**/locales/**/*.json
