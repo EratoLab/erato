@@ -32,6 +32,7 @@ import {
   MusicNote,
   MediaVideo,
   MultiplePages,
+  Search,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -188,6 +189,10 @@ export const MultiplePagesIcon = ({ className, ...props }: IconProps) => (
   <MultiplePages className={className} {...props} />
 );
 
+export const SearchIcon = ({ className, ...props }: IconProps) => (
+  <Search className={className} {...props} />
+);
+
 // Direct re-exports for convenience (maintaining Iconoir naming)
 export {
   Copy,
@@ -217,6 +222,7 @@ export {
   MusicNote,
   MediaVideo,
   MultiplePages,
+  Search,
 };
 
 // Export the IconProps type for use in other components

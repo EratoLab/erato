@@ -4,14 +4,16 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { memo, useRef, useState, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
+import { useNavigate, useLocation } from "react-router-dom";
 
 import { env } from "@/app/env";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
+import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
-import { SidebarToggleIcon, EditIcon } from "../icons";
+import { SidebarToggleIcon, SearchIcon, EditIcon } from "../icons";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
@@ -49,11 +51,12 @@ export interface ChatHistorySidebarProps {
 }
 
 const ChatHistoryHeader = memo<{
-  onNewChat?: () => void;
+  onSearch?: () => void;
   collapsed: boolean;
   onToggleCollapse?: () => void;
   showTitle?: boolean;
-}>(({ onNewChat, collapsed, onToggleCollapse, showTitle }) => (
+  isOnSearchPage?: boolean;
+}>(({ onSearch, collapsed, onToggleCollapse, showTitle, isOnSearchPage }) => (
   <div className="flex border-b border-theme-border p-2">
     {/* Only show the toggle button when not collapsed */}
     {!collapsed && (
@@ -78,15 +81,36 @@ const ChatHistoryHeader = memo<{
           )}
         </div>
         <div className="flex w-12 justify-center">
-          <Button
-            onClick={() => {
-              logger.log("[CHAT_FLOW] New chat button clicked in sidebar");
-              if (onNewChat) void onNewChat();
-            }}
-            variant="sidebar-icon"
-            icon={<EditIcon />}
-            aria-label={t`New Chat`}
-          />
+          {isOnSearchPage ? (
+            <Button
+              variant="sidebar-icon"
+              icon={<SearchIcon />}
+              aria-label={t`Search`}
+              disabled={true}
+              className="cursor-not-allowed opacity-50"
+            />
+          ) : (
+            <a
+              href="/search"
+              onClick={(e) => {
+                // Allow cmd/ctrl-click to open in new tab
+                if (e.metaKey || e.ctrlKey) {
+                  return;
+                }
+                // Prevent default navigation for normal clicks
+                e.preventDefault();
+                logger.log("[CHAT_FLOW] Search button clicked in sidebar");
+                if (onSearch) void onSearch();
+              }}
+              aria-label={t`Search`}
+            >
+              <Button
+                variant="sidebar-icon"
+                icon={<SearchIcon />}
+                aria-label={t`Search`}
+              />
+            </a>
+          )}
         </div>
       </>
     )}
@@ -95,6 +119,27 @@ const ChatHistoryHeader = memo<{
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryHeader.displayName = "ChatHistoryHeader";
+
+const NewChatItem = memo<{
+  onNewChat?: () => void;
+}>(({ onNewChat }) => (
+  <div className="px-2 py-1">
+    <InteractiveContainer
+      useDiv={true}
+      onClick={() => {
+        logger.log("[CHAT_FLOW] New chat item clicked");
+        if (onNewChat) void onNewChat();
+      }}
+      className="flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-theme-bg-hover"
+    >
+      <EditIcon className="size-4 text-theme-fg-secondary" />
+      <span className="font-medium text-theme-fg-primary">{t`New Chat`}</span>
+    </InteractiveContainer>
+  </div>
+));
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+NewChatItem.displayName = "NewChatItem";
 
 const ChatHistoryFooter = memo<{
   userProfile?: UserProfile;
@@ -139,6 +184,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
   }) => {
     const ref = useRef<HTMLElement>(null);
     const [width, setWidth] = useState(minWidth);
+    const navigate = useNavigate();
+    const location = useLocation();
+    const isOnSearchPage = location.pathname === "/search";
 
     // Only use ResizeObserver in the browser
     const isBrowser = typeof window !== "undefined";
@@ -181,6 +229,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       }
     };
 
+    const handleSearchClick = () => {
+      logger.log("[CHAT_FLOW] Navigating to search page");
+      navigate("/search");
+    };
+
     return (
       <ErrorBoundary FallbackComponent={ErrorDisplay}>
         <div className="relative h-full">
@@ -209,12 +262,20 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             )}
           >
             <ChatHistoryHeader
-              onNewChat={onNewChat}
+              onSearch={handleSearchClick}
               collapsed={collapsed}
               onToggleCollapse={onToggleCollapse}
               showTitle={showTitle}
+              isOnSearchPage={isOnSearchPage}
             />
             <div className="flex min-h-0 flex-1 flex-col">
+              {/* New Chat Item */}
+              <NewChatItem onNewChat={onNewChat} />
+
+              {/* Divider */}
+              <div className="mx-2 my-1 border-t border-theme-border" />
+
+              {/* Chat History */}
               {error ? (
                 <ErrorDisplay error={error} />
               ) : isLoading ? (

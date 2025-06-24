@@ -5,9 +5,11 @@ import { Routes, Route, Link, Outlet, Navigate } from "react-router-dom";
 import { ClientProviders } from "./components/providers/ClientProviders";
 // Page Imports
 import ChatLayout from "./layouts/ChatLayout";
+import SearchLayout from "./layouts/SearchLayout";
 import ChatDetailPage from "./pages/ChatDetailPage";
 import HomePage from "./pages/HomePage";
 import NewChatPage from "./pages/NewChatPage";
+import SearchPage from "./pages/SearchPage";
 
 // Layout Imports
 
@@ -60,6 +62,10 @@ function AppRoutes() {
           {/* Default /chat to /chat/new */}
           <Route path="new" element={<NewChatPage />} />
           <Route path=":id" element={<ChatDetailPage />} />
+        </Route>
+        {/* Search section with its own layout */}
+        <Route path="search" element={<SearchLayout />}>
+          <Route index element={<SearchPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>

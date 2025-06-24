@@ -420,7 +420,63 @@ msgstr "Eliminar todos los archivos"
 msgid "Reset to Browser Detection"
 msgstr "Restablecer a detección del navegador"
 
-#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Chat/ChatHistorySidebar.tsx:88
+msgid "Search"
+msgstr "Buscar"
+
+#: src/pages/SearchPage.tsx:95
+msgid "Search chat messages..."
+msgstr "Buscar mensajes de chat..."
+
+#: src/pages/SearchPage.tsx:104
+msgid "Clear search"
+msgstr "Limpiar búsqueda"
+
+#: src/pages/SearchPage.tsx:114
+msgid "Searching..."
+msgstr "Buscando..."
+
+#: src/pages/SearchPage.tsx:122
+msgid "Search Your Chats"
+msgstr "Buscar en sus chats"
+
+#: src/pages/SearchPage.tsx:125
+msgid "Find messages, conversations, and topics from your chat history"
+msgstr "Encuentre mensajes, conversaciones y temas de su historial de chat"
+
+#: src/pages/SearchPage.tsx:139
+msgid "No results found"
+msgstr "No se encontraron resultados"
+
+#: src/pages/SearchPage.tsx:142
+msgid "Try different keywords or check your spelling"
+msgstr "Pruebe con palabras clave diferentes o verifique la ortografía"
+
+#: src/pages/SearchPage.tsx:149
+msgid "Found ${resultsCount} results"
+msgstr "Se encontraron ${resultsCount} resultados"
+
+#: src/pages/SearchPage.tsx:135
+msgid "Search chat titles..."
+msgstr "Buscar títulos de chat..."
+
+#: src/pages/SearchPage.tsx:158
+msgid "No chats found"
+msgstr "No se encontraron chats"
+
+#: src/pages/SearchPage.tsx:170
+msgid "Recent Chats"
+msgstr "Chats recientes"
+
+#: src/pages/SearchPage.tsx:170
+msgid "Search Results"
+msgstr "Resultados de búsqueda"
+
+#: src/pages/SearchPage.tsx:173
+msgid "Showing ${resultsCount} recent chats"
+msgstr "Mostrando ${resultsCount} chats recientes"
+
+#: src/components/ui/Chat/ChatInput.tsx:336
 msgid "Send message"
 msgstr "Enviar mensaje"
 
