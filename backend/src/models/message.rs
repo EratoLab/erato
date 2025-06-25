@@ -468,17 +468,44 @@ pub async fn get_generation_input_messages_by_previous_message_id(
     new_generation_files: Vec<FileContentsForGeneration>,
 ) -> Result<GenerationInputMessages, Report> {
     let num_previous_messages = num_previous_messages.unwrap_or(10);
+    let mut messages_to_process: Vec<messages::Model> = vec![];
+    let mut base_history: Option<GenerationInputMessages> = None;
+    let mut current_message_id_opt = Some(*previous_message_id);
 
-    let mut input_messages: Vec<InputMessage> = vec![];
+    while let Some(current_message_id) = current_message_id_opt {
+        // Traverse the chat history, until we have `num_previous_messages` messages, or we reach the first message
+        if messages_to_process.len() >= num_previous_messages {
+            break;
+        }
 
-    // Traverse the chat history, until we have `num_previous_messages` messages, or we reach the first message
-    let mut current_message_id: Uuid = previous_message_id.to_owned();
-    while input_messages.len() < num_previous_messages {
         let message = Messages::find_by_id(current_message_id)
             .one(conn)
             .await?
             .ok_or_else(|| eyre!("Message with ID {} not found", current_message_id))?;
 
+        current_message_id_opt = message.previous_message_id;
+
+        if let Some(gen_input_json) = &message.generation_input_messages {
+            base_history = Some(GenerationInputMessages::validate(gen_input_json)?);
+            messages_to_process.push(message);
+            break; // Found anchor
+        } else {
+            messages_to_process.push(message);
+        }
+    }
+
+    // `messages_to_process` is in reverse chronological order. Reverse it to process chronologically.
+    messages_to_process.reverse();
+
+    // Start with the base history if we found one.
+    let mut input_messages: Vec<InputMessage> = if let Some(history) = base_history {
+        history.messages
+    } else {
+        vec![]
+    };
+
+    // Process the collected messages and add their content to the input_messages.
+    for message in messages_to_process {
         let parsed_raw_message = MessageSchema::validate(&message.raw_message)?;
         for content_part in parsed_raw_message.content {
             input_messages.push(InputMessage {
@@ -486,27 +513,21 @@ pub async fn get_generation_input_messages_by_previous_message_id(
                 content: content_part,
             });
         }
-
-        if let Some(prev_id) = message.previous_message_id {
-            current_message_id = prev_id;
-        } else {
-            break;
-        }
     }
-    // If we are at the first message, we add the system prompt if it exists
-    if input_messages.len() == 1 {
-        if let Some(system_prompt) = system_prompt {
-            input_messages.push(InputMessage {
-                role: MessageRole::System,
-                content: ContentPart::Text(ContentPartText {
-                    text: system_prompt,
-                }),
-            });
+
+    // Add system prompt if not present
+    if !input_messages.iter().any(|m| m.role == MessageRole::System) {
+        if let Some(prompt) = system_prompt {
+            input_messages.insert(
+                0,
+                InputMessage {
+                    role: MessageRole::System,
+                    content: ContentPart::Text(ContentPartText { text: prompt }),
+                },
+            );
         }
     }
 
-    // Reverse the order of the messages, as we want to start with the oldest message
-    input_messages.reverse();
     // Now add the new generation files to the input messages
     for file in new_generation_files {
         let mut content = String::new();
