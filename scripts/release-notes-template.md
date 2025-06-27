@@ -1,4 +1,4 @@
-# Release {{RELEASE_VERSION}}
+# {{RELEASE_VERSION}}
 
 This release includes the latest updates to the Erato application.
 
