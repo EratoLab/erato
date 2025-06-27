@@ -68,9 +68,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // authenticated routes that are not nested under /me
     // Should at a later time use a more generic middleware that can use a non-me profile as a Subject
     let authenticated_routes = Router::new()
-        .route("/chats/:chat_id/messages", get(chat_messages))
-        .route("/chats/:chat_id/archive", post(archive_chat_endpoint))
-        .route("/files/:file_id", get(get_file))
+        .route("/chats/{chat_id}/messages", get(chat_messages))
+        .route("/chats/{chat_id}/archive", post(archive_chat_endpoint))
+        .route("/files/{file_id}", get(get_file))
         .route(
             "/token_usage/estimate",
             post(token_usage::token_usage_estimate),

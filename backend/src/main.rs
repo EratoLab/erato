@@ -102,7 +102,7 @@ fn extend_with_sentry_layers(mut router: Router<AppState>) -> Router<AppState> {
     #[cfg(feature = "sentry")]
     {
         router = router.layer(sentry_tower::NewSentryLayer::<Request<Body>>::new_from_top());
-        router = router.layer(sentry_tower::SentryHttpLayer::with_transaction());
+        router = router.layer(sentry_tower::SentryHttpLayer::new().enable_transaction());
     }
     router
 }
