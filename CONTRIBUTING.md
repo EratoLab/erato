@@ -45,10 +45,10 @@ After the release preparation pull request has been merged into `main`, the rele
     git pull origin main
     ```
 
-2.  Run the `tag-release.sh` script.
+2.  Run the `tag-release.py` script.
 
     ```bash
-    ./scripts/tag-release.sh
+    ./scripts/tag-release.py
     ```
 
     This script will:
