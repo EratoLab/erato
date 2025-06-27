@@ -3,6 +3,8 @@ name: Build and Push Docker Images
 on:
   push:
     branches: [ main ]
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+*'
     paths:
       - '.github/workflows/docker-build.yml' 
       - 'backend/**'
@@ -30,6 +32,7 @@ env:
   FRONTEND_IMAGE_NAME: erato/frontend
   COMBINED_IMAGE_NAME: erato/app
   SHA_TAG: ${{ github.sha }}
+  RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
 
 jobs:
   lint:
@@ -296,6 +299,7 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
           cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64-buildcache
           cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64-buildcache
 
@@ -308,6 +312,7 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
           cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
           cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
 
@@ -321,10 +326,11 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.COMBINED_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
           build-args: |
             REGISTRY=${{ env.REGISTRY }}
-            BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
-            FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
+            BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-amd64', env.RELEASE_VERSION) || format('{0}-amd64', env.SHA_TAG) }}
+            FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-amd64', env.RELEASE_VERSION) || format('{0}-amd64', env.SHA_TAG) }}
 
   build-and-push-arm64:
     runs-on: ubuntu-22.04-arm64-custom-large
@@ -354,6 +360,7 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
           cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64-buildcache
           cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64-buildcache
 
@@ -366,6 +373,7 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
           cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
           cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
 
@@ -379,10 +387,11 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.COMBINED_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
           build-args: |
             REGISTRY=${{ env.REGISTRY }}
-            BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
-            FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+            BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-arm64', env.RELEASE_VERSION) || format('{0}-arm64', env.SHA_TAG) }}
+            FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-arm64', env.RELEASE_VERSION) || format('{0}-arm64', env.SHA_TAG) }}
 
   create-manifests:
     needs: [build-and-push-amd64, build-and-push-arm64]
@@ -407,6 +416,11 @@ jobs:
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }} \
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          if [[ "${{ env.RELEASE_VERSION }}" != "" ]]; then
+            docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION }} \
+              ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-amd64 \
+              ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-arm64
+          fi
 
           # Frontend manifest
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest \
@@ -415,6 +429,11 @@ jobs:
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }} \
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          if [[ "${{ env.RELEASE_VERSION }}" != "" ]]; then
+            docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION }} \
+              ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-amd64 \
+              ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-arm64
+          fi
 
           # Combined manifest
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest \
@@ -423,3 +442,8 @@ jobs:
           docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }} \
             ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
             ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          if [[ "${{ env.RELEASE_VERSION }}" != "" ]]; then
+            docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.RELEASE_VERSION }} \
+              ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-amd64 \
+              ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-arm64
+          fi
