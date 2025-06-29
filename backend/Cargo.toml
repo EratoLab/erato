@@ -48,6 +48,10 @@ tiktoken-rs = "0.6.0"
 rust-mcp-sdk = { version = "0.4.2", default-features = false, features = ["client"] }
 rust-mcp-schema = { version = "0.5.2", features = ["schema_utils"] }
 rust-mcp-transport = "0.3.4"
+ractor = "0.15.6"
+ractor_actors = { version = "0.4.9", features = ["time"] }
+chrono = "0.4"
+cron = "0.12.1"
 
 [dependencies.sentry]
 version = "0.41.0"

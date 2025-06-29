@@ -1,3 +1,4 @@
+use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig};
 use crate::services::file_storage::FileStorage;
 use crate::services::mcp_manager::McpServers;
@@ -21,6 +22,7 @@ pub struct AppState {
     pub file_storage_providers: HashMap<String, FileStorage>,
     pub mcp_servers: Arc<McpServers>,
     pub config: AppConfig,
+    pub actor_manager: ActorManager,
 }
 
 impl AppState {
@@ -30,6 +32,7 @@ impl AppState {
         let file_storage_providers = Self::build_file_storage_providers(&config)?;
         let genai_client = Self::build_genai_client(config.chat_provider.clone())?;
         let mcp_servers = Arc::new(McpServers::new(&config).await?);
+        let actor_manager = ActorManager::new(db.clone(), config.clone()).await;
 
         Ok(Self {
             db,
@@ -39,6 +42,7 @@ impl AppState {
             file_storage_providers,
             mcp_servers,
             config,
+            actor_manager,
         })
     }
 
