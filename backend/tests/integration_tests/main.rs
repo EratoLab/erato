@@ -28,6 +28,7 @@ struct Event {
     retry: Option<u32>,
 }
 
+mod actors;
 mod db;
 mod migrations;
 
@@ -80,6 +81,9 @@ pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppS
     .unwrap();
     file_storage_providers.insert("local_minio".to_owned(), provider);
 
+    let actor_manager =
+        erato::actors::manager::ActorManager::new(db.clone(), app_config.clone()).await;
+
     AppState {
         db: db.clone(),
         genai_client: AppState::build_genai_client(app_config.chat_provider.clone()).unwrap(),
@@ -88,6 +92,7 @@ pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppS
         file_storage_providers,
         mcp_servers: Arc::new(Default::default()),
         config: app_config,
+        actor_manager,
     }
 }
 // This is the main entry point for integration tests

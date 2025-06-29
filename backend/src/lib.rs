@@ -5,6 +5,7 @@ use server::router::MainRouterApiDoc;
 
 use crate::server::router::MAIN_ROUTER_DOC;
 
+pub mod actors;
 pub mod config;
 pub mod db;
 pub mod frontend_environment;

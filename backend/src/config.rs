@@ -41,6 +41,14 @@ pub struct AppConfig {
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
     #[serde(default)]
     pub additional_frontend_environment: HashMap<String, serde_json::Value>,
+
+    // If true, enables the cleanup worker that periodically deletes old data.
+    // Defaults to `false`.
+    pub cleanup_enabled: bool,
+    // Number of days after which archived chats should be deleted by the cleanup worker.
+    // Only has an effect if `cleanup_enabled` is `true`.
+    // Defaults to 30.
+    pub cleanup_archived_max_age_days: u32,
 }
 
 impl AppConfig {
@@ -58,7 +66,9 @@ impl AppConfig {
             .set_default("environment", "development")?
             .set_default("http_host", "127.0.0.1")?
             .set_default("http_port", "3130")?
-            .set_default("frontend_bundle_path", "./public")?;
+            .set_default("frontend_bundle_path", "./public")?
+            .set_default("cleanup_enabled", false)?
+            .set_default("cleanup_archived_max_age_days", 30)?;
 
         let config_files_to_load: Vec<String> = if let Some(paths) = config_file_paths {
             paths
