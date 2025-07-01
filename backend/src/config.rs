@@ -136,7 +136,7 @@ impl AppConfig {
             config
                 .frontend
                 .additional_environment
-                .extend(additional_frontend_env.into_iter());
+                .extend(additional_frontend_env);
         }
         config.additional_frontend_environment = None;
 

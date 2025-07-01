@@ -1,7 +1,5 @@
-use axum::body::Body;
 use axum::handler::HandlerWithoutStateExt;
-use axum::http::Request;
-use axum::{Extension, Router};
+use axum::Extension;
 use eyre::Report;
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
@@ -10,6 +8,7 @@ use erato::frontend_environment::{
     build_frontend_environment, serve_files_with_script, FrontendBundlePath,
 };
 use erato::models;
+use erato::services::sentry::{extend_with_sentry_layers, setup_sentry};
 use erato::state::AppState;
 use erato::{server, ApiDoc};
 use tower_http::cors::CorsLayer;
@@ -74,43 +73,4 @@ async fn main() -> Result<(), Report> {
     axum::serve(listener, app.into_make_service()).await?;
 
     Ok(())
-}
-
-#[allow(unused_mut)]
-fn extend_with_sentry_layers(mut router: Router<AppState>) -> Router<AppState> {
-    #[cfg(feature = "sentry")]
-    {
-        router = router.layer(sentry_tower::NewSentryLayer::<Request<Body>>::new_from_top());
-        router = router.layer(sentry_tower::SentryHttpLayer::new().enable_transaction());
-    }
-    router
-}
-
-#[cfg(feature = "sentry")]
-fn setup_sentry(
-    sentry_dsn: Option<&String>,
-    environment: String,
-    _sentry_guard: &mut Option<sentry::ClientInitGuard>,
-) {
-    if let Some(sentry_dsn) = sentry_dsn {
-        *_sentry_guard = Some(sentry::init((
-            sentry_dsn.as_str(),
-            sentry::ClientOptions {
-                release: sentry::release_name!(),
-                debug: std::env::var("SENTRY_DEBUG").is_ok(),
-                environment: Some(environment.into()),
-                ..Default::default()
-            },
-        )));
-    } else {
-        println!("No SENTRY_DSN specified. Observability via Sentry is disabled");
-    }
-}
-
-#[cfg(not(feature = "sentry"))]
-fn setup_sentry(
-    _sentry_dsn: Option<&String>,
-    _environment: String,
-    _sentry_guard: &mut Option<()>,
-) {
 }
