@@ -14,6 +14,7 @@ use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::ChatMessage;
 use crate::services::file_storage::FileStorage;
 use crate::services::mcp_manager::convert_mcp_tools_to_genai_tools;
+use crate::services::sentry::capture_report;
 use crate::state::AppState;
 use axum::extract::State;
 use axum::response::sse::Event;
@@ -28,11 +29,8 @@ use genai::chat::{
 };
 use sea_orm::prelude::Uuid;
 use sea_orm::JsonValue;
-#[cfg(feature = "sentry")]
-use sentry::{event_from_error, Hub};
 use serde::Serialize;
 use serde_json::json;
-use std::error::Error;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamExt as _;
@@ -1556,23 +1554,4 @@ pub async fn edit_message_sse(
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
     )
-}
-
-#[cfg(feature = "sentry")]
-fn capture_report(report: &Report) {
-    Hub::with_active(|hub| {
-        let err: &dyn Error = report.as_ref();
-        let event = event_from_error(err);
-        // if let Some(exc) = event.exception.iter_mut().last() {
-        //     let backtrace = err.backtrace();
-        //     exc.stacktrace = sentry_backtrace::parse_stacktrace(&format!("{backtrace:#}"));
-        // }
-
-        hub.capture_event(event);
-    });
-}
-
-#[cfg(not(feature = "sentry"))]
-fn capture_report(err: &Report) {
-    tracing::error!("{}", err.to_string());
 }

@@ -1,16 +1,14 @@
-use axum::body::Body;
 use axum::handler::HandlerWithoutStateExt;
-use axum::http::Request;
-use axum::{Extension, Router};
+use axum::Extension;
 use eyre::Report;
-use serde_json::{json, Value};
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use erato::config::AppConfig;
 use erato::frontend_environment::{
-    serve_files_with_script, FrontedEnvironment, FrontendBundlePath,
+    build_frontend_environment, serve_files_with_script, FrontendBundlePath,
 };
 use erato::models;
+use erato::services::sentry::{extend_with_sentry_layers, setup_sentry};
 use erato::state::AppState;
 use erato::{server, ApiDoc};
 use tower_http::cors::CorsLayer;
@@ -75,63 +73,4 @@ async fn main() -> Result<(), Report> {
     axum::serve(listener, app.into_make_service()).await?;
 
     Ok(())
-}
-
-pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
-    let mut env = FrontedEnvironment::default();
-
-    let api_root_url = "/api/".to_string();
-
-    env.0.insert(
-        "API_ROOT_URL".to_owned(),
-        Value::String(api_root_url.clone()),
-    );
-    env.0
-        .insert("SOME_OBJECT".to_owned(), json!({ "foo": "bar" }));
-
-    // Inject additional_frontend_environment
-    for (key, value) in &config.additional_frontend_environment {
-        env.0.insert(key.clone(), value.clone());
-    }
-
-    env
-}
-
-#[allow(unused_mut)]
-fn extend_with_sentry_layers(mut router: Router<AppState>) -> Router<AppState> {
-    #[cfg(feature = "sentry")]
-    {
-        router = router.layer(sentry_tower::NewSentryLayer::<Request<Body>>::new_from_top());
-        router = router.layer(sentry_tower::SentryHttpLayer::new().enable_transaction());
-    }
-    router
-}
-
-#[cfg(feature = "sentry")]
-fn setup_sentry(
-    sentry_dsn: Option<&String>,
-    environment: String,
-    _sentry_guard: &mut Option<sentry::ClientInitGuard>,
-) {
-    if let Some(sentry_dsn) = sentry_dsn {
-        *_sentry_guard = Some(sentry::init((
-            sentry_dsn.as_str(),
-            sentry::ClientOptions {
-                release: sentry::release_name!(),
-                debug: std::env::var("SENTRY_DEBUG").is_ok(),
-                environment: Some(environment.into()),
-                ..Default::default()
-            },
-        )));
-    } else {
-        println!("No SENTRY_DSN specified. Observability via Sentry is disabled");
-    }
-}
-
-#[cfg(not(feature = "sentry"))]
-fn setup_sentry(
-    _sentry_dsn: Option<&String>,
-    _environment: String,
-    _sentry_guard: &mut Option<()>,
-) {
 }

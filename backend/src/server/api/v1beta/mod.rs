@@ -15,6 +15,7 @@ use crate::server::api::v1beta::message_streaming::{
     EditMessageStreamingResponseMessage, MessageSubmitRequest,
     MessageSubmitStreamingResponseMessage,
 };
+use crate::services::sentry::log_internal_server_error;
 use crate::state::AppState;
 use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::StatusCode;
@@ -24,11 +25,8 @@ use axum::{middleware, Extension, Json, Router};
 use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
 use eyre::{OptionExt, Report, WrapErr};
-#[cfg(feature = "sentry")]
-use sentry::{event_from_error, Hub};
 use serde::{Deserialize, Serialize};
 use sqlx::types::{chrono, Uuid};
-use std::error::Error;
 use tower_http::limit::RequestBodyLimitLayer;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
@@ -824,25 +822,4 @@ pub async fn archive_chat_endpoint(
         chat_id: updated_chat.id.to_string(),
         archived_at,
     }))
-}
-
-#[cfg(feature = "sentry")]
-fn log_internal_server_error(report: Report) -> StatusCode {
-    Hub::with_active(|hub| {
-        let err: &dyn Error = report.as_ref();
-        let event = event_from_error(err);
-        // if let Some(exc) = event.exception.iter_mut().last() {
-        //     let backtrace = err.backtrace();
-        //     exc.stacktrace = sentry_backtrace::parse_stacktrace(&format!("{backtrace:#}"));
-        // }
-
-        hub.capture_event(event);
-    });
-    StatusCode::INTERNAL_SERVER_ERROR
-}
-
-#[cfg(not(feature = "sentry"))]
-fn log_internal_server_error(err: Report) -> StatusCode {
-    tracing::error!("{}", err.to_string());
-    StatusCode::INTERNAL_SERVER_ERROR
 }

@@ -1,5 +1,6 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
 pub use self::axum::serve_files_with_script;
+use crate::config::AppConfig;
 use lol_html::html_content::ContentType;
 use lol_html::{element, HtmlRewriter, Settings};
 use ordered_multimap::ListOrderedMultimap;
@@ -10,11 +11,45 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+// The following keys are aligned with the `env.ts` of the frontend.
+// If you change the keys, you must also update them in the frontend.
+const FRONTEND_ENV_KEY_API_ROOT_URL: &str = "API_ROOT_URL";
+const FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME: &str = "THEME_CUSTOMER_NAME";
+
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
 ///
-/// Values can be injected from AppConfig.additional_frontend_environment, and can be strings or maps (string key, string value).
-pub struct FrontedEnvironment(pub ListOrderedMultimap<String, Value>);
+/// Values can be injected from AppConfig.frontend.additional_environment, and can be strings or maps (string key, string value).
+/// The values are only ordered, so that we have control over whether our keys or the user-provided keys have priority.
+/// The values provided by users are not guaranteed to be in the order provided in the config file.
+pub struct FrontedEnvironment {
+    pub additional_environment: ListOrderedMultimap<String, Value>,
+}
+
+pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
+    let mut env = FrontedEnvironment::default();
+
+    let api_root_url = "/api/".to_string();
+
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_API_ROOT_URL.to_string(),
+        Value::String(api_root_url.clone()),
+    );
+    if let Some(theme) = &config.frontend.theme {
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME.to_string(),
+            Value::String(theme.clone()),
+        );
+    }
+
+    // Inject pairs from frontend.additional_environment
+    for (key, value) in &config.additional_frontend_environment() {
+        env.additional_environment
+            .insert(key.clone(), value.clone());
+    }
+
+    env
+}
 
 #[derive(Debug, Clone)]
 pub struct FrontendBundlePath(pub String);
@@ -71,7 +106,7 @@ pub fn inject_environment_script_tag(
     let mut script_tag = String::new();
     script_tag.write_str("<script>\n").unwrap();
     // Writes a line with the content `window.KEY = "VALUE";` for every entry
-    for (key, value) in &frontend_env.0 {
+    for (key, value) in &frontend_env.additional_environment {
         script_tag.write_str("window.").unwrap();
         script_tag.write_str(key).unwrap();
         script_tag.write_str(" = ").unwrap();
