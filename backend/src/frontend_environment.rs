@@ -11,7 +11,10 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+// The following keys are aligned with the `env.ts` of the frontend.
+// If you change the keys, you must also update them in the frontend.
 const FRONTEND_ENV_KEY_API_ROOT_URL: &str = "API_ROOT_URL";
+const FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME: &str = "THEME_CUSTOMER_NAME";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -32,6 +35,12 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
         FRONTEND_ENV_KEY_API_ROOT_URL.to_string(),
         Value::String(api_root_url.clone()),
     );
+    if let Some(theme) = &config.frontend.theme {
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME.to_string(),
+            Value::String(theme.clone()),
+        );
+    }
 
     // Inject pairs from frontend.additional_environment
     for (key, value) in &config.additional_frontend_environment() {

@@ -140,6 +140,15 @@ impl AppConfig {
         }
         config.additional_frontend_environment = None;
 
+        if let Some(serde_json::Value::String(theme_name)) = config
+            .frontend
+            .additional_environment
+            .get("THEME_CUSTOMER_NAME")
+        {
+            tracing::warn!("The `additional_environment` key `THEME_CUSTOMER_NAME` is deprecated for setting the theme. Please use `frontend.theme` instead.");
+            config.frontend.theme = Some(theme_name.to_string());
+        }
+
         config
     }
 
@@ -323,6 +332,10 @@ pub struct McpServerConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
 pub struct FrontendConfig {
+    // The name of a theme to use for the frontend.
+    // Themes can be placed in `frontend/public/custom-theme/<THEME_NAME>` directories.
+    pub theme: Option<String>,
+
     // Additional values to inject into the frontend environment as global variables.
     // This is a dictionary where each value can be a string or a map (string key, string value).
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
