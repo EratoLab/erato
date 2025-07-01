@@ -3,12 +3,11 @@ use axum::handler::HandlerWithoutStateExt;
 use axum::http::Request;
 use axum::{Extension, Router};
 use eyre::Report;
-use serde_json::{json, Value};
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use erato::config::AppConfig;
 use erato::frontend_environment::{
-    serve_files_with_script, FrontedEnvironment, FrontendBundlePath,
+    build_frontend_environment, serve_files_with_script, FrontendBundlePath,
 };
 use erato::models;
 use erato::state::AppState;
@@ -75,26 +74,6 @@ async fn main() -> Result<(), Report> {
     axum::serve(listener, app.into_make_service()).await?;
 
     Ok(())
-}
-
-pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
-    let mut env = FrontedEnvironment::default();
-
-    let api_root_url = "/api/".to_string();
-
-    env.0.insert(
-        "API_ROOT_URL".to_owned(),
-        Value::String(api_root_url.clone()),
-    );
-    env.0
-        .insert("SOME_OBJECT".to_owned(), json!({ "foo": "bar" }));
-
-    // Inject additional_frontend_environment
-    for (key, value) in &config.additional_frontend_environment {
-        env.0.insert(key.clone(), value.clone());
-    }
-
-    env
 }
 
 #[allow(unused_mut)]

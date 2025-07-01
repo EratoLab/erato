@@ -36,11 +36,16 @@ pub struct AppConfig {
     // If present, will enable Sentry for error reporting.
     pub sentry_dsn: Option<String>,
 
-    // Additional values to inject into the frontend environment as global variables.
+    // **Deprecated**: Please use `frontend.additional_environment` instead.
+    //
     // This is a dictionary where each value can be a string or a map (string key, string value).
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
     #[serde(default)]
-    pub additional_frontend_environment: HashMap<String, serde_json::Value>,
+    #[deprecated(note = "Please use `frontend.additional_environment` instead.")]
+    pub additional_frontend_environment: Option<HashMap<String, serde_json::Value>>,
+
+    #[serde(default)]
+    pub frontend: FrontendConfig,
 
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
@@ -117,7 +122,25 @@ impl AppConfig {
     pub fn new_for_app(config_file_paths: Option<Vec<String>>) -> Result<Self, ConfigError> {
         let schema = Self::config_schema(config_file_paths, true)?;
         // You can deserialize (and thus freeze) the entire configuration as
-        schema.try_deserialize()
+        let mut config: Self = schema.try_deserialize()?;
+        config = config.migrate();
+        Ok(config)
+    }
+
+    #[allow(deprecated)]
+    pub fn migrate(self) -> Self {
+        let mut config = self;
+
+        if let Some(additional_frontend_env) = config.additional_frontend_environment.clone() {
+            tracing::warn!("Config key `additional_frontend_environment` is deprecated. Please use `frontend.additional_environment` instead.");
+            config
+                .frontend
+                .additional_environment
+                .extend(additional_frontend_env.into_iter());
+        }
+        config.additional_frontend_environment = None;
+
+        config
     }
 
     /// Returns the maximum configured file upload size in bytes, if any.
@@ -127,6 +150,10 @@ impl AppConfig {
             .filter_map(|p| p.max_upload_size_kb)
             .max()
             .map(|kb| kb * 1024)
+    }
+
+    pub fn additional_frontend_environment(&self) -> HashMap<String, serde_json::Value> {
+        self.frontend.additional_environment.clone()
     }
 }
 
@@ -292,4 +319,13 @@ pub struct McpServerConfig {
     pub url: String,
     // For `transport_type = "sse"`, these static headers will be sent with every request.
     pub http_headers: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct FrontendConfig {
+    // Additional values to inject into the frontend environment as global variables.
+    // This is a dictionary where each value can be a string or a map (string key, string value).
+    // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
+    #[serde(default)]
+    pub additional_environment: HashMap<String, serde_json::Value>,
 }

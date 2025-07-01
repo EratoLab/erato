@@ -35,7 +35,7 @@ dotenv-flow = "0.16.2"
 config = "0.15.6"
 http-body-util = "0.1.2"
 lol_html = "2.2.0"
-ordered-multimap = "0.7.3"
+ordered-multimap = { version = "0.7.3" , features = ["serde"]}
 futures = "0.3"
 tokio-stream = "0.1.17"
 genai = { version = "0.1.24-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "e92ed0b5053bdb8411ac83fd8d9ca499832d6a24" }
