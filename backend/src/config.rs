@@ -149,6 +149,16 @@ impl AppConfig {
             config.frontend.theme = Some(theme_name.to_string());
         }
 
+        // Migrate azure_openai to openai format
+        if config.chat_provider.provider_kind == "azure_openai" {
+            config.chat_provider = config
+                .chat_provider
+                .migrate_azure_openai_to_openai()
+                .unwrap_or_else(|e| {
+                    panic!("Failed to migrate azure_openai config: {}", e);
+                });
+        }
+
         config
     }
 
@@ -170,6 +180,7 @@ impl AppConfig {
 pub struct ChatProviderConfig {
     // May be one of:
     // - "openai" (applicable for both OpenAI and AzureGPT)
+    // - "azure_openai" (will be automatically converted to "openai" format during config loading)
     // - "ollama"
     pub provider_kind: String,
     // The model name to use for the chat provider.
@@ -181,8 +192,15 @@ pub struct ChatProviderConfig {
     //
     // Should likely end with `/v1/`
     // E.g. 'http://localhost:11434/v1/'
+    //
+    // For Azure OpenAI, this should be the deployment endpoint URL ending with
+    // either `.api.cognitive.microsoft.com` or `.openai.azure.com`
+    // E.g. 'https://germanywestcentral.api.cognitive.microsoft.com'
     pub base_url: Option<String>,
     pub api_key: Option<String>,
+    // For Azure OpenAI, the API version to use (e.g. "2024-10-21").
+    // This will be automatically converted to additional_request_parameters during config loading.
+    pub api_version: Option<String>,
     // Additional request parameters to be added to API requests.
     // E.g. 'api-version=2024-10-21'
     pub additional_request_parameters: Option<Vec<String>>,
@@ -218,6 +236,65 @@ impl ChatProviderConfig {
             }
         }
         headers
+    }
+
+    /// Migrates azure_openai configuration to openai format
+    pub fn migrate_azure_openai_to_openai(self) -> Result<Self, Report> {
+        if self.provider_kind != "azure_openai" {
+            return Ok(self);
+        }
+
+        // Validate and process base_url
+        let base_url = if let Some(url) = &self.base_url {
+            let trimmed_url = url.trim_end_matches('/');
+
+            // Validate that the URL ends with the expected Azure OpenAI domains
+            if !trimmed_url.contains(".api.cognitive.microsoft.com")
+                && !trimmed_url.contains(".openai.azure.com")
+            {
+                return Err(eyre!(
+                    "Azure OpenAI base_url must end with either '.api.cognitive.microsoft.com' or '.openai.azure.com', got: {}",
+                    url
+                ));
+            }
+
+            // Construct the full deployment URL by appending the model name as deployment name
+            let deployment_url = format!("{}/openai/deployments/{}/", trimmed_url, self.model_name);
+            Some(deployment_url)
+        } else {
+            return Err(eyre!("base_url is required for azure_openai provider"));
+        };
+
+        // Prepare additional_request_parameters
+        let mut additional_params = self.additional_request_parameters.unwrap_or_default();
+        if let Some(api_version) = &self.api_version {
+            additional_params.push(format!("api-version={}", api_version));
+        }
+
+        // Prepare additional_request_headers
+        let mut additional_headers = self.additional_request_headers.unwrap_or_default();
+        if let Some(api_key) = &self.api_key {
+            additional_headers.push(format!("api-key={}", api_key));
+        }
+
+        Ok(ChatProviderConfig {
+            provider_kind: "openai".to_string(),
+            model_name: self.model_name,
+            base_url,
+            api_key: None,     // Moved to headers
+            api_version: None, // Moved to parameters
+            additional_request_parameters: if additional_params.is_empty() {
+                None
+            } else {
+                Some(additional_params)
+            },
+            additional_request_headers: if additional_headers.is_empty() {
+                None
+            } else {
+                Some(additional_headers)
+            },
+            system_prompt: self.system_prompt,
+        })
     }
 }
 
