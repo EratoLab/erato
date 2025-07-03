@@ -1823,8 +1823,8 @@ dependencies = [
 
 [[package]]
 name = "genai"
-version = "0.1.24-WIP"
-source = "git+https://github.com/EratoLab/rust-genai.git?rev=e92ed0b5053bdb8411ac83fd8d9ca499832d6a24#e92ed0b5053bdb8411ac83fd8d9ca499832d6a24"
+version = "0.4.0-WIP"
+source = "git+https://github.com/EratoLab/rust-genai.git?rev=38dd115943a9184ee16fad40fe9c96bedea04d37#38dd115943a9184ee16fad40fe9c96bedea04d37"
 dependencies = [
  "bytes",
  "derive_more 2.0.1",
