@@ -28,6 +28,7 @@ impl InputMessage {
             MessageRole::Tool => ChatMessage {
                 role: GenAiChatRole::Tool,
                 content: self.content.into(),
+                options: None,
             },
         }
     }

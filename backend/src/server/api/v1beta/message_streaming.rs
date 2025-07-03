@@ -6,8 +6,8 @@ use crate::models::chat::{
 use crate::models::file_upload::get_file_upload_by_id;
 use crate::models::message::{
     get_generation_input_messages_by_previous_message_id, get_message_by_id, submit_message,
-    ContentPart, GenerationInputMessages, MessageSchema, ToolCallStatus as MessageToolCallStatus,
-    ToolUse,
+    ContentPart, ContentPartText, GenerationInputMessages, MessageSchema,
+    ToolCallStatus as MessageToolCallStatus, ToolUse,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
@@ -581,7 +581,7 @@ async fn prepare_chat_request(
     let mut chat_request = generation_input_messages.clone().into_chat_request();
     let chat_options = ChatOptions::default()
         .with_capture_content(true)
-        .with_capture_tools(true);
+        .with_capture_tool_calls(true);
 
     let mcp_server_tools = app_state.mcp_servers.list_tools().await;
 
@@ -618,6 +618,9 @@ async fn stream_generate_chat_completion<
         current_turn += 1;
         tracing::debug!("Starting chat completion turn {}", current_turn);
 
+        if current_turn != 1 && unfinished_tool_calls.is_empty() {
+            tracing::warn!("Trying to progress chat completion after first iteration without open tool calls. Will likely result in error.")
+        }
         // First work off open tool calls
         let mut current_turn_tool_responses = vec![];
         while let Some(unfinished_tool_call) = unfinished_tool_calls.pop() {
@@ -695,6 +698,7 @@ async fn stream_generate_chat_completion<
             current_turn_chat_request.messages.push(GenAiChatMessage {
                 role: ChatRole::Tool,
                 content: MessageContent::ToolResponses(current_turn_tool_responses.clone()),
+                options: None,
             });
         }
 
@@ -722,7 +726,7 @@ async fn stream_generate_chat_completion<
         while let Some(result) = inner_stream.next().await {
             match result {
                 Ok(message) => match message {
-                    ChatStreamEvent::Chunk(StreamChunk::Content(content)) => {
+                    ChatStreamEvent::Chunk(StreamChunk { content }) => {
                         let delta = MessageSubmitStreamingResponseMessageTextDelta {
                             message_id: assistant_message_id,
                             content_index: current_message_content.len(),
@@ -749,21 +753,32 @@ async fn stream_generate_chat_completion<
         if let Some(stream_end) = stream_end {
             #[allow(clippy::collapsible_match)]
             #[allow(clippy::single_match)]
-            if let Some(captured_content) = stream_end.clone().captured_content {
-                match captured_content {
-                    MessageContent::Text(text) => {
-                        current_message_content.push(ContentPart::Text(text.into()));
-                    }
-                    _ => {}
+            if let Some(captured_texts) = stream_end.captured_texts() {
+                for captured_text in captured_texts {
+                    current_message_content.push(ContentPart::Text(ContentPartText {
+                        text: captured_text.into(),
+                    }));
                 }
             }
 
-            if !stream_end.captured_tools.is_empty() {
-                current_turn_chat_request.messages.push(GenAiChatMessage {
-                    role: ChatRole::Assistant,
-                    content: MessageContent::ToolCalls(stream_end.captured_tools.clone()),
-                });
-                unfinished_tool_calls.extend(stream_end.captured_tools.clone());
+            if let Some(captured_tool_calls) = stream_end.captured_tool_calls() {
+                if !captured_tool_calls.is_empty() {
+                    current_turn_chat_request.messages.push(GenAiChatMessage {
+                        role: ChatRole::Assistant,
+                        content: MessageContent::ToolCalls(
+                            captured_tool_calls.clone().into_iter().cloned().collect(),
+                        ),
+                        options: None,
+                    });
+                    unfinished_tool_calls.extend(
+                        captured_tool_calls
+                            .clone()
+                            .into_iter()
+                            .map(ToOwned::to_owned),
+                    );
+                } else {
+                    break 'loop_call_turns Ok(current_message_content);
+                }
             } else {
                 break 'loop_call_turns Ok(current_message_content);
             }
@@ -853,13 +868,13 @@ pub async fn generate_chat_summary(
     let summary_completion = app_state
         .genai()
         .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
-        .await?;
+        .await
+        .context("Failed to generate chat summary")?;
 
     let summary = summary_completion
-        .content
-        .ok_or_else(|| eyre!("No captured content in chat stream end event"))?
-        .text_into_string()
-        .ok_or_else(|| eyre!("Expected text response"))?;
+        .first_text()
+        .ok_or_else(|| eyre!("No captured content in chat stream end event, or not of type Text"))?
+        .to_string();
 
     // Update the chat with the generated summary
     crate::models::chat::update_chat_summary(
