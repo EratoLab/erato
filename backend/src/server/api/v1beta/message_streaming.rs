@@ -25,7 +25,7 @@ use eyre::{OptionExt, WrapErr};
 use futures::Stream;
 use genai::chat::{
     ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatRole, ChatStreamEvent,
-    MessageContent, StreamChunk, StreamEnd,
+    MessageContent, ReasoningEffort, StreamChunk, StreamEnd,
 };
 use sea_orm::prelude::Uuid;
 use sea_orm::JsonValue;
@@ -843,6 +843,7 @@ async fn stream_update_assistant_message_completion<
     Ok(())
 }
 
+// TODO: Allow specifying different model for summary, so we don't use reasoning models for it.
 /// Generate a summary of the chat, based on the first message to the chat.
 pub async fn generate_chat_summary(
     app_state: &AppState,
@@ -861,9 +862,19 @@ pub async fn generate_chat_summary(
 
     let mut chat_request: ChatRequest = Default::default();
     chat_request = chat_request.append_message(GenAiChatMessage::user(prompt));
-    let chat_options = ChatOptions::default()
+    let mut chat_options = ChatOptions::default()
         .with_capture_content(true)
-        .with_max_tokens(30);
+        // NOTE: Desired tokens are more like ~30, but we have some buffer in case a reasoning model is used
+        .with_max_tokens(300);
+
+    // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
+    if app_state.config.chat_provider.model_name.starts_with("o1-")
+        || app_state.config.chat_provider.model_name.starts_with("o2-")
+        || app_state.config.chat_provider.model_name.starts_with("o3-")
+        || app_state.config.chat_provider.model_name.starts_with("o4-")
+    {
+        chat_options = chat_options.with_reasoning_effort(ReasoningEffort::Low);
+    }
 
     let summary_completion = app_state
         .genai()
