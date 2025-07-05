@@ -38,7 +38,7 @@ lol_html = "2.2.0"
 ordered-multimap = { version = "0.7.3" , features = ["serde"]}
 futures = "0.3"
 tokio-stream = "0.1.17"
-genai = "0.4.0-alpha.3"
+genai = { version = "0.4.0-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "42ef411b480dc4e798c004912c833cbed6bfe3ad" }
 reqwest = { version = "0.12.12", features = ["multipart"] }
 opendal = { version = "0.52.0", features = ["services-s3", "services-azblob"] }
 
