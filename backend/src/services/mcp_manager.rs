@@ -418,6 +418,7 @@ pub fn convert_mcp_tools_to_genai_tools(managed_mcp_tools: Vec<ManagedTool>) -> 
                 name: tool.name,
                 description: tool.description.clone(),
                 schema: Some(schema),
+                config: None,
             }
         })
         .collect()
