@@ -1,0 +1,15 @@
+default:
+    just --list
+
+install:
+    pnpm install
+
+run:
+    pnpm run dev
+
+build:
+    pnpm run build
+
+build_and_serve:
+    pnpm run build
+    pnpm exec serve out -p 54624
