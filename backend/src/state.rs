@@ -46,8 +46,30 @@ impl AppState {
         })
     }
 
-    pub fn genai(&self) -> &GenaiClient {
-        &self.genai_client
+    pub fn chat_provider_for_summary(&self) -> Result<ChatProviderConfig, Report> {
+        let default_chat_provider_id = self.config.determine_chat_provider(None, None)?;
+        Ok(self
+            .config
+            .get_chat_provider(default_chat_provider_id)
+            .clone())
+    }
+
+    pub fn genai_for_summary(&self) -> Result<GenaiClient, Report> {
+        Self::build_genai_client(self.chat_provider_for_summary()?)
+    }
+
+    pub fn genai_for_chatcompletion(
+        &self,
+        requested_chat_provider: Option<&str>,
+    ) -> Result<GenaiClient, Report> {
+        // TODO: Replace with evaluation logic, of per-user allowlist
+        let chat_provider_allowlist = None;
+
+        let chat_provider_id = self
+            .config
+            .determine_chat_provider(chat_provider_allowlist, requested_chat_provider)?;
+        let chat_provider_config = self.config.get_chat_provider(chat_provider_id);
+        Self::build_genai_client(chat_provider_config.clone())
     }
 
     pub fn default_file_storage_provider(&self) -> &FileStorage {
