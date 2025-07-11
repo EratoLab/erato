@@ -22,18 +22,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.10.0'
-          cache: 'pnpm'
-          cache-dependency-path: './site/pnpm-lock.yaml'
-
+      # Setup section
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.2.1
+          # Source of truth is at /site/package.json -> "packageManager" field.
+          version: 9.15.5
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          # Source of truth is at /site/.node-version
+          node-version: '22.10.0'
+          cache: 'pnpm'
+          cache-dependency-path: './site/pnpm-lock.yaml'
 
       - name: Install dependencies
         working-directory: ./site
