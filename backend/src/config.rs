@@ -174,6 +174,97 @@ impl AppConfig {
     pub fn additional_frontend_environment(&self) -> HashMap<String, serde_json::Value> {
         self.frontend.additional_environment.clone()
     }
+
+    /// Returns the list of available chat providers, filtered by the optional allowlist.
+    pub fn available_chat_providers(&self, chat_provider_allowlist: Option<&[&str]>) -> Vec<&str> {
+        // For now, only a single provider exists, but structure for future extension.
+        let all_providers = [self.chat_provider.provider_kind.as_str()];
+        let filtered: Vec<&str> = match chat_provider_allowlist {
+            Some(allowlist) => {
+                let allowlist_set: std::collections::HashSet<&str> =
+                    allowlist.iter().copied().collect();
+                all_providers
+                    .iter()
+                    .copied()
+                    .filter(|p| allowlist_set.contains(p))
+                    .collect()
+            }
+            None => all_providers.to_vec(),
+        };
+        tracing::debug!(?filtered, "Available chat providers after allowlist filter");
+        filtered
+    }
+
+    /// Determines the chat provider to use based on precedence, allowlist, and requested provider.
+    ///
+    /// # Arguments
+    /// * `chat_provider_allowlist` - Optional list of allowed provider kinds.
+    /// * `requested_chat_provider` - Optional requested provider kind.
+    ///
+    /// # Returns
+    /// The chosen provider kind as a string slice, or an error if not allowed.
+    pub fn determine_chat_provider<'a>(
+        &'a self,
+        chat_provider_allowlist: Option<&[&str]>,
+        requested_chat_provider: Option<&str>,
+    ) -> Result<&'a str, eyre::Report> {
+        // For now, only a single provider exists, but structure for future extension.
+        let all_providers = [self.chat_provider.provider_kind.as_str()];
+        // Precedence order: just the only provider for now.
+        let precedence_order = [self.chat_provider.provider_kind.as_str()];
+        let allowed: Vec<&'a str> = match chat_provider_allowlist {
+            Some(allowlist) => {
+                let allowlist_set: std::collections::HashSet<&str> =
+                    allowlist.iter().copied().collect();
+                all_providers
+                    .iter()
+                    .copied()
+                    .filter(|p| allowlist_set.contains(p))
+                    .collect()
+            }
+            None => all_providers.to_vec(),
+        };
+        tracing::debug!(?allowed, "Allowed chat providers after allowlist filter");
+        if let Some(requested) = requested_chat_provider {
+            tracing::debug!(requested, "Requested chat provider");
+            // Return the matching &str from allowed (which is from self), not the input reference
+            if let Some(&matching) = allowed.iter().find(|&&p| p == requested) {
+                tracing::debug!(requested, "Requested chat provider is allowed");
+                Ok(matching)
+            } else {
+                tracing::debug!(
+                    requested,
+                    ?allowed,
+                    "Requested chat provider is not allowed"
+                );
+                Err(eyre!(
+                    "Requested chat provider '{}' is not in the allowed list: {:?}",
+                    requested,
+                    allowed
+                ))
+            }
+        } else {
+            // Pick the first in precedence order that is allowed
+            let chosen = precedence_order
+                .iter()
+                .copied()
+                .find(|p| allowed.contains(p));
+            tracing::debug!(
+                ?chosen,
+                ?precedence_order,
+                ?allowed,
+                "Choosing chat provider by precedence"
+            );
+            chosen.ok_or_else(|| eyre!("No allowed chat provider found"))
+        }
+    }
+
+    /// Returns the ChatProviderConfig for the given provider id.
+    /// For now, always returns the single chat_provider.
+    pub fn get_chat_provider(&self, _provider_id: &str) -> &ChatProviderConfig {
+        // In the future, this will look up by id. For now, always return the only provider.
+        &self.chat_provider
+    }
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]

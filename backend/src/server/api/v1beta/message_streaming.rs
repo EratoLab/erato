@@ -703,7 +703,8 @@ async fn stream_generate_chat_completion<
         }
 
         let chat_stream = match app_state
-            .genai()
+            .genai_for_chatcompletion(None)
+            .expect("Unable to choose chat provider")
             .exec_chat_stream(
                 "PLACEHOLDER_MODEL",
                 current_turn_chat_request.clone(),
@@ -868,16 +869,17 @@ pub async fn generate_chat_summary(
         .with_max_tokens(300);
 
     // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
-    if app_state.config.chat_provider.model_name.starts_with("o1-")
-        || app_state.config.chat_provider.model_name.starts_with("o2-")
-        || app_state.config.chat_provider.model_name.starts_with("o3-")
-        || app_state.config.chat_provider.model_name.starts_with("o4-")
+    let chat_provider = app_state.chat_provider_for_summary()?;
+    if chat_provider.model_name.starts_with("o1-")
+        || chat_provider.model_name.starts_with("o2-")
+        || chat_provider.model_name.starts_with("o3-")
+        || chat_provider.model_name.starts_with("o4-")
     {
         chat_options = chat_options.with_reasoning_effort(ReasoningEffort::Low);
     }
 
     let summary_completion = app_state
-        .genai()
+        .genai_for_summary()?
         .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
         .await
         .context("Failed to generate chat summary")?;

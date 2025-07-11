@@ -1484,6 +1484,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "synonym",
+ "tempfile",
  "test-log",
  "tiktoken-rs",
  "tokio",

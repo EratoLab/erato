@@ -29,6 +29,7 @@ struct Event {
 }
 
 mod actors;
+mod config;
 mod db;
 mod migrations;
 
