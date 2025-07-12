@@ -1,0 +1,29 @@
+# Deployment (Helm)
+
+The primary way to deploy Erato is via the official Helm chart.
+
+## Repository
+
+It is currently published to the repository `oci://harbor.imassage.me/erato-helm-dev`, and tagged with a fixed `0.1.0` version number followed by the Git commit hash.
+A new version is published on every commit to the `main` branch.
+
+> [!WARNING]
+>
+> The repository URL will soon be replaced with a new stable one, and the releases tagged with version numbers matching the application version.
+
+## Usage
+
+To use as a subchart in a chart of your own, where you override the values in a `values.yaml`, add the following to your `Chart.yaml`:
+
+```yaml
+dependencies:
+  - name: erato
+    version: "0.1.0-5038d92f711a1aee7cfbeccfde6f17b15c5a9b95"
+    repository: "oci://harbor.imassage.me/erato-helm-dev"
+```
+
+## `values.yaml` reference
+
+🚧Work in progress 🚧
+
+Some example usage can be found in the [`erato-local` chart of our repository](https://github.com/EratoLab/erato/tree/main/infrastructure/k3d/erato-local), that we use as part of our end-to-end integration tests.

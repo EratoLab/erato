@@ -1,1 +1,83 @@
 # Configuration
+
+## Ways to provide configuration
+
+There are multiple ways to provide configuration to Erato.
+
+All sources are configuration are merged together into one, so configuration can be specified via e.g. `erato.toml`, as well as via environment variables.
+
+As of now, there is no specified precedence order when it comes to values provided for the same configuration key that are provided in different sources.
+
+### `erato.toml` files
+
+The `erato.toml` file is the preferred way to provide configuration for Erato.
+The file must be placed in the current working directory of the Erato process.
+
+In the Helm chart, a secret from where the `erato.toml` file should be mounted can be specified via `backend.configFile`.
+
+### `*.auto.erato.toml` files
+
+In addition to the main `erato.toml` file, Erato will also auto-discover all files matching the pattern `*.auto.erato.toml` in the current working directory.
+
+This is useful if you e.g. want to split out all the secret values (LLM API keys, Database credentials) into a different file that is not checked into source control.
+
+### Environment variables
+
+Configuration can also be provided via environment variables.
+
+Though it is not recommended, values for nested configuration can also be provided via environment variables.
+In that case, each nesting level is separated by double underscores (`__`). E.g. `CHAT_PROVIDER__BASE_URL` is equivalent to `chat_provider.base_url`.
+
+## Configuration reference
+
+🚧Work in progress; ~5% complete 🚧
+
+### `frontend`
+
+#### `frontend.theme`
+
+The name of the theme to use for the frontend.
+
+When provided, the theme must be part of the frontend bundle (usually located in the `public` directory), and placed in the `custom-theme` directory, under the name provided here.
+E.g. if `frontend.theme` is set to `my-theme`, the theme must be placed in `public/custom-theme/my-theme`.
+
+See [Theming](./theming) for more information about themes and theme directory structure.
+
+If not provided, the default bundled theme will be used.
+
+**Default value:** `None`
+
+**Type:** `string | None`
+
+**Example**
+
+```toml
+[frontend]
+theme = "my-theme"
+```
+
+#### `frontend.additional_environment`
+
+Additional values to inject into the frontend environment as global variables.
+These will be made available to the frontend Javascript, and added to the `window` object.
+
+This is a dictionary where each value can be a string or a map (string key, string value).
+
+This may be useful if you are using a forked version of the frontend, which you need to pass some configuration to.
+
+**Default value:** `None`
+
+**Type:** `object<string, any>`
+
+**Example**
+
+```toml
+[frontend]
+additional_environment = { "FOO": "bar" }
+```
+
+This will be inejcted into the frontend as:
+
+```js
+window.FOO = "bar";
+```
