@@ -1,30 +1,41 @@
-import { Footer, Layout, Navbar } from 'nextra-theme-docs'
-import { Banner, Head } from 'nextra/components'
-import { getPageMap } from 'nextra/page-map'
-import { Dongle } from 'next/font/google'
+import { Footer, Layout, Navbar } from "nextra-theme-docs";
+import { Banner, Head } from "nextra/components";
+import { getPageMap } from "nextra/page-map";
+import { Dongle } from "next/font/google";
 
-import './globals.css'
+import "./globals.css";
 
 const dongle = Dongle({
-  weight: '400',
-  subsets: ['latin'],
-  variable: '--font-dongle',
-})
- 
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-dongle",
+});
+
 export const metadata = {
   // Define your metadata here
   // For more information on metadata API, see: https://nextjs.org/docs/app/building-your-application/optimizing/metadata
-}
- 
+};
+
 // const banner = <Banner storageKey="some-key">Nextra 4.0 is released 🎉</Banner>
 const navbar = (
   <Navbar
-    logo={<img src="/erato_logo.svg" alt="Erato Logo" style={{ height: 32, width: 'auto', display: 'inline-block', verticalAlign: 'middle' }} />}
+    logo={
+      <img
+        src="/erato_logo.svg"
+        alt="Erato Logo"
+        style={{
+          height: 32,
+          width: "auto",
+          display: "inline-block",
+          verticalAlign: "middle",
+        }}
+      />
+    }
     // ... Your additional navbar options
   />
-)
-const footer = <Footer></Footer>
- 
+);
+const footer = <Footer></Footer>;
+
 export default async function RootLayout({ children }) {
   return (
     <html
@@ -53,5 +64,5 @@ export default async function RootLayout({ children }) {
         </Layout>
       </body>
     </html>
-  )
+  );
 }

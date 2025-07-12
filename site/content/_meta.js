@@ -1,16 +1,16 @@
 export default {
   index: {
-    title: 'Home',
-    type: 'page',
-    display: 'hidden',
+    title: "Home",
+    type: "page",
+    display: "hidden",
     theme: {
       sidebar: false,
       toc: false,
-      layout: 'full'
-    }
+      layout: "full",
+    },
   },
   docs: {
-    title: 'Documentation',
-    type: 'page'
+    title: "Documentation",
+    type: "page",
   },
-}
+};

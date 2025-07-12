@@ -13,3 +13,9 @@ build:
 build_and_serve:
     pnpm run build
     pnpm exec serve out -p 54624
+
+format:
+    pnpm exec prettier . --write
+
+check-format:
+    pnpm exec prettier . --check
