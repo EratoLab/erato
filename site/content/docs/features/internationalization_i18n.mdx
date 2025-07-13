@@ -1,0 +1,38 @@
+# i18n - Internationalization
+
+## Language detection
+
+The language used for the frontend is chosen based on the user's browser language.
+
+If the user's browser language is not supported, the default language (English) is used.
+
+## Supported languages
+
+The language support is differentiated into two tiers:
+
+- **Tier 1**: First-class support. All translations are human-reviewed by a maintainer with native language proficiency.
+- **Tier 2**: Machine-translated
+
+If a language you are looking for is not currently supported, please reach out to us!
+
+**Tier 1 languages**
+
+- `de` - German
+- `en` - English
+
+**Tier 2 languages**
+
+- `es` - Spanish
+- `fr` - French
+- `pl` - Polish
+
+## Translation strings / Theme overrides
+
+The translation strings are stored in `messages.po` files in the `frontend/src/locales/<LOCALE_CODE>` directories.
+
+Individual translation strings can also be overriden on a [per-theme basis](./theming), to allow for customization e.g. to fit organizational branding and communication style.
+
+To do that, create a `messages.po` file in the `frontend/public/custom-theme/<THEME_NAME>/locales/<LOCALE_CODE>` directory, and override the translation strings you want to change.
+For this to work, the custom theme must be present during the build process.
+
+Only translation strings marked with the `js-lingui-explicit-id` comment have stable ID and are suitable for overriding.
