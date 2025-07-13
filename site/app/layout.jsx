@@ -56,7 +56,7 @@ export default async function RootLayout({ children }) {
         <Layout
           navbar={navbar}
           pageMap={await getPageMap()}
-          docsRepositoryBase="https://github.com/EratoLab/erato/tree/main/docs"
+          docsRepositoryBase="https://github.com/EratoLab/erato/tree/main/site"
           footer={footer}
           // ... Your additional layout options
         >

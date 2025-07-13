@@ -1,6 +1,6 @@
 export default {
   index: "",
-  deployment_helm: "",
+  deployment: "",
   configuration: "",
-  theming: "",
+  features: "",
 };
