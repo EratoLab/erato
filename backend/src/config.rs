@@ -47,6 +47,9 @@ pub struct AppConfig {
     #[serde(default)]
     pub frontend: FrontendConfig,
 
+    #[serde(default)]
+    pub integrations: IntegrationsConfig,
+
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
     pub cleanup_enabled: bool,
@@ -157,6 +160,11 @@ impl AppConfig {
                 .unwrap_or_else(|e| {
                     panic!("Failed to migrate azure_openai config: {}", e);
                 });
+        }
+
+        // Validate integrations configuration
+        if let Err(e) = config.integrations.langfuse.validate() {
+            panic!("Invalid Langfuse configuration: {}", e);
         }
 
         config
@@ -509,4 +517,52 @@ pub struct FrontendConfig {
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
     #[serde(default)]
     pub additional_environment: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct IntegrationsConfig {
+    #[serde(default)]
+    pub langfuse: LangfuseConfig,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct LangfuseConfig {
+    // Whether Langfuse integration is enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    // The base URL for the Langfuse API.
+    // E.g. 'https://cloud.langfuse.com' or 'http://localhost:3000'
+    pub base_url: Option<String>,
+
+    // The public key for Langfuse API authentication.
+    pub public_key: Option<String>,
+
+    // The secret key for Langfuse API authentication.
+    pub secret_key: Option<String>,
+
+    // Whether tracing is enabled for Langfuse.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub tracing_enabled: bool,
+}
+
+impl LangfuseConfig {
+    /// Validates that required fields are set when the integration is enabled.
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.enabled {
+            if self.public_key.is_none() {
+                return Err(eyre!(
+                    "Langfuse integration is enabled but public_key is not set"
+                ));
+            }
+            if self.secret_key.is_none() {
+                return Err(eyre!(
+                    "Langfuse integration is enabled but secret_key is not set"
+                ));
+            }
+        }
+        Ok(())
+    }
 }

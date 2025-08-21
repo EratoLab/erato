@@ -1,6 +1,7 @@
 use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig};
 use crate::services::file_storage::FileStorage;
+use crate::services::langfuse::LangfuseClient;
 use crate::services::mcp_manager::McpServers;
 use eyre::Report;
 use genai::adapter::AdapterKind;
@@ -23,6 +24,7 @@ pub struct AppState {
     pub mcp_servers: Arc<McpServers>,
     pub config: AppConfig,
     pub actor_manager: ActorManager,
+    pub langfuse_client: LangfuseClient,
 }
 
 impl AppState {
@@ -33,6 +35,7 @@ impl AppState {
         let genai_client = Self::build_genai_client(config.chat_provider.clone())?;
         let mcp_servers = Arc::new(McpServers::new(&config).await?);
         let actor_manager = ActorManager::new(db.clone(), config.clone()).await;
+        let langfuse_client = LangfuseClient::from_config(&config.integrations.langfuse)?;
 
         Ok(Self {
             db,
@@ -43,6 +46,7 @@ impl AppState {
             mcp_servers,
             config,
             actor_manager,
+            langfuse_client,
         })
     }
 
