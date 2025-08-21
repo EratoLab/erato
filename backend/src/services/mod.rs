@@ -1,5 +1,7 @@
 pub mod file_storage;
 pub mod genai;
+pub mod genai_langfuse;
+pub mod langfuse;
 // TODO: SSE Transport to get rid of STDIO + mcp-proxy workaround
 // pub mod mcp_servers;
 pub mod mcp_manager;

@@ -6,10 +6,13 @@ use axum_test::multipart::MultipartForm;
 use axum_test::multipart::Part;
 use axum_test::{TestResponse, TestServer};
 use ctor::ctor;
-use erato::config::{AppConfig, FileStorageProviderConfig, StorageProviderSpecificConfigMerged};
+use erato::config::{
+    AppConfig, FileStorageProviderConfig, LangfuseConfig, StorageProviderSpecificConfigMerged,
+};
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
 use erato::services::file_storage::FileStorage;
+use erato::services::langfuse::LangfuseClient;
 use erato::state::AppState;
 use sea_orm::prelude::Uuid;
 use serde_json::{json, Value};
@@ -85,6 +88,13 @@ pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppS
     let actor_manager =
         erato::actors::manager::ActorManager::new(db.clone(), app_config.clone()).await;
 
+    // Create a disabled Langfuse client for testing
+    let langfuse_config = LangfuseConfig {
+        enabled: false,
+        ..Default::default()
+    };
+    let langfuse_client = LangfuseClient::from_config(&langfuse_config).unwrap();
+
     AppState {
         db: db.clone(),
         genai_client: AppState::build_genai_client(app_config.chat_provider.clone()).unwrap(),
@@ -94,6 +104,7 @@ pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppS
         mcp_servers: Arc::new(Default::default()),
         config: app_config,
         actor_manager,
+        langfuse_client,
     }
 }
 // This is the main entry point for integration tests

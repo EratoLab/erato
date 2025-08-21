@@ -31,7 +31,7 @@ cd "$TARGET_DIR" || { echo "Failed to change directory to $TARGET_DIR"; exit 1; 
 
 # Start the first command in the background
 echo "Starting MCP proxy server..."
-uvx mcp-proxy --sse-port 63490 pnpx @modelcontextprotocol/server-filesystem . &
+uvx --from mcp-proxy==0.7.0 mcp-proxy --sse-port 63490 pnpx @modelcontextprotocol/server-filesystem . &
 pids+=($!) # Add the PID of the last background command to the array
 
 # Add more commands here in the future if needed
