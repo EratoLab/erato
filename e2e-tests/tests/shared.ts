@@ -64,33 +64,46 @@ export const waitForMessageIdsToStabilize = async (page: Page, expectedMessageCo
   const delayBetweenChecks = 500; // Check every 500ms
   
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const userMessages = page.locator('[data-testid="message-user"]');
-    const currentCount = await userMessages.count();
-    
-    // If we have an expected count, wait for it first
-    if (expectedMessageCount && currentCount < expectedMessageCount) {
-      await page.waitForTimeout(delayBetweenChecks);
-      continue;
-    }
+    try {
+      const userMessages = page.locator('[data-testid="message-user"]');
+      const currentCount = await userMessages.count();
+      
+      // If we have an expected count, wait for it first
+      if (expectedMessageCount && currentCount < expectedMessageCount) {
+        console.log(`[TIMING_HELPER] 🔄 Attempt ${attempt + 1}: Waiting for ${expectedMessageCount} messages, currently have ${currentCount}`);
+        await page.waitForTimeout(delayBetweenChecks);
+        continue;
+      }
     
     // Check if any messages still have temp IDs
     let hasAnyTempIds = false;
     
     for (let i = 0; i < currentCount; i++) {
-      const messageId = await userMessages.nth(i).getAttribute("data-message-id");
-      if (messageId && messageId.startsWith("temp-user-")) {
-        hasAnyTempIds = true;
+      try {
+        const messageId = await userMessages.nth(i).getAttribute("data-message-id");
+        if (messageId && messageId.startsWith("temp-user-")) {
+          hasAnyTempIds = true;
+          break;
+        }
+      } catch (error) {
+        // Message element might not be ready yet, continue checking
+        console.log(`[TIMING_HELPER] ⚠️ Could not get messageId for message ${i}, continuing...`);
+        hasAnyTempIds = true; // Assume we need to wait more
         break;
       }
     }
     
-    if (!hasAnyTempIds) {
-      console.log(`[TIMING_HELPER] ✅ All message IDs stabilized after ${attempt * delayBetweenChecks}ms`);
-      return; // All IDs are stable (real UUIDs)
+      if (!hasAnyTempIds) {
+        console.log(`[TIMING_HELPER] ✅ All message IDs stabilized after ${attempt * delayBetweenChecks}ms`);
+        return; // All IDs are stable (real UUIDs)
+      }
+      
+      console.log(`[TIMING_HELPER] 🔄 Attempt ${attempt + 1}: Still waiting for temp IDs to be replaced...`);
+      await page.waitForTimeout(delayBetweenChecks);
+    } catch (error) {
+      console.log(`[TIMING_HELPER] ⚠️ Attempt ${attempt + 1} failed, retrying... Error: ${error}`);
+      await page.waitForTimeout(delayBetweenChecks);
     }
-    
-    console.log(`[TIMING_HELPER] 🔄 Attempt ${attempt + 1}: Still waiting for temp IDs to be replaced...`);
-    await page.waitForTimeout(delayBetweenChecks);
   }
   
   console.warn(`[TIMING_HELPER] ⚠️ Timeout: Some message IDs may still be temp after ${maxAttempts * delayBetweenChecks}ms`);
