@@ -449,7 +449,10 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
             chat.get("last_message_at").is_some(),
             "Chat is missing 'last_message_at' field"
         );
-        assert!(chat.get("can_edit").is_some(), "Chat is missing 'can_edit' field");
+        assert!(
+            chat.get("can_edit").is_some(),
+            "Chat is missing 'can_edit' field"
+        );
         assert!(
             chat.get("can_edit").unwrap().as_bool().is_some(),
             "'can_edit' should be a boolean",
@@ -573,7 +576,10 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
 
     // Verify 'can_edit' exists and is true for both chats for the owner
     for chat in chats {
-        assert!(chat.get("can_edit").is_some(), "Chat is missing 'can_edit' field");
+        assert!(
+            chat.get("can_edit").is_some(),
+            "Chat is missing 'can_edit' field"
+        );
         assert!(chat.get("can_edit").unwrap().as_bool().unwrap());
     }
 }

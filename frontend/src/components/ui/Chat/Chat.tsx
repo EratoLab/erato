@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useChatActions } from "@/hooks/chat";
@@ -173,6 +173,10 @@ export const Chat = ({
     | { mode: "compose" }
   >({ mode: "compose" });
 
+  // Debug logging for edit state changes
+  useEffect(() => {
+    console.log("[DEBUG_EDIT_STATE] Edit state changed:", editState);
+  }, [editState]);
 
   const cancelEdit = useCallback(() => setEditState({ mode: "compose" }), []);
 
@@ -326,21 +330,40 @@ export const Chat = ({
             onMessageAction={async (action: MessageAction) => {
               // Intercept edit/regenerate here to route to local handlers
               if (action.type === "edit") {
+                console.log(
+                  `[EDIT_DEBUG] ==> Edit action called with messageId: ${action.messageId}`,
+                );
+
                 // Find the message directly from the messages object
                 const messageToEdit = messages[action.messageId];
-                console.log(`[EDIT_DEBUG] Edit requested for messageId: ${action.messageId}`);
-                console.log(`[EDIT_DEBUG] Available messages:`, Object.keys(messages));
-                console.log(`[EDIT_DEBUG] Found message:`, messageToEdit);
-                
-                if (messageToEdit && messageToEdit.role === "user") {
-                  console.log(`[EDIT_DEBUG] Setting edit state with content: "${messageToEdit.content}"`);
-                  setEditState({ 
-                    mode: "edit", 
-                    messageId: action.messageId, 
-                    initialContent: messageToEdit.content 
-                  });
+                console.log(
+                  `[EDIT_DEBUG] Available message keys:`,
+                  Object.keys(messages),
+                );
+                console.log(`[EDIT_DEBUG] Looking up message:`, messageToEdit);
+
+                if (messageToEdit.role === "user") {
+                  console.log(
+                    `[EDIT_DEBUG] ==> Setting editState: messageId=${action.messageId}, content="${messageToEdit.content}"`,
+                  );
+
+                  // Use React's functional update to ensure we get the latest state
+                  setEditState(() => ({
+                    mode: "edit",
+                    messageId: action.messageId,
+                    initialContent: messageToEdit.content,
+                  }));
+
+                  console.log(`[EDIT_DEBUG] ==> editState set successfully`);
                 } else {
-                  console.error(`Cannot edit message ${action.messageId}: not found or not a user message`, messageToEdit);
+                  console.error(
+                    `[EDIT_DEBUG] Cannot edit message ${action.messageId}: not found or not a user message`,
+                    {
+                      messageToEdit,
+                      role: messageToEdit.role,
+                      available: Object.keys(messages),
+                    },
+                  );
                 }
                 return true;
               }

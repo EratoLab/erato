@@ -439,8 +439,11 @@ export function useChatMessaging(
       }
     }
 
+    // Only include messages that are in the active thread when provided by API
     const apiMsgs: Message[] =
-      chatMessagesQuery.data?.messages.map(mapApiMessageToUiMessage) ?? [];
+      chatMessagesQuery.data?.messages
+        .map(mapApiMessageToUiMessage)
+        .filter((m) => m.is_message_in_active_thread !== false) ?? [];
 
     // Use the new utility for merging messages
     const merged = mergeDisplayMessages(apiMsgs, localUserMsgs);
@@ -951,6 +954,190 @@ export function useChatMessaging(
     ],
   );
 
+  // Edit an existing message (rerun with modified user content and optional files)
+  const editMessage = useCallback(
+    async (
+      messageId: string,
+      newContent: string,
+      replaceInputFileIds?: string[],
+    ): Promise<void> => {
+      if (isSubmittingRef.current) {
+        console.warn("[DEBUG_STREAMING] Preventing duplicate edit submission");
+        return;
+      }
+
+      // Clear any previous streaming state and close existing SSE connection
+      resetStreaming();
+      if (sseCleanupRef.current) {
+        sseCleanupRef.current();
+        sseCleanupRef.current = null;
+      }
+
+      isSubmittingRef.current = true;
+
+      try {
+        const requestBody = {
+          message_id: messageId,
+          replace_user_message: newContent,
+          ...(replaceInputFileIds && replaceInputFileIds.length > 0
+            ? { replace_input_files_ids: replaceInputFileIds }
+            : {}),
+        } as const;
+
+        // eslint-disable-next-line lingui/no-unlocalized-strings
+        const sseUrl = `/api/v1beta/me/messages/editstream`;
+        sseCleanupRef.current = createSSEConnection(sseUrl, {
+          onMessage: processStreamEvent,
+          onError: (errorEvent) => {
+            const connectionError =
+              errorEvent instanceof Error
+                ? errorEvent
+                : new Error("SSE connection error (edit)");
+            console.error(
+              "[DEBUG_STREAMING] SSE error in editMessage:",
+              connectionError,
+            );
+            setError(connectionError);
+            resetStreaming();
+            void handleRefetchAndClear({ logContext: "SSE error (edit)" });
+            isSubmittingRef.current = false;
+          },
+          onOpen: () => {
+            // no-op
+          },
+          onClose: () => {
+            isSubmittingRef.current = false;
+            if (!streaming.isStreaming) {
+              void handleRefetchAndClear({
+                logContext: "Edit SSE closed normally",
+              });
+            } else {
+              console.warn(
+                "[DEBUG_STREAMING] Edit SSE connection closed unexpectedly while streaming was still active.",
+              );
+              setError(new Error("SSE connection closed unexpectedly (edit)"));
+              resetStreaming();
+              void handleRefetchAndClear({
+                logContext: "Edit SSE closed unexpectedly",
+              });
+            }
+          },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+      } catch (err) {
+        console.error("[DEBUG_STREAMING] editMessage error:", err);
+        setError(
+          err instanceof Error ? err : new Error("Failed to edit message"),
+        );
+        resetStreaming();
+        // eslint-disable-next-line lingui/no-unlocalized-strings
+        void handleRefetchAndClear({ logContext: "Edit message error" });
+        isSubmittingRef.current = false;
+      }
+    },
+    [
+      handleRefetchAndClear,
+      processStreamEvent,
+      resetStreaming,
+      setError,
+      streaming.isStreaming,
+    ],
+  );
+
+  // Regenerate an assistant response for an existing message
+  const regenerateMessage = useCallback(
+    async (currentMessageId: string): Promise<void> => {
+      if (isSubmittingRef.current) {
+        console.warn(
+          "[DEBUG_STREAMING] Preventing duplicate regenerate submission",
+        );
+        return;
+      }
+
+      // Clear any previous streaming state and close existing SSE connection
+      resetStreaming();
+      if (sseCleanupRef.current) {
+        sseCleanupRef.current();
+        sseCleanupRef.current = null;
+      }
+
+      isSubmittingRef.current = true;
+
+      try {
+        const requestBody = {
+          current_message_id: currentMessageId,
+        };
+
+        // eslint-disable-next-line lingui/no-unlocalized-strings
+        const sseUrl = `/api/v1beta/me/messages/regeneratestream`;
+        sseCleanupRef.current = createSSEConnection(sseUrl, {
+          onMessage: processStreamEvent,
+          onError: (errorEvent) => {
+            const connectionError =
+              errorEvent instanceof Error
+                ? errorEvent
+                : new Error("SSE connection error (regenerate)");
+            console.error(
+              "[DEBUG_STREAMING] SSE error in regenerateMessage:",
+              connectionError,
+            );
+            setError(connectionError);
+            resetStreaming();
+            void handleRefetchAndClear({
+              logContext: "SSE error (regenerate)",
+            });
+            isSubmittingRef.current = false;
+          },
+          onOpen: () => {
+            // no-op
+          },
+          onClose: () => {
+            isSubmittingRef.current = false;
+            if (!streaming.isStreaming) {
+              void handleRefetchAndClear({
+                logContext: "Regenerate SSE closed normally",
+              });
+            } else {
+              console.warn(
+                "[DEBUG_STREAMING] Regenerate SSE connection closed unexpectedly while streaming was still active.",
+              );
+              setError(
+                new Error("SSE connection closed unexpectedly (regenerate)"),
+              );
+              resetStreaming();
+              void handleRefetchAndClear({
+                logContext: "Regenerate SSE closed unexpectedly",
+              });
+            }
+          },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+      } catch (err) {
+        console.error("[DEBUG_STREAMING] regenerateMessage error:", err);
+        setError(
+          err instanceof Error
+            ? err
+            : new Error("Failed to regenerate message"),
+        );
+        resetStreaming();
+        // eslint-disable-next-line lingui/no-unlocalized-strings
+        void handleRefetchAndClear({ logContext: "Regenerate message error" });
+        isSubmittingRef.current = false;
+      }
+    },
+    [
+      handleRefetchAndClear,
+      processStreamEvent,
+      resetStreaming,
+      setError,
+      streaming.isStreaming,
+    ],
+  );
+
   return {
     messages,
     isLoading: chatMessagesQuery.isLoading,
@@ -958,6 +1145,8 @@ export function useChatMessaging(
     streamingContent: streaming.content,
     error: chatMessagesQuery.error ?? error,
     sendMessage,
+    editMessage,
+    regenerateMessage,
     cancelMessage,
     refetch: chatMessagesQuery.refetch,
     newlyCreatedChatId,
