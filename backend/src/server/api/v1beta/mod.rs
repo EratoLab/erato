@@ -5,6 +5,7 @@ pub mod token_usage;
 
 use crate::db::entity_ext::messages;
 use crate::models;
+use crate::models::permissions;
 use crate::models::chat::{archive_chat, get_or_create_chat, get_recent_chats};
 use crate::models::message::{ContentPart, MessageSchema};
 use crate::policy::engine::PolicyEngine;
@@ -204,6 +205,11 @@ pub struct RecentChat {
     last_chat_provider_id: Option<String>,
     /// The model information for the most recent message, if available
     last_model: Option<ChatModel>,
+    /// Whether the current user can edit this chat (e.g., edit messages)
+    ///
+    /// NOTE: Currently this is true only for the chat owner. In the future,
+    /// this may include collaborators/roles/policy-based permissions.
+    can_edit: bool,
 }
 
 /// A message in a chat
@@ -643,6 +649,8 @@ pub async fn recent_chats(
             None
         };
 
+        let can_edit = permissions::can_user_edit_chat(&me_user.0.id, &chat.owner_user_id);
+
         api_chats.push(RecentChat {
             id: chat.id,
             title_by_summary: chat.title_by_summary,
@@ -651,6 +659,7 @@ pub async fn recent_chats(
             archived_at: chat.archived_at,
             last_chat_provider_id: chat.last_chat_provider_id.clone(),
             last_model,
+            can_edit,
         });
     }
 

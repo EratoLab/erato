@@ -447,7 +447,7 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
     // Verify we have exactly 2 chats
     assert_eq!(chats.len(), 2, "Expected 2 chats, got {}", chats.len());
 
-    // Verify each chat has the expected fields
+    // Verify each chat has the expected fields, including can_edit
     for chat in chats {
         assert!(chat.get("id").is_some(), "Chat is missing 'id' field");
         assert!(
@@ -457,6 +457,15 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
         assert!(
             chat.get("last_message_at").is_some(),
             "Chat is missing 'last_message_at' field"
+        );
+        assert!(chat.get("can_edit").is_some(), "Chat is missing 'can_edit' field");
+        assert!(
+            chat.get("can_edit").unwrap().as_bool().is_some(),
+            "'can_edit' should be a boolean",
+        );
+        assert!(
+            chat.get("can_edit").unwrap().as_bool().unwrap(),
+            "'can_edit' should be true for owner in /me/recent_chats",
         );
     }
 
@@ -518,6 +527,16 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
         "The remaining chat should be the one we didn't archive"
     );
 
+    // And can_edit should remain true for the owner
+    assert!(
+        chats[0].get("can_edit").is_some(),
+        "Remaining chat should include 'can_edit'",
+    );
+    assert!(
+        chats[0].get("can_edit").unwrap().as_bool().unwrap(),
+        "'can_edit' should be true for the owner",
+    );
+
     // Now query with include_archived=true, should return both chats
     let response = server
         .get("/api/v1beta/me/recent_chats?include_archived=true")
@@ -560,6 +579,12 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
         response_chat_ids.contains(&chat_ids[1]),
         "Response should include the non-archived chat ID"
     );
+
+    // Verify 'can_edit' exists and is true for both chats for the owner
+    for chat in chats {
+        assert!(chat.get("can_edit").is_some(), "Chat is missing 'can_edit' field");
+        assert!(chat.get("can_edit").unwrap().as_bool().unwrap());
+    }
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]

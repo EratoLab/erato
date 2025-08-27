@@ -104,6 +104,8 @@ pub struct RecentChat {
     /// Time of the last message in the chat.
     pub last_message_at: DateTimeWithTimeZone,
     pub archived_at: Option<DateTimeWithTimeZone>,
+    /// Owner of the chat (for permission checks at the API boundary)
+    pub owner_user_id: String,
     /// The chat provider ID used for the most recent message
     pub last_chat_provider_id: Option<String>,
 }
@@ -208,6 +210,7 @@ pub async fn get_recent_chats(
             last_message_at: latest_message.latest_message_at,
             archived_at: chat.archived_at,
             last_chat_provider_id,
+            owner_user_id: chat.owner_user_id.clone(),
         });
     }
 
