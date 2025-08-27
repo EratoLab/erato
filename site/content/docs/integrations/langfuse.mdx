@@ -1,0 +1,134 @@
+# Langfuse
+
+Erato provides support for [Langfuse](https://langfuse.com/) observability and prompt management.
+
+## Features
+
+### Observability and Tracing
+
+Langfuse integration provides comprehensive observability for your LLM interactions:
+
+- **Trace Capture**: Automatically captures all chat completions as traces in Langfuse
+- **Generation Logging**: Records detailed generation information including:
+  - Input messages and context
+  - Model responses and tool usage
+  - Token usage statistics
+  - Generation timing and performance metrics
+- **Error Tracking**: Captures and reports errors during LLM interactions
+- **Session Tracking**: Groups related conversations for better analysis
+
+### Prompt Management
+
+Erato supports Langfuse's prompt management feature, allowing you to:
+
+- **Dynamic System Prompts**: Configure chat providers to use prompts stored in Langfuse instead of static configuration
+- **Version Control**: Leverage Langfuse's prompt versioning for better prompt iteration
+- **Centralized Management**: Manage all your system prompts from the Langfuse dashboard
+- **Multiple Prompt Formats**: Support for both text and chat-format prompts
+
+## Configuration
+
+### Basic Setup
+
+To enable the Langfuse integration, configure the following in your `erato.toml`:
+
+```toml filename="erato.toml"
+[integrations.langfuse]
+enabled = true
+base_url = "https://cloud.langfuse.com"  # or your self-hosted instance
+public_key = "pk-lf-..."
+secret_key = "sk-lf-..."
+tracing_enabled = true  # optional, defaults to false
+```
+
+### Configuration Options
+
+For detailed configuration options and examples, see the [Configuration Reference](../configuration#integrationslangfuse) documentation.
+
+### System Prompt Management
+
+To use Langfuse for system prompt management, configure your chat provider with `system_prompt_langfuse` instead of `system_prompt`:
+
+```toml filename="erato.toml"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4"
+# Use Langfuse prompt management instead of static prompt
+system_prompt_langfuse = { prompt_name = "assistant-prompt-v1" }
+
+[integrations.langfuse]
+enabled = true
+base_url = "https://cloud.langfuse.com"
+public_key = "pk-lf-..."
+secret_key = "sk-lf-..."
+```
+
+For detailed information about the `system_prompt_langfuse` configuration option, see the [Chat Provider Configuration](../configuration#chat_providersystem_prompt_langfuse) documentation.
+
+## Prompt Format Support
+
+Erato supports two types of prompts from Langfuse:
+
+### Text Prompts
+
+Simple text prompts where the entire content is used as the system message:
+
+```json
+{
+  "type": "text",
+  "prompt": "You are a helpful assistant..."
+}
+```
+
+### Chat Prompts
+
+Chat-format prompts with multiple messages. Erato will extract the system message:
+
+```json
+{
+  "type": "chat",
+  "prompt": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant..."
+    }
+  ]
+}
+```
+
+## Getting Started
+
+1. **Create a Langfuse Account**: Sign up at [langfuse.com](https://langfuse.com/) or set up a self-hosted instance
+2. **Create a Project**: Create a new project in your Langfuse dashboard
+3. **Get API Keys**: Copy your project's public and secret keys from the project settings
+4. **Configure Erato**: Add the Langfuse configuration to your `erato.toml`
+5. **Enable Tracing** (optional): Set `tracing_enabled = true` to start logging LLM interactions
+6. **Set Up Prompt Management** (optional): Create prompts in Langfuse and reference them in your chat provider configuration
+
+## Security Considerations
+
+- Store your Langfuse secret key securely (e.g., in environment variables or a separate `*.auto.erato.toml` file)
+- Use appropriate access controls in your Langfuse project settings
+- Consider network security when connecting to self-hosted Langfuse instances
+
+## Troubleshooting
+
+### Common Issues
+
+**"Langfuse integration is enabled but public_key is not set"**
+
+- Ensure both `public_key` and `secret_key` are configured when `enabled = true`
+
+**"Failed to retrieve prompt from Langfuse"**
+
+- Verify the prompt name exists in your Langfuse project
+- Check that your API keys have the necessary permissions
+- Ensure network connectivity to your Langfuse instance
+
+**"Cannot specify both system_prompt and system_prompt_langfuse"**
+
+- Remove either `system_prompt` or `system_prompt_langfuse` from your chat provider configuration
+
+**"Chat provider uses Langfuse system prompts but Langfuse integration is not enabled"**
+
+- Set `integrations.langfuse.enabled = true` when using `system_prompt_langfuse`

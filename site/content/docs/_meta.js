@@ -3,4 +3,5 @@ export default {
   deployment: "",
   configuration: "",
   features: "",
+  integrations: "",
 };

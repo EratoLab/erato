@@ -81,3 +81,141 @@ This will be inejcted into the frontend as:
 ```js
 window.FOO = "bar";
 ```
+
+### `chat_provider`
+
+Configuration for the chat provider (LLM) that Erato will use for generating responses.
+
+#### `chat_provider.provider_kind`
+
+The type of chat provider to use.
+
+**Type:** `string`
+
+**Supported values:** `"openai"`, `"azure_openai"`
+
+**Example:** `"openai"`
+
+#### `chat_provider.model_name`
+
+The name of the model to use with the chat provider.
+
+**Type:** `string`
+
+**Example:** `"gpt-4o"`
+
+#### `chat_provider.base_url`
+
+The base URL for the chat provider API. If not provided, will use the default for the provider.
+
+**Type:** `string | None`
+
+**Example:** `"https://api.openai.com/v1/"`, `"http://localhost:11434/v1/"`
+
+#### `chat_provider.api_key`
+
+The API key for the chat provider.
+
+**Type:** `string | None`
+
+**Example:** `"sk-..."`
+
+#### `chat_provider.system_prompt`
+
+A static system prompt to use with the chat provider. This sets the behavior and personality of the AI assistant.
+
+**Type:** `string | None`
+
+**Note:** This option is mutually exclusive with `system_prompt_langfuse`.
+
+**Example:**
+
+```toml
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4"
+system_prompt = "You are a helpful assistant that provides concise and accurate answers."
+```
+
+#### `chat_provider.system_prompt_langfuse`
+
+Configuration for using a system prompt from [Langfuse](./integrations/langfuse) prompt management instead of a static prompt.
+
+**Type:** `object | None`
+
+**Note:** This option is mutually exclusive with `system_prompt`. Requires the [Langfuse integration](./integrations/langfuse) to be enabled.
+
+**Properties:**
+
+- `prompt_name` (string): The name of the prompt in [Langfuse](./integrations/langfuse) to use
+
+**Example:**
+
+```toml
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4"
+system_prompt_langfuse = { prompt_name = "assistant-prompt-v1" }
+
+[integrations.langfuse]
+enabled = true
+base_url = "https://cloud.langfuse.com"
+public_key = "pk-lf-..."
+secret_key = "sk-lf-..."
+```
+
+### `integrations`
+
+Configuration for external service integrations.
+
+#### `integrations.langfuse`
+
+Configuration for the [Langfuse](./integrations/langfuse) observability and prompt management integration.
+
+##### `integrations.langfuse.enabled`
+
+Whether the [Langfuse](./integrations/langfuse) integration is enabled.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+##### `integrations.langfuse.base_url`
+
+The base URL for your [Langfuse](./integrations/langfuse) instance. Use `https://cloud.langfuse.com` for Langfuse Cloud or your self-hosted URL.
+
+**Required when enabled:** Yes
+
+**Type:** `string`
+
+**Example:** `"https://cloud.langfuse.com"` or `"https://langfuse.yourcompany.com"`
+
+##### `integrations.langfuse.public_key`
+
+Your [Langfuse](./integrations/langfuse) project's public key. You can find this in your Langfuse project settings.
+
+**Required when enabled:** Yes
+
+**Type:** `string`
+
+**Example:** `"pk-lf-1234567890abcdef"`
+
+##### `integrations.langfuse.secret_key`
+
+Your [Langfuse](./integrations/langfuse) project's secret key. You can find this in your Langfuse project settings.
+
+**Required when enabled:** Yes
+
+**Type:** `string`
+
+**Example:** `"sk-lf-abcdef1234567890"`
+
+##### `integrations.langfuse.tracing_enabled`
+
+Whether to enable detailed tracing of LLM interactions. When enabled, all chat completions will be logged to [Langfuse](./integrations/langfuse).
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+See the [Langfuse Integration](./integrations/langfuse) documentation for detailed usage instructions and feature descriptions.
