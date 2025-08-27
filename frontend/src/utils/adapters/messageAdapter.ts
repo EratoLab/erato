@@ -16,6 +16,7 @@ import type { Message } from "@/types/chat";
  */
 export interface UiChatMessage extends Message {
   sender: string;
+  // authorId retained for storybook/tests; not used for permission checks
   authorId: string;
   previous_message_id?: string;
   input_files_ids?: string[];
@@ -59,6 +60,8 @@ export function mapApiMessageToUiMessage(
     sender: apiMessage.role,
     createdAt: apiMessage.created_at || new Date().toISOString(),
     authorId: apiMessage.role === "user" ? "user_id" : "assistant_id",
+    // map active thread flag
+    is_message_in_active_thread: apiMessage.is_message_in_active_thread,
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     input_files_ids: apiMessage.input_files_ids || undefined,
     previous_message_id:

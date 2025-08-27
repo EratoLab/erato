@@ -102,6 +102,9 @@ test.describe("Edit Message Functionality", () => {
       const editButton = secondMessageElement!.getByLabel("Edit message");
       await editButton.waitFor({ state: 'visible', timeout: 10000 });
       await editButton.click();
+      
+      // Small delay to allow async action handler to complete
+      await page.waitForTimeout(200);
 
       // Verify we're in edit mode
       const editTextbox = page.getByRole("textbox", { name: "Edit your message..." });
@@ -189,6 +192,9 @@ test.describe("Edit Message Functionality", () => {
       await userMessage.hover();
       const editButton = userMessage.getByLabel("Edit message");
       await editButton.click();
+      
+      // Small delay to allow async action handler to complete
+      await page.waitForTimeout(200);
 
       // Verify we're in edit mode
       const editTextbox = page.getByRole("textbox", { name: "Edit your message..." });
@@ -275,6 +281,9 @@ test.describe("Edit Message Functionality", () => {
       const editButton = messageToEdit.getByLabel("Edit message");
       await editButton.waitFor({ state: 'visible', timeout: 10000 });
       await editButton.click();
+      
+      // Small delay to allow async action handler to complete
+      await page.waitForTimeout(200);
 
       // Verify edit mode shows correct content
       const editTextbox = page.getByRole("textbox", { name: "Edit your message..." });
