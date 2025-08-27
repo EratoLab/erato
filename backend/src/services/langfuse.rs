@@ -247,6 +247,89 @@ impl LangfuseClient {
         self.send_ingestion_batch(batch).await
     }
 
+    /// Get a prompt from Langfuse by name
+    pub async fn get_prompt(&self, prompt_name: &str) -> Result<LangfusePrompt> {
+        if !self.enabled {
+            return Err(eyre!("Langfuse client is disabled"));
+        }
+
+        tracing::debug!(
+            prompt_name = %prompt_name,
+            "Retrieving prompt from Langfuse"
+        );
+
+        let url = format!("{}/api/public/v2/prompts/{}", self.base_url, prompt_name);
+
+        tracing::debug!(
+            url = %url,
+            "Sending request to Langfuse prompts endpoint"
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .basic_auth(&self.public_key, Some(&self.secret_key))
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+            .map_err(|e| {
+                tracing::error!(
+                    error = %e,
+                    url = %url,
+                    prompt_name = %prompt_name,
+                    "Failed to send HTTP request to Langfuse prompts endpoint"
+                );
+                eyre!("Failed to retrieve prompt from Langfuse: {}", e)
+            })?;
+
+        let status = response.status();
+
+        tracing::debug!(
+            status = %status,
+            prompt_name = %prompt_name,
+            "Received response from Langfuse prompts endpoint"
+        );
+
+        if !status.is_success() {
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read response body".to_string());
+
+            tracing::error!(
+                status = %status,
+                response_body = %body,
+                url = %url,
+                prompt_name = %prompt_name,
+                "Langfuse prompt retrieval failed"
+            );
+
+            return Err(eyre!(
+                "Failed to retrieve prompt '{}' from Langfuse with status {}: {}",
+                prompt_name,
+                status,
+                body
+            ));
+        }
+
+        let prompt = response.json::<LangfusePrompt>().await.map_err(|e| {
+            tracing::error!(
+                error = %e,
+                prompt_name = %prompt_name,
+                "Failed to parse Langfuse prompt response as JSON"
+            );
+            eyre!("Failed to parse prompt response from Langfuse: {}", e)
+        })?;
+
+        tracing::debug!(
+            prompt_name = %prompt_name,
+            prompt_type = ?prompt_type_from_prompt(&prompt),
+            "Successfully retrieved prompt from Langfuse"
+        );
+
+        Ok(prompt)
+    }
+
     /// Send an ingestion batch to Langfuse
     async fn send_ingestion_batch(&self, batch: IngestionBatch) -> Result<()> {
         let url = format!("{}/api/public/ingestion", self.base_url);
@@ -536,6 +619,28 @@ struct IngestionError {
     pub id: String,
     pub message: String,
     pub error: Option<String>,
+}
+
+/// Langfuse prompt response structure
+#[derive(Debug, Deserialize, Clone)]
+pub struct LangfusePrompt {
+    pub id: String,
+    pub name: String,
+    pub version: i32,
+    pub prompt: serde_json::Value,
+    #[serde(rename = "type")]
+    pub prompt_type: String,
+    pub labels: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+/// Helper function to extract prompt type for logging
+fn prompt_type_from_prompt(prompt: &LangfusePrompt) -> &str {
+    &prompt.prompt_type
 }
 
 #[cfg(test)]
