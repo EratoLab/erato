@@ -102,6 +102,8 @@ pub struct RecentChat {
     /// Time of the last message in the chat.
     pub last_message_at: DateTimeWithTimeZone,
     pub archived_at: Option<DateTimeWithTimeZone>,
+    /// Owner of the chat (for permission checks at the API boundary)
+    pub owner_user_id: String,
 }
 
 /// Statistics for a list of chats
@@ -197,6 +199,7 @@ pub async fn get_recent_chats(
                     .unwrap_or_else(|| "Untitled Chat".to_string()),
                 last_message_at: latest_message.latest_message_at,
                 archived_at: chat.archived_at,
+                owner_user_id: chat.owner_user_id.clone(),
             }
         })
         .collect::<Vec<RecentChat>>();
