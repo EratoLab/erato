@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useChatActions } from "@/hooks/chat";
@@ -103,6 +103,8 @@ export const Chat = ({
   // Get chat data and actions from context provider
   const {
     sendMessage,
+    editMessage,
+    regenerateMessage,
     isMessagingLoading: chatLoading,
     chats: chatHistory,
     currentChatId,
@@ -133,6 +135,10 @@ export const Chat = ({
       }))
     : [];
 
+  const canEditForCurrentChat = Array.isArray(chatHistory)
+    ? !!chatHistory.find((c) => c.id === (currentChatId ?? ""))?.can_edit
+    : false;
+
   // Use chat actions hook for handlers
   const { handleSendMessage: baseHandleSendMessage, handleMessageAction } =
     useChatActions({
@@ -149,8 +155,6 @@ export const Chat = ({
         inputFileIds,
       );
 
-      // Send the message using the handler from useChatActions
-      // Now baseHandleSendMessage returns a Promise we can chain with
       baseHandleSendMessage(message, inputFileIds)
         .then(() => {
           logger.log("[CHAT_FLOW] Message sent, refreshing chats");
@@ -161,6 +165,33 @@ export const Chat = ({
         });
     },
     [baseHandleSendMessage, refreshChats],
+  );
+
+  // Local edit state (simple UX; further polish can come later)
+  const [editState, setEditState] = useState<
+    | { mode: "edit"; messageId: string; initialContent: string }
+    | { mode: "compose" }
+  >({ mode: "compose" });
+
+
+  const cancelEdit = useCallback(() => setEditState({ mode: "compose" }), []);
+
+  const handleEditSubmit = useCallback(
+    (messageId: string, newContent: string, replaceInputFileIds?: string[]) => {
+      void editMessage(messageId, newContent, replaceInputFileIds).finally(
+        () => {
+          setEditState({ mode: "compose" });
+        },
+      );
+    },
+    [editMessage],
+  );
+
+  const handleRegenerate = useCallback(
+    (assistantMessageId: string) => {
+      void regenerateMessage(assistantMessageId);
+    },
+    [regenerateMessage],
   );
 
   // Handler for when the error boundary resets
@@ -288,8 +319,37 @@ export const Chat = ({
             showAvatars={showAvatars}
             userProfile={profile}
             controls={messageControls}
-            controlsContext={controlsContext}
-            onMessageAction={handleMessageAction}
+            controlsContext={{
+              ...controlsContext,
+              canEdit: canEditForCurrentChat,
+            }}
+            onMessageAction={async (action: MessageAction) => {
+              // Intercept edit/regenerate here to route to local handlers
+              if (action.type === "edit") {
+                // Find the message directly from the messages object
+                const messageToEdit = messages[action.messageId];
+                console.log(`[EDIT_DEBUG] Edit requested for messageId: ${action.messageId}`);
+                console.log(`[EDIT_DEBUG] Available messages:`, Object.keys(messages));
+                console.log(`[EDIT_DEBUG] Found message:`, messageToEdit);
+                
+                if (messageToEdit && messageToEdit.role === "user") {
+                  console.log(`[EDIT_DEBUG] Setting edit state with content: "${messageToEdit.content}"`);
+                  setEditState({ 
+                    mode: "edit", 
+                    messageId: action.messageId, 
+                    initialContent: messageToEdit.content 
+                  });
+                } else {
+                  console.error(`Cannot edit message ${action.messageId}: not found or not a user message`, messageToEdit);
+                }
+                return true;
+              }
+              if (action.type === "regenerate") {
+                handleRegenerate(action.messageId);
+                return true;
+              }
+              return handleMessageAction(action);
+            }}
             className={layout}
             useVirtualization={messageOrder.length > 30}
             virtualizationThreshold={30}
@@ -300,6 +360,8 @@ export const Chat = ({
 
           <ChatInput
             onSendMessage={handleSendMessage}
+            onEditMessage={handleEditSubmit}
+            onCancelEdit={editState.mode === "edit" ? cancelEdit : undefined}
             acceptedFileTypes={acceptedFileTypes}
             onFilePreview={openPreviewModal}
             handleFileAttachments={handleFileAttachments}
@@ -310,6 +372,13 @@ export const Chat = ({
             onRegenerate={onRegenerate}
             showFileTypes={true}
             initialFiles={[]}
+            mode={editState.mode}
+            editMessageId={
+              editState.mode === "edit" ? editState.messageId : undefined
+            }
+            editInitialContent={
+              editState.mode === "edit" ? editState.initialContent : undefined
+            }
           />
         </div>
       </ChatErrorBoundary>
