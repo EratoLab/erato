@@ -1762,7 +1762,7 @@ pub async fn edit_message_sse(
             let _ = tx.send(Err(err)).await;
             return Err(());
         }
-        let previous_message = previous_message_res.unwrap();
+        let _previous_message = previous_message_res.unwrap();
 
         let chat_res = get_chat_by_message_id(
             &app_state.db,
@@ -1793,8 +1793,8 @@ pub async fn edit_message_sse(
             &me_user.to_subject(),
             &chat.id,
             user_message,
-            previous_message.previous_message_id.as_ref(),
-            Some(&previous_message.id),
+            message_to_edit.previous_message_id.as_ref(),
+            Some(&message_to_edit.id),
             None,
             &request.replace_input_files_ids,
             None, // User messages don't have generation parameters

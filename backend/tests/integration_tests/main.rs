@@ -1524,6 +1524,186 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
     );
 }
 
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool: Pool<Postgres>) {
+    // Test for the specific bug where editing a message in a multi-message conversation
+    // incorrectly truncates messages that should remain active
+    let app_state = test_app_state(test_app_config(), pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
+
+    // Create a 3-message conversation: User1 -> Assistant1 -> User2 -> Assistant2
+
+    // Message 1: User asks about France
+    let response1 = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "user_message": "What is the capital of France?",
+            "previous_message_id": null,
+            "input_files_ids": []
+        }))
+        .await;
+
+    let messages1 = collect_sse_messages(response1).await;
+    let assistant_message_1_id = messages1
+        .iter()
+        .find_map(|msg| {
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
+                if json["message_type"] == "assistant_message_completed" {
+                    return Some(json["message_id"].as_str().unwrap().to_string());
+                }
+            }
+            None
+        })
+        .expect("No assistant_message_completed event found for message 1");
+
+    // Message 2: User asks about Germany
+    let response2 = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "user_message": "What is the capital of Germany?",
+            "previous_message_id": assistant_message_1_id,
+            "input_files_ids": []
+        }))
+        .await;
+
+    let messages2 = collect_sse_messages(response2).await;
+    let assistant_message_2_id = messages2
+        .iter()
+        .find_map(|msg| {
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
+                if json["message_type"] == "assistant_message_completed" {
+                    return Some(json["message_id"].as_str().unwrap().to_string());
+                }
+            }
+            None
+        })
+        .expect("No assistant_message_completed event found for message 2");
+
+    // Now edit the second user message (about Germany) to ask about Spain instead
+    let response3 = server
+        .post("/api/v1beta/me/messages/editstream")
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "message_id": assistant_message_2_id,
+            "replace_user_message": "What is the capital of Spain?",
+            "replace_input_files_ids": []
+        }))
+        .await;
+
+    let edit_messages = collect_sse_messages(response3).await;
+    let final_assistant_message_id = edit_messages
+        .iter()
+        .find_map(|msg| {
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
+                if json["message_type"] == "assistant_message_completed" {
+                    return Some(json["message"]["chat_id"].as_str().unwrap().to_string());
+                }
+            }
+            None
+        })
+        .expect("No final assistant message found");
+
+    // Get all messages to verify lineage preservation
+    let response = server
+        .get(&format!(
+            "/api/v1beta/chats/{}/messages",
+            final_assistant_message_id
+        ))
+        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .await;
+
+    let json: Value = response.json();
+    let messages = json["messages"].as_array().unwrap();
+
+    // Get all active messages
+    let active_messages: Vec<&Value> = messages
+        .iter()
+        .filter(|msg| msg["is_message_in_active_thread"].as_bool().unwrap())
+        .collect();
+
+    // CRITICAL TEST: We should have exactly 4 active messages:
+    // 1. User message about France
+    // 2. Assistant response about France
+    // 3. Edited user message about Spain (replacing Germany question)
+    // 4. New assistant response about Spain
+    assert_eq!(
+        active_messages.len(),
+        4,
+        "Expected 4 active messages after editing middle message, but got {}. Active messages: {:?}",
+        active_messages.len(),
+        active_messages.iter().map(|m| format!("{}:{}", m["role"], m["content"][0]["text"])).collect::<Vec<_>>()
+    );
+
+    // Verify the first conversation (France) is preserved
+    let france_user_msg = active_messages.iter().find(|msg| {
+        msg["role"].as_str() == Some("user")
+            && msg["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("France")
+    });
+    assert!(
+        france_user_msg.is_some(),
+        "France user message should still be active"
+    );
+
+    let france_assistant_msg = active_messages.iter().find(|msg| {
+        msg["role"].as_str() == Some("assistant")
+            && msg["previous_message_id"].as_str() == france_user_msg.unwrap()["id"].as_str()
+    });
+    assert!(
+        france_assistant_msg.is_some(),
+        "France assistant message should still be active"
+    );
+
+    // Verify the edited message (Spain) replaced the Germany message
+    let spain_user_msg = active_messages.iter().find(|msg| {
+        msg["role"].as_str() == Some("user")
+            && msg["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("Spain")
+    });
+    assert!(
+        spain_user_msg.is_some(),
+        "Spain user message should be active"
+    );
+
+    // Verify NO Germany messages are active (they should be replaced/truncated)
+    let germany_messages = active_messages
+        .iter()
+        .filter(|msg| {
+            msg["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("Germany")
+        })
+        .count();
+    assert_eq!(
+        germany_messages, 0,
+        "No Germany messages should remain active after edit"
+    );
+
+    // Verify lineage: Spain message should link to France assistant message
+    assert_eq!(
+        spain_user_msg.unwrap()["previous_message_id"].as_str(),
+        Some(assistant_message_1_id.as_str()),
+        "Spain message should be linked to France assistant message"
+    );
+}
+
 // Helper function to collect SSE messages from a TestResponse
 async fn collect_sse_messages(response: TestResponse) -> Vec<Event> {
     let body = response.as_bytes();
