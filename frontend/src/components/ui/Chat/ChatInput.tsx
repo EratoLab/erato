@@ -20,6 +20,14 @@ import type { FileType } from "@/utils/fileTypes";
 interface ChatInputProps {
   onSendMessage: (message: string, inputFileIds?: string[]) => void;
   onRegenerate?: () => void;
+  // Optional edit mode submit handler. When provided with mode="edit", submit will call this instead of onSendMessage
+  onEditMessage?: (
+    messageId: string,
+    newContent: string,
+    replaceInputFileIds?: string[],
+  ) => void;
+  // Optional cancel callback for edit mode
+  onCancelEdit?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
   disabled?: boolean;
@@ -41,6 +49,12 @@ interface ChatInputProps {
   chatId?: string | null;
   // Add prop for previous message ID
   previousMessageId?: string | null;
+  // Control whether the input is editing an existing message or composing a new one
+  mode?: "compose" | "edit";
+  // Target message id to edit when in edit mode
+  editMessageId?: string;
+  // Initial content when entering edit mode (used to prefill the textarea)
+  editInitialContent?: string;
 }
 
 /**
@@ -49,6 +63,8 @@ interface ChatInputProps {
 export const ChatInput = ({
   onSendMessage,
   onRegenerate: _onRegenerate,
+  onEditMessage,
+  onCancelEdit,
   handleFileAttachments,
   isLoading: propIsLoading,
   disabled = false,
@@ -64,8 +80,11 @@ export const ChatInput = ({
   onFilePreview,
   chatId,
   previousMessageId,
+  mode = "compose",
+  editMessageId,
+  editInitialContent,
 }: ChatInputProps) => {
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(" ");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
@@ -115,6 +134,16 @@ export const ChatInput = ({
   // Log attachedFiles received from the hook
   console.log("[ChatInput] Received attachedFiles from hook:", attachedFiles);
 
+  // Prefill message when entering edit mode
+  useEffect(() => {
+    if (mode === "edit" && editInitialContent !== undefined) {
+      setMessage(editInitialContent);
+    }
+    if (mode === "compose") {
+      setMessage("");
+    }
+  }, [mode, editInitialContent]);
+
   // Create the submit handler
   const handleSubmit = createSubmitHandler(
     message,
@@ -126,13 +155,18 @@ export const ChatInput = ({
       }
 
       console.log(
-        "[CHAT_FLOW] ChatInput - Message submitted:",
+        "[CHAT_FLOW] ChatInput - Submit:",
+        { mode, editMessageId },
         messageContent.substring(0, 20) +
           (messageContent.length > 20 ? "..." : ""),
-        "with files:",
+        "files:",
         inputFileIds,
       );
-      onSendMessage(messageContent, inputFileIds);
+      if (mode === "edit" && onEditMessage && editMessageId) {
+        onEditMessage(editMessageId, messageContent, inputFileIds);
+      } else {
+        onSendMessage(messageContent, inputFileIds);
+      }
     },
     isLoading || isStreaming,
     disabled,
@@ -270,7 +304,9 @@ export const ChatInput = ({
           placeholder={
             isAnyTokenLimitExceeded
               ? t`Message exceeds token limit. Please reduce length or remove files.`
-              : placeholder
+              : mode === "edit"
+                ? t`Edit your message...`
+                : placeholder
           }
           maxLength={maxLength}
           rows={1}
@@ -324,18 +360,34 @@ export const ChatInput = ({
             )}
           </div>
 
-          <Button
-            type="submit"
-            variant="secondary"
-            size="sm"
-            icon={<ArrowUpIcon className="size-5" />}
-            disabled={!canSendMessage || isSendDisabled}
-            aria-label={
-              isAnyTokenLimitExceeded
-                ? t`Cannot send: Token limit exceeded`
-                : t`Send message`
-            }
-          />
+          <div className="flex items-center gap-2">
+            {mode === "edit" && onCancelEdit && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onCancelEdit}
+                data-testid="chat-input-cancel-edit"
+              >
+                {t`Cancel`}
+              </Button>
+            )}
+            <Button
+              type="submit"
+              variant="secondary"
+              size="sm"
+              icon={<ArrowUpIcon className="size-5" />}
+              disabled={!canSendMessage || isSendDisabled}
+              data-testid={mode === "edit" ? "chat-input-save-edit" : "chat-input-send-message"}
+              aria-label={
+                isAnyTokenLimitExceeded
+                  ? t`Cannot send: Token limit exceeded`
+                  : mode === "edit"
+                    ? t`Save edit`
+                    : t`Send message`
+              }
+            />
+          </div>
         </div>
       </div>
     </form>
