@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { TAG_CI } from "./tags";
-import { chatIsReadyToChat, login, ensureOpenSidebar } from "./shared";
+import { chatIsReadyToChat, login, ensureOpenSidebar, chatIsReadyToEditMessages, waitForMessageIdsToStabilize } from "./shared";
 
 test.describe("Edit Message Functionality", () => {
   test(
@@ -28,6 +28,10 @@ test.describe("Edit Message Functionality", () => {
       await textbox.fill("Third message");
       await textbox.press("Enter");
       await chatIsReadyToChat(page, { expectAssistantResponse: true });
+
+      // CRITICAL: Wait for all message IDs to stabilize before attempting edit
+      console.log("[EDIT_TEST] 🕒 Waiting for message IDs to stabilize before edit...");
+      await waitForMessageIdsToStabilize(page, 3);
 
       // Now we should have 6 messages total: 3 user + 3 assistant
       const userMessages = page.locator('[data-testid="message-user"]');
@@ -220,18 +224,13 @@ test.describe("Edit Message Functionality", () => {
         "Message 5: Final message"
       ];
 
-      // Send all messages with sufficient waiting
+      // Send all messages and wait for each to stabilize
       for (let i = 0; i < messageContents.length; i++) {
         await textbox.fill(messageContents[i]);
         await textbox.press("Enter");
         
-        // Wait for the input to be ready again (simpler than waiting for assistant)
-        await chatIsReadyToChat(page);
-        await page.waitForTimeout(1000); // Wait for message processing
-        
-        // Verify we have the expected number of user messages so far
-        const currentUserMessages = page.locator('[data-testid="message-user"]');
-        await expect(currentUserMessages).toHaveCount(i + 1);
+        // Wait for the input to be ready and message ID to stabilize
+        await chatIsReadyToEditMessages(page, i + 1);
       }
 
       // Verify we have 5 user messages
