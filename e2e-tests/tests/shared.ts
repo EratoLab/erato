@@ -106,3 +106,43 @@ export const chatIsReadyToEditMessages = async (page: Page, expectedMessageCount
   // Then wait for message IDs to stabilize
   await waitForMessageIdsToStabilize(page, expectedMessageCount);
 };
+
+/**
+ * Wait for an edit operation to complete by watching for content changes
+ * This handles the async nature of edit operations via SSE
+ */
+export const waitForEditToComplete = async (
+  page: Page, 
+  messageLocator: any, 
+  expectedContent: string,
+  timeout: number = 10000
+) => {
+  console.log(`[EDIT_COMPLETION] Waiting for message content to update to: "${expectedContent}"`);
+  
+  // Wait for the message content to actually change to the expected text
+  // Playwright will automatically retry until timeout
+  try {
+    await expect(messageLocator).toContainText(expectedContent, { timeout });
+    console.log(`[EDIT_COMPLETION] ✅ Message content successfully updated to: "${expectedContent}"`);
+  } catch (error) {
+    // Log current content for debugging
+    const currentContent = await messageLocator.textContent();
+    console.error(`[EDIT_COMPLETION] ❌ Edit did not complete within ${timeout}ms`);
+    console.error(`[EDIT_COMPLETION] Expected: "${expectedContent}"`);
+    console.error(`[EDIT_COMPLETION] Actual: "${currentContent}"`);
+    throw error;
+  }
+};
+
+/**
+ * Wait for chat to return to compose mode after edit
+ */
+export const waitForEditModeToEnd = async (page: Page) => {
+  // Wait for compose mode textbox to be visible
+  await expect(page.getByRole("textbox", { name: "Type a message..." })).toBeVisible();
+  
+  // Ensure edit textbox is gone
+  await expect(page.getByRole("textbox", { name: "Edit your message..." })).not.toBeVisible();
+  
+  console.log(`[EDIT_COMPLETION] ✅ Successfully returned to compose mode`);
+};
