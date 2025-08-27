@@ -1,7 +1,7 @@
 use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig};
 use crate::services::file_storage::FileStorage;
-use crate::services::langfuse::LangfuseClient;
+use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
 use eyre::Report;
 use genai::adapter::AdapterKind;
@@ -18,7 +18,6 @@ use std::sync::Arc;
 pub struct AppState {
     pub db: DatabaseConnection,
     pub genai_client: GenaiClient,
-    pub system_prompt: Option<String>,
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
     pub mcp_servers: Arc<McpServers>,
@@ -30,7 +29,6 @@ pub struct AppState {
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let db = Database::connect(&config.database_url).await?;
-        let system_prompt = config.chat_provider.system_prompt.clone();
         let file_storage_providers = Self::build_file_storage_providers(&config)?;
         let genai_client = Self::build_genai_client(config.chat_provider.clone())?;
         let mcp_servers = Arc::new(McpServers::new(&config).await?);
@@ -40,7 +38,6 @@ impl AppState {
         Ok(Self {
             db,
             genai_client,
-            system_prompt,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
             file_storage_providers,
             mcp_servers,
@@ -74,6 +71,19 @@ impl AppState {
             .determine_chat_provider(chat_provider_allowlist, requested_chat_provider)?;
         let chat_provider_config = self.config.get_chat_provider(chat_provider_id);
         Self::build_genai_client(chat_provider_config.clone())
+    }
+
+    pub fn chat_provider_for_chatcompletion(
+        &self,
+        requested_chat_provider: Option<&str>,
+    ) -> Result<ChatProviderConfig, Report> {
+        // TODO: Replace with evaluation logic, of per-user allowlist
+        let chat_provider_allowlist = None;
+
+        let chat_provider_id = self
+            .config
+            .determine_chat_provider(chat_provider_allowlist, requested_chat_provider)?;
+        Ok(self.config.get_chat_provider(chat_provider_id).clone())
     }
 
     pub fn default_file_storage_provider(&self) -> &FileStorage {
@@ -173,6 +183,107 @@ impl AppState {
             file_storage_providers.insert(provider_config_id.clone(), provider);
         }
         Ok(file_storage_providers)
+    }
+
+    /// Get the system prompt for a given chat provider configuration.
+    /// This resolves either a static system prompt or retrieves one from Langfuse.
+    pub async fn get_system_prompt(
+        &self,
+        config: &ChatProviderConfig,
+    ) -> Result<Option<String>, Report> {
+        // If a static system prompt is configured, return it
+        if let Some(system_prompt) = &config.system_prompt {
+            tracing::debug!(
+                system_prompt_length = system_prompt.len(),
+                "Using static system prompt"
+            );
+            return Ok(Some(system_prompt.clone()));
+        }
+
+        // If Langfuse system prompt is configured, retrieve it
+        if let Some(langfuse_config) = &config.system_prompt_langfuse {
+            tracing::debug!(
+                prompt_name = %langfuse_config.prompt_name,
+                "Retrieving system prompt from Langfuse"
+            );
+
+            let langfuse_prompt = self
+                .langfuse_client
+                .get_prompt(&langfuse_config.prompt_name)
+                .await?;
+
+            let system_prompt = extract_system_prompt_from_langfuse_prompt(&langfuse_prompt)?;
+
+            tracing::debug!(
+                prompt_name = %langfuse_config.prompt_name,
+                system_prompt_length = system_prompt.len(),
+                "Successfully retrieved system prompt from Langfuse"
+            );
+
+            return Ok(Some(system_prompt));
+        }
+
+        // No system prompt configured
+        tracing::debug!("No system prompt configured");
+        Ok(None)
+    }
+}
+
+/// Extract the system prompt content from a Langfuse prompt response.
+/// This handles different prompt formats that Langfuse might return.
+fn extract_system_prompt_from_langfuse_prompt(prompt: &LangfusePrompt) -> Result<String, Report> {
+    tracing::debug!(
+        prompt_type = %prompt.prompt_type,
+        "Extracting system prompt from Langfuse prompt"
+    );
+
+    match prompt.prompt_type.as_str() {
+        "text" => {
+            // For text prompts, the content should be directly in the prompt field
+            if let Some(content) = prompt.prompt.as_str() {
+                Ok(content.to_string())
+            } else {
+                Err(eyre::eyre!(
+                    "Expected string content for text prompt '{}', but got: {:?}",
+                    prompt.name,
+                    prompt.prompt
+                ))
+            }
+        }
+        "chat" => {
+            // For chat prompts, look for system message in the messages array
+            if let Some(messages) = prompt.prompt.as_array() {
+                for message in messages {
+                    if let Some(message_obj) = message.as_object() {
+                        if let Some(role) = message_obj.get("role").and_then(|r| r.as_str()) {
+                            if role == "system" {
+                                if let Some(content) =
+                                    message_obj.get("content").and_then(|c| c.as_str())
+                                {
+                                    return Ok(content.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(eyre::eyre!(
+                    "No system message found in chat prompt '{}'. Available messages: {:?}",
+                    prompt.name,
+                    messages
+                ))
+            } else {
+                Err(eyre::eyre!(
+                    "Expected array of messages for chat prompt '{}', but got: {:?}",
+                    prompt.name,
+                    prompt.prompt
+                ))
+            }
+        }
+        _ => Err(eyre::eyre!(
+            "Unsupported prompt type '{}' for prompt '{}'. Supported types are 'text' and 'chat'.",
+            prompt.prompt_type,
+            prompt.name
+        )),
     }
 }
 

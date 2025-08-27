@@ -220,9 +220,13 @@ async fn prepare_input_messages(
     previous_message_id: &Uuid,
     files_for_generation: Vec<FileContentsForGeneration>,
 ) -> Result<GenerationInputMessages, Report> {
+    // Resolve system prompt dynamically based on chat provider configuration
+    let chat_provider_config = app_state.chat_provider_for_chatcompletion(None)?;
+    let system_prompt = app_state.get_system_prompt(&chat_provider_config).await?;
+
     crate::models::message::get_generation_input_messages_by_previous_message_id(
         &app_state.db,
-        app_state.system_prompt.clone(),
+        system_prompt,
         previous_message_id,
         Some(10),
         files_for_generation,

@@ -573,10 +573,13 @@ async fn prepare_chat_request(
     previous_message_id: &Uuid,
     new_input_files: Vec<FileContentsForGeneration>,
 ) -> Result<(ChatRequest, ChatOptions, GenerationInputMessages), Report> {
-    // TODO: Initial system message?
+    // Resolve system prompt dynamically based on chat provider configuration
+    let chat_provider_config = app_state.chat_provider_for_chatcompletion(None)?;
+    let system_prompt = app_state.get_system_prompt(&chat_provider_config).await?;
+
     let generation_input_messages = get_generation_input_messages_by_previous_message_id(
         &app_state.db,
-        app_state.system_prompt.clone(),
+        system_prompt,
         previous_message_id,
         Some(10),
         new_input_files,

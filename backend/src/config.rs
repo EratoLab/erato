@@ -162,9 +162,19 @@ impl AppConfig {
                 });
         }
 
+        // Validate chat provider configuration
+        if let Err(e) = config.chat_provider.validate() {
+            panic!("Invalid chat provider configuration: {}", e);
+        }
+
         // Validate integrations configuration
         if let Err(e) = config.integrations.langfuse.validate() {
             panic!("Invalid Langfuse configuration: {}", e);
+        }
+
+        // Validate that Langfuse is configured if any chat provider uses it
+        if config.any_chat_provider_uses_langfuse() && !config.integrations.langfuse.enabled {
+            panic!("Chat provider uses Langfuse system prompts but Langfuse integration is not enabled. Please set integrations.langfuse.enabled = true and configure the required Langfuse settings.");
         }
 
         config
@@ -273,6 +283,12 @@ impl AppConfig {
         // In the future, this will look up by id. For now, always return the only provider.
         &self.chat_provider
     }
+
+    /// Returns true if any chat provider uses Langfuse for system prompts.
+    pub fn any_chat_provider_uses_langfuse(&self) -> bool {
+        // For now, only check the single chat_provider. In the future, this will iterate over all providers.
+        self.chat_provider.uses_langfuse_system_prompt()
+    }
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
@@ -308,6 +324,9 @@ pub struct ChatProviderConfig {
     pub additional_request_headers: Option<Vec<String>>,
     // Optional system prompt to use with the chat provider.
     pub system_prompt: Option<String>,
+    // Optional Langfuse system prompt configuration.
+    // Mutually exclusive with system_prompt.
+    pub system_prompt_langfuse: Option<LangfuseSystemPromptConfig>,
 }
 
 impl ChatProviderConfig {
@@ -393,7 +412,23 @@ impl ChatProviderConfig {
                 Some(additional_headers)
             },
             system_prompt: self.system_prompt,
+            system_prompt_langfuse: self.system_prompt_langfuse,
         })
+    }
+
+    /// Validates that system_prompt and system_prompt_langfuse are mutually exclusive.
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.system_prompt.is_some() && self.system_prompt_langfuse.is_some() {
+            return Err(eyre!(
+                "Cannot specify both system_prompt and system_prompt_langfuse. They are mutually exclusive."
+            ));
+        }
+        Ok(())
+    }
+
+    /// Returns true if this chat provider uses Langfuse for system prompts.
+    pub fn uses_langfuse_system_prompt(&self) -> bool {
+        self.system_prompt_langfuse.is_some()
     }
 }
 
@@ -546,6 +581,12 @@ pub struct LangfuseConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub tracing_enabled: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct LangfuseSystemPromptConfig {
+    // The name of the prompt in Langfuse prompt management.
+    pub prompt_name: String,
 }
 
 impl LangfuseConfig {
