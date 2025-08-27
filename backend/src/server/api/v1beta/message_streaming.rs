@@ -613,6 +613,8 @@ async fn stream_generate_chat_completion<
     chat_request: ChatRequest,
     chat_options: ChatOptions,
     assistant_message_id: Uuid,
+    user_id: String,
+    chat_id: Uuid,
 ) -> Result<Vec<ContentPart>, ()> {
     // Initialize Langfuse tracing if enabled
     let langfuse_enabled = app_state.config.integrations.langfuse.enabled
@@ -839,8 +841,8 @@ async fn stream_generate_chat_completion<
                                 create_trace_request_from_chat(
                                     langfuse_trace_id.clone().unwrap(),
                                     &current_turn_chat_request,
-                                    None, // user_id - could be extracted from MeProfile if needed
-                                    None, // session_id - could be derived from chat_id if needed
+                                    Some(user_id.clone()),
+                                    Some(chat_id.to_string()),
                                 )
                             } else {
                                 // For subsequent turns, we don't need to create a new trace
@@ -1307,6 +1309,8 @@ pub async fn message_submit_sse(
             chat_request,
             chat_options,
             initial_assistant_message.id, // Pass assistant_message_id
+            me_user.0.id.clone(),         // Pass user_id
+            chat.id,                      // Pass chat_id
         )
         .await?;
 
@@ -1488,6 +1492,8 @@ pub async fn regenerate_message_sse(
             chat_request,
             chat_options,
             initial_assistant_message.id, // Pass assistant_message_id
+            me_user.0.id.clone(),         // Pass user_id
+            chat.id,                      // Pass chat_id
         )
         .await?;
 
@@ -1701,6 +1707,8 @@ pub async fn edit_message_sse(
             chat_request,
             chat_options,
             initial_assistant_message.id, // Pass assistant_message_id
+            me_user.0.id.clone(),         // Pass user_id
+            chat.id,                      // Pass chat_id
         )
         .await?;
 
