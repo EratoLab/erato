@@ -81,6 +81,7 @@ export const handlers = [
           title_by_summary: "Recent Chat 1 Title",
           last_message_at: new Date().toISOString(),
           file_uploads: [],
+          can_edit: true,
         },
       ],
       stats: {

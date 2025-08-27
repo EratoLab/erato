@@ -6,7 +6,6 @@ import { useState, useEffect, useCallback } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
-import { useProfile } from "@/hooks/useProfile";
 import { createLogger } from "@/utils/debugLogger";
 
 import {
@@ -36,7 +35,7 @@ interface ExtendedMessageControlsProps extends MessageControlsProps {
 export const DefaultMessageControls = ({
   messageId,
   // messageType,
-  authorId,
+  authorId: _authorId,
   createdAt,
   context,
   showOnHover = false,
@@ -53,9 +52,8 @@ export const DefaultMessageControls = ({
   const [feedbackState, setFeedbackState] = useState<
     "liked" | "disliked" | null
   >(null);
-  const profile = useProfile();
-
-  const isOwnMessage = authorId === profile.profile?.id;
+  // Chat-level edit permission from context; default true if unspecified
+  const canEditChat = context.canEdit !== false; // default to true if unspecified
   // const isDialogOwner = context.dialogOwnerId === profile.profile?.id;
 
   useEffect(() => {
@@ -133,7 +131,7 @@ export const DefaultMessageControls = ({
           title={t`Copy message`}
         />
 
-        {isUser && isOwnMessage && !context.isSharedDialog && (
+        {isUser && canEditChat && !context.isSharedDialog && (
           <Button
             onClick={() => void handleAction("edit")}
             variant="icon-only"

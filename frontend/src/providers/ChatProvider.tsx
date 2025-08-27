@@ -51,6 +51,12 @@ interface ChatContextValue {
     content: string,
     inputFileIds?: string[],
   ) => Promise<string | undefined>;
+  editMessage: (
+    messageId: string,
+    newContent: string,
+    replaceInputFileIds?: string[],
+  ) => Promise<void>;
+  regenerateMessage: (currentMessageId: string) => Promise<void>;
   cancelMessage: () => void;
   refetchMessages: () => Promise<unknown>;
 
@@ -134,6 +140,8 @@ export function ChatProvider({
     streamingContent,
     error: messagingError,
     sendMessage,
+    editMessage,
+    regenerateMessage,
     cancelMessage,
     refetch: refetchMessages,
   } = useChatMessaging({
@@ -237,6 +245,8 @@ export function ChatProvider({
       streamingContent,
       messagingError,
       sendMessage,
+      editMessage,
+      regenerateMessage,
       cancelMessage,
       refetchMessages,
 
@@ -276,6 +286,8 @@ export function ChatProvider({
     streamingContent,
     messagingError,
     sendMessage,
+    editMessage,
+    regenerateMessage,
     cancelMessage,
     refetchMessages,
 

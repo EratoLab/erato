@@ -1,8 +1,8 @@
 pub mod chat;
 pub mod file_upload;
 pub mod message;
-pub mod user;
 pub mod permissions;
+pub mod user;
 
 /// Pagination utilities for consistent pagination implementation across models
 pub mod pagination {

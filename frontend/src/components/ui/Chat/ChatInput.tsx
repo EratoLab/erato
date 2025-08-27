@@ -378,7 +378,11 @@ export const ChatInput = ({
               size="sm"
               icon={<ArrowUpIcon className="size-5" />}
               disabled={!canSendMessage || isSendDisabled}
-              data-testid={mode === "edit" ? "chat-input-save-edit" : "chat-input-send-message"}
+              data-testid={
+                mode === "edit"
+                  ? "chat-input-save-edit"
+                  : "chat-input-send-message"
+              }
               aria-label={
                 isAnyTokenLimitExceeded
                   ? t`Cannot send: Token limit exceeded`

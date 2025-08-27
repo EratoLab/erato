@@ -25,5 +25,3 @@ pub fn can_user_edit_message(_current_user_id: &str, _message_role: &str) -> boo
     // Intentionally conservative: return false until explicit logic is added.
     false
 }
-
-
