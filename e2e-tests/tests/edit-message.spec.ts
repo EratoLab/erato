@@ -109,7 +109,7 @@ test.describe("Edit Message Functionality", () => {
       await editTextbox.fill("Edited second message");
 
       // Submit the edit
-      const saveButton = page.getByRole("button", { name: "Save edit" });
+      const saveButton = page.getByTestId("chat-input-save-edit");
       await expect(saveButton).toBeEnabled();
       await saveButton.click();
 
@@ -190,13 +190,108 @@ test.describe("Edit Message Functionality", () => {
       const editTextbox = page.getByRole("textbox", { name: "Edit your message..." });
       await expect(editTextbox).toBeVisible();
 
-      // Click cancel
-      const cancelButton = page.getByRole("button", { name: "Cancel" });
+      // Click cancel - use specific test ID for chat input cancel
+      const cancelButton = page.getByTestId("chat-input-cancel-edit");
       await cancelButton.click();
 
       // Verify we're back in compose mode
       await expect(page.getByRole("textbox", { name: "Type a message..." })).toBeVisible();
       await expect(editTextbox).not.toBeVisible();
+    }
+  );
+
+  test(
+    "Editing a message in longer conversation preserves other messages",
+    { tag: TAG_CI },
+    async ({ page }) => {
+      await page.goto("/");
+      await login(page, "admin@example.com");
+      await chatIsReadyToChat(page);
+      await ensureOpenSidebar(page);
+
+      const textbox = page.getByRole("textbox", { name: "Type a message..." });
+
+      // Create a longer conversation with 5 user messages
+      const messageContents = [
+        "Message 1: Starting conversation",
+        "Message 2: This will be edited", 
+        "Message 3: Middle message",
+        "Message 4: Another message",
+        "Message 5: Final message"
+      ];
+
+      // Send all messages with sufficient waiting
+      for (let i = 0; i < messageContents.length; i++) {
+        await textbox.fill(messageContents[i]);
+        await textbox.press("Enter");
+        
+        // Wait for the input to be ready again (simpler than waiting for assistant)
+        await chatIsReadyToChat(page);
+        await page.waitForTimeout(1000); // Wait for message processing
+        
+        // Verify we have the expected number of user messages so far
+        const currentUserMessages = page.locator('[data-testid="message-user"]');
+        await expect(currentUserMessages).toHaveCount(i + 1);
+      }
+
+      // Verify we have 5 user messages
+      const userMessages = page.locator('[data-testid="message-user"]');
+      await expect(userMessages).toHaveCount(5);
+
+      // Get all message contents before edit
+      const messagesBefore = [];
+      for (let i = 0; i < 5; i++) {
+        const content = await userMessages.nth(i).textContent();
+        messagesBefore.push(content?.trim() || "");
+      }
+
+      // Edit the second message specifically
+      const secondMessage = userMessages.nth(1);
+      await secondMessage.hover();
+      const editButton = secondMessage.getByLabel("Edit message");
+      await editButton.click();
+
+      // Verify edit mode shows correct content
+      const editTextbox = page.getByRole("textbox", { name: "Edit your message..." });
+      await expect(editTextbox).toBeVisible();
+
+      // Edit the message
+      await editTextbox.clear();
+      await editTextbox.fill("Message 2: EDITED VERSION");
+      
+      const saveButton = page.getByTestId("chat-input-save-edit");
+      await saveButton.click();
+
+      // Wait for edit to complete
+      await expect(page.getByRole("textbox", { name: "Type a message..." })).toBeVisible();
+      
+      // Verify all messages are still there
+      await expect(userMessages).toHaveCount(5);
+
+      // Verify only the second message was changed, others preserved
+      const expectedContents = [
+        messagesBefore[0], // Message 1: unchanged
+        "Message 2: EDITED VERSION", // Message 2: edited
+        messagesBefore[2], // Message 3: unchanged  
+        messagesBefore[3], // Message 4: unchanged
+        messagesBefore[4], // Message 5: unchanged
+      ];
+
+      for (let i = 0; i < 5; i++) {
+        const messageElement = userMessages.nth(i);
+        const content = await messageElement.textContent();
+        expect(content).toContain(expectedContents[i].split(":")[0]); // Check message prefix
+        
+        if (i === 1) {
+          // Verify the edited message
+          expect(content).toContain("EDITED VERSION");
+        } else {
+          // Verify other messages unchanged
+          expect(content).not.toContain("EDITED VERSION");
+        }
+      }
+
+      console.log("✅ Message preservation test passed: Only target message edited, others preserved");
     }
   );
 });
