@@ -1,6 +1,6 @@
 [package]
 name = "erato"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -35,7 +35,7 @@ dotenv-flow = "0.16.2"
 config = "0.15.6"
 http-body-util = "0.1.2"
 lol_html = "2.2.0"
-ordered-multimap = { version = "0.7.3" , features = ["serde"]}
+ordered-multimap = { version = "0.7.3",  features = ["serde"]}
 futures = "0.3"
 tokio-stream = "0.1.17"
 genai = { version = "0.4.0-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "42ef411b480dc4e798c004912c833cbed6bfe3ad" }
