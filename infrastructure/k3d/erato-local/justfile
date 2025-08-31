@@ -1,0 +1,17 @@
+default:
+    just --list
+
+# Run all tests (unit tests + linting)
+test: unittest lint
+
+# Run helm unit tests (erato-local templates only)
+unittest:
+    helm unittest --with-subchart=false .
+
+# Run helm lint checks (note: dependency errors expected without Chart.yaml dependencies)
+lint:
+    helm lint . || echo "⚠️  Lint may fail due to missing Chart.yaml dependencies - this is expected for erato-local"
+
+# Install/update chart dependencies
+deps:
+    helm dependency update

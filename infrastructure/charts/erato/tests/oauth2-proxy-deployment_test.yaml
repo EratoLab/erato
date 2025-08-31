@@ -1,0 +1,149 @@
+suite: test oauth2-proxy deployment
+templates:
+  - oauth2-proxy-deployment.yaml
+tests:
+  - it: should render deployment when oauth2Proxy is enabled
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oauth2-proxy
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: oauth2-proxy
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oauth2-proxy
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: quay.io/oauth2-proxy/oauth2-proxy:v7.8.1
+
+  - it: should not render when oauth2Proxy is disabled
+    set:
+      oauth2Proxy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should use custom image repository and tag
+    set:
+      oauth2Proxy.image.repository: my-registry/oauth2-proxy
+      oauth2Proxy.image.tag: v8.0.0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: my-registry/oauth2-proxy:v8.0.0
+
+  - it: should set custom imagePullPolicy
+    set:
+      oauth2Proxy.image.pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  - it: should include config file argument
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --config=/etc/oauth2-proxy/oauth2-proxy.cfg
+
+  - it: should set environment variables when specified
+    set:
+      oauth2Proxy.extraEnvVars:
+        - name: OAUTH2_PROXY_CLIENT_ID
+          value: test-client-id
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OAUTH2_PROXY_CLIENT_ID
+            value: test-client-id
+
+  - it: should add envFrom when extraEnvVarsCM is set
+    set:
+      oauth2Proxy.extraEnvVarsCM: oauth2-config-cm
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: oauth2-config-cm
+
+  - it: should add envFrom when extraEnvVarsSecret is set
+    set:
+      oauth2Proxy.extraEnvVarsSecret: oauth2-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: oauth2-secret
+
+  - it: should set correct port configuration
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: http
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 4180
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].protocol
+          value: TCP
+
+  - it: should include liveness and readiness probes
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /ping
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: http
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /ping
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: http
+
+  - it: should mount config volume
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /etc/oauth2-proxy
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: config
+            configMap:
+              name: RELEASE-NAME-oauth2-proxy-config-file
+
+  - it: should set resource limits and requests
+    set:
+      oauth2Proxy.resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 50m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 64Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 128Mi

@@ -1,0 +1,17 @@
+default:
+    just --list
+
+# Run all tests (unit tests + linting)
+test: unittest lint
+
+# Run helm unit tests
+unittest:
+    helm unittest .
+
+# Run helm lint checks
+lint:
+    helm lint .
+
+# Install/update chart dependencies
+deps:
+    helm dependency update

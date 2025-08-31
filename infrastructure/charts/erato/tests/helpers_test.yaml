@@ -1,0 +1,83 @@
+suite: test helper templates
+templates:
+  - backend-deployment.yaml  # We use this template to test the helpers
+tests:
+  - it: should use default chart name
+    asserts:
+      - matchRegex:
+          path: metadata.labels["app.kubernetes.io/name"]
+          pattern: '^erato$'
+
+  - it: should use nameOverride when specified
+    set:
+      nameOverride: custom-name
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: custom-name
+
+  - it: should include standard labels
+    asserts:
+      - isNotEmpty:
+          path: metadata.labels["helm.sh/chart"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: erato
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels["app.kubernetes.io/version"]
+          value: "0.1.0"
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+
+  - it: should include custom common labels
+    set:
+      commonLabels:
+        environment: test
+        team: platform
+    asserts:
+      - equal:
+          path: metadata.labels["environment"]
+          value: test
+      - equal:
+          path: metadata.labels["team"]
+          value: platform
+
+  - it: should use external postgres connection string by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_URL
+            value: "postgresql://postgres:postgres@localhost:5432/postgres"
+
+  - it: should handle postgres connection string valueFrom
+    set:
+      postgresql.external.connectionString:
+        valueFrom:
+          secretKeyRef:
+            name: postgres-secret
+            key: connection-string
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: postgres-secret
+                key: connection-string
+
+  - it: should use internal postgres when enabled
+    set:
+      postgresql.enabled: true
+      postgresql.auth.database: erato-db
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_URL
+            value: erato-db

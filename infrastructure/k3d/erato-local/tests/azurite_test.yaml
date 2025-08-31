@@ -1,0 +1,117 @@
+suite: test azurite components
+templates:
+  - azurite.yaml
+tests:
+  - it: should render PVC, Service and Deployment
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: should render PVC with correct configuration
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-erato-local-azurite-pvc
+      - equal:
+          path: spec.accessModes[0]
+          value: ReadWriteOnce
+      - equal:
+          path: spec.resources.requests.storage
+          value: 1Gi
+
+  - it: should render Service with correct ports
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-erato-local-azurite
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.ports[0].port
+          value: 10000
+      - equal:
+          path: spec.ports[0].name
+          value: blob
+      - equal:
+          path: spec.ports[1].port
+          value: 10001
+      - equal:
+          path: spec.ports[1].name
+          value: queue
+      - equal:
+          path: spec.ports[2].port
+          value: 10002
+      - equal:
+          path: spec.ports[2].name
+          value: table
+
+  - it: should render Deployment with correct configuration
+    documentIndex: 2
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-erato-local-azurite
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: azurite
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: mcr.microsoft.com/azure-storage/azurite:3.34.0
+      - contains:
+          path: spec.template.spec.containers[0].command
+          content: azurite
+      - contains:
+          path: spec.template.spec.containers[0].command
+          content: "--location"
+      - contains:
+          path: spec.template.spec.containers[0].command
+          content: "/data"
+
+  - it: should have correct port configuration in deployment
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 10000
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: blob
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].containerPort
+          value: 10001
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].name
+          value: queue
+      - equal:
+          path: spec.template.spec.containers[0].ports[2].containerPort
+          value: 10002
+      - equal:
+          path: spec.template.spec.containers[0].ports[2].name
+          value: table
+
+  - it: should mount persistent volume correctly
+    documentIndex: 2
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /data
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-erato-local-azurite-pvc

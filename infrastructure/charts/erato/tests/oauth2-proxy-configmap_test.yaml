@@ -1,0 +1,61 @@
+suite: test oauth2-proxy configmap
+templates:
+  - oauth2-proxy-configmap.yaml
+tests:
+  - it: should render configmap when oauth2Proxy is enabled
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oauth2-proxy-config-file
+      - isNotEmpty:
+          path: data["oauth2-proxy.cfg"]
+
+  - it: should not render when oauth2Proxy is disabled
+    set:
+      oauth2Proxy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should include proper labels
+    asserts:
+      - isNotEmpty:
+          path: metadata.labels
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: erato
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: should include custom config content
+    set:
+      oauth2Proxy.config: |
+        http_address = "0.0.0.0:4180"
+        upstreams = ["http://backend:8080"]
+        email_domains = ["example.com"]
+    asserts:
+      - matchRegex:
+          path: data["oauth2-proxy.cfg"]
+          pattern: 'http_address = "0.0.0.0:4180"'
+      - matchRegex:
+          path: data["oauth2-proxy.cfg"]
+          pattern: 'upstreams = \["http://backend:8080"\]'
+      - matchRegex:
+          path: data["oauth2-proxy.cfg"]
+          pattern: 'email_domains = \["example.com"\]'
+
+  - it: should include custom labels when specified
+    set:
+      commonLabels:
+        custom-label: custom-value
+        environment: test
+    asserts:
+      - equal:
+          path: metadata.labels["custom-label"]
+          value: custom-value
+      - equal:
+          path: metadata.labels["environment"]
+          value: test

@@ -1,0 +1,25 @@
+# Helm unittest configuration file
+# This file configures test execution behavior for the erato helm chart
+
+# Default values that will be used if not specified in individual test files
+defaults:
+  # Default release name for tests
+  release:
+    name: "test-release"
+    namespace: "test-namespace"
+
+# Test execution settings
+execution:
+  # Fail fast on first test failure
+  failfast: false
+  # Show verbose output during test execution  
+  verbose: true
+  # Enable colored output
+  color: true
+
+# Coverage settings (optional)
+coverage:
+  # Enable coverage reporting
+  enabled: false
+  # Minimum coverage threshold (percentage)
+  threshold: 80
