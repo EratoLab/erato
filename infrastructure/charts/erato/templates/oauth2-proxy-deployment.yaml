@@ -59,8 +59,14 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/oauth2-proxy
+            {{- if .Values.oauth2Proxy.extraVolumeMounts }}
+            {{- toYaml .Values.oauth2Proxy.extraVolumeMounts | nindent 12 }}
+            {{- end }}
       volumes:
         - name: config
           configMap:
             name: {{ .Release.Name }}-oauth2-proxy-config-file
+        {{- if .Values.oauth2Proxy.extraVolumes }}
+        {{- toYaml .Values.oauth2Proxy.extraVolumes | nindent 8 }}
+        {{- end }}
 {{- end }}

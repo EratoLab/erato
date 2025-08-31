@@ -6,9 +6,6 @@
 tests/
 unittest.yaml
 
-# Configuration files that shouldn't be in the package
-config/
-
 # Common VCS dirs
 .git/
 .gitignore

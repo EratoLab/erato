@@ -80,19 +80,29 @@ spec:
                 name: {{ .Values.backend.extraEnvVarsSecret }}
             {{- end }}
           {{- end }}
-          {{- if and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey }}
+          {{- if or (and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey) .Values.backend.extraVolumeMounts }}
           volumeMounts:
+            {{- if and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey }}
             - name: erato-config
               mountPath: /app/erato.toml
               subPath: erato.toml
               readOnly: true
+            {{- end }}
+            {{- if .Values.backend.extraVolumeMounts }}
+            {{- toYaml .Values.backend.extraVolumeMounts | nindent 12 }}
+            {{- end }}
           {{- end }}
-      {{- if and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey }}
+      {{- if or (and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey) .Values.backend.extraVolumes }}
       volumes:
+        {{- if and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey }}
         - name: erato-config
           secret:
             secretName: {{ .Values.backend.configFile.secretName }}
             items:
               - key: {{ .Values.backend.configFile.secretKey }}
                 path: erato.toml
+        {{- end }}
+        {{- if .Values.backend.extraVolumes }}
+        {{- toYaml .Values.backend.extraVolumes | nindent 8 }}
+        {{- end }}
       {{- end }}

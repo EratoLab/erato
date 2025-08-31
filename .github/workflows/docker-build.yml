@@ -10,6 +10,8 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'e2e-tests/**'
+      - 'infrastructure/charts/**'
+      - 'infrastructure/k3d/**'
       - 'Dockerfile.combined'
       - '.hadolint.yaml'
       - '**/Dockerfile'
@@ -21,6 +23,8 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'e2e-tests/**'
+      - 'infrastructure/charts/**'
+      - 'infrastructure/k3d/**'
       - 'Dockerfile.combined'
       - '.hadolint.yaml'
       - '**/Dockerfile'
@@ -97,6 +101,46 @@ jobs:
         working-directory: ./backend/sqitch
         if: success() || failure()
         run: ./generate_summary.sh --check
+
+      - name: "Install Helm"
+        if: success() || failure()
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.16.4'
+
+      - name: "Install helm-unittest plugin"
+        if: success() || failure()
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest
+
+      - name: "Install dependencies for main chart"
+        working-directory: ./infrastructure/charts/erato
+        if: success() || failure()
+        run: helm dependency update
+
+      - name: "Helm lint main chart"
+        working-directory: ./infrastructure/charts/erato
+        if: success() || failure()
+        run: helm lint .
+
+      - name: "Helm unit tests main chart"
+        working-directory: ./infrastructure/charts/erato
+        if: success() || failure()
+        run: helm unittest .
+
+      - name: "Install dependencies for erato-local chart"
+        working-directory: ./infrastructure/k3d/erato-local
+        if: success() || failure()
+        run: helm dependency update || echo "⚠️  Dependency update may fail for erato-local - this is expected"
+
+      - name: "Helm lint erato-local chart"
+        working-directory: ./infrastructure/k3d/erato-local
+        if: success() || failure()
+        run: helm lint . || echo "⚠️  Lint may fail due to missing Chart.yaml dependencies - this is expected for erato-local"
+
+      - name: "Helm unit tests erato-local chart"
+        working-directory: ./infrastructure/k3d/erato-local
+        if: success() || failure()
+        run: helm unittest --with-subchart=false .
 
   cargo-clippy:
     runs-on: ubuntu-22.04

@@ -1,0 +1,21 @@
+# Helm unittest configuration file for erato-local chart
+# This file configures test execution behavior for the local development chart
+
+# Note: To run tests only for erato-local templates (excluding subcharts), use:
+# helm unittest --with-subchart=false .
+
+# Default values that will be used if not specified in individual test files
+defaults:
+  # Default release name for tests
+  release:
+    name: "test-release"
+    namespace: "test-namespace"
+
+# Test execution settings
+execution:
+  # Fail fast on first test failure
+  failfast: false
+  # Show verbose output during test execution  
+  verbose: true
+  # Enable colored output
+  color: true

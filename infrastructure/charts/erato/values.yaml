@@ -30,6 +30,8 @@ oauth2Proxy:
   extraEnvVars: []
   extraEnvVarsCM: ""
   extraEnvVarsSecret: ""
+  extraVolumes: []
+  extraVolumeMounts: []
   # Full configuration file content for oauth2-proxy
   config: |
     # Example configuration - replace with your own
@@ -58,6 +60,8 @@ backend:
   extraEnvVars: []
   extraEnvVarsCM: ""
   extraEnvVarsSecret: ""
+  extraVolumes: []
+  extraVolumeMounts: []
   # Optional configuration for mounting erato.toml from a secret
   configFile:
     # Name of the secret containing the erato.toml file

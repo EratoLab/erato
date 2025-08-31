@@ -1,0 +1,267 @@
+suite: test backend deployment
+templates:
+  - backend-deployment.yaml
+tests:
+  - it: should render a deployment with default values
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-erato-app
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: erato-app
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: erato-backend
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: harbor.imassage.me/erato/app:latest
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 3130
+
+  - it: should set custom replica count
+    set:
+      backend.replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should use custom image repository and tag
+    set:
+      backend.image.repository: my-registry/erato
+      backend.image.tag: v1.2.3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: my-registry/erato:v1.2.3
+
+  - it: should set environment variables correctly
+    set:
+      global.environment: staging
+      backend.extraEnvVars:
+        - name: CUSTOM_VAR
+          value: test-value
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ENVIRONMENT
+            value: staging
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: test-value
+
+  - it: should add envFrom when extraEnvVarsCM is set
+    set:
+      backend.extraEnvVarsCM: erato-config-cm
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            configMapRef:
+              name: erato-config-cm
+
+  - it: should add envFrom when extraEnvVarsSecret is set
+    set:
+      backend.extraEnvVarsSecret: erato-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: erato-secret
+
+  - it: should mount config file when configFile is set
+    set:
+      backend.configFile.secretName: erato-config
+      backend.configFile.secretKey: erato.toml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: erato-config
+            mountPath: /app/erato.toml
+            subPath: erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: erato-config
+            secret:
+              secretName: erato-config
+              items:
+                - key: erato.toml
+                  path: erato.toml
+
+  - it: should set resource limits and requests
+    set:
+      backend.resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 1000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 1Gi
+
+  - it: should have init container for migrations
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: run-migrations
+      - equal:
+          path: spec.template.spec.initContainers[0].command[0]
+          value: /bin/bash
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "-c"
+
+  - it: should include liveness and readiness probes
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: http
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: http
+
+  - it: should support extraVolumes and extraVolumeMounts
+    set:
+      backend.extraVolumes:
+        - name: test-volume
+          emptyDir: {}
+        - name: secret-volume
+          secret:
+            secretName: my-secret
+      backend.extraVolumeMounts:
+        - name: test-volume
+          mountPath: /tmp/test
+        - name: secret-volume
+          mountPath: /etc/secrets
+          readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: test-volume
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: secret-volume
+            secret:
+              secretName: my-secret
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: test-volume
+            mountPath: /tmp/test
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: secret-volume
+            mountPath: /etc/secrets
+            readOnly: true
+
+  - it: should support extraVolumeMounts without extraVolumes
+    set:
+      backend.extraVolumeMounts:
+        - name: existing-volume
+          mountPath: /mnt/existing
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: existing-volume
+            mountPath: /mnt/existing
+
+  - it: should support extraVolumes without extraVolumeMounts
+    set:
+      backend.extraVolumes:
+        - name: unused-volume
+          configMap:
+            name: my-config
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: unused-volume
+            configMap:
+              name: my-config
+
+  - it: should not include volumes or volumeMounts when none are configured
+    set:
+      backend.configFile.secretName: ""
+      backend.configFile.secretKey: ""
+      backend.extraVolumes: []
+      backend.extraVolumeMounts: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.volumes
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
+
+  - it: should work with both configFile and extraVolumes/extraVolumeMounts
+    set:
+      backend.configFile.secretName: "erato-config-secret"
+      backend.configFile.secretKey: "erato.toml"
+      backend.extraVolumes:
+        - name: additional-volume
+          emptyDir: {}
+      backend.extraVolumeMounts:
+        - name: additional-volume
+          mountPath: /tmp/additional
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: erato-config
+            secret:
+              secretName: erato-config-secret
+              items:
+                - key: erato.toml
+                  path: erato.toml
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: additional-volume
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: erato-config
+            mountPath: /app/erato.toml
+            subPath: erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: additional-volume
+            mountPath: /tmp/additional
