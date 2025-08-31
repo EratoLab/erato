@@ -151,3 +151,117 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.port
           value: http
+
+  - it: should support extraVolumes and extraVolumeMounts
+    set:
+      backend.extraVolumes:
+        - name: test-volume
+          emptyDir: {}
+        - name: secret-volume
+          secret:
+            secretName: my-secret
+      backend.extraVolumeMounts:
+        - name: test-volume
+          mountPath: /tmp/test
+        - name: secret-volume
+          mountPath: /etc/secrets
+          readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: test-volume
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: secret-volume
+            secret:
+              secretName: my-secret
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: test-volume
+            mountPath: /tmp/test
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: secret-volume
+            mountPath: /etc/secrets
+            readOnly: true
+
+  - it: should support extraVolumeMounts without extraVolumes
+    set:
+      backend.extraVolumeMounts:
+        - name: existing-volume
+          mountPath: /mnt/existing
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: existing-volume
+            mountPath: /mnt/existing
+
+  - it: should support extraVolumes without extraVolumeMounts
+    set:
+      backend.extraVolumes:
+        - name: unused-volume
+          configMap:
+            name: my-config
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: unused-volume
+            configMap:
+              name: my-config
+
+  - it: should not include volumes or volumeMounts when none are configured
+    set:
+      backend.configFile.secretName: ""
+      backend.configFile.secretKey: ""
+      backend.extraVolumes: []
+      backend.extraVolumeMounts: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.volumes
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
+
+  - it: should work with both configFile and extraVolumes/extraVolumeMounts
+    set:
+      backend.configFile.secretName: "erato-config-secret"
+      backend.configFile.secretKey: "erato.toml"
+      backend.extraVolumes:
+        - name: additional-volume
+          emptyDir: {}
+      backend.extraVolumeMounts:
+        - name: additional-volume
+          mountPath: /tmp/additional
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: erato-config
+            secret:
+              secretName: erato-config-secret
+              items:
+                - key: erato.toml
+                  path: erato.toml
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: additional-volume
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: erato-config
+            mountPath: /app/erato.toml
+            subPath: erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: additional-volume
+            mountPath: /tmp/additional

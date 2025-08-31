@@ -147,3 +147,115 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 128Mi
+
+  - it: should support extraVolumes and extraVolumeMounts
+    set:
+      oauth2Proxy.extraVolumes:
+        - name: test-volume
+          emptyDir: {}
+        - name: secret-volume
+          secret:
+            secretName: my-secret
+      oauth2Proxy.extraVolumeMounts:
+        - name: test-volume
+          mountPath: /tmp/test
+        - name: secret-volume
+          mountPath: /etc/secrets
+          readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: test-volume
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: secret-volume
+            secret:
+              secretName: my-secret
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: test-volume
+            mountPath: /tmp/test
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: secret-volume
+            mountPath: /etc/secrets
+            readOnly: true
+
+  - it: should support extraVolumeMounts without extraVolumes
+    set:
+      oauth2Proxy.extraVolumeMounts:
+        - name: existing-volume
+          mountPath: /mnt/existing
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: existing-volume
+            mountPath: /mnt/existing
+
+  - it: should support extraVolumes without extraVolumeMounts
+    set:
+      oauth2Proxy.extraVolumes:
+        - name: unused-volume
+          configMap:
+            name: my-config
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: unused-volume
+            configMap:
+              name: my-config
+
+  - it: should always include default config volume and mount
+    set:
+      oauth2Proxy.extraVolumes: []
+      oauth2Proxy.extraVolumeMounts: []
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: config
+            configMap:
+              name: RELEASE-NAME-oauth2-proxy-config-file
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /etc/oauth2-proxy
+
+  - it: should work with both default config and extra volumes/mounts
+    set:
+      oauth2Proxy.extraVolumes:
+        - name: additional-volume
+          emptyDir: {}
+      oauth2Proxy.extraVolumeMounts:
+        - name: additional-volume
+          mountPath: /tmp/additional
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: config
+            configMap:
+              name: RELEASE-NAME-oauth2-proxy-config-file
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: additional-volume
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /etc/oauth2-proxy
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: additional-volume
+            mountPath: /tmp/additional
