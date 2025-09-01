@@ -37,7 +37,8 @@ export function extractToolCallsFromContent(
         status: toolUse.status,
         input: toolUse.input,
         output: toolUse.output,
-        progressMessage: toolUse.progress_message ?? undefined,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/prefer-nullish-coalescing
+        progressMessage: toolUse.progress_message || undefined,
       };
     });
 }
