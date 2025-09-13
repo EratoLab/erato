@@ -4,9 +4,10 @@ Erato provides support for [Sentry](https://sentry.io/) tracing and error report
 
 ## Configuration
 
-To enable the Sentry integration, the Sentry DSN of the project must be configured:
+To enable the Sentry integration, the Sentry DSN of the project must be configured in the integrations section:
 
 ```toml filename="erato.toml"
+[integrations.sentry]
 sentry_dsn = "https://public@sentry.example.com/1"
 ```
 

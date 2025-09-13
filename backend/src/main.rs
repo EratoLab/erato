@@ -29,7 +29,7 @@ async fn main() -> Result<(), Report> {
 
     let mut _sentry_guard = None;
     setup_sentry(
-        config.sentry_dsn.as_ref(),
+        config.get_sentry_dsn(),
         config.environment.clone(),
         &mut _sentry_guard,
     );

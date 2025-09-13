@@ -33,7 +33,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub mcp_servers: HashMap<String, McpServerConfig>,
 
+    // **Deprecated**: Please use `integrations.sentry.sentry_dsn` instead.
+    //
     // If present, will enable Sentry for error reporting.
+    #[deprecated(note = "Please use `integrations.sentry.sentry_dsn` instead.")]
     pub sentry_dsn: Option<String>,
 
     // **Deprecated**: Please use `frontend.additional_environment` instead.
@@ -151,6 +154,15 @@ impl AppConfig {
             tracing::warn!("The `additional_environment` key `THEME_CUSTOMER_NAME` is deprecated for setting the theme. Please use `frontend.theme` instead.");
             config.frontend.theme = Some(theme_name.to_string());
         }
+
+        // Migrate deprecated sentry_dsn to integrations.sentry.sentry_dsn
+        if let Some(sentry_dsn) = config.sentry_dsn.clone() {
+            tracing::warn!("Config key `sentry_dsn` is deprecated. Please use `integrations.sentry.sentry_dsn` instead.");
+            if config.integrations.sentry.sentry_dsn.is_none() {
+                config.integrations.sentry.sentry_dsn = Some(sentry_dsn);
+            }
+        }
+        config.sentry_dsn = None;
 
         // Migrate azure_openai to openai format
         if config.chat_provider.provider_kind == "azure_openai" {
@@ -288,6 +300,17 @@ impl AppConfig {
     pub fn any_chat_provider_uses_langfuse(&self) -> bool {
         // For now, only check the single chat_provider. In the future, this will iterate over all providers.
         self.chat_provider.uses_langfuse_system_prompt()
+    }
+
+    /// Returns the Sentry DSN from either the new location (integrations.sentry.sentry_dsn)
+    /// or the old deprecated location (sentry_dsn) for backward compatibility.
+    #[allow(deprecated)]
+    pub fn get_sentry_dsn(&self) -> Option<&String> {
+        self.integrations
+            .sentry
+            .sentry_dsn
+            .as_ref()
+            .or(self.sentry_dsn.as_ref())
     }
 }
 
@@ -558,6 +581,8 @@ pub struct FrontendConfig {
 pub struct IntegrationsConfig {
     #[serde(default)]
     pub langfuse: LangfuseConfig,
+    #[serde(default)]
+    pub sentry: SentryConfig,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
@@ -587,6 +612,12 @@ pub struct LangfuseConfig {
 pub struct LangfuseSystemPromptConfig {
     // The name of the prompt in Langfuse prompt management.
     pub prompt_name: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct SentryConfig {
+    // If present, will enable Sentry for error reporting.
+    pub sentry_dsn: Option<String>,
 }
 
 impl LangfuseConfig {
