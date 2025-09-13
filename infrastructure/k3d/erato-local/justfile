@@ -2,7 +2,7 @@ default:
     just --list
 
 # Run all tests (unit tests + linting)
-test: unittest lint
+test: validate_schema unittest lint
 
 # Run helm unit tests (erato-local templates only)
 unittest:
@@ -11,6 +11,9 @@ unittest:
 # Run helm lint checks (note: dependency errors expected without Chart.yaml dependencies)
 lint:
     helm lint . || echo "⚠️  Lint may fail due to missing Chart.yaml dependencies - this is expected for erato-local"
+
+validate_schema:
+    pnpx ajv-cli@5.0.0 validate --strict=false -s ./tests_schema/helm-testsuite.json -d "./tests/*.yaml"
 
 # Install/update chart dependencies
 deps:

@@ -110,7 +110,12 @@ jobs:
 
       - name: "Install helm-unittest plugin"
         if: success() || failure()
-        run: helm plugin install https://github.com/helm-unittest/helm-unittest
+        run: helm plugin install --version 1.0.1 https://github.com/helm-unittest/helm-unittest
+
+      - name: "Validate Helm test schema for main chart"
+        working-directory: ./infrastructure/charts/erato
+        if: success() || failure()
+        run: pnpx ajv-cli@5.0.0 validate --strict=false -s ./tests_schema/helm-testsuite.json -d "./tests/*.yaml"
 
       - name: "Install dependencies for main chart"
         working-directory: ./infrastructure/charts/erato
@@ -126,6 +131,11 @@ jobs:
         working-directory: ./infrastructure/charts/erato
         if: success() || failure()
         run: helm unittest .
+
+      - name: "Validate Helm test schema for erato-local chart"
+        working-directory: ./infrastructure/k3d/erato-local
+        if: success() || failure()
+        run: pnpx ajv-cli@5.0.0 validate --strict=false -s ./tests_schema/helm-testsuite.json -d "./tests/*.yaml"
 
       - name: "Install dependencies for erato-local chart"
         working-directory: ./infrastructure/k3d/erato-local

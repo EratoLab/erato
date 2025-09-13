@@ -1,4 +1,6 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
 suite: test azurite init job
+minimumVersion: 1.0.1
 templates:
   - azurite-init-job.yaml
 tests:
