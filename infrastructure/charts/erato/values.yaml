@@ -62,12 +62,33 @@ backend:
   extraEnvVarsSecret: ""
   extraVolumes: []
   extraVolumeMounts: []
-  # Optional configuration for mounting erato.toml from a secret
+  # Optional configuration for mounting erato.toml from a secret, configMap, or inline content
   configFile:
     # Name of the secret containing the erato.toml file
     secretName: ""
     # Key in the secret that contains the erato.toml content
     secretKey: ""
+    # Name of the configMap containing the erato.toml file (alternative to secretName/secretKey)
+    configMapName: ""
+    # Key in the configMap that contains the erato.toml content
+    configMapKey: ""
+    # Inline content for erato.toml (alternative to secret/configMap)
+    inlineContent: ""
+  # Optional list of additional config files to mount (e.g., *.auto.erato.toml files)
+  # Each item can use secret, configMap, or inline content just like configFile above
+  extraConfigFiles: []
+  # Example:
+  # extraConfigFiles:
+  #   - name: mcp-servers
+  #     secretName: mcp-config-secret
+  #     secretKey: mcp-servers.toml
+  #   - name: additional-config
+  #     configMapName: additional-config-cm
+  #     configMapKey: additional.toml
+  #   - name: inline-config
+  #     inlineContent: |
+  #       [mcp_servers.example]
+  #       ...
   resources:
     requests:
       cpu: 100m

@@ -1,0 +1,30 @@
+{{/*
+ConfigMaps for inline config content
+*/}}
+{{- if .Values.backend.configFile.inlineContent }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-erato-inline-config
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: erato-app
+data:
+  erato.toml: |
+    {{- .Values.backend.configFile.inlineContent | nindent 4 }}
+---
+{{- end }}
+
+{{- range $index, $configFile := .Values.backend.extraConfigFiles }}
+{{- if $configFile.inlineContent }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $.Release.Name }}-extra-config-{{ $configFile.name }}-inline
+  labels: {{- include "common.labels.standard" ( dict "customLabels" $.Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: erato-app
+data:
+  {{ $configFile.name | default (printf "config-%d" $index) }}.toml: |
+    {{- $configFile.inlineContent | nindent 4 }}
+---
+{{- end }}
+{{- end }}

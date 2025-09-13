@@ -16,7 +16,14 @@ erato:
     configFile:
       secretName: erato-local-erato-toml-secret
       secretKey: erato.toml
+      # `useAlt` is not part of the `erato` chart
+      # If it is provided, `config/erato.alt.toml` will be used instead of `config/erato.toml`
       useAlt: false
+    extraConfigFiles:
+      - name: frontend-env
+        inlineContent: |
+          [frontend.additional_environment]
+          FOO_BAR = "true"
   
   oauth2Proxy:
     enabled: true

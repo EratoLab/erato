@@ -80,3 +80,80 @@ Return the proper Docker Image Registry Secret Names
 {{- define "erato.imagePullSecrets" -}}
 {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.oauth2Proxy.image .Values.backend.image) "context" $) -}}
 {{- end -}}
+
+{{/*
+Check if the main config file should be mounted
+*/}}
+{{- define "erato.hasMainConfigFile" -}}
+{{- if or (and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey) (and .Values.backend.configFile.configMapName .Values.backend.configFile.configMapKey) .Values.backend.configFile.inlineContent -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+Check if there are extra config files to mount
+*/}}
+{{- define "erato.hasExtraConfigFiles" -}}
+{{- if .Values.backend.extraConfigFiles -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+Render the main config file volume
+*/}}
+{{- define "erato.renderMainConfigVolume" -}}
+{{- if and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey -}}
+- name: erato-config
+  secret:
+    secretName: {{ .Values.backend.configFile.secretName }}
+    items:
+      - key: {{ .Values.backend.configFile.secretKey }}
+        path: erato.toml
+{{- else if and .Values.backend.configFile.configMapName .Values.backend.configFile.configMapKey -}}
+- name: erato-config
+  configMap:
+    name: {{ .Values.backend.configFile.configMapName }}
+    items:
+      - key: {{ .Values.backend.configFile.configMapKey }}
+        path: erato.toml
+{{- else if .Values.backend.configFile.inlineContent -}}
+- name: erato-config
+  configMap:
+    name: {{ .Release.Name }}-erato-inline-config
+    items:
+      - key: erato.toml
+        path: erato.toml
+{{- end -}}
+{{- end -}}
+
+{{/*
+Render an extra config file volume
+*/}}
+{{- define "erato.renderExtraConfigVolume" -}}
+{{- $configFile := .configFile -}}
+{{- $index := .index -}}
+{{- $context := .context -}}
+{{- if and $configFile.secretName $configFile.secretKey -}}
+- name: extra-config-{{ $configFile.name }}
+  secret:
+    secretName: {{ $configFile.secretName }}
+    items:
+      - key: {{ $configFile.secretKey }}
+        path: {{ $configFile.name }}.auto.erato.toml
+{{- else if and $configFile.configMapName $configFile.configMapKey -}}
+- name: extra-config-{{ $configFile.name }}
+  configMap:
+    name: {{ $configFile.configMapName }}
+    items:
+      - key: {{ $configFile.configMapKey }}
+        path: {{ $configFile.name }}.auto.erato.toml
+{{- else if $configFile.inlineContent -}}
+- name: extra-config-{{ $configFile.name }}
+  configMap:
+    name: {{ $context.Release.Name }}-extra-config-{{ $configFile.name }}-inline
+    items:
+      - key: {{ $configFile.name }}.toml
+        path: {{ $configFile.name }}.auto.erato.toml
+{{- end -}}
+{{- end -}}

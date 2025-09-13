@@ -1,0 +1,100 @@
+suite: test backend configmaps
+templates:
+  - backend-configmaps.yaml
+tests:
+  - it: should not render configmaps by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render configmap for inline main config
+    set:
+      backend.configFile.inlineContent: "main"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-erato-inline-config
+
+  - it: should render configmaps for inline extra configs
+    set:
+      backend.extraConfigFiles:
+        - name: extra0
+          inlineContent: "extra0"
+        - name: extra1
+          inlineContent: "extra1"
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-extra-config-extra0-inline
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-extra-config-extra1-inline
+        documentIndex: 1
+
+  - it: should render both main and extra configmaps
+    set:
+      backend.configFile.inlineContent: "main"
+      backend.extraConfigFiles:
+        - name: extra0
+          inlineContent: "extra0"
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-erato-inline-config
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-extra-config-extra0-inline
+        documentIndex: 1
+
+  - it: should not render configmaps for secret-based configs
+    set:
+      backend.configFile.secretName: "s"
+      backend.configFile.secretKey: "k"
+      backend.extraConfigFiles:
+        - name: extra0
+          secretName: "s"
+          secretKey: "k"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render configmaps for configmap-based configs
+    set:
+      backend.configFile.configMapName: "cm"
+      backend.configFile.configMapKey: "k"
+      backend.extraConfigFiles:
+        - name: extra0
+          configMapName: "cm"
+          configMapKey: "k"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render only inline configmaps when mixed
+    set:
+      backend.configFile.inlineContent: "main"
+      backend.extraConfigFiles:
+        - name: extra0
+          secretName: "s"
+          secretKey: "k"
+        - name: extra1
+          inlineContent: "extra1"
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-erato-inline-config
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-extra-config-extra1-inline
+        documentIndex: 1

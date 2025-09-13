@@ -158,7 +158,6 @@ if [ "$USE_ALT_ERATO_TOML" = true ]; then
     fi
 
     HELM_SET_ARGS="$HELM_SET_ARGS --set erato.backend.configFile.useAlt=true"
-    HELM_SET_ARGS="$HELM_SET_ARGS --set erato.backend.configFile.secretKey=erato.alt.toml"
 fi
 
 # Install nginx ingress controller
