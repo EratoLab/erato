@@ -219,3 +219,24 @@ Whether to enable detailed tracing of LLM interactions. When enabled, all chat c
 **Type:** `boolean`
 
 See the [Langfuse Integration](./integrations/langfuse) documentation for detailed usage instructions and feature descriptions.
+
+#### `integrations.sentry`
+
+Configuration for the [Sentry](./integrations/sentry) error reporting and performance monitoring integration.
+
+##### `integrations.sentry.sentry_dsn`
+
+The Sentry DSN (Data Source Name) for your Sentry project. This enables error reporting and performance monitoring.
+
+**Default value:** `None`
+
+**Type:** `string | None`
+
+**Example:**
+
+```toml
+[integrations.sentry]
+sentry_dsn = "https://public@sentry.example.com/1"
+```
+
+See the [Sentry Integration](./integrations/sentry) documentation for detailed setup instructions.

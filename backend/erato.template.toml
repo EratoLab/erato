@@ -6,3 +6,7 @@ config = { endpoint = "http://localhost:9000", bucket = "erato-storage", region 
 # [mcp_servers.file_provider]
 # transport_type = "sse"
 # url = "http://127.0.0.1:63490/sse"
+
+# Example Sentry integration configuration
+# [integrations.sentry]
+# sentry_dsn = "https://your-sentry-dsn@sentry.io/project-id"
