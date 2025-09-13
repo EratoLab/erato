@@ -265,3 +265,176 @@ tests:
           content:
             name: additional-volume
             mountPath: /tmp/additional
+
+  - it: should mount config file from configMap
+    set:
+      backend.configFile.configMapName: erato-config-cm
+      backend.configFile.configMapKey: erato.toml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: erato-config
+            mountPath: /app/erato.toml
+            subPath: erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: erato-config
+            configMap:
+              name: erato-config-cm
+              items:
+                - key: erato.toml
+                  path: erato.toml
+
+  - it: should mount config file from inline content
+    set:
+      backend.configFile.inlineContent: |
+        [database]
+        host = "localhost"
+        port = 5432
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: erato-config
+            mountPath: /app/erato.toml
+            subPath: erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: erato-config
+            configMap:
+              name: RELEASE-NAME-erato-inline-config
+              items:
+                - key: erato.toml
+                  path: erato.toml
+
+  - it: should mount extra config files from secrets
+    set:
+      backend.extraConfigFiles:
+        - name: mcp-config
+          secretName: mcp-secret
+          secretKey: mcp.toml
+        - name: additional-config
+          secretName: additional-secret
+          secretKey: additional.toml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-config-mcp-config
+            mountPath: /app/mcp-config.auto.erato.toml
+            subPath: mcp-config.auto.erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-config-additional-config
+            mountPath: /app/additional-config.auto.erato.toml
+            subPath: additional-config.auto.erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-config-mcp-config
+            secret:
+              secretName: mcp-secret
+              items:
+                - key: mcp.toml
+                  path: mcp-config.auto.erato.toml
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-config-additional-config
+            secret:
+              secretName: additional-secret
+              items:
+                - key: additional.toml
+                  path: additional-config.auto.erato.toml
+
+  - it: should mount extra config files from configMaps
+    set:
+      backend.extraConfigFiles:
+        - name: mcp-config
+          configMapName: mcp-config-cm
+          configMapKey: mcp.toml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-config-mcp-config
+            mountPath: /app/mcp-config.auto.erato.toml
+            subPath: mcp-config.auto.erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-config-mcp-config
+            configMap:
+              name: mcp-config-cm
+              items:
+                - key: mcp.toml
+                  path: mcp-config.auto.erato.toml
+
+  - it: should mount extra config files from inline content
+    set:
+      backend.extraConfigFiles:
+        - name: mcp-config
+          inlineContent: |
+            [mcp_servers.example]
+            command = "example-server"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-config-mcp-config
+            mountPath: /app/mcp-config.auto.erato.toml
+            subPath: mcp-config.auto.erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-config-mcp-config
+            configMap:
+              name: RELEASE-NAME-extra-config-mcp-config-inline
+              items:
+                - key: mcp-config.toml
+                  path: mcp-config.auto.erato.toml
+
+  - it: should handle mixed config file sources
+    set:
+      backend.configFile.inlineContent: |
+        [database]
+        host = "localhost"
+      backend.extraConfigFiles:
+        - name: mcp-config
+          secretName: mcp-secret
+          secretKey: mcp.toml
+        - name: additional-config
+          configMapName: additional-cm
+          configMapKey: additional.toml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: erato-config
+            mountPath: /app/erato.toml
+            subPath: erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-config-mcp-config
+            mountPath: /app/mcp-config.auto.erato.toml
+            subPath: mcp-config.auto.erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-config-additional-config
+            mountPath: /app/additional-config.auto.erato.toml
+            subPath: additional-config.auto.erato.toml
+            readOnly: true

@@ -80,27 +80,31 @@ spec:
                 name: {{ .Values.backend.extraEnvVarsSecret }}
             {{- end }}
           {{- end }}
-          {{- if or (and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey) .Values.backend.extraVolumeMounts }}
+          {{- if or (include "erato.hasMainConfigFile" .) (include "erato.hasExtraConfigFiles" .) .Values.backend.extraVolumeMounts }}
           volumeMounts:
-            {{- if and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey }}
+            {{- if include "erato.hasMainConfigFile" . }}
             - name: erato-config
               mountPath: /app/erato.toml
               subPath: erato.toml
+              readOnly: true
+            {{- end }}
+            {{- range $index, $configFile := .Values.backend.extraConfigFiles }}
+            - name: extra-config-{{ $configFile.name }}
+              mountPath: /app/{{ $configFile.name }}.auto.erato.toml
+              subPath: {{ $configFile.name }}.auto.erato.toml
               readOnly: true
             {{- end }}
             {{- if .Values.backend.extraVolumeMounts }}
             {{- toYaml .Values.backend.extraVolumeMounts | nindent 12 }}
             {{- end }}
           {{- end }}
-      {{- if or (and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey) .Values.backend.extraVolumes }}
+      {{- if or (include "erato.hasMainConfigFile" .) (include "erato.hasExtraConfigFiles" .) .Values.backend.extraVolumes }}
       volumes:
-        {{- if and .Values.backend.configFile.secretName .Values.backend.configFile.secretKey }}
-        - name: erato-config
-          secret:
-            secretName: {{ .Values.backend.configFile.secretName }}
-            items:
-              - key: {{ .Values.backend.configFile.secretKey }}
-                path: erato.toml
+        {{- if include "erato.hasMainConfigFile" . }}
+        {{- include "erato.renderMainConfigVolume" . | nindent 8 }}
+        {{- end }}
+        {{- range $index, $configFile := .Values.backend.extraConfigFiles }}
+        {{- include "erato.renderExtraConfigVolume" (dict "configFile" $configFile "index" $index "context" $) | nindent 8 }}
         {{- end }}
         {{- if .Values.backend.extraVolumes }}
         {{- toYaml .Values.backend.extraVolumes | nindent 8 }}

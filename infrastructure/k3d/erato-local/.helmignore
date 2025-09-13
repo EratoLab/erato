@@ -6,8 +6,8 @@
 tests/
 unittest.yaml
 
-# Configuration files that shouldn't be in the package
-config/
+# Configuration files shouldn't be in the .helmignore, otherwise `.Files.Get` can't access them!
+# config/
 
 # Common VCS dirs
 .git/
