@@ -4,6 +4,7 @@
 
 # Test files
 tests/
+tests_schema/
 unittest.yaml
 
 # Common VCS dirs

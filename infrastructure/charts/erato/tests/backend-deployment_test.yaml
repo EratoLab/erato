@@ -1,4 +1,6 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
 suite: test backend deployment
+minimumVersion: 1.0.1
 templates:
   - backend-deployment.yaml
 tests:
@@ -223,9 +225,9 @@ tests:
       backend.extraVolumes: []
       backend.extraVolumeMounts: []
     asserts:
-      - isNull:
+      - notExists:
           path: spec.template.spec.volumes
-      - isNull:
+      - notExists:
           path: spec.template.spec.containers[0].volumeMounts
 
   - it: should work with both configFile and extraVolumes/extraVolumeMounts

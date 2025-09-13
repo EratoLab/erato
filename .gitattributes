@@ -1,1 +1,3 @@
 frontend/src/lib/generated/**/* linguist-generated
+infrastructure/charts/erato/tests_schema/helm-testsuite.json linguist-generated
+infrastructure/k3d/erato-local/tests_schema/helm-testsuite.json linguist-generated

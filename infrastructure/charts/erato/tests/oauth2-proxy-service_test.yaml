@@ -1,4 +1,6 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
 suite: test oauth2-proxy service
+minimumVersion: 1.0.1
 templates:
   - oauth2-proxy-service.yaml
 tests:

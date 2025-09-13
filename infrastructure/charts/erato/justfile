@@ -1,8 +1,12 @@
 default:
     just --list
 
+fetch_json_schema:
+    mkdir -p ./tests_schema
+    curl https://raw.githubusercontent.com/helm-unittest/helm-unittest/refs/tags/v1.0.1/schema/helm-testsuite.json --output ./tests_schema/helm-testsuite.json
+
 # Run all tests (unit tests + linting)
-test: unittest lint
+test: validate_schema unittest lint
 
 # Run helm unit tests
 unittest:
@@ -11,6 +15,9 @@ unittest:
 # Run helm lint checks
 lint:
     helm lint .
+
+validate_schema:
+    pnpx ajv-cli@5.0.0 validate --strict=false -s ./tests_schema/helm-testsuite.json -d "./tests/*.yaml"
 
 # Install/update chart dependencies
 deps:
