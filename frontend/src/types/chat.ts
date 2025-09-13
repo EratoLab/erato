@@ -11,6 +11,8 @@ export interface Message {
   input_files_ids?: string[];
   status?: "sending" | "complete" | "error";
   previous_message_id?: string;
+  // Whether this message is in the active thread per backend lineage logic
+  is_message_in_active_thread?: boolean;
 }
 
 // Metadata for a chat session

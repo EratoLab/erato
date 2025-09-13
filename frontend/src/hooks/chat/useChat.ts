@@ -29,6 +29,8 @@ export function useChat() {
     streamingContent,
     error: messagingError,
     sendMessage,
+    editMessage,
+    regenerateMessage,
     cancelMessage,
     refetch: refetchMessages,
   } = useChatMessaging(currentChatId);
@@ -52,6 +54,8 @@ export function useChat() {
       isStreaming,
       streamingContent,
       sendMessage,
+      editMessage,
+      regenerateMessage,
       cancelMessage,
       refetchMessages,
 
@@ -69,6 +73,8 @@ export function useChat() {
       isStreaming,
       streamingContent,
       sendMessage,
+      editMessage,
+      regenerateMessage,
       cancelMessage,
       refetchMessages,
       isLoading,
