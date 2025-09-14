@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { TAG_CI } from "./tags";
-import { chatIsReadyToChat, login, ensureOpenSidebar } from "./shared";
+import { chatIsReadyToChat, ensureOpenSidebar } from "./shared";
 
 test(
   "Can open new chat page and input is focused",
@@ -8,8 +8,6 @@ test(
   async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/");
-
-    await login(page, "admin@example.com");
 
     await expect(
       page.getByRole("textbox", { name: "Type a message..." }),
@@ -25,7 +23,6 @@ test(
   { tag: TAG_CI },
   async ({ page }) => {
     await page.goto("/");
-    await login(page, "admin@example.com");
 
     const textbox = page.getByRole("textbox", { name: "Type a message..." });
     await ensureOpenSidebar(page);
