@@ -27,3 +27,101 @@ dependencies:
 🚧Work in progress 🚧
 
 Some example usage can be found in the [`erato-local` chart of our repository](https://github.com/EratoLab/erato/tree/main/infrastructure/k3d/erato-local), that we use as part of our end-to-end integration tests.
+
+## `erato.toml` configuration in the Helm chart
+
+Erato supports loading multiple configuration files to help organize and manage different aspects of your configuration. This is particularly useful for scenarios like MCP server configurations, where you might want to separate sensitive credentials or environment-specific settings.
+
+### How It Works
+
+In addition to the main `erato.toml` file, Erato automatically discovers and loads all files matching the pattern `*.auto.erato.toml` in the application directory. These files are merged with the main configuration, allowing you to split your configuration across multiple files.
+
+### Helm Chart Support
+
+The Helm chart provides flexible support for multiple configuration files through the `backend.extraConfigFiles` value:
+
+```yaml
+backend:
+  # Main configuration file
+  configFile:
+    secretName: "erato-main-config"
+    secretKey: "erato.toml"
+
+  # Additional configuration files (automatically named *.auto.erato.toml)
+  extraConfigFiles:
+    - name: "mcp-servers"
+      secretName: "erato-mcp-config"
+      secretKey: "mcp-servers.toml"
+
+    - name: "secrets"
+      inlineContent: |
+        [mcp_servers.private_api]
+        transport_type = "sse"
+        url = "https://private-api.example.com/sse"
+        http_headers = { "Authorization" = "Bearer secret-token" }
+```
+
+### MCP Server Use Case
+
+This multi-file approach is especially beneficial for MCP server configurations, and connecting multiple seperately deployed/external MCP servers:
+
+**Main `erato.toml`** (public configuration):
+
+```toml
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[frontend]
+theme = "custom-theme"
+```
+
+**`mcp-servers.auto.erato.toml`** (MCP-specific configuration):
+
+```toml
+[mcp_servers.file_provider]
+transport_type = "sse"
+url = "http://file-server:8080/sse"
+
+[mcp_servers.database_tools]
+transport_type = "sse"
+url = "http://db-tools:9090/sse"
+http_headers = { "X-API-Key" = "database-access-key" }
+```
+
+### Configuration Sources
+
+Each extra configuration file can be provided through:
+
+- **Kubernetes Secret:** Reference an existing secret containing the configuration
+- **ConfigMap:** Reference a ConfigMap for non-sensitive configuration
+- **Inline Content:** Define the configuration directly in your Helm values
+
+**Example with different sources:**
+
+```yaml
+backend:
+  extraConfigFiles:
+    # From a Kubernetes secret
+    - name: "mcp-secrets"
+      secretName: "mcp-credentials"
+      secretKey: "config.toml"
+
+    # From a ConfigMap
+    - name: "mcp-public"
+      configMapName: "mcp-public-config"
+      configMapKey: "servers.toml"
+
+    # Inline content
+    - name: "feature-flags"
+      inlineContent: |
+        [features]
+        experimental_mode = true
+```
+
+This approach allows you to:
+
+- Keep sensitive MCP server credentials in separate secrets
+- Share common MCP server configurations across environments
+- Manage different aspects of configuration independently
+- Maintain clean separation between application and integration settings
