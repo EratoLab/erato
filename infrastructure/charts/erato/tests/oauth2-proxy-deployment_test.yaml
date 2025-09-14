@@ -261,3 +261,181 @@ tests:
           content:
             name: additional-volume
             mountPath: /tmp/additional
+
+  # Annotation tests
+  - it: should not include deployment annotations when none are set
+    asserts:
+      - notExists:
+          path: metadata.annotations
+
+  - it: should include deployment annotations when oauth2Proxy.deploymentAnnotations is set
+    set:
+      oauth2Proxy.deploymentAnnotations:
+        deployment.kubernetes.io/revision: "1"
+        custom/annotation: "value"
+    asserts:
+      - equal:
+          path: metadata.annotations["deployment.kubernetes.io/revision"]
+          value: "1"
+      - equal:
+          path: metadata.annotations["custom/annotation"]
+          value: "value"
+
+  - it: should include deployment annotations when commonAnnotations is set
+    set:
+      commonAnnotations:
+        common/annotation: "common-value"
+        environment: "test"
+    asserts:
+      - equal:
+          path: metadata.annotations["common/annotation"]
+          value: "common-value"
+      - equal:
+          path: metadata.annotations["environment"]
+          value: "test"
+
+  - it: should merge deployment annotations with commonAnnotations
+    set:
+      commonAnnotations:
+        common/annotation: "common-value"
+        environment: "test"
+      oauth2Proxy.deploymentAnnotations:
+        deployment.kubernetes.io/revision: "1"
+        oauth2proxy/specific: "oauth2proxy-value"
+    asserts:
+      - equal:
+          path: metadata.annotations["common/annotation"]
+          value: "common-value"
+      - equal:
+          path: metadata.annotations["environment"]
+          value: "test"
+      - equal:
+          path: metadata.annotations["deployment.kubernetes.io/revision"]
+          value: "1"
+      - equal:
+          path: metadata.annotations["oauth2proxy/specific"]
+          value: "oauth2proxy-value"
+
+  - it: should override commonAnnotations with oauth2Proxy.deploymentAnnotations when keys conflict
+    set:
+      commonAnnotations:
+        environment: "common-environment"
+        common/annotation: "common-value"
+      oauth2Proxy.deploymentAnnotations:
+        environment: "oauth2proxy-environment"
+        oauth2proxy/specific: "oauth2proxy-value"
+    asserts:
+      - equal:
+          path: metadata.annotations["environment"]
+          value: "oauth2proxy-environment"
+      - equal:
+          path: metadata.annotations["common/annotation"]
+          value: "common-value"
+      - equal:
+          path: metadata.annotations["oauth2proxy/specific"]
+          value: "oauth2proxy-value"
+
+  - it: should not include pod annotations when none are set
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations
+
+  - it: should include pod annotations when oauth2Proxy.podAnnotations is set
+    set:
+      oauth2Proxy.podAnnotations:
+        pod/annotation: "pod-value"
+        prometheus.io/scrape: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["pod/annotation"]
+          value: "pod-value"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+
+  - it: should include pod annotations when commonAnnotations is set
+    set:
+      commonAnnotations:
+        common/annotation: "common-value"
+        prometheus.io/port: "4180"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["common/annotation"]
+          value: "common-value"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "4180"
+
+  - it: should merge pod annotations with commonAnnotations
+    set:
+      commonAnnotations:
+        common/annotation: "common-value"
+        prometheus.io/port: "4180"
+      oauth2Proxy.podAnnotations:
+        pod/annotation: "pod-value"
+        prometheus.io/scrape: "true"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["common/annotation"]
+          value: "common-value"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "4180"
+      - equal:
+          path: spec.template.metadata.annotations["pod/annotation"]
+          value: "pod-value"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+
+  - it: should override commonAnnotations with oauth2Proxy.podAnnotations when keys conflict
+    set:
+      commonAnnotations:
+        prometheus.io/scrape: "false"
+        common/annotation: "common-value"
+      oauth2Proxy.podAnnotations:
+        prometheus.io/scrape: "true"
+        pod/specific: "pod-value"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["common/annotation"]
+          value: "common-value"
+      - equal:
+          path: spec.template.metadata.annotations["pod/specific"]
+          value: "pod-value"
+
+  - it: should render annotations with template values
+    set:
+      oauth2Proxy.deploymentAnnotations:
+        app.version: "{{ .Chart.AppVersion }}"
+        release.name: "{{ .Release.Name }}"
+      oauth2Proxy.podAnnotations:
+        chart.version: "{{ .Chart.Version }}"
+        namespace: "{{ .Release.Namespace }}"
+    asserts:
+      - equal:
+          path: metadata.annotations["app.version"]
+          value: "0.1.0"
+      - equal:
+          path: metadata.annotations["release.name"]
+          value: "RELEASE-NAME"
+      - equal:
+          path: spec.template.metadata.annotations["chart.version"]
+          value: "0.1.0"
+      - equal:
+          path: spec.template.metadata.annotations["namespace"]
+          value: "NAMESPACE"
+
+  - it: should not render when oauth2Proxy is disabled even with annotations set
+    set:
+      oauth2Proxy.enabled: false
+      oauth2Proxy.deploymentAnnotations:
+        test/annotation: "test-value"
+      oauth2Proxy.podAnnotations:
+        pod/annotation: "pod-value"
+    asserts:
+      - hasDocuments:
+          count: 0

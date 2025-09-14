@@ -5,6 +5,10 @@ metadata:
   name: {{ .Release.Name }}-oauth2-proxy
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
     app.kubernetes.io/component: oauth2-proxy
+  {{- if or .Values.oauth2Proxy.deploymentAnnotations .Values.commonAnnotations }}
+  {{- $annotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.oauth2Proxy.deploymentAnnotations .Values.commonAnnotations ) "context" . ) }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" $annotations "context" $) | nindent 4 }}
+  {{- end }}
 spec:
   replicas: 1
   selector:
@@ -15,6 +19,10 @@ spec:
       labels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
         app.kubernetes.io/component: oauth2-proxy
         app.kubernetes.io/app-version: {{ .Chart.AppVersion }}
+      {{- if or .Values.oauth2Proxy.podAnnotations .Values.commonAnnotations }}
+      {{- $podAnnotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.oauth2Proxy.podAnnotations .Values.commonAnnotations ) "context" . ) }}
+      annotations: {{- include "common.tplvalues.render" ( dict "value" $podAnnotations "context" $) | nindent 8 }}
+      {{- end }}
     spec:
       {{- include "erato.imagePullSecrets" . | nindent 6 }}
       containers:

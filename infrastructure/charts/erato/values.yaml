@@ -10,6 +10,9 @@ nameOverride: ""
 ## @param commonLabels Labels to add to all deployed objects
 ##
 commonLabels: {}
+## @param commonAnnotations Annotations to add to all deployed objects
+##
+commonAnnotations: {}
 
 ingress:
   enabled: true
@@ -41,6 +44,12 @@ oauth2Proxy:
     # cookie_secret = ""
     # cookie_secure = true
     # skip_auth_regex = ["^/health", "^/metrics"]
+  ## @param oauth2Proxy.deploymentAnnotations Annotations to add to the oauth2-proxy deployment
+  ##
+  deploymentAnnotations: {}
+  ## @param oauth2Proxy.podAnnotations Annotations to add to the oauth2-proxy pod
+  ##
+  podAnnotations: {}
   resources:
     requests:
       cpu: 100m
@@ -62,6 +71,12 @@ backend:
   extraEnvVarsSecret: ""
   extraVolumes: []
   extraVolumeMounts: []
+  ## @param backend.deploymentAnnotations Annotations to add to the backend deployment
+  ##
+  deploymentAnnotations: {}
+  ## @param backend.podAnnotations Annotations to add to the backend pod
+  ##
+  podAnnotations: {}
   # Optional configuration for mounting erato.toml from a secret, configMap, or inline content
   configFile:
     # Name of the secret containing the erato.toml file
