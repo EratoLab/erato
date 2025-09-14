@@ -7,7 +7,7 @@ use crate::models::file_upload::get_file_upload_by_id;
 use crate::models::message::{
     get_generation_input_messages_by_previous_message_id, get_message_by_id, submit_message,
     update_message_generation_metadata, ContentPart, ContentPartText, GenerationInputMessages,
-    GenerationMetadata, GenerationParameters, MessageSchema,
+    GenerationMetadata, GenerationParameters, MessageRole, MessageSchema,
     ToolCallStatus as MessageToolCallStatus, ToolUse,
 };
 use crate::policy::engine::PolicyEngine;
@@ -1747,22 +1747,16 @@ pub async fn edit_message_sse(
             return Err(());
         }
         let message_to_edit = message_to_edit_res.unwrap();
-
-        // Get the previous message (user message) to get the chat + required message content
-        let previous_message_res = get_message_by_id(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            &message_to_edit
-                .previous_message_id
-                .expect("Expected previous message ID"),
-        )
-        .await;
-        if let Err(err) = previous_message_res {
+        let message_to_edit_inner_res = MessageSchema::validate(&message_to_edit.raw_message);
+        if let Err(err) = message_to_edit_inner_res {
             let _ = tx.send(Err(err)).await;
             return Err(());
         }
-        let _previous_message = previous_message_res.unwrap();
+        let message_to_edit_inner = message_to_edit_inner_res.unwrap();
+        if message_to_edit_inner.role != MessageRole::User {
+            let _ = tx.send(Err(eyre!("The provided `message_id` must be the message ID of a message with role `user`."))).await;
+            return Err(());
+        }
 
         let chat_res = get_chat_by_message_id(
             &app_state.db,
@@ -1793,9 +1787,12 @@ pub async fn edit_message_sse(
             &me_user.to_subject(),
             &chat.id,
             user_message,
+            // Previous message is inherited from message to edit
             message_to_edit.previous_message_id.as_ref(),
+            // Sibling is the message to edit
             Some(&message_to_edit.id),
             None,
+            // TODO: Verify input file replacement behaviour in tests
             &request.replace_input_files_ids,
             None, // User messages don't have generation parameters
             None, // User messages don't have generation metadata
@@ -1882,7 +1879,8 @@ pub async fn edit_message_sse(
             &chat.id,
             empty_assistant_message_json,
             Some(&saved_user_message.id), // Previous is the new user message
-            Some(&request.message_id), // Sibling is the original assistant message being replaced
+            // No sibling
+            None,
             Some(generation_input_messages.clone()),
             &[],
             Some(generation_parameters), // Save generation parameters with chat provider ID
