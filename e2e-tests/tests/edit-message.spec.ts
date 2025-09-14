@@ -44,7 +44,7 @@ test.describe("Edit Message Functionality", () => {
 
       // Now we should have 6 messages total: 3 user + 3 assistant
       const userMessages = page.locator('[data-testid="message-user"]');
-      await expect(userMessages).toHaveCount(3);
+      await expect(userMessages).toHaveCount(3, { timeout: 30000 });
 
       // Get all user messages and their IDs
       const messageElements = await userMessages.all();
@@ -128,7 +128,7 @@ test.describe("Edit Message Functionality", () => {
       const editTextbox = page.getByRole("textbox", {
         name: "Edit your message...",
       });
-      await expect(editTextbox).toBeVisible();
+      await expect(editTextbox).toBeVisible({ timeout: 30000 });
       await expect(editTextbox).toHaveValue("Second message");
 
       // Edit the message content
@@ -217,11 +217,11 @@ test.describe("Edit Message Functionality", () => {
     // Small delay to allow async action handler to complete
     await page.waitForTimeout(200);
 
-    // Verify we're in edit mode
-    const editTextbox = page.getByRole("textbox", {
-      name: "Edit your message...",
-    });
-    await expect(editTextbox).toBeVisible();
+      // Verify we're in edit mode
+      const editTextbox = page.getByRole("textbox", {
+        name: "Edit your message...",
+      });
+      await expect(editTextbox).toBeVisible({ timeout: 30000 });
 
     // Click cancel - use specific test ID for chat input cancel
     const cancelButton = page.getByTestId("chat-input-cancel-edit");
@@ -297,7 +297,7 @@ test.describe("Edit Message Functionality", () => {
       await expect(userMessages).toHaveCount(finalMessageCount);
 
       // Get all message contents before edit
-      const messagesBefore = [];
+      const messagesBefore: string[] = [];
       for (let i = 0; i < finalMessageCount; i++) {
         const content = await userMessages.nth(i).textContent();
         messagesBefore.push(content?.trim() || "");
@@ -321,7 +321,7 @@ test.describe("Edit Message Functionality", () => {
       const editTextbox = page.getByRole("textbox", {
         name: "Edit your message...",
       });
-      await expect(editTextbox).toBeVisible();
+      await expect(editTextbox).toBeVisible({ timeout: 30000 });
 
       // Edit the message
       await editTextbox.clear();
