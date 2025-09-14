@@ -1,4 +1,7 @@
 erato:
+  commonAnnotations:
+    reloader.stakater.com/auto: "true"
+  
   ingress:
     enabled: true
     host: app.erato.internal

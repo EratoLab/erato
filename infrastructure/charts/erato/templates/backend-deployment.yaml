@@ -4,6 +4,10 @@ metadata:
   name: {{ .Release.Name }}-erato-app
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
     app.kubernetes.io/component: erato-app
+  {{- if or .Values.backend.deploymentAnnotations .Values.commonAnnotations }}
+  {{- $annotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.backend.deploymentAnnotations .Values.commonAnnotations ) "context" . ) }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" $annotations "context" $) | nindent 4 }}
+  {{- end }}
 spec:
   replicas: {{ .Values.backend.replicaCount }}
   selector:
@@ -14,6 +18,10 @@ spec:
       labels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
         app.kubernetes.io/component: erato-app
         app.kubernetes.io/app-version: {{ .Chart.AppVersion }}
+      {{- if or .Values.backend.podAnnotations .Values.commonAnnotations }}
+      {{- $podAnnotations := include "common.tplvalues.merge" ( dict "values" ( list .Values.backend.podAnnotations .Values.commonAnnotations ) "context" . ) }}
+      annotations: {{- include "common.tplvalues.render" ( dict "value" $podAnnotations "context" $) | nindent 8 }}
+      {{- end }}
     spec:
       {{- include "erato.imagePullSecrets" . | nindent 6 }}
       initContainers:
