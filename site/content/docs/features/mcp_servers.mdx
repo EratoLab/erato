@@ -1,7 +1,140 @@
 # MCP Servers
 
-🚧Work in progress 🚧
+Erato supports connecting to MCP (Model Context Protocol) servers, allowing you to extend the capabilities of your AI assistant with custom tools and integrations.
 
-Erato supports connecting to MCP (Model Context Protocol) servers, allowing you to integrate custom logic into Erato.
+## Overview
 
-MCP server interactions and the LLM tool calls they are translated into are recorded in the chat history, and displayed in the frontend.
+Model Context Protocol (MCP) is an open standard for connecting AI applications to external data sources and tools.
+Through MCP servers, Erato can access file systems, databases, APIs, internal knowledge bses and other external services, making the AI assistant more powerful and versatile.
+
+One benefit for organizations making use of MCP, is that tools/services that provide their functionality via MCP can not only be used from Chat-UIs like Erato,
+but can also provide the same tools e.g. your AI-enabled workflow automation solution.
+
+With that MCP can form the basis for a well-rounded AI strategy for your organization.
+
+## MCP servers
+
+When it comes to providing access to a data source or tools via MCP, there are two main approaches:
+
+### Native support
+
+Many SaaS tools in use at organizations are already starting to natively support the MCP standard, by extending their API with dedicated MCP endpoints.
+
+Integrating a service that natively supports MCP can be as simple as getting the API keys for the service and configuring the endpoint with your Erato deployment.
+
+There is a official (non-exhaustive) [list of companies providing official support for their products](https://github.com/modelcontextprotocol/servers#%EF%B8%8F-official-integrations).
+
+### Standalone MCP servers
+
+For services that don't natively support MCP, there is still the option of using a seperate hosted MCP server, that converts between the MCP standard and traditional REST APIs.
+
+Standalone MCP servers are also the common option for MCP servers that provide tools that are unrelated to data storage (e.g. a file conversion tool).
+
+Integrating a standalone MCP server with an Erato deployment usually involves deploying the MCP server and Erato seperately and then configuring Erato to connect to the MCP server.
+
+## Capabilities
+
+Erato's MCP integration provides the following capabilities:
+
+### Tool Discovery and Execution
+
+- Automatic discovery of tools provided by connected MCP servers
+- Runtime tool execution with parameter validation
+- Error handling and response processing
+- Full audit trail of tool calls in chat history
+
+### Multiple Server Support
+
+- Connect to multiple MCP servers simultaneously
+- Each server identified by a unique configuration key
+- Independent configuration for each server (URLs, authentication, etc.)
+
+## Configuration
+
+MCP servers are configured in your `erato.toml` file under the `[mcp_servers]` section. Each server requires:
+
+1. A unique identifier (used as the configuration key)
+2. Transport type specification
+3. Server URL endpoint
+4. Optional authentication headers
+
+**Example:**
+
+```toml
+[mcp_servers.file_provider]
+transport_type = "sse"
+url = "http://127.0.0.1:63490/sse"
+
+[mcp_servers.api_integration]
+transport_type = "sse"
+url = "https://api.example.com/mcp/sse"
+http_headers = { "Authorization" = "Bearer your-api-token" }
+```
+
+See the [Configuration Reference](../configuration#mcp_servers) for detailed configuration options.
+
+## Deployment Considerations
+
+When deploying Erato with MCP servers:
+
+- Ensure MCP server endpoints are accessible from the Erato backend
+- Configure appropriate network policies for security
+- Use HTTPS for production deployments
+- Consider using multiple configuration files to separate MCP server configurations from main application config
+
+For Kubernetes/Helm deployments, you can use the multi-configuration file support to manage MCP server configurations separately, which can also facilitate splitting up the deployment of Erato and the MCP servers into separate helm charts. See the [Helm Deployment](../deployment/deployment_helm#multiple-configuration-files) documentation for details.
+
+## Transport Types
+
+The MCP standard features the following transport protocols:
+
+### Server-Sent Events (SSE, aka HTTP+SSE)
+
+[Section in MCP specification](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#http-with-sse)
+
+For Erato, this is currently the recommended transport protocol for connecting with MCP servers.
+
+The SSE transport uses HTTP with Server-Sent Events for bidirectional communication with MCP servers.
+
+- **Transport Type:** `"sse"`
+- **Protocol:** HTTP/HTTPS with Server-Sent Events
+- **Use Cases:** Web-based MCP servers, cloud-hosted services
+- **Configuration:** Requires a URL endpoint (conventionally ending with `/sse`)
+
+### Streamable HTTP
+
+[Section in MCP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http).
+
+The **Streamable HTTP** transport is a modern protocol for efficient, bidirectional streaming of data between Erato and MCP servers over HTTP.
+It is designed to support advanced use cases and improved performance compared to traditional Server-Sent Events (SSE).
+
+> [!WARNING]
+>
+> **Not yet supported:** Streamable HTTP is not currently supported in Erato, but support is planned for a future release. You can follow [the MCP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) for details on the protocol and keep an eye on the Erato changelog for updates.
+
+- **Transport Type:** `"streamable_http"`
+- **Protocol:** HTTP/HTTPS with full-duplex streaming (see MCP spec)
+- **Use Cases:** High-performance integrations, advanced tool servers, large data transfers
+- **Configuration:** Will require a URL endpoint and may support additional options (to be documented upon release)
+
+If you are developing or deploying MCP servers that support Streamable HTTP, you will be able to connect them to Erato as soon as this feature is released. For now, use the `"sse"` transport type for compatibility.
+
+### stdio
+
+[Section in MCP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#stdio).
+
+The `stdio` transport type is a method for communicating with MCP servers via standard input and output streams, typically used for local process integration.
+
+Erato does **not natively support** the `stdio` transport type.
+
+- **Protocol:** Local process communication via stdin/stdout (requires proxying)
+- **Configuration:** Use a proxy tool to expose the local `stdio` MCP server as an SSE endpoint, then configure Erato to use the `sse` transport type and point to the proxy's URL
+
+> [!NOTE]
+>
+> MCP servers that only implement the `stdio` transport are often not intended for organizational use cases, and may lack support for proper multi-user scenarios.
+>
+> If you nevertheless want to connect a MCP server that only supports the `stdio` transport, you can proxy it via tools such as [mcp-remote](https://github.com/geelen/mcp-remote) and configure Erato with the resulting `sse`/`http` transport/endpoint
+> in Erato.
+>
+> For most scenarios, use MCP servers that support the `sse` transport type directly, if possible.

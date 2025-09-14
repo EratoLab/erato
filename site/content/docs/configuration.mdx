@@ -240,3 +240,57 @@ sentry_dsn = "https://public@sentry.example.com/1"
 ```
 
 See the [Sentry Integration](./integrations/sentry) documentation for detailed setup instructions.
+
+### `mcp_servers`
+
+Configuration for Model Context Protocol (MCP) servers that extend Erato's capabilities through custom tools and integrations.
+
+**Type:** `object<string, McpServerConfig>`
+
+**Example:**
+
+```toml
+[mcp_servers.file_provider]
+transport_type = "sse"
+url = "http://127.0.0.1:63490/sse"
+
+[mcp_servers.filesystem]
+transport_type = "sse"
+url = "https://my-mcp-server.example.com/sse"
+http_headers = { "Authorization" = "Bearer token123", "X-API-Key" = "key456" }
+```
+
+#### `mcp_servers.<server_id>.transport_type`
+
+The type of transport protocol used to communicate with the MCP server.
+
+**Type:** `string`
+
+**Supported values:** `"sse"` (Server-Sent Events)
+
+**Example:** `"sse"`
+
+#### `mcp_servers.<server_id>.url`
+
+The URL endpoint for the MCP server. For SSE transport, this conventionally ends with `/sse`.
+
+**Type:** `string`
+
+**Example:** `"http://127.0.0.1:63490/sse"`, `"https://my-mcp-server.example.com/sse"`
+
+#### `mcp_servers.<server_id>.http_headers`
+
+Optional static HTTP headers to include with every request to the MCP server. This is useful for authentication or API keys.
+
+**Type:** `object<string, string> | None`
+
+**Example:**
+
+```toml
+[mcp_servers.authenticated_server]
+transport_type = "sse"
+url = "https://secure-mcp-server.example.com/sse"
+http_headers = { "Authorization" = "Bearer your-token", "X-API-Key" = "your-api-key" }
+```
+
+See the [MCP Servers](./features/mcp_servers) documentation for more information about Model Context Protocol integration.
