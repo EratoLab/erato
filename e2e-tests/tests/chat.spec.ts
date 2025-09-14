@@ -1,14 +1,12 @@
 import { test, expect } from "@playwright/test";
 import { TAG_CI } from "./tags";
-import { chatIsReadyToChat, login } from "./shared";
+import { chatIsReadyToChat } from "./shared";
 
 test(
   "Can upload a file and see it in the UI",
   { tag: TAG_CI },
   async ({ page }) => {
     await page.goto("/");
-
-    await login(page, "admin@example.com");
     await chatIsReadyToChat(page);
 
     // Start waiting for file chooser before clicking the button
@@ -29,8 +27,6 @@ test(
   { tag: TAG_CI },
   async ({ page }) => {
     await page.goto("/");
-
-    await login(page, "admin@example.com");
     await chatIsReadyToChat(page);
 
     const textbox = page.getByRole("textbox", { name: "Type a message..." });
@@ -68,8 +64,6 @@ test(
   { tag: TAG_CI },
   async ({ page }) => {
     await page.goto("/");
-
-    await login(page, "admin@example.com");
     await chatIsReadyToChat(page);
 
     // Start waiting for file chooser before clicking the button

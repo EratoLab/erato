@@ -1,25 +1,26 @@
 import { test, expect } from "@playwright/test";
-import { chatIsReadyToChat, login } from "./shared";
+import { chatIsReadyToChat, createAuthenticatedContext } from "./shared";
 import { TAG_CI } from "./tags";
 
 test(
   "User cannot see chat from another user",
   { tag: TAG_CI },
-  async ({ page, browser }) => {
+  async ({ browser }) => {
     // User 01 logs in and creates a new chat
-    await page.goto("/");
-    await login(page, "user01@example.com");
-    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    const { context: user01Context, page: user01Page } =
+      await createAuthenticatedContext(browser, "user01@example.com");
+    await user01Page.goto("/");
+    const textbox = user01Page.getByRole("textbox", {
+      name: "Type a message...",
+    });
     await textbox.fill("This is a private message for user 01");
     await textbox.press("Enter");
-    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/);
-    const chatUrl = page.url();
+    await expect(user01Page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/);
+    const chatUrl = user01Page.url();
 
     // User 02 logs in
-    const user02Context = await browser.newContext();
-    const user02Page = await user02Context.newPage();
-    await user02Page.goto("/");
-    await login(user02Page, "user02@example.com", "admin");
+    const { context: user02Context, page: user02Page } =
+      await createAuthenticatedContext(browser, "user02@example.com", "admin");
 
     // User 02 tries to access the chat from user 01
     await user02Page.goto(chatUrl);
@@ -34,6 +35,7 @@ test(
     // And the user should be on the base chat page, not the specific chat URL
     // await expect(user02Page).toHaveURL(/\/chat$/);
 
+    await user01Context.close();
     await user02Context.close();
   },
 );

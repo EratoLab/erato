@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import Sharp from "sharp";
 import { TAG_CI } from "./tags";
-import { chatIsReadyToChat, login } from "./shared";
+import { chatIsReadyToChat, createAuthenticatedContext } from "./shared";
 
 /**
  * Analyzes a screenshot buffer to determine if it shows a light or dark theme
@@ -88,8 +88,6 @@ test(
   async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/");
-
-    await login(page, "admin@example.com");
     await chatIsReadyToChat(page);
 
     await expectIsDarkPage(page, "Page should be dark by default");
@@ -112,8 +110,6 @@ test(
   async ({ page }) => {
     await page.emulateMedia({ colorScheme: "light" });
     await page.goto("/");
-
-    await login(page, "admin@example.com");
     await chatIsReadyToChat(page);
 
     await expectIsLightPage(page, "Page should be light by default");
@@ -134,16 +130,28 @@ test(
   "Can login and see german language by default",
   { tag: TAG_CI },
   async ({ browser }) => {
-    const context = await browser.newContext({
-      locale: "de-DE",
+    const { context, page } = await createAuthenticatedContext(
+      browser,
+      "admin@example.com",
+    );
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, "language", {
+        get: function () {
+          return "de-DE";
+        },
+      });
+      Object.defineProperty(navigator, "languages", {
+        get: function () {
+          return ["de-DE"];
+        },
+      });
     });
-    const page = await context.newPage();
     await page.goto("/");
-
-    await login(page, "admin@example.com");
 
     await expect(
       page.getByRole("textbox", { name: "Nachricht eingeben..." }),
     ).toBeVisible();
+
+    await context.close();
   },
 );
