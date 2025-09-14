@@ -1386,7 +1386,7 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
     assert!(!messages.is_empty());
 
     // Extract the assistant message ID from the message_complete event
-    let assistant_message_id = messages
+    let _assistant_message_id = messages
         .iter()
         .find_map(|msg| {
             if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
@@ -1397,6 +1397,17 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
             None
         })
         .expect("No assistant_message_completed event found");
+    let initial_user_message_id = messages
+        .iter()
+        .find_map(|msg| {
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
+                if json["message_type"] == "user_message_saved" {
+                    return Some(json["message_id"].as_str().unwrap().to_string());
+                }
+            }
+            None
+        })
+        .expect("No user_message_saved event found");
 
     // Now edit the message with a new user message
     let edited_message = "What is the capital of Spain?";
@@ -1405,7 +1416,7 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
         .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
         .add_header(http::header::CONTENT_TYPE, "application/json")
         .json(&json!({
-            "message_id": assistant_message_id,
+            "message_id": initial_user_message_id,
             "replace_user_message": edited_message,
             "replace_input_files_ids": []
         }))
@@ -1512,17 +1523,12 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
         .as_bool()
         .unwrap());
 
-    // Verify the new assistant message has the original message as a sibling
+    // Verify the new assistant message has no sibling
     let new_assistant_message = active_messages
         .iter()
         .find(|msg| msg["role"].as_str().unwrap() == "assistant")
         .expect("No active assistant message found");
-    assert_eq!(
-        new_assistant_message["sibling_message_id"]
-            .as_str()
-            .unwrap(),
-        assistant_message_id
-    );
+    assert_eq!(new_assistant_message["sibling_message_id"].as_str(), None);
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -1579,7 +1585,7 @@ async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool:
         .await;
 
     let messages2 = collect_sse_messages(response2).await;
-    let assistant_message_2_id = messages2
+    let _assistant_message_2_id = messages2
         .iter()
         .find_map(|msg| {
             if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
@@ -1590,6 +1596,17 @@ async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool:
             None
         })
         .expect("No assistant_message_completed event found for message 2");
+    let user_message_2_id = messages2
+        .iter()
+        .find_map(|msg| {
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
+                if json["message_type"] == "user_message_saved" {
+                    return Some(json["message_id"].as_str().unwrap().to_string());
+                }
+            }
+            None
+        })
+        .expect("No user_message_saved event found");
 
     // Now edit the second user message (about Germany) to ask about Spain instead
     let response3 = server
@@ -1597,7 +1614,7 @@ async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool:
         .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
         .add_header(http::header::CONTENT_TYPE, "application/json")
         .json(&json!({
-            "message_id": assistant_message_2_id,
+            "message_id": user_message_2_id,
             "replace_user_message": "What is the capital of Spain?",
             "replace_input_files_ids": []
         }))
