@@ -3,26 +3,39 @@ set -e
 
 # Parse command line arguments
 GIT_SHA=""
+RELEASE_MODE=false
 
 for arg in "$@"; do
   case $arg in
     --git-sha=*)
       GIT_SHA="${arg#*=}"
       ;;
+    --release)
+      RELEASE_MODE=true
+      ;;
     *)
       echo "Unknown argument: $arg"
-      echo "Usage: $0 --git-sha=<GIT_SHA>"
-      echo "Example: $0 --git-sha=a1b2c3d"
+      echo "Usage: $0 [--git-sha=<GIT_SHA>] [--release]"
+      echo "Examples:"
+      echo "  $0 --git-sha=a1b2c3d                   # Dev build with git sha suffix"
+      echo "  $0 --release                           # Release build with chart version as-is"
       exit 1
       ;;
   esac
 done
 
-# Check if git-sha is provided
-if [ -z "$GIT_SHA" ]; then
-  echo "Error: --git-sha flag is required"
-  echo "Usage: $0 --git-sha=<GIT_SHA>"
-  echo "Example: $0 --git-sha=a1b2c3d"
+# Check argument validation
+if [ "$RELEASE_MODE" = true ] && [ -n "$GIT_SHA" ]; then
+  echo "Error: --release and --git-sha flags are mutually exclusive"
+  exit 1
+fi
+
+if [ "$RELEASE_MODE" = false ] && [ -z "$GIT_SHA" ]; then
+  echo "Error: Either --git-sha or --release flag is required"
+  echo "Usage: $0 [--git-sha=<GIT_SHA>] [--release]"
+  echo "Examples:"
+  echo "  $0 --git-sha=a1b2c3d                   # Dev build with git sha suffix"
+  echo "  $0 --release                           # Release build with chart version as-is"
   exit 1
 fi
 
@@ -34,19 +47,26 @@ TMP_DIR="${PROJECT_ROOT}/tmp/helm"
 
 # Extract the original version from Chart.yaml
 ORIGINAL_VERSION=$(grep '^version:' "${CHART_DIR}/Chart.yaml" | awk '{print $2}')
-CHART_VERSION="${ORIGINAL_VERSION}-${GIT_SHA}"
 CHART_NAME="erato"
 OCI_REGISTRY="harbor.imassage.me"
-OCI_REPO="erato-helm-dev"
+
+# Set chart version and OCI repository based on mode
+if [ "$RELEASE_MODE" = true ]; then
+  CHART_VERSION="${ORIGINAL_VERSION}"
+  OCI_REPO="erato-helm"
+  echo "Publishing release chart version ${CHART_VERSION}..."
+else
+  CHART_VERSION="${ORIGINAL_VERSION}-${GIT_SHA}"
+  OCI_REPO="erato-helm-dev"
+  echo "Publishing dev chart version ${CHART_VERSION}..."
+  
+  # Update the version in Chart.yaml for dev builds only
+  sed -i.bak "s/^version:.*/version: ${CHART_VERSION}/" "${CHART_DIR}/Chart.yaml"
+  rm "${CHART_DIR}/Chart.yaml.bak"
+fi
 
 # Create tmp directory if it doesn't exist
 mkdir -p "${TMP_DIR}"
-
-echo "Updating Helm chart version to ${CHART_VERSION}..."
-
-# Update the version in Chart.yaml
-sed -i.bak "s/^version:.*/version: ${CHART_VERSION}/" "${CHART_DIR}/Chart.yaml"
-rm "${CHART_DIR}/Chart.yaml.bak"
 
 echo "Packaging Helm chart..."
 helm package "${CHART_DIR}" --dependency-update --destination "${TMP_DIR}"
@@ -67,6 +87,8 @@ echo "Successfully published ${CHART_NAME} chart version ${CHART_VERSION} to oci
 # Clean up
 rm "${CHART_PACKAGE}"
 
-# Restore original version in Chart.yaml
-sed -i.bak "s/^version:.*/version: ${ORIGINAL_VERSION}/" "${CHART_DIR}/Chart.yaml"
-rm "${CHART_DIR}/Chart.yaml.bak"
+# Restore original version in Chart.yaml (only for dev builds)
+if [ "$RELEASE_MODE" = false ]; then
+  sed -i.bak "s/^version:.*/version: ${ORIGINAL_VERSION}/" "${CHART_DIR}/Chart.yaml"
+  rm "${CHART_DIR}/Chart.yaml.bak"
+fi

@@ -3,6 +3,9 @@ suite: test oauth2-proxy deployment
 minimumVersion: 1.0.1
 templates:
   - oauth2-proxy-deployment.yaml
+chart:
+  appVersion: 0.2.99
+  version: 0.2.99
 tests:
   - it: should render deployment when oauth2Proxy is enabled
     asserts:
@@ -418,13 +421,13 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["app.version"]
-          value: "0.1.0"
+          value: "0.2.99"
       - equal:
           path: metadata.annotations["release.name"]
           value: "RELEASE-NAME"
       - equal:
           path: spec.template.metadata.annotations["chart.version"]
-          value: "0.1.0"
+          value: "0.2.99"
       - equal:
           path: spec.template.metadata.annotations["namespace"]
           value: "NAMESPACE"

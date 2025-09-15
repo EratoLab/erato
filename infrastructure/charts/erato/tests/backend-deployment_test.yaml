@@ -3,6 +3,9 @@ suite: test backend deployment
 minimumVersion: 1.0.1
 templates:
   - backend-deployment.yaml
+chart:
+  appVersion: 0.2.99
+  version: 0.2.99
 tests:
   - it: should render a deployment with default values
     asserts:
@@ -22,7 +25,7 @@ tests:
           value: erato-backend
       - equal:
           path: spec.template.spec.containers[0].image
-          value: harbor.imassage.me/erato/app:latest
+          value: harbor.imassage.me/erato/app:0.2.99
       - equal:
           path: spec.template.spec.containers[0].ports[0].containerPort
           value: 3130
@@ -597,13 +600,13 @@ tests:
     asserts:
       - equal:
           path: metadata.annotations["app.version"]
-          value: "0.1.0"
+          value: "0.2.99"
       - equal:
           path: metadata.annotations["release.name"]
           value: "RELEASE-NAME"
       - equal:
           path: spec.template.metadata.annotations["chart.version"]
-          value: "0.1.0"
+          value: "0.2.99"
       - equal:
           path: spec.template.metadata.annotations["namespace"]
           value: "NAMESPACE"
