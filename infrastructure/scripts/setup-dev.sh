@@ -9,10 +9,11 @@ HELM_SET_ARGS=""
 CHART_DEP_UPDATE=false
 USE_ALT_ERATO_TOML=false
 API_KEY=""
+WITH_TELEPRESENCE=false
 
 # Function to display script usage
 usage() {
-    echo "Usage: $0 [--wait] [--build-local] [--erato-image-repository <repo>] [--erato-image-tag <tag>] [--chart-dep-update] [--use-alt-erato-toml] [--api-key <key>]"
+    echo "Usage: $0 [--wait] [--build-local] [--erato-image-repository <repo>] [--erato-image-tag <tag>] [--chart-dep-update] [--use-alt-erato-toml] [--api-key <key>] [--with-telepresence]"
     exit 1
 }
 
@@ -30,6 +31,7 @@ while [[ "$#" -gt 0 ]]; do
             USE_ALT_ERATO_TOML=true
             shift
             ;;
+        --with-telepresence) WITH_TELEPRESENCE=true ;;
         -h|--help) usage ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac
@@ -77,6 +79,7 @@ kubectl -n kube-system wait --for=condition=Available deployment/coredns --timeo
 # Add bitnami helm repo
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo add cnpg https://cloudnative-pg.github.io/charts
+helm repo add datawire https://app.getambassador.io
 # helm repo update
 
 if [ "$CHART_DEP_UPDATE" = true ]; then
@@ -170,6 +173,19 @@ if ! helm list -n ingress-nginx | grep -q "^ingress-nginx"; then
 else
     echo "nginx ingress controller already installed, skipping..."
 fi
+
+# Install Telepresence (optional)
+if [ "$WITH_TELEPRESENCE" = true ]; then
+    if ! helm list -n ambassador | grep -q "^traffic-manager"; then
+        echo "Installing Telepresence..."
+        telepresence helm install
+    else
+        echo "Telepresence already installed, skipping..."
+    fi
+else
+    echo "Skipping Telepresence installation (use --with-telepresence to enable)"
+fi
+
 # Install CNPG operator
 if ! helm list -n cnpg-system | grep -q "^cnpg"; then
     echo "Installing CNPG operator..."
