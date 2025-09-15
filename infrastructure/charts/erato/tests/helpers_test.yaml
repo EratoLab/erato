@@ -3,6 +3,9 @@ suite: test helper templates
 minimumVersion: 1.0.1
 templates:
   - backend-deployment.yaml  # We use this template to test the helpers
+chart:
+  appVersion: 0.2.99
+  version: 0.2.99
 tests:
   - it: should use default chart name
     asserts:
@@ -30,7 +33,7 @@ tests:
           value: RELEASE-NAME
       - equal:
           path: metadata.labels["app.kubernetes.io/version"]
-          value: "0.1.0"
+          value: "0.2.99"
       - equal:
           path: metadata.labels["app.kubernetes.io/managed-by"]
           value: Helm

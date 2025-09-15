@@ -4,6 +4,7 @@
 # dependencies = [
 #   "tomlkit",
 #   "semver",
+#   "pyyaml",
 # ]
 # ///
 
@@ -46,11 +47,17 @@ def main():
         sys.exit(1)
 
     cargo_toml_path = Path(__file__).parent.parent / "backend" / "Cargo.toml"
+    chart_yaml_path = Path(__file__).parent.parent / "infrastructure" / "charts" / "erato" / "Chart.yaml"
 
     if not cargo_toml_path.exists():
         print(f"Error: {cargo_toml_path} not found.", file=sys.stderr)
         sys.exit(1)
 
+    if not chart_yaml_path.exists():
+        print(f"Error: {chart_yaml_path} not found.", file=sys.stderr)
+        sys.exit(1)
+
+    # Update Cargo.toml
     with open(cargo_toml_path, "r") as f:
         content = f.read()
         cargo_data = tomlkit.parse(content)
@@ -61,7 +68,7 @@ def main():
         sys.exit(1)
         
     current_version = package_table.get("version")
-    print(f"Found current version: {current_version}")
+    print(f"Found current backend version: {current_version}")
 
     package_table["version"] = new_version
 
@@ -69,6 +76,23 @@ def main():
         f.write(tomlkit.dumps(cargo_data))
 
     print(f"Updated 'backend/Cargo.toml' to version {new_version}")
+
+    # Update Chart.yaml
+    import yaml
+    with open(chart_yaml_path, "r") as f:
+        chart_data = yaml.safe_load(f)
+
+    current_chart_version = chart_data.get("version")
+    current_app_version = chart_data.get("appVersion")
+    print(f"Found current chart version: {current_chart_version}, appVersion: {current_app_version}")
+
+    chart_data["version"] = new_version
+    chart_data["appVersion"] = new_version
+
+    with open(chart_yaml_path, "w") as f:
+        yaml.dump(chart_data, f, default_flow_style=False, sort_keys=False)
+
+    print(f"Updated 'infrastructure/charts/erato/Chart.yaml' version and appVersion to {new_version}")
 
     backend_dir = cargo_toml_path.parent
     try:
@@ -90,7 +114,7 @@ def main():
 
     try:
         cargo_lock_path = backend_dir / "Cargo.lock"
-        subprocess.run(["git", "add", str(cargo_toml_path), str(cargo_lock_path)], check=True)
+        subprocess.run(["git", "add", str(cargo_toml_path), str(cargo_lock_path), str(chart_yaml_path)], check=True)
         subprocess.run(["git", "commit", "-m", f"Prepare release {new_version}"], check=True)
         print(f"Committed changes with message 'Prepare release {new_version}'")
     except FileNotFoundError:

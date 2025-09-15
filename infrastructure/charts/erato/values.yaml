@@ -62,7 +62,7 @@ oauth2Proxy:
 backend:
   image:
     repository: harbor.imassage.me/erato/app
-    tag: latest
+    tag: ""
     pullPolicy: IfNotPresent
     pullSecrets: []
   replicaCount: 1
