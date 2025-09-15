@@ -51,3 +51,11 @@ run_local_services:
 
 format:
     cargo fmt --all
+
+# Connect to the erato-dev k3d cluster via Telepresence to prepare injection into the cluster
+k3d_connect:
+    telepresence connect --context k3d-erato-dev --namespace erato-local-ns
+
+# Reroute the the traffic for the backend in the k3d cluster to local ports; e.g. for auth handling testing
+k3d_replace:
+    telepresence replace erato-local-erato-app --env-file k3d_mnt/.env

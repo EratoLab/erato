@@ -158,7 +158,7 @@ pub mod axum {
         let fallback_path = PathBuf::from(frontend_bundle_path.0.clone())
             .join("404.html")
             .canonicalize()
-            .expect("Unable to normalize frontend bundle path");
+            .expect("Unable to normalize frontend bundle path for 404.html");
 
         // Check if we have any rewrite rules that match
         let path = req.uri().path().to_string();
