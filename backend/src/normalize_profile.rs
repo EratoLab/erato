@@ -137,4 +137,39 @@ mod tests {
         assert_eq!(profile.preferred_language, Some("en".to_string()));
         assert_eq!(profile.picture, None);
     }
+
+    #[test]
+    pub fn test_normalize_keycloak_profile() {
+        let claims = serde_json::json!({
+          "exp": 1757968403,
+          "iat": 1757968103,
+          "auth_time": 1757968103,
+          "jti": "340e3d4b-2654-47e4-accd-686c8a2eba05",
+          "iss": "http://localhost:8080/realms/erato",
+          "aud": "erato-frontend",
+          "sub": "760960c1-6c60-400e-a176-78c71131be7d",
+          "typ": "ID",
+          "azp": "erato-frontend",
+          "session_state": "330a1b84-802c-44fd-b127-fa8031ec2de5",
+          "at_hash": "JhnpxOI9AYLT65nmS8tYxw",
+          "sid": "330a1b84-802c-44fd-b127-fa8031ec2de5",
+          "email_verified": true,
+          "name": "Admin User",
+          "groups": [
+            "administrators",
+            "managers"
+          ],
+          "preferred_username": "admin",
+          "given_name": "Admin",
+          "family_name": "User",
+          "email": "admin@example.com"
+        });
+        let profile = normalize_profile(claims).unwrap();
+        assert_eq!(profile.iss, "http://localhost:8080/realms/erato");
+        assert_eq!(profile.sub, "760960c1-6c60-400e-a176-78c71131be7d");
+        assert_eq!(profile.email, Some("admin@example.com".to_string()));
+        assert_eq!(profile.name, Some("Admin User".to_string()));
+        assert_eq!(profile.preferred_language, None);
+        assert_eq!(profile.picture, None);
+    }
 }

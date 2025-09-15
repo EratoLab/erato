@@ -1,0 +1,39 @@
+version: "3.7"
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.2
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: 8080
+      KC_HOSTNAME_STRICT_BACKCHANNEL: false
+      KC_HTTP_ENABLED: true
+      KC_HOSTNAME_STRICT_HTTPS: false
+      KC_HEALTH_ENABLED: true
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak-realm.json:/opt/keycloak/data/import/realm.json
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/127.0.0.1/8080;echo -e \"GET /health/ready HTTP/1.1\r\nhost: 127.0.0.1:8080\r\nConnection: close\r\n\r\n\" >&3;grep \"HTTP/1.1 200 OK\" <&3",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.8.1
+    network_mode: host
+    volumes:
+      - ./oauth2-proxy-keycloak.cfg:/etc/oauth2-proxy/oauth2-proxy.cfg
+    command: ["--config", "/etc/oauth2-proxy/oauth2-proxy.cfg"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
