@@ -98,6 +98,8 @@ export const ChatMessage = memo(function ChatMessage({
       role="log"
       aria-live="polite"
       aria-label={`${isUser ? t`Your` : t`Assistant`} ${t`message`}`}
+      data-testid={`message-${role}`}
+      data-message-id={message.id}
     >
       <div className="flex w-full gap-6">
         {showAvatar && (
@@ -159,7 +161,6 @@ export const ChatMessage = memo(function ChatMessage({
                 <DefaultMessageControls
                   messageId={message.id}
                   messageType={message.sender}
-                  authorId={message.authorId}
                   createdAt={message.createdAt}
                   context={controlsContext}
                   showOnHover={showControlsOnHover}
@@ -175,7 +176,6 @@ export const ChatMessage = memo(function ChatMessage({
                 <Controls
                   messageId={message.id}
                   messageType={message.sender}
-                  authorId={message.authorId}
                   createdAt={message.createdAt}
                   context={controlsContext}
                   showOnHover={showControlsOnHover}

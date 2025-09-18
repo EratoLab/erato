@@ -92,10 +92,25 @@ jobs:
         if: success() || failure()
         run: pnpm exec prettier . --check
 
+      - name: "Compile i18n messages"
+        working-directory: ./frontend
+        if: success() || failure()
+        run: pnpm run i18n:compile
+
       - name: "Frontend lint"
         working-directory: ./frontend
         if: success() || failure()
         run: pnpm run lint
+
+      - name: "Frontend lint (strict)"
+        working-directory: ./frontend
+        if: success() || failure()
+        run: pnpm run lint:strict
+
+      - name: "Frontend typecheck"
+        working-directory: ./frontend
+        if: success() || failure()
+        run: pnpm run typecheck
 
       - name: "sqitch db summary up-to-date"
         working-directory: ./backend/sqitch
