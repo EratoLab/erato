@@ -31,6 +31,14 @@ dev_entra_id:
     echo "Proxied local server with Entra ID auth will be available at http://localhost:4180"
     cd .. && pnpm run dev
 
+dev_nginx_jwt:
+    cd local-auth && docker compose -f docker-compose.nginx-jwt.yml up --force-recreate --detach
+    echo "Proxied local server with Nginx JWT auth will be available at http://localhost:4180"
+    echo "Usage: Add ?user=<username> to any URL to authenticate"
+    echo "Example: http://localhost:4180/?user=alice"
+    echo "To logout: Visit http://localhost:4180/logout"
+    pnpm run dev
+
 start:
     pnpm run start
 

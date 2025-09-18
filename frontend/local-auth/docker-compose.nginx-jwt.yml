@@ -1,0 +1,17 @@
+version: "3.7"
+
+services:
+  nginx-jwt-proxy:
+    image: nginx:1.25-alpine
+    ports:
+      - "4180:80"
+    volumes:
+      - ./nginx-jwt/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx-jwt/main.js:/etc/nginx/main.js
+    command: ["nginx", "-g", "daemon off;"]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
