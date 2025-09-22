@@ -18,6 +18,10 @@ pub struct Model {
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub generation_input_messages: Option<Json>,
     pub input_file_uploads: Option<Vec<Uuid>>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub generation_parameters: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub generation_metadata: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

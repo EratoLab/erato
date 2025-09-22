@@ -6,7 +6,7 @@ use crate::models::chat::{
 use crate::models::file_upload::get_file_upload_by_id;
 use crate::models::message::{
     get_generation_input_messages_by_previous_message_id, get_message_by_id, submit_message,
-    ContentPart, ContentPartText, GenerationInputMessages, MessageSchema,
+    ContentPart, ContentPartText, GenerationInputMessages, GenerationParameters, MessageSchema,
     ToolCallStatus as MessageToolCallStatus, ToolUse,
 };
 use crate::policy::engine::PolicyEngine;
@@ -536,6 +536,7 @@ async fn stream_save_user_message<
         None,
         None,
         input_files_ids,
+        None, // User messages don't have generation parameters
     )
     .await
     {
@@ -1277,6 +1278,13 @@ pub async fn message_submit_sse(
             "content": [], // Empty content
         });
 
+        // Determine the chat provider ID that will be used for generation
+        let chat_provider_id = app_state.config.determine_chat_provider(None, None)
+            .unwrap_or("unknown").to_string();
+        let generation_parameters = GenerationParameters {
+            generation_chat_provider_id: Some(chat_provider_id),
+        };
+
         let initial_assistant_message = match submit_message(
             &app_state.db,
             &policy,
@@ -1287,6 +1295,7 @@ pub async fn message_submit_sse(
             None,                         // No sibling for a new message
             Some(generation_input_messages.clone()), // Save generation inputs
             &[],                          // Assistant messages don't have input files themselves
+            Some(generation_parameters),  // Save generation parameters with chat provider ID
         )
         .await
         {
@@ -1457,6 +1466,13 @@ pub async fn regenerate_message_sse(
         // ---- SAVE INITIAL EMPTY ASSISTANT MESSAGE (for regeneration) ----
         let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
 
+        // Determine the chat provider ID that will be used for generation
+        let chat_provider_id = app_state.config.determine_chat_provider(None, None)
+            .unwrap_or("unknown").to_string();
+        let generation_parameters = GenerationParameters {
+            generation_chat_provider_id: Some(chat_provider_id),
+        };
+
         let initial_assistant_message = match submit_message(
             &app_state.db,
             &policy,
@@ -1467,6 +1483,7 @@ pub async fn regenerate_message_sse(
             Some(&request.current_message_id), // Sibling is the message being regenerated
             Some(generation_input_messages.clone()),
             &[],
+            Some(generation_parameters), // Save generation parameters with chat provider ID
         )
         .await
         {
@@ -1619,6 +1636,7 @@ pub async fn edit_message_sse(
             Some(&previous_message.id),
             None,
             &request.replace_input_files_ids,
+            None, // User messages don't have generation parameters
         )
         .await
         {
@@ -1675,6 +1693,14 @@ pub async fn edit_message_sse(
 
         // ---- SAVE INITIAL EMPTY ASSISTANT MESSAGE (for edit) ----
         let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
+
+        // Determine the chat provider ID that will be used for generation
+        let chat_provider_id = app_state.config.determine_chat_provider(None, None)
+            .unwrap_or("unknown").to_string();
+        let generation_parameters = GenerationParameters {
+            generation_chat_provider_id: Some(chat_provider_id),
+        };
+
         let initial_assistant_message = match submit_message(
             &app_state.db,
             &policy,
@@ -1685,6 +1711,7 @@ pub async fn edit_message_sse(
             Some(&request.message_id), // Sibling is the original assistant message being replaced
             Some(generation_input_messages.clone()),
             &[],
+            Some(generation_parameters), // Save generation parameters with chat provider ID
         )
         .await
         {

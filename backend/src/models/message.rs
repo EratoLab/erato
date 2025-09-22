@@ -13,6 +13,14 @@ use serde_json::{to_value, Value as JsonValue};
 use std::fmt;
 use utoipa::ToSchema;
 
+/// Parameters used for generating a message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenerationParameters {
+    /// The chat provider ID that was used to generate the message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generation_chat_provider_id: Option<String>,
+}
+
 /// Role of the message author
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -162,11 +170,14 @@ pub async fn submit_message(
     sibling_message_id: Option<&Uuid>,
     generation_input_messages: Option<GenerationInputMessages>,
     input_files_ids: &[Uuid],
+    generation_parameters: Option<GenerationParameters>,
 ) -> Result<messages::Model, Report> {
     // Validate the message format
     MessageSchema::validate(&raw_message)?;
     let generation_input_messages: Option<JsonValue> =
         generation_input_messages.map(to_value).transpose()?;
+    let generation_parameters_json: Option<JsonValue> =
+        generation_parameters.map(to_value).transpose()?;
 
     // Authorize that the subject can submit messages to this chat
     authorize!(
@@ -278,6 +289,7 @@ pub async fn submit_message(
         } else {
             Some(input_files_ids.to_vec())
         }),
+        generation_parameters: ActiveValue::Set(generation_parameters_json),
         ..Default::default()
     };
 
