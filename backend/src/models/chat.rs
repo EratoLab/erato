@@ -1,6 +1,8 @@
+use crate::db::entity::messages;
 use crate::db::entity_ext::chats;
 use crate::db::entity_ext::chats_latest_message;
 use crate::db::entity_ext::prelude::*;
+use crate::models::message::GenerationParameters;
 use crate::models::pagination;
 use crate::policy::prelude::*;
 use eyre::{eyre, Report};
@@ -102,6 +104,8 @@ pub struct RecentChat {
     /// Time of the last message in the chat.
     pub last_message_at: DateTimeWithTimeZone,
     pub archived_at: Option<DateTimeWithTimeZone>,
+    /// The chat provider ID used for the most recent message
+    pub last_chat_provider_id: Option<String>,
 }
 
 /// Statistics for a list of chats
@@ -182,24 +186,30 @@ pub async fn get_recent_chats(
         }
     }
 
-    let recent_chats = authorized_chats
-        .iter()
-        .map(|(chat, latest_message)| {
-            let latest_message = latest_message
-                .as_ref()
-                .expect("Latest message should never be None");
-            RecentChat {
-                id: chat.id.to_string(),
-                // Use the chat's title_by_summary if available, otherwise use a default
-                title_by_summary: chat
-                    .title_by_summary
-                    .clone()
-                    .unwrap_or_else(|| "Untitled Chat".to_string()),
-                last_message_at: latest_message.latest_message_at,
-                archived_at: chat.archived_at,
-            }
-        })
-        .collect::<Vec<RecentChat>>();
+    // Collect recent chats with last chat provider IDs
+    let mut recent_chats = Vec::new();
+    for (chat, latest_message) in authorized_chats.iter() {
+        let latest_message = latest_message
+            .as_ref()
+            .expect("Latest message should never be None");
+
+        // Get the last chat provider ID for this chat
+        let last_chat_provider_id = get_last_chat_provider_id(conn, &chat.id)
+            .await
+            .unwrap_or(None);
+
+        recent_chats.push(RecentChat {
+            id: chat.id.to_string(),
+            // Use the chat's title_by_summary if available, otherwise use a default
+            title_by_summary: chat
+                .title_by_summary
+                .clone()
+                .unwrap_or_else(|| "Untitled Chat".to_string()),
+            last_message_at: latest_message.latest_message_at,
+            archived_at: chat.archived_at,
+            last_chat_provider_id,
+        });
+    }
 
     // Create the statistics object
     let stats = ChatListStats {
@@ -300,4 +310,38 @@ pub async fn archive_chat(
     let updated_chat = chat_active.update(conn).await?;
 
     Ok(updated_chat)
+}
+
+/// Get the chat provider ID from the most recent active message in a chat.
+/// Returns None if no active messages found or if the message doesn't have generation parameters.
+pub async fn get_last_chat_provider_id(
+    conn: &DatabaseConnection,
+    chat_id: &Uuid,
+) -> Result<Option<String>, Report> {
+    // Find the most recent active message in the chat that has generation_parameters
+    let message = Messages::find()
+        .filter(messages::Column::ChatId.eq(*chat_id))
+        .filter(messages::Column::IsMessageInActiveThread.eq(true))
+        .filter(messages::Column::GenerationParameters.is_not_null())
+        .order_by_desc(messages::Column::CreatedAt)
+        .one(conn)
+        .await?;
+
+    if let Some(message) = message {
+        if let Some(generation_params_json) = message.generation_parameters {
+            // Parse the generation_parameters JSON
+            let generation_params: GenerationParameters =
+                serde_json::from_value(generation_params_json).map_err(|e| {
+                    eyre!(
+                        "Failed to parse generation parameters for message {}: {}",
+                        message.id,
+                        e
+                    )
+                })?;
+
+            return Ok(generation_params.generation_chat_provider_id);
+        }
+    }
+
+    Ok(None)
 }

@@ -405,6 +405,40 @@
         ]
       }
     },
+    "/api/v1beta/me/models": {
+      "get": {
+        "tags": [],
+        "summary": "Get available chat models for the user",
+        "description": "This endpoint returns all available chat models (providers) that the user can use.\nEach model includes the provider ID and display name.",
+        "operationId": "available_models",
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved available models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChatModel"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/profile": {
       "get": {
         "tags": [],
@@ -749,6 +783,24 @@
           }
         }
       },
+      "ChatModel": {
+        "type": "object",
+        "description": "A chat model available to the user",
+        "required": [
+          "chat_provider_id",
+          "model_display_name"
+        ],
+        "properties": {
+          "chat_provider_id": {
+            "type": "string",
+            "description": "The unique ID of the chat provider"
+          },
+          "model_display_name": {
+            "type": "string",
+            "description": "The display name of the model shown to users"
+          }
+        }
+      },
       "ContentPart": {
         "oneOf": [
           {
@@ -830,6 +882,14 @@
           "replace_user_message"
         ],
         "properties": {
+          "chat_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
+            "example": "primary"
+          },
           "message_id": {
             "type": "string",
             "format": "uuid",
@@ -1050,6 +1110,14 @@
           "user_message"
         ],
         "properties": {
+          "chat_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
+            "example": "primary"
+          },
           "existing_chat_id": {
             "type": [
               "string",
@@ -1467,10 +1535,28 @@
           "id": {
             "type": "string"
           },
+          "last_chat_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The chat provider ID used for the most recent message"
+          },
           "last_message_at": {
             "type": "string",
             "format": "date-time",
             "description": "Time of the last message in the chat."
+          },
+          "last_model": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ChatModel",
+                "description": "The model information for the most recent message, if available"
+              }
+            ]
           },
           "title_by_summary": {
             "type": "string",
@@ -1537,6 +1623,14 @@
           "current_message_id"
         ],
         "properties": {
+          "chat_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
+            "example": "primary"
+          },
           "current_message_id": {
             "type": "string",
             "format": "uuid",

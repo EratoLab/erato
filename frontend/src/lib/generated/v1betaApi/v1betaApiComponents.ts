@@ -653,6 +653,122 @@ export const useMessageSubmitSse = (
   });
 };
 
+export type AvailableModelsError = Fetcher.ErrorWrapper<undefined>;
+
+export type AvailableModelsResponse = Schemas.ChatModel[];
+
+export type AvailableModelsVariables = V1betaApiContext["fetcherOptions"];
+
+/**
+ * This endpoint returns all available chat models (providers) that the user can use.
+ * Each model includes the provider ID and display name.
+ */
+export const fetchAvailableModels = (
+  variables: AvailableModelsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    AvailableModelsResponse,
+    AvailableModelsError,
+    undefined,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/me/models", method: "get", ...variables, signal });
+
+/**
+ * This endpoint returns all available chat models (providers) that the user can use.
+ * Each model includes the provider ID and display name.
+ */
+export function availableModelsQuery(variables: AvailableModelsVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<AvailableModelsResponse>;
+};
+
+export function availableModelsQuery(
+  variables: AvailableModelsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<AvailableModelsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function availableModelsQuery(
+  variables: AvailableModelsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/models",
+      operationId: "availableModels",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchAvailableModels(variables, signal),
+  };
+}
+
+/**
+ * This endpoint returns all available chat models (providers) that the user can use.
+ * Each model includes the provider ID and display name.
+ */
+export const useSuspenseAvailableModels = <TData = AvailableModelsResponse,>(
+  variables: AvailableModelsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      AvailableModelsResponse,
+      AvailableModelsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    AvailableModelsResponse,
+    AvailableModelsError,
+    TData
+  >({
+    ...availableModelsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+/**
+ * This endpoint returns all available chat models (providers) that the user can use.
+ * Each model includes the provider ID and display name.
+ */
+export const useAvailableModels = <TData = AvailableModelsResponse,>(
+  variables: AvailableModelsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      AvailableModelsResponse,
+      AvailableModelsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    AvailableModelsResponse,
+    AvailableModelsError,
+    TData
+  >({
+    ...availableModelsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type ProfileError = Fetcher.ErrorWrapper<undefined>;
 
 export type ProfileVariables = V1betaApiContext["fetcherOptions"];
@@ -1073,6 +1189,11 @@ export type QueryOperation =
       path: "/api/v1beta/files/{fileId}";
       operationId: "getFile";
       variables: GetFileVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/models";
+      operationId: "availableModels";
+      variables: AvailableModelsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/profile";

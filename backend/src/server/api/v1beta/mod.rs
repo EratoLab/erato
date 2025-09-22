@@ -54,6 +54,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/recent_chats", get(recent_chats))
         .route("/chats", post(create_chat))
         .route("/files", post(upload_file))
+        .route("/models", get(available_models))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             me_profile_middleware::user_profile_middleware,
@@ -102,7 +103,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         create_chat,
         get_file,
         archive_chat_endpoint,
-        token_usage::token_usage_estimate
+        token_usage::token_usage_estimate,
+        available_models
     ),
     components(schemas(
         Message,
@@ -124,6 +126,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         CreateChatResponse,
         ArchiveChatRequest,
         ArchiveChatResponse,
+        ChatModel,
         token_usage::TokenUsageRequest,
         token_usage::TokenUsageStats,
         token_usage::TokenUsageResponseFileItem,
@@ -135,6 +138,15 @@ pub struct ApiV1ApiDoc;
 #[derive(Serialize, ToSchema)]
 struct NotFound {
     error: String,
+}
+
+/// A chat model available to the user
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ChatModel {
+    /// The unique ID of the chat provider
+    chat_provider_id: String,
+    /// The display name of the model shown to users
+    model_display_name: String,
 }
 
 pub async fn fallback() -> impl IntoResponse {
@@ -188,6 +200,10 @@ pub struct RecentChat {
     file_uploads: Vec<FileUploadItem>,
     /// When this chat was archived by the user.
     archived_at: Option<DateTime<FixedOffset>>,
+    /// The chat provider ID used for the most recent message
+    last_chat_provider_id: Option<String>,
+    /// The model information for the most recent message, if available
+    last_model: Option<ChatModel>,
 }
 
 /// A message in a chat
@@ -612,12 +628,29 @@ pub async fn recent_chats(
             })
             .collect();
 
+        // Get the last model information based on the last chat provider ID
+        let last_model = if let Some(ref provider_id) = chat.last_chat_provider_id {
+            // Check if this provider_id exists in the current available models
+            let available_models = app_state.available_models();
+            available_models
+                .into_iter()
+                .find(|(id, _)| id == provider_id)
+                .map(|(provider_id, display_name)| ChatModel {
+                    chat_provider_id: provider_id,
+                    model_display_name: display_name,
+                })
+        } else {
+            None
+        };
+
         api_chats.push(RecentChat {
             id: chat.id,
             title_by_summary: chat.title_by_summary,
             last_message_at: chat.last_message_at,
             file_uploads: file_upload_items,
             archived_at: chat.archived_at,
+            last_chat_provider_id: chat.last_chat_provider_id.clone(),
+            last_model,
         });
     }
 
@@ -822,4 +855,36 @@ pub async fn archive_chat_endpoint(
         chat_id: updated_chat.id.to_string(),
         archived_at,
     }))
+}
+
+/// Get available chat models for the user
+///
+/// This endpoint returns all available chat models (providers) that the user can use.
+/// Each model includes the provider ID and display name.
+#[utoipa::path(
+    get,
+    path = "/me/models",
+    responses(
+        (status = OK, body = Vec<ChatModel>, description = "Successfully retrieved available models"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn available_models(
+    State(app_state): State<AppState>,
+    Extension(_me_user): Extension<MeProfile>,
+) -> Result<Json<Vec<ChatModel>>, StatusCode> {
+    let models = app_state
+        .available_models()
+        .into_iter()
+        .map(|(provider_id, display_name)| ChatModel {
+            chat_provider_id: provider_id,
+            model_display_name: display_name,
+        })
+        .collect();
+
+    Ok(Json(models))
 }
