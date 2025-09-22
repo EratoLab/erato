@@ -82,9 +82,11 @@ This will be inejcted into the frontend as:
 window.FOO = "bar";
 ```
 
-### `chat_provider`
+### `chat_provider` (deprecated)
 
-Configuration for the chat provider (LLM) that Erato will use for generating responses.
+**⚠️ Deprecated:** Please use `chat_providers` instead for multiple provider support and better flexibility.
+
+Configuration for a single chat provider (LLM) that Erato will use for generating responses. This is maintained for backward compatibility but will be automatically migrated to the new `chat_providers` format.
 
 #### `chat_provider.provider_kind`
 
@@ -103,6 +105,14 @@ The name of the model to use with the chat provider.
 **Type:** `string`
 
 **Example:** `"gpt-4o"`
+
+#### `chat_provider.model_display_name`
+
+The display name for the model shown to users. If not provided, falls back to `model_name`.
+
+**Type:** `string | None`
+
+**Example:** `"GPT-4 Omni (Production)"`
 
 #### `chat_provider.base_url`
 
@@ -162,6 +172,91 @@ enabled = true
 base_url = "https://cloud.langfuse.com"
 public_key = "pk-lf-..."
 secret_key = "sk-lf-..."
+```
+
+### `chat_providers`
+
+Configuration for multiple chat providers with priority ordering. This is the recommended way to configure chat providers as it supports multiple providers, fallback mechanisms, and better flexibility.
+
+#### `chat_providers.priority_order`
+
+An ordered list of provider IDs that defines the priority for provider selection. The first provider in the list has the highest priority.
+
+**Type:** `array of strings`
+
+**Required:** Yes
+
+**Example:** `["primary", "backup", "local"]`
+
+#### `chat_providers.providers`
+
+A map of provider configurations, where each key is a unique provider ID and the value is a provider configuration object.
+
+**Type:** `object`
+
+**Required:** Yes
+
+**Example:**
+
+```toml
+[chat_providers]
+priority_order = ["primary", "backup"]
+
+[chat_providers.providers.primary]
+provider_kind = "openai"
+model_name = "gpt-4"
+model_display_name = "GPT-4 (Primary)"
+api_key = "sk-primary-key"
+
+[chat_providers.providers.backup]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+model_display_name = "GPT-3.5 Turbo (Backup)"
+api_key = "sk-backup-key"
+base_url = "https://api.backup-provider.com/v1/"
+```
+
+#### Provider Configuration Fields
+
+Each provider in `chat_providers.providers` supports the following fields:
+
+- **`provider_kind`** - The type of chat provider (`"openai"`, `"azure_openai"`, `"ollama"`)
+- **`model_name`** - The model identifier for the provider
+- **`model_display_name`** - Optional display name for the model (falls back to `model_name`)
+- **`api_key`** - Optional API key for authentication
+- **`base_url`** - Optional custom base URL for the provider API
+- **`system_prompt`** - Optional static system prompt
+- **`system_prompt_langfuse`** - Optional Langfuse prompt configuration (mutually exclusive with `system_prompt`)
+- **`additional_request_parameters`** - Optional array of additional request parameters
+- **`additional_request_headers`** - Optional array of additional request headers
+
+#### Migration from `chat_provider`
+
+If you're using the old `chat_provider` configuration, it will be automatically migrated to the new format:
+
+- The old provider will be given the ID `"default"`
+- The priority order will be set to `["default"]`
+- A deprecation warning will be logged
+
+**Before (deprecated):**
+
+```toml
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4"
+api_key = "sk-key"
+```
+
+**After (recommended):**
+
+```toml
+[chat_providers]
+priority_order = ["main"]
+
+[chat_providers.providers.main]
+provider_kind = "openai"
+model_name = "gpt-4"
+api_key = "sk-key"
 ```
 
 ### `integrations`

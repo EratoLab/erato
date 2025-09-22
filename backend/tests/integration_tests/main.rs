@@ -97,7 +97,11 @@ pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppS
 
     AppState {
         db: db.clone(),
-        genai_client: AppState::build_genai_client(app_config.chat_provider.clone()).unwrap(),
+        genai_client: {
+            let default_provider_id = app_config.determine_chat_provider(None, None).unwrap();
+            let default_provider = app_config.get_chat_provider(default_provider_id);
+            AppState::build_genai_client(default_provider.clone()).unwrap()
+        },
         default_file_storage_provider: None,
         file_storage_providers,
         mcp_servers: Arc::new(Default::default()),
