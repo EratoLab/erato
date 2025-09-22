@@ -19,7 +19,7 @@ pub struct AppConfig {
     // Defaults to `./public`
     pub frontend_bundle_path: String,
     pub database_url: String,
-    pub chat_provider: ChatProviderConfig,
+    pub chat_providers: Option<ChatProvidersConfig>,
     // A list of file storage providers to use.
     //
     // The keys of the map act as the IDs for the providers.
@@ -32,20 +32,6 @@ pub struct AppConfig {
     // A list of MCP servers that may be used in conjunction with the LLM providers.
     #[serde(default)]
     pub mcp_servers: HashMap<String, McpServerConfig>,
-
-    // **Deprecated**: Please use `integrations.sentry.sentry_dsn` instead.
-    //
-    // If present, will enable Sentry for error reporting.
-    #[deprecated(note = "Please use `integrations.sentry.sentry_dsn` instead.")]
-    pub sentry_dsn: Option<String>,
-
-    // **Deprecated**: Please use `frontend.additional_environment` instead.
-    //
-    // This is a dictionary where each value can be a string or a map (string key, string value).
-    // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
-    #[serde(default)]
-    #[deprecated(note = "Please use `frontend.additional_environment` instead.")]
-    pub additional_frontend_environment: Option<HashMap<String, serde_json::Value>>,
 
     #[serde(default)]
     pub frontend: FrontendConfig,
@@ -60,6 +46,21 @@ pub struct AppConfig {
     // Only has an effect if `cleanup_enabled` is `true`.
     // Defaults to 30.
     pub cleanup_archived_max_age_days: u32,
+
+    // **Deprecated**: Please use `chat_providers` instead for multiple provider support and better flexibility.
+    pub chat_provider: Option<ChatProviderConfig>,
+    // **Deprecated**: Please use `integrations.sentry.sentry_dsn` instead.
+    //
+    // If present, will enable Sentry for error reporting.
+    #[deprecated(note = "Please use `integrations.sentry.sentry_dsn` instead.")]
+    pub sentry_dsn: Option<String>,
+    // **Deprecated**: Please use `frontend.additional_environment` instead.
+    //
+    // This is a dictionary where each value can be a string or a map (string key, string value).
+    // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
+    #[serde(default)]
+    #[deprecated(note = "Please use `frontend.additional_environment` instead.")]
+    pub additional_frontend_environment: Option<HashMap<String, serde_json::Value>>,
 }
 
 impl AppConfig {
@@ -112,7 +113,8 @@ impl AppConfig {
                 .separator("__")
                 .list_separator(" ")
                 .with_list_parse_key("chat_provider.additional_request_parameters")
-                .with_list_parse_key("chat_provider.additional_request_headers"),
+                .with_list_parse_key("chat_provider.additional_request_headers")
+                .with_list_parse_key("chat_providers.priority_order"),
         );
         Ok(builder)
     }
@@ -164,24 +166,17 @@ impl AppConfig {
         }
         config.sentry_dsn = None;
 
-        // Migrate azure_openai to openai format
-        if config.chat_provider.provider_kind == "azure_openai" {
-            config.chat_provider = config
-                .chat_provider
-                .migrate_azure_openai_to_openai()
-                .unwrap_or_else(|e| {
-                    panic!("Failed to migrate azure_openai config: {}", e);
-                });
-        }
-
-        // Validate chat provider configuration
-        if let Err(e) = config.chat_provider.validate() {
-            panic!("Invalid chat provider configuration: {}", e);
-        }
-
         // Validate integrations configuration
         if let Err(e) = config.integrations.langfuse.validate() {
             panic!("Invalid Langfuse configuration: {}", e);
+        }
+
+        // Migrate single chat_provider to new chat_providers structure and handle Azure OpenAI migration
+        config = config.migrate_chat_providers();
+
+        // Validate chat providers configuration
+        if let Err(e) = config.validate_chat_providers() {
+            panic!("Invalid chat providers configuration: {}", e);
         }
 
         // Validate that Langfuse is configured if any chat provider uses it
@@ -190,6 +185,106 @@ impl AppConfig {
         }
 
         config
+    }
+
+    /// Migrates the old single chat_provider configuration to the new chat_providers structure.
+    /// Also handles Azure OpenAI to OpenAI migration for all providers.
+    pub fn migrate_chat_providers(mut self) -> Self {
+        if self.chat_providers.is_none() {
+            // Check if we have the old single chat_provider configured
+            if let Some(chat_provider) = &self.chat_provider {
+                tracing::warn!("Config key `chat_provider` is deprecated. Please use `chat_providers.providers.<provider_id>` and `chat_providers.priority_order` instead.");
+
+                let mut providers = HashMap::new();
+                providers.insert("default".to_string(), chat_provider.clone());
+
+                self.chat_providers = Some(ChatProvidersConfig {
+                    priority_order: vec!["default".to_string()],
+                    providers,
+                });
+
+                // Clear the old chat_provider after migration
+                self.chat_provider = None;
+            } else {
+                // No chat provider configured at all - this will be caught by validation later
+                tracing::error!("No chat provider configuration found. Please configure either `chat_provider` or `chat_providers`.");
+            }
+        }
+
+        // Migrate azure_openai to openai format for all providers in the new structure
+        if let Some(chat_providers) = &mut self.chat_providers {
+            for (provider_id, provider_config) in &mut chat_providers.providers {
+                if provider_config.provider_kind == "azure_openai" {
+                    match provider_config.clone().migrate_azure_openai_to_openai() {
+                        Ok(migrated_config) => {
+                            *provider_config = migrated_config;
+                        }
+                        Err(e) => {
+                            panic!(
+                                "Failed to migrate azure_openai config for provider '{}': {}",
+                                provider_id, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        self
+    }
+
+    /// Validates the chat providers configuration.
+    pub fn validate_chat_providers(&self) -> Result<(), eyre::Report> {
+        if let Some(chat_providers) = &self.chat_providers {
+            // Validate priority order is not empty
+            if chat_providers.priority_order.is_empty() {
+                return Err(eyre!(
+                    "Priority order cannot be empty when chat_providers is configured"
+                ));
+            }
+
+            // Validate that at least one provider is configured
+            if chat_providers.providers.is_empty() {
+                return Err(eyre!("At least one chat provider must be configured"));
+            }
+
+            // Warn if a provider_id in priority order is not configured
+            for provider_id in &chat_providers.priority_order {
+                if !chat_providers.providers.contains_key(provider_id) {
+                    tracing::warn!(
+                        "Provider '{}' in priority order is not configured in providers",
+                        provider_id
+                    );
+                }
+            }
+
+            // Warn if a configured provider is not in priority order
+            for provider_id in chat_providers.providers.keys() {
+                if !chat_providers.priority_order.contains(provider_id) {
+                    tracing::warn!(
+                        "Provider '{}' is configured but not in priority order",
+                        provider_id
+                    );
+                }
+            }
+
+            // Validate individual provider configurations
+            for (provider_id, provider_config) in &chat_providers.providers {
+                if let Err(e) = provider_config.validate() {
+                    return Err(eyre!(
+                        "Invalid configuration for provider '{}': {}",
+                        provider_id,
+                        e
+                    ));
+                }
+            }
+        } else {
+            // If no new chat_providers config, ensure we have at least the old single provider configured
+            if self.chat_provider.is_none() {
+                return Err(eyre!("No chat provider configuration found. Please configure either `chat_provider` or `chat_providers`."));
+            }
+        }
+        Ok(())
     }
 
     /// Returns the maximum configured file upload size in bytes, if any.
@@ -207,8 +302,18 @@ impl AppConfig {
 
     /// Returns the list of available chat providers, filtered by the optional allowlist.
     pub fn available_chat_providers(&self, chat_provider_allowlist: Option<&[&str]>) -> Vec<&str> {
-        // For now, only a single provider exists, but structure for future extension.
-        let all_providers = [self.chat_provider.provider_kind.as_str()];
+        let all_providers: Vec<&str> = if let Some(chat_providers) = &self.chat_providers {
+            chat_providers
+                .providers
+                .keys()
+                .map(|s| s.as_str())
+                .collect()
+        } else if let Some(chat_provider) = &self.chat_provider {
+            vec![chat_provider.provider_kind.as_str()]
+        } else {
+            vec![]
+        };
+
         let filtered: Vec<&str> = match chat_provider_allowlist {
             Some(allowlist) => {
                 let allowlist_set: std::collections::HashSet<&str> =
@@ -219,7 +324,7 @@ impl AppConfig {
                     .filter(|p| allowlist_set.contains(p))
                     .collect()
             }
-            None => all_providers.to_vec(),
+            None => all_providers,
         };
         tracing::debug!(?filtered, "Available chat providers after allowlist filter");
         filtered
@@ -232,16 +337,33 @@ impl AppConfig {
     /// * `requested_chat_provider` - Optional requested provider kind.
     ///
     /// # Returns
-    /// The chosen provider kind as a string slice, or an error if not allowed.
+    /// The chosen provider id as a string slice, or an error if not allowed.
     pub fn determine_chat_provider<'a>(
         &'a self,
         chat_provider_allowlist: Option<&[&str]>,
         requested_chat_provider: Option<&str>,
     ) -> Result<&'a str, eyre::Report> {
-        // For now, only a single provider exists, but structure for future extension.
-        let all_providers = [self.chat_provider.provider_kind.as_str()];
-        // Precedence order: just the only provider for now.
-        let precedence_order = [self.chat_provider.provider_kind.as_str()];
+        let (all_providers, precedence_order): (Vec<&str>, Vec<&str>) =
+            if let Some(chat_providers) = &self.chat_providers {
+                let all: Vec<&str> = chat_providers
+                    .providers
+                    .keys()
+                    .map(|s| s.as_str())
+                    .collect();
+                let precedence: Vec<&str> = chat_providers
+                    .priority_order
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect();
+                (all, precedence)
+            } else if self.chat_provider.is_some() {
+                // Fallback to single provider - use "default" as the provider ID for backward compatibility
+                let single = vec!["default"];
+                (single.clone(), single)
+            } else {
+                (vec![], vec![])
+            };
+
         let allowed: Vec<&'a str> = match chat_provider_allowlist {
             Some(allowlist) => {
                 let allowlist_set: std::collections::HashSet<&str> =
@@ -252,9 +374,10 @@ impl AppConfig {
                     .filter(|p| allowlist_set.contains(p))
                     .collect()
             }
-            None => all_providers.to_vec(),
+            None => all_providers,
         };
         tracing::debug!(?allowed, "Allowed chat providers after allowlist filter");
+
         if let Some(requested) = requested_chat_provider {
             tracing::debug!(requested, "Requested chat provider");
             // Return the matching &str from allowed (which is from self), not the input reference
@@ -290,16 +413,36 @@ impl AppConfig {
     }
 
     /// Returns the ChatProviderConfig for the given provider id.
-    /// For now, always returns the single chat_provider.
-    pub fn get_chat_provider(&self, _provider_id: &str) -> &ChatProviderConfig {
-        // In the future, this will look up by id. For now, always return the only provider.
-        &self.chat_provider
+    pub fn get_chat_provider(&self, provider_id: &str) -> &ChatProviderConfig {
+        if let Some(chat_providers) = &self.chat_providers {
+            chat_providers
+                .providers
+                .get(provider_id)
+                .unwrap_or_else(|| {
+                    panic!("Chat provider '{}' not found in configuration", provider_id)
+                })
+        } else if let Some(chat_provider) = &self.chat_provider {
+            // Fallback to single provider for backward compatibility
+            // In legacy mode, we accept any provider_id and return the single provider
+            chat_provider
+        } else {
+            panic!("No chat provider configuration found");
+        }
     }
 
     /// Returns true if any chat provider uses Langfuse for system prompts.
     pub fn any_chat_provider_uses_langfuse(&self) -> bool {
-        // For now, only check the single chat_provider. In the future, this will iterate over all providers.
-        self.chat_provider.uses_langfuse_system_prompt()
+        if let Some(chat_providers) = &self.chat_providers {
+            chat_providers
+                .providers
+                .values()
+                .any(|p| p.uses_langfuse_system_prompt())
+        } else if let Some(chat_provider) = &self.chat_provider {
+            // Fallback to single provider for backward compatibility
+            chat_provider.uses_langfuse_system_prompt()
+        } else {
+            false
+        }
     }
 
     /// Returns the Sentry DSN from either the new location (integrations.sentry.sentry_dsn)
@@ -314,6 +457,15 @@ impl AppConfig {
     }
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct ChatProvidersConfig {
+    // Priority order of chat providers to use.
+    // Each string should match a key in the providers map.
+    pub priority_order: Vec<String>,
+    // Map of provider_id to provider configuration.
+    pub providers: HashMap<String, ChatProviderConfig>,
+}
+
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
 pub struct ChatProviderConfig {
     // May be one of:
@@ -325,6 +477,9 @@ pub struct ChatProviderConfig {
     //
     // E.g. `gpt-4o`
     pub model_name: String,
+    // The display name for the model shown to users.
+    // Falls back to model_name if not provided.
+    pub model_display_name: Option<String>,
     // The base URL for OpenAI compatible API endpoints.
     // If not provided, will use the default for the provider.
     //
@@ -421,6 +576,7 @@ impl ChatProviderConfig {
         Ok(ChatProviderConfig {
             provider_kind: "openai".to_string(),
             model_name: self.model_name,
+            model_display_name: self.model_display_name,
             base_url,
             api_key: None,     // Moved to headers
             api_version: None, // Moved to parameters
@@ -452,6 +608,11 @@ impl ChatProviderConfig {
     /// Returns true if this chat provider uses Langfuse for system prompts.
     pub fn uses_langfuse_system_prompt(&self) -> bool {
         self.system_prompt_langfuse.is_some()
+    }
+
+    /// Returns the display name for the model, falling back to model_name if not set.
+    pub fn model_display_name(&self) -> &str {
+        self.model_display_name.as_ref().unwrap_or(&self.model_name)
     }
 }
 

@@ -810,7 +810,14 @@ async fn stream_generate_chat_completion<
                     turn_start_time,
                 ) {
                     let turn_end_time = SystemTime::now();
-                    let model_name = app_state.config.chat_provider.model_name.clone();
+                    let model_name = match app_state.config.determine_chat_provider(None, None) {
+                        Ok(provider_id) => app_state
+                            .config
+                            .get_chat_provider(provider_id)
+                            .model_name
+                            .clone(),
+                        Err(_) => "unknown".to_string(),
+                    };
 
                     // Generate a unique observation ID for this turn
                     let turn_obs_id = format!("{}_turn_{}", obs_id, current_turn);

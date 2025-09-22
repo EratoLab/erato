@@ -46,11 +46,15 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         .expect("Failed to deserialize config");
 
     // Verify that the chat provider configuration is parsed correctly
-    assert_eq!(config.chat_provider.provider_kind, "openai");
-    assert_eq!(config.chat_provider.model_name, "o4-mini");
-    assert_eq!(config.chat_provider.api_key, Some("sk-XXX".to_string()));
-    assert_eq!(config.chat_provider.base_url, None);
-    assert_eq!(config.chat_provider.system_prompt, None);
+    let chat_provider = config
+        .chat_provider
+        .as_ref()
+        .expect("chat_provider should be configured");
+    assert_eq!(chat_provider.provider_kind, "openai");
+    assert_eq!(chat_provider.model_name, "o4-mini");
+    assert_eq!(chat_provider.api_key, Some("sk-XXX".to_string()));
+    assert_eq!(chat_provider.base_url, None);
+    assert_eq!(chat_provider.system_prompt, None);
 
     // Verify defaults are still applied
     assert_eq!(config.environment, "development");
@@ -111,18 +115,19 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         .expect("Failed to deserialize config");
 
     // Verify that the chat provider configuration is parsed correctly
-    assert_eq!(config.chat_provider.provider_kind, "openai");
-    assert_eq!(config.chat_provider.model_name, "gpt-4");
+    let chat_provider = config
+        .chat_provider
+        .as_ref()
+        .expect("chat_provider should be configured");
+    assert_eq!(chat_provider.provider_kind, "openai");
+    assert_eq!(chat_provider.model_name, "gpt-4");
+    assert_eq!(chat_provider.api_key, Some("sk-test-key".to_string()));
     assert_eq!(
-        config.chat_provider.api_key,
-        Some("sk-test-key".to_string())
-    );
-    assert_eq!(
-        config.chat_provider.base_url,
+        chat_provider.base_url,
         Some("https://api.custom-openai.com/v1/".to_string())
     );
     assert_eq!(
-        config.chat_provider.system_prompt,
+        chat_provider.system_prompt,
         Some("You are a helpful assistant.".to_string())
     );
 
@@ -177,14 +182,325 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         .expect("Failed to deserialize config");
 
     // Verify that the chat provider configuration is parsed correctly
-    assert_eq!(config.chat_provider.provider_kind, "openai");
-    assert_eq!(config.chat_provider.model_name, "gpt-3.5-turbo");
-    assert_eq!(config.chat_provider.api_key, None);
-    assert_eq!(config.chat_provider.base_url, None);
+    let chat_provider = config
+        .chat_provider
+        .as_ref()
+        .expect("chat_provider should be configured");
+    assert_eq!(chat_provider.provider_kind, "openai");
+    assert_eq!(chat_provider.model_name, "gpt-3.5-turbo");
+    assert_eq!(chat_provider.api_key, None);
+    assert_eq!(chat_provider.base_url, None);
     assert_eq!(
         config.database_url,
         "postgres://user:pass@localhost:5432/test"
     );
+}
+
+#[test]
+fn test_config_with_multiple_chat_providers() {
+    // Test the new multiple chat providers configuration
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["primary", "secondary"]
+
+[chat_providers.providers.primary]
+provider_kind = "openai"
+model_name = "gpt-4"
+model_display_name = "GPT-4 (Primary)"
+api_key = "sk-primary-key"
+
+[chat_providers.providers.secondary]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+model_display_name = "GPT-3.5 Turbo (Backup)"
+api_key = "sk-secondary-key"
+base_url = "https://api.backup-openai.com/v1/"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+
+    // Flush the file to ensure content is written
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    // Get the path of the temporary file
+    let temp_path = temp_file.path().to_str().unwrap();
+
+    // Load configuration from the temporary file
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+
+    // Add required fields that don't have defaults
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    // Apply migration to process the configuration
+    config = config.migrate();
+
+    // Verify that the chat providers configuration is parsed correctly
+    assert!(config.chat_providers.is_some());
+    let chat_providers = config.chat_providers.as_ref().unwrap();
+
+    assert_eq!(chat_providers.priority_order, vec!["primary", "secondary"]);
+    assert_eq!(chat_providers.providers.len(), 2);
+
+    // Test primary provider
+    let primary = chat_providers.providers.get("primary").unwrap();
+    assert_eq!(primary.provider_kind, "openai");
+    assert_eq!(primary.model_name, "gpt-4");
+    assert_eq!(primary.model_display_name(), "GPT-4 (Primary)");
+    assert_eq!(primary.api_key, Some("sk-primary-key".to_string()));
+
+    // Test secondary provider
+    let secondary = chat_providers.providers.get("secondary").unwrap();
+    assert_eq!(secondary.provider_kind, "openai");
+    assert_eq!(secondary.model_name, "gpt-3.5-turbo");
+    assert_eq!(secondary.model_display_name(), "GPT-3.5 Turbo (Backup)");
+    assert_eq!(secondary.api_key, Some("sk-secondary-key".to_string()));
+    assert_eq!(
+        secondary.base_url,
+        Some("https://api.backup-openai.com/v1/".to_string())
+    );
+
+    // Test provider lookup methods
+    assert_eq!(
+        config.determine_chat_provider(None, None).unwrap(),
+        "primary"
+    );
+    assert_eq!(
+        config
+            .determine_chat_provider(None, Some("secondary"))
+            .unwrap(),
+        "secondary"
+    );
+
+    let primary_config = config.get_chat_provider("primary");
+    assert_eq!(primary_config.model_name, "gpt-4");
+
+    let secondary_config = config.get_chat_provider("secondary");
+    assert_eq!(secondary_config.model_name, "gpt-3.5-turbo");
+}
+
+#[test]
+fn test_config_migration_from_single_to_multiple_providers() {
+    // Test that the old single chat_provider configuration is migrated to the new structure
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4"
+model_display_name = "My GPT-4"
+api_key = "sk-test-key"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+
+    // Flush the file to ensure content is written
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    // Get the path of the temporary file
+    let temp_path = temp_file.path().to_str().unwrap();
+
+    // Load configuration from the temporary file
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+
+    // Add required fields that don't have defaults
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    // Before migration, chat_providers should be None
+    assert!(config.chat_providers.is_none());
+
+    // Apply migration
+    config = config.migrate();
+
+    // After migration, chat_providers should be populated
+    assert!(config.chat_providers.is_some());
+    let chat_providers = config.chat_providers.as_ref().unwrap();
+
+    assert_eq!(chat_providers.priority_order, vec!["default"]);
+    assert_eq!(chat_providers.providers.len(), 1);
+
+    let default_provider = chat_providers.providers.get("default").unwrap();
+    assert_eq!(default_provider.provider_kind, "openai");
+    assert_eq!(default_provider.model_name, "gpt-4");
+    assert_eq!(default_provider.model_display_name(), "My GPT-4");
+    assert_eq!(default_provider.api_key, Some("sk-test-key".to_string()));
+
+    // Test that the methods work correctly with migrated config
+    assert_eq!(
+        config.determine_chat_provider(None, None).unwrap(),
+        "default"
+    );
+    let provider_config = config.get_chat_provider("default");
+    assert_eq!(provider_config.model_name, "gpt-4");
+}
+
+#[test]
+fn test_config_azure_openai_migration_multiple_providers() {
+    // Test that Azure OpenAI migration works for multiple providers in the new structure
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["azure_primary", "azure_backup", "openai_provider"]
+
+[chat_providers.providers.azure_primary]
+provider_kind = "azure_openai"
+model_name = "gpt-4"
+model_display_name = "Azure GPT-4 Primary"
+base_url = "https://primary.api.cognitive.microsoft.com"
+api_key = "primary-azure-key"
+api_version = "2024-10-21"
+
+[chat_providers.providers.azure_backup]
+provider_kind = "azure_openai"
+model_name = "gpt-3.5-turbo"
+model_display_name = "Azure GPT-3.5 Backup"
+base_url = "https://backup.openai.azure.com"
+api_key = "backup-azure-key"
+api_version = "2024-08-01-preview"
+
+[chat_providers.providers.openai_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+model_display_name = "OpenAI GPT-4o"
+api_key = "openai-key"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+
+    // Flush the file to ensure content is written
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    // Get the path of the temporary file
+    let temp_path = temp_file.path().to_str().unwrap();
+
+    // Load configuration from the temporary file
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+
+    // Add required fields that don't have defaults
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    // Apply migration to process the configuration
+    config = config.migrate();
+
+    // Verify that the chat providers configuration is parsed correctly
+    assert!(config.chat_providers.is_some());
+    let chat_providers = config.chat_providers.as_ref().unwrap();
+
+    assert_eq!(
+        chat_providers.priority_order,
+        vec!["azure_primary", "azure_backup", "openai_provider"]
+    );
+    assert_eq!(chat_providers.providers.len(), 3);
+
+    // Test that Azure providers were migrated to OpenAI format
+    let azure_primary = chat_providers.providers.get("azure_primary").unwrap();
+    assert_eq!(azure_primary.provider_kind, "openai"); // Should be migrated to "openai"
+    assert_eq!(azure_primary.model_name, "gpt-4");
+    assert_eq!(azure_primary.model_display_name(), "Azure GPT-4 Primary");
+    assert_eq!(azure_primary.api_key, None); // Should be moved to headers
+    assert!(azure_primary
+        .base_url
+        .as_ref()
+        .unwrap()
+        .contains("/openai/deployments/gpt-4/")); // Should be converted to deployment URL
+    assert!(azure_primary
+        .additional_request_parameters
+        .as_ref()
+        .unwrap()
+        .contains(&"api-version=2024-10-21".to_string()));
+    assert!(azure_primary
+        .additional_request_headers
+        .as_ref()
+        .unwrap()
+        .contains(&"api-key=primary-azure-key".to_string()));
+
+    let azure_backup = chat_providers.providers.get("azure_backup").unwrap();
+    assert_eq!(azure_backup.provider_kind, "openai"); // Should be migrated to "openai"
+    assert_eq!(azure_backup.model_name, "gpt-3.5-turbo");
+    assert_eq!(azure_backup.model_display_name(), "Azure GPT-3.5 Backup");
+    assert_eq!(azure_backup.api_key, None); // Should be moved to headers
+    assert!(azure_backup
+        .base_url
+        .as_ref()
+        .unwrap()
+        .contains("/openai/deployments/gpt-3.5-turbo/")); // Should be converted to deployment URL
+    assert!(azure_backup
+        .additional_request_parameters
+        .as_ref()
+        .unwrap()
+        .contains(&"api-version=2024-08-01-preview".to_string()));
+    assert!(azure_backup
+        .additional_request_headers
+        .as_ref()
+        .unwrap()
+        .contains(&"api-key=backup-azure-key".to_string()));
+
+    // Test that regular OpenAI provider was not affected
+    let openai_provider = chat_providers.providers.get("openai_provider").unwrap();
+    assert_eq!(openai_provider.provider_kind, "openai");
+    assert_eq!(openai_provider.model_name, "gpt-4o");
+    assert_eq!(openai_provider.model_display_name(), "OpenAI GPT-4o");
+    assert_eq!(openai_provider.api_key, Some("openai-key".to_string()));
+    assert!(openai_provider.additional_request_parameters.is_none());
+    assert!(openai_provider.additional_request_headers.is_none());
+
+    // Test that the methods work correctly with migrated config
+    assert_eq!(
+        config.determine_chat_provider(None, None).unwrap(),
+        "azure_primary"
+    );
+    let primary_config = config.get_chat_provider("azure_primary");
+    assert_eq!(primary_config.model_name, "gpt-4");
 }
 
 #[test]
