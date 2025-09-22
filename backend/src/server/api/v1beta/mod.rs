@@ -141,7 +141,7 @@ struct NotFound {
 }
 
 /// A chat model available to the user
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ChatModel {
     /// The unique ID of the chat provider
     chat_provider_id: String,
@@ -200,6 +200,10 @@ pub struct RecentChat {
     file_uploads: Vec<FileUploadItem>,
     /// When this chat was archived by the user.
     archived_at: Option<DateTime<FixedOffset>>,
+    /// The chat provider ID used for the most recent message
+    last_chat_provider_id: Option<String>,
+    /// The model information for the most recent message, if available
+    last_model: Option<ChatModel>,
 }
 
 /// A message in a chat
@@ -624,12 +628,29 @@ pub async fn recent_chats(
             })
             .collect();
 
+        // Get the last model information based on the last chat provider ID
+        let last_model = if let Some(ref provider_id) = chat.last_chat_provider_id {
+            // Check if this provider_id exists in the current available models
+            let available_models = app_state.available_models();
+            available_models
+                .into_iter()
+                .find(|(id, _)| id == provider_id)
+                .map(|(provider_id, display_name)| ChatModel {
+                    chat_provider_id: provider_id,
+                    model_display_name: display_name,
+                })
+        } else {
+            None
+        };
+
         api_chats.push(RecentChat {
             id: chat.id,
             title_by_summary: chat.title_by_summary,
             last_message_at: chat.last_message_at,
             file_uploads: file_upload_items,
             archived_at: chat.archived_at,
+            last_chat_provider_id: chat.last_chat_provider_id.clone(),
+            last_model,
         });
     }
 

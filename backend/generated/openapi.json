@@ -1519,10 +1519,28 @@
           "id": {
             "type": "string"
           },
+          "last_chat_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The chat provider ID used for the most recent message"
+          },
           "last_message_at": {
             "type": "string",
             "format": "date-time",
             "description": "Time of the last message in the chat."
+          },
+          "last_model": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ChatModel",
+                "description": "The model information for the most recent message, if available"
+              }
+            ]
           },
           "title_by_summary": {
             "type": "string",
