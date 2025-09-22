@@ -405,6 +405,40 @@
         ]
       }
     },
+    "/api/v1beta/me/models": {
+      "get": {
+        "tags": [],
+        "summary": "Get available chat models for the user",
+        "description": "This endpoint returns all available chat models (providers) that the user can use.\nEach model includes the provider ID and display name.",
+        "operationId": "available_models",
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved available models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChatModel"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/profile": {
       "get": {
         "tags": [],
@@ -746,6 +780,24 @@
           "stats": {
             "$ref": "#/components/schemas/ChatMessageStats",
             "description": "Statistics about the message list"
+          }
+        }
+      },
+      "ChatModel": {
+        "type": "object",
+        "description": "A chat model available to the user",
+        "required": [
+          "chat_provider_id",
+          "model_display_name"
+        ],
+        "properties": {
+          "chat_provider_id": {
+            "type": "string",
+            "description": "The unique ID of the chat provider"
+          },
+          "model_display_name": {
+            "type": "string",
+            "description": "The display name of the model shown to users"
           }
         }
       },

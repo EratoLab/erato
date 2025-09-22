@@ -124,6 +124,20 @@ export type ChatMessagesResponse = {
   stats: ChatMessageStats;
 };
 
+/**
+ * A chat model available to the user
+ */
+export type ChatModel = {
+  /**
+   * The unique ID of the chat provider
+   */
+  chat_provider_id: string;
+  /**
+   * The display name of the model shown to users
+   */
+  model_display_name: string;
+};
+
 export type ContentPart =
   | (ContentPartText & {
       content_type: "text";
