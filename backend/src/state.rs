@@ -17,7 +17,6 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct AppState {
     pub db: DatabaseConnection,
-    pub genai_client: GenaiClient,
     pub default_file_storage_provider: Option<String>,
     pub file_storage_providers: HashMap<String, FileStorage>,
     pub mcp_servers: Arc<McpServers>,
@@ -30,16 +29,12 @@ impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let db = Database::connect(&config.database_url).await?;
         let file_storage_providers = Self::build_file_storage_providers(&config)?;
-        let default_chat_provider_id = config.determine_chat_provider(None, None)?;
-        let default_chat_provider = config.get_chat_provider(default_chat_provider_id);
-        let genai_client = Self::build_genai_client(default_chat_provider.clone())?;
         let mcp_servers = Arc::new(McpServers::new(&config).await?);
         let actor_manager = ActorManager::new(db.clone(), config.clone()).await;
         let langfuse_client = LangfuseClient::from_config(&config.integrations.langfuse)?;
 
         Ok(Self {
             db,
-            genai_client,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
             file_storage_providers,
             mcp_servers,
