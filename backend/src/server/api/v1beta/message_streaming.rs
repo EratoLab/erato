@@ -6,7 +6,8 @@ use crate::models::chat::{
 use crate::models::file_upload::get_file_upload_by_id;
 use crate::models::message::{
     get_generation_input_messages_by_previous_message_id, get_message_by_id, submit_message,
-    ContentPart, ContentPartText, GenerationInputMessages, MessageSchema,
+    update_message_generation_metadata, ContentPart, ContentPartText, GenerationInputMessages,
+    GenerationMetadata, GenerationParameters, MessageSchema,
     ToolCallStatus as MessageToolCallStatus, ToolUse,
 };
 use crate::policy::engine::PolicyEngine;
@@ -536,6 +537,8 @@ async fn stream_save_user_message<
         None,
         None,
         input_files_ids,
+        None, // User messages don't have generation parameters
+        None, // User messages don't have generation metadata
     )
     .await
     {
@@ -588,7 +591,8 @@ async fn prepare_chat_request(
     let mut chat_request = generation_input_messages.clone().into_chat_request();
     let chat_options = ChatOptions::default()
         .with_capture_content(true)
-        .with_capture_tool_calls(true);
+        .with_capture_tool_calls(true)
+        .with_capture_usage(true);
 
     let mcp_server_tools = app_state.mcp_servers.list_tools().await;
 
@@ -615,7 +619,7 @@ async fn stream_generate_chat_completion<
     assistant_message_id: Uuid,
     user_id: String,
     chat_id: Uuid,
-) -> Result<Vec<ContentPart>, ()> {
+) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
     // Initialize Langfuse tracing if enabled
     let langfuse_enabled = app_state.config.integrations.langfuse.enabled
         && app_state.config.integrations.langfuse.tracing_enabled;
@@ -643,6 +647,12 @@ async fn stream_generate_chat_completion<
 
     let mut current_message_content: Vec<ContentPart> = vec![];
     let mut current_turn_chat_request = chat_request.clone();
+
+    // Track cumulative usage statistics across all turns
+    let mut total_prompt_tokens = 0u32;
+    let mut total_completion_tokens = 0u32;
+    let mut total_total_tokens = 0u32;
+    let mut total_reasoning_tokens = 0u32;
 
     'loop_call_turns: loop {
         current_turn += 1;
@@ -802,6 +812,25 @@ async fn stream_generate_chat_completion<
                 }
             }
 
+            // Accumulate usage statistics from this turn
+            if let Some(usage) = stream_end.captured_usage.as_ref() {
+                if let Some(prompt_tokens) = usage.prompt_tokens {
+                    total_prompt_tokens += prompt_tokens as u32;
+                }
+                if let Some(completion_tokens) = usage.completion_tokens {
+                    total_completion_tokens += completion_tokens as u32;
+                }
+                if let Some(total_tokens) = usage.total_tokens {
+                    total_total_tokens += total_tokens as u32;
+                }
+                // Extract reasoning tokens from completion_tokens_details
+                if let Some(details) = &usage.completion_tokens_details {
+                    if let Some(reasoning_tokens) = details.reasoning_tokens {
+                        total_reasoning_tokens += reasoning_tokens as u32;
+                    }
+                }
+            }
+
             // Send Langfuse tracing for this turn if enabled
             if langfuse_enabled {
                 if let (Some(obs_id), Some(trace_id), Some(turn_start)) = (
@@ -935,10 +964,70 @@ async fn stream_generate_chat_completion<
                             .map(ToOwned::to_owned),
                     );
                 } else {
-                    break 'loop_call_turns Ok(current_message_content);
+                    // Create generation metadata from accumulated usage
+                    let generation_metadata = if total_prompt_tokens > 0
+                        || total_completion_tokens > 0
+                        || total_total_tokens > 0
+                    {
+                        Some(GenerationMetadata {
+                            used_prompt_tokens: if total_prompt_tokens > 0 {
+                                Some(total_prompt_tokens)
+                            } else {
+                                None
+                            },
+                            used_completion_tokens: if total_completion_tokens > 0 {
+                                Some(total_completion_tokens)
+                            } else {
+                                None
+                            },
+                            used_total_tokens: if total_total_tokens > 0 {
+                                Some(total_total_tokens)
+                            } else {
+                                None
+                            },
+                            used_reasoning_tokens: if total_reasoning_tokens > 0 {
+                                Some(total_reasoning_tokens)
+                            } else {
+                                None
+                            },
+                        })
+                    } else {
+                        None
+                    };
+                    break 'loop_call_turns Ok((current_message_content, generation_metadata));
                 }
             } else {
-                break 'loop_call_turns Ok(current_message_content);
+                // Create generation metadata from accumulated usage
+                let generation_metadata = if total_prompt_tokens > 0
+                    || total_completion_tokens > 0
+                    || total_total_tokens > 0
+                {
+                    Some(GenerationMetadata {
+                        used_prompt_tokens: if total_prompt_tokens > 0 {
+                            Some(total_prompt_tokens)
+                        } else {
+                            None
+                        },
+                        used_completion_tokens: if total_completion_tokens > 0 {
+                            Some(total_completion_tokens)
+                        } else {
+                            None
+                        },
+                        used_total_tokens: if total_total_tokens > 0 {
+                            Some(total_total_tokens)
+                        } else {
+                            None
+                        },
+                        used_reasoning_tokens: if total_reasoning_tokens > 0 {
+                            Some(total_reasoning_tokens)
+                        } else {
+                            None
+                        },
+                    })
+                } else {
+                    None
+                };
+                break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
         } else {
             // TODO: Send error that stream ended without sending stream_end event
@@ -1277,6 +1366,16 @@ pub async fn message_submit_sse(
             "content": [], // Empty content
         });
 
+        // Determine the chat provider ID that will be used for generation
+        let chat_provider_id = app_state
+            .config
+            .determine_chat_provider(None, None)
+            .unwrap_or("unknown")
+            .to_string();
+        let generation_parameters = GenerationParameters {
+            generation_chat_provider_id: Some(chat_provider_id),
+        };
+
         let initial_assistant_message = match submit_message(
             &app_state.db,
             &policy,
@@ -1287,6 +1386,8 @@ pub async fn message_submit_sse(
             None,                         // No sibling for a new message
             Some(generation_input_messages.clone()), // Save generation inputs
             &[],                          // Assistant messages don't have input files themselves
+            Some(generation_parameters),  // Save generation parameters with chat provider ID
+            None, // Generation metadata will be added later when stream completes
         )
         .await
         {
@@ -1310,22 +1411,39 @@ pub async fn message_submit_sse(
         }
         // ---- END EMIT AssistantMessageStarted ----
 
-        let end = stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
-            tx.clone(),
-            &app_state,
-            chat_request,
-            chat_options,
-            initial_assistant_message.id, // Pass assistant_message_id
-            me_user.0.id.clone(),         // Pass user_id
-            chat.id,                      // Pass chat_id
-        )
-        .await?;
+        let (end_content, generation_metadata) =
+            stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
+                tx.clone(),
+                &app_state,
+                chat_request,
+                chat_options,
+                initial_assistant_message.id, // Pass assistant_message_id
+                me_user.0.id.clone(),         // Pass user_id
+                chat.id,                      // Pass chat_id
+            )
+            .await?;
+
+        // Update the assistant message with generation metadata if available
+        if let Some(metadata) = generation_metadata {
+            if let Err(err) = update_message_generation_metadata(
+                &app_state.db,
+                &policy,
+                &me_user.to_subject(),
+                &initial_assistant_message.id,
+                metadata,
+            )
+            .await
+            {
+                tracing::warn!("Failed to update generation metadata: {}", err);
+                // Don't fail the entire request if metadata update fails
+            }
+        }
 
         stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
             tx.clone(),
             &app_state,
             &policy,
-            end,
+            end_content,
             &me_user,
             initial_assistant_message.id,
         )
@@ -1457,6 +1575,16 @@ pub async fn regenerate_message_sse(
         // ---- SAVE INITIAL EMPTY ASSISTANT MESSAGE (for regeneration) ----
         let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
 
+        // Determine the chat provider ID that will be used for generation
+        let chat_provider_id = app_state
+            .config
+            .determine_chat_provider(None, None)
+            .unwrap_or("unknown")
+            .to_string();
+        let generation_parameters = GenerationParameters {
+            generation_chat_provider_id: Some(chat_provider_id),
+        };
+
         let initial_assistant_message = match submit_message(
             &app_state.db,
             &policy,
@@ -1467,6 +1595,8 @@ pub async fn regenerate_message_sse(
             Some(&request.current_message_id), // Sibling is the message being regenerated
             Some(generation_input_messages.clone()),
             &[],
+            Some(generation_parameters), // Save generation parameters with chat provider ID
+            None, // Generation metadata will be added later when stream completes
         )
         .await
         {
@@ -1493,22 +1623,39 @@ pub async fn regenerate_message_sse(
         }
         // ---- END EMIT ----
 
-        let end = stream_generate_chat_completion::<RegenerateMessageStreamingResponseMessage>(
-            tx.clone(),
-            &app_state,
-            chat_request,
-            chat_options,
-            initial_assistant_message.id, // Pass assistant_message_id
-            me_user.0.id.clone(),         // Pass user_id
-            chat.id,                      // Pass chat_id
-        )
-        .await?;
+        let (end_content, generation_metadata) =
+            stream_generate_chat_completion::<RegenerateMessageStreamingResponseMessage>(
+                tx.clone(),
+                &app_state,
+                chat_request,
+                chat_options,
+                initial_assistant_message.id, // Pass assistant_message_id
+                me_user.0.id.clone(),         // Pass user_id
+                chat.id,                      // Pass chat_id
+            )
+            .await?;
+
+        // Update the assistant message with generation metadata if available
+        if let Some(metadata) = generation_metadata {
+            if let Err(err) = update_message_generation_metadata(
+                &app_state.db,
+                &policy,
+                &me_user.to_subject(),
+                &initial_assistant_message.id,
+                metadata,
+            )
+            .await
+            {
+                tracing::warn!("Failed to update generation metadata: {}", err);
+                // Don't fail the entire request if metadata update fails
+            }
+        }
 
         stream_update_assistant_message_completion::<RegenerateMessageStreamingResponseMessage>(
             tx.clone(),
             &app_state,
             &policy,
-            end,
+            end_content,
             &me_user,
             initial_assistant_message.id,
         )
@@ -1619,6 +1766,8 @@ pub async fn edit_message_sse(
             Some(&previous_message.id),
             None,
             &request.replace_input_files_ids,
+            None, // User messages don't have generation parameters
+            None, // User messages don't have generation metadata
         )
         .await
         {
@@ -1675,6 +1824,17 @@ pub async fn edit_message_sse(
 
         // ---- SAVE INITIAL EMPTY ASSISTANT MESSAGE (for edit) ----
         let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
+
+        // Determine the chat provider ID that will be used for generation
+        let chat_provider_id = app_state
+            .config
+            .determine_chat_provider(None, None)
+            .unwrap_or("unknown")
+            .to_string();
+        let generation_parameters = GenerationParameters {
+            generation_chat_provider_id: Some(chat_provider_id),
+        };
+
         let initial_assistant_message = match submit_message(
             &app_state.db,
             &policy,
@@ -1685,6 +1845,8 @@ pub async fn edit_message_sse(
             Some(&request.message_id), // Sibling is the original assistant message being replaced
             Some(generation_input_messages.clone()),
             &[],
+            Some(generation_parameters), // Save generation parameters with chat provider ID
+            None, // Generation metadata will be added later when stream completes
         )
         .await
         {
@@ -1708,22 +1870,39 @@ pub async fn edit_message_sse(
         }
         // ---- END EMIT ----
 
-        let end = stream_generate_chat_completion::<EditMessageStreamingResponseMessage>(
-            tx.clone(),
-            &app_state,
-            chat_request,
-            chat_options,
-            initial_assistant_message.id, // Pass assistant_message_id
-            me_user.0.id.clone(),         // Pass user_id
-            chat.id,                      // Pass chat_id
-        )
-        .await?;
+        let (end_content, generation_metadata) =
+            stream_generate_chat_completion::<EditMessageStreamingResponseMessage>(
+                tx.clone(),
+                &app_state,
+                chat_request,
+                chat_options,
+                initial_assistant_message.id, // Pass assistant_message_id
+                me_user.0.id.clone(),         // Pass user_id
+                chat.id,                      // Pass chat_id
+            )
+            .await?;
+
+        // Update the assistant message with generation metadata if available
+        if let Some(metadata) = generation_metadata {
+            if let Err(err) = update_message_generation_metadata(
+                &app_state.db,
+                &policy,
+                &me_user.to_subject(),
+                &initial_assistant_message.id,
+                metadata,
+            )
+            .await
+            {
+                tracing::warn!("Failed to update generation metadata: {}", err);
+                // Don't fail the entire request if metadata update fails
+            }
+        }
 
         stream_update_assistant_message_completion::<EditMessageStreamingResponseMessage>(
             tx.clone(),
             &app_state,
             &policy,
-            end,
+            end_content,
             &me_user,
             initial_assistant_message.id,
         )

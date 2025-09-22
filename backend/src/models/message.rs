@@ -13,6 +13,31 @@ use serde_json::{to_value, Value as JsonValue};
 use std::fmt;
 use utoipa::ToSchema;
 
+/// Parameters used for generating a message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenerationParameters {
+    /// The chat provider ID that was used to generate the message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generation_chat_provider_id: Option<String>,
+}
+
+/// Metadata about the generation process, including usage statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenerationMetadata {
+    /// Number of prompt tokens used during generation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub used_prompt_tokens: Option<u32>,
+    /// Number of completion tokens used during generation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub used_completion_tokens: Option<u32>,
+    /// Total number of tokens used during generation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub used_total_tokens: Option<u32>,
+    /// Number of reasoning tokens used during generation (e.g., for o1 models)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub used_reasoning_tokens: Option<u32>,
+}
+
 /// Role of the message author
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -162,11 +187,17 @@ pub async fn submit_message(
     sibling_message_id: Option<&Uuid>,
     generation_input_messages: Option<GenerationInputMessages>,
     input_files_ids: &[Uuid],
+    generation_parameters: Option<GenerationParameters>,
+    generation_metadata: Option<GenerationMetadata>,
 ) -> Result<messages::Model, Report> {
     // Validate the message format
     MessageSchema::validate(&raw_message)?;
     let generation_input_messages: Option<JsonValue> =
         generation_input_messages.map(to_value).transpose()?;
+    let generation_parameters_json: Option<JsonValue> =
+        generation_parameters.map(to_value).transpose()?;
+    let generation_metadata_json: Option<JsonValue> =
+        generation_metadata.map(to_value).transpose()?;
 
     // Authorize that the subject can submit messages to this chat
     authorize!(
@@ -278,6 +309,8 @@ pub async fn submit_message(
         } else {
             Some(input_files_ids.to_vec())
         }),
+        generation_parameters: ActiveValue::Set(generation_parameters_json),
+        generation_metadata: ActiveValue::Set(generation_metadata_json),
         ..Default::default()
     };
 
@@ -419,6 +452,51 @@ pub async fn update_message_content(
         .exec(conn)
         .await
         .map_err(|e| eyre!("Failed to update message content: {}", e))?;
+
+    // Re-fetch the message to return the updated model
+    let updated_message_model = Messages::find_by_id(*message_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Message with ID {} not found after update", message_id))?;
+
+    Ok(updated_message_model)
+}
+
+/// Update the generation metadata for a message.
+pub async fn update_message_generation_metadata(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    message_id: &Uuid,
+    generation_metadata: GenerationMetadata,
+) -> Result<messages::Model, Report> {
+    // Find the message to get its chat_id for authorization
+    let message = Messages::find_by_id(*message_id)
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Message with ID {} not found for update", message_id))?;
+
+    // Authorize that the subject can update this message (part of submitting to chat)
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(message.chat_id.to_string()),
+        Action::SubmitMessage
+    )?;
+
+    let generation_metadata_json = to_value(generation_metadata)?;
+
+    let active_model = messages::ActiveModel {
+        id: ActiveValue::Set(*message_id),
+        generation_metadata: ActiveValue::Set(Some(generation_metadata_json)),
+        ..Default::default() // Only update generation_metadata, preserve other fields
+    };
+
+    messages::Entity::update(active_model)
+        .filter(messages::Column::Id.eq(*message_id))
+        .exec(conn)
+        .await
+        .map_err(|e| eyre!("Failed to update message generation metadata: {}", e))?;
 
     // Re-fetch the message to return the updated model
     let updated_message_model = Messages::find_by_id(*message_id)
