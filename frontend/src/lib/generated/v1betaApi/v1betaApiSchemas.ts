@@ -167,6 +167,12 @@ export type CreateChatResponse = {
 
 export type EditMessageRequest = {
   /**
+   * The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
+   *
+   * @example primary
+   */
+  chat_provider_id?: null | string;
+  /**
    * The ID of the message that should be edited with a new response. It will be considered a sibling message to the new message.
    *
    * @format uuid
@@ -240,6 +246,12 @@ export type Message = {
 };
 
 export type MessageSubmitRequest = {
+  /**
+   * The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
+   *
+   * @example primary
+   */
+  chat_provider_id?: null | string;
   /**
    * The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
    * This is useful for scenarios where you have created a chat first (e.g. for file uploads) before sending the first message.
@@ -448,6 +460,12 @@ export type RecentChatsResponse = {
 };
 
 export type RegenerateMessageRequest = {
+  /**
+   * The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
+   *
+   * @example primary
+   */
+  chat_provider_id?: null | string;
   /**
    * The ID of the message that should have a replacement response generated.
    *

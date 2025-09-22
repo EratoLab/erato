@@ -164,6 +164,9 @@ pub struct MessageSubmitRequest {
     /// The files should normally only be provided with the first message they appear in the chat. After that they can assumed to be part of the chat history.
     #[serde(default)]
     input_files_ids: Vec<Uuid>,
+    #[schema(example = "primary")]
+    /// The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
+    chat_provider_id: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -266,6 +269,9 @@ pub struct RegenerateMessageRequest {
     #[schema(example = "00000000-0000-0000-0000-000000000000")]
     /// The ID of the message that should have a replacement response generated.
     current_message_id: Uuid,
+    #[schema(example = "primary")]
+    /// The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
+    chat_provider_id: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -358,6 +364,9 @@ pub struct EditMessageRequest {
     /// The IDs of any files that should replace the input files. These files must already be uploaded to the file_uploads table.
     #[serde(default)]
     replace_input_files_ids: Vec<Uuid>,
+    #[schema(example = "primary")]
+    /// The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
+    chat_provider_id: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -606,6 +615,7 @@ async fn prepare_chat_request(
     Ok((chat_request, chat_options, generation_input_messages))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn stream_generate_chat_completion<
     MSG: SendAsSseEvent
         + From<MessageSubmitStreamingResponseMessageTextDelta>
@@ -619,6 +629,7 @@ async fn stream_generate_chat_completion<
     assistant_message_id: Uuid,
     user_id: String,
     chat_id: Uuid,
+    chat_provider_id: Option<&str>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
     // Initialize Langfuse tracing if enabled
     let langfuse_enabled = app_state.config.integrations.langfuse.enabled
@@ -750,7 +761,7 @@ async fn stream_generate_chat_completion<
         }
 
         let chat_stream = match app_state
-            .genai_for_chatcompletion(None)
+            .genai_for_chatcompletion(chat_provider_id)
             .expect("Unable to choose chat provider")
             .exec_chat_stream(
                 "PLACEHOLDER_MODEL",
@@ -1367,13 +1378,22 @@ pub async fn message_submit_sse(
         });
 
         // Determine the chat provider ID that will be used for generation
+        // Use the user's allowlist to filter available providers
+        let chat_provider_allowlist = app_state.determine_chat_provider_allowlist_for_user();
+        let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
+            .as_ref()
+            .map(|list| list.iter().map(|s| s.as_str()).collect());
+
         let chat_provider_id = app_state
             .config
-            .determine_chat_provider(None, None)
+            .determine_chat_provider(
+                allowlist_refs.as_deref(),
+                request.chat_provider_id.as_deref(),
+            )
             .unwrap_or("unknown")
             .to_string();
         let generation_parameters = GenerationParameters {
-            generation_chat_provider_id: Some(chat_provider_id),
+            generation_chat_provider_id: Some(chat_provider_id.clone()),
         };
 
         let initial_assistant_message = match submit_message(
@@ -1420,6 +1440,7 @@ pub async fn message_submit_sse(
                 initial_assistant_message.id, // Pass assistant_message_id
                 me_user.0.id.clone(),         // Pass user_id
                 chat.id,                      // Pass chat_id
+                Some(chat_provider_id.as_str()), // Pass chat_provider_id
             )
             .await?;
 
@@ -1576,13 +1597,22 @@ pub async fn regenerate_message_sse(
         let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
 
         // Determine the chat provider ID that will be used for generation
+        // Use the user's allowlist to filter available providers
+        let chat_provider_allowlist = app_state.determine_chat_provider_allowlist_for_user();
+        let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
+            .as_ref()
+            .map(|list| list.iter().map(|s| s.as_str()).collect());
+
         let chat_provider_id = app_state
             .config
-            .determine_chat_provider(None, None)
+            .determine_chat_provider(
+                allowlist_refs.as_deref(),
+                request.chat_provider_id.as_deref(),
+            )
             .unwrap_or("unknown")
             .to_string();
         let generation_parameters = GenerationParameters {
-            generation_chat_provider_id: Some(chat_provider_id),
+            generation_chat_provider_id: Some(chat_provider_id.clone()),
         };
 
         let initial_assistant_message = match submit_message(
@@ -1632,6 +1662,7 @@ pub async fn regenerate_message_sse(
                 initial_assistant_message.id, // Pass assistant_message_id
                 me_user.0.id.clone(),         // Pass user_id
                 chat.id,                      // Pass chat_id
+                Some(chat_provider_id.as_str()), // Pass chat_provider_id
             )
             .await?;
 
@@ -1826,13 +1857,22 @@ pub async fn edit_message_sse(
         let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
 
         // Determine the chat provider ID that will be used for generation
+        // Use the user's allowlist to filter available providers
+        let chat_provider_allowlist = app_state.determine_chat_provider_allowlist_for_user();
+        let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
+            .as_ref()
+            .map(|list| list.iter().map(|s| s.as_str()).collect());
+
         let chat_provider_id = app_state
             .config
-            .determine_chat_provider(None, None)
+            .determine_chat_provider(
+                allowlist_refs.as_deref(),
+                request.chat_provider_id.as_deref(),
+            )
             .unwrap_or("unknown")
             .to_string();
         let generation_parameters = GenerationParameters {
-            generation_chat_provider_id: Some(chat_provider_id),
+            generation_chat_provider_id: Some(chat_provider_id.clone()),
         };
 
         let initial_assistant_message = match submit_message(
@@ -1879,6 +1919,7 @@ pub async fn edit_message_sse(
                 initial_assistant_message.id, // Pass assistant_message_id
                 me_user.0.id.clone(),         // Pass user_id
                 chat.id,                      // Pass chat_id
+                Some(chat_provider_id.as_str()), // Pass chat_provider_id
             )
             .await?;
 

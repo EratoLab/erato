@@ -882,6 +882,14 @@
           "replace_user_message"
         ],
         "properties": {
+          "chat_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
+            "example": "primary"
+          },
           "message_id": {
             "type": "string",
             "format": "uuid",
@@ -1102,6 +1110,14 @@
           "user_message"
         ],
         "properties": {
+          "chat_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
+            "example": "primary"
+          },
           "existing_chat_id": {
             "type": [
               "string",
@@ -1607,6 +1623,14 @@
           "current_message_id"
         ],
         "properties": {
+          "chat_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
+            "example": "primary"
+          },
           "current_message_id": {
             "type": "string",
             "format": "uuid",
