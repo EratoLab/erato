@@ -8,7 +8,8 @@
     "deploy/0006_add_chats_summary_and_archived.sql",
     "deploy/0007_add_file_uploads_table.sql",
     "deploy/0008_alter_messages_raw_message_structure_to_array.sql",
-    "deploy/0009_add_generation_paramters_generation_metadata_columns.sql"
+    "deploy/0009_add_generation_paramters_generation_metadata_columns.sql",
+    "deploy/0010_add_view_user_daily_token_usage.sql"
   ],
-  "latest_change": "42114be8eef3a97f956328ce2558425940f65cb7"
+  "latest_change": "fe51db7e79f54b8ba2ab69c1396a2980937c8837"
 }
