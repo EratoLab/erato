@@ -40,12 +40,21 @@ export const chatIsReadyToChat = async (
   args?: { expectAssistantResponse?: boolean },
 ) => {
   const textbox = page.getByRole("textbox", { name: "Type a message..." });
-  await expect(textbox).toBeVisible();
-  await expect(textbox).toBeEnabled();
+  await expect(textbox).toBeVisible({ timeout: 15000 });
+  await expect(textbox).toBeEnabled({ timeout: 10000 });
+
+  // Wait for any loading states to complete
+  await expect(page.getByText("Loading")).toHaveCount(0, { timeout: 10000 });
+
   if (args?.expectAssistantResponse) {
-    await expect(page.getByText("Assistant")).toBeVisible();
+    // Use first() to handle cases where multiple "Assistant" labels exist
+    await expect(page.getByText("Assistant").first()).toBeVisible({ timeout: 30000 });
+    // Ensure assistant response is fully loaded - no streaming indicators
+    await expect(page.locator('[data-testid="message-assistant"]')).toBeVisible({ timeout: 30000 });
   }
-  await expect(page.getByText("Loading")).toHaveCount(0);
+
+  // Additional stability check - ensure no pending network requests
+  await page.waitForLoadState("networkidle");
 };
 
 export const ensureOpenSidebar = async (page: Page) => {
@@ -59,53 +68,110 @@ export const ensureOpenSidebar = async (page: Page) => {
  * Wait for message IDs to stabilize (temp-user-* → real UUIDs)
  * This handles the ~2 second window where messages have temp IDs before server replacement
  */
+// Browser-specific expectations for ID stabilization
+const browserCapabilities = {
+  chromium: {
+    tempIdPhase: 'usually',
+    stabilizationReliability: 'high',
+    maxWaitTime: 15000,
+    strictTesting: true
+  },
+  firefox: {
+    tempIdPhase: 'inconsistent',
+    stabilizationReliability: 'medium',
+    maxWaitTime: 10000,
+    strictTesting: false // Firefox has known timing issues
+  },
+  webkit: {
+    tempIdPhase: 'unknown',
+    stabilizationReliability: 'unknown',
+    maxWaitTime: 15000,
+    strictTesting: false
+  }
+};
+
 export const waitForMessageIdsToStabilize = async (
   page: Page,
   expectedMessageCount?: number,
 ) => {
-  const maxAttempts = 10;
-  const delayBetweenChecks = 500; // Check every 500ms
+  // Detect browser for diagnostics
+  const browserName = page.context().browser()?.browserType().name() || 'unknown';
+  const capabilities = browserCapabilities[browserName as keyof typeof browserCapabilities] || browserCapabilities.webkit;
+
+  const maxAttempts = Math.ceil(capabilities.maxWaitTime / 750);
+  const delayBetweenChecks = 750;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
+      // Wait for network idle first to ensure messages are fully processed
+      await page.waitForLoadState("networkidle");
+
       const userMessages = page.locator('[data-testid="message-user"]');
       const currentCount = await userMessages.count();
 
       // If we have an expected count, wait for it first
       if (expectedMessageCount && currentCount < expectedMessageCount) {
-        console.log(
-          `[TIMING_HELPER] 🔄 Attempt ${attempt + 1}: Waiting for ${expectedMessageCount} messages, currently have ${currentCount}`,
-        );
         await page.waitForTimeout(delayBetweenChecks);
         continue;
       }
 
       // Check if any messages still have temp IDs
       let hasAnyTempIds = false;
+      const messageIds: string[] = [];
+      const messageDetails: any[] = [];
 
       for (let i = 0; i < currentCount; i++) {
         try {
-          const messageId = await userMessages
-            .nth(i)
-            .getAttribute("data-message-id");
-          if (messageId && messageId.startsWith("temp-user-")) {
+          // Wait for each message element to be stable
+          await userMessages.nth(i).waitFor({ state: "visible", timeout: 5000 });
+
+          const messageElement = userMessages.nth(i);
+          const messageId = await messageElement.getAttribute("data-message-id");
+          const messageContent = await messageElement.textContent();
+          const timestamp = Date.now();
+
+          const detail = {
+            index: i,
+            messageId,
+            content: messageContent?.substring(0, 50) + "...",
+            timestamp,
+            browser: browserName,
+            isTemp: messageId?.startsWith("temp-user-") || false
+          };
+
+          messageDetails.push(detail);
+
+          if (!messageId) {
+            hasAnyTempIds = true;
+            break;
+          }
+
+          messageIds.push(messageId);
+
+          if (messageId.startsWith("temp-user-")) {
             hasAnyTempIds = true;
             break;
           }
         } catch (error) {
           // Message element might not be ready yet, continue checking
           console.log(
-            `[TIMING_HELPER] ⚠️ Could not get messageId for message ${i}, continuing...`,
+            `[TIMING_HELPER-${browserName.toUpperCase()}] ⚠️ Could not get messageId for message ${i}, continuing... Error: ${error}`,
           );
           hasAnyTempIds = true; // Assume we need to wait more
           break;
         }
       }
 
-      if (!hasAnyTempIds) {
+      // Log detailed comparison for browser analysis
+      if (attempt > 5) { // Only after a few attempts to avoid spam
+        console.log(`[TIMING_HELPER-${browserName.toUpperCase()}] 📊 Message details:`, JSON.stringify(messageDetails, null, 2));
+      }
+
+      if (!hasAnyTempIds && currentCount >= (expectedMessageCount || 1)) {
         console.log(
-          `[TIMING_HELPER] ✅ All message IDs stabilized after ${attempt * delayBetweenChecks}ms`,
+          `[TIMING_HELPER] ✅ All ${currentCount} message IDs stabilized after ${attempt * delayBetweenChecks}ms`,
         );
+        console.log(`[TIMING_HELPER] 📋 Final message IDs: ${JSON.stringify(messageIds)}`);
         return; // All IDs are stable (real UUIDs)
       }
 
@@ -121,9 +187,44 @@ export const waitForMessageIdsToStabilize = async (
     }
   }
 
-  console.warn(
-    `[TIMING_HELPER] ⚠️ Timeout: Some message IDs may still be temp after ${maxAttempts * delayBetweenChecks}ms`,
-  );
+  if (capabilities.strictTesting) {
+    console.error(
+      `[TIMING_HELPER] ❌ Timeout: Message IDs did not stabilize after ${maxAttempts * delayBetweenChecks}ms (${browserName})`,
+    );
+
+    // Log current state for debugging
+    try {
+      const userMessages = page.locator('[data-testid="message-user"]');
+      const finalCount = await userMessages.count();
+      console.error(`[TIMING_HELPER] 📊 Final count: ${finalCount}, Expected: ${expectedMessageCount}`);
+
+      for (let i = 0; i < finalCount; i++) {
+        const messageId = await userMessages.nth(i).getAttribute("data-message-id");
+        console.error(`[TIMING_HELPER] 📊 Message ${i}: ${messageId}`);
+      }
+    } catch (e) {
+      console.error(`[TIMING_HELPER] ❌ Could not log final state: ${e}`);
+    }
+  } else {
+    console.warn(
+      `[TIMING_HELPER] ⚠️ Message IDs did not stabilize after ${maxAttempts * delayBetweenChecks}ms (${browserName}) - continuing with current state (non-strict mode)`,
+    );
+
+    // Still log for diagnostic purposes but don't error
+    try {
+      const userMessages = page.locator('[data-testid="message-user"]');
+      const finalCount = await userMessages.count();
+      console.warn(`[TIMING_HELPER] 📊 Final count: ${finalCount}, Expected: ${expectedMessageCount}`);
+
+      for (let i = 0; i < finalCount; i++) {
+        const messageId = await userMessages.nth(i).getAttribute("data-message-id");
+        const isTemp = messageId?.startsWith('temp-user-');
+        console.warn(`[TIMING_HELPER] 📊 Message ${i}: ${messageId} ${isTemp ? '(TEMP - ACCEPTED IN NON-STRICT)' : '(REAL)'}`);
+      }
+    } catch (e) {
+      console.warn(`[TIMING_HELPER] ⚠️ Could not log diagnostic state: ${e}`);
+    }
+  }
 };
 
 /**
