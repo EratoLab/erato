@@ -45,11 +45,36 @@ impl AppState {
     }
 
     pub fn chat_provider_for_summary(&self) -> Result<ChatProviderConfig, Report> {
-        let default_chat_provider_id = self.config.determine_chat_provider(None, None)?;
-        Ok(self
-            .config
-            .get_chat_provider(default_chat_provider_id)
-            .clone())
+        // Check if a specific summary chat provider is configured
+        let chat_provider_id = if let Some(ref chat_providers) = self.config.chat_providers {
+            if let Some(ref summary_provider_id) = chat_providers.summary.summary_chat_provider_id {
+                // Validate that the configured provider exists
+                if chat_providers.providers.contains_key(summary_provider_id) {
+                    summary_provider_id.as_str()
+                } else {
+                    return Err(eyre::eyre!(
+                        "Configured summary chat provider '{}' not found in providers",
+                        summary_provider_id
+                    ));
+                }
+            } else {
+                // Fall back to highest priority provider
+                self.config.determine_chat_provider(None, None)?
+            }
+        } else {
+            // Fall back to highest priority provider
+            self.config.determine_chat_provider(None, None)?
+        };
+
+        Ok(self.config.get_chat_provider(chat_provider_id).clone())
+    }
+
+    pub fn max_tokens_for_summary(&self) -> u32 {
+        self.config
+            .chat_providers
+            .as_ref()
+            .and_then(|cp| cp.summary.max_tokens)
+            .unwrap_or(300) // Default to current hardcoded value
     }
 
     pub fn genai_for_summary(&self) -> Result<GenaiClient, Report> {

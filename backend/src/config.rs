@@ -201,6 +201,7 @@ impl AppConfig {
                 self.chat_providers = Some(ChatProvidersConfig {
                     priority_order: vec!["default".to_string()],
                     providers,
+                    summary: SummaryConfig::default(),
                 });
 
                 // Clear the old chat_provider after migration
@@ -464,6 +465,19 @@ pub struct ChatProvidersConfig {
     pub priority_order: Vec<String>,
     // Map of provider_id to provider configuration.
     pub providers: HashMap<String, ChatProviderConfig>,
+    // Configuration for summary generation.
+    #[serde(default)]
+    pub summary: SummaryConfig,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+pub struct SummaryConfig {
+    // The chat provider ID to use for summary generation.
+    // If not specified, uses the highest priority chat provider.
+    pub summary_chat_provider_id: Option<String>,
+    // Maximum output tokens for summary generation.
+    // Defaults to 300 if not specified.
+    pub max_tokens: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]

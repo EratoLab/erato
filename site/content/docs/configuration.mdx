@@ -230,6 +230,71 @@ Each provider in `chat_providers.providers` supports the following fields:
 - **`additional_request_parameters`** - Optional array of additional request parameters
 - **`additional_request_headers`** - Optional array of additional request headers
 
+#### `chat_providers.summary`
+
+Configuration for chat summary generation. This allows you to specify which provider and settings to use when generating chat summaries.
+
+**Type:** `object | None`
+
+**Example:**
+
+```toml
+[chat_providers.summary]
+summary_chat_provider_id = "summarizer"
+max_tokens = 150
+```
+
+##### `chat_providers.summary.summary_chat_provider_id`
+
+The ID of the chat provider to use specifically for generating chat summaries. This provider must exist in the `chat_providers.providers` map.
+
+If not specified, Erato will use the highest priority provider from `priority_order` for summary generation.
+
+**Type:** `string | None`
+
+**Default value:** `None` (uses highest priority provider)
+
+**Example:** `"summarizer"`
+
+##### `chat_providers.summary.max_tokens`
+
+The maximum number of output tokens to allow when generating chat summaries. This helps control the length and cost of summary generation.
+
+**Type:** `number | None`
+
+**Default value:** `300`
+
+**Example:** `150`
+
+**Complete Example:**
+
+```toml
+[chat_providers]
+priority_order = ["main"]
+
+[chat_providers.summary]
+summary_chat_provider_id = "summarizer"
+max_tokens = 150
+
+[chat_providers.providers.main]
+provider_kind = "openai"
+model_name = "gpt-4"
+api_key = "sk-main-key"
+
+[chat_providers.providers.summarizer]
+provider_kind = "openai"
+model_name = "gpt-4o-mini"
+model_display_name = "GPT-4o Mini (Summarizer)"
+api_key = "sk-summarizer-key"
+```
+
+In this example:
+
+- Regular chat interactions use the "main" provider (GPT-4)
+- Chat summaries are generated using the "summarizer" provider (GPT-4o Mini)
+- Summary generation is limited to 150 output tokens
+- This allows using a faster, cheaper model for summaries while keeping a more powerful model for main interactions
+
 #### Migration from `chat_provider`
 
 If you're using the old `chat_provider` configuration, it will be automatically migrated to the new format:
