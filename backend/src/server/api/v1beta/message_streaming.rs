@@ -1120,10 +1120,11 @@ pub async fn generate_chat_summary(
 
     let mut chat_request: ChatRequest = Default::default();
     chat_request = chat_request.append_message(GenAiChatMessage::user(prompt));
+    let max_tokens = app_state.max_tokens_for_summary();
     let mut chat_options = ChatOptions::default()
         .with_capture_content(true)
         // NOTE: Desired tokens are more like ~30, but we have some buffer in case a reasoning model is used
-        .with_max_tokens(300);
+        .with_max_tokens(max_tokens);
 
     // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
     let chat_provider = app_state.chat_provider_for_summary()?;

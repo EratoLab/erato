@@ -825,3 +825,138 @@ sentry_dsn = "https://new-key@sentry.io/12345"
         Some(&"https://new-key@sentry.io/12345".to_string())
     );
 }
+
+#[test]
+fn test_config_with_summary_configuration() {
+    // Test the new summary configuration feature
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["primary", "summarizer"]
+
+[chat_providers.summary]
+summary_chat_provider_id = "summarizer"
+max_tokens = 150
+
+[chat_providers.providers.primary]
+provider_kind = "openai"
+model_name = "gpt-4"
+model_display_name = "GPT-4 (Primary)"
+api_key = "sk-primary-key"
+
+[chat_providers.providers.summarizer]
+provider_kind = "openai"
+model_name = "gpt-4o-mini"
+model_display_name = "GPT-4o Mini (Summarizer)"
+api_key = "sk-summarizer-key"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+
+    // Flush the file to ensure content is written
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    // Get the path of the temporary file
+    let temp_path = temp_file.path().to_str().unwrap();
+
+    // Load configuration from the temporary file
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+
+    // Add required fields that don't have defaults
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    // Apply migration to process the configuration
+    config = config.migrate();
+
+    // Verify that the chat providers configuration is parsed correctly
+    assert!(config.chat_providers.is_some());
+    let chat_providers = config.chat_providers.as_ref().unwrap();
+
+    // Test summary configuration
+    assert_eq!(
+        chat_providers.summary.summary_chat_provider_id,
+        Some("summarizer".to_string())
+    );
+    assert_eq!(chat_providers.summary.max_tokens, Some(150));
+
+    // Verify the summarizer provider exists
+    assert!(chat_providers.providers.contains_key("summarizer"));
+    let summarizer = chat_providers.providers.get("summarizer").unwrap();
+    assert_eq!(summarizer.model_name, "gpt-4o-mini");
+    assert_eq!(summarizer.model_display_name(), "GPT-4o Mini (Summarizer)");
+}
+
+#[test]
+fn test_config_with_default_summary_configuration() {
+    // Test that summary configuration defaults work correctly
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["primary"]
+
+[chat_providers.providers.primary]
+provider_kind = "openai"
+model_name = "gpt-4"
+model_display_name = "GPT-4 (Primary)"
+api_key = "sk-primary-key"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+
+    // Flush the file to ensure content is written
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    // Get the path of the temporary file
+    let temp_path = temp_file.path().to_str().unwrap();
+
+    // Load configuration from the temporary file
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+
+    // Add required fields that don't have defaults
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    // Apply migration to process the configuration
+    config = config.migrate();
+
+    // Verify that the chat providers configuration is parsed correctly
+    assert!(config.chat_providers.is_some());
+    let chat_providers = config.chat_providers.as_ref().unwrap();
+
+    // Test default summary configuration
+    assert_eq!(chat_providers.summary.summary_chat_provider_id, None);
+    assert_eq!(chat_providers.summary.max_tokens, None);
+}
