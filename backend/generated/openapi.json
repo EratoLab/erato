@@ -1764,6 +1764,14 @@
           "user_message"
         ],
         "properties": {
+          "chat_provider_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional chat provider ID to use for token estimation. If not provided, uses the default provider.",
+            "example": "gpt-4o"
+          },
           "existing_chat_id": {
             "type": [
               "string",
@@ -1852,9 +1860,14 @@
           "history_tokens",
           "file_tokens",
           "max_tokens",
-          "remaining_tokens"
+          "remaining_tokens",
+          "chat_provider_id"
         ],
         "properties": {
+          "chat_provider_id": {
+            "type": "string",
+            "description": "The chat provider ID that was used for this estimation"
+          },
           "file_tokens": {
             "type": "integer",
             "description": "Number of tokens in file contents",

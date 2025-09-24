@@ -4,7 +4,7 @@ use eyre::{eyre, OptionExt, Report};
 use serde::Deserialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Deserialize, PartialEq, Clone)]
 pub struct AppConfig {
     // A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
     // but is never parsed/interpreted by the application to trigger environment-specific behavior.
@@ -213,6 +213,7 @@ impl AppConfig {
         }
 
         // Migrate azure_openai to openai format for all providers in the new structure
+        // and apply default model capabilities
         if let Some(chat_providers) = &mut self.chat_providers {
             for (provider_id, provider_config) in &mut chat_providers.providers {
                 if provider_config.provider_kind == "azure_openai" {
@@ -458,7 +459,7 @@ impl AppConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct ChatProvidersConfig {
     // Priority order of chat providers to use.
     // Each string should match a key in the providers map.
@@ -480,7 +481,7 @@ pub struct SummaryConfig {
     pub max_tokens: Option<u32>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Deserialize, PartialEq, Clone)]
 pub struct ChatProviderConfig {
     // May be one of:
     // - "openai" (applicable for both OpenAI and AzureGPT)
@@ -519,6 +520,9 @@ pub struct ChatProviderConfig {
     // Optional Langfuse system prompt configuration.
     // Mutually exclusive with system_prompt.
     pub system_prompt_langfuse: Option<LangfuseSystemPromptConfig>,
+    // Model capabilities configuration for this chat provider.
+    #[serde(default)]
+    pub model_capabilities: ModelCapabilities,
 }
 
 impl ChatProviderConfig {
@@ -606,6 +610,7 @@ impl ChatProviderConfig {
             },
             system_prompt: self.system_prompt,
             system_prompt_langfuse: self.system_prompt_langfuse,
+            model_capabilities: self.model_capabilities,
         })
     }
 
@@ -787,6 +792,45 @@ pub struct LangfuseConfig {
 pub struct LangfuseSystemPromptConfig {
     // The name of the prompt in Langfuse prompt management.
     pub prompt_name: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct ModelCapabilities {
+    // Maximum number of tokens that may be provided to the model
+    #[serde(default = "default_context_size_tokens")]
+    pub context_size_tokens: usize,
+    // Whether the model supports being provided with images for understanding
+    #[serde(default)]
+    pub supports_image_understanding: bool,
+    // Whether the model supports reasoning mode
+    #[serde(default)]
+    pub supports_reasoning: bool,
+    // Whether the model supports providing a verbosity parameter (for future support of GPT-5-type models)
+    #[serde(default)]
+    pub supports_verbosity: bool,
+    // Price per 1 million input tokens (unit-less)
+    #[serde(default)]
+    pub cost_input_tokens_per_1m: f64,
+    // Price per 1 million output tokens (unit-less)
+    #[serde(default)]
+    pub cost_output_tokens_per_1m: f64,
+}
+
+fn default_context_size_tokens() -> usize {
+    1_000_000
+}
+
+impl Default for ModelCapabilities {
+    fn default() -> Self {
+        Self {
+            context_size_tokens: default_context_size_tokens(),
+            supports_image_understanding: false,
+            supports_reasoning: false,
+            supports_verbosity: false,
+            cost_input_tokens_per_1m: 0.0,
+            cost_output_tokens_per_1m: 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]

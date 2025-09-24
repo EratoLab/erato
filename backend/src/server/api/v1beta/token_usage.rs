@@ -11,8 +11,6 @@ use serde::{Deserialize, Serialize};
 use tiktoken_rs::o200k_base;
 use utoipa::ToSchema;
 
-const MAX_TOKENS: u32 = 10000;
-
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct TokenUsageRequest {
@@ -29,6 +27,9 @@ pub struct TokenUsageRequest {
     /// The IDs of any files attached to this message. These files must already be uploaded to the file_uploads table.
     #[serde(default)]
     input_files_ids: Vec<Uuid>,
+    #[schema(example = "gpt-4o")]
+    /// Optional chat provider ID to use for token estimation. If not provided, uses the default provider.
+    chat_provider_id: Option<String>,
 }
 
 /// Token usage statistics for the request
@@ -46,6 +47,8 @@ pub struct TokenUsageStats {
     max_tokens: u32,
     /// Remaining tokens available for the model response
     remaining_tokens: u32,
+    /// The chat provider ID that was used for this estimation
+    chat_provider_id: String,
 }
 
 /// Token usage details for an individual file
@@ -196,17 +199,51 @@ pub async fn token_usage_estimate(
     // Calculate the history tokens without the user message
     let history_tokens_without_user = history_tokens.saturating_sub(user_message_tokens);
 
+    // Get the chat provider configuration to determine max context tokens
+    let chat_provider_config =
+        match app_state.chat_provider_for_chatcompletion(request.chat_provider_id.as_deref()) {
+            Ok(config) => config,
+            Err(err) => {
+                return Err((
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get chat provider configuration: {}", err),
+                ));
+            }
+        };
+
+    // Determine which chat provider ID was actually used
+    let chat_provider_allowlist = app_state.determine_chat_provider_allowlist_for_user();
+    let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
+        .as_ref()
+        .map(|list| list.iter().map(|s| s.as_str()).collect());
+
+    let resolved_chat_provider_id = match app_state.config.determine_chat_provider(
+        allowlist_refs.as_deref(),
+        request.chat_provider_id.as_deref(),
+    ) {
+        Ok(id) => id.to_string(),
+        Err(err) => {
+            return Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to determine chat provider: {}", err),
+            ));
+        }
+    };
+
+    let max_context_tokens = chat_provider_config.model_capabilities.context_size_tokens as u32;
+
     // Calculate total and remaining tokens
     let total_tokens = history_tokens;
-    let remaining_tokens = MAX_TOKENS.saturating_sub(total_tokens as u32);
+    let remaining_tokens = max_context_tokens.saturating_sub(total_tokens as u32);
 
     let stats = TokenUsageStats {
         total_tokens,
         user_message_tokens,
         history_tokens: history_tokens_without_user,
         file_tokens: total_file_tokens,
-        max_tokens: MAX_TOKENS,
+        max_tokens: max_context_tokens,
         remaining_tokens,
+        chat_provider_id: resolved_chat_provider_id,
     };
 
     Ok(Json(TokenUsageResponse {
