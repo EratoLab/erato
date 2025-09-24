@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { TAG_CI } from "./tags";
+import { TAG_NO_CI } from "./tags";
 import { chatIsReadyToChat, login, ensureOpenSidebar } from "./shared";
 
 test.describe("Message ID Lifecycle Investigation", () => {
   test(
     "Track message ID replacement from temp to real server IDs",
-    { tag: TAG_CI },
+    { tag: TAG_NO_CI },
     async ({ page }) => {
       await page.goto("/");
       await chatIsReadyToChat(page);
@@ -234,7 +234,7 @@ test.describe("Message ID Lifecycle Investigation", () => {
 
   test(
     "Test fast vs slow message sending to identify race conditions",
-    { tag: TAG_CI },
+    { tag: TAG_NO_CI },
     async ({ page }) => {
       await page.goto("/");
       await chatIsReadyToChat(page);

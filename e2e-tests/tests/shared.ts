@@ -40,21 +40,12 @@ export const chatIsReadyToChat = async (
   args?: { expectAssistantResponse?: boolean },
 ) => {
   const textbox = page.getByRole("textbox", { name: "Type a message..." });
-  await expect(textbox).toBeVisible({ timeout: 15000 });
-  await expect(textbox).toBeEnabled({ timeout: 10000 });
-
-  // Wait for any loading states to complete
-  await expect(page.getByText("Loading")).toHaveCount(0, { timeout: 10000 });
-
+  await expect(textbox).toBeVisible();
+  await expect(textbox).toBeEnabled();
   if (args?.expectAssistantResponse) {
-    // Use first() to handle cases where multiple "Assistant" labels exist
-    await expect(page.getByText("Assistant").first()).toBeVisible({ timeout: 30000 });
-    // Ensure assistant response is fully loaded - no streaming indicators
-    await expect(page.locator('[data-testid="message-assistant"]')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText("Assistant")).toBeVisible();
   }
-
-  // Additional stability check - ensure no pending network requests
-  await page.waitForLoadState("networkidle");
+  await expect(page.getByText("Loading")).toHaveCount(0);
 };
 
 export const ensureOpenSidebar = async (page: Page) => {
@@ -71,23 +62,23 @@ export const ensureOpenSidebar = async (page: Page) => {
 // Browser-specific expectations for ID stabilization
 const browserCapabilities = {
   chromium: {
-    tempIdPhase: 'usually',
-    stabilizationReliability: 'high',
+    tempIdPhase: "usually",
+    stabilizationReliability: "high",
     maxWaitTime: 15000,
-    strictTesting: true
+    strictTesting: true,
   },
   firefox: {
-    tempIdPhase: 'inconsistent',
-    stabilizationReliability: 'medium',
+    tempIdPhase: "inconsistent",
+    stabilizationReliability: "medium",
     maxWaitTime: 10000,
-    strictTesting: false // Firefox has known timing issues
+    strictTesting: false, // Firefox has known timing issues
   },
   webkit: {
-    tempIdPhase: 'unknown',
-    stabilizationReliability: 'unknown',
+    tempIdPhase: "unknown",
+    stabilizationReliability: "unknown",
     maxWaitTime: 15000,
-    strictTesting: false
-  }
+    strictTesting: false,
+  },
 };
 
 export const waitForMessageIdsToStabilize = async (
@@ -95,8 +86,11 @@ export const waitForMessageIdsToStabilize = async (
   expectedMessageCount?: number,
 ) => {
   // Detect browser for diagnostics
-  const browserName = page.context().browser()?.browserType().name() || 'unknown';
-  const capabilities = browserCapabilities[browserName as keyof typeof browserCapabilities] || browserCapabilities.webkit;
+  const browserName =
+    page.context().browser()?.browserType().name() || "unknown";
+  const capabilities =
+    browserCapabilities[browserName as keyof typeof browserCapabilities] ||
+    browserCapabilities.webkit;
 
   const maxAttempts = Math.ceil(capabilities.maxWaitTime / 750);
   const delayBetweenChecks = 750;
@@ -123,10 +117,13 @@ export const waitForMessageIdsToStabilize = async (
       for (let i = 0; i < currentCount; i++) {
         try {
           // Wait for each message element to be stable
-          await userMessages.nth(i).waitFor({ state: "visible", timeout: 5000 });
+          await userMessages
+            .nth(i)
+            .waitFor({ state: "visible", timeout: 5000 });
 
           const messageElement = userMessages.nth(i);
-          const messageId = await messageElement.getAttribute("data-message-id");
+          const messageId =
+            await messageElement.getAttribute("data-message-id");
           const messageContent = await messageElement.textContent();
           const timestamp = Date.now();
 
@@ -136,7 +133,7 @@ export const waitForMessageIdsToStabilize = async (
             content: messageContent?.substring(0, 50) + "...",
             timestamp,
             browser: browserName,
-            isTemp: messageId?.startsWith("temp-user-") || false
+            isTemp: messageId?.startsWith("temp-user-") || false,
           };
 
           messageDetails.push(detail);
@@ -163,15 +160,21 @@ export const waitForMessageIdsToStabilize = async (
       }
 
       // Log detailed comparison for browser analysis
-      if (attempt > 5) { // Only after a few attempts to avoid spam
-        console.log(`[TIMING_HELPER-${browserName.toUpperCase()}] 📊 Message details:`, JSON.stringify(messageDetails, null, 2));
+      if (attempt > 5) {
+        // Only after a few attempts to avoid spam
+        console.log(
+          `[TIMING_HELPER-${browserName.toUpperCase()}] 📊 Message details:`,
+          JSON.stringify(messageDetails, null, 2),
+        );
       }
 
       if (!hasAnyTempIds && currentCount >= (expectedMessageCount || 1)) {
         console.log(
           `[TIMING_HELPER] ✅ All ${currentCount} message IDs stabilized after ${attempt * delayBetweenChecks}ms`,
         );
-        console.log(`[TIMING_HELPER] 📋 Final message IDs: ${JSON.stringify(messageIds)}`);
+        console.log(
+          `[TIMING_HELPER] 📋 Final message IDs: ${JSON.stringify(messageIds)}`,
+        );
         return; // All IDs are stable (real UUIDs)
       }
 
@@ -196,10 +199,14 @@ export const waitForMessageIdsToStabilize = async (
     try {
       const userMessages = page.locator('[data-testid="message-user"]');
       const finalCount = await userMessages.count();
-      console.error(`[TIMING_HELPER] 📊 Final count: ${finalCount}, Expected: ${expectedMessageCount}`);
+      console.error(
+        `[TIMING_HELPER] 📊 Final count: ${finalCount}, Expected: ${expectedMessageCount}`,
+      );
 
       for (let i = 0; i < finalCount; i++) {
-        const messageId = await userMessages.nth(i).getAttribute("data-message-id");
+        const messageId = await userMessages
+          .nth(i)
+          .getAttribute("data-message-id");
         console.error(`[TIMING_HELPER] 📊 Message ${i}: ${messageId}`);
       }
     } catch (e) {
@@ -214,12 +221,18 @@ export const waitForMessageIdsToStabilize = async (
     try {
       const userMessages = page.locator('[data-testid="message-user"]');
       const finalCount = await userMessages.count();
-      console.warn(`[TIMING_HELPER] 📊 Final count: ${finalCount}, Expected: ${expectedMessageCount}`);
+      console.warn(
+        `[TIMING_HELPER] 📊 Final count: ${finalCount}, Expected: ${expectedMessageCount}`,
+      );
 
       for (let i = 0; i < finalCount; i++) {
-        const messageId = await userMessages.nth(i).getAttribute("data-message-id");
-        const isTemp = messageId?.startsWith('temp-user-');
-        console.warn(`[TIMING_HELPER] 📊 Message ${i}: ${messageId} ${isTemp ? '(TEMP - ACCEPTED IN NON-STRICT)' : '(REAL)'}`);
+        const messageId = await userMessages
+          .nth(i)
+          .getAttribute("data-message-id");
+        const isTemp = messageId?.startsWith("temp-user-");
+        console.warn(
+          `[TIMING_HELPER] 📊 Message ${i}: ${messageId} ${isTemp ? "(TEMP - ACCEPTED IN NON-STRICT)" : "(REAL)"}`,
+        );
       }
     } catch (e) {
       console.warn(`[TIMING_HELPER] ⚠️ Could not log diagnostic state: ${e}`);

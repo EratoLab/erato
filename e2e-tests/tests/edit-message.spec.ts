@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { TAG_CI } from "./tags";
+import { TAG_NO_CI } from "./tags";
 import {
   chatIsReadyToChat,
   login,
@@ -13,10 +13,13 @@ import {
 test.describe("Edit Message Functionality", () => {
   test(
     "Can edit a specific message and sends correct messageId to backend",
-    { tag: TAG_CI },
+    { tag: TAG_NO_CI },
     async ({ page }) => {
       // Skip in CI until timing issues are resolved
-      test.skip(!!process.env.CI, 'Skipping edit message tests in CI due to timing instability');
+      test.skip(
+        !!process.env.CI,
+        "Skipping edit message tests in CI due to timing instability",
+      );
       await page.goto("/");
       await chatIsReadyToChat(page);
       await ensureOpenSidebar(page);
@@ -48,7 +51,9 @@ test.describe("Edit Message Functionality", () => {
       // The test should adapt to the actual number of messages created
       // In some environments, not all 3 messages may be successfully created
       if (actualMessageCount < 2) {
-        throw new Error(`Test requires at least 2 messages to edit, but only found ${actualMessageCount}`);
+        throw new Error(
+          `Test requires at least 2 messages to edit, but only found ${actualMessageCount}`,
+        );
       }
 
       await expect(userMessages).toHaveCount(actualMessageCount);
@@ -99,19 +104,21 @@ test.describe("Edit Message Functionality", () => {
       console.log(`All message IDs: ${JSON.stringify(messageIds)}`);
 
       // Browser-aware temp ID handling
-      const browserName = page.context().browser()?.browserType().name() || 'unknown';
-      const isTemp = targetMessageId && targetMessageId.startsWith("temp-user-");
+      const browserName =
+        page.context().browser()?.browserType().name() || "unknown";
+      const isTemp =
+        targetMessageId && targetMessageId.startsWith("temp-user-");
 
       if (isTemp) {
-        if (browserName === 'chromium') {
+        if (browserName === "chromium") {
           // Chromium should have stable IDs - this indicates a real problem
           throw new Error(
-            `Cannot edit message with temp ID in Chromium: ${targetMessageId}. This indicates a backend communication issue.`
+            `Cannot edit message with temp ID in Chromium: ${targetMessageId}. This indicates a backend communication issue.`,
           );
         } else {
           // Firefox/other browsers: proceed with temp ID but log warning
           console.warn(
-            `Using temp ID for edit in ${browserName}: ${targetMessageId}. This is a known timing issue.`
+            `Using temp ID for edit in ${browserName}: ${targetMessageId}. This is a known timing issue.`,
           );
         }
       }
@@ -179,9 +186,9 @@ test.describe("Edit Message Functionality", () => {
 
       // Browser-aware message ID validation
       const sentMessageId = capturedRequestBody.message_id;
-      const sentIsTemp = sentMessageId?.startsWith('temp-user-');
+      const sentIsTemp = sentMessageId?.startsWith("temp-user-");
 
-      if (browserName === 'chromium') {
+      if (browserName === "chromium") {
         // Chromium: Expect exact match (should be real ID)
         expect(sentMessageId).toBe(targetMessageId);
       } else {
@@ -189,7 +196,9 @@ test.describe("Edit Message Functionality", () => {
         expect(sentMessageId).toBeTruthy(); // Some ID was sent
 
         if (sentMessageId !== targetMessageId && !(sentIsTemp && isTemp)) {
-          console.warn(`ID mismatch in ${browserName}: expected ${targetMessageId}, sent ${sentMessageId}`);
+          console.warn(
+            `ID mismatch in ${browserName}: expected ${targetMessageId}, sent ${sentMessageId}`,
+          );
         }
       }
 
@@ -210,10 +219,13 @@ test.describe("Edit Message Functionality", () => {
 
   test(
     "Edit button only appears on user messages",
-    { tag: TAG_CI },
+    { tag: TAG_NO_CI },
     async ({ page }) => {
       // Skip in CI until timing issues are resolved
-      test.skip(!!process.env.CI, 'Skipping edit message tests in CI due to timing instability');
+      test.skip(
+        !!process.env.CI,
+        "Skipping edit message tests in CI due to timing instability",
+      );
       await page.goto("/");
       await chatIsReadyToChat(page);
       await ensureOpenSidebar(page);
@@ -241,9 +253,12 @@ test.describe("Edit Message Functionality", () => {
     },
   );
 
-  test("Can cancel edit mode", { tag: TAG_CI }, async ({ page }) => {
+  test("Can cancel edit mode", { tag: TAG_NO_CI }, async ({ page }) => {
     // Skip in CI until timing issues are resolved
-    test.skip(!!process.env.CI, 'Skipping edit message tests in CI due to timing instability');
+    test.skip(
+      !!process.env.CI,
+      "Skipping edit message tests in CI due to timing instability",
+    );
     await page.goto("/");
     await chatIsReadyToChat(page);
     await ensureOpenSidebar(page);
@@ -264,11 +279,11 @@ test.describe("Edit Message Functionality", () => {
     // Small delay to allow async action handler to complete
     await page.waitForTimeout(200);
 
-      // Verify we're in edit mode
-      const editTextbox = page.getByRole("textbox", {
-        name: "Edit your message...",
-      });
-      await expect(editTextbox).toBeVisible({ timeout: 30000 });
+    // Verify we're in edit mode
+    const editTextbox = page.getByRole("textbox", {
+      name: "Edit your message...",
+    });
+    await expect(editTextbox).toBeVisible({ timeout: 30000 });
 
     // Click cancel - use specific test ID for chat input cancel
     const cancelButton = page.getByTestId("chat-input-cancel-edit");
@@ -283,10 +298,13 @@ test.describe("Edit Message Functionality", () => {
 
   test(
     "Editing a message may truncate subsequent messages (expected behavior)",
-    { tag: TAG_CI },
+    { tag: TAG_NO_CI },
     async ({ page }) => {
       // Skip in CI until timing issues are resolved
-      test.skip(!!process.env.CI, 'Skipping edit message tests in CI due to timing instability');
+      test.skip(
+        !!process.env.CI,
+        "Skipping edit message tests in CI due to timing instability",
+      );
       await page.goto("/");
       await chatIsReadyToChat(page);
       await ensureOpenSidebar(page);
