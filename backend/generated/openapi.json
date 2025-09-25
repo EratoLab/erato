@@ -1514,7 +1514,8 @@
           "id",
           "title_by_summary",
           "last_message_at",
-          "file_uploads"
+          "file_uploads",
+          "can_edit"
         ],
         "properties": {
           "archived_at": {
@@ -1524,6 +1525,10 @@
             ],
             "format": "date-time",
             "description": "When this chat was archived by the user."
+          },
+          "can_edit": {
+            "type": "boolean",
+            "description": "Whether the current user can edit this chat (e.g., edit messages)\n\nNOTE: Currently this is true only for the chat owner. In the future,\nthis may include collaborators/roles/policy-based permissions."
           },
           "file_uploads": {
             "type": "array",

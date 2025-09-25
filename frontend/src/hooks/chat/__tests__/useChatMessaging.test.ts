@@ -435,6 +435,7 @@ describe("useChatMessaging", () => {
       sender: "user",
       authorId: "user_id",
       toolCalls: undefined,
+      is_message_in_active_thread: true,
     });
 
     expect(result.current.messages[secondMessageId]).toEqual({
@@ -448,6 +449,7 @@ describe("useChatMessaging", () => {
       sender: "assistant",
       authorId: "assistant_id",
       toolCalls: undefined,
+      is_message_in_active_thread: true,
     });
   });
 

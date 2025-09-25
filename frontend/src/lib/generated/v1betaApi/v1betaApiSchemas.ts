@@ -395,6 +395,13 @@ export type RecentChat = {
    */
   archived_at?: null | undefined;
   /**
+   * Whether the current user can edit this chat (e.g., edit messages)
+   *
+   * NOTE: Currently this is true only for the chat owner. In the future,
+   * this may include collaborators/roles/policy-based permissions.
+   */
+  can_edit: boolean;
+  /**
    * Files uploaded to this chat
    */
   file_uploads: FileUploadItem[];
@@ -604,7 +611,7 @@ export type ToolCallStatus = "in_progress" | "success" | "error";
 export type ToolUse = {
   input?: null | Value;
   output?: null | Value;
-  progress_message?: string;
+  progress_message?: null | undefined;
   status: ToolCallStatus;
   tool_call_id: string;
   tool_name: string;

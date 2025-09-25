@@ -110,6 +110,7 @@ export class MockDataGenerator {
         overrides?.title_by_summary ?? faker.company.catchPhrase(),
       last_message_at: overrides?.last_message_at ?? new Date().toISOString(),
       file_uploads: overrides?.file_uploads ?? [],
+      can_edit: overrides?.can_edit ?? true,
     };
   }
 

@@ -25,6 +25,8 @@ export interface MessageControlsContext {
   currentUserId?: string;
   dialogOwnerId?: string;
   isSharedDialog?: boolean;
+  // Whether the current user can edit messages in this chat (coarse chat-level permission)
+  canEdit?: boolean;
 }
 
 /**
