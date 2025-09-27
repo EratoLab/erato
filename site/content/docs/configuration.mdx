@@ -208,12 +208,24 @@ model_name = "gpt-4"
 model_display_name = "GPT-4 (Primary)"
 api_key = "sk-primary-key"
 
+[chat_providers.providers.primary.model_capabilities]
+context_size_tokens = 8192
+supports_image_understanding = false
+cost_input_tokens_per_1m = 30.0
+cost_output_tokens_per_1m = 60.0
+
 [chat_providers.providers.backup]
 provider_kind = "openai"
 model_name = "gpt-3.5-turbo"
 model_display_name = "GPT-3.5 Turbo (Backup)"
 api_key = "sk-backup-key"
 base_url = "https://api.backup-provider.com/v1/"
+
+[chat_providers.providers.backup.model_capabilities]
+context_size_tokens = 16385
+supports_image_understanding = false
+cost_input_tokens_per_1m = 1.0
+cost_output_tokens_per_1m = 2.0
 ```
 
 #### Provider Configuration Fields
@@ -229,6 +241,36 @@ Each provider in `chat_providers.providers` supports the following fields:
 - **`system_prompt_langfuse`** - Optional Langfuse prompt configuration (mutually exclusive with `system_prompt`)
 - **`additional_request_parameters`** - Optional array of additional request parameters
 - **`additional_request_headers`** - Optional array of additional request headers
+- **`model_capabilities`** - Optional configuration for model capabilities and limitations
+
+##### `model_capabilities`
+
+The `model_capabilities` field allows you to configure the capabilities and limitations of each chat provider's model. This information is used for token usage estimation, cost calculation, and determining which features are available.
+
+**Type:** `object | None`
+
+**Example:**
+
+```toml
+[chat_providers.providers.main.model_capabilities]
+context_size_tokens = 128000
+supports_image_understanding = true
+supports_reasoning = false
+supports_verbosity = false
+cost_input_tokens_per_1m = 5.0
+cost_output_tokens_per_1m = 15.0
+```
+
+**Fields:**
+
+- **`context_size_tokens`** _(default: 1000000)_ - Maximum number of tokens that may be provided to the model including input messages, system prompt, and files
+- **`supports_image_understanding`** _(default: false)_ - Whether the model supports being provided with images for understanding
+- **`supports_reasoning`** _(default: false)_ - Whether the model supports reasoning mode (e.g., OpenAI o1 family)
+- **`supports_verbosity`** _(default: false)_ - Whether the model supports providing a verbosity parameter (for future support of advanced models)
+- **`cost_input_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million input tokens (unit-less, for cost estimation)
+- **`cost_output_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million output tokens (unit-less, for cost estimation)
+
+If not explicitly configured, all capabilities default to conservative values (large context window, no special features, no cost tracking).
 
 #### `chat_providers.summary`
 

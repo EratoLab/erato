@@ -960,3 +960,206 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(chat_providers.summary.summary_chat_provider_id, None);
     assert_eq!(chat_providers.summary.max_tokens, None);
 }
+
+#[test]
+fn test_config_with_model_capabilities() {
+    // Create a temporary erato.toml file with model capabilities
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["gpt4", "gpt4o-mini"]
+
+[chat_providers.providers.gpt4]
+provider_kind = "openai"
+model_name = "gpt-4"
+model_display_name = "GPT-4"
+api_key = "sk-test-key"
+
+[chat_providers.providers.gpt4.model_capabilities]
+context_size_tokens = 8192
+supports_image_understanding = false
+supports_reasoning = false
+supports_verbosity = false
+cost_input_tokens_per_1m = 30.0
+cost_output_tokens_per_1m = 60.0
+
+[chat_providers.providers.gpt4o-mini]
+provider_kind = "openai"
+model_name = "gpt-4o-mini"
+model_display_name = "GPT-4o Mini"
+api_key = "sk-test-key"
+
+[chat_providers.providers.gpt4o-mini.model_capabilities]
+context_size_tokens = 128000
+supports_image_understanding = true
+supports_reasoning = false
+supports_verbosity = false
+cost_input_tokens_per_1m = 0.15
+cost_output_tokens_per_1m = 0.6
+
+[file_storage_providers.test]
+provider_kind = "s3"
+config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+
+    // Flush the file to ensure content is written
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    // Get the path of the temporary file
+    let temp_path = temp_file.path().to_str().unwrap();
+
+    // Load configuration from the temporary file
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+
+    // Add required fields that don't have defaults
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    // Apply migration to process the configuration
+    config = config.migrate();
+
+    // Verify that the chat providers configuration is parsed correctly
+    assert!(config.chat_providers.is_some());
+    let chat_providers = config.chat_providers.as_ref().unwrap();
+
+    // Test that both providers are configured
+    assert_eq!(chat_providers.priority_order, vec!["gpt4", "gpt4o-mini"]);
+    assert!(chat_providers.providers.contains_key("gpt4"));
+    assert!(chat_providers.providers.contains_key("gpt4o-mini"));
+
+    // Test GPT-4 model capabilities
+    let gpt4_provider = &chat_providers.providers["gpt4"];
+    assert_eq!(gpt4_provider.model_capabilities.context_size_tokens, 8192);
+    assert!(
+        !gpt4_provider
+            .model_capabilities
+            .supports_image_understanding
+    );
+    assert!(!gpt4_provider.model_capabilities.supports_reasoning);
+    assert!(!gpt4_provider.model_capabilities.supports_verbosity);
+    assert_eq!(
+        gpt4_provider.model_capabilities.cost_input_tokens_per_1m,
+        30.0
+    );
+    assert_eq!(
+        gpt4_provider.model_capabilities.cost_output_tokens_per_1m,
+        60.0
+    );
+
+    // Test GPT-4o Mini model capabilities
+    let gpt4o_mini_provider = &chat_providers.providers["gpt4o-mini"];
+    assert_eq!(
+        gpt4o_mini_provider.model_capabilities.context_size_tokens,
+        128000
+    );
+    assert!(
+        gpt4o_mini_provider
+            .model_capabilities
+            .supports_image_understanding
+    );
+    assert!(!gpt4o_mini_provider.model_capabilities.supports_reasoning);
+    assert!(!gpt4o_mini_provider.model_capabilities.supports_verbosity);
+    assert_eq!(
+        gpt4o_mini_provider
+            .model_capabilities
+            .cost_input_tokens_per_1m,
+        0.15
+    );
+    assert_eq!(
+        gpt4o_mini_provider
+            .model_capabilities
+            .cost_output_tokens_per_1m,
+        0.6
+    );
+
+    // Test accessing a provider through the config API
+    let gpt4_config = config.get_chat_provider("gpt4");
+    assert_eq!(gpt4_config.model_capabilities.context_size_tokens, 8192);
+}
+
+#[test]
+fn test_config_with_default_model_capabilities() {
+    // Create a temporary erato.toml file without explicit model capabilities
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["basic"]
+
+[chat_providers.providers.basic]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+api_key = "sk-test-key"
+
+[file_storage_providers.test]
+provider_kind = "s3"
+config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+
+    // Flush the file to ensure content is written
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    // Get the path of the temporary file
+    let temp_path = temp_file.path().to_str().unwrap();
+
+    // Load configuration from the temporary file
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+
+    // Add required fields that don't have defaults
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    // Apply migration to process the configuration
+    config = config.migrate();
+
+    // Verify that default model capabilities are applied
+    let basic_provider = &config.chat_providers.as_ref().unwrap().providers["basic"];
+
+    // Should have default values
+    assert_eq!(
+        basic_provider.model_capabilities.context_size_tokens,
+        1_000_000
+    ); // Default
+    assert!(
+        !basic_provider
+            .model_capabilities
+            .supports_image_understanding
+    );
+    assert!(!basic_provider.model_capabilities.supports_reasoning);
+    assert!(!basic_provider.model_capabilities.supports_verbosity);
+    assert_eq!(
+        basic_provider.model_capabilities.cost_input_tokens_per_1m,
+        0.0
+    );
+    assert_eq!(
+        basic_provider.model_capabilities.cost_output_tokens_per_1m,
+        0.0
+    );
+}

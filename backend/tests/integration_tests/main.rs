@@ -2211,7 +2211,7 @@ async fn test_token_usage_estimate_with_file(pool: Pool<Postgres>) {
 
     // Max tokens should be a reasonable value (the test expects 10000 from the implementation)
     let max_tokens = token_usage["stats"]["max_tokens"].as_u64().unwrap();
-    assert_eq!(max_tokens, 10000, "Max tokens should be 10000");
+    assert_eq!(max_tokens, 1_000_000, "Max tokens should be 10000");
 
     // Remaining tokens should be max_tokens - total_tokens
     let remaining_tokens = token_usage["stats"]["remaining_tokens"].as_u64().unwrap();
