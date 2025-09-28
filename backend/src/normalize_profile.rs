@@ -21,6 +21,8 @@ pub struct IdTokenProfile {
     pub picture: Option<String>,
     // Preferred language
     pub preferred_language: Option<String>,
+    // Groups - list of group names/identifiers the user belongs to
+    pub groups: Vec<String>,
 }
 
 // Normalize profile from the ID token claims of different OIDC providers.
@@ -48,6 +50,28 @@ pub fn normalize_profile(claims: Value) -> Result<IdTokenProfile, Report> {
 
     let preferred_language = user_preferred_language.or(tenant_preferred_language);
 
+    // Parse groups claim - can be either an array of strings or a single string
+    let groups = match claims.get("groups") {
+        Some(groups_value) => {
+            tracing::debug!("Groups claim found in ID token: {:?}", groups_value);
+            match groups_value {
+                Value::Array(arr) => arr
+                    .iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect(),
+                Value::String(s) => vec![s.clone()],
+                _ => {
+                    tracing::warn!("Groups claim has unexpected format: {:?}", groups_value);
+                    Vec::new()
+                }
+            }
+        }
+        None => {
+            tracing::debug!("No groups claim found in ID token");
+            Vec::new()
+        }
+    };
+
     let profile = IdTokenProfile {
         iss: iss.as_str().map(String::from).unwrap(),
         sub: sub.as_str().map(String::from).unwrap(),
@@ -55,6 +79,7 @@ pub fn normalize_profile(claims: Value) -> Result<IdTokenProfile, Report> {
         name,
         picture,
         preferred_language,
+        groups,
     };
 
     Ok(profile)
@@ -88,6 +113,7 @@ mod tests {
         assert_eq!(profile.name, Some("admin".to_string()));
         assert_eq!(profile.preferred_language, None);
         assert_eq!(profile.picture, None);
+        assert_eq!(profile.groups, Vec::<String>::new());
     }
 
     #[test]
@@ -136,6 +162,7 @@ mod tests {
         assert_eq!(profile.name, Some("John Doe".to_string()));
         assert_eq!(profile.preferred_language, Some("en".to_string()));
         assert_eq!(profile.picture, None);
+        assert_eq!(profile.groups, Vec::<String>::new());
     }
 
     #[test]
@@ -171,5 +198,54 @@ mod tests {
         assert_eq!(profile.name, Some("Admin User".to_string()));
         assert_eq!(profile.preferred_language, None);
         assert_eq!(profile.picture, None);
+        assert_eq!(
+            profile.groups,
+            vec!["administrators".to_string(), "managers".to_string()]
+        );
+    }
+
+    #[test]
+    pub fn test_normalize_groups_claim_variations() {
+        // Test with groups as array
+        let claims_array = serde_json::json!({
+            "iss": "http://test.example.com",
+            "sub": "test-user",
+            "groups": ["group1", "group2", "group3"]
+        });
+        let profile = normalize_profile(claims_array).unwrap();
+        assert_eq!(
+            profile.groups,
+            vec![
+                "group1".to_string(),
+                "group2".to_string(),
+                "group3".to_string()
+            ]
+        );
+
+        // Test with groups as single string
+        let claims_single = serde_json::json!({
+            "iss": "http://test.example.com",
+            "sub": "test-user",
+            "groups": "single-group"
+        });
+        let profile = normalize_profile(claims_single).unwrap();
+        assert_eq!(profile.groups, vec!["single-group".to_string()]);
+
+        // Test with no groups claim
+        let claims_no_groups = serde_json::json!({
+            "iss": "http://test.example.com",
+            "sub": "test-user"
+        });
+        let profile = normalize_profile(claims_no_groups).unwrap();
+        assert_eq!(profile.groups, Vec::<String>::new());
+
+        // Test with invalid groups format (should default to empty)
+        let claims_invalid = serde_json::json!({
+            "iss": "http://test.example.com",
+            "sub": "test-user",
+            "groups": 123
+        });
+        let profile = normalize_profile(claims_invalid).unwrap();
+        assert_eq!(profile.groups, Vec::<String>::new());
     }
 }

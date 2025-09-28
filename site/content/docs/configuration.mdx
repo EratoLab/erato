@@ -366,6 +366,146 @@ model_name = "gpt-4"
 api_key = "sk-key"
 ```
 
+### `model_permissions`
+
+Configuration for controlling user access to chat providers based on user attributes like group membership. This allows you to implement fine-grained access control, such as restricting premium models to certain user groups or providing different models to different teams.
+
+**Type:** `object | None`
+
+**Default behavior:** If no model permissions are configured, all users have access to all configured chat providers.
+
+#### `model_permissions.rules`
+
+A map of permission rules, where each key is a unique rule name and the value is a rule configuration object. Rules are evaluated independently, and if any rule grants access to a chat provider, the user is allowed to use it.
+
+**Type:** `object<string, ModelPermissionRule>`
+
+**Example:**
+
+```toml
+[model_permissions.rules.basic_access]
+rule_type = "allow-all"
+chat_provider_ids = ["gpt-4o-mini"]
+
+[model_permissions.rules.premium_access]
+rule_type = "allow-for-group-members"
+chat_provider_ids = ["gpt-4", "claude-3-opus"]
+groups = ["premium-users", "administrators"]
+
+[model_permissions.rules.admin_only]
+rule_type = "allow-for-group-members"
+chat_provider_ids = ["gpt-4-turbo", "experimental-model"]
+groups = ["administrators"]
+```
+
+#### Rule Types
+
+There are two types of permission rules:
+
+##### `allow-all`
+
+Grants access to specified chat providers for all users, regardless of their group membership.
+
+**Fields:**
+
+- **`rule_type`** - Must be `"allow-all"`
+- **`chat_provider_ids`** - Array of chat provider IDs that this rule grants access to
+
+**Example:**
+
+```toml
+[model_permissions.rules.public_models]
+rule_type = "allow-all"
+chat_provider_ids = ["gpt-4o-mini", "claude-3-haiku"]
+```
+
+##### `allow-for-group-members`
+
+Grants access to specified chat providers only for users who belong to at least one of the specified groups. User groups are derived from the `groups` claim in the user's ID token (see [SSO/OIDC configuration](./features/sso_oidc)).
+
+**Fields:**
+
+- **`rule_type`** - Must be `"allow-for-group-members"`
+- **`chat_provider_ids`** - Array of chat provider IDs that this rule grants access to
+- **`groups`** - Array of group names/identifiers that are allowed access
+
+**Example:**
+
+```toml
+[model_permissions.rules.premium_models]
+rule_type = "allow-for-group-members"
+chat_provider_ids = ["gpt-4", "claude-3-opus"]
+groups = ["premium-subscribers", "enterprise-users"]
+```
+
+#### How Permission Evaluation Works
+
+1. **No rules configured:** All users have access to all chat providers
+2. **Rules configured:** For each chat provider, check if any rule grants access:
+   - `allow-all` rules always grant access
+   - `allow-for-group-members` rules grant access only if the user belongs to at least one specified group
+3. **Access granted:** If any rule grants access to a chat provider, the user can use it
+4. **Access denied:** If no rules grant access to a chat provider, it's hidden from the user
+
+#### Complete Example
+
+```toml
+# Chat provider configuration
+[chat_providers]
+priority_order = ["basic", "premium", "experimental"]
+
+[chat_providers.providers.basic]
+provider_kind = "openai"
+model_name = "gpt-4o-mini"
+model_display_name = "GPT-4o Mini (Basic)"
+api_key = "sk-basic-key"
+
+[chat_providers.providers.premium]
+provider_kind = "openai"
+model_name = "gpt-4"
+model_display_name = "GPT-4 (Premium)"
+api_key = "sk-premium-key"
+
+[chat_providers.providers.experimental]
+provider_kind = "openai"
+model_name = "gpt-4-turbo"
+model_display_name = "GPT-4 Turbo (Experimental)"
+api_key = "sk-experimental-key"
+
+# Model permissions configuration
+[model_permissions.rules.basic_access]
+rule_type = "allow-all"
+chat_provider_ids = ["basic"]
+
+[model_permissions.rules.premium_access]
+rule_type = "allow-for-group-members"
+chat_provider_ids = ["premium"]
+groups = ["premium-users", "enterprise"]
+
+[model_permissions.rules.experimental_access]
+rule_type = "allow-for-group-members"
+chat_provider_ids = ["experimental"]
+groups = ["beta-testers", "administrators"]
+```
+
+In this example:
+
+- **All users** can access the "basic" model (GPT-4o Mini)
+- **Premium users and enterprise users** can access both "basic" and "premium" models
+- **Beta testers and administrators** can access "basic", "premium" (if they're also in premium groups), and "experimental" models
+- **Regular users** (not in any special groups) can only access the "basic" model
+
+#### Integration with SSO/OIDC
+
+Model permissions rely on group information from the user's ID token. The `groups` claim in the JWT token is parsed and used for permission evaluation. See the [SSO/OIDC documentation](./features/sso_oidc) for information on how to configure your identity provider to include group information in ID tokens.
+
+**Common group claim formats:**
+
+- **Array of strings:** `["group1", "group2", "group3"]`
+- **Single string:** `"group1"` (automatically converted to array)
+
+If no `groups` claim is present in the ID token, the user is treated as having no group memberships, and only `allow-all` rules will grant them access.
+
 ### `integrations`
 
 Configuration for external service integrations.

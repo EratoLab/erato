@@ -34,6 +34,11 @@ pub struct UserProfile {
     /// - Browser Accept-Language header
     /// - Default to "en"
     pub preferred_language: String,
+    /// List of groups the user belongs to.
+    ///
+    /// This is derived from the `groups` claim in the ID token.
+    /// If the claim is not present, this will be an empty list.
+    pub groups: Vec<String>,
 }
 
 impl UserProfile {
@@ -45,6 +50,7 @@ impl UserProfile {
             name: profile.name,
             picture: profile.picture,
             preferred_language,
+            groups: profile.groups,
         }
     }
 
