@@ -194,6 +194,37 @@
         ]
       }
     },
+    "/api/v1beta/me/budget": {
+      "get": {
+        "tags": [
+          "budget"
+        ],
+        "operationId": "budget_status",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "500": {
+            "description": "When an internal server error occurs"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/chats": {
       "post": {
         "tags": [],
@@ -645,6 +676,70 @@
           "chat_id": {
             "type": "string",
             "description": "The ID of the archived chat"
+          }
+        }
+      },
+      "BudgetCurrency": {
+        "type": "string",
+        "enum": [
+          "EUR",
+          "USD"
+        ]
+      },
+      "BudgetStatusResponse": {
+        "type": "object",
+        "description": "Budget status information for the current user",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "budget_currency": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BudgetCurrency",
+                "description": "The currency configured for display purposes"
+              }
+            ]
+          },
+          "budget_limit": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "The budget limit for the time period (unit-less)"
+          },
+          "budget_period_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Number of days in the current budget period",
+            "minimum": 0
+          },
+          "current_spending": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Current spending in the budget period for the user (unit-less)"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the budget feature is enabled"
+          },
+          "warn_threshold": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "The warning threshold (0.0 to 1.0)"
           }
         }
       },

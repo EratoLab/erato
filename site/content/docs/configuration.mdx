@@ -636,3 +636,106 @@ http_headers = { "Authorization" = "Bearer your-token", "X-API-Key" = "your-api-
 ```
 
 See the [MCP Servers](./features/mcp_servers) documentation for more information about Model Context Protocol integration.
+
+### `budget`
+
+Configuration for budget tracking and display functionality. This feature allows you to track and display per-user spending based on token usage and model pricing.
+
+**Type:** `object`
+
+**Default behavior:** Budget tracking is disabled by default.
+
+**Example:**
+
+```toml
+[budget]
+enabled = true
+max_budget = 100.0
+budget_currency = "USD"
+warn_threshold = 0.8
+budget_period_days = 30
+```
+
+#### `budget.enabled`
+
+Whether budget tracking and display is enabled. When disabled, no budget information will be calculated or displayed to users.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
+**Example:** `true`
+
+#### `budget.max_budget`
+
+The maximum budget amount per budget period (unit-less). This value is used for calculating budget usage percentages and determining when warning thresholds are exceeded.
+
+The budget amount is treated as unit-less for flexibility - the actual monetary value depends on your model pricing configuration and the configured display currency.
+
+**Type:** `number | None`
+
+**Required when:** `budget.enabled = true`
+
+**Example:** `100.0`
+
+#### `budget.budget_currency`
+
+The currency to use for display purposes in the frontend. This is purely cosmetic and doesn't affect calculations - all budget amounts and costs are treated as unit-less values.
+
+**Type:** `string`
+
+**Supported values:** `"USD"`, `"EUR"`
+
+**Default value:** `"USD"`
+
+**Example:** `"EUR"`
+
+#### `budget.warn_threshold`
+
+The threshold (between 0.0 and 1.0) at which to warn users about budget usage. When a user's spending exceeds this percentage of their budget limit, they will receive warnings in the UI.
+
+For example, a value of `0.7` means users will be warned when they've used 70% of their budget.
+
+**Type:** `number`
+
+**Default value:** `0.7`
+
+**Valid range:** `0.0` to `1.0`
+
+**Example:** `0.8`
+
+#### `budget.budget_period_days`
+
+Number of days that counts as one budget period. Budget usage is calculated and reset based on this period length.
+
+**Type:** `number`
+
+**Default value:** `30`
+
+**Example:** `7` (for weekly budgets), `30` (for monthly budgets)
+
+#### Complete Budget Configuration Example
+
+```toml
+[budget]
+enabled = true
+max_budget = 50.0
+budget_currency = "EUR"
+warn_threshold = 0.75
+budget_period_days = 7
+
+# You also need to configure model pricing for accurate cost calculations
+[chat_providers]
+priority_order = ["main"]
+
+[chat_providers.providers.main]
+provider_kind = "openai"
+model_name = "gpt-4o"
+api_key = "sk-your-key"
+
+[chat_providers.providers.main.model_capabilities]
+cost_input_tokens_per_1m = 5.0
+cost_output_tokens_per_1m = 15.0
+```
+
+**Note:** Budget tracking requires that you configure accurate pricing information in your chat provider's `model_capabilities` section. The budget calculations are based on actual token usage multiplied by the configured token prices.

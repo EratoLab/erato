@@ -1,8 +1,9 @@
 use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment};
 use eyre::{eyre, OptionExt, Report};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::ToSchema;
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone)]
 pub struct AppConfig {
@@ -42,6 +43,10 @@ pub struct AppConfig {
     // Model permissions configuration for controlling access to chat providers based on user attributes.
     #[serde(default)]
     pub model_permissions: ModelPermissionsConfig,
+
+    // Budget configuration for tracking and displaying per-user spending.
+    #[serde(default)]
+    pub budget: BudgetConfig,
 
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
@@ -186,6 +191,11 @@ impl AppConfig {
         // Validate model permissions configuration
         if let Err(e) = config.model_permissions.validate() {
             panic!("Invalid model permissions configuration: {}", e);
+        }
+
+        // Validate budget configuration
+        if let Err(e) = config.budget.validate() {
+            panic!("Invalid budget configuration: {}", e);
         }
 
         // Validate that Langfuse is configured if any chat provider uses it
@@ -846,6 +856,87 @@ impl Default for ModelCapabilities {
 pub struct SentryConfig {
     // If present, will enable Sentry for error reporting.
     pub sentry_dsn: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
+pub struct BudgetConfig {
+    // Whether budget tracking and display is enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    // The maximum budget amount per budget period (unit-less).
+    // Only has an effect if `enabled` is `true`.
+    pub max_budget: Option<f64>,
+
+    // The currency to use for display purposes.
+    // Only has an effect if `enabled` is `true`.
+    // Defaults to `USD`.
+    #[serde(default)]
+    pub budget_currency: BudgetCurrency,
+
+    // The threshold (between 0.0 and 1.0) at which to warn users about budget usage.
+    // Only has an effect if `enabled` is `true`.
+    // Defaults to `0.7` (70%).
+    #[serde(default = "default_warn_threshold")]
+    pub warn_threshold: f64,
+
+    // Number of days that counts as one budget period.
+    // Only has an effect if `enabled` is `true`.
+    // Defaults to `30`.
+    #[serde(default = "default_budget_period_days")]
+    pub budget_period_days: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, ToSchema, Default)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum BudgetCurrency {
+    EUR,
+    #[default]
+    USD,
+}
+
+fn default_warn_threshold() -> f64 {
+    0.7
+}
+
+fn default_budget_period_days() -> u32 {
+    30
+}
+
+impl BudgetConfig {
+    /// Validates the budget configuration.
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.enabled {
+            if self.max_budget.is_none() {
+                return Err(eyre!("Budget is enabled but max_budget is not set"));
+            }
+
+            if let Some(max_budget) = self.max_budget {
+                if max_budget <= 0.0 {
+                    return Err(eyre!(
+                        "max_budget must be greater than 0, got: {}",
+                        max_budget
+                    ));
+                }
+            }
+
+            if self.warn_threshold < 0.0 || self.warn_threshold > 1.0 {
+                return Err(eyre!(
+                    "warn_threshold must be between 0.0 and 1.0, got: {}",
+                    self.warn_threshold
+                ));
+            }
+
+            if self.budget_period_days == 0 {
+                return Err(eyre!(
+                    "budget_period_days must be greater than 0, got: {}",
+                    self.budget_period_days
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl LangfuseConfig {
