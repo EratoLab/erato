@@ -110,7 +110,14 @@ pub async fn token_usage_estimate(
 
     // Get the input messages based on the previous message ID
     let input_messages = if let Some(prev_msg_id) = request.previous_message_id {
-        match prepare_input_messages(&app_state, &prev_msg_id, files_for_generation.clone()).await {
+        match prepare_input_messages(
+            &app_state,
+            &prev_msg_id,
+            files_for_generation.clone(),
+            &me_user.0.groups,
+        )
+        .await
+        {
             Ok(messages) => messages,
             Err(err) => {
                 return Err((
@@ -200,19 +207,21 @@ pub async fn token_usage_estimate(
     let history_tokens_without_user = history_tokens.saturating_sub(user_message_tokens);
 
     // Get the chat provider configuration to determine max context tokens
-    let chat_provider_config =
-        match app_state.chat_provider_for_chatcompletion(request.chat_provider_id.as_deref()) {
-            Ok(config) => config,
-            Err(err) => {
-                return Err((
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get chat provider configuration: {}", err),
-                ));
-            }
-        };
+    let chat_provider_config = match app_state
+        .chat_provider_for_chatcompletion(request.chat_provider_id.as_deref(), &me_user.0.groups)
+    {
+        Ok(config) => config,
+        Err(err) => {
+            return Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get chat provider configuration: {}", err),
+            ));
+        }
+    };
 
     // Determine which chat provider ID was actually used
-    let chat_provider_allowlist = app_state.determine_chat_provider_allowlist_for_user();
+    let chat_provider_allowlist =
+        app_state.determine_chat_provider_allowlist_for_user(&me_user.0.groups);
     let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
         .as_ref()
         .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -256,9 +265,10 @@ async fn prepare_input_messages(
     app_state: &AppState,
     previous_message_id: &Uuid,
     files_for_generation: Vec<FileContentsForGeneration>,
+    user_groups: &[String],
 ) -> Result<GenerationInputMessages, Report> {
     // Resolve system prompt dynamically based on chat provider configuration
-    let chat_provider_config = app_state.chat_provider_for_chatcompletion(None)?;
+    let chat_provider_config = app_state.chat_provider_for_chatcompletion(None, user_groups)?;
     let system_prompt = app_state.get_system_prompt(&chat_provider_config).await?;
 
     crate::models::message::get_generation_input_messages_by_previous_message_id(

@@ -39,6 +39,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub integrations: IntegrationsConfig,
 
+    // Model permissions configuration for controlling access to chat providers based on user attributes.
+    #[serde(default)]
+    pub model_permissions: ModelPermissionsConfig,
+
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
     pub cleanup_enabled: bool,
@@ -177,6 +181,11 @@ impl AppConfig {
         // Validate chat providers configuration
         if let Err(e) = config.validate_chat_providers() {
             panic!("Invalid chat providers configuration: {}", e);
+        }
+
+        // Validate model permissions configuration
+        if let Err(e) = config.model_permissions.validate() {
+            panic!("Invalid model permissions configuration: {}", e);
         }
 
         // Validate that Langfuse is configured if any chat provider uses it
@@ -855,5 +864,296 @@ impl LangfuseConfig {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod model_permissions_tests {
+    use super::*;
+
+    #[test]
+    fn test_no_rules_allows_all() {
+        let config = ModelPermissionsConfig {
+            rules: HashMap::new(),
+        };
+
+        let available_providers = vec!["gpt-4".to_string(), "claude".to_string()];
+        let user_groups = vec!["admin".to_string()];
+
+        let result = config.filter_allowed_chat_provider_ids(&available_providers, &user_groups);
+        assert_eq!(result, available_providers);
+    }
+
+    #[test]
+    fn test_allow_all_rule() {
+        let mut rules = HashMap::new();
+        rules.insert(
+            "allow_gpt".to_string(),
+            ModelPermissionRule::AllowAll {
+                chat_provider_ids: vec!["gpt-4".to_string()],
+            },
+        );
+
+        let config = ModelPermissionsConfig { rules };
+        let available_providers = vec!["gpt-4".to_string(), "claude".to_string()];
+        let user_groups = vec!["admin".to_string()];
+
+        let result = config.filter_allowed_chat_provider_ids(&available_providers, &user_groups);
+        assert_eq!(result, vec!["gpt-4".to_string()]);
+    }
+
+    #[test]
+    fn test_allow_for_group_members_rule_matching_group() {
+        let mut rules = HashMap::new();
+        rules.insert(
+            "allow_claude_for_admins".to_string(),
+            ModelPermissionRule::AllowForGroupMembers {
+                chat_provider_ids: vec!["claude".to_string()],
+                groups: vec!["admin".to_string()],
+            },
+        );
+
+        let config = ModelPermissionsConfig { rules };
+        let available_providers = vec!["gpt-4".to_string(), "claude".to_string()];
+        let user_groups = vec!["admin".to_string()];
+
+        let result = config.filter_allowed_chat_provider_ids(&available_providers, &user_groups);
+        assert_eq!(result, vec!["claude".to_string()]);
+    }
+
+    #[test]
+    fn test_allow_for_group_members_rule_no_matching_group() {
+        let mut rules = HashMap::new();
+        rules.insert(
+            "allow_claude_for_admins".to_string(),
+            ModelPermissionRule::AllowForGroupMembers {
+                chat_provider_ids: vec!["claude".to_string()],
+                groups: vec!["admin".to_string()],
+            },
+        );
+
+        let config = ModelPermissionsConfig { rules };
+        let available_providers = vec!["gpt-4".to_string(), "claude".to_string()];
+        let user_groups = vec!["user".to_string()];
+
+        let result = config.filter_allowed_chat_provider_ids(&available_providers, &user_groups);
+        assert_eq!(result, Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_multiple_rules_any_match_allows() {
+        let mut rules = HashMap::new();
+        rules.insert(
+            "allow_gpt_for_all".to_string(),
+            ModelPermissionRule::AllowAll {
+                chat_provider_ids: vec!["gpt-4".to_string()],
+            },
+        );
+        rules.insert(
+            "allow_claude_for_admins".to_string(),
+            ModelPermissionRule::AllowForGroupMembers {
+                chat_provider_ids: vec!["claude".to_string()],
+                groups: vec!["admin".to_string()],
+            },
+        );
+
+        let config = ModelPermissionsConfig { rules };
+        let available_providers = vec![
+            "gpt-4".to_string(),
+            "claude".to_string(),
+            "ollama".to_string(),
+        ];
+
+        // User with admin group should get both gpt-4 (allow-all) and claude (group match)
+        let admin_user_groups = vec!["admin".to_string()];
+        let admin_result =
+            config.filter_allowed_chat_provider_ids(&available_providers, &admin_user_groups);
+        let mut admin_expected = vec!["gpt-4".to_string(), "claude".to_string()];
+        admin_expected.sort();
+        let mut admin_actual = admin_result;
+        admin_actual.sort();
+        assert_eq!(admin_actual, admin_expected);
+
+        // Regular user should only get gpt-4 (allow-all)
+        let regular_user_groups = vec!["user".to_string()];
+        let regular_result =
+            config.filter_allowed_chat_provider_ids(&available_providers, &regular_user_groups);
+        assert_eq!(regular_result, vec!["gpt-4".to_string()]);
+    }
+
+    #[test]
+    fn test_model_permission_rule_allows_chat_provider() {
+        let allow_all_rule = ModelPermissionRule::AllowAll {
+            chat_provider_ids: vec!["gpt-4".to_string(), "claude".to_string()],
+        };
+
+        assert!(allow_all_rule.allows_chat_provider("gpt-4", &[]));
+        assert!(allow_all_rule.allows_chat_provider("claude", &[]));
+        assert!(!allow_all_rule.allows_chat_provider("ollama", &[]));
+
+        let group_rule = ModelPermissionRule::AllowForGroupMembers {
+            chat_provider_ids: vec!["premium-model".to_string()],
+            groups: vec!["premium".to_string(), "admin".to_string()],
+        };
+
+        assert!(group_rule.allows_chat_provider("premium-model", &["premium".to_string()]));
+        assert!(group_rule.allows_chat_provider("premium-model", &["admin".to_string()]));
+        assert!(group_rule.allows_chat_provider(
+            "premium-model",
+            &["user".to_string(), "premium".to_string()]
+        ));
+        assert!(!group_rule.allows_chat_provider("premium-model", &["user".to_string()]));
+        assert!(!group_rule.allows_chat_provider("other-model", &["premium".to_string()]));
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct ModelPermissionsConfig {
+    // Map of rule name to rule configuration.
+    #[serde(default)]
+    pub rules: HashMap<String, ModelPermissionRule>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[serde(tag = "rule_type")]
+pub enum ModelPermissionRule {
+    #[serde(rename = "allow-all")]
+    AllowAll {
+        // List of chat provider IDs this rule grants access to
+        chat_provider_ids: Vec<String>,
+    },
+    #[serde(rename = "allow-for-group-members")]
+    AllowForGroupMembers {
+        // List of chat provider IDs this rule grants access to
+        chat_provider_ids: Vec<String>,
+        // List of group names/identifiers that are allowed access
+        groups: Vec<String>,
+    },
+}
+
+impl ModelPermissionsConfig {
+    /// Validates the model permissions configuration.
+    pub fn validate(&self) -> Result<(), Report> {
+        for (rule_name, rule) in &self.rules {
+            if let Err(e) = rule.validate() {
+                return Err(eyre!(
+                    "Invalid configuration for model permission rule '{}': {}",
+                    rule_name,
+                    e
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Filters a list of chat provider IDs based on the configured permission rules.
+    /// If no rules are configured, all providers are allowed.
+    /// If rules are configured, a provider is allowed if at least one rule grants access to it.
+    pub fn filter_allowed_chat_provider_ids(
+        &self,
+        available_chat_provider_ids: &[String],
+        user_groups: &[String],
+    ) -> Vec<String> {
+        // If no rules are configured, allow all providers
+        if self.rules.is_empty() {
+            tracing::debug!("No model permission rules configured, allowing all chat providers");
+            return available_chat_provider_ids.to_vec();
+        }
+
+        let mut allowed_providers = Vec::new();
+
+        for chat_provider_id in available_chat_provider_ids {
+            let is_allowed = self.rules.iter().any(|(rule_name, rule)| {
+                let allowed = rule.allows_chat_provider(chat_provider_id, user_groups);
+                if allowed {
+                    tracing::debug!(
+                        rule_name,
+                        chat_provider_id,
+                        "Rule grants access to chat provider"
+                    );
+                }
+                allowed
+            });
+
+            if is_allowed {
+                allowed_providers.push(chat_provider_id.clone());
+            } else {
+                tracing::debug!(chat_provider_id, "No rules grant access to chat provider");
+            }
+        }
+
+        tracing::debug!(
+            ?allowed_providers,
+            "Final allowed chat provider IDs for user"
+        );
+        allowed_providers
+    }
+}
+
+impl ModelPermissionRule {
+    /// Validates the model permission rule configuration.
+    pub fn validate(&self) -> Result<(), Report> {
+        match self {
+            ModelPermissionRule::AllowAll { chat_provider_ids } => {
+                if chat_provider_ids.is_empty() {
+                    return Err(eyre!(
+                        "Allow-all rule must specify at least one chat_provider_id"
+                    ));
+                }
+            }
+            ModelPermissionRule::AllowForGroupMembers {
+                chat_provider_ids,
+                groups,
+            } => {
+                if chat_provider_ids.is_empty() {
+                    return Err(eyre!(
+                        "Allow-for-group-members rule must specify at least one chat_provider_id"
+                    ));
+                }
+                if groups.is_empty() {
+                    return Err(eyre!(
+                        "Allow-for-group-members rule must specify at least one group"
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Checks if this rule allows access to a specific chat provider for the given user groups.
+    pub fn allows_chat_provider(&self, chat_provider_id: &str, user_groups: &[String]) -> bool {
+        match self {
+            ModelPermissionRule::AllowAll { chat_provider_ids } => {
+                let allows = chat_provider_ids.contains(&chat_provider_id.to_string());
+                tracing::debug!(
+                    chat_provider_id,
+                    ?chat_provider_ids,
+                    allows,
+                    "Allow-all rule evaluation"
+                );
+                allows
+            }
+            ModelPermissionRule::AllowForGroupMembers {
+                chat_provider_ids,
+                groups,
+            } => {
+                let has_provider = chat_provider_ids.contains(&chat_provider_id.to_string());
+                let has_matching_group = user_groups
+                    .iter()
+                    .any(|user_group| groups.contains(user_group));
+                let allows = has_provider && has_matching_group;
+                tracing::debug!(
+                    chat_provider_id,
+                    ?chat_provider_ids,
+                    ?user_groups,
+                    ?groups,
+                    has_provider,
+                    has_matching_group,
+                    allows,
+                    "Allow-for-group-members rule evaluation"
+                );
+                allows
+            }
+        }
     }
 }

@@ -84,8 +84,9 @@ impl AppState {
     pub fn genai_for_chatcompletion(
         &self,
         requested_chat_provider: Option<&str>,
+        user_groups: &[String],
     ) -> Result<GenaiClient, Report> {
-        let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user();
+        let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user(user_groups);
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
             .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -100,8 +101,9 @@ impl AppState {
     pub fn chat_provider_for_chatcompletion(
         &self,
         requested_chat_provider: Option<&str>,
+        user_groups: &[String],
     ) -> Result<ChatProviderConfig, Report> {
-        let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user();
+        let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user(user_groups);
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
             .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -112,18 +114,45 @@ impl AppState {
         Ok(self.config.get_chat_provider(chat_provider_id).clone())
     }
 
-    /// Placeholder method to determine chat provider allowlist for a user.
-    /// Currently returns None (no restrictions), but will be implemented with proper
-    /// user-based access control logic in the future.
-    pub fn determine_chat_provider_allowlist_for_user(&self) -> Option<Vec<String>> {
-        // TODO: Implement per-user chat provider access control
-        None
+    /// Determines chat provider allowlist for a user based on their group memberships.
+    /// Uses the model_permissions configuration to filter available chat providers.
+    pub fn determine_chat_provider_allowlist_for_user(
+        &self,
+        user_groups: &[String],
+    ) -> Option<Vec<String>> {
+        // Get all available chat provider IDs
+        let all_provider_ids: Vec<String> =
+            if let Some(chat_providers) = &self.config.chat_providers {
+                chat_providers.providers.keys().cloned().collect()
+            } else if self.config.chat_provider.is_some() {
+                // Fallback to single provider - use "default" as the provider ID for backward compatibility
+                vec!["default".to_string()]
+            } else {
+                vec![]
+            };
+
+        let allowed_providers = self
+            .config
+            .model_permissions
+            .filter_allowed_chat_provider_ids(&all_provider_ids, user_groups);
+
+        // If the filtered list is the same as the original list, return None (no restrictions)
+        if allowed_providers.len() == all_provider_ids.len() {
+            tracing::debug!("Model permissions allow all available chat providers");
+            None
+        } else {
+            tracing::debug!(
+                ?allowed_providers,
+                "Model permissions filtered chat providers"
+            );
+            Some(allowed_providers)
+        }
     }
 
     /// Get available chat models for the user, taking into account any allowlist restrictions.
     /// Returns a list of (provider_id, display_name) pairs.
-    pub fn available_models(&self) -> Vec<(String, String)> {
-        let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user();
+    pub fn available_models(&self, user_groups: &[String]) -> Vec<(String, String)> {
+        let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user(user_groups);
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
             .map(|list| list.iter().map(|s| s.as_str()).collect());

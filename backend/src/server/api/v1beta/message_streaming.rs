@@ -584,9 +584,10 @@ async fn prepare_chat_request(
     app_state: &AppState,
     previous_message_id: &Uuid,
     new_input_files: Vec<FileContentsForGeneration>,
+    user_groups: &[String],
 ) -> Result<(ChatRequest, ChatOptions, GenerationInputMessages), Report> {
     // Resolve system prompt dynamically based on chat provider configuration
-    let chat_provider_config = app_state.chat_provider_for_chatcompletion(None)?;
+    let chat_provider_config = app_state.chat_provider_for_chatcompletion(None, user_groups)?;
     let system_prompt = app_state.get_system_prompt(&chat_provider_config).await?;
 
     let generation_input_messages = get_generation_input_messages_by_previous_message_id(
@@ -630,6 +631,7 @@ async fn stream_generate_chat_completion<
     user_id: String,
     chat_id: Uuid,
     chat_provider_id: Option<&str>,
+    user_groups: &[String],
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
     // Initialize Langfuse tracing if enabled
     let langfuse_enabled = app_state.config.integrations.langfuse.enabled
@@ -761,7 +763,7 @@ async fn stream_generate_chat_completion<
         }
 
         let chat_stream = match app_state
-            .genai_for_chatcompletion(chat_provider_id)
+            .genai_for_chatcompletion(chat_provider_id, user_groups)
             .expect("Unable to choose chat provider")
             .exec_chat_stream(
                 "PLACEHOLDER_MODEL",
@@ -1363,6 +1365,7 @@ pub async fn message_submit_sse(
             &app_state,
             &saved_user_message.id,
             files_for_generation.clone(),
+            &me_user.0.groups,
         )
         .await;
         if let Err(err) = prepare_chat_request_res {
@@ -1380,7 +1383,8 @@ pub async fn message_submit_sse(
 
         // Determine the chat provider ID that will be used for generation
         // Use the user's allowlist to filter available providers
-        let chat_provider_allowlist = app_state.determine_chat_provider_allowlist_for_user();
+        let chat_provider_allowlist =
+            app_state.determine_chat_provider_allowlist_for_user(&me_user.0.groups);
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
             .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -1442,6 +1446,7 @@ pub async fn message_submit_sse(
                 me_user.0.id.clone(),         // Pass user_id
                 chat.id,                      // Pass chat_id
                 Some(chat_provider_id.as_str()), // Pass chat_provider_id
+                &me_user.0.groups,            // Pass user_groups
             )
             .await?;
 
@@ -1585,6 +1590,7 @@ pub async fn regenerate_message_sse(
             &app_state,
             &previous_message.id,
             files_for_generation.clone(),
+            &me_user.0.groups,
         )
         .await;
         if let Err(err) = prepare_chat_request_res {
@@ -1599,7 +1605,8 @@ pub async fn regenerate_message_sse(
 
         // Determine the chat provider ID that will be used for generation
         // Use the user's allowlist to filter available providers
-        let chat_provider_allowlist = app_state.determine_chat_provider_allowlist_for_user();
+        let chat_provider_allowlist =
+            app_state.determine_chat_provider_allowlist_for_user(&me_user.0.groups);
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
             .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -1664,6 +1671,7 @@ pub async fn regenerate_message_sse(
                 me_user.0.id.clone(),         // Pass user_id
                 chat.id,                      // Pass chat_id
                 Some(chat_provider_id.as_str()), // Pass chat_provider_id
+                &me_user.0.groups,            // Pass user_groups
             )
             .await?;
 
@@ -1842,6 +1850,7 @@ pub async fn edit_message_sse(
             &app_state,
             &saved_user_message.id,
             files_for_generation.clone(),
+            &me_user.0.groups,
         )
         .await;
         if let Err(err) = prepare_chat_request_res {
@@ -1856,7 +1865,8 @@ pub async fn edit_message_sse(
 
         // Determine the chat provider ID that will be used for generation
         // Use the user's allowlist to filter available providers
-        let chat_provider_allowlist = app_state.determine_chat_provider_allowlist_for_user();
+        let chat_provider_allowlist =
+            app_state.determine_chat_provider_allowlist_for_user(&me_user.0.groups);
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
             .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -1919,6 +1929,7 @@ pub async fn edit_message_sse(
                 me_user.0.id.clone(),         // Pass user_id
                 chat.id,                      // Pass chat_id
                 Some(chat_provider_id.as_str()), // Pass chat_provider_id
+                &me_user.0.groups,            // Pass user_groups
             )
             .await?;
 

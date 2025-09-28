@@ -1964,7 +1964,8 @@
         "type": "object",
         "required": [
           "id",
-          "preferred_language"
+          "preferred_language",
+          "groups"
         ],
         "properties": {
           "email": {
@@ -1973,6 +1974,13 @@
               "null"
             ],
             "description": "The user's email address. Shouldn't be used as a unique identifier, as it may change."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of groups the user belongs to.\n\nThis is derived from the `groups` claim in the ID token.\nIf the claim is not present, this will be an empty list."
           },
           "id": {
             "type": "string"

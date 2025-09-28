@@ -637,7 +637,7 @@ pub async fn recent_chats(
         // Get the last model information based on the last chat provider ID
         let last_model = if let Some(ref provider_id) = chat.last_chat_provider_id {
             // Check if this provider_id exists in the current available models
-            let available_models = app_state.available_models();
+            let available_models = app_state.available_models(&me_user.0.groups);
             available_models
                 .into_iter()
                 .find(|(id, _)| id == provider_id)
@@ -884,10 +884,10 @@ pub async fn archive_chat_endpoint(
 )]
 pub async fn available_models(
     State(app_state): State<AppState>,
-    Extension(_me_user): Extension<MeProfile>,
+    Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<Vec<ChatModel>>, StatusCode> {
     let models = app_state
-        .available_models()
+        .available_models(&me_user.0.groups)
         .into_iter()
         .map(|(provider_id, display_name)| ChatModel {
             chat_provider_id: provider_id,
