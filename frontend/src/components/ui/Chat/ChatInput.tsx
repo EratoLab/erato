@@ -4,21 +4,29 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
-import { useTokenManagement } from "@/hooks/chat";
+import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import { useFileDropzone } from "@/hooks/files";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { useChatContext } from "@/providers/ChatProvider";
 
 import { ArrowUpIcon } from "../icons";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
+import { ModelSelector } from "./ModelSelector";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  FileUploadItem,
+  ChatModel,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 
 interface ChatInputProps {
-  onSendMessage: (message: string, inputFileIds?: string[]) => void;
+  onSendMessage: (
+    message: string,
+    inputFileIds?: string[],
+    modelId?: string,
+  ) => void;
   onRegenerate?: () => void;
   // Optional edit mode submit handler. When provided with mode="edit", submit will call this instead of onSendMessage
   onEditMessage?: (
@@ -55,6 +63,8 @@ interface ChatInputProps {
   editMessageId?: string;
   // Initial content when entering edit mode (used to prefill the textarea)
   editInitialContent?: string;
+  // Initial model to use for selection (typically from chat history)
+  initialModel?: ChatModel | null;
 }
 
 /**
@@ -83,6 +93,7 @@ export const ChatInput = ({
   mode = "compose",
   editMessageId,
   editInitialContent,
+  initialModel,
 }: ChatInputProps) => {
   const [message, setMessage] = useState(" ");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -94,6 +105,16 @@ export const ChatInput = ({
 
   // Combine loading states
   const isLoading = propIsLoading ?? isMessagingLoading;
+
+  // Use local model selection hook
+  const {
+    availableModels: _availableModels,
+    selectedModel,
+    setSelectedModel: _setSelectedModel,
+    isSelectionReady: _isSelectionReady,
+  } = useActiveModelSelection({
+    initialModel,
+  });
 
   // Use our token management hook
   const {
@@ -161,11 +182,17 @@ export const ChatInput = ({
           (messageContent.length > 20 ? "..." : ""),
         "files:",
         inputFileIds,
+        "model:",
+        selectedModel?.chat_provider_id,
       );
       if (mode === "edit" && onEditMessage && editMessageId) {
         onEditMessage(editMessageId, messageContent, inputFileIds);
       } else {
-        onSendMessage(messageContent, inputFileIds);
+        onSendMessage(
+          messageContent,
+          inputFileIds,
+          selectedModel?.chat_provider_id,
+        );
       }
     },
     isLoading || isStreaming,
@@ -372,6 +399,12 @@ export const ChatInput = ({
                 {t`Cancel`}
               </Button>
             )}
+            <ModelSelector
+              availableModels={_availableModels}
+              selectedModel={selectedModel}
+              onModelChange={_setSelectedModel}
+              disabled={!_isSelectionReady}
+            />
             <Button
               type="submit"
               variant="secondary"

@@ -2,7 +2,11 @@
 
 import { createContext, useContext, useMemo, useState } from "react";
 
-import { useChatHistory, useChatMessaging } from "@/hooks/chat";
+import {
+  useChatHistory,
+  useChatMessaging,
+  useModelHistory,
+} from "@/hooks/chat";
 import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
@@ -11,7 +15,10 @@ import type {
   ChatMessagesError,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import type { ErrorWrapper } from "@/lib/generated/v1betaApi/v1betaApiFetcher";
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  FileUploadItem,
+  ChatModel,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type { FileType } from "@/utils/fileTypes";
 import type { ReactNode } from "react";
@@ -77,6 +84,9 @@ interface ChatContextValue {
   // New states for mount key logic
   newChatCounter: number;
   mountKey: string | number;
+
+  // Model history (read-only historical context)
+  currentChatLastModel: ChatModel | null;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -112,6 +122,12 @@ export function ChatProvider({
   } = useChatHistory();
 
   const [newChatCounter, setNewChatCounter] = useState(0);
+
+  // Use model history hook for historical model information
+  const { currentChatLastModel } = useModelHistory({
+    currentChatId,
+    chats,
+  });
 
   // Custom createNewChat that also increments the counter
   const createNewChat = useMemo(() => {
@@ -267,6 +283,9 @@ export function ChatProvider({
       // New states for mount key logic
       newChatCounter,
       mountKey,
+
+      // Model history (read-only historical context)
+      currentChatLastModel,
     };
   }, [
     // Chat history dependencies
@@ -308,6 +327,9 @@ export function ChatProvider({
     // New states for mount key logic
     newChatCounter,
     mountKey,
+
+    // Model history dependencies
+    currentChatLastModel,
   ]);
 
   return (
