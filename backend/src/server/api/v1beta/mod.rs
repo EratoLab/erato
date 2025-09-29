@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+pub mod budget;
 pub mod me_profile_middleware;
 pub mod message_streaming;
 pub mod token_usage;
@@ -56,6 +57,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/chats", post(create_chat))
         .route("/files", post(upload_file))
         .route("/models", get(available_models))
+        .route("/budget", get(budget::budget_status))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             me_profile_middleware::user_profile_middleware,
@@ -105,7 +107,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         get_file,
         archive_chat_endpoint,
         token_usage::token_usage_estimate,
-        available_models
+        available_models,
+        budget::budget_status
     ),
     components(schemas(
         Message,
@@ -131,7 +134,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         token_usage::TokenUsageRequest,
         token_usage::TokenUsageStats,
         token_usage::TokenUsageResponseFileItem,
-        token_usage::TokenUsageResponse
+        token_usage::TokenUsageResponse,
+        budget::BudgetStatusResponse,
+        crate::config::BudgetCurrency
     ))
 )]
 pub struct ApiV1ApiDoc;
