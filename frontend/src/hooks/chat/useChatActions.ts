@@ -7,6 +7,7 @@ interface UseChatActionsProps {
   sendMessage: (
     content: string,
     inputFileIds?: string[],
+    modelId?: string,
   ) => Promise<string | undefined>;
   onMessageAction?: (action: MessageAction) => Promise<boolean>;
 }
@@ -46,9 +47,9 @@ export function useChatActions({
   );
 
   const handleSendMessage = useCallback(
-    (message: string, inputFileIds?: string[]) => {
+    (message: string, inputFileIds?: string[], modelId?: string) => {
       if (message.trim() || (inputFileIds && inputFileIds.length > 0)) {
-        return sendMessage(message, inputFileIds);
+        return sendMessage(message, inputFileIds, modelId);
       }
       return Promise.resolve(undefined);
     },

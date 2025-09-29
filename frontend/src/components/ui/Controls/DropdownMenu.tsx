@@ -37,6 +37,8 @@ export interface DropdownMenuProps {
     vertical: "top" | "bottom";
     horizontal: "left" | "right";
   };
+  /** Callback fired when dropdown open state changes */
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 type Position = {
@@ -100,8 +102,18 @@ export const DropdownMenu = memo(
     triggerIcon = <MoreVertical className="size-4" />,
     id,
     preferredOrientation,
+    onOpenChange,
   }: DropdownMenuProps) => {
-    const [isOpen, setIsOpen] = useState(false);
+    const [isOpen, setIsOpenState] = useState(false);
+
+    // Custom setIsOpen that also calls onOpenChange
+    const setIsOpen = useCallback(
+      (open: boolean) => {
+        setIsOpenState(open);
+        onOpenChange?.(open);
+      },
+      [onOpenChange],
+    );
     const [isProcessingClick, setIsProcessingClick] = useState(false);
     const clickTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
     const [position, setPosition] = useState<Position>({
@@ -175,7 +187,7 @@ export const DropdownMenu = memo(
       if (isProcessingClick) return;
       setIsOpen(false);
       buttonRef.current?.focus();
-    }, [isProcessingClick]);
+    }, [isProcessingClick, setIsOpen]);
 
     const handleMenuItemClick = useCallback(
       (item: DropdownMenuItem, e: React.MouseEvent) => {
@@ -205,7 +217,7 @@ export const DropdownMenu = memo(
           }, 100);
         }
       },
-      [], // Dependencies: setConfirmingItem, setIsProcessingClick, setIsOpen (implicitly via scope)
+      [setIsOpen], // Dependencies: setConfirmingItem, setIsProcessingClick are implicit via scope
     );
 
     const handleConfirmAction = useCallback(() => {
@@ -215,7 +227,7 @@ export const DropdownMenu = memo(
         setConfirmingItem(null); // Close the confirmation dialog
         setIsOpen(false); // Close the dropdown menu
       }
-    }, [confirmingItem]); // Dependency: setIsOpen (implicitly via scope)
+    }, [confirmingItem, setIsOpen]);
 
     const handleCancelConfirm = useCallback(() => {
       setConfirmingItem(null); // Just close the confirmation dialog
@@ -344,13 +356,14 @@ export const DropdownMenu = memo(
             e.stopPropagation();
             setIsOpen(!isOpen);
           }}
-          className={"flex items-center justify-center"}
-          icon={triggerIcon}
+          className="flex min-w-fit items-center justify-center"
           aria-label={t`Open menu`}
           aria-expanded={isOpen}
           aria-haspopup="true"
           aria-controls={menuId}
-        />
+        >
+          {triggerIcon}
+        </Button>
         {renderDropdown()}
 
         {/* Render Confirmation Dialog if needed */}

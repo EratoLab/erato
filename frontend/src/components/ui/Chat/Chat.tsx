@@ -114,6 +114,7 @@ export const Chat = ({
     isHistoryLoading: chatHistoryLoading,
     historyError: chatHistoryError,
     refetchHistory: refreshChats,
+    currentChatLastModel,
   } = useChatContext();
 
   const { profile } = useProfile();
@@ -149,13 +150,13 @@ export const Chat = ({
 
   // Enhanced sendMessage handler that refreshes the sidebar after sending
   const handleSendMessage = useCallback(
-    (message: string, inputFileIds?: string[]) => {
-      logger.log(
-        "[CHAT_FLOW] Chat - handleSendMessage called with files:",
-        inputFileIds,
-      );
+    (message: string, inputFileIds?: string[], modelId?: string) => {
+      logger.log("[CHAT_FLOW] Chat - handleSendMessage called", {
+        files: inputFileIds,
+        model: modelId,
+      });
 
-      baseHandleSendMessage(message, inputFileIds)
+      baseHandleSendMessage(message, inputFileIds, modelId)
         .then(() => {
           logger.log("[CHAT_FLOW] Message sent, refreshing chats");
           return refreshChats();
@@ -402,6 +403,7 @@ export const Chat = ({
             editInitialContent={
               editState.mode === "edit" ? editState.initialContent : undefined
             }
+            initialModel={currentChatLastModel}
           />
         </div>
       </ChatErrorBoundary>

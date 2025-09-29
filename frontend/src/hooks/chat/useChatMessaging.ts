@@ -684,6 +684,7 @@ export function useChatMessaging(
     async (
       content: string,
       inputFileIds?: string[],
+      modelId?: string,
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingRef.current) {
@@ -693,7 +694,7 @@ export function useChatMessaging(
         return undefined;
       }
       console.log(
-        `[DEBUG_STREAMING] sendMessage called. Content: "${content}", Files: ${inputFileIds?.length ?? 0}`,
+        `[DEBUG_STREAMING] sendMessage called. Content: "${content}", Files: ${inputFileIds?.length ?? 0}, Model: ${modelId ?? "default"}`,
       );
 
       // ---> If using silentChatId, set the target navigation ID immediately <---
@@ -781,6 +782,7 @@ export function useChatMessaging(
           inputFileIds,
           previousMessageId,
           effectiveChatIdForRequest,
+          modelId,
         );
 
         console.log(
