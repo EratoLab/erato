@@ -585,9 +585,11 @@ async fn prepare_chat_request(
     previous_message_id: &Uuid,
     new_input_files: Vec<FileContentsForGeneration>,
     user_groups: &[String],
+    requested_chat_provider_id: Option<&str>,
 ) -> Result<(ChatRequest, ChatOptions, GenerationInputMessages), Report> {
     // Resolve system prompt dynamically based on chat provider configuration
-    let chat_provider_config = app_state.chat_provider_for_chatcompletion(None, user_groups)?;
+    let chat_provider_config =
+        app_state.chat_provider_for_chatcompletion(requested_chat_provider_id, user_groups)?;
     let system_prompt = app_state.get_system_prompt(&chat_provider_config).await?;
 
     let generation_input_messages = get_generation_input_messages_by_previous_message_id(
@@ -1366,6 +1368,7 @@ pub async fn message_submit_sse(
             &saved_user_message.id,
             files_for_generation.clone(),
             &me_user.0.groups,
+            request.chat_provider_id.as_deref(),
         )
         .await;
         if let Err(err) = prepare_chat_request_res {
@@ -1591,6 +1594,7 @@ pub async fn regenerate_message_sse(
             &previous_message.id,
             files_for_generation.clone(),
             &me_user.0.groups,
+            request.chat_provider_id.as_deref(),
         )
         .await;
         if let Err(err) = prepare_chat_request_res {
@@ -1851,6 +1855,7 @@ pub async fn edit_message_sse(
             &saved_user_message.id,
             files_for_generation.clone(),
             &me_user.0.groups,
+            request.chat_provider_id.as_deref(),
         )
         .await;
         if let Err(err) = prepare_chat_request_res {
