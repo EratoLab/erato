@@ -322,30 +322,47 @@ impl AppConfig {
     }
 
     /// Returns the list of available chat providers, filtered by the optional allowlist.
+    /// The providers are returned in priority_order.
     pub fn available_chat_providers(&self, chat_provider_allowlist: Option<&[&str]>) -> Vec<&str> {
-        let all_providers: Vec<&str> = if let Some(chat_providers) = &self.chat_providers {
-            chat_providers
-                .providers
-                .keys()
-                .map(|s| s.as_str())
-                .collect()
-        } else if let Some(chat_provider) = &self.chat_provider {
-            vec![chat_provider.provider_kind.as_str()]
-        } else {
-            vec![]
-        };
+        let (all_providers, priority_order): (Vec<&str>, Vec<&str>) =
+            if let Some(chat_providers) = &self.chat_providers {
+                let all: Vec<&str> = chat_providers
+                    .providers
+                    .keys()
+                    .map(|s| s.as_str())
+                    .collect();
+                let priority: Vec<&str> = chat_providers
+                    .priority_order
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect();
+                (all, priority)
+            } else if let Some(chat_provider) = &self.chat_provider {
+                let single = vec![chat_provider.provider_kind.as_str()];
+                (single.clone(), single)
+            } else {
+                (vec![], vec![])
+            };
 
         let filtered: Vec<&str> = match chat_provider_allowlist {
             Some(allowlist) => {
                 let allowlist_set: std::collections::HashSet<&str> =
                     allowlist.iter().copied().collect();
-                all_providers
+                // Return providers in priority order that are both configured and in the allowlist
+                priority_order
                     .iter()
                     .copied()
-                    .filter(|p| allowlist_set.contains(p))
+                    .filter(|p| all_providers.contains(p) && allowlist_set.contains(p))
                     .collect()
             }
-            None => all_providers,
+            None => {
+                // Return providers in priority order that are configured
+                priority_order
+                    .iter()
+                    .copied()
+                    .filter(|p| all_providers.contains(p))
+                    .collect()
+            }
         };
         tracing::debug!(?filtered, "Available chat providers after allowlist filter");
         filtered
