@@ -207,7 +207,9 @@ impl AppState {
             header_map.insert(HeaderName::from_str(&key)?, HeaderValue::from_str(&value)?);
         }
 
-        client_builder = client_builder.default_headers(header_map);
+        client_builder = client_builder
+            .default_headers(header_map)
+            .connection_verbose(true);
 
         let custom_client = client_builder.build()?;
 
