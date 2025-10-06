@@ -70,7 +70,7 @@ const ChatHistoryListItem = memo<{
       <InteractiveContainer
         useDiv={true}
         className={clsx(
-          "flex flex-col rounded-lg px-3 py-1.5 pr-1.5 text-left",
+          "flex flex-col rounded-lg px-3 py-1.5 pb-3.5 pr-1.5 text-left",
           isActive && "bg-theme-bg-selected",
           "hover:bg-theme-bg-hover",
           layout === "compact" ? "gap-0.5" : "gap-1",
