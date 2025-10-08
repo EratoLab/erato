@@ -28,10 +28,8 @@ impl SqitchMigrationSource {
 impl<'a> MigrationSource<'a> for SqitchMigrationSource {
     fn resolve(
         self,
-    ) -> BoxFuture<
-        'a,
-        Result<Vec<Migration>, Box<(dyn StdError + std::marker::Send + Sync + 'static)>>,
-    > {
+    ) -> BoxFuture<'a, Result<Vec<Migration>, Box<dyn StdError + std::marker::Send + Sync + 'static>>>
+    {
         // Read and parse the summary file
         let summary_content = fs::read_to_string(&self.summary_path)
             .map_err(|e| {
