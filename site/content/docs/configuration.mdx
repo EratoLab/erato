@@ -608,17 +608,22 @@ The type of transport protocol used to communicate with the MCP server.
 
 **Type:** `string`
 
-**Supported values:** `"sse"` (Server-Sent Events)
+**Supported values:** 
+- `"sse"` (Server-Sent Events)
+- `"streamable_http"` (Streamable HTTP)
 
-**Example:** `"sse"`
+**Example:** `"sse"` or `"streamable_http"`
 
 #### `mcp_servers.<server_id>.url`
 
-The URL endpoint for the MCP server. For SSE transport, this conventionally ends with `/sse`.
+The URL endpoint for the MCP server.
+
+- For `transport_type = "sse"`, this conventionally ends with `/sse`
+- For `transport_type = "streamable_http"`, this should be the base HTTP endpoint
 
 **Type:** `string`
 
-**Example:** `"http://127.0.0.1:63490/sse"`, `"https://my-mcp-server.example.com/sse"`
+**Example:** `"http://127.0.0.1:63490/sse"`, `"https://my-mcp-server.example.com/sse"`, `"https://api.example.com/mcp"`
 
 #### `mcp_servers.<server_id>.http_headers`
 

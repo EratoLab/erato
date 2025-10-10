@@ -29,7 +29,12 @@ impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let db = Database::connect(&config.database_url).await?;
         let file_storage_providers = Self::build_file_storage_providers(&config)?;
-        let mcp_servers = Arc::new(McpServers::new(&config).await?);
+        let mcp_servers = Arc::new(McpServers::new(&config));
+
+        // Perform connectivity checks for MCP servers
+        // Failures are logged but not fatal
+        mcp_servers.check_connectivity().await;
+
         let actor_manager = ActorManager::new(db.clone(), config.clone()).await;
         let langfuse_client = LangfuseClient::from_config(&config.integrations.langfuse)?;
 
