@@ -582,6 +582,7 @@ async fn stream_save_user_message<
 
 async fn prepare_chat_request(
     app_state: &AppState,
+    chat_id: Uuid,
     previous_message_id: &Uuid,
     new_input_files: Vec<FileContentsForGeneration>,
     user_groups: &[String],
@@ -606,7 +607,7 @@ async fn prepare_chat_request(
         .with_capture_tool_calls(true)
         .with_capture_usage(true);
 
-    let mcp_server_tools = app_state.mcp_servers.list_tools().await;
+    let mcp_server_tools = app_state.mcp_servers.list_tools(chat_id).await;
 
     let tools = convert_mcp_tools_to_genai_tools(mcp_server_tools);
     if !tools.is_empty() {
@@ -708,10 +709,14 @@ async fn stream_generate_chat_completion<
 
             let managed_tool_call = app_state
                 .mcp_servers
-                .convert_tool_call_to_managed_tool_call(unfinished_tool_call.clone())
+                .convert_tool_call_to_managed_tool_call(chat_id, unfinished_tool_call.clone())
                 .await
                 .unwrap();
-            match app_state.mcp_servers.call_tool(managed_tool_call).await {
+            match app_state
+                .mcp_servers
+                .call_tool(chat_id, managed_tool_call)
+                .await
+            {
                 Ok(tool_call_result) => {
                     // Emit event for tool call proposed
                     {
@@ -1365,6 +1370,7 @@ pub async fn message_submit_sse(
         .await?;
         let prepare_chat_request_res = prepare_chat_request(
             &app_state,
+            chat.id,
             &saved_user_message.id,
             files_for_generation.clone(),
             &me_user.0.groups,
@@ -1591,6 +1597,7 @@ pub async fn regenerate_message_sse(
 
         let prepare_chat_request_res = prepare_chat_request(
             &app_state,
+            chat.id,
             &previous_message.id,
             files_for_generation.clone(),
             &me_user.0.groups,
@@ -1852,6 +1859,7 @@ pub async fn edit_message_sse(
         .await?;
         let prepare_chat_request_res = prepare_chat_request(
             &app_state,
+            chat.id,
             &saved_user_message.id,
             files_for_generation.clone(),
             &me_user.0.groups,

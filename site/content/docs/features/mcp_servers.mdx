@@ -69,6 +69,11 @@ url = "http://127.0.0.1:63490/sse"
 transport_type = "sse"
 url = "https://api.example.com/mcp/sse"
 http_headers = { "Authorization" = "Bearer your-api-token" }
+
+[mcp_servers.advanced_service]
+transport_type = "streamable_http"
+url = "https://api.example.com/mcp"
+http_headers = { "Authorization" = "Bearer your-api-token" }
 ```
 
 See the [Configuration Reference](../configuration#mcp_servers) for detailed configuration options.
@@ -108,16 +113,21 @@ The SSE transport uses HTTP with Server-Sent Events for bidirectional communicat
 The **Streamable HTTP** transport is a modern protocol for efficient, bidirectional streaming of data between Erato and MCP servers over HTTP.
 It is designed to support advanced use cases and improved performance compared to traditional Server-Sent Events (SSE).
 
-> [!WARNING]
->
-> **Not yet supported:** Streamable HTTP is not currently supported in Erato, but support is planned for a future release. You can follow [the MCP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) for details on the protocol and keep an eye on the Erato changelog for updates.
-
 - **Transport Type:** `"streamable_http"`
 - **Protocol:** HTTP/HTTPS with full-duplex streaming (see MCP spec)
 - **Use Cases:** High-performance integrations, advanced tool servers, large data transfers
-- **Configuration:** Will require a URL endpoint and may support additional options (to be documented upon release)
+- **Configuration:** Requires a URL endpoint for the MCP server
 
-If you are developing or deploying MCP servers that support Streamable HTTP, you will be able to connect them to Erato as soon as this feature is released. For now, use the `"sse"` transport type for compatibility.
+**Example configuration:**
+
+```toml
+[mcp_servers.advanced_service]
+transport_type = "streamable_http"
+url = "https://api.example.com/mcp"
+http_headers = { "Authorization" = "Bearer your-api-token" }
+```
+
+Both SSE and Streamable HTTP transports are fully supported in Erato, allowing you to choose the transport that best fits your deployment needs.
 
 ### stdio
 
