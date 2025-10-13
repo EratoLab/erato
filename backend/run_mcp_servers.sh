@@ -34,9 +34,10 @@ echo "Starting MCP proxy server..."
 uvx --from mcp-proxy==0.7.0 mcp-proxy --sse-port 63490 pnpx @modelcontextprotocol/server-filesystem . &
 pids+=($!) # Add the PID of the last background command to the array
 
-# Add more commands here in the future if needed
-# command2 &
-# pids+=($!)
+# Start the second command in the background
+echo "Starting MCP proxy server with streamable HTTP transport..."
+uvx --from mcp-proxy==0.7.0 mcp-proxy --transport streamablehttp --sse-port 63491 pnpx @modelcontextprotocol/server-filesystem . &
+pids+=($!)
 
 echo "Script running. Press Ctrl+C to terminate all processes."
 echo "You can run an MCP inspector via \`pnpx @modelcontextprotocol/inspector\`"

@@ -771,12 +771,16 @@ impl StorageProviderSpecificConfigMerged {
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct McpServerConfig {
     // The type of transport that the MCP server uses.
-    // Right now the only valid value is `sse`.
+    // Supported values are:
+    // - "sse" (Server-Sent Events)
+    // - "streamable_http" (Streamable HTTP)
     pub transport_type: String,
     // Url of the server.
     // For `transport_type = "sse"`, this will conventionally end with `/sse`.
+    // For `transport_type = "streamable_http"`, this should be the base HTTP endpoint.
     pub url: String,
-    // For `transport_type = "sse"`, these static headers will be sent with every request.
+    // Optional static HTTP headers to be sent with every request.
+    // This is useful for authentication or API keys.
     pub http_headers: Option<HashMap<String, String>>,
 }
 
