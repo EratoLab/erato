@@ -1,0 +1,13 @@
+{{- if .Values.fileStorageConfig.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-erato-file-storage-config
+data:
+{{- if and .Values.fileStorageConfig.sourceFile (ne .Values.fileStorageConfig.sourceFile "") }}
+  erato.file-storage.toml: {{ .Files.Get .Values.fileStorageConfig.sourceFile | quote }}
+{{- else }}
+  erato.file-storage.toml: {{ .Files.Get "config/erato.file-storage.toml" | quote }}
+{{- end }}
+{{- end }}
+

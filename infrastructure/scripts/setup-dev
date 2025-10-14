@@ -1,0 +1,593 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pydantic>=2.0.0",
+# ]
+# ///
+
+import argparse
+import subprocess
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+from pydantic import BaseModel, Field
+
+
+class ScriptConfig(BaseModel):
+    """Configuration for the setup script."""
+    wait_flag: str = ""
+    erato_image_repository: str = "harbor.imassage.me/erato/app"
+    erato_image_tag: Optional[str] = None
+    build_local: bool = False
+    helm_set_args: list[str] = Field(default_factory=list)
+    chart_dep_update: bool = False
+    use_alt_erato_toml: bool = False
+    api_key: Optional[str] = None
+    with_telepresence: bool = False
+    file_storage_config_source: Optional[str] = None
+
+
+class ClusterConfig(BaseModel):
+    """Configuration for the k3d cluster."""
+    cluster_name: str = "erato-dev"
+    erato_chart_path: Path = Path("./charts/erato")
+    chart_path: Path = Path("./k3d/erato-local")
+    app_host: str = "app.erato.internal"
+    dex_host: str = "dex.erato.internal"
+
+
+class ClusterStatus(BaseModel):
+    """Status of a k3d cluster."""
+    exists: bool
+    running: bool
+
+
+class BuildConfig(BaseModel):
+    """Configuration for local image build."""
+    project_root: Path
+    build_tag: str
+    local_registry: str = "harbor.imassage.me"
+    frontend_image_name: str = "erato/frontend"
+    repo_base: str
+    tag_base: str
+    backend_image_repo: str
+    base_backend_image: str
+    combined_image_path: str
+    local_frontend_image: str
+    local_combined_image: str
+    backend_image_for_build_arg: str
+
+
+def run_command(cmd: list[str], check: bool = True, capture_output: bool = False, 
+                shell: bool = False, input: Optional[str] = None, cwd: Optional[Path] = None) -> subprocess.CompletedProcess:
+    """Run a shell command with error handling."""
+    try:
+        if shell:
+            cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
+            result = subprocess.run(cmd_str, shell=True, check=check, 
+                                  capture_output=capture_output, text=True, 
+                                  input=input, cwd=cwd)
+        else:
+            result = subprocess.run(cmd, check=check, capture_output=capture_output, 
+                                  text=True, input=input, cwd=cwd)
+        return result
+    except subprocess.CalledProcessError as e:
+        print(f"Error running command: {' '.join(cmd)}", file=sys.stderr)
+        if e.stderr:
+            print(f"Stderr: {e.stderr}", file=sys.stderr)
+        if check:
+            sys.exit(1)
+        raise
+    except FileNotFoundError:
+        print(f"Error: Command not found: {cmd[0]}", file=sys.stderr)
+        sys.exit(1)
+
+
+def check_prerequisites():
+    """Check if required commands are available."""
+    required_commands = ["k3d", "kubectl", "helm"]
+    for cmd in required_commands:
+        result = run_command(["which", cmd], check=False, capture_output=True)
+        if result.returncode != 0:
+            print(f"{cmd} is required but not installed. Aborting.", file=sys.stderr)
+            sys.exit(1)
+
+
+def get_cluster_status(cluster_name: str) -> ClusterStatus:
+    """Check if a k3d cluster exists and if it's running."""
+    import json
+    
+    result = run_command(["k3d", "cluster", "list", "--output", "json"], capture_output=True)
+    
+    try:
+        clusters = json.loads(result.stdout)
+        for cluster in clusters:
+            if cluster.get("name") == cluster_name:
+                # Check if all expected nodes are running
+                servers_running = cluster.get("serversRunning", 0)
+                servers_count = cluster.get("serversCount", 0)
+                agents_running = cluster.get("agentsRunning", 0)
+                agents_count = cluster.get("agentsCount", 0)
+                
+                # Cluster is running if all servers and agents are running
+                is_running = (servers_running == servers_count and 
+                            agents_running == agents_count and 
+                            servers_count > 0)
+                
+                return ClusterStatus(exists=True, running=is_running)
+        
+        return ClusterStatus(exists=False, running=False)
+    except json.JSONDecodeError:
+        # Fallback if JSON parsing fails
+        print("Warning: Could not parse k3d cluster list output", file=sys.stderr)
+        return ClusterStatus(exists=False, running=False)
+
+
+def create_or_use_cluster(cluster_config: ClusterConfig):
+    """Create k3d cluster if it doesn't exist, start it if stopped, otherwise use existing."""
+    status = get_cluster_status(cluster_config.cluster_name)
+    
+    if not status.exists:
+        print(f"Creating k3d cluster '{cluster_config.cluster_name}'...")
+        run_command([
+            "k3d", "cluster", "create",
+            cluster_config.cluster_name,
+            "--config", "k3d/cluster-config.yaml"
+        ])
+    elif not status.running:
+        print(f"Starting existing cluster '{cluster_config.cluster_name}'...")
+        run_command(["k3d", "cluster", "start", cluster_config.cluster_name])
+    else:
+        print(f"Using existing cluster '{cluster_config.cluster_name}'...")
+
+
+def wait_for_cluster():
+    """Wait for cluster nodes to be ready."""
+    print("Waiting for cluster to be ready...")
+    
+    # Retry a few times in case the API server isn't immediately available
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        result = run_command([
+            "kubectl", "wait", "--for=condition=Ready",
+            "nodes", "--all", "--timeout=60s"
+        ], check=False, capture_output=True)
+        
+        if result.returncode == 0:
+            return
+        
+        if attempt < max_retries:
+            print(f"Attempt {attempt}/{max_retries}: Cluster not ready yet, waiting 5 seconds...")
+            time.sleep(5)
+        else:
+            print("Error: Cluster did not become ready in time", file=sys.stderr)
+            print(f"Last error: {result.stderr}", file=sys.stderr)
+            sys.exit(1)
+
+
+def wait_for_coredns():
+    """Wait for CoreDNS to be ready."""
+    print("Waiting for CoreDNS to be ready...")
+    run_command([
+        "kubectl", "-n", "kube-system", "wait",
+        "--for=condition=Available", "deployment/coredns",
+        "--timeout=60s"
+    ])
+
+
+def add_helm_repos():
+    """Add required Helm repositories."""
+    repos = [
+        ("bitnami", "https://charts.bitnami.com/bitnami"),
+        ("cnpg", "https://cloudnative-pg.github.io/charts"),
+        ("datawire", "https://app.getambassador.io"),
+    ]
+    for name, url in repos:
+        run_command(["helm", "repo", "add", name, url], check=False, capture_output=True)
+
+
+def update_chart_dependencies(config: ScriptConfig, cluster_config: ClusterConfig):
+    """Update Helm chart dependencies if requested."""
+    if config.chart_dep_update:
+        print("Updating chart dependencies...")
+        run_command(["helm", "repo", "update"])
+        run_command(["helm", "dependency", "update", str(cluster_config.erato_chart_path)])
+        run_command(["helm", "dependency", "update", str(cluster_config.chart_path)])
+
+
+def configure_helm_args(config: ScriptConfig) -> list[str]:
+    """Configure Helm arguments based on script config."""
+    helm_args = config.helm_set_args.copy()
+    
+    if config.erato_image_repository:
+        helm_args.extend(["--set", f"erato.backend.image.repository={config.erato_image_repository}"])
+    
+    if config.erato_image_tag:
+        helm_args.extend(["--set", f"erato.backend.image.tag={config.erato_image_tag}"])
+    
+    return helm_args
+
+
+def perform_local_build(config: ScriptConfig) -> list[str]:
+    """Perform local build and return Helm arguments."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    build_tag = str(int(datetime.now().timestamp()))
+    
+    repo_base = config.erato_image_repository or "harbor.imassage.me/erato/app"
+    tag_base = config.erato_image_tag or "latest"
+    
+    backend_image_repo = repo_base.replace("/app", "/backend")
+    base_backend_image = f"{backend_image_repo}:{tag_base}"
+    print(f"Using base backend image: {base_backend_image}")
+    
+    combined_image_path = "/".join(repo_base.split("/")[1:])
+    
+    build_config = BuildConfig(
+        project_root=project_root,
+        build_tag=build_tag,
+        repo_base=repo_base,
+        tag_base=tag_base,
+        backend_image_repo=backend_image_repo,
+        base_backend_image=base_backend_image,
+        combined_image_path=combined_image_path,
+        local_frontend_image=f"harbor.imassage.me/erato/frontend:{build_tag}",
+        local_combined_image=f"k3d-registry.localhost:5000/{combined_image_path}:{build_tag}",
+        backend_image_for_build_arg="/".join(base_backend_image.split("/")[1:])
+    )
+    
+    print(f"Building frontend image: {build_config.local_frontend_image}")
+    run_command([
+        "docker", "build",
+        "-t", build_config.local_frontend_image,
+        "-f", str(build_config.project_root / "frontend" / "Dockerfile"),
+        str(build_config.project_root / "frontend"),
+        "--platform=linux/amd64"
+    ])
+    run_command(["docker", "push", build_config.local_frontend_image])
+    
+    print(f"Building combined image: {build_config.local_combined_image}")
+    run_command([
+        "docker", "build",
+        "--build-arg", f"REGISTRY={build_config.local_registry}",
+        "--build-arg", f"FRONTEND_IMAGE={build_config.frontend_image_name}:{build_config.build_tag}",
+        "--build-arg", f"BACKEND_IMAGE={build_config.backend_image_for_build_arg}",
+        "-t", build_config.local_combined_image,
+        "-f", str(build_config.project_root / "Dockerfile.combined"),
+        str(build_config.project_root),
+        "--platform=linux/amd64"
+    ])
+    run_command(["docker", "push", build_config.local_combined_image])
+    
+    return [
+        "--set", f"erato.backend.image.repository=k3d-registry.localhost:5000/{build_config.combined_image_path}",
+        "--set", f"erato.backend.image.tag={build_config.build_tag}"
+    ]
+
+
+def handle_alt_erato_toml(config: ScriptConfig, cluster_config: ClusterConfig) -> list[str]:
+    """Handle alternative erato.toml configuration."""
+    if not config.use_alt_erato_toml:
+        return []
+    
+    alt_toml_path = cluster_config.chart_path / "config" / "erato.alt.toml"
+    
+    if config.api_key:
+        print(f"Generating {alt_toml_path} from template...")
+        template_path = cluster_config.chart_path / "config" / "erato.alt.template.toml"
+        
+        with open(template_path, "r") as f:
+            template_content = f.read()
+        
+        alt_content = template_content.replace("<API_KEY>", config.api_key)
+        
+        with open(alt_toml_path, "w") as f:
+            f.write(alt_content)
+    
+    if not alt_toml_path.exists():
+        print(f"Error: --use-alt-erato-toml is set, but {alt_toml_path} does not exist.", file=sys.stderr)
+        print("Please create it or use --api-key to generate it.", file=sys.stderr)
+        sys.exit(1)
+    
+    return ["--set", "erato.backend.configFile.useAlt=true"]
+
+
+def handle_file_storage_config(config: ScriptConfig) -> list[str]:
+    """Handle file storage configuration source."""
+    if not config.file_storage_config_source:
+        return []
+    
+    return ["--set", f"fileStorageConfig.sourceFile={config.file_storage_config_source}"]
+
+
+def helm_release_exists(namespace: str, release_name: str) -> bool:
+    """Check if a Helm release exists."""
+    result = run_command(
+        ["helm", "list", "-n", namespace],
+        capture_output=True,
+        check=False
+    )
+    for line in result.stdout.splitlines():
+        if line.startswith(release_name):
+            return True
+    return False
+
+
+def install_nginx_ingress():
+    """Install nginx ingress controller."""
+    print("Installing nginx ingress controller...")
+    if not helm_release_exists("ingress-nginx", "ingress-nginx"):
+        print("Installing nginx ingress controller...")
+        run_command([
+            "helm", "upgrade", "--install", "ingress-nginx", "ingress-nginx",
+            "--repo", "https://kubernetes.github.io/ingress-nginx",
+            "--namespace", "ingress-nginx", "--create-namespace"
+        ])
+    else:
+        print("nginx ingress controller already installed, skipping...")
+
+
+def install_telepresence(config: ScriptConfig):
+    """Install Telepresence if requested."""
+    if config.with_telepresence:
+        if not helm_release_exists("ambassador", "traffic-manager"):
+            print("Installing Telepresence...")
+            run_command(["telepresence", "helm", "install"])
+        else:
+            print("Telepresence already installed, skipping...")
+    else:
+        print("Skipping Telepresence installation (use --with-telepresence to enable)")
+
+
+def install_cnpg():
+    """Install CNPG operator."""
+    if not helm_release_exists("cnpg-system", "cnpg"):
+        print("Installing CNPG operator...")
+        run_command([
+            "helm", "upgrade", "--install", "cnpg",
+            "--namespace", "cnpg-system",
+            "--create-namespace",
+            "cnpg/cloudnative-pg"
+        ])
+    else:
+        print("CNPG operator already installed, skipping...")
+
+
+def install_reloader():
+    """Install Reloader for ConfigMap auto-reloading."""
+    # Check if reloader is already installed by checking for the deployment
+    # Reloader is typically installed in the default namespace
+    result = run_command([
+        "kubectl", "get", "deployment",
+        "reloader-reloader",
+        "-n", "default"
+    ], capture_output=True, check=False)
+    
+    if result.returncode == 0:
+        print("Reloader already installed, skipping...")
+        return
+    
+    print("Installing Reloader for ConfigMap auto-reloading...")
+    run_command([
+        "kubectl", "apply", "-f",
+        "https://raw.githubusercontent.com/stakater/Reloader/master/deployments/kubernetes/reloader.yaml"
+    ])
+
+
+def wait_for_webhook(namespace: str, service_name: str, webhook_name: str, max_attempts: int = 60):
+    """Wait for a webhook service to be ready."""
+    print(f"Waiting for {webhook_name} to be ready...")
+    
+    for attempt in range(1, max_attempts + 1):
+        result = run_command([
+            "kubectl", "get", "endpoints",
+            "-n", namespace, service_name,
+            "-o", "jsonpath={.subsets[*].addresses[*].ip}"
+        ], capture_output=True, check=False)
+        
+        if result.returncode == 0 and result.stdout.strip():
+            print("Webhook is ready!")
+            return
+        
+        print(f"Attempt {attempt}/{max_attempts}: Webhook not ready, waiting 5 seconds...")
+        time.sleep(5)
+    
+    print("Timeout: Webhook did not become ready", file=sys.stderr)
+    sys.exit(1)
+
+
+def install_erato_chart(config: ScriptConfig, cluster_config: ClusterConfig, helm_args: list[str]):
+    """Install/upgrade Erato local development chart."""
+    print("Installing/upgrading Erato local development chart...")
+    
+    cmd = [
+        "helm", "upgrade", "--install", "erato-local",
+        str(cluster_config.chart_path),
+        "--namespace", "erato-local-ns", "--create-namespace"
+    ]
+    
+    if config.wait_flag:
+        cmd.append(config.wait_flag)
+    
+    cmd.extend(helm_args)
+    
+    print(f"Running: {' '.join(cmd)}")
+    run_command(cmd)
+
+
+def ensure_hosts_entries(cluster_config: ClusterConfig):
+    """Ensure local DNS entries exist in /etc/hosts."""
+    hosts = [
+        cluster_config.app_host,
+        cluster_config.dex_host,
+        "k3d-registry.localhost"
+    ]
+    
+    try:
+        with open("/etc/hosts", "r") as f:
+            hosts_content = f.read()
+    except PermissionError:
+        print("Warning: Cannot read /etc/hosts. You may need to add entries manually.", file=sys.stderr)
+        return
+    
+    for host in hosts:
+        if host not in hosts_content:
+            print(f"Adding {host} to /etc/hosts...")
+            entry = f"127.0.0.1 {host}\n"
+            try:
+                result = run_command(
+                    ["sudo", "tee", "-a", "/etc/hosts"],
+                    capture_output=True,
+                    input=entry
+                )
+            except Exception as e:
+                print(f"Warning: Could not add {host} to /etc/hosts: {e}", file=sys.stderr)
+                print(f"Please manually add: 127.0.0.1 {host}", file=sys.stderr)
+
+
+def print_completion_message(cluster_config: ClusterConfig):
+    """Print completion message with access information."""
+    print()
+    print("Setup complete! Your development environment is ready.")
+    print(f"Access the application at: https://{cluster_config.app_host}")
+    print(f"Access Dex at: https://{cluster_config.dex_host}")
+    print()
+    print("Default login credentials:")
+    print("  Username: admin@example.com")
+    print("  Password: admin")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Setup local k3d development environment for Erato",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="Wait for resources to be ready during Helm install"
+    )
+    parser.add_argument(
+        "--build-local",
+        action="store_true",
+        help="Build images locally instead of pulling from registry"
+    )
+    parser.add_argument(
+        "--erato-image-repository",
+        default="harbor.imassage.me/erato/app",
+        help="Erato image repository (default: harbor.imassage.me/erato/app)"
+    )
+    parser.add_argument(
+        "--erato-image-tag",
+        default=None,
+        help="Erato image tag (if not specified, uses chart default)"
+    )
+    parser.add_argument(
+        "--chart-dep-update",
+        action="store_true",
+        help="Update Helm chart dependencies"
+    )
+    parser.add_argument(
+        "--use-alt-erato-toml",
+        action="store_true",
+        help="Use alternative erato.toml configuration"
+    )
+    parser.add_argument(
+        "--api-key",
+        help="API key to generate alternative erato.toml (implies --use-alt-erato-toml)"
+    )
+    parser.add_argument(
+        "--with-telepresence",
+        action="store_true",
+        help="Install Telepresence for local development"
+    )
+    parser.add_argument(
+        "--file-storage-config",
+        dest="file_storage_config_source",
+        help="Source file for file storage config (e.g., 'config/erato.file-storage.toml')"
+    )
+    
+    args = parser.parse_args()
+    
+    # Build configuration
+    config = ScriptConfig(
+        wait_flag="--wait" if args.wait else "",
+        erato_image_repository=args.erato_image_repository,
+        erato_image_tag=args.erato_image_tag,
+        build_local=args.build_local,
+        chart_dep_update=args.chart_dep_update,
+        use_alt_erato_toml=args.use_alt_erato_toml or bool(args.api_key),
+        api_key=args.api_key,
+        with_telepresence=args.with_telepresence,
+        file_storage_config_source=args.file_storage_config_source
+    )
+    
+    cluster_config = ClusterConfig()
+    
+    # Change to infrastructure directory
+    script_dir = Path(__file__).resolve().parent
+    infrastructure_dir = script_dir.parent
+    
+    try:
+        import os
+        os.chdir(infrastructure_dir)
+    except Exception as e:
+        print(f"Error: Could not change to infrastructure directory: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Execute setup steps
+    check_prerequisites()
+    create_or_use_cluster(cluster_config)
+    
+    # Switch kubectl context
+    run_command(["kubectl", "config", "use-context", f"k3d-{cluster_config.cluster_name}"])
+    
+    wait_for_cluster()
+    wait_for_coredns()
+    
+    add_helm_repos()
+    update_chart_dependencies(config, cluster_config)
+    
+    # Configure Helm arguments
+    helm_args = configure_helm_args(config)
+    
+    # Handle local build if requested
+    if config.build_local:
+        print("Performing local build...")
+        build_helm_args = perform_local_build(config)
+        helm_args = build_helm_args  # Override with build-specific args
+    
+    # Handle alternative erato.toml
+    alt_toml_args = handle_alt_erato_toml(config, cluster_config)
+    helm_args.extend(alt_toml_args)
+    
+    # Handle file storage config
+    file_storage_args = handle_file_storage_config(config)
+    helm_args.extend(file_storage_args)
+    
+    # Install components
+    install_nginx_ingress()
+    install_telepresence(config)
+    install_cnpg()
+    install_reloader()
+    
+    # Wait for webhooks
+    wait_for_webhook("ingress-nginx", "ingress-nginx-controller-admission", "NGINX admission webhook")
+    wait_for_webhook("cnpg-system", "cnpg-webhook-service", "CNPG webhook")
+    
+    # Install Erato chart
+    install_erato_chart(config, cluster_config, helm_args)
+    
+    # Ensure DNS entries
+    ensure_hosts_entries(cluster_config)
+    
+    # Print completion message
+    print_completion_message(cluster_config)
+
+
+if __name__ == "__main__":
+    main()
+

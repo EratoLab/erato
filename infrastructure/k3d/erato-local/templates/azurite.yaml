@@ -61,21 +61,10 @@ spec:
             - "azurite"
             - "--blobHost"
             - "0.0.0.0"
-            - "--queueHost"
-            - "0.0.0.0"
-            - "--tableHost"
-            - "0.0.0.0"
-            - "--location"
-            - "/data"
+            - "--inMemoryPersistence"
           ports:
             - name: blob
               containerPort: 10000
-              protocol: TCP
-            - name: queue
-              containerPort: 10001
-              protocol: TCP
-            - name: table
-              containerPort: 10002
               protocol: TCP
           volumeMounts:
             - name: data
