@@ -4,11 +4,14 @@ metadata:
   name: erato-dev
 servers: 1
 agents: 0
+image: "rancher/k3s:v1.34.1-k3s1"
 registries:
   create:
     name: k3d-registry.localhost
     host: "0.0.0.0"
     hostPort: "5000"
+    volumes:
+      - /tmp/k3d-erato-registry-data:/var/lib/registry
   config: |
     mirrors:
       "k3d-registry.localhost:5000":
@@ -29,4 +32,12 @@ options:
     extraArgs:
       - arg: --disable=traefik
         nodeFilters:
-          - server:* 
+          - server:*
+      - arg: --kubelet-arg=eviction-hard=imagefs.available<0.5%,nodefs.available<0.5%
+        nodeFilters:
+          - server:*
+          - agent:*
+      - arg: --kubelet-arg=eviction-minimum-reclaim=imagefs.available=0.5%,nodefs.available=0.5%
+        nodeFilters:
+          - server:*
+          - agent:* 

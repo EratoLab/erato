@@ -18,3 +18,5 @@ tmp/
 
 # Debug directories
 .debug/
+
+__pycache__

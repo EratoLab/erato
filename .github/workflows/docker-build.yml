@@ -283,10 +283,16 @@ jobs:
       - name: Install k3d
         run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          uv --version
+
       - name: Spin up k3d cluster for tests
         working-directory: ./infrastructure
         run: |
-          ./scripts/setup-dev.sh --wait --chart-dep-update \
+          ./scripts/setup-dev --wait --chart-dep-update \
             --erato-image-repository ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }} \
             --erato-image-tag ${{ env.SHA_TAG }}-amd64 \
             --api-key "${{ secrets.E2E_OPENAI_API_KEY }}"

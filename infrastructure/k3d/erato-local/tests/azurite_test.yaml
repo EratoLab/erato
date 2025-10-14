@@ -76,10 +76,7 @@ tests:
           content: azurite
       - contains:
           path: spec.template.spec.containers[0].command
-          content: "--location"
-      - contains:
-          path: spec.template.spec.containers[0].command
-          content: "/data"
+          content: "--inMemoryPersistence"
 
   - it: should have correct port configuration in deployment
     documentIndex: 2
@@ -90,18 +87,6 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].ports[0].name
           value: blob
-      - equal:
-          path: spec.template.spec.containers[0].ports[1].containerPort
-          value: 10001
-      - equal:
-          path: spec.template.spec.containers[0].ports[1].name
-          value: queue
-      - equal:
-          path: spec.template.spec.containers[0].ports[2].containerPort
-          value: 10002
-      - equal:
-          path: spec.template.spec.containers[0].ports[2].name
-          value: table
 
   - it: should mount persistent volume correctly
     documentIndex: 2

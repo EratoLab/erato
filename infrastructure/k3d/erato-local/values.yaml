@@ -1,3 +1,11 @@
+# File storage configuration
+# This will be mounted as erato.file-storage.auto.erato.toml
+fileStorageConfig:
+  enabled: true
+  # sourceFile: Path to file relative to chart root (e.g., "config/erato.file-storage.toml")
+  # If not specified, defaults to "config/erato.file-storage.toml"
+  sourceFile: ""
+
 erato:
   commonAnnotations:
     reloader.stakater.com/auto: "true"
@@ -14,7 +22,7 @@ erato:
   backend:
     image:
       repository: harbor.imassage.me/erato/app
-      tag: "latest"
+      tag: "adff59a50e3b78d0221a8a5bbb818a249fffb45a"
       pullPolicy: Always
     configFile:
       secretName: erato-local-erato-toml-secret
@@ -23,6 +31,9 @@ erato:
       # If it is provided, `config/erato.alt.toml` will be used instead of `config/erato.toml`
       useAlt: false
     extraConfigFiles:
+      - name: file-storage
+        configMapName: erato-local-erato-file-storage-config
+        configMapKey: erato.file-storage.toml
       - name: frontend-env
         inlineContent: |
           [frontend.additional_environment]
