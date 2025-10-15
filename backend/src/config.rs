@@ -795,6 +795,22 @@ pub struct FrontendConfig {
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
     #[serde(default)]
     pub additional_environment: HashMap<String, serde_json::Value>,
+
+    // Whether to disable file upload functionality in the UI.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub disable_upload: bool,
+
+    // Whether to disable automatic focusing of the chat input field.
+    // This prevents unwanted scrolling behavior when navigating to pages with embedded chat.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub disable_chat_input_autofocus: bool,
+
+    // Whether to hide logout functionality from the UI.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub disable_logout: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]

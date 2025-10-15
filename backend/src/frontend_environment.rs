@@ -15,6 +15,9 @@ use std::path::Path;
 // If you change the keys, you must also update them in the frontend.
 const FRONTEND_ENV_KEY_API_ROOT_URL: &str = "API_ROOT_URL";
 const FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME: &str = "THEME_CUSTOMER_NAME";
+const FRONTEND_ENV_KEY_DISABLE_UPLOAD: &str = "DISABLE_UPLOAD";
+const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_AUTOFOCUS";
+const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -41,6 +44,20 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
             Value::String(theme.clone()),
         );
     }
+
+    // Inject frontend configuration flags
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_DISABLE_UPLOAD.to_string(),
+        Value::Bool(config.frontend.disable_upload),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS.to_string(),
+        Value::Bool(config.frontend.disable_chat_input_autofocus),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_DISABLE_LOGOUT.to_string(),
+        Value::Bool(config.frontend.disable_logout),
+    );
 
     // Inject pairs from frontend.additional_environment
     for (key, value) in &config.additional_frontend_environment() {
