@@ -71,11 +71,11 @@ test(
     await page.getByLabel("Upload Files").click();
     const fileChooser = await fileChooserPromise;
 
-    const filePath = "test-files/big-file-100mb.pdf";
+    const filePath = "test-files/big-file-20mb.pdf";
     await fileChooser.setFiles(filePath);
 
     await expect(page.getByText("File is too large")).toBeVisible({
-      // Increased timeout, as uploading a 100MB file can take a while
+      // Increased timeout, as uploading a 20MB file can take a while
       timeout: 30000,
     });
   },

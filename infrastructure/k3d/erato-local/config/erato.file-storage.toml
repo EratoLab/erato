@@ -1,4 +1,5 @@
 [file_storage_providers.azblob_k8s]
 provider_kind = "azblob"
+max_upload_size_kb = 15360  # 15 MB
 config = { endpoint = "http://erato-local-azurite:10000/devstoreaccount1", container = "erato-storage", account_name = "devstoreaccount1", account_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==" }
 
