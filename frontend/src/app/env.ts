@@ -5,6 +5,9 @@ export type Env = {
   themeConfigPath: string | null;
   themeLogoPath: string | null;
   themeLogoDarkPath: string | null;
+  disableUpload: boolean;
+  disableChatInputAutofocus: boolean;
+  disableLogout: boolean;
 };
 
 declare global {
@@ -16,6 +19,9 @@ declare global {
     THEME_CONFIG_PATH?: string;
     THEME_LOGO_PATH?: string;
     THEME_LOGO_DARK_PATH?: string;
+    DISABLE_UPLOAD?: boolean;
+    DISABLE_CHAT_INPUT_AUTOFOCUS?: boolean;
+    DISABLE_LOGOUT?: boolean;
   }
 }
 
@@ -51,6 +57,11 @@ export const env = (): Env => {
     themeLogoDarkPath = null;
   }
 
+  const disableUpload = window.DISABLE_UPLOAD ?? false;
+  const disableChatInputAutofocus =
+    window.DISABLE_CHAT_INPUT_AUTOFOCUS ?? false;
+  const disableLogout = window.DISABLE_LOGOUT ?? false;
+
   return {
     apiRootUrl,
     themeCustomerName: customerName,
@@ -58,5 +69,8 @@ export const env = (): Env => {
     themeConfigPath,
     themeLogoPath,
     themeLogoDarkPath,
+    disableUpload,
+    disableChatInputAutofocus,
+    disableLogout,
   };
 };

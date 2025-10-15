@@ -10,3 +10,13 @@ config = { endpoint = "http://localhost:9000", bucket = "erato-storage", region 
 # Example Sentry integration configuration
 # [integrations.sentry]
 # sentry_dsn = "https://your-sentry-dsn@sentry.io/project-id"
+
+# Frontend configuration options for embedded scenarios
+# [frontend]
+# # Whether to disable file upload functionality in the UI (default: false)
+# disable_upload = true
+# # Whether to disable automatic focusing of the chat input field (default: false)
+# # This prevents unwanted scrolling behavior when navigating to pages with embedded chat
+# disable_chat_input_autofocus = true
+# # Whether to hide logout functionality from the UI (default: false)
+# disable_logout = true
