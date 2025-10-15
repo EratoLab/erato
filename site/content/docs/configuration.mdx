@@ -366,6 +366,281 @@ model_name = "gpt-4"
 api_key = "sk-key"
 ```
 
+### `file_storage_providers`
+
+Configuration for file storage providers that handle uploaded files and documents in Erato. You can configure multiple storage providers with different backends (S3-compatible or Azure Blob Storage) and designate one as the default.
+
+**Type:** `object<string, FileStorageProviderConfig>`
+
+**Required:** At least one file storage provider must be configured.
+
+**Example:**
+
+```toml
+[file_storage_providers.primary]
+provider_kind = "s3"
+display_name = "Primary Storage"
+max_upload_size_kb = 102400  # 100 MB
+config = { bucket = "erato-files", region = "us-east-1", access_key_id = "AKIAIOSFODNN7EXAMPLE", secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" }
+
+# Set which provider to use as default
+default_file_storage_provider = "primary"
+```
+
+#### `file_storage_providers.<provider_id>.provider_kind`
+
+The type of file storage backend to use.
+
+**Type:** `string`
+
+**Required:** Yes
+
+**Supported values:**
+
+- `"s3"` - Amazon S3 or services that expose an S3-compatible API (e.g., MinIO, DigitalOcean Spaces, Cloudflare R2)
+- `"azblob"` - Azure Blob Storage
+
+**Example:** `"s3"` or `"azblob"`
+
+#### `file_storage_providers.<provider_id>.display_name`
+
+A human-readable name to display in the UI for this storage provider.
+
+**Type:** `string | None`
+
+**Default:** Falls back to the provider ID if not specified
+
+**Example:** `"Primary Storage"` or `"Azure Backup Storage"`
+
+#### `file_storage_providers.<provider_id>.max_upload_size_kb`
+
+The maximum file size that may be uploaded in kilobytes. This limit is enforced by the backend.
+
+**Type:** `number | None`
+
+**Default:** No limit (system default applies)
+
+**Example:** `102400` (100 MB), `10240` (10 MB)
+
+#### `file_storage_providers.<provider_id>.config`
+
+Provider-specific configuration object. The available fields depend on the `provider_kind`.
+
+**Type:** `object`
+
+**Required:** Yes
+
+##### S3 Provider Configuration
+
+When `provider_kind = "s3"`, the following configuration fields are available:
+
+**`bucket`** _(required)_
+
+The name of the S3 bucket to store files in.
+
+**Type:** `string`
+
+**Example:** `"erato-files"`, `"my-company-documents"`
+
+**`endpoint`** _(optional)_
+
+The S3-compatible endpoint URL. Use this when connecting to S3-compatible services other than AWS S3 (e.g., MinIO, DigitalOcean Spaces).
+
+If not specified, defaults to AWS S3.
+
+**Type:** `string | None`
+
+**Example:** `"https://nyc3.digitaloceanspaces.com"`, `"http://localhost:9000"`
+
+**`region`** _(optional)_
+
+The AWS region where the bucket is located.
+
+**Type:** `string | None`
+
+**Example:** `"us-east-1"`, `"eu-central-1"`
+
+**`root`** _(optional)_
+
+A prefix path within the bucket where files should be stored. Useful for organizing files or sharing buckets across multiple applications.
+
+**Type:** `string | None`
+
+**Example:** `"erato-uploads/"`, `"production/files/"`
+
+**`access_key_id`** _(optional)_
+
+The AWS access key ID for authentication. If not provided, the SDK will attempt to use environment variables or instance credentials.
+
+**Type:** `string | None`
+
+**Example:** `"AKIAIOSFODNN7EXAMPLE"`
+
+**`secret_access_key`** _(optional)_
+
+The AWS secret access key for authentication. If not provided, the SDK will attempt to use environment variables or instance credentials.
+
+**Type:** `string | None`
+
+**Example:** `"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"`
+
+**Complete S3 Example:**
+
+```toml
+[file_storage_providers.s3_primary]
+provider_kind = "s3"
+display_name = "AWS S3 Primary"
+max_upload_size_kb = 204800  # 200 MB
+config = { bucket = "erato-production-files", region = "us-west-2", root = "uploads/", access_key_id = "AKIAIOSFODNN7EXAMPLE", secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" }
+
+default_file_storage_provider = "s3_primary"
+```
+
+**MinIO Example:**
+
+```toml
+[file_storage_providers.minio]
+provider_kind = "s3"
+display_name = "MinIO Local Storage"
+max_upload_size_kb = 102400  # 100 MB
+config = { bucket = "erato-storage", endpoint = "http://localhost:9000", access_key_id = "minioadmin", secret_access_key = "minioadmin" }
+
+default_file_storage_provider = "minio"
+```
+
+##### Azure Blob Storage Configuration
+
+When `provider_kind = "azblob"`, the following configuration fields are available:
+
+**`container`** _(required)_
+
+The name of the Azure Blob Storage container to store files in.
+
+**Type:** `string`
+
+**Example:** `"erato-files"`, `"documents"`
+
+**`endpoint`** _(required)_
+
+The Azure Blob Storage endpoint URL for your storage account.
+
+**Type:** `string`
+
+**Example:** `"https://mystorageaccount.blob.core.windows.net"`
+
+**`root`** _(optional)_
+
+A prefix path within the container where files should be stored. Useful for organizing files or sharing containers across multiple applications.
+
+**Type:** `string | None`
+
+**Example:** `"erato-uploads/"`, `"production/files/"`
+
+**`account_name`** _(optional)_
+
+The Azure storage account name for authentication. If not provided, the SDK will attempt to use environment variables or managed identity.
+
+**Type:** `string | None`
+
+**Example:** `"mystorageaccount"`
+
+**`account_key`** _(optional)_
+
+The Azure storage account key for authentication. If not provided, the SDK will attempt to use environment variables or managed identity.
+
+**Type:** `string | None`
+
+**Example:** `"Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="`
+
+**Complete Azure Blob Storage Example:**
+
+```toml
+[file_storage_providers.azure]
+provider_kind = "azblob"
+display_name = "Azure Blob Storage"
+max_upload_size_kb = 153600  # 150 MB
+config = { endpoint = "https://mycompany.blob.core.windows.net", container = "erato-files", root = "uploads/", account_name = "mycompany", account_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==" }
+
+default_file_storage_provider = "azure"
+```
+
+**Azurite (Azure Blob Storage Emulator) Example:**
+
+```toml
+[file_storage_providers.azurite]
+provider_kind = "azblob"
+display_name = "Azurite Local Storage"
+max_upload_size_kb = 102400  # 100 MB
+config = { endpoint = "http://127.0.0.1:10000/devstoreaccount1", container = "erato-storage", account_name = "devstoreaccount1", account_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==" }
+
+default_file_storage_provider = "azurite"
+```
+
+### `default_file_storage_provider`
+
+Specifies which file storage provider to use as the default for new file uploads. This must match one of the keys in the `file_storage_providers` map.
+
+When multiple file storage providers are configured, this setting is **required** and determines where new files will be written. All configured providers remain available for reading existing files, which is useful for migration scenarios.
+
+**Type:** `string | None`
+
+**Required when:** Multiple file storage providers are configured
+
+**Example:** `"primary"`, `"s3_main"`, `"azure"`
+
+**Note:** This is a top-level configuration key, not nested under `file_storage_providers`.
+
+**Configuration Example:**
+
+```toml
+# Define multiple providers
+[file_storage_providers.primary]
+provider_kind = "s3"
+display_name = "Primary Storage"
+max_upload_size_kb = 102400
+config = { bucket = "erato-files", region = "us-east-1" }
+
+[file_storage_providers.backup]
+provider_kind = "azblob"
+display_name = "Backup Storage"
+max_upload_size_kb = 102400
+config = { endpoint = "https://backup.blob.core.windows.net", container = "erato-backup" }
+
+# Specify which one is default (top-level key)
+default_file_storage_provider = "primary"
+```
+
+In this example:
+
+- New files will be uploaded to the "primary" S3 provider
+- Existing files can still be read from both "primary" and "backup" providers
+- This allows migrating from one storage provider to another without data loss
+
+#### Multiple Providers Example
+
+You can configure multiple file storage providers.
+This is currently mainly useful for migration scenarios, where new file uploads should be read + written from a new file storage provider,
+but past uploaded files should still be available to be read from an older file storage provider.
+
+```toml
+# Primary S3 storage
+[file_storage_providers.s3_primary]
+provider_kind = "s3"
+display_name = "S3 Primary (US)"
+max_upload_size_kb = 204800  # 200 MB
+config = { bucket = "erato-us-files", region = "us-east-1", access_key_id = "AKIAIOSFODNN7EXAMPLE", secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" }
+
+# Backup Azure storage
+[file_storage_providers.azure_backup]
+provider_kind = "azblob"
+display_name = "Azure Backup (EU)"
+max_upload_size_kb = 204800  # 200 MB
+config = { endpoint = "https://eratoeu.blob.core.windows.net", container = "erato-eu-files", account_name = "eratoeu", account_key = "..." }
+
+# Set default provider
+default_file_storage_provider = "s3_primary"
+```
+
 ### `model_permissions`
 
 Configuration for controlling user access to chat providers based on user attributes like group membership. This allows you to implement fine-grained access control, such as restricting premium models to certain user groups or providing different models to different teams.
@@ -608,7 +883,8 @@ The type of transport protocol used to communicate with the MCP server.
 
 **Type:** `string`
 
-**Supported values:** 
+**Supported values:**
+
 - `"sse"` (Server-Sent Events)
 - `"streamable_http"` (Streamable HTTP)
 
