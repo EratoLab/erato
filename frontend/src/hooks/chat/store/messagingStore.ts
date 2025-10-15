@@ -19,6 +19,7 @@ export interface ToolCall {
 // Streaming state
 export interface StreamingState {
   isStreaming: boolean;
+  isFinalizing: boolean; // True during post-streaming refetch/cleanup phase
   currentMessageId: string | null;
   content: string;
   // Add tool call tracking
@@ -48,6 +49,7 @@ export interface MessagingStore {
 // Initial streaming state
 export const initialStreamingState: StreamingState = {
   isStreaming: false,
+  isFinalizing: false,
   currentMessageId: null,
   content: "",
   toolCalls: {},

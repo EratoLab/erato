@@ -296,6 +296,16 @@ export function useChatMessaging(
           );
         }
       }
+
+      // Signal that finalization is complete - frontend is now fully ready
+      // Only set isFinalizing to false if this was called from message completion
+      if (logContext.includes("completed")) {
+        console.log(
+          `[DEBUG_STREAMING] ${logContext}: Setting isFinalizing to false - frontend fully ready`,
+        );
+        const { setStreaming } = useMessagingStore.getState();
+        setStreaming({ isFinalizing: false });
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -1144,6 +1154,7 @@ export function useChatMessaging(
     messages,
     isLoading: chatMessagesQuery.isLoading,
     isStreaming: streaming.isStreaming,
+    isFinalizing: streaming.isFinalizing,
     streamingContent: streaming.content,
     error: chatMessagesQuery.error ?? error,
     sendMessage,

@@ -75,11 +75,13 @@ export const handleMessageComplete = (
   }
 
   // Update streaming state to indicate completion
+  // Set isFinalizing to true while refetch/cleanup happens
   console.log(
-    `[DEBUG_STREAMING] handleMessageComplete: Setting streaming store. Real Message ID: ${realMessageId || null}, isStreaming: false, Final Content: "${finalContent.substring(0, 100)}..."`,
+    `[DEBUG_STREAMING] handleMessageComplete: Setting streaming store. Real Message ID: ${realMessageId || null}, isStreaming: false, isFinalizing: true, Final Content: "${finalContent.substring(0, 100)}..."`,
   );
   setStreaming({
     isStreaming: false,
+    isFinalizing: true, // Signal that we're in the finalization phase
     content: finalContent,
     currentMessageId: realMessageId || null, // Update to real ID
     toolCalls: {}, // Clear tool calls when message is completed

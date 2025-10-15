@@ -51,6 +51,7 @@ interface ChatContextValue {
   messages: Record<string, ChatMessage>;
   messageOrder: string[];
   isStreaming: boolean;
+  isFinalizing: boolean;
   streamingContent: string | null;
   isMessagingLoading: boolean;
   messagingError: Error | ChatMessagesError | null;
@@ -153,6 +154,7 @@ export function ChatProvider({
     messages,
     isLoading: isMessagingLoading,
     isStreaming,
+    isFinalizing,
     streamingContent,
     error: messagingError,
     sendMessage,
@@ -168,6 +170,28 @@ export function ChatProvider({
   // Removed newlyCreatedChatId store access - now handled in explicit navigation
 
   // Removed automatic navigation logic - now handled explicitly in message completion
+
+  // ============================================================================
+  // PLACEHOLDER: Usage/Consumption Hook
+  // ============================================================================
+  // TODO: Add hook to fetch current usage/consumption and limits here
+  // This should trigger when the frontend is fully ready after streaming completes
+  //
+  // Example implementation:
+  // useEffect(() => {
+  //   const isFullyReady = !isStreaming && !isFinalizing;
+  //   if (isFullyReady) {
+  //     // Fetch usage data here
+  //     // fetchCurrentUsageAndLimits();
+  //   }
+  // }, [isStreaming, isFinalizing]);
+  //
+  // Or use a dedicated hook:
+  // const { usage, limits } = useUsageTracking({
+  //   enabled: !isStreaming && !isFinalizing,
+  //   chatId: currentChatId,
+  // });
+  // ============================================================================
 
   // Get file upload functionality
   const {
@@ -258,6 +282,7 @@ export function ChatProvider({
       messageOrder: orderedMessageIds, // Add the ordered message IDs
       isMessagingLoading,
       isStreaming,
+      isFinalizing,
       streamingContent,
       messagingError,
       sendMessage,
@@ -302,6 +327,7 @@ export function ChatProvider({
     messages,
     isMessagingLoading,
     isStreaming,
+    isFinalizing,
     streamingContent,
     messagingError,
     sendMessage,
