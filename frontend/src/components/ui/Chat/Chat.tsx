@@ -11,6 +11,7 @@ import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
+import { BudgetWarning } from "./BudgetWarning";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { MessageList } from "../MessageList/MessageList";
 
@@ -381,6 +382,9 @@ export const Chat = ({
             onFilePreview={openPreviewModal}
             emptyStateComponent={emptyStateComponent}
           />
+
+          {/* Budget warning - shows when user approaches spending limit */}
+          <BudgetWarning className="mx-2 sm:mx-4" />
 
           <ChatInput
             onSendMessage={handleSendMessage}

@@ -7,6 +7,7 @@ import {
   useChatMessaging,
   useModelHistory,
 } from "@/hooks/chat";
+import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
@@ -171,27 +172,10 @@ export function ChatProvider({
 
   // Removed automatic navigation logic - now handled explicitly in message completion
 
-  // ============================================================================
-  // PLACEHOLDER: Usage/Consumption Hook
-  // ============================================================================
-  // TODO: Add hook to fetch current usage/consumption and limits here
-  // This should trigger when the frontend is fully ready after streaming completes
-  //
-  // Example implementation:
-  // useEffect(() => {
-  //   const isFullyReady = !isStreaming && !isFinalizing;
-  //   if (isFullyReady) {
-  //     // Fetch usage data here
-  //     // fetchCurrentUsageAndLimits();
-  //   }
-  // }, [isStreaming, isFinalizing]);
-  //
-  // Or use a dedicated hook:
-  // const { usage, limits } = useUsageTracking({
-  //   enabled: !isStreaming && !isFinalizing,
-  //   chatId: currentChatId,
-  // });
-  // ============================================================================
+  // Budget/Usage tracking: Initialize on mount and auto-refresh after streaming
+  // The query is fetched on mount and automatically refreshed via query invalidation
+  // in useChatMessaging's handleRefetchAndClear function after streaming completes.
+  useBudgetStatus(); // Fetches on mount, caches result, auto-refreshes after messages
 
   // Get file upload functionality
   const {
