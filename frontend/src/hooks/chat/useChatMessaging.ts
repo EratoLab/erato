@@ -16,8 +16,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
-import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import { useChatHistory } from "@/hooks";
+import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import { useChatMessages } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import {
@@ -312,7 +312,7 @@ export function useChatMessaging(
         console.log(
           `[DEBUG_STREAMING] ${logContext}: Invalidating budget query for fresh usage data`,
         );
-        queryClient.invalidateQueries({ queryKey: BUDGET_QUERY_KEY });
+        void queryClient.invalidateQueries({ queryKey: BUDGET_QUERY_KEY });
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

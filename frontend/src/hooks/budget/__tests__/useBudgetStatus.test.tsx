@@ -1,16 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { useBudgetStatus, BUDGET_QUERY_KEY } from "../useBudgetStatus";
 
 import type { ReactNode } from "react";
 
-// Mock fetch
-global.fetch = vi.fn();
-
 describe("useBudgetStatus", () => {
   let queryClient: QueryClient;
+  let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     queryClient = new QueryClient({
@@ -20,6 +18,16 @@ describe("useBudgetStatus", () => {
         },
       },
     });
+
+    // Create a proper mock function
+    fetchMock = vi.fn();
+    // Replace global fetch with our mock
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    // Restore global fetch
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -37,7 +45,7 @@ describe("useBudgetStatus", () => {
       budget_currency: "USD" as const,
     };
 
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => mockData,
     });
@@ -56,14 +64,19 @@ describe("useBudgetStatus", () => {
   });
 
   it("should handle API errors gracefully", async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    // Mock a failed response (ok: false will cause the queryFn to throw)
+    fetchMock.mockResolvedValueOnce({
       ok: false,
       status: 500,
-    });
+      json: async () => ({}),
+    } as Response);
 
     const { result } = renderHook(() => useBudgetStatus(), { wrapper });
 
-    await waitFor(() => expect(result.current.isError).toBe(true));
+    await waitFor(
+      () => expect(result.current.isError).toBe(true),
+      { timeout: 3000 },
+    );
 
     expect(result.current.error).toBeDefined();
     expect(result.current.data).toBeUndefined();
@@ -76,7 +89,7 @@ describe("useBudgetStatus", () => {
 
     expect(result.current.isLoading).toBe(false);
     expect(result.current.isFetching).toBe(false);
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("should use the correct query key", () => {
@@ -93,7 +106,7 @@ describe("useBudgetStatus", () => {
       budget_currency: null,
     };
 
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => mockData,
     });
@@ -106,4 +119,3 @@ describe("useBudgetStatus", () => {
     expect(result.current.data?.current_spending).toBeNull();
   });
 });
-

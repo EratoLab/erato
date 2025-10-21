@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 import { useBudgetWarning } from "@/hooks/budget/useBudgetWarning";
 
-import { Alert } from "../Feedback/Alert";
+import { Alert } from "../Alert";
 
 import type React from "react";
 
@@ -53,12 +53,16 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
   const percentUsed = Math.round(warning.percentUsed);
 
   // Create the warning message
+  // Extract formatted values to variables for lingui compliance
+  const formattedLimit = warning.formattedLimit;
+  const formattedSpending = warning.formattedSpending;
+
   let message = "";
 
   if (warning.isError) {
-    message = t`You have reached or exceeded your budget limit of ${warning.formattedLimit}. Current spending: ${warning.formattedSpending}.`;
+    message = t`You have reached or exceeded your budget limit of ${formattedLimit}. Current spending: ${formattedSpending}.`;
   } else if (warning.isWarning) {
-    message = t`You are using ${percentUsed}% of your budget (${warning.formattedSpending} of ${warning.formattedLimit}).`;
+    message = t`You are using ${percentUsed}% of your budget (${formattedSpending} of ${formattedLimit}).`;
   }
 
   // Show budget period if available
