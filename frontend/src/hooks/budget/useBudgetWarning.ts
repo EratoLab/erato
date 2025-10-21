@@ -44,13 +44,19 @@ export function useBudgetWarning(
 ): BudgetWarningResult {
   return useMemo(() => {
     // Default state when no data
+    // Use Intl.NumberFormat for consistent formatting even in default state
+    const defaultFormatter = new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "USD",
+    });
+
     const defaultResult: BudgetWarningResult = {
       isWarning: false,
       isError: false,
       percentUsed: 0,
       hasData: false,
-      formattedSpending: "$0.00",
-      formattedLimit: "$0.00",
+      formattedSpending: defaultFormatter.format(0),
+      formattedLimit: defaultFormatter.format(0),
     };
 
     // Return default if budget not enabled or no data
@@ -75,10 +81,15 @@ export function useBudgetWarning(
     const isError = spending >= limit; // At or over limit
     const isWarning = !isError && spending >= limit * warnThreshold; // Above threshold but below limit
 
-    // Format currency values
-    const currencySymbol = currency === "EUR" ? "€" : "$";
-    const formattedSpending = `${currencySymbol}${spending.toFixed(2)}`;
-    const formattedLimit = `${currencySymbol}${limit.toFixed(2)}`;
+    // Format currency values using Intl.NumberFormat for proper locale-aware formatting
+    // This respects the user's locale for currency symbols, decimal separators, and thousands separators
+    const currencyFormatter = new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currency,
+    });
+
+    const formattedSpending = currencyFormatter.format(spending);
+    const formattedLimit = currencyFormatter.format(limit);
 
     return {
       isWarning,

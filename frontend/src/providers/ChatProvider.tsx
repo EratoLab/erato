@@ -2,12 +2,12 @@
 
 import { createContext, useContext, useMemo, useState } from "react";
 
+import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 import {
   useChatHistory,
   useChatMessaging,
   useModelHistory,
 } from "@/hooks/chat";
-import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
