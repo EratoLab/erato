@@ -14,7 +14,10 @@ vi.mock("@/hooks/budget/useBudgetStatus");
 vi.mock("@/hooks/budget/useBudgetWarning");
 
 describe("BudgetWarning", () => {
-  const mockUseBudgetStatus = vi.spyOn(useBudgetStatusModule, "useBudgetStatus");
+  const mockUseBudgetStatus = vi.spyOn(
+    useBudgetStatusModule,
+    "useBudgetStatus",
+  );
   const mockUseBudgetWarning = vi.spyOn(
     useBudgetWarningModule,
     "useBudgetWarning",

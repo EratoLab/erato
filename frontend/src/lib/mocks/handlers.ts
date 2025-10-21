@@ -67,6 +67,7 @@ export const handlers = [
     const response: Schemas.UserProfile = {
       id: "user123",
       preferred_language: "en",
+      groups: [],
       // email, name, picture are nullable/optional
     };
     return HttpResponse.json(response);

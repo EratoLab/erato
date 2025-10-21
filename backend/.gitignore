@@ -8,3 +8,4 @@ target
 !.env.template
 
 erato.toml
+erato.toml.backup

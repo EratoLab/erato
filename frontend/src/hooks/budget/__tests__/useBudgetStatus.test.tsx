@@ -73,10 +73,9 @@ describe("useBudgetStatus", () => {
 
     const { result } = renderHook(() => useBudgetStatus(), { wrapper });
 
-    await waitFor(
-      () => expect(result.current.isError).toBe(true),
-      { timeout: 3000 },
-    );
+    await waitFor(() => expect(result.current.isError).toBe(true), {
+      timeout: 3000,
+    });
 
     expect(result.current.error).toBeDefined();
     expect(result.current.data).toBeUndefined();

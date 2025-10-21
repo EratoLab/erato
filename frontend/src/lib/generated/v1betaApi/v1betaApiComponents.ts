@@ -389,6 +389,103 @@ export const useGetFile = <TData = Schemas.FileUploadItem,>(
   });
 };
 
+export type BudgetStatusError = Fetcher.ErrorWrapper<undefined>;
+
+export type BudgetStatusVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchBudgetStatus = (
+  variables: BudgetStatusVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.BudgetStatusResponse,
+    BudgetStatusError,
+    undefined,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/me/budget", method: "get", ...variables, signal });
+
+export function budgetStatusQuery(variables: BudgetStatusVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.BudgetStatusResponse>;
+};
+
+export function budgetStatusQuery(
+  variables: BudgetStatusVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.BudgetStatusResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function budgetStatusQuery(
+  variables: BudgetStatusVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/budget",
+      operationId: "budgetStatus",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchBudgetStatus(variables, signal),
+  };
+}
+
+export const useSuspenseBudgetStatus = <TData = Schemas.BudgetStatusResponse,>(
+  variables: BudgetStatusVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.BudgetStatusResponse,
+      BudgetStatusError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.BudgetStatusResponse,
+    BudgetStatusError,
+    TData
+  >({
+    ...budgetStatusQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useBudgetStatus = <TData = Schemas.BudgetStatusResponse,>(
+  variables: BudgetStatusVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.BudgetStatusResponse,
+      BudgetStatusError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.BudgetStatusResponse,
+    BudgetStatusError,
+    TData
+  >({
+    ...budgetStatusQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type CreateChatError = Fetcher.ErrorWrapper<undefined>;
 
 export type CreateChatVariables = {
@@ -1189,6 +1286,11 @@ export type QueryOperation =
       path: "/api/v1beta/files/{fileId}";
       operationId: "getFile";
       variables: GetFileVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/budget";
+      operationId: "budgetStatus";
+      variables: BudgetStatusVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/models";

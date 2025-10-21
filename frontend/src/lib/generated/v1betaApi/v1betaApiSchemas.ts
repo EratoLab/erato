@@ -24,6 +24,44 @@ export type ArchiveChatResponse = {
   chat_id: string;
 };
 
+export type BudgetCurrency = "EUR" | "USD";
+
+/**
+ * Budget status information for the current user
+ */
+export type BudgetStatusResponse = {
+  budget_currency?: null | BudgetCurrency;
+  /**
+   * The budget limit for the time period (unit-less)
+   *
+   * @format double
+   */
+  budget_limit?: null | undefined;
+  /**
+   * Number of days in the current budget period
+   *
+   * @format int32
+   * @minimum 0
+   */
+  budget_period_days?: null | undefined;
+  /**
+   * Current spending in the budget period for the user (unit-less)
+   *
+   * @format double
+   */
+  current_spending?: null | undefined;
+  /**
+   * Whether the budget feature is enabled
+   */
+  enabled: boolean;
+  /**
+   * The warning threshold (0.0 to 1.0)
+   *
+   * @format double
+   */
+  warn_threshold?: null | undefined;
+};
+
 /**
  * @deprecated true
  */
@@ -171,7 +209,7 @@ export type EditMessageRequest = {
    *
    * @example primary
    */
-  chat_provider_id?: null | string;
+  chat_provider_id?: null | undefined;
   /**
    * The ID of the message that should be edited with a new response. It will be considered a sibling message to the new message.
    *
@@ -251,7 +289,7 @@ export type MessageSubmitRequest = {
    *
    * @example primary
    */
-  chat_provider_id?: null | string;
+  chat_provider_id?: null | undefined;
   /**
    * The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
    * This is useful for scenarios where you have created a chat first (e.g. for file uploads) before sending the first message.
@@ -409,7 +447,7 @@ export type RecentChat = {
   /**
    * The chat provider ID used for the most recent message
    */
-  last_chat_provider_id?: null | string;
+  last_chat_provider_id?: null | undefined;
   /**
    * Time of the last message in the chat.
    *
@@ -472,7 +510,7 @@ export type RegenerateMessageRequest = {
    *
    * @example primary
    */
-  chat_provider_id?: null | string;
+  chat_provider_id?: null | undefined;
   /**
    * The ID of the message that should have a replacement response generated.
    *
@@ -500,6 +538,12 @@ export type RegenerateMessageStreamingResponseMessage =
     });
 
 export type TokenUsageRequest = {
+  /**
+   * Optional chat provider ID to use for token estimation. If not provided, uses the default provider.
+   *
+   * @example gpt-4o
+   */
+  chat_provider_id?: null | undefined;
   /**
    * The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
    *
@@ -567,6 +611,10 @@ export type TokenUsageResponseFileItem = {
  */
 export type TokenUsageStats = {
   /**
+   * The chat provider ID that was used for this estimation
+   */
+  chat_provider_id: string;
+  /**
    * Number of tokens in file contents
    *
    * @minimum 0
@@ -622,6 +670,13 @@ export type UserProfile = {
    * The user's email address. Shouldn't be used as a unique identifier, as it may change.
    */
   email?: null | undefined;
+  /**
+   * List of groups the user belongs to.
+   *
+   * This is derived from the `groups` claim in the ID token.
+   * If the claim is not present, this will be an empty list.
+   */
+  groups: string[];
   id: string;
   /**
    * The user's display name.

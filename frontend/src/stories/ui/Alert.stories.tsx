@@ -129,7 +129,8 @@ export const Dismissible: Story = {
       return (
         <button
           onClick={() => setVisible(true)}
-          className="rounded bg-theme-primary px-4 py-2 text-sm text-theme-primary-fg"
+          // eslint-disable-next-line tailwindcss/no-custom-classname
+          className="bg-theme-primary text-theme-primary-fg rounded px-4 py-2 text-sm"
         >
           Show Alert Again
         </button>
@@ -274,8 +275,8 @@ export const ChatExamples: Story = {
             dismissible
             onDismiss={() => setAlerts({ ...alerts, budget: false })}
           >
-            You are using 72% of your budget ($720.00 of $1,000.00). This is
-            for your 30-day budget period.
+            You are using 72% of your budget ($720.00 of $1,000.00). This is for
+            your 30-day budget period.
           </Alert>
         )}
 
@@ -292,12 +293,16 @@ export const ChatExamples: Story = {
         )}
 
         {!alerts.budget && !alerts.token && (
-          <div className="rounded-md border border-theme-border-secondary bg-theme-bg-primary p-4 text-center text-sm text-theme-fg-secondary">
+          <div
+            // eslint-disable-next-line tailwindcss/no-custom-classname
+            className="border-theme-border-secondary rounded-md border bg-theme-bg-primary p-4 text-center text-sm text-theme-fg-secondary"
+          >
             No active alerts
             <div className="mt-2">
               <button
                 onClick={() => setAlerts({ budget: true, token: true })}
-                className="text-xs text-theme-primary underline"
+                // eslint-disable-next-line tailwindcss/no-custom-classname
+                className="text-theme-primary text-xs underline"
               >
                 Reset alerts
               </button>
@@ -305,7 +310,10 @@ export const ChatExamples: Story = {
           </div>
         )}
 
-        <div className="rounded-md border border-theme-border-secondary bg-theme-bg-primary p-3">
+        <div
+          // eslint-disable-next-line tailwindcss/no-custom-classname
+          className="border-theme-border-secondary rounded-md border bg-theme-bg-primary p-3"
+        >
           <div className="text-sm text-theme-fg-muted">
             ChatInput would appear here...
           </div>

@@ -40,6 +40,7 @@ export class MockDataGenerator {
       email: undefined,
       picture: undefined,
       preferred_language: overrides?.preferred_language ?? "en",
+      groups: [],
       ...overrides,
     };
   }
@@ -54,6 +55,7 @@ export class MockDataGenerator {
       email: undefined,
       picture: undefined,
       preferred_language: overrides?.preferred_language ?? "en",
+      groups: [],
       ...overrides,
     };
   }

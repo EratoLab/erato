@@ -20,10 +20,6 @@ import type {
 const WARNING_THRESHOLD = 0.85; // 85% of max tokens used
 const CRITICAL_THRESHOLD = 0.95; // 95% of max tokens used
 
-// Query stale/cache times for token estimations
-const TOKEN_ESTIMATE_STALE_TIME = 2000; // Consider results valid for 2 seconds
-const TOKEN_ESTIMATE_CACHE_TIME = 30000; // Cache for 30 seconds
-
 export interface TokenUsageEstimationResult {
   /** Full token usage response from the API */
   tokenUsage: TokenUsageResponse | null;
@@ -171,20 +167,11 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
           previousMessageId,
         );
 
-        // Log the estimation request for debugging
-        console.log(
-          "[TOKEN_ESTIMATION] Requesting estimation for:",
-          message.substring(0, 20) + (message.length > 20 ? "..." : ""),
-          "with files:",
-          inputFileIds?.length ?? 0,
-        );
-
         // Check if we already have cached data
         const cachedData =
           queryClient.getQueryData<TokenUsageResponse>(queryKey);
 
         if (cachedData) {
-          console.log("[TOKEN_ESTIMATION] Using cached estimation");
           return processTokenUsageResponse(cachedData);
         }
 
@@ -207,27 +194,17 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
             previousMessageId;
         }
 
-        // Fetch using React Query's prefetchQuery to leverage caching
-        const result = await queryClient.fetchQuery({
-          queryKey,
-          queryFn: async () => {
-            console.log("[TOKEN_ESTIMATION] Fetching estimation from API");
-            return tokenUsageMutation.mutateAsync({
-              body: requestBody,
-            });
-          },
-          staleTime: TOKEN_ESTIMATE_STALE_TIME,
-          gcTime: TOKEN_ESTIMATE_CACHE_TIME,
+        // Call the mutation directly - the outer useQuery will handle caching
+        const result = await tokenUsageMutation.mutateAsync({
+          body: requestBody,
         });
+
+        // Cache the result manually for future use
+        queryClient.setQueryData(queryKey, result);
 
         // Process and return the result
         return processTokenUsageResponse(result);
       } catch (error) {
-        // Handle errors
-        console.error(
-          "[TOKEN_ESTIMATION] Error estimating token usage:",
-          error,
-        );
         const errorResult: TokenUsageEstimationResult = {
           ...emptyEstimationResult,
           error: error instanceof Error ? error : new Error(String(error)),

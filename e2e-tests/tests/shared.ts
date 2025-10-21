@@ -48,6 +48,22 @@ export const chatIsReadyToChat = async (
   await expect(page.getByText("Loading")).toHaveCount(0);
 };
 
+/**
+ * Select a specific model by display name from the model dropdown
+ */
+export const selectModel = async (page: Page, modelDisplayName: string) => {
+  // Click the model selector dropdown (it shows the current model name)
+  // The dropdown button should be in the chat input area
+  const modelSelector = page.locator('button:has-text("GPT"), button:has-text("Test Model"), button:has-text("Llama")').first();
+  await modelSelector.click();
+
+  // Wait for dropdown menu to appear and click the desired model
+  await page.getByRole("menuitem", { name: modelDisplayName }).click();
+
+  // Wait a moment for the selection to take effect
+  await page.waitForTimeout(500);
+};
+
 export const ensureOpenSidebar = async (page: Page) => {
   const expandButton = page.getByLabel("expand sidebar");
   if (await expandButton.isVisible()) {
