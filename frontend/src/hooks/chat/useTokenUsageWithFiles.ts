@@ -81,8 +81,9 @@ export function useTokenUsageWithFiles({
       previousMessageId,
     ),
     queryFn: async () => {
-      console.log("[TOKEN_USAGE_FILES] Query function triggered");
-      if (!shouldEstimate) return null;
+      if (!shouldEstimate) {
+        return null;
+      }
 
       return estimateTokenUsage(
         message,
@@ -102,7 +103,6 @@ export function useTokenUsageWithFiles({
   // Debounced function to trigger refetch (rather than direct API call)
   const debouncedCheckTokens = useDebouncedCallback(() => {
     if (shouldEstimate) {
-      console.log("[TOKEN_USAGE_FILES] Debounced refetch triggered");
       void refetch();
     }
   }, debounceDelay);
@@ -113,7 +113,6 @@ export function useTokenUsageWithFiles({
       return null;
     }
 
-    console.log("[TOKEN_USAGE_FILES] Manual check triggered");
     return estimateTokenUsage(
       message,
       chatId,
@@ -154,9 +153,15 @@ export function useTokenUsageWithFiles({
 
   return {
     isEstimating,
-    tokenUsageEstimation: queryEstimation ?? lastEstimation,
+    // Only use lastEstimation as fallback if we should be estimating
+    // Otherwise, return null to clear any previous warnings
+    tokenUsageEstimation: shouldEstimate
+      ? (queryEstimation ?? lastEstimation)
+      : null,
     checkTokenUsage,
     clearEstimation,
-    exceedsLimit: (queryEstimation ?? lastEstimation)?.exceedsLimit ?? false,
+    exceedsLimit: shouldEstimate
+      ? ((queryEstimation ?? lastEstimation)?.exceedsLimit ?? false)
+      : false,
   };
 }

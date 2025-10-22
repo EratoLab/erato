@@ -61,6 +61,7 @@ describe("useAuth", () => {
       name: undefined,
       email: undefined,
       picture: undefined,
+      groups: [],
     };
 
     mockUseProfileApi.mockReturnValue({
@@ -128,6 +129,7 @@ describe("useAuth", () => {
       name: undefined,
       email: undefined,
       picture: undefined,
+      groups: [],
     };
 
     mockUseProfileApi.mockReturnValue({

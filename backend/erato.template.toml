@@ -2,6 +2,28 @@
 provider_kind = "s3"
 config = { endpoint = "http://localhost:9000", bucket = "erato-storage", region = "us-east-1", access_key_id = "erato-app-user", secret_access_key = "erato-app-password" }
 
+# Chat providers for e2e tests
+[chat_providers]
+priority_order = ["test-token-limit"]
+
+# Test model with very low token limit for e2e testing token warnings
+# Only accessible to tokentest@example.com user (configured in Keycloak)
+[chat_providers.providers.test-token-limit]
+provider_kind = "ollama"
+model_name = "smollm2:135m"
+model_display_name = "Test Model (Low Token Limit)"
+base_url = "http://localhost:12434/v1/"
+
+[chat_providers.providers.test-token-limit.model_capabilities]
+context_size_tokens = 1000  # Very low limit for easy testing
+cost_input_tokens_per_1m = 0.0
+cost_output_tokens_per_1m = 0.0
+
+# Model permissions - allow test model for all users (low token limit makes it test-only anyway)
+[model_permissions.rules.allow-test-model-for-all]
+rule_type = "allow-all"
+chat_provider_ids = ["test-token-limit"]
+
 # From ./run_mcp_server.sh
 # [mcp_servers.file_provider]
 # transport_type = "sse"

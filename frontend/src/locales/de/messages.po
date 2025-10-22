@@ -21,6 +21,10 @@ msgstr " (weitere verfügbar)"
 msgid " File attachments account for {fileTokensFormatted} tokens."
 msgstr " Dateianhänge beanspruchen {fileTokensFormatted} Token."
 
+#: src/components/ui/Chat/BudgetWarning.tsx
+msgid " This is for your {days}-day budget period."
+msgstr " Dies gilt für Ihre {days}-Tage-Budgetperiode."
+
 #. placeholder {0}: session.metadata?.fileCount ?? 0
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
@@ -69,6 +73,10 @@ msgstr "Alle Dateitypen akzeptiert"
 msgid "upload.error.unknown"
 msgstr ""
 
+#: src/components/ui/Chat/BudgetWarning.tsx
+msgid "Approaching Budget Limit"
+msgstr "Budgetlimit wird erreicht"
+
 #: src/components/ui/Chat/TokenUsageWarning.tsx
 #: src/components/ui/Chat/TokenUsageWarning.tsx
 msgid "Approaching Token Limit"
@@ -82,6 +90,11 @@ msgstr "Möchten Sie wirklich fortfahren?"
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "Are you sure you want to remove this chat?"
 msgstr "Möchten Sie diesen Chat wirklich entfernen?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WelcomeScreen.tsx
+msgid "branding.welcomeScreen.description"
+msgstr "Stellen Sie Fragen und erhalten Sie hilfreiche Antworten von unserem KI-Assistenten."
 
 #: src/components/ui/Chat/ChatMessage.tsx
 #: src/components/ui/Chat/ChatMessage.tsx
@@ -108,7 +121,12 @@ msgstr "Gesprächsanfang"
 msgid "Browser Language:"
 msgstr ""
 
+#: src/components/ui/Chat/BudgetWarning.tsx
+msgid "Budget Limit Reached"
+msgstr "Budgetlimit erreicht"
+
 #: src/components/ui/Modal/ConfirmationDialog.tsx
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Cancel"
 msgstr "Abbrechen"
 
@@ -139,6 +157,10 @@ msgstr "Chat-Nachrichten"
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Clear All"
 msgstr "Alle löschen"
+
+#: src/pages/SearchPage.tsx
+msgid "Clear search"
+msgstr "Suche löschen"
 
 #: src/components/ui/Modal/ModalBase.tsx
 msgid "Close modal"
@@ -216,6 +238,10 @@ msgstr "Dateien zum Hochladen loslassen..."
 msgid "Edit message"
 msgstr "Nachricht bearbeiten"
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Edit your message..."
+msgstr ""
+
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "End of conversation"
 msgstr "Gesprächsende"
@@ -260,6 +286,15 @@ msgstr "Datei"
 #: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
 msgstr ""
+
+#: src/pages/SearchPage.tsx
+msgid "Found {resultsCount} results"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/WelcomeScreen.tsx
+msgid "branding.welcomeScreen.subtitle"
+msgstr "Erhalten Sie Expertenunterstützung für Ihre Fragen"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -321,6 +356,7 @@ msgstr "Datei wird geladen..."
 
 #: src/components/ui/Message/LoadMoreButton.tsx
 #: src/components/ui/Feedback/SpinnerIcon.tsx
+#: src/components/ui/Chat/ModelSelector.tsx
 msgid "Loading..."
 msgstr "Laden..."
 
@@ -349,12 +385,19 @@ msgstr "Nachrichten"
 msgid "navigation.page.new_chat"
 msgstr ""
 
+#: src/pages/SearchPage.tsx
+#: src/pages/SearchPage.tsx
+#: src/components/ui/Search/SearchPageStructure.tsx
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/Chat.tsx
 msgid "New Chat"
 msgstr "Neuer Chat"
+
+#: src/pages/SearchPage.tsx
+msgid "No chats found"
+msgstr "Keine Chats gefunden"
 
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "No messages yet"
@@ -393,6 +436,10 @@ msgstr "Vorschau von"
 msgid "Preview:"
 msgstr "Vorschau:"
 
+#: src/pages/SearchPage.tsx
+msgid "Recent Chats"
+msgstr "Aktuelle Chats"
+
 #. js-lingui-explicit-id
 #: src/pages/HomePage.tsx
 msgid "home.redirecting"
@@ -420,63 +467,33 @@ msgstr "Alle Dateien entfernen"
 msgid "Reset to Browser Detection"
 msgstr ""
 
-#: src/components/ui/Chat/ChatHistorySidebar.tsx:88
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Save edit"
+msgstr ""
+
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "Search"
 msgstr "Suchen"
 
-#: src/pages/SearchPage.tsx:95
-msgid "Search chat messages..."
-msgstr "Chat-Nachrichten durchsuchen..."
-
-#: src/pages/SearchPage.tsx:104
-msgid "Clear search"
-msgstr "Suche löschen"
-
-#: src/pages/SearchPage.tsx:114
-msgid "Searching..."
-msgstr "Suchen..."
-
-#: src/pages/SearchPage.tsx:122
-msgid "Search Your Chats"
-msgstr "Durchsuchen Sie Ihre Chats"
-
-#: src/pages/SearchPage.tsx:125
-msgid "Find messages, conversations, and topics from your chat history"
-msgstr "Finden Sie Nachrichten, Unterhaltungen und Themen aus Ihrem Chat-Verlauf"
-
-#: src/pages/SearchPage.tsx:139
-msgid "No results found"
-msgstr "Keine Ergebnisse gefunden"
-
-#: src/pages/SearchPage.tsx:142
-msgid "Try different keywords or check your spelling"
-msgstr "Versuchen Sie andere Suchbegriffe oder überprüfen Sie die Rechtschreibung"
-
-#: src/pages/SearchPage.tsx:149
-msgid "Found ${resultsCount} results"
-msgstr "${resultsCount} Ergebnisse gefunden"
-
-#: src/pages/SearchPage.tsx:135
+#: src/pages/SearchPage.tsx
 msgid "Search chat titles..."
 msgstr "Chat-Titel durchsuchen..."
 
-#: src/pages/SearchPage.tsx:158
-msgid "No chats found"
-msgstr "Keine Chats gefunden"
-
-#: src/pages/SearchPage.tsx:170
-msgid "Recent Chats"
-msgstr "Aktuelle Chats"
-
-#: src/pages/SearchPage.tsx:170
+#: src/pages/SearchPage.tsx
 msgid "Search Results"
 msgstr "Suchergebnisse"
 
-#: src/pages/SearchPage.tsx:173
-msgid "Showing ${resultsCount} recent chats"
-msgstr "Zeige ${resultsCount} aktuelle Chats"
+#: src/pages/SearchPage.tsx
+msgid "Search Your Chats"
+msgstr "Durchsuchen Sie Ihre Chats"
 
-#: src/components/ui/Chat/ChatInput.tsx:336
+#: src/pages/SearchPage.tsx
+msgid "Searching..."
+msgstr "Suchen..."
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Send message"
 msgstr "Nachricht senden"
 
@@ -505,6 +522,10 @@ msgstr "Tool-Aufrufe anzeigen"
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "Showing"
 msgstr "Anzeige"
+
+#: src/pages/SearchPage.tsx
+msgid "Showing {resultsCount} recent chats"
+msgstr ""
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Sign out"
@@ -590,6 +611,10 @@ msgstr "gesamt"
 msgid "Try Again"
 msgstr "Erneut versuchen"
 
+#: src/pages/SearchPage.tsx
+msgid "Try different keywords or check your spelling"
+msgstr "Versuchen Sie andere Suchbegriffe oder überprüfen Sie die Rechtschreibung"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Type a message..."
 msgstr "Nachricht eingeben..."
@@ -616,25 +641,28 @@ msgstr "Benutzer-Avatar"
 msgid "Using tools"
 msgstr "Tools werden verwendet"
 
-#: src/components/ui/Chat/ChatMessage.tsx
-msgid "You"
-msgstr "Sie"
-
-#: src/components/ui/Chat/ChatMessage.tsx
-msgid "Your"
-msgstr "Ihre"
-
 #. js-lingui-explicit-id
+#: src/components/ui/WelcomeScreen.tsx
 #: src/components/ui/WelcomeScreen.tsx
 msgid "branding.welcomeScreen.title"
 msgstr "Willkommen beim KI-Assistenten"
 
-#. js-lingui-explicit-id
-#: src/components/ui/WelcomeScreen.tsx
-msgid "branding.welcomeScreen.subtitle"
-msgstr "Erhalten Sie Expertenunterstützung für Ihre Fragen"
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "You"
+msgstr "Sie"
 
-#. js-lingui-explicit-id
-#: src/components/ui/WelcomeScreen.tsx
-msgid "branding.welcomeScreen.description"
-msgstr "Stellen Sie Fragen und erhalten Sie hilfreiche Antworten von unserem KI-Assistenten."
+#. placeholder {0}: warning.formattedSpending
+#. placeholder {1}: warning.formattedLimit
+#: src/components/ui/Chat/BudgetWarning.tsx
+msgid "You are using {percentUsed}% of your budget ({0} of {1})."
+msgstr "Sie nutzen {percentUsed}% Ihres Budgets ({0} von {1})."
+
+#. placeholder {0}: warning.formattedLimit
+#. placeholder {1}: warning.formattedSpending
+#: src/components/ui/Chat/BudgetWarning.tsx
+msgid "You have reached or exceeded your budget limit of {0}. Current spending: {1}."
+msgstr "Sie haben Ihr Budgetlimit von {0} erreicht oder überschritten. Aktuelle Ausgaben: {1}."
+
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "Your"
+msgstr "Ihre"

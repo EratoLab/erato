@@ -14,6 +14,7 @@ import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { ModelSelector } from "./ModelSelector";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
+import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
 
 import type {
   FileUploadItem,
@@ -284,6 +285,9 @@ export const ChatInput = ({
         disabled={isDisabled}
         onLimitExceeded={handleMessageTokenLimitExceeded}
       />
+
+      {/* Budget warning - shows when user approaches spending limit */}
+      <BudgetWarning />
 
       {/* File previews using our new component */}
       <FileAttachmentsPreview

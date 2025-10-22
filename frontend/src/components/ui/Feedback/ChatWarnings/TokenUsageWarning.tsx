@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 
-import { Alert } from "../Feedback/Alert";
+import { Alert } from "../Alert";
 
 import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type { TokenUsageStats } from "@/lib/generated/v1betaApi/v1betaApiSchemas";

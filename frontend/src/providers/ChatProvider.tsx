@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useMemo, useState } from "react";
 
+import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 import {
   useChatHistory,
   useChatMessaging,
@@ -51,6 +52,7 @@ interface ChatContextValue {
   messages: Record<string, ChatMessage>;
   messageOrder: string[];
   isStreaming: boolean;
+  isFinalizing: boolean;
   streamingContent: string | null;
   isMessagingLoading: boolean;
   messagingError: Error | ChatMessagesError | null;
@@ -153,6 +155,7 @@ export function ChatProvider({
     messages,
     isLoading: isMessagingLoading,
     isStreaming,
+    isFinalizing,
     streamingContent,
     error: messagingError,
     sendMessage,
@@ -168,6 +171,11 @@ export function ChatProvider({
   // Removed newlyCreatedChatId store access - now handled in explicit navigation
 
   // Removed automatic navigation logic - now handled explicitly in message completion
+
+  // Budget/Usage tracking: Initialize on mount and auto-refresh after streaming
+  // The query is fetched on mount and automatically refreshed via query invalidation
+  // in useChatMessaging's handleRefetchAndClear function after streaming completes.
+  useBudgetStatus(); // Fetches on mount, caches result, auto-refreshes after messages
 
   // Get file upload functionality
   const {
@@ -258,6 +266,7 @@ export function ChatProvider({
       messageOrder: orderedMessageIds, // Add the ordered message IDs
       isMessagingLoading,
       isStreaming,
+      isFinalizing,
       streamingContent,
       messagingError,
       sendMessage,
@@ -302,6 +311,7 @@ export function ChatProvider({
     messages,
     isMessagingLoading,
     isStreaming,
+    isFinalizing,
     streamingContent,
     messagingError,
     sendMessage,

@@ -17,6 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 import { useChatHistory } from "@/hooks";
+import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import { useChatMessages } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import {
@@ -295,6 +296,23 @@ export function useChatMessaging(
             `[DEBUG_REDIRECT] ${logContext} (new chat without active chatId for refetch), relevant for pending chat: ${newlyCreatedChatId}`,
           );
         }
+      }
+
+      // Signal that finalization is complete - frontend is now fully ready
+      // Only set isFinalizing to false if this was called from message completion
+      if (logContext.includes("completed")) {
+        console.log(
+          `[DEBUG_STREAMING] ${logContext}: Setting isFinalizing to false - frontend fully ready`,
+        );
+        const { setStreaming } = useMessagingStore.getState();
+        setStreaming({ isFinalizing: false });
+
+        // Invalidate budget query to refresh usage/consumption data
+        // TanStack Query will handle deduplication and caching automatically
+        console.log(
+          `[DEBUG_STREAMING] ${logContext}: Invalidating budget query for fresh usage data`,
+        );
+        void queryClient.invalidateQueries({ queryKey: BUDGET_QUERY_KEY });
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1144,6 +1162,7 @@ export function useChatMessaging(
     messages,
     isLoading: chatMessagesQuery.isLoading,
     isStreaming: streaming.isStreaming,
+    isFinalizing: streaming.isFinalizing,
     streamingContent: streaming.content,
     error: chatMessagesQuery.error ?? error,
     sendMessage,

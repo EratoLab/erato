@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 import { useTokenUsageWithFiles } from "@/hooks/chat/useTokenUsageWithFiles";
 
-import { TokenUsageWarning } from "./TokenUsageWarning";
+import { TokenUsageWarning } from "../Feedback/ChatWarnings/TokenUsageWarning";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
