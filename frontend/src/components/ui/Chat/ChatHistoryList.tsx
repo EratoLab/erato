@@ -78,7 +78,10 @@ const ChatHistoryListItem = memo<{
         data-chat-id={session.id}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate font-medium">
+          <span
+            className="truncate font-medium"
+            title={session.title || t`New Chat`}
+          >
             {session.title || t`New Chat`}
           </span>
           {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
@@ -111,6 +114,13 @@ const ChatHistoryListItem = memo<{
                   ? "text-theme-fg-muted"
                   : "text-theme-fg-secondary",
               )}
+              title={
+                session.metadata?.fileCount === 0
+                  ? t`No files`
+                  : session.metadata?.fileCount === 1
+                    ? t`1 file`
+                    : `${session.metadata?.fileCount ?? 0} files`
+              }
             >
               <Plural
                 value={session.metadata?.fileCount ?? 0}
