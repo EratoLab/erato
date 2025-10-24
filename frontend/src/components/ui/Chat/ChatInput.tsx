@@ -42,7 +42,6 @@ interface ChatInputProps {
   disabled?: boolean;
   className?: string;
   placeholder?: string;
-  maxLength?: number;
   showControls?: boolean;
   /** Limit the total number of files that can be attached */
   maxFiles?: number;
@@ -81,7 +80,6 @@ export const ChatInput = ({
   disabled = false,
   className = "",
   placeholder = t`Type a message...`,
-  maxLength = 16000,
   showControls = true,
   maxFiles = 5,
   acceptedFileTypes = [],
@@ -339,7 +337,6 @@ export const ChatInput = ({
                 ? t`Edit your message...`
                 : placeholder
           }
-          maxLength={maxLength}
           rows={1}
           disabled={isLoading || isStreaming || disabled || isUploading}
           tabIndex={0}
