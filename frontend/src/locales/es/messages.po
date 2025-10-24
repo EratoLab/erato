@@ -17,11 +17,11 @@ msgstr ""
 msgid " (more available)"
 msgstr " (más disponibles)"
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx
+#: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid " File attachments account for {fileTokensFormatted} tokens."
 msgstr " Los archivos adjuntos ocupan {fileTokensFormatted} tokens."
 
-#: src/components/ui/Chat/BudgetWarning.tsx
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid " This is for your {days}-day budget period."
 msgstr " Esto es para su período presupuestario de {days} días."
 
@@ -50,6 +50,10 @@ msgstr "• Nota: Los cambios de idioma no se guardan al actualizar la página"
 msgid "• Use \"Reset to Browser Detection\" to test fresh detection"
 msgstr "• Use \"Restablecer a detección del navegador\" para probar detección nueva"
 
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "1 file"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/App.tsx
 msgid "error.404.title"
@@ -73,12 +77,12 @@ msgstr "Todos los tipos de archivo aceptados"
 msgid "upload.error.unknown"
 msgstr ""
 
-#: src/components/ui/Chat/BudgetWarning.tsx
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "Approaching Budget Limit"
 msgstr "Aproximándose al límite presupuestario"
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx
-#: src/components/ui/Chat/TokenUsageWarning.tsx
+#: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
+#: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Approaching Token Limit"
 msgstr "Acercándose al límite de tokens"
 
@@ -121,7 +125,7 @@ msgstr "Inicio de la conversación"
 msgid "Browser Language:"
 msgstr "Idioma del navegador:"
 
-#: src/components/ui/Chat/BudgetWarning.tsx
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "Budget Limit Reached"
 msgstr "Límite presupuestario alcanzado"
 
@@ -391,6 +395,7 @@ msgstr ""
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/Chat.tsx
 msgid "New Chat"
 msgstr "Nuevo chat"
@@ -398,6 +403,10 @@ msgstr "Nuevo chat"
 #: src/pages/SearchPage.tsx
 msgid "No chats found"
 msgstr "No se encontraron chats"
+
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "No files"
+msgstr ""
 
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "No messages yet"
@@ -567,19 +576,19 @@ msgstr "Probar cambios de idioma:"
 msgid "Thinking"
 msgstr "Pensando"
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx
+#: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
 msgstr "Este mensaje excede el límite de tokens de {maxTokensFormatted}. Por favor, reduzca la longitud del mensaje o elimine archivos adjuntos."
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx
+#: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message is using {percentUsed}% of the available token limit ({totalTokensFormatted} of {maxTokensFormatted})."
 msgstr "Este mensaje está usando {percentUsed}% del límite de tokens disponible ({totalTokensFormatted} de {maxTokensFormatted})."
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx
+#: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Token Limit Exceeded"
 msgstr "Límite de tokens excedido"
 
-#: src/components/ui/Chat/TokenUsageWarning.tsx
+#: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Token Usage"
 msgstr "Uso de tokens"
 
@@ -651,17 +660,13 @@ msgstr "Bienvenido al Asistente IA"
 msgid "You"
 msgstr "Tú"
 
-#. placeholder {0}: warning.formattedSpending
-#. placeholder {1}: warning.formattedLimit
-#: src/components/ui/Chat/BudgetWarning.tsx
-msgid "You are using {percentUsed}% of your budget ({0} of {1})."
-msgstr "Está utilizando el {percentUsed}% de su presupuesto ({0} de {1})."
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "You are using {percentUsed}% of your budget ({formattedSpending} of {formattedLimit})."
+msgstr ""
 
-#. placeholder {0}: warning.formattedLimit
-#. placeholder {1}: warning.formattedSpending
-#: src/components/ui/Chat/BudgetWarning.tsx
-msgid "You have reached or exceeded your budget limit of {0}. Current spending: {1}."
-msgstr "Ha alcanzado o superado su límite presupuestario de {0}. Gasto actual: {1}."
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "You have reached or exceeded your budget limit of {formattedLimit}. Current spending: {formattedSpending}."
+msgstr ""
 
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "Your"
