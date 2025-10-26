@@ -34,6 +34,7 @@ struct Event {
 mod actors;
 mod config;
 mod db;
+mod llm_streaming_mock;
 mod migrations;
 
 // Using a (possibly brittle?) life-before-main method to set the DATABASE_URL before any tests run.
