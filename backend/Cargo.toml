@@ -63,6 +63,7 @@ test-log = "0.2.14"
 ctor = "0.2.9"
 axum-test = "17.0.0"
 tempfile = "3.14.0"
+mocktail = { git = "https://github.com/EratoLab/mocktail.git", rev = "4a99543bcfe0511db6eea524a037a670b96a6faf" }
 #env_logger = "0.11.2"
 #pretty_assertions = "1.4.0"
 
