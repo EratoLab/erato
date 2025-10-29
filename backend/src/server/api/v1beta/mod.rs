@@ -217,6 +217,13 @@ pub struct RecentChat {
     can_edit: bool,
 }
 
+/// Error information for a message generation
+#[derive(Debug, ToSchema, Serialize, Clone)]
+pub struct MessageError {
+    /// The type of error that occurred
+    error_type: String,
+}
+
 /// A message in a chat
 #[derive(Debug, ToSchema, Serialize)]
 pub struct ChatMessage {
@@ -240,6 +247,9 @@ pub struct ChatMessage {
     is_message_in_active_thread: bool,
     /// The IDs of the files that were used to generate this message
     input_files_ids: Vec<String>,
+    /// Error information if generation failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<MessageError>,
 }
 
 /// Statistics for a list of chat messages
@@ -448,6 +458,20 @@ pub async fn upload_file(
 impl ChatMessage {
     pub fn from_model(msg: messages::Model) -> Result<Self, Report> {
         let parsed_message = MessageSchema::validate(&msg.raw_message)?;
+        
+        // Extract error from generation_metadata if present
+        let error = msg.generation_metadata.as_ref().and_then(|metadata| {
+            // Parse the metadata JSON to extract the error field
+            metadata.get("error").and_then(|error_value| {
+                // Extract error_type from the error object
+                error_value.get("error_type").and_then(|error_type| {
+                    error_type.as_str().map(|s| MessageError {
+                        error_type: s.to_string(),
+                    })
+                })
+            })
+        });
+        
         Ok(ChatMessage {
             id: msg.id.to_string(),
             chat_id: msg.chat_id.to_string(),
@@ -464,6 +488,7 @@ impl ChatMessage {
                 .iter()
                 .map(|id| id.to_string())
                 .collect(),
+            error,
         })
     }
 }
