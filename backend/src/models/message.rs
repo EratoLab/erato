@@ -36,6 +36,9 @@ pub struct GenerationMetadata {
     /// Number of reasoning tokens used during generation (e.g., for o1 models)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub used_reasoning_tokens: Option<u32>,
+    /// Error information if generation failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<JsonValue>,
 }
 
 /// Role of the message author
