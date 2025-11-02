@@ -9,6 +9,15 @@ export default {
       layout: "full",
     },
   },
+  about: {
+    title: "About",
+    type: "page",
+    theme: {
+      sidebar: false,
+      toc: false,
+      layout: "full",
+    },
+  },
   docs: {
     title: "Documentation",
     type: "page",

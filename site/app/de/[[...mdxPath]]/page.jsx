@@ -1,11 +1,10 @@
 import { generateStaticParamsFor } from "nextra/pages";
 import { useMDXComponents as getMDXComponents } from "../../../mdx-components";
 import { resolveContentWithFallback } from "../../../lib/content-resolver.js";
-import { getValidLocale, supportedLocales } from "../../../lib/i18n.js";
-import { notFound } from "next/navigation";
+import { supportedLocales } from "../../../lib/i18n.js";
 
 /**
- * Locale-prefixed route handler for non-default locales (e.g., /de/*)
+ * German locale route handler (/de/*)
  *
  * NOTE: Documentation pages are English-only for the foreseeable future.
  * When users access /de/docs/* routes, they will see English content with
@@ -13,38 +12,49 @@ import { notFound } from "next/navigation";
  * are planned for localization.
  */
 
-// Only generate routes for valid locales - don't match invalid ones
+// Only generate routes for German content
 export const dynamicParams = false;
 
-// Generate static params for locale and mdxPath
+// Generate static params for mdxPath (locale is fixed to "de")
 export const generateStaticParams = async () => {
-  const locales = ["de"]; // Only generate non-default locales here
+  const locale = "de"; // Hardcoded for this route
+  const validLocales = new Set(supportedLocales);
   const mdxParamsGenerator = generateStaticParamsFor("mdxPath");
   const mdxParams = await mdxParamsGenerator();
 
   const params = [];
-  for (const locale of locales) {
-    // Always include the root path (empty mdxPath) for each locale
-    params.push({
-      locale,
-      mdxPath: [],
-    });
 
-    // Add all other paths, but filter out locale-specific paths
-    // (e.g., don't include paths that start with a locale code since we're generating /de/* routes)
-    for (const mdxParam of mdxParams) {
-      // Skip if it's already the empty path (we added it above)
-      if (mdxParam.mdxPath && mdxParam.mdxPath.length > 0) {
-        // Filter out paths that start with a locale code (these are already locale-specific)
-        const firstSegment = mdxParam.mdxPath[0];
-        if (!supportedLocales.includes(firstSegment)) {
-          params.push({
-            locale,
-            mdxPath: mdxParam.mdxPath,
-          });
-        }
+  // Always include the root path (empty mdxPath)
+  params.push({
+    mdxPath: [],
+  });
+
+  // Add all other paths, but filter out docs and locale-specific paths
+  // NOTE: Documentation is English-only, so we don't generate /de/docs/* routes
+  for (const mdxParam of mdxParams) {
+    // Skip if it's already the empty path (we added it above)
+    if (mdxParam.mdxPath && mdxParam.mdxPath.length > 0) {
+      const firstSegment = mdxParam.mdxPath[0];
+
+      // Filter out:
+      // 1. Paths that start with a locale code (these are already locale-specific)
+      // 2. Docs paths (documentation is English-only)
+      if (!validLocales.has(firstSegment) && firstSegment !== "docs") {
+        params.push({
+          mdxPath: mdxParam.mdxPath,
+        });
       }
     }
+  }
+
+  // Manually add about page in case Nextra hasn't picked it up yet
+  const hasAbout = params.some(
+    (p) => p.mdxPath && p.mdxPath.length === 1 && p.mdxPath[0] === "about",
+  );
+  if (!hasAbout) {
+    params.push({
+      mdxPath: ["about"],
+    });
   }
 
   return params;
@@ -52,17 +62,7 @@ export const generateStaticParams = async () => {
 
 export async function generateMetadata(props) {
   const params = await props.params;
-  const localeParam = params.locale;
-
-  // With dynamicParams = false, only valid locales should reach here
-  // But we'll still validate to be safe
-  if (!supportedLocales.includes(localeParam)) {
-    return {
-      title: "Erato",
-    };
-  }
-
-  const locale = getValidLocale(localeParam);
+  const locale = "de"; // Hardcoded for this route
   const mdxPath = params.mdxPath || [];
 
   try {
@@ -87,30 +87,23 @@ const Wrapper = getMDXComponents().wrapper;
 
 export default async function Page(props) {
   const params = await props.params;
-  const localeParam = params.locale;
-
-  // With dynamicParams = false, only valid locales should reach here
-  // But we'll still validate to be safe
-  if (!supportedLocales.includes(localeParam)) {
-    // This shouldn't happen with dynamicParams = false, but handle it gracefully
-    notFound();
-  }
-
-  const locale = getValidLocale(localeParam);
+  const locale = "de"; // Hardcoded for this route
   const mdxPath = params.mdxPath || [];
 
   try {
     const result = await resolveContentWithFallback(mdxPath, locale);
     const { default: MDXContent, toc, metadata, actualLocale } = result;
 
-    // Skip wrapper for index pages
-    const isIndexPage =
+    // Skip wrapper for full-layout pages (index and about)
+    const isFullLayoutPage =
       metadata.filePath === `content/${locale}/index.mdx` ||
+      metadata.filePath === `content/${locale}/about.mdx` ||
       (actualLocale === "en" &&
-        metadata.filePath === "content/index.mdx" &&
+        (metadata.filePath === "content/index.mdx" ||
+          metadata.filePath === "content/about.mdx") &&
         locale === "de");
 
-    if (isIndexPage) {
+    if (isFullLayoutPage) {
       return <MDXContent {...props} params={params} />;
     }
 

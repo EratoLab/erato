@@ -16,5 +16,14 @@ export default {
       layout: "full",
     },
   },
+  about: {
+    title: "Über",
+    type: "page",
+    theme: {
+      sidebar: false,
+      toc: false,
+      layout: "full",
+    },
+  },
   // docs entry intentionally omitted - documentation is English-only
 };
