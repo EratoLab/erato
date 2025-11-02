@@ -17,6 +17,11 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchUploadFile: vi.fn(),
 }));
 
+// Mock FeatureConfigProvider
+vi.mock("@/providers/FeatureConfigProvider", () => ({
+  useUploadFeature: vi.fn(() => ({ enabled: true })),
+}));
+
 // Mock react-dropzone
 vi.mock("react-dropzone", () => {
   return {

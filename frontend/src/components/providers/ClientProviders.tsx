@@ -2,8 +2,8 @@
 
 import { ApiProvider } from "./ApiProvider";
 import { ThemeProvider } from "./ThemeProvider";
-import { I18nProvider } from "../../providers/I18nProvider";
 import { FeatureConfigProvider } from "../../providers/FeatureConfigProvider";
+import { I18nProvider } from "../../providers/I18nProvider";
 
 import type { PropsWithChildren } from "react";
 

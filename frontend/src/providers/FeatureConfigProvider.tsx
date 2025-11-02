@@ -162,4 +162,3 @@ export function useAuthFeature(): AuthFeatureConfig {
   const config = useFeatureConfig();
   return config.auth;
 }
-

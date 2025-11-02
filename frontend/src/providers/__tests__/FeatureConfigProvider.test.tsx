@@ -1,6 +1,14 @@
 import { renderHook } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
+// Mock the env function
+vi.mock("@/app/env", () => ({
+  env: vi.fn(),
+}));
+
+// Import the mocked env
+import { env } from "@/app/env";
+
 import {
   FeatureConfigProvider,
   useFeatureConfig,
@@ -11,21 +19,15 @@ import {
 
 import type { ReactNode } from "react";
 
-// Mock the env function
-vi.mock("@/app/env", () => ({
-  env: vi.fn(),
-}));
-
-// Import the mocked env
-import { env } from "@/app/env";
 const mockEnv = env as ReturnType<typeof vi.fn>;
 
 // Helper to create wrapper with provider
-const createWrapper = () => {
+function createWrapper() {
+  // eslint-disable-next-line react/display-name
   return ({ children }: { children: ReactNode }) => (
     <FeatureConfigProvider>{children}</FeatureConfigProvider>
   );
-};
+}
 
 describe("FeatureConfigProvider", () => {
   beforeEach(() => {
@@ -58,7 +60,9 @@ describe("FeatureConfigProvider", () => {
 
       expect(() => {
         renderHook(() => useFeatureConfig());
-      }).toThrow("useFeatureConfig must be used within a FeatureConfigProvider");
+      }).toThrow(
+        "useFeatureConfig must be used within a FeatureConfigProvider",
+      );
 
       consoleErrorSpy.mockRestore();
     });
@@ -178,7 +182,9 @@ describe("FeatureConfigProvider", () => {
 
       expect(() => {
         renderHook(() => useUploadFeature());
-      }).toThrow("useFeatureConfig must be used within a FeatureConfigProvider");
+      }).toThrow(
+        "useFeatureConfig must be used within a FeatureConfigProvider",
+      );
 
       consoleErrorSpy.mockRestore();
     });
@@ -222,7 +228,9 @@ describe("FeatureConfigProvider", () => {
 
       expect(() => {
         renderHook(() => useChatInputFeature());
-      }).toThrow("useFeatureConfig must be used within a FeatureConfigProvider");
+      }).toThrow(
+        "useFeatureConfig must be used within a FeatureConfigProvider",
+      );
 
       consoleErrorSpy.mockRestore();
     });
@@ -266,7 +274,9 @@ describe("FeatureConfigProvider", () => {
 
       expect(() => {
         renderHook(() => useAuthFeature());
-      }).toThrow("useFeatureConfig must be used within a FeatureConfigProvider");
+      }).toThrow(
+        "useFeatureConfig must be used within a FeatureConfigProvider",
+      );
 
       consoleErrorSpy.mockRestore();
     });
@@ -316,4 +326,3 @@ describe("FeatureConfigProvider", () => {
     });
   });
 });
-

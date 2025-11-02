@@ -6,6 +6,7 @@ import {
   fetchUploadFile,
   type UploadFileVariables,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
 
 import {
@@ -77,6 +78,9 @@ export function useFileDropzone({
   chatId = null,
   // onSilentChatCreated,
 }: UseFileDropzoneProps): UseFileDropzoneResult {
+  // Check if upload feature is enabled
+  const { enabled: uploadEnabled } = useUploadFeature();
+
   // Use the Zustand store for state management
   const {
     uploadedFiles,
@@ -269,7 +273,7 @@ export function useFileDropzone({
         ? FileTypeUtil.getAcceptObject(acceptedFileTypes)
         : undefined,
     multiple,
-    disabled: disabled || isUploading,
+    disabled: disabled || isUploading || !uploadEnabled,
     maxSize: getMaxFileSize(),
   });
 

@@ -2,6 +2,8 @@ import { t } from "@lingui/core/macro";
 import { clsx } from "clsx";
 import { memo } from "react";
 
+import { useAuthFeature } from "@/providers/FeatureConfigProvider";
+
 import { DropdownMenu } from "./DropdownMenu";
 import { Avatar } from "../Feedback/Avatar";
 import { LogOutIcon, SunIcon, MoonIcon, ComputerIcon } from "../icons";
@@ -30,6 +32,9 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
     themeMode = "light",
     setThemeMode,
   }) => {
+    // Check if logout should be shown
+    const { showLogout } = useAuthFeature();
+
     // Create dropdown items array
     const dropdownItems = [
       ...(showThemeToggle && setThemeMode
@@ -54,11 +59,15 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
             },
           ]
         : []),
-      {
-        label: t`Sign out`,
-        icon: <LogOutIcon className="size-4" />,
-        onClick: onSignOut,
-      },
+      ...(showLogout
+        ? [
+            {
+              label: t`Sign out`,
+              icon: <LogOutIcon className="size-4" />,
+              onClick: onSignOut,
+            },
+          ]
+        : []),
     ];
 
     return (
