@@ -4,6 +4,8 @@ import { formatDistanceToNow } from "date-fns";
 import { memo, useEffect, useState } from "react";
 import { useUpdateEffect } from "react-use";
 
+import { useDateFnsLocale } from "@/hooks/useDateFnsLocale";
+
 interface MessageTimestampProps {
   createdAt: Date;
   className?: string;
@@ -56,6 +58,9 @@ export const MessageTimestamp = memo(function MessageTimestamp({
   // Ensure we have a valid date object
   const safeCreatedAt = ensureValidDate(createdAt);
 
+  // Get the date-fns locale based on the current i18n locale
+  const dateFnsLocale = useDateFnsLocale();
+
   const [now, setNow] = useState<number>(() => Date.now());
   const [timeString, setTimeString] = useState(() =>
     displayStyle === "time"
@@ -66,6 +71,7 @@ export const MessageTimestamp = memo(function MessageTimestamp({
       : formatDistanceToNow(safeCreatedAt, {
           addSuffix: true,
           includeSeconds: true,
+          locale: dateFnsLocale,
         }),
   );
 
@@ -83,9 +89,15 @@ export const MessageTimestamp = memo(function MessageTimestamp({
         : formatDistanceToNow(safeCreatedAt, {
             addSuffix: true,
             includeSeconds: true,
+            locale: dateFnsLocale,
           }),
     );
-  }, [safeCreatedAt, displayStyle, shouldUpdateOnNowChange && now]);
+  }, [
+    safeCreatedAt,
+    displayStyle,
+    shouldUpdateOnNowChange && now,
+    dateFnsLocale,
+  ]);
 
   useEffect(() => {
     if (!autoUpdate || displayStyle === "time") return;
