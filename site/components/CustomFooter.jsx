@@ -44,8 +44,8 @@ export default function CustomFooter() {
             </h3>
             <ul className="space-y-2">
               <li>
-                <Link 
-                  href="https://github.com/EratoLab/erato" 
+                <Link
+                  href="https://github.com/EratoLab/erato"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
@@ -54,8 +54,8 @@ export default function CustomFooter() {
                 </Link>
               </li>
               <li>
-                <Link 
-                  href="/docs" 
+                <Link
+                  href="/docs"
                   className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                 >
                   Documentation
@@ -78,4 +78,3 @@ export default function CustomFooter() {
     </footer>
   );
 }
-

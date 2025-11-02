@@ -1,6 +1,6 @@
 /**
  * German content metadata
- * 
+ *
  * NOTE: Documentation pages are English-only for the foreseeable future.
  * This _meta.js only includes marketing pages (homepage, etc.) that are localized.
  * The "docs" entry is intentionally omitted since documentation is not localized.
@@ -18,4 +18,3 @@ export default {
   },
   // docs entry intentionally omitted - documentation is English-only
 };
-

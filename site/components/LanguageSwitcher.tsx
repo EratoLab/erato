@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getLocaleFromPath, getPathWithoutLocale, addLocaleToPath, supportedLocales } from "../lib/i18n.js";
+import {
+  getLocaleFromPath,
+  getPathWithoutLocale,
+  addLocaleToPath,
+  supportedLocales,
+} from "../lib/i18n.js";
 
 const LOCALE_STORAGE_KEY = "erato-preferred-locale";
 
@@ -28,7 +33,7 @@ export default function LanguageSwitcher() {
       {supportedLocales.map((locale) => {
         const isActive = locale === currentLocale;
         const href = addLocaleToPath(pathWithoutLocale, locale);
-        
+
         return (
           <li key={locale}>
             <Link
@@ -48,4 +53,3 @@ export default function LanguageSwitcher() {
     </ul>
   );
 }
-

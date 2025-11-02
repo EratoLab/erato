@@ -7,10 +7,10 @@ export const dynamicParams = false;
 export const generateStaticParams = async () => {
   const mdxParamsGenerator = generateStaticParamsFor("mdxPath");
   const allParams = await mdxParamsGenerator();
-  
+
   // Filter out docs paths (they're handled by /docs/[[...slug]])
   // and locale paths (they're handled by /[locale]/[[...mdxPath]])
-  return allParams.filter(param => {
+  return allParams.filter((param) => {
     const path = param.mdxPath || [];
     // Exclude docs paths
     if (path.length > 0 && path[0] === "docs") {

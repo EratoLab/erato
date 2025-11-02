@@ -12,14 +12,14 @@ export const dynamicParams = false;
 export const generateStaticParams = async () => {
   const mdxParamsGenerator = generateStaticParamsFor("mdxPath");
   const allParams = await mdxParamsGenerator();
-  
+
   // Filter to only include paths that start with "docs"
   return allParams
-    .filter(param => {
+    .filter((param) => {
       const path = param.mdxPath || [];
       return path.length > 0 && path[0] === "docs";
     })
-    .map(param => ({
+    .map((param) => ({
       slug: param.mdxPath.slice(1), // Remove "docs" prefix since it's in the route
     }));
 };
@@ -28,7 +28,7 @@ export async function generateMetadata(props) {
   const params = await props.params;
   const slug = params.slug || [];
   const mdxPath = ["docs", ...slug];
-  
+
   const { metadata } = await importPage(mdxPath);
   return {
     ...metadata,
@@ -42,7 +42,7 @@ export default async function Page(props) {
   const params = await props.params;
   const slug = params.slug || [];
   const mdxPath = ["docs", ...slug];
-  
+
   const result = await importPage(mdxPath);
   const { default: MDXContent, toc, metadata } = result;
 
@@ -52,4 +52,3 @@ export default async function Page(props) {
     </Wrapper>
   );
 }
-

@@ -7,7 +7,7 @@ import { getLocaleFromPath, addLocaleToPath } from "../lib/i18n.js";
 export default function HomepageHero() {
   const pathname = usePathname();
   const locale = getLocaleFromPath(pathname);
-  
+
   // Translations
   const translations = {
     en: {

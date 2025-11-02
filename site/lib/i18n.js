@@ -1,6 +1,6 @@
 /**
  * Internationalization utilities for the erato.chat website
- * 
+ *
  * LOCALE POLICY:
  * - Marketing pages (homepage, etc.) are localized in English and German
  * - Documentation pages (/docs/*) are English-only for the foreseeable future
@@ -97,4 +97,3 @@ export function addLocaleToPath(pathname, locale) {
   const cleanPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
   return `/${locale}${cleanPath === "/" ? "" : cleanPath}`;
 }
-

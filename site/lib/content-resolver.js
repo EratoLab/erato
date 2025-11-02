@@ -4,12 +4,12 @@ import { defaultLocale } from "./i18n.js";
 /**
  * Resolves content with locale fallback
  * Tries locale-specific content first, falls back to English if not found
- * 
+ *
  * IMPORTANT: Documentation pages (under /docs/) are English-only for the foreseeable future.
  * This means that when accessing /de/docs/* routes, users will see English content
  * but with the /de/ URL prefix preserved. This is intentional behavior - only marketing
  * pages (homepage, etc.) are planned for localization.
- * 
+ *
  * @param {string[]} mdxPath - MDX path segments
  * @param {string} locale - Locale code
  * @returns {Promise<{default: Component, toc: any, metadata: any, actualLocale: string}>}
@@ -27,15 +27,20 @@ export async function resolveContentWithFallback(mdxPath, locale) {
     const result = await importPage(localePath);
     // Check if the file actually exists by verifying metadata filePath
     // The filePath should start with "content/{locale}/" for locale-specific content
-    if (result.metadata?.filePath && result.metadata.filePath.startsWith(`content/${locale}/`)) {
+    if (
+      result.metadata?.filePath &&
+      result.metadata.filePath.startsWith(`content/${locale}/`)
+    ) {
       return { ...result, actualLocale: locale };
     }
     // If filePath doesn't match, it might be a fallback, so continue to English fallback
   } catch (error) {
     // Content doesn't exist, fall through to fallback
     // Log error in development for debugging
-    if (process.env.NODE_ENV === 'development') {
-      console.debug(`[i18n] Locale-specific content not found for path [${localePath.join(', ')}], falling back to English`);
+    if (process.env.NODE_ENV === "development") {
+      console.debug(
+        `[i18n] Locale-specific content not found for path [${localePath.join(", ")}], falling back to English`,
+      );
     }
   }
 
@@ -45,7 +50,10 @@ export async function resolveContentWithFallback(mdxPath, locale) {
     return { ...result, actualLocale: defaultLocale };
   } catch (error) {
     // Re-throw if English content also doesn't exist
-    console.error(`[i18n] Failed to load content for path [${mdxPath.join(', ')}]:`, error);
+    console.error(
+      `[i18n] Failed to load content for path [${mdxPath.join(", ")}]:`,
+      error,
+    );
     throw error;
   }
 }
@@ -76,4 +84,3 @@ export async function resolveContentPath(mdxPath, locale) {
   // Fallback to English content
   return { path: mdxPath, actualLocale: defaultLocale };
 }
-

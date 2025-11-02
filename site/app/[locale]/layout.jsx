@@ -1,10 +1,10 @@
 /**
  * Locale-specific layout for routes like /de/*
- * 
+ *
  * NOTE: This is a nested layout under the root layout.
  * It should NOT include <html>, <body>, or duplicate the full Layout component.
  * The root layout already provides the HTML structure and Nextra Layout.
- * 
+ *
  * This layout only exists to provide locale-specific metadata.
  */
 
@@ -21,4 +21,3 @@ export default async function LocaleLayout({ children, params }) {
   // The locale is already being handled by the page component
   return <>{children}</>;
 }
-
