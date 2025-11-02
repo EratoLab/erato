@@ -42,7 +42,7 @@ export default function HomepageHero() {
         <Link
           href={docsPath}
           role="button"
-          className="inline-block py-3 px-12 rounded-md bg-erato-green dark:bg-[#10b981] hover:bg-[#059669] dark:hover:bg-[#059669] active:bg-[#047857] dark:active:bg-[#047857] text-white dark:text-black transition-colors duration-200 ease-in-out shadow-md hover:shadow-lg"
+          className="inline-block py-3 px-12 rounded-md btn-primary-bg btn-primary-bg-hover btn-primary-bg-active btn-primary-text transition-colors duration-200 ease-in-out shadow-md hover:shadow-lg"
         >
           {t.cta}
         </Link>

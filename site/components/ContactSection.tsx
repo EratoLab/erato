@@ -8,14 +8,10 @@ export default function ContactSection({
   backgroundColor = "white",
 }: ContactSectionProps) {
   const bgClasses =
-    backgroundColor === "white"
-      ? "bg-white dark:bg-[#024231]"
-      : "bg-gray-50 dark:bg-[#035e4a]";
+    backgroundColor === "white" ? "section-bg-primary" : "section-bg-secondary";
 
   const boxClasses =
-    backgroundColor === "white"
-      ? "bg-gray-50 dark:bg-[#035e4a]"
-      : "bg-white dark:bg-[#024231]";
+    backgroundColor === "white" ? "section-bg-secondary" : "section-bg-primary";
 
   return (
     <div className={`${bgClasses} py-16 sm:py-24`}>
@@ -23,10 +19,10 @@ export default function ContactSection({
         <div className="mx-auto max-w-2xl lg:mx-0 lg:max-w-none">
           <div className="grid grid-cols-1 gap-10 py-16 lg:grid-cols-3">
             <div>
-              <h2 className="text-4xl font-semibold tracking-tight text-pretty text-gray-900 dark:text-white">
+              <h2 className="text-4xl font-semibold tracking-tight text-pretty section-text-heading">
                 Get in touch
               </h2>
-              <p className="mt-4 text-base leading-7 text-gray-600 dark:text-gray-400">
+              <p className="mt-4 text-base leading-7 section-text-body">
                 Reach out for requests, feedback or partnerships
               </p>
             </div>
@@ -34,7 +30,7 @@ export default function ContactSection({
               <div className={`rounded-2xl p-10 ${boxClasses}`}>
                 <div className="flex items-center gap-3">
                   <svg
-                    className="h-6 w-6 text-erato-green dark:text-[#10b981]"
+                    className="h-6 w-6 section-text-accent"
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth="1.5"
@@ -46,17 +42,17 @@ export default function ContactSection({
                       d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"
                     />
                   </svg>
-                  <h3 className="text-base leading-7 font-semibold text-gray-900 dark:text-white">
+                  <h3 className="text-base leading-7 font-semibold section-text-heading">
                     Contact Us
                   </h3>
                 </div>
-                <dl className="mt-3 space-y-1 text-sm leading-6 text-gray-600 dark:text-gray-400">
+                <dl className="mt-3 space-y-1 text-sm leading-6 section-text-body-muted">
                   <div>
                     <dt className="sr-only">Email</dt>
                     <dd>
                       <a
                         href="mailto:contact@eratolabs.com"
-                        className="font-semibold text-erato-green dark:text-[#10b981] hover:underline"
+                        className="font-semibold section-text-accent hover:underline"
                       >
                         contact@eratolabs.com
                       </a>
@@ -67,7 +63,7 @@ export default function ContactSection({
               <div className={`rounded-2xl p-10 ${boxClasses}`}>
                 <div className="flex items-center gap-3">
                   <svg
-                    className="h-6 w-6 text-erato-green dark:text-[#10b981]"
+                    className="h-6 w-6 section-text-accent"
                     fill="currentColor"
                     viewBox="0 0 24 24"
                   >
@@ -77,11 +73,11 @@ export default function ContactSection({
                       clipRule="evenodd"
                     />
                   </svg>
-                  <h3 className="text-base leading-7 font-semibold text-gray-900 dark:text-white">
+                  <h3 className="text-base leading-7 font-semibold section-text-heading">
                     GitHub
                   </h3>
                 </div>
-                <dl className="mt-3 space-y-1 text-sm leading-6 text-gray-600 dark:text-gray-400">
+                <dl className="mt-3 space-y-1 text-sm leading-6 section-text-body-muted">
                   <div>
                     <dt className="sr-only">Repository</dt>
                     <dd>
@@ -89,7 +85,7 @@ export default function ContactSection({
                         href="https://github.com/EratoLab/erato"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-semibold text-erato-green dark:text-[#10b981] hover:underline"
+                        className="font-semibold section-text-accent hover:underline"
                       >
                         github.com/EratoLab/erato
                       </a>

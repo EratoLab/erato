@@ -9,5 +9,75 @@
 }
 
 @theme {
-  --color-erato-green: #059669;
+  --color-erato-green: #059669; /* primary green (hover states) */
+  --color-erato-green-light: #10b981; /* bright green (accents, dark mode button) */
+  --color-erato-green-dark: #047857; /* dark green (active/pressed states) */
+  --color-erato-dark-primary: #024231; /* deep dark teal (dark mode backgrounds) */
+  --color-erato-dark-secondary: #035e4a; /* medium dark teal (dark mode backgrounds) */
+}
+
+@layer utilities {
+  /* Section Background Utilities */
+  .section-bg-primary {
+    @apply bg-white dark:bg-erato-dark-primary;
+  }
+
+  .section-bg-secondary {
+    @apply bg-gray-50 dark:bg-erato-dark-secondary;
+  }
+
+  /* Section Text Utilities */
+  .section-text-heading {
+    @apply text-gray-900 dark:text-white;
+  }
+
+  .section-text-body {
+    @apply text-gray-600 dark:text-gray-300;
+  }
+
+  .section-text-body-muted {
+    @apply text-gray-600 dark:text-gray-400;
+  }
+
+  .section-text-accent {
+    @apply text-erato-green dark:text-erato-green-light;
+  }
+
+  /* UI Element Utilities (Footer, Navigation) */
+  .ui-bg {
+    @apply bg-white dark:bg-neutral-900;
+  }
+
+  .ui-border {
+    @apply border-neutral-200 dark:border-neutral-800;
+  }
+
+  .ui-text-heading {
+    @apply text-neutral-900 dark:text-neutral-100;
+  }
+
+  .ui-text-body {
+    @apply text-neutral-600 dark:text-neutral-400;
+  }
+
+  .ui-text-hover {
+    @apply hover:text-neutral-900 dark:hover:text-neutral-100;
+  }
+
+  /* Button Utilities */
+  .btn-primary-bg {
+    @apply bg-erato-green dark:bg-erato-green-light;
+  }
+
+  .btn-primary-bg-hover {
+    @apply hover:bg-erato-green dark:hover:bg-erato-green;
+  }
+
+  .btn-primary-bg-active {
+    @apply active:bg-erato-green-dark dark:active:bg-erato-green-dark;
+  }
+
+  .btn-primary-text {
+    @apply text-white dark:text-black;
+  }
 }

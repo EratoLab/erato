@@ -16,9 +16,7 @@ export default function FeatureSection({
   backgroundColor = "white",
 }: FeatureSectionProps) {
   const bgClasses =
-    backgroundColor === "white"
-      ? "bg-white dark:bg-[#024231]"
-      : "bg-gray-50 dark:bg-[#035e4a]";
+    backgroundColor === "white" ? "section-bg-primary" : "section-bg-secondary";
 
   return (
     <div className={`overflow-hidden ${bgClasses} py-24 sm:py-32`}>
@@ -29,10 +27,10 @@ export default function FeatureSection({
             className={`flex flex-col justify-center ${imagePosition === "right" ? "" : "lg:order-last"}`}
           >
             <div className="max-w-xl">
-              <h2 className="text-4xl font-semibold tracking-tight text-pretty text-gray-900 sm:text-5xl dark:text-white">
+              <h2 className="text-4xl font-semibold tracking-tight text-pretty sm:text-5xl section-text-heading">
                 {title}
               </h2>
-              <p className="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-300">
+              <p className="mt-6 text-lg leading-8 section-text-body">
                 {description}
               </p>
             </div>
