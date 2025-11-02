@@ -20,7 +20,8 @@ vi.mock("@/utils/sse/sseClient", () => ({
 
 // Mock React Router hooks
 const mockNavigate = vi.fn();
-const mockLocation = { pathname: "/chat/test" };
+let mockLocation = { pathname: "/chat" };
+let mockParams: { id?: string } = {};
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
@@ -28,6 +29,7 @@ vi.mock("react-router-dom", async () => {
     ...actual,
     useNavigate: () => mockNavigate,
     useLocation: () => mockLocation,
+    useParams: () => mockParams,
   };
 });
 
@@ -126,6 +128,10 @@ describe("Chat hooks integration", () => {
     // Reset mocks
     vi.clearAllMocks();
 
+    // Reset router mocks to initial state
+    mockLocation = { pathname: "/chat" };
+    mockParams = {};
+
     // Setup SSE mock to return a cleanup function
     vi.mocked(createSSEConnection).mockReturnValue(() => {
       console.log("[TEST] SSE connection cleanup called");
@@ -178,7 +184,9 @@ describe("Chat hooks integration", () => {
 
   it("should navigate between chats and load appropriate messages", async () => {
     // Render the chat history hook with router context
-    const { result: historyResult } = renderHook(() => useChatHistory());
+    const { result: historyResult, rerender } = renderHook(() =>
+      useChatHistory(),
+    );
 
     // Initially we should have the list of chats
     expect(historyResult.current.chats).toEqual(mockChats);
@@ -190,6 +198,11 @@ describe("Chat hooks integration", () => {
 
     // The navigate function should have been called
     expect(mockNavigate).toHaveBeenCalledWith("/chat/chat1");
+
+    // Simulate URL change after navigation
+    mockLocation = { pathname: "/chat/chat1" };
+    mockParams = { id: "chat1" };
+    rerender();
 
     // Verify the current chat ID is set
     expect(historyResult.current.currentChatId).toBe("chat1");
@@ -231,6 +244,11 @@ describe("Chat hooks integration", () => {
     // The navigate function should have been called
     expect(mockNavigate).toHaveBeenCalledWith("/chat/chat2");
 
+    // Simulate URL change after navigation
+    mockLocation = { pathname: "/chat/chat2" };
+    mockParams = { id: "chat2" };
+    rerender();
+
     // Verify the current chat ID is updated
     expect(historyResult.current.currentChatId).toBe("chat2");
 
@@ -266,7 +284,9 @@ describe("Chat hooks integration", () => {
     });
 
     // Render the chat history hook with router context
-    const { result: historyResult } = renderHook(() => useChatHistory());
+    const { result: historyResult, rerender } = renderHook(() =>
+      useChatHistory(),
+    );
 
     // Create a new chat
     await act(async () => {
@@ -275,6 +295,11 @@ describe("Chat hooks integration", () => {
 
     // Should navigate to new chat page
     expect(mockNavigate).toHaveBeenCalledWith("/chat/new", { replace: true });
+
+    // Simulate URL change to /chat/new
+    mockLocation = { pathname: "/chat/new" };
+    mockParams = {};
+    rerender();
 
     // Manually reset the isNewChatPending flag as would happen in real navigation
     await act(async () => {
@@ -286,6 +311,11 @@ describe("Chat hooks integration", () => {
     await act(async () => {
       historyResult.current.navigateToChat("new-chat-id");
     });
+
+    // Simulate URL change after navigation to new chat
+    mockLocation = { pathname: "/chat/new-chat-id" };
+    mockParams = { id: "new-chat-id" };
+    rerender();
 
     // Verify current chat ID is set
     expect(historyResult.current.currentChatId).toBe("new-chat-id");

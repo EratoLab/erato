@@ -13,7 +13,7 @@ export default function NewChatPage() {
 
   useEffect(() => {
     logger.log(
-      "[DEBUG_REDIRECT] NewChatPage mounted - resetting new chat pending flag to false",
+      "[DEBUG_REDIRECT] NewChatPage mounted - resetting new chat pending flag to false (currentChatId derived from URL)",
     );
     setNewChatPending(false);
   }, [setNewChatPending]);
