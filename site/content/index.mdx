@@ -1,5 +1,6 @@
 import HomepageHero from "@components/HomepageHero";
 import FeatureSection from "@components/FeatureSection";
+import ContactSection from "@components/ContactSection";
 
 <div className="min-h-screen flex flex-col">
 <div>
@@ -7,26 +8,39 @@ import FeatureSection from "@components/FeatureSection";
 </div>
 
 <div className="flex-1 bg-erato-green">
-<div className="flex flex-row max-w-7xl mx-auto px-6 lg:px-8 pt-10">
-  <h2  className="text-4xl underline font-bold">Why Erato?</h2>
-</div>
-<div className="flex flex-col md:flex-row max-w-7xl mx-auto px-6 lg:px-8 py-10 gap-6 bg-erato-green">
-  <div>
-    <h3 className="text-4xl font-bold pb-2">Open Source</h3>
-    <span>Erato is fully open source, giving you complete transparency, control, and the freedom to customize or contribute. No vendor lock-in. Run, inspect, and improve the platform as you see fit.</span>
+  <div className="flex flex-row max-w-7xl mx-auto px-6 lg:px-8 pt-10">
+    <h2 className="text-4xl underline font-bold">Why Erato?</h2>
   </div>
-  <div>
-    <h3 className="text-4xl font-bold pb-2">Built for Self-Hosting</h3>
-    <span>Designed from the ground up for easy self-hosting, Erato empowers you to deploy in your own environment. On-premises or in the cloud: ensuring data privacy and suitable for high-compliance environments.</span>
+  <div className="flex flex-col md:flex-row max-w-7xl mx-auto px-6 lg:px-8 py-10 gap-6 bg-erato-green">
+    <div>
+      <h3 className="text-4xl font-bold pb-2">Open Source</h3>
+      <span>
+        Erato is fully open source, giving you complete transparency, control,
+        and the freedom to customize or contribute. No vendor lock-in. Run,
+        inspect, and improve the platform as you see fit.
+      </span>
+    </div>
+    <div>
+      <h3 className="text-4xl font-bold pb-2">Built for Self-Hosting</h3>
+      <span>
+        Designed from the ground up for easy self-hosting, Erato empowers you to
+        deploy in your own environment. On-premises or in the cloud: ensuring
+        data privacy and suitable for high-compliance environments.
+      </span>
+    </div>
+    <div>
+      <h3 className="text-4xl font-bold pb-2">Extensible</h3>
+      <span>
+        Erato's architecture is extensible with first-class support for MCP
+        (Model Context Protocol) servers, allowing you to integrate custom
+        logic, connect external systems, and expand capabilities to fit your
+        unique workflows.
+      </span>
+    </div>
   </div>
-  <div>
-    <h3 className="text-4xl font-bold pb-2">Extensible</h3>
-    <span>Erato's architecture is extensible with first-class support for MCP (Model Context Protocol) servers, allowing you to integrate custom logic, connect external systems, and expand capabilities to fit your unique workflows.</span>
-  </div>
-</div>
 </div>
 
-<FeatureSection 
+<FeatureSection
   title="Powerful AI Capabilities"
   description="Leverage the latest advancements in large language models with complete control over your data. Erato brings cutting-edge AI technology directly into your infrastructure, ensuring your sensitive information never leaves your environment while maintaining the productivity benefits of modern AI assistants."
   imageUrl="/erato-ai-capabilities.png"
@@ -34,7 +48,7 @@ import FeatureSection from "@components/FeatureSection";
   backgroundColor="white"
 />
 
-<FeatureSection 
+<FeatureSection
   title="Enterprise-Ready Security"
   description="Built with security at its core, Erato provides comprehensive access controls, audit logging, and compliance features. Deploy with confidence knowing that your organization's data is protected by industry-standard security practices, with full visibility into all AI interactions and the ability to set granular permissions based on your existing identity provider."
   imageUrl="/erato-security-capabilities.png"
@@ -42,12 +56,14 @@ import FeatureSection from "@components/FeatureSection";
   backgroundColor="gray"
 />
 
-<FeatureSection 
+<FeatureSection
   title="Seamless Integration"
   description="Connect Erato to your existing tools and workflows effortlessly. With support for the Model Context Protocol (MCP), you can extend functionality to integrate with databases, APIs, and internal systems. Erato fits naturally into your development environment, enhancing productivity without disrupting your established processes."
   imageUrl="/erato-integration-capabilities.png"
   imagePosition="right"
   backgroundColor="white"
 />
+
+<ContactSection backgroundColor="gray" />
 
 </div>
