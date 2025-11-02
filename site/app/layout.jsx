@@ -1,9 +1,10 @@
-import { Footer, Layout, Navbar } from "nextra-theme-docs";
+import { Footer, Layout } from "nextra-theme-docs";
 import { Banner, Head } from "nextra/components";
 import { getPageMap } from "nextra/page-map";
 import { Dongle } from "next/font/google";
 import LanguageDetection from "../components/LanguageDetection.jsx";
 import CustomFooter from "../components/CustomFooter.jsx";
+import CustomNavbar from "../components/CustomNavbar.jsx";
 
 import "./globals.css";
 
@@ -31,23 +32,7 @@ export const metadata = {
 };
 
 // const banner = <Banner storageKey="some-key">Nextra 4.0 is released 🎉</Banner>
-const navbar = (
-  <Navbar
-    logo={
-      <img
-        src="/erato_logo.svg"
-        alt="Erato Logo"
-        style={{
-          height: 32,
-          width: "auto",
-          display: "inline-block",
-          verticalAlign: "middle",
-        }}
-      />
-    }
-    // ... Your additional navbar options
-  />
-);
+const navbar = <CustomNavbar />;
 const footer = <CustomFooter />;
 
 export default async function RootLayout({ children }) {
