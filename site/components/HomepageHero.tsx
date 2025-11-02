@@ -11,10 +11,11 @@ export default function HomepageHero() {
   // Translations
   const translations = {
     en: {
-      tagline: "The AI Chat built for on-premise",
-      tagline2: "and fit for your organizations needs.",
+      tagline: "Erato brings the productivity of modern LLMs into your infrastructure – on-premise, compliant, open-source — on your terms.",
+      tagline2: null,
       cta: "GET STARTED",
     },
+    // TODO: German variant
     de: {
       tagline: "Der KI-Chat für On-Premise",
       tagline2: "und passend für die Bedürfnisse Ihrer Organisation.",
@@ -26,9 +27,9 @@ export default function HomepageHero() {
   const docsPath = addLocaleToPath("/docs", locale);
 
   return (
-    <div className="flex flex-col md:flex-row max-w-[60rem] mx-auto px-6 py-10">
-      <div className="w-3/5">
-        <div className="text-8xl font-black">Erato</div>
+    <div className="flex flex-col md:flex-col max-w-[60rem] mx-auto px-6 py-10">
+      <div className="w-full">
+        <div className="text-8xl font-black">The Open Source AI Platform</div>
         <div className="text-lg max-w-[30rem] pt-2">
           {t.tagline}
           <br /> {t.tagline2}
