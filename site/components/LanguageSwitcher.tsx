@@ -24,28 +24,28 @@ export default function LanguageSwitcher() {
   };
 
   return (
-    <div className="flex gap-2 items-center">
-      <span className="text-sm text-gray-600 dark:text-gray-400">Language:</span>
+    <ul className="space-y-2">
       {supportedLocales.map((locale) => {
         const isActive = locale === currentLocale;
         const href = addLocaleToPath(pathWithoutLocale, locale);
         
         return (
-          <Link
-            key={locale}
-            href={href}
-            onClick={() => handleLanguageClick(locale)}
-            className={`px-2 py-1 text-sm rounded ${
-              isActive
-                ? "bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 font-semibold"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-            }`}
-          >
-            {languageNames[locale]}
-          </Link>
+          <li key={locale}>
+            <Link
+              href={href}
+              onClick={() => handleLanguageClick(locale)}
+              className={`text-sm block transition-colors ${
+                isActive
+                  ? "text-neutral-900 dark:text-neutral-100 font-semibold"
+                  : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+              }`}
+            >
+              {languageNames[locale]}
+            </Link>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 }
 
