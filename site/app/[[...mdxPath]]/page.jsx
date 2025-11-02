@@ -8,9 +8,10 @@ export const generateStaticParams = async () => {
   const mdxParamsGenerator = generateStaticParamsFor("mdxPath");
   const allParams = await mdxParamsGenerator();
 
+  console.log("All params:", allParams);
   // Filter out docs paths (they're handled by /docs/[[...slug]])
   // and locale paths (they're handled by /[locale]/[[...mdxPath]])
-  return allParams.filter((param) => {
+  const filteredParams = allParams.filter((param) => {
     const path = param.mdxPath || [];
     // Exclude docs paths
     if (path.length > 0 && path[0] === "docs") {
@@ -22,6 +23,17 @@ export const generateStaticParams = async () => {
     }
     return true;
   });
+
+  // Explicitly add /about route if not already present
+  // This ensures Next.js knows this route (not [locale]) handles /about
+  const hasAbout = filteredParams.some(
+    (p) => p.mdxPath && p.mdxPath.length === 1 && p.mdxPath[0] === "about",
+  );
+  if (!hasAbout) {
+    filteredParams.push({ mdxPath: ["about"] });
+  }
+
+  return filteredParams;
 };
 
 export async function generateMetadata(props) {
@@ -42,8 +54,11 @@ export default async function Page(props) {
   const result = await importPage(mdxPath);
   const { default: MDXContent, toc, metadata } = result;
 
-  // Skip wrapper
-  if (metadata.filePath === "content/index.mdx") {
+  // Skip wrapper for full-layout pages
+  if (
+    metadata.filePath === "content/index.mdx" ||
+    metadata.filePath === "content/about.mdx"
+  ) {
     return <MDXContent {...props} params={params} />;
   }
 

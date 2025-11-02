@@ -45,6 +45,14 @@ export default function CustomFooter() {
             <ul className="space-y-2">
               <li>
                 <Link
+                  href="/about"
+                  className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
+                >
+                  About Us
+                </Link>
+              </li>
+              <li>
+                <Link
                   href="https://github.com/EratoLab/erato"
                   target="_blank"
                   rel="noopener noreferrer"
