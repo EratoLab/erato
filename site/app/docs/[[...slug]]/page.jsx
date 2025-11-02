@@ -1,32 +1,34 @@
 import { generateStaticParamsFor, importPage } from "nextra/pages";
-import { useMDXComponents as getMDXComponents } from "../../mdx-components";
+import { useMDXComponents as getMDXComponents } from "../../../mdx-components";
 
-// Force static generation for all non-locale routes
+/**
+ * Explicit /docs route handler to prevent /docs from being matched as a locale.
+ * This route has higher priority than [locale] routes.
+ */
+
+// Force static generation
 export const dynamicParams = false;
 
 export const generateStaticParams = async () => {
   const mdxParamsGenerator = generateStaticParamsFor("mdxPath");
   const allParams = await mdxParamsGenerator();
   
-  // Filter out docs paths (they're handled by /docs/[[...slug]])
-  // and locale paths (they're handled by /[locale]/[[...mdxPath]])
-  return allParams.filter(param => {
-    const path = param.mdxPath || [];
-    // Exclude docs paths
-    if (path.length > 0 && path[0] === "docs") {
-      return false;
-    }
-    // Exclude locale paths (de, etc.)
-    if (path.length > 0 && ["de"].includes(path[0])) {
-      return false;
-    }
-    return true;
-  });
+  // Filter to only include paths that start with "docs"
+  return allParams
+    .filter(param => {
+      const path = param.mdxPath || [];
+      return path.length > 0 && path[0] === "docs";
+    })
+    .map(param => ({
+      slug: param.mdxPath.slice(1), // Remove "docs" prefix since it's in the route
+    }));
 };
 
 export async function generateMetadata(props) {
   const params = await props.params;
-  const mdxPath = params.mdxPath || [];
+  const slug = params.slug || [];
+  const mdxPath = ["docs", ...slug];
+  
   const { metadata } = await importPage(mdxPath);
   return {
     ...metadata,
@@ -38,14 +40,11 @@ const Wrapper = getMDXComponents().wrapper;
 
 export default async function Page(props) {
   const params = await props.params;
-  const mdxPath = params.mdxPath || [];
+  const slug = params.slug || [];
+  const mdxPath = ["docs", ...slug];
+  
   const result = await importPage(mdxPath);
   const { default: MDXContent, toc, metadata } = result;
-
-  // Skip wrapper
-  if (metadata.filePath === "content/index.mdx") {
-    return <MDXContent {...props} params={params} />;
-  }
 
   return (
     <Wrapper toc={toc} metadata={metadata}>
@@ -53,3 +52,4 @@ export default async function Page(props) {
     </Wrapper>
   );
 }
+

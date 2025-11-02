@@ -2,6 +2,8 @@ import { Footer, Layout, Navbar } from "nextra-theme-docs";
 import { Banner, Head } from "nextra/components";
 import { getPageMap } from "nextra/page-map";
 import { Dongle } from "next/font/google";
+import LanguageDetection from "../components/LanguageDetection.jsx";
+import CustomFooter from "../components/CustomFooter.jsx";
 
 import "./globals.css";
 
@@ -46,7 +48,7 @@ const navbar = (
     // ... Your additional navbar options
   />
 );
-const footer = <Footer></Footer>;
+const footer = <CustomFooter />;
 
 export default async function RootLayout({ children }) {
   return (
@@ -68,15 +70,17 @@ export default async function RootLayout({ children }) {
         {/* Your additional tags should be passed as `children` of `<Head>` element */}
       </Head>
       <body>
-        <Layout
-          navbar={navbar}
-          pageMap={await getPageMap()}
-          docsRepositoryBase="https://github.com/EratoLab/erato/tree/main/site"
-          footer={footer}
-          // ... Your additional layout options
-        >
-          {children}
-        </Layout>
+        <LanguageDetection>
+          <Layout
+            navbar={navbar}
+            pageMap={await getPageMap()}
+            docsRepositoryBase="https://github.com/EratoLab/erato/tree/main/site"
+            footer={footer}
+            // ... Your additional layout options
+          >
+            {children}
+          </Layout>
+        </LanguageDetection>
       </body>
     </html>
   );
