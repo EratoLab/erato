@@ -8,6 +8,10 @@ import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import { useFileDropzone } from "@/hooks/files";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { useChatContext } from "@/providers/ChatProvider";
+import {
+  useUploadFeature,
+  useChatInputFeature,
+} from "@/providers/FeatureConfigProvider";
 
 import { ArrowUpIcon } from "../icons";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
@@ -104,6 +108,10 @@ export const ChatInput = ({
 
   // Combine loading states
   const isLoading = propIsLoading ?? isMessagingLoading;
+
+  // Get feature configurations
+  const { enabled: uploadEnabled } = useUploadFeature();
+  const { autofocus: shouldAutofocus } = useChatInputFeature();
 
   // Use local model selection hook
   const {
@@ -340,7 +348,7 @@ export const ChatInput = ({
           rows={1}
           disabled={isLoading || isStreaming || disabled || isUploading}
           tabIndex={0}
-          autoFocus={true} // eslint-disable-line jsx-a11y/no-autofocus -- The chat input is the main interactive element on the page.
+          autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
           className={clsx(
             "w-full resize-none overflow-y-auto",
             "p-2 sm:px-3",
@@ -361,7 +369,7 @@ export const ChatInput = ({
             {showControls && (
               <>
                 {/* File Upload Button with Token Check */}
-                {handleFileAttachments && (
+                {handleFileAttachments && uploadEnabled && (
                   <FileUploadWithTokenCheck
                     message={message}
                     chatId={chatId}

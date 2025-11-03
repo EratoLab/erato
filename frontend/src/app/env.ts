@@ -57,10 +57,18 @@ export const env = (): Env => {
     themeLogoDarkPath = null;
   }
 
-  const disableUpload = window.DISABLE_UPLOAD ?? false;
+  const disableUpload =
+    import.meta.env.VITE_DISABLE_UPLOAD === "true"
+      ? true
+      : (window.DISABLE_UPLOAD ?? false);
   const disableChatInputAutofocus =
-    window.DISABLE_CHAT_INPUT_AUTOFOCUS ?? false;
-  const disableLogout = window.DISABLE_LOGOUT ?? false;
+    import.meta.env.VITE_DISABLE_CHAT_INPUT_AUTOFOCUS === "true"
+      ? true
+      : (window.DISABLE_CHAT_INPUT_AUTOFOCUS ?? false);
+  const disableLogout =
+    import.meta.env.VITE_DISABLE_LOGOUT === "true"
+      ? true
+      : (window.DISABLE_LOGOUT ?? false);
 
   return {
     apiRootUrl,

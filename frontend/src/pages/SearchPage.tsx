@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { SearchIcon, CloseIcon } from "@/components/ui/icons";
 import { useChatContext } from "@/providers/ChatProvider";
+import { useChatInputFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 const logger = createLogger("UI", "SearchPage");
@@ -41,6 +42,9 @@ export default function SearchPage() {
 
   // Get chat data from context
   const { chats: chatHistory, navigateToChat } = useChatContext();
+
+  // Get feature configurations
+  const { autofocus: shouldAutofocus } = useChatInputFeature();
 
   // Debounce search query
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
@@ -154,7 +158,7 @@ export default function SearchPage() {
                 }
               }}
               placeholder={t`Search chat titles...`}
-              autoFocus={true} // eslint-disable-line jsx-a11y/no-autofocus -- The search input is the main interactive element on the search page.
+              autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
               className="w-full rounded-xl border border-theme-border bg-theme-bg-secondary px-12 py-4 text-lg text-theme-fg-primary placeholder:text-theme-fg-muted focus:border-theme-border-focus focus:outline-none focus:ring-2 focus:ring-theme-focus"
             />
             {searchQuery && (
