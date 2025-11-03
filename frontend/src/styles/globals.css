@@ -254,3 +254,34 @@ body {
 .theme-transition {
   @apply transition-all duration-150 ease-in-out;
 }
+
+/* Footnote reference styling - add square brackets and remove underline */
+a[data-footnote-ref="true"] {
+  text-decoration: none;
+  padding-left: 0.125rem;
+}
+
+a[data-footnote-ref="true"]::before {
+  content: "[";
+}
+
+a[data-footnote-ref="true"]::after {
+  content: "]";
+}
+
+/* Footnote section styling - match inline footnote style with square brackets */
+section[data-footnotes="true"] ol {
+  list-style: none;
+  counter-reset: footnote-counter;
+}
+
+section[data-footnotes="true"] li {
+  counter-increment: footnote-counter;
+  position: relative;
+}
+
+section[data-footnotes="true"] li::before {
+  content: "[" counter(footnote-counter) "]";
+  position: absolute;
+  left: -1.5rem;
+}
