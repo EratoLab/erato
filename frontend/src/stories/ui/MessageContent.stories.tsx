@@ -233,3 +233,27 @@ const greetUser = (user: User): string => {
 `,
   },
 };
+
+export const Footnotes: Story = {
+  args: {
+    content: `# Footnotes example
+
+First sentence with single footnote.[^1]
+
+[^1]: http://example.com/example1
+
+Second sentence with multiple footnotes.[^2][^3]
+
+[^2]: http://example.com/example2
+[^3]: http://example.com/example3
+
+Another sentence without footnotes.
+
+Second sentence with text-named footnote.[^footnote]
+
+[^footnote]: http://example.com/example-footnote
+
+Another sentence without footnotes.
+`,
+  },
+};

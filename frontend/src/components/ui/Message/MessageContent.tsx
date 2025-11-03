@@ -213,6 +213,14 @@ export const MessageContent = memo(function MessageContent({
         </p>
       );
     },
+    // Footnote references - render as inline instead of superscript
+    sup({ children, ...props }) {
+      return (
+        <span className="inline" {...props}>
+          {children}
+        </span>
+      );
+    },
   };
 
   // Create dynamic components based on streaming state
