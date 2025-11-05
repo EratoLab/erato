@@ -2,9 +2,35 @@
 
 import Link from "next/link";
 import { ThemeSwitch } from "nextra-theme-docs";
+import { usePathname } from "next/navigation";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { getLocaleFromPath, addLocaleToPath } from "../lib/i18n.js";
 
 export default function CustomFooter() {
+  const pathname = usePathname();
+  const locale = getLocaleFromPath(pathname);
+
+  // Translations
+  const translations = {
+    en: {
+      about: "About",
+      aboutUs: "About Us",
+      documentation: "Documentation",
+      language: "Language",
+    },
+    de: {
+      about: "Über uns",
+      aboutUs: "Über uns",
+      documentation: "Dokumentation",
+      language: "Sprache",
+    },
+  };
+
+  const t = translations[locale] || translations.en;
+  const aboutPath = addLocaleToPath("/about", locale);
+  // Documentation is English-only, so we always link to /docs regardless of locale
+  const docsPath = "/docs";
+
   return (
     <footer className="border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
       <div className="max-w-7xl mx-auto px-6 py-6">
@@ -40,15 +66,15 @@ export default function CustomFooter() {
           {/* Column 4 - About */}
           <div className="space-y-4">
             <h3 className="font-semibold text-neutral-900 dark:text-neutral-100 text-sm uppercase tracking-wider">
-              About
+              {t.about}
             </h3>
             <ul className="space-y-2">
               <li>
                 <Link
-                  href="/about"
+                  href={aboutPath}
                   className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                 >
-                  About Us
+                  {t.aboutUs}
                 </Link>
               </li>
               <li>
@@ -63,10 +89,10 @@ export default function CustomFooter() {
               </li>
               <li>
                 <Link
-                  href="/docs"
+                  href={docsPath}
                   className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                 >
-                  Documentation
+                  {t.documentation}
                 </Link>
               </li>
             </ul>
@@ -75,7 +101,7 @@ export default function CustomFooter() {
           {/* Column 5 - Languages */}
           <div className="space-y-4">
             <h3 className="font-semibold text-neutral-900 dark:text-neutral-100 text-sm uppercase tracking-wider">
-              Language
+              {t.language}
             </h3>
             <div className="flex flex-col gap-2">
               <LanguageSwitcher />

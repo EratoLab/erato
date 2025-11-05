@@ -3,7 +3,7 @@
  *
  * NOTE: Documentation pages are English-only for the foreseeable future.
  * This _meta.js only includes marketing pages (homepage, etc.) that are localized.
- * The "docs" entry is intentionally omitted since documentation is not localized.
+ * The "docs" entry is intentionally omitted since there are no German docs pages.
  */
 export default {
   index: {
@@ -17,7 +17,7 @@ export default {
     },
   },
   about: {
-    title: "Über",
+    title: "Über uns",
     type: "page",
     theme: {
       sidebar: false,
