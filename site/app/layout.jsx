@@ -5,6 +5,7 @@ import { Dongle } from "next/font/google";
 import LanguageDetection from "../components/LanguageDetection.jsx";
 import CustomFooter from "../components/CustomFooter.jsx";
 import CustomNavbar from "../components/CustomNavbar.jsx";
+import SearchConfig from "../components/SearchConfig.jsx";
 
 import "./globals.css";
 
@@ -56,6 +57,7 @@ export default async function RootLayout({ children }) {
       </Head>
       <body>
         <LanguageDetection>
+          <SearchConfig />
           <Layout
             navbar={navbar}
             pageMap={await getPageMap()}

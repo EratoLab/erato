@@ -17,11 +17,11 @@ export default function HomepageHero() {
       tagline2: null,
       cta: "GET STARTED",
     },
-    // TODO: German variant
     de: {
       oneLiner: "Die Open Source AI Platform",
-      tagline: "Der KI-Chat für On-Premise",
-      tagline2: "und passend für die Bedürfnisse Ihrer Organisation.",
+      tagline:
+        "Erato bringt die Produktivität moderner LLMs direkt in Ihre Infrastruktur – on-premises, compliant und Open Source. Ihre Daten bleiben unter Ihrer Kontrolle.",
+      tagline2: null,
       cta: "LOSLEGEN",
     },
   };

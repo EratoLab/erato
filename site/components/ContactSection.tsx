@@ -1,4 +1,8 @@
+"use client";
+
 import React from "react";
+import { usePathname } from "next/navigation";
+import { getLocaleFromPath } from "../lib/i18n.js";
 
 interface ContactSectionProps {
   backgroundColor?: "white" | "gray";
@@ -7,6 +11,30 @@ interface ContactSectionProps {
 export default function ContactSection({
   backgroundColor = "white",
 }: ContactSectionProps) {
+  const pathname = usePathname();
+  const locale = getLocaleFromPath(pathname);
+
+  // Translations
+  const translations = {
+    en: {
+      title: "Get in touch",
+      subtitle: "Reach out for requests, feedback or partnerships",
+      contactUs: "Contact Us",
+      email: "Email",
+      repository: "Repository",
+    },
+    de: {
+      title: "Kontakt aufnehmen",
+      subtitle:
+        "Kontaktieren Sie uns bei Fragen, Feedback oder für Partnerschaften",
+      contactUs: "Kontaktieren Sie uns",
+      email: "E-Mail",
+      repository: "Repository",
+    },
+  };
+
+  const t = translations[locale] || translations.en;
+
   const bgClasses =
     backgroundColor === "white" ? "section-bg-primary" : "section-bg-secondary";
 
@@ -20,10 +48,10 @@ export default function ContactSection({
           <div className="grid grid-cols-1 gap-10 py-16 lg:grid-cols-3">
             <div>
               <h2 className="text-4xl font-semibold tracking-tight text-pretty section-text-heading">
-                Get in touch
+                {t.title}
               </h2>
               <p className="mt-4 text-base leading-7 section-text-body">
-                Reach out for requests, feedback or partnerships
+                {t.subtitle}
               </p>
             </div>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:col-span-2 lg:gap-8">
@@ -43,12 +71,12 @@ export default function ContactSection({
                     />
                   </svg>
                   <h3 className="text-base leading-7 font-semibold section-text-heading">
-                    Contact Us
+                    {t.contactUs}
                   </h3>
                 </div>
                 <dl className="mt-3 space-y-1 text-sm leading-6 section-text-body-muted">
                   <div>
-                    <dt className="sr-only">Email</dt>
+                    <dt className="sr-only">{t.email}</dt>
                     <dd>
                       <a
                         href="mailto:contact@eratolabs.com"
@@ -79,7 +107,7 @@ export default function ContactSection({
                 </div>
                 <dl className="mt-3 space-y-1 text-sm leading-6 section-text-body-muted">
                   <div>
-                    <dt className="sr-only">Repository</dt>
+                    <dt className="sr-only">{t.repository}</dt>
                     <dd>
                       <a
                         href="https://github.com/EratoLab/erato"
