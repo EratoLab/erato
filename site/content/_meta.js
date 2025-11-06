@@ -25,6 +25,7 @@ export default {
   imprint: {
     title: "Imprint",
     type: "page",
+    display: "hidden",
     theme: {
       sidebar: false,
       toc: false,

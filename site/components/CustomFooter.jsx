@@ -17,17 +17,20 @@ export default function CustomFooter() {
       aboutUs: "About Us",
       documentation: "Documentation",
       language: "Language",
+      imprint: "Imprint",
     },
     de: {
       about: "Über uns",
       aboutUs: "Über uns",
       documentation: "Dokumentation",
       language: "Sprache",
+      imprint: "Impressum",
     },
   };
 
   const t = translations[locale] || translations.en;
   const aboutPath = addLocaleToPath("/about", locale);
+  const imprintPath = addLocaleToPath("/imprint", locale);
   // Documentation is English-only, so we always link to /docs regardless of locale
   const docsPath = "/docs";
 
@@ -93,6 +96,14 @@ export default function CustomFooter() {
                   className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
                 >
                   {t.documentation}
+                </Link>
+              </li>
+              <li className="mt-2">
+                <Link
+                  href={imprintPath}
+                  className="text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors"
+                >
+                  {t.imprint}
                 </Link>
               </li>
             </ul>
