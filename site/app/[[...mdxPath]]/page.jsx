@@ -57,7 +57,8 @@ export default async function Page(props) {
   // Skip wrapper for full-layout pages
   if (
     metadata.filePath === "content/index.mdx" ||
-    metadata.filePath === "content/about.mdx"
+    metadata.filePath === "content/about.mdx" ||
+    metadata.filePath === "content/imprint.mdx"
   ) {
     return <MDXContent {...props} params={params} />;
   }

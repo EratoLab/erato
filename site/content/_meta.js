@@ -22,4 +22,13 @@ export default {
     title: "Documentation",
     type: "page",
   },
+  imprint: {
+    title: "Imprint",
+    type: "page",
+    theme: {
+      sidebar: false,
+      toc: false,
+      layout: "full",
+    },
+  },
 };

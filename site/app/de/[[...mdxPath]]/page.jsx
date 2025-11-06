@@ -94,13 +94,15 @@ export default async function Page(props) {
     const result = await resolveContentWithFallback(mdxPath, locale);
     const { default: MDXContent, toc, metadata, actualLocale } = result;
 
-    // Skip wrapper for full-layout pages (index and about)
+    // Skip wrapper for full-layout pages (index, about, and imprint)
     const isFullLayoutPage =
       metadata.filePath === `content/${locale}/index.mdx` ||
       metadata.filePath === `content/${locale}/about.mdx` ||
+      metadata.filePath === `content/${locale}/imprint.mdx` ||
       (actualLocale === "en" &&
         (metadata.filePath === "content/index.mdx" ||
-          metadata.filePath === "content/about.mdx") &&
+          metadata.filePath === "content/about.mdx" ||
+          metadata.filePath === "content/imprint.mdx") &&
         locale === "de");
 
     if (isFullLayoutPage) {

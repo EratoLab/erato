@@ -25,5 +25,14 @@ export default {
       layout: "full",
     },
   },
+  imprint: {
+    title: "Impressum",
+    type: "page",
+    theme: {
+      sidebar: false,
+      toc: false,
+      layout: "full",
+    },
+  },
   // docs entry intentionally omitted - documentation is English-only
 };
