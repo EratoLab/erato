@@ -2,11 +2,11 @@ apiVersion: v2
 name: erato
 description: Helm chart for the Erato chat application
 type: application
-version: 0.3.1
-appVersion: "0.3.1"
+version: 0.4.0
+appVersion: 0.4.0
 maintainers:
-  - name: Erato Team
+- name: Erato Team
 dependencies:
-  - name: common
-    version: 2.30.0
-    repository: oci://registry-1.docker.io/bitnamicharts 
+- name: common
+  version: 2.30.0
+  repository: oci://registry-1.docker.io/bitnamicharts
