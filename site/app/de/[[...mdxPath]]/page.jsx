@@ -98,8 +98,10 @@ export default async function Page(props) {
     const isFullLayoutPage =
       metadata.filePath === `content/${locale}/index.mdx` ||
       metadata.filePath === `content/${locale}/about.mdx` ||
+      metadata.filePath === `content/${locale}/imprint.mdx` ||
       (actualLocale === "en" &&
         (metadata.filePath === "content/index.mdx" ||
+          metadata.filePath === "content/imprint.mdx" ||
           metadata.filePath === "content/about.mdx") &&
         locale === "de");
 
