@@ -191,6 +191,16 @@ jobs:
           cargo clippy --all-targets --no-default-features --locked
           cargo clippy --all-targets --no-default-features --features=sentry --locked
 
+  cargo-deny:
+    runs-on: ubuntu-22.04
+    name: "cargo deny"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: backend/Cargo.toml
+          command: check licenses
+
   test-backend:
     runs-on: ubuntu-22.04
     name: "test backend"
@@ -221,7 +231,7 @@ jobs:
       # Should be kept in sync with `justfile` -> `install_clis`
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest@0.9.88,sea-orm-cli@1.1.4
+          tool: cargo-nextest@0.9.88,sea-orm-cli@1.1.4,cargo-deny@0.18.5
       - name: "Run tests"
         working-directory: backend
         run: cargo nextest run --retries 2
