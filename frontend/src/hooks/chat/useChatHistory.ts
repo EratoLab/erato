@@ -6,7 +6,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 // import { useRouter } from "next/navigation"; // Removed Next.js router
 import { useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom"; // Added React Router navigate
+import { useNavigate, useLocation, useParams } from "react-router-dom"; // Added React Router hooks
 import { create } from "zustand";
 
 import {
@@ -26,9 +26,7 @@ import { deepMerge } from "@/lib/generated/v1betaApi/v1betaApiUtils";
 // } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface ChatHistoryState {
-  currentChatId: string | null;
   isNewChatPending: boolean; // Flag to indicate a new chat navigation is in progress
-  setCurrentChatId: (id: string | null) => void;
   setNewChatPending: (isPending: boolean) => void;
 }
 
@@ -37,9 +35,7 @@ interface ChatHistoryState {
 export const useChatHistoryStore = create<ChatHistoryState>((set) => {
   // Initialize with default state
   const initialState: ChatHistoryState = {
-    currentChatId: null,
     isNewChatPending: false,
-    setCurrentChatId: (id) => set({ currentChatId: id }),
     setNewChatPending: (isPending) => set({ isNewChatPending: isPending }),
   };
 
@@ -55,15 +51,23 @@ export const useChatHistoryStore = create<ChatHistoryState>((set) => {
 export function useChatHistory() {
   // const router = useRouter(); // Removed Next.js router
   const navigate = useNavigate(); // Added React Router navigate
+  const location = useLocation();
+  const params = useParams<{ id?: string }>();
   const queryClient = useQueryClient();
+
+  // Derive currentChatId from URL (single source of truth)
+  const currentChatId = useMemo(() => {
+    // Check if we're on /chat/new or /chat
+    if (location.pathname === "/chat/new" || location.pathname === "/chat") {
+      return null;
+    }
+    // Extract ID from /chat/:id
+    return params.id ?? null;
+  }, [location.pathname, params.id]);
+
   // Get context to access fetcherOptions - contextFetcherOptions removed as it was unused after introducing stableEmptyFetcherOptions
   // const { fetcherOptions: contextFetcherOptions } = useV1betaApiContext();
-  const {
-    currentChatId,
-    isNewChatPending,
-    setCurrentChatId,
-    setNewChatPending,
-  } = useChatHistoryStore();
+  const { isNewChatPending, setNewChatPending } = useChatHistoryStore();
 
   // Fetch chats using the generated API hook (passing empty object directly)
   const { data, isLoading, error, refetch } = useRecentChats({});
@@ -94,7 +98,6 @@ export function useChatHistory() {
       console.log(
         `[DEBUG_REDIRECT] navigateToChat: Successfully navigating to chat: ${chatId}`,
       );
-      setCurrentChatId(chatId);
 
       // Make sure we actually navigate to the chat URL using the router
       // Use replace to ensure a clean navigation
@@ -102,22 +105,19 @@ export function useChatHistory() {
       navigate(`/chat/${chatId}`); // Replaced router.push with navigate
     },
     // [router, setCurrentChatId, isNewChatPending],
-    [navigate, setCurrentChatId, isNewChatPending], // Updated dependency array
+    [navigate, isNewChatPending], // Updated dependency array
   );
 
   // Create a new chat and navigate to it
   const createNewChat = useCallback(async () => {
     try {
       console.log(
-        "[DEBUG_REDIRECT] Creating new chat - resetting currentChatId",
+        "[DEBUG_REDIRECT] Creating new chat - navigating to /chat/new",
       );
 
-      // Set the pending flag first to prevent unwanted changes to currentChatId
+      // Set the pending flag first to prevent unwanted changes during navigation
       console.log("[DEBUG_REDIRECT] Setting isNewChatPending to TRUE");
       setNewChatPending(true);
-
-      // Reset the current chat ID
-      setCurrentChatId(null);
 
       // Make sure the store state gets updated immediately before navigation
       // This is necessary to avoid state inconsistency during navigation
@@ -142,7 +142,7 @@ export function useChatHistory() {
       setNewChatPending(false);
       throw error;
     }
-  }, [navigate, setCurrentChatId, setNewChatPending]); // Updated dependency array
+  }, [navigate, setNewChatPending]); // Updated dependency array
 
   // Archive a chat
   const archiveChat = useCallback(
@@ -168,7 +168,6 @@ export function useChatHistory() {
 
         // If the archived chat was the current one, navigate to the new chat page
         if (currentChatId === chatId) {
-          setCurrentChatId(null); // Reset current chat ID in the store
           // router.replace("/chat/new"); // Navigate to the new chat page
           navigate("/chat/new", { replace: true }); // Replaced router.replace with navigate
         }
@@ -187,7 +186,6 @@ export function useChatHistory() {
       currentChatId,
       // router,
       navigate, // Updated dependency array
-      setCurrentChatId,
       stableEmptyFetcherOptions, // Use stable reference in dependency array
     ],
   );
