@@ -9,7 +9,7 @@ install_clis:
         curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash; \
     fi
     # Should be kept in sync with `docker-build.yml`
-    cargo binstall cargo-nextest@0.9.88 sea-orm-cli@1.1.4
+    cargo binstall cargo-nextest@0.9.88 sea-orm-cli@1.1.4 cargo-deny@0.18.5
 
 deploy_db:
     cd sqitch && ./deploy_distributed.sh --db-uri postgresql://eratouser:eratopw@localhost:5432/erato
