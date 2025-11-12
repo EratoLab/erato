@@ -12,3 +12,4 @@
 0009_add_generation_paramters_generation_metadata_columns 2025-09-22T12:56:32Z System Administrator <root@ip-192-168-8-225.eu-central-1.compute.internal> # Add generation_paramters generation_metadata columns
 0010_add_view_user_daily_token_usage 2025-09-22T15:01:32Z System Administrator <root@ip-192-168-8-225.eu-central-1.compute.internal> # Add view user_daily_token_usage
 0011_adjust_view_user_daily_token_usage 2025-09-28T20:08:26Z System Administrator <root@Maxs-Laptop.local> # Adjust view user_daily_token_usage
+0012_migrate_file_uploads_relation_to_own_table 2025-11-12T22:26:39Z System Administrator <root@Maxs-Laptop.local> # Migrate file_uploads relation to own table

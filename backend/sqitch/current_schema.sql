@@ -10,8 +10,10 @@
 -- PostgreSQL database dump
 --
 
+\restrict ZYd2o8gFqKpVzywpGAsPpFAklWbPQh49utAY3n4O8iy8pTzoRAIGDbKARplWNoP
+
 -- Dumped from database version 17.2 (Debian 17.2-1.pgdg120+1)
--- Dumped by pg_dump version 17.0
+-- Dumped by pg_dump version 17.6
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -136,6 +138,18 @@ $_$;
 SET default_table_access_method = heap;
 
 --
+-- Name: chat_file_uploads; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.chat_file_uploads (
+    chat_id uuid NOT NULL,
+    file_upload_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: chats; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -143,7 +157,9 @@ CREATE TABLE public.chats (
     id uuid DEFAULT public.uuidv7() NOT NULL,
     owner_user_id text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    title_by_summary text,
+    archived_at timestamp with time zone
 );
 
 
@@ -160,7 +176,10 @@ CREATE TABLE public.messages (
     previous_message_id uuid,
     sibling_message_id uuid,
     is_message_in_active_thread boolean DEFAULT true NOT NULL,
-    generation_input_messages jsonb
+    generation_input_messages jsonb,
+    input_file_uploads uuid[],
+    generation_parameters jsonb,
+    generation_metadata jsonb
 );
 
 
@@ -178,6 +197,40 @@ CREATE VIEW public.chats_latest_message AS
             row_number() OVER (PARTITION BY m.chat_id ORDER BY m.created_at DESC) AS rn
            FROM public.messages m) ranked_messages
   WHERE (rn = 1);
+
+
+--
+-- Name: file_uploads; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.file_uploads (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    filename text NOT NULL,
+    file_storage_provider_id text NOT NULL,
+    file_storage_path text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: user_daily_token_usage; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.user_daily_token_usage AS
+ SELECT c.owner_user_id AS user_id,
+    date(m.created_at) AS usage_date,
+    COALESCE((m.generation_parameters ->> 'generation_chat_provider_id'::text), 'unknown'::text) AS chat_provider_id,
+    count(*) AS total_messages,
+    sum(COALESCE(((m.generation_metadata ->> 'used_prompt_tokens'::text))::integer, 0)) AS total_prompt_tokens,
+    sum(COALESCE(((m.generation_metadata ->> 'used_completion_tokens'::text))::integer, 0)) AS total_completion_tokens,
+    sum(COALESCE(((m.generation_metadata ->> 'used_total_tokens'::text))::integer, 0)) AS total_tokens,
+    sum(COALESCE(((m.generation_metadata ->> 'used_reasoning_tokens'::text))::integer, 0)) AS total_reasoning_tokens
+   FROM (public.messages m
+     JOIN public.chats c ON ((m.chat_id = c.id)))
+  WHERE ((m.generation_metadata IS NOT NULL) AND (m.generation_metadata ? 'used_total_tokens'::text))
+  GROUP BY c.owner_user_id, (date(m.created_at)), COALESCE((m.generation_parameters ->> 'generation_chat_provider_id'::text), 'unknown'::text)
+  ORDER BY (date(m.created_at)) DESC, c.owner_user_id, COALESCE((m.generation_parameters ->> 'generation_chat_provider_id'::text), 'unknown'::text);
 
 
 --
@@ -216,11 +269,27 @@ COMMENT ON COLUMN public.users.email IS 'The user''s email address (optional, as
 
 
 --
+-- Name: chat_file_uploads chat_file_uploads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chat_file_uploads
+    ADD CONSTRAINT chat_file_uploads_pkey PRIMARY KEY (chat_id, file_upload_id);
+
+
+--
 -- Name: chats chats_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.chats
     ADD CONSTRAINT chats_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: file_uploads file_uploads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.file_uploads
+    ADD CONSTRAINT file_uploads_pkey PRIMARY KEY (id);
 
 
 --
@@ -237,6 +306,20 @@ ALTER TABLE ONLY public.messages
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_chat_file_uploads_chat_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chat_file_uploads_chat_id ON public.chat_file_uploads USING btree (chat_id);
+
+
+--
+-- Name: idx_chat_file_uploads_file_upload_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chat_file_uploads_file_upload_id ON public.chat_file_uploads USING btree (file_upload_id);
 
 
 --
@@ -289,6 +372,13 @@ CREATE TRIGGER on_update_set_updated_columns BEFORE UPDATE ON public.chats FOR E
 
 
 --
+-- Name: file_uploads on_update_set_updated_columns; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns BEFORE UPDATE ON public.file_uploads FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
 -- Name: messages on_update_set_updated_columns; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -300,6 +390,29 @@ CREATE TRIGGER on_update_set_updated_columns BEFORE UPDATE ON public.messages FO
 --
 
 CREATE TRIGGER on_update_set_updated_columns BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: chat_file_uploads on_update_set_updated_columns_chat_file_uploads; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_chat_file_uploads BEFORE UPDATE ON public.chat_file_uploads FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: chat_file_uploads chat_file_uploads_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chat_file_uploads
+    ADD CONSTRAINT chat_file_uploads_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
+
+
+--
+-- Name: chat_file_uploads chat_file_uploads_file_upload_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chat_file_uploads
+    ADD CONSTRAINT chat_file_uploads_file_upload_id_fkey FOREIGN KEY (file_upload_id) REFERENCES public.file_uploads(id) ON DELETE CASCADE;
 
 
 --
@@ -329,4 +442,6 @@ ALTER TABLE ONLY public.messages
 --
 -- PostgreSQL database dump complete
 --
+
+\unrestrict ZYd2o8gFqKpVzywpGAsPpFAklWbPQh49utAY3n4O8iy8pTzoRAIGDbKARplWNoP
 
