@@ -1,3 +1,5 @@
+//! Database migration tests and utilities.
+
 use futures::future::BoxFuture;
 use serde::de::StdError;
 use serde::Deserialize;
