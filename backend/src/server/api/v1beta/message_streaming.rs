@@ -40,6 +40,7 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamExt as _;
 use tracing;
+use tracing::{trace, warn};
 use utoipa::ToSchema;
 
 #[derive(Serialize, ToSchema)]
@@ -109,11 +110,74 @@ pub struct MessageSubmitStreamingResponseToolCallUpdate {
     output: Option<JsonValue>,
 }
 
+#[derive(Serialize, ToSchema, Clone, Debug)]
+#[serde(rename_all = "snake_case", tag = "error_type")]
+/// Represents different types of errors that can occur during message generation
+pub enum GenerationErrorType {
+    /// Content was filtered by the model provider's content policy
+    #[serde(rename = "content_filter")]
+    ContentFilter {
+        /// Description of why the content was filtered
+        error_description: String,
+        /// Additional details about which filters were triggered
+        #[serde(skip_serializing_if = "Option::is_none")]
+        filter_details: Option<JsonValue>,
+    },
+    /// Rate limit was exceeded
+    #[allow(dead_code)]
+    #[serde(rename = "rate_limit")]
+    RateLimit {
+        /// Description of the rate limit error
+        error_description: String,
+    },
+    /// Model or provider is unavailable
+    #[allow(dead_code)]
+    #[serde(rename = "model_unavailable")]
+    ModelUnavailable {
+        /// Description of the availability issue
+        error_description: String,
+    },
+    /// Invalid request parameters
+    #[allow(dead_code)]
+    #[serde(rename = "invalid_request")]
+    InvalidRequest {
+        /// Description of what was invalid
+        error_description: String,
+    },
+    /// Generic error from the model provider
+    #[serde(rename = "provider_error")]
+    ProviderError {
+        /// Description of the provider error
+        error_description: String,
+        /// HTTP status code if available
+        #[serde(skip_serializing_if = "Option::is_none")]
+        status_code: Option<u16>,
+    },
+    /// Internal server error
+    #[serde(rename = "internal_error")]
+    InternalError {
+        /// Description of the internal error
+        error_description: String,
+    },
+}
+
+#[derive(Serialize, ToSchema, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct MessageSubmitStreamingResponseError {
+    /// The message ID if available (may not be present if error occurred before message creation)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message_id: Option<Uuid>,
+    /// The error details
+    #[serde(flatten)]
+    error: GenerationErrorType,
+}
+
 trait SendAsSseEvent {
     fn tag(&self) -> &'static str;
     fn data_json(&self) -> Result<String, Report>;
 
     async fn send_event(&self, tx: Sender<Result<Event, Report>>) -> Result<(), ()> {
+        trace!("Sending event with tag {tag}", tag=self.tag());
         match self.data_json() {
             Ok(json) => {
                 if let Err(err) = tx
@@ -193,6 +257,9 @@ pub enum MessageSubmitStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "error")]
+    /// Sent when an error occurs during message generation.
+    Error(MessageSubmitStreamingResponseError),
 }
 
 impl SendAsSseEvent for MessageSubmitStreamingResponseMessage {
@@ -205,6 +272,7 @@ impl SendAsSseEvent for MessageSubmitStreamingResponseMessage {
             Self::TextDelta(_) => "text_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::Error(_) => "error",
         }
     }
 
@@ -263,6 +331,12 @@ impl From<MessageSubmitStreamingResponseToolCallUpdate> for MessageSubmitStreami
     }
 }
 
+impl From<MessageSubmitStreamingResponseError> for MessageSubmitStreamingResponseMessage {
+    fn from(value: MessageSubmitStreamingResponseError) -> Self {
+        MessageSubmitStreamingResponseMessage::Error(value)
+    }
+}
+
 #[derive(serde::Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct RegenerateMessageRequest {
@@ -293,6 +367,9 @@ pub enum RegenerateMessageStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "error")]
+    /// Sent when an error occurs during message generation.
+    Error(MessageSubmitStreamingResponseError),
 }
 
 impl SendAsSseEvent for RegenerateMessageStreamingResponseMessage {
@@ -303,6 +380,7 @@ impl SendAsSseEvent for RegenerateMessageStreamingResponseMessage {
             Self::TextDelta(_) => "text_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::Error(_) => "error",
         }
     }
 
@@ -351,6 +429,12 @@ impl From<MessageSubmitStreamingResponseToolCallUpdate>
     }
 }
 
+impl From<MessageSubmitStreamingResponseError> for RegenerateMessageStreamingResponseMessage {
+    fn from(value: MessageSubmitStreamingResponseError) -> Self {
+        RegenerateMessageStreamingResponseMessage::Error(value)
+    }
+}
+
 #[derive(serde::Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct EditMessageRequest {
@@ -390,6 +474,9 @@ pub enum EditMessageStreamingResponseMessage {
     #[serde(rename = "user_message_saved")]
     /// Sent when the edited user message has been saved.
     UserMessageSaved(MessageSubmitStreamingResponseUserMessageSaved),
+    #[serde(rename = "error")]
+    /// Sent when an error occurs during message generation.
+    Error(MessageSubmitStreamingResponseError),
 }
 
 impl SendAsSseEvent for EditMessageStreamingResponseMessage {
@@ -401,6 +488,7 @@ impl SendAsSseEvent for EditMessageStreamingResponseMessage {
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
             Self::UserMessageSaved(_) => "user_message_saved",
+            Self::Error(_) => "error",
         }
     }
 
@@ -444,6 +532,76 @@ impl From<MessageSubmitStreamingResponseToolCallProposed> for EditMessageStreami
 impl From<MessageSubmitStreamingResponseToolCallUpdate> for EditMessageStreamingResponseMessage {
     fn from(value: MessageSubmitStreamingResponseToolCallUpdate) -> Self {
         EditMessageStreamingResponseMessage::ToolCallUpdate(value)
+    }
+}
+
+impl From<MessageSubmitStreamingResponseError> for EditMessageStreamingResponseMessage {
+    fn from(value: MessageSubmitStreamingResponseError) -> Self {
+        EditMessageStreamingResponseMessage::Error(value)
+    }
+}
+
+/// Parse an error from the LLM streaming response and create an appropriate error type
+async fn parse_streaming_error(
+    err: genai::Error,
+    message_id: Uuid,
+) -> MessageSubmitStreamingResponseError {
+    // Try to extract detailed error information from the response
+    if let genai::Error::ReqwestEventSource(event_source_err) = err {
+        if let reqwest_eventsource::Error::InvalidStatusCode(err_status_code, err_response) =
+            *event_source_err
+        {
+            let status_code = err_status_code.as_u16();
+
+            // Try to parse the error response body as JSON
+            if let Ok(err_response_json) = err_response.json::<JsonValue>().await {
+                // Check if this is a content filter error
+                if status_code == 400 {
+                    if let Some(error_obj) = err_response_json.get("error") {
+                        if let Some(code) = error_obj.get("code").and_then(|c| c.as_str()) {
+                            if code == "content_filter" {
+                                let error_message = error_obj
+                                    .get("message")
+                                    .and_then(|m| m.as_str())
+                                    .unwrap_or(
+                                        "Content was filtered by the provider's content policy",
+                                    );
+
+                                let filter_details = error_obj
+                                    .get("innererror")
+                                    .and_then(|ie| ie.get("content_filter_result"))
+                                    .cloned();
+
+                                return MessageSubmitStreamingResponseError {
+                                    message_id: Some(message_id),
+                                    error: GenerationErrorType::ContentFilter {
+                                        error_description: error_message.to_string(),
+                                        filter_details,
+                                    },
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+
+            // For all other errors, return a generic provider error
+            return MessageSubmitStreamingResponseError {
+                message_id: Some(message_id),
+                error: GenerationErrorType::ProviderError {
+                    error_description: format!("Provider returned HTTP status {}", status_code),
+                    status_code: Some(status_code),
+                },
+            };
+        }
+    }
+
+    // Fallback for any other error type
+    MessageSubmitStreamingResponseError {
+        message_id: Some(message_id),
+        error: GenerationErrorType::InternalError {
+            error_description: "An unexpected error occurred during generation".to_string(),
+        },
     }
 }
 
@@ -624,7 +782,8 @@ async fn stream_generate_chat_completion<
     MSG: SendAsSseEvent
         + From<MessageSubmitStreamingResponseMessageTextDelta>
         + From<MessageSubmitStreamingResponseToolCallProposed>
-        + From<MessageSubmitStreamingResponseToolCallUpdate>,
+        + From<MessageSubmitStreamingResponseToolCallUpdate>
+        + From<MessageSubmitStreamingResponseError>,
 >(
     tx: Sender<Result<Event, Report>>,
     app_state: &AppState,
@@ -810,10 +969,29 @@ async fn stream_generate_chat_completion<
                     _ => {}
                 },
                 Err(err) => {
+                    warn!(assistant_message_id = assistant_message_id.to_string(), "Encountered error during response generation");
                     if let genai::Error::JsonValueExt(_) = err {
+                        // Ignore JSON parsing errors during streaming
                     } else {
-                        let _ = tx.send(Err(err).wrap_err("Error from chat stream")).await;
-                        return Err(());
+                        // Parse the error and create appropriate error response
+                        let error_response = parse_streaming_error(err, assistant_message_id).await;
+
+                        // Send the error event
+                        let error_message: MSG = error_response.clone().into();
+                        error_message.send_event(tx.clone()).await?;
+
+                        // Create metadata with error information
+                        let error_metadata = GenerationMetadata {
+                            used_prompt_tokens: None,
+                            used_completion_tokens: None,
+                            used_total_tokens: None,
+                            used_reasoning_tokens: None,
+                            error: Some(serde_json::to_value(&error_response.error).unwrap_or(json!(null))),
+                        };
+
+                        // Return with empty content and error metadata
+                        // The error event was already sent above
+                        return Ok((vec![], Some(error_metadata)));
                     }
                 }
             }
@@ -1010,6 +1188,7 @@ async fn stream_generate_chat_completion<
                             } else {
                                 None
                             },
+                            error: None,
                         })
                     } else {
                         None
@@ -1043,6 +1222,7 @@ async fn stream_generate_chat_completion<
                         } else {
                             None
                         },
+                        error: None,
                     })
                 } else {
                     None
