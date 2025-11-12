@@ -147,3 +147,33 @@ postgresql:
     tag: "17.2"
   storage:
     size: 2Gi
+
+seaweedfs:
+  master:
+    replicas: 1
+    raftHashicorp: true
+    heartbeatInterval: "100ms"
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+    data:
+      type: "emptyDir"  # Ephemeral storage for fast startup
+  
+  volume:
+    replicas: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+    data:
+      type: "emptyDir"  # Ephemeral storage for fast startup
+  
+  filer:
+    enabled: true
+    replicas: 1
+  
+  s3:
+    enabled: true
+    replicas: 1
+    port: 8333
