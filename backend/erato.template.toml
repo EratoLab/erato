@@ -42,3 +42,8 @@ chat_provider_ids = ["test-token-limit"]
 # disable_chat_input_autofocus = true
 # # Whether to hide logout functionality from the UI (default: false)
 # disable_logout = true
+
+# Experimental assistants feature configuration
+# [experimental_assistants]
+# # Whether to enable the experimental assistants feature in the frontend (default: false)
+# enabled = false

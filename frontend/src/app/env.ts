@@ -8,6 +8,7 @@ export type Env = {
   disableUpload: boolean;
   disableChatInputAutofocus: boolean;
   disableLogout: boolean;
+  assistantsEnabled: boolean;
 };
 
 declare global {
@@ -22,6 +23,7 @@ declare global {
     DISABLE_UPLOAD?: boolean;
     DISABLE_CHAT_INPUT_AUTOFOCUS?: boolean;
     DISABLE_LOGOUT?: boolean;
+    ASSISTANTS_ENABLED?: boolean;
   }
 }
 
@@ -69,6 +71,10 @@ export const env = (): Env => {
     import.meta.env.VITE_DISABLE_LOGOUT === "true"
       ? true
       : (window.DISABLE_LOGOUT ?? false);
+  const assistantsEnabled =
+    import.meta.env.VITE_ASSISTANTS_ENABLED === "true"
+      ? true
+      : (window.ASSISTANTS_ENABLED ?? false);
 
   return {
     apiRootUrl,
@@ -80,5 +86,6 @@ export const env = (): Env => {
     disableUpload,
     disableChatInputAutofocus,
     disableLogout,
+    assistantsEnabled,
   };
 };

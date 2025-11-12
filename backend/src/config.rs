@@ -48,6 +48,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub budget: BudgetConfig,
 
+    // Experimental assistants configuration.
+    #[serde(default)]
+    pub experimental_assistants: ExperimentalAssistantsConfig,
+
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
     pub cleanup_enabled: bool,
@@ -811,6 +815,14 @@ pub struct FrontendConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub disable_logout: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct ExperimentalAssistantsConfig {
+    // Whether the experimental assistants feature is enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
