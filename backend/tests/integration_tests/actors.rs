@@ -1,6 +1,6 @@
 //! Actor and background worker tests.
 
-use crate::test_utils::{TEST_JWT_TOKEN, TestRequestAuthExt};
+use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN};
 use crate::{test_app_config, test_app_state, MIGRATOR};
 use axum_test::TestServer;
 use chrono::{Duration, Utc};

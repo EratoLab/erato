@@ -9,8 +9,8 @@ use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 
+use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT};
 use crate::{test_app_config, test_app_state};
-use crate::test_utils::{TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt};
 
 /// Test message submission with SSE streaming.
 ///
@@ -42,7 +42,6 @@ async fn test_message_submit_stream(pool: Pool<Postgres>) {
 
     // Create the test server with our router
     let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
-
 
     // Prepare the request body
     let request_body = serde_json::json!({
@@ -367,5 +366,138 @@ async fn test_token_usage_estimate_with_file(pool: Pool<Postgres>) {
         remaining_tokens,
         max_tokens - total_tokens,
         "Remaining tokens should be max_tokens - total_tokens"
+    );
+}
+
+/// Test message submission with invalid previous_message_id (non-existent UUID).
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+///
+/// # Test Behavior
+/// Verifies that submitting a message with a non-existent previous_message_id
+/// returns a 500 error (internal server error from SSE stream).
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_message_submit_with_nonexistent_previous_message_id(pool: Pool<Postgres>) {
+    let app_state = test_app_state(test_app_config(), pool).await;
+    let issuer = TEST_USER_ISSUER;
+    let subject = TEST_USER_SUBJECT;
+    let _user = get_or_create_user(&app_state.db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Use a random UUID that doesn't exist
+    let non_existent_id = "00000000-0000-0000-0000-000000000001";
+
+    let request_body = json!({
+        "previous_message_id": non_existent_id,
+        "user_message": "This should fail"
+    });
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&request_body)
+        .await;
+
+    // The response should now return 400 Bad Request due to validation
+    response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+
+    // Check that the error message is about non-existent message
+    let error_text = response.text();
+    assert!(
+        error_text.contains("not found") || error_text.contains("Failed to get previous message"),
+        "Expected error message about non-existent previous message, got: {}",
+        error_text
+    );
+}
+
+/// Test message submission with previous_message_id of wrong role (user after user).
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+///
+/// # Test Behavior
+/// Verifies that submitting a user message with a previous_message_id pointing to
+/// another user message (instead of an assistant message) returns an error.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_message_submit_with_wrong_role_previous_message(pool: Pool<Postgres>) {
+    let app_state = test_app_state(test_app_config(), pool).await;
+    let issuer = TEST_USER_ISSUER;
+    let subject = TEST_USER_SUBJECT;
+    let _user = get_or_create_user(&app_state.db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // First, submit a message to create a chat with a user message
+    let first_request = json!({
+        "user_message": "First message"
+    });
+
+    let first_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&first_request)
+        .await;
+
+    first_response.assert_status_ok();
+
+    // Extract the user message ID from the response
+    let body = first_response.as_bytes();
+    let body_str = String::from_utf8_lossy(body);
+    let events: Vec<String> = body_str
+        .split("\n\n")
+        .filter(|chunk| chunk.contains("data:"))
+        .map(|chunk| chunk.to_string())
+        .collect();
+
+    let user_message_id = events
+        .iter()
+        .find_map(|event| {
+            let data = event.split("data:").nth(1).unwrap_or("").trim();
+            if let Ok(json) = serde_json::from_str::<Value>(data) {
+                if json["message_type"] == "user_message_saved" {
+                    return json["message_id"].as_str().map(|s| s.to_string());
+                }
+            }
+            None
+        })
+        .expect("Expected to find user_message_saved event");
+
+    // Now try to submit a second user message with the first user message as previous
+    let second_request = json!({
+        "previous_message_id": user_message_id,
+        "user_message": "This should fail - user after user"
+    });
+
+    let second_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&second_request)
+        .await;
+
+    // The response should now return 400 Bad Request due to validation
+    second_response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+
+    // Check that the error message is about wrong role
+    let error_text = second_response.text();
+    assert!(
+        error_text.contains("assistant") || error_text.contains("role"),
+        "Expected error message about wrong role, got: {}",
+        error_text
     );
 }

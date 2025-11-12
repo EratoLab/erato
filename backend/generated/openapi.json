@@ -344,6 +344,9 @@
               }
             }
           },
+          "400": {
+            "description": "When validation fails (e.g., invalid message role)"
+          },
           "401": {
             "description": "When no valid JWT token is provided"
           },
@@ -383,6 +386,9 @@
               }
             }
           },
+          "400": {
+            "description": "When validation fails (e.g., invalid message role)"
+          },
           "401": {
             "description": "When no valid JWT token is provided"
           },
@@ -421,6 +427,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "When validation fails (e.g., invalid previous_message_id)"
           },
           "401": {
             "description": "When no valid JWT token is provided"

@@ -8,8 +8,8 @@ use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 
+use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN};
 use crate::{test_app_config, test_app_state};
-use crate::test_utils::{TEST_JWT_TOKEN, TestRequestAuthExt};
 
 // Helper structure for SSE events
 #[derive(Debug, Clone)]
@@ -259,9 +259,7 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
 /// truncates only the messages after the edit point while preserving earlier
 /// messages in the conversation thread.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn test_edit_message_preserves_lineage_in_multi_message_conversation(
-    pool: Pool<Postgres>,
-) {
+async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool: Pool<Postgres>) {
     // Test for the specific bug where editing a message in a multi-message conversation
     // incorrectly truncates messages that should remain active
     let app_state = test_app_state(test_app_config(), pool).await;
@@ -446,5 +444,82 @@ async fn test_edit_message_preserves_lineage_in_multi_message_conversation(
         spain_user_msg.unwrap()["previous_message_id"].as_str(),
         Some(assistant_message_1_id.as_str()),
         "Spain message should be linked to France assistant message"
+    );
+}
+
+/// Test editing a message with wrong role (assistant instead of user).
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+///
+/// # Test Behavior
+/// Verifies that attempting to edit an assistant message (instead of a user message)
+/// returns an appropriate error.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_edit_assistant_message_fails(pool: Pool<Postgres>) {
+    let app_state = test_app_state(test_app_config(), pool).await;
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // First, create a chat with a user message and assistant response
+    let first_request = json!({
+        "user_message": "Tell me about cats"
+    });
+
+    let first_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&first_request)
+        .await;
+
+    first_response.assert_status_ok();
+
+    // Extract the assistant message ID
+    let body = first_response.as_bytes();
+    let body_str = String::from_utf8_lossy(body);
+    let events: Vec<String> = body_str
+        .split("\n\n")
+        .filter(|chunk| chunk.contains("data:"))
+        .map(|chunk| chunk.to_string())
+        .collect();
+
+    let assistant_message_id = events
+        .iter()
+        .find_map(|event| {
+            let data = event.split("data:").nth(1).unwrap_or("").trim();
+            if let Ok(json) = serde_json::from_str::<Value>(data) {
+                if json["message_type"] == "assistant_message_started" {
+                    return json["message_id"].as_str().map(|s| s.to_string());
+                }
+            }
+            None
+        })
+        .expect("Expected to find assistant_message_started event");
+
+    // Now try to edit the assistant message (should fail)
+    let edit_request = json!({
+        "message_id": assistant_message_id,
+        "replace_user_message": "This should fail - can't edit assistant messages"
+    });
+
+    let edit_response = server
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&edit_request)
+        .await;
+
+    // The response should now return 400 Bad Request due to validation
+    edit_response.assert_status(axum::http::StatusCode::BAD_REQUEST);
+
+    // Check that the error message is about wrong message role
+    let error_text = edit_response.text();
+    assert!(
+        error_text.contains("user") || error_text.contains("role"),
+        "Expected error message about wrong message role, got: {}",
+        error_text
     );
 }

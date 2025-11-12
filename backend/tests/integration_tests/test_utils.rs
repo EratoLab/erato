@@ -47,9 +47,7 @@ pub fn create_temp_config_file(content: &str) -> NamedTempFile {
         .write_all(content.as_bytes())
         .expect("Failed to write to temporary file");
 
-    temp_file
-        .flush()
-        .expect("Failed to flush temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
 
     temp_file
 }
@@ -85,7 +83,7 @@ pub fn build_app_config_with_overrides(
     for (key, value) in overrides {
         builder = builder
             .set_override(*key, *value)
-            .expect(&format!("Failed to set override {}={}", key, value));
+            .unwrap_or_else(|_| panic!("Failed to set override {}={}", key, value));
     }
 
     let config_schema = builder.build().expect("Failed to build config schema");

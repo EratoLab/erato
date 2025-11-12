@@ -1,7 +1,7 @@
 //! File upload and download API tests.
 
-use axum::http::StatusCode;
 use axum::http;
+use axum::http::StatusCode;
 use axum::Router;
 use axum_test::multipart::{MultipartForm, Part};
 use axum_test::TestServer;
@@ -11,8 +11,8 @@ use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 
+use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN};
 use crate::{test_app_config, test_app_state};
-use crate::test_utils::{TEST_JWT_TOKEN, TestRequestAuthExt};
 
 /// Test file upload to a chat.
 ///
@@ -373,9 +373,9 @@ async fn test_create_chat_file_upload_message_flow(pool: Pool<Postgres>) {
 
     // Helper to parse SSE events
     let has_event = |event_type: &str| {
-        lines.windows(2).any(|w| {
-            w[0] == format!("event: {}", event_type) && w[1].starts_with("data: ")
-        })
+        lines
+            .windows(2)
+            .any(|w| w[0] == format!("event: {}", event_type) && w[1].starts_with("data: "))
     };
 
     // We should NOT see a chat_created event (since we used an existing chat)
@@ -385,7 +385,10 @@ async fn test_create_chat_file_upload_message_flow(pool: Pool<Postgres>) {
     );
 
     // We should see a user_message_saved event
-    assert!(has_event("user_message_saved"), "Missing user_message_saved event");
+    assert!(
+        has_event("user_message_saved"),
+        "Missing user_message_saved event"
+    );
 
     // We should see a message_complete event for the assistant's response
     assert!(

@@ -8,8 +8,8 @@ use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 
+use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER};
 use crate::{test_app_config, test_app_state};
-use crate::test_utils::{TEST_JWT_TOKEN, TEST_USER_ISSUER, TestRequestAuthExt};
 
 /// Test retrieving recent chats for the authenticated user.
 ///

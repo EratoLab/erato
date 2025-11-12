@@ -1,7 +1,7 @@
 //! Tests using mocked LLM responses for streaming behavior validation.
 
+use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT};
 use crate::{test_app_state, MIGRATOR};
-use crate::test_utils::{TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt};
 use axum::http;
 use axum::Router;
 use axum_test::TestServer;

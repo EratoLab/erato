@@ -8,8 +8,8 @@ use serde_json::Value;
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 
+use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT};
 use crate::{test_app_config, test_app_state};
-use crate::test_utils::{TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt};
 
 /// Test the user profile endpoint with JWT authentication.
 ///
@@ -37,7 +37,6 @@ async fn test_profile_endpoint(pool: Pool<Postgres>) {
         .with_state(app_state);
     // Create the test server with our router
     let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
-
 
     // Make a request to the profile endpoint with the mock JWT
     let response = server
