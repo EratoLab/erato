@@ -18,6 +18,7 @@ const FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME: &str = "THEME_CUSTOMER_NAME";
 const FRONTEND_ENV_KEY_DISABLE_UPLOAD: &str = "DISABLE_UPLOAD";
 const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_AUTOFOCUS";
 const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
+const FRONTEND_ENV_KEY_ASSISTANTS_ENABLED: &str = "ASSISTANTS_ENABLED";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -57,6 +58,10 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_DISABLE_LOGOUT.to_string(),
         Value::Bool(config.frontend.disable_logout),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_ASSISTANTS_ENABLED.to_string(),
+        Value::Bool(config.experimental_assistants.enabled),
     );
 
     // Inject pairs from frontend.additional_environment

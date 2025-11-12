@@ -967,6 +967,36 @@ http_headers = { "Authorization" = "Bearer your-token", "X-API-Key" = "your-api-
 
 See the [MCP Servers](./features/mcp_servers) documentation for more information about Model Context Protocol integration.
 
+### `experimental_assistants`
+
+Configuration for the experimental assistants feature. This allows enabling the assistants functionality in the frontend, which provides users with pre-configured chat assistants tuned for specific use-cases.
+
+**Note:** This is an experimental feature that will be replaced with a stable `[assistants]` configuration section once the feature has stabilized.
+
+#### `experimental_assistants.enabled`
+
+Whether to enable the experimental assistants feature in the frontend. When enabled, the frontend will expose assistant-related functionality and UI components to users.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[experimental_assistants]
+enabled = true
+```
+
+**Future Migration Plan:**
+
+Once the assistants feature has stabilized, this configuration will be replaced by:
+
+```toml
+[assistants]
+enabled = true  # Will default to true once stable
+```
+
 ### `budget`
 
 Configuration for budget tracking and display functionality. This feature allows you to track and display per-user spending based on token usage and model pricing.
