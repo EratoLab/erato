@@ -1,4 +1,4 @@
-use crate::db::entity::{chats, messages};
+use crate::db::entity::{chat_file_uploads, chats, messages};
 use chrono::{Duration, Utc};
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use sea_orm::{
@@ -50,6 +50,28 @@ pub async fn cleanup_archived_chats(
         tracing::error!("Failed to begin transaction for cleanup: {}", e);
         ActorProcessingErr::from(e)
     })?;
+
+    // Delete chat-file upload relations from join table to allow chat deletion
+    // This removes the foreign key constraint by deleting the join table records
+    // File upload records themselves are preserved for potential future use
+    let chat_file_uploads_delete_result = chat_file_uploads::Entity::delete_many()
+        .filter(chat_file_uploads::Column::ChatId.is_in(chat_ids.clone()))
+        .exec(&txn)
+        .await
+        .map_err(|e| {
+            tracing::error!(
+                "Failed to delete chat-file upload relations for cleanup: {}",
+                e
+            );
+            ActorProcessingErr::from(e)
+        })?;
+
+    if chat_file_uploads_delete_result.rows_affected > 0 {
+        tracing::info!(
+            "Deleted {} chat-file upload relations to allow chat deletion (file uploads preserved).",
+            chat_file_uploads_delete_result.rows_affected
+        );
+    }
 
     messages::Entity::delete_many()
         .filter(messages::Column::ChatId.is_in(chat_ids.clone()))
