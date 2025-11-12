@@ -52,28 +52,74 @@ export default defineConfig({
   },
 
   /* Configure projects for major browsers */
+  /* Projects are organized by test scenario with dedicated setup projects.
+   * Each scenario has its own setup project that switches to the required k3d scenario.
+   * Tests depend on their scenario's setup project to ensure the correct environment.
+   */
   projects: [
-    // Setup project
-    { name: "setup", testMatch: /.*\.setup\.ts/ },
+    // Authentication setup - runs first
+    { name: "setup", testMatch: /auth\.setup\.ts/ },
 
+    // Scenario setup projects
     {
-      name: "chromium",
+      name: "setup-basic",
+      testMatch: /basic\.setup\.ts/,
       use: {
-        ...devices["Desktop Chrome"],
-        // Use signed-in state
+        storageState: "playwright/.auth/user.json",
+      },
+      dependencies: ["setup"],
+    },
+    {
+      name: "setup-tight-budget",
+      testMatch: /tight-budget\.setup\.ts/,
+      use: {
         storageState: "playwright/.auth/user.json",
       },
       dependencies: ["setup"],
     },
 
+    // Chromium - Basic scenario tests
     {
-      name: "firefox",
+      name: "chromium-basic",
+      testIgnore: /.*\.tight-budget\.spec\.ts$/,
       use: {
-        ...devices["Desktop Firefox"],
-        // Use signed-in state
+        ...devices["Desktop Chrome"],
         storageState: "playwright/.auth/user.json",
       },
-      dependencies: ["setup"],
+      dependencies: ["setup-basic"],
+    },
+
+    // Chromium - Tight-budget scenario tests
+    {
+      name: "chromium-tight-budget",
+      testMatch: /.*\.tight-budget\.spec\.ts$/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "playwright/.auth/user.json",
+      },
+      dependencies: ["setup-tight-budget"],
+    },
+
+    // Firefox - Basic scenario tests
+    {
+      name: "firefox-basic",
+      testIgnore: /.*\.tight-budget\.spec\.ts$/,
+      use: {
+        ...devices["Desktop Firefox"],
+        storageState: "playwright/.auth/user.json",
+      },
+      dependencies: ["setup-basic"],
+    },
+
+    // Firefox - Tight-budget scenario tests
+    {
+      name: "firefox-tight-budget",
+      testMatch: /.*\.tight-budget\.spec\.ts$/,
+      use: {
+        ...devices["Desktop Firefox"],
+        storageState: "playwright/.auth/user.json",
+      },
+      dependencies: ["setup-tight-budget"],
     },
 
     // TODO: Currently deactivated, because there are issues with using `0.0.0.0` as host during auth flow

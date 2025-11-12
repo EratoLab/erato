@@ -1,4 +1,7 @@
-[chat_provider]
+[chat_providers]
+priority_order = ["main"]
+
+[chat_providers.providers.main]
 provider_kind = "openai"
 model_name = "gpt-4o-mini"
 api_key = "<API_KEY>"

@@ -1,0 +1,13 @@
+{{- if .Values.testScenarioConfig.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-erato-test-scenario-config
+data:
+{{- if and .Values.testScenarioConfig.sourceFile (ne .Values.testScenarioConfig.sourceFile "") }}
+  erato.scenario.toml: {{ .Files.Get .Values.testScenarioConfig.sourceFile | quote }}
+{{- else }}
+  erato.scenario.toml: {{ .Files.Get "config/erato.scenario-basic.toml" | quote }}
+{{- end }}
+{{- end }}
+

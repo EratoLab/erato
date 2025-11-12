@@ -1,4 +1,11 @@
-import { expect, Page, Browser } from "@playwright/test";
+import { expect, Page, Browser, test } from "@playwright/test";
+import { execSync } from "child_process";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const login = async (page: Page, email: string, password = "admin") => {
   await page.getByRole("button", { name: "Sign in with" }).click();
@@ -54,7 +61,11 @@ export const chatIsReadyToChat = async (
 export const selectModel = async (page: Page, modelDisplayName: string) => {
   // Click the model selector dropdown (it shows the current model name)
   // The dropdown button should be in the chat input area
-  const modelSelector = page.locator('button:has-text("GPT"), button:has-text("Test Model"), button:has-text("Llama")').first();
+  const modelSelector = page
+    .locator(
+      'button:has-text("GPT"), button:has-text("Test Model"), button:has-text("Llama")',
+    )
+    .first();
   await modelSelector.click();
 
   // Wait for dropdown menu to appear and click the desired model
@@ -319,3 +330,168 @@ export const waitForEditModeToEnd = async (page: Page) => {
 
   console.log(`[EDIT_COMPLETION] ✅ Successfully returned to compose mode`);
 };
+
+/**
+ * Wait for Erato page to be properly loaded by checking for API_ROOT_URL.
+ */
+async function waitForEratoPageReady(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      return (window as any).API_ROOT_URL !== undefined;
+    },
+    { timeout: 10000 },
+  );
+}
+
+/**
+ * Check if the test is running against a k3d environment.
+ * K3d environments expose the K3D_TEST_SCENARIO variable via window.
+ */
+async function isK3dEnvironment(page: Page): Promise<boolean> {
+  try {
+    const scenario = await page.evaluate(() => {
+      return (window as any).K3D_TEST_SCENARIO;
+    });
+    return scenario !== undefined;
+  } catch (error) {
+    console.warn(`[K3D_SCENARIO] Error checking k3d environment: ${error}`);
+    return false;
+  }
+}
+
+/**
+ * Get the currently deployed test scenario.
+ * Returns null if not in a k3d environment or if the scenario is not set.
+ */
+async function getCurrentScenario(page: Page): Promise<string | null> {
+  try {
+    const scenario = await page.evaluate(() => {
+      return (window as any).K3D_TEST_SCENARIO;
+    });
+    return scenario || null;
+  } catch (error) {
+    console.warn(`[K3D_SCENARIO] Error getting current scenario: ${error}`);
+    return null;
+  }
+}
+
+/**
+ * Ensure the correct test scenario is deployed before running a test.
+ * This function works independently of the current page state by creating
+ * a temporary page to check and switch scenarios.
+ *
+ * If not in k3d, emits a warning that manual setup is required.
+ * If in k3d but wrong scenario, switches to the required scenario.
+ *
+ * @param page - The Playwright page object (used to get browser context)
+ * @param requiredScenario - The scenario that this test requires ('basic' or 'tight-budget')
+ */
+export async function ensureTestScenario(
+  page: Page,
+  requiredScenario: "basic" | "tight-budget",
+): Promise<void> {
+  await test.step(`Ensure test scenario: ${requiredScenario}`, async () => {
+    // Create a new page for scenario detection/switching, independent of current page state
+    const context = page.context();
+    const helperPage = await context.newPage();
+
+    try {
+      await test.step(`Navigate to Erato and check environment`, async () => {
+        // Navigate to root and wait for Erato to be properly loaded
+        await helperPage.goto("/");
+
+        // Wait for Erato page to be ready (API_ROOT_URL should be present)
+        await waitForEratoPageReady(helperPage);
+
+        console.log(`[K3D_SCENARIO] Erato page loaded and ready`);
+      });
+
+      const isK3d = await isK3dEnvironment(helperPage);
+
+      if (!isK3d) {
+        console.warn(
+          `[K3D_SCENARIO] ⚠️ Not running in k3d environment. ` +
+            `Manual scenario setup required for: ${requiredScenario}`,
+        );
+        return;
+      }
+
+      const currentScenario = await getCurrentScenario(helperPage);
+
+      if (currentScenario === requiredScenario) {
+        console.log(
+          `[K3D_SCENARIO] ✅ Already on scenario: ${requiredScenario}`,
+        );
+        return;
+      }
+
+      await test.step(`Switch from '${currentScenario}' to '${requiredScenario}'`, async () => {
+        console.log(`[K3D_SCENARIO] 🔄 Switching scenarios...`);
+
+        // Path to the switch-test-scenario script
+        const scriptPath = path.resolve(
+          __dirname,
+          "../../infrastructure/scripts/switch-test-scenario",
+        );
+
+        try {
+          // Run the switch script
+          await test.step(`Run switch-test-scenario script`, async () => {
+            const output = execSync(
+              `${scriptPath} --scenario ${requiredScenario}`,
+              {
+                encoding: "utf-8",
+                stdio: "pipe",
+                timeout: 120000, // 2 minute timeout
+              },
+            );
+
+            console.log(`[K3D_SCENARIO] Script output:\n${output}`);
+          });
+
+          // Wait for the scenario to actually switch by polling
+          await test.step(`Wait for scenario switch to take effect`, async () => {
+            const maxWaitTime = 120000; // 2 minutes
+            const pollInterval = 2000; // 2 seconds
+            const startTime = Date.now();
+
+            while (Date.now() - startTime < maxWaitTime) {
+              // Reload the helper page to get fresh environment variables
+              await helperPage.reload();
+              await waitForEratoPageReady(helperPage);
+
+              // Check if scenario has changed
+              const newScenario = await getCurrentScenario(helperPage);
+
+              if (newScenario === requiredScenario) {
+                console.log(
+                  `[K3D_SCENARIO] ✅ Successfully switched to: ${requiredScenario}`,
+                );
+                return;
+              }
+
+              console.log(
+                `[K3D_SCENARIO] ⏳ Waiting for scenario switch... ` +
+                  `Current: ${newScenario}, Target: ${requiredScenario}`,
+              );
+
+              await helperPage.waitForTimeout(pollInterval);
+            }
+
+            throw new Error(
+              `Timeout: Scenario did not switch to '${requiredScenario}' within ${maxWaitTime}ms`,
+            );
+          });
+        } catch (error) {
+          console.error(
+            `[K3D_SCENARIO] ❌ Failed to switch scenario: ${error}`,
+          );
+          throw error;
+        }
+      });
+    } finally {
+      // Always close the helper page when done
+      await helperPage.close();
+    }
+  });
+}

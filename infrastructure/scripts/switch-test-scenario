@@ -1,0 +1,173 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pyyaml>=6.0",
+# ]
+# ///
+
+"""Script to switch between test scenarios in a running k3d cluster.
+
+This script assumes a k3d cluster is already running with the erato-local chart deployed.
+It preserves existing Helm values (like image tag) while switching to a new test scenario.
+"""
+
+import argparse
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Optional, List
+
+# Import shared utilities
+from k3d_common import validate_scenario, get_helm_scenario_args, VALID_SCENARIOS
+
+
+def run_command(
+    cmd: List[str],
+    check: bool = True,
+    capture_output: bool = False,
+    cwd: Optional[Path] = None
+) -> subprocess.CompletedProcess:
+    """Run a shell command with error handling."""
+    try:
+        result = subprocess.run(
+            cmd,
+            check=check,
+            capture_output=capture_output,
+            text=True,
+            cwd=cwd
+        )
+        return result
+    except subprocess.CalledProcessError as e:
+        print(f"Error running command: {' '.join(cmd)}", file=sys.stderr)
+        if e.stderr:
+            print(f"Stderr: {e.stderr}", file=sys.stderr)
+        if check:
+            sys.exit(1)
+        raise
+    except FileNotFoundError:
+        print(f"Error: Command not found: {cmd[0]}", file=sys.stderr)
+        sys.exit(1)
+
+
+def upgrade_chart_with_scenario(
+    release_name: str,
+    namespace: str,
+    chart_path: Path,
+    scenario: str,
+) -> None:
+    """Upgrade the Helm chart with new scenario configuration.
+    
+    Uses --reuse-values to preserve all previous --set values,
+    then applies the new scenario configuration on top.
+    """
+    print(f"Upgrading chart to scenario: {scenario}")
+    
+    # Build command with --reuse-values to preserve previous settings
+    cmd = [
+        "helm", "upgrade",
+        release_name,
+        str(chart_path),
+        "-n", namespace,
+        "--reuse-values",
+    ]
+    
+    # Add scenario configuration
+    scenario_args = get_helm_scenario_args(scenario)
+    cmd.extend(scenario_args)
+    
+    print(f"Running: {' '.join(cmd)}")
+    run_command(cmd)
+
+
+def wait_for_rollout(namespace: str, timeout: int = 300) -> None:
+    """Wait for the deployment to complete rollout."""
+    print("Waiting for deployment rollout to complete...")
+    
+    deployment_name = "erato-local-erato-app"
+    
+    result = run_command([
+        "kubectl", "rollout", "status",
+        f"deployment/{deployment_name}",
+        "-n", namespace,
+        f"--timeout={timeout}s"
+    ], check=False, capture_output=True)
+    
+    if result.returncode != 0:
+        print("Error: Deployment rollout failed or timed out", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        sys.exit(1)
+    
+    print("Deployment rollout completed successfully!")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Switch test scenario in a running k3d cluster",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f"""
+Available scenarios:
+  {', '.join(VALID_SCENARIOS)}
+
+This script assumes the k3d cluster is already running with erato-local deployed.
+It preserves existing Helm values like image repository and tag.
+        """
+    )
+    
+    parser.add_argument(
+        "--scenario",
+        required=True,
+        choices=VALID_SCENARIOS,
+        help="Test scenario to switch to"
+    )
+    
+    parser.add_argument(
+        "--release-name",
+        default="erato-local",
+        help="Helm release name (default: erato-local)"
+    )
+    
+    parser.add_argument(
+        "--namespace",
+        default="erato-local-ns",
+        help="Kubernetes namespace (default: erato-local-ns)"
+    )
+    
+    args = parser.parse_args()
+    
+    # Validate scenario
+    if not validate_scenario(args.scenario):
+        print(f"Error: Invalid scenario '{args.scenario}'", file=sys.stderr)
+        print(f"Valid scenarios: {', '.join(VALID_SCENARIOS)}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Change to infrastructure directory
+    script_dir = Path(__file__).resolve().parent
+    infrastructure_dir = script_dir.parent
+    chart_path = infrastructure_dir / "k3d" / "erato-local"
+    
+    if not chart_path.exists():
+        print(f"Error: Chart path not found: {chart_path}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Upgrade chart with new scenario
+    # Helm upgrade automatically preserves all previous --set values
+    upgrade_chart_with_scenario(
+        args.release_name,
+        args.namespace,
+        chart_path,
+        args.scenario,
+    )
+    
+    # Wait for rollout
+    wait_for_rollout(args.namespace)
+    
+    print()
+    print(f"Successfully switched to scenario: {args.scenario}")
+    print()
+
+
+if __name__ == "__main__":
+    main()
+

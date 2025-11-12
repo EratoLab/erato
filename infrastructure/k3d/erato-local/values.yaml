@@ -6,6 +6,14 @@ fileStorageConfig:
   # If not specified, defaults to "config/erato.file-storage.toml"
   sourceFile: ""
 
+# Test scenario configuration
+# This will be mounted as erato.scenario.auto.erato.toml
+testScenarioConfig:
+  enabled: true
+  # sourceFile: Path to file relative to chart root (e.g., "config/erato.scenario-basic.toml")
+  # If not specified, defaults to "config/erato.scenario-basic.toml"
+  sourceFile: ""
+
 erato:
   commonAnnotations:
     reloader.stakater.com/auto: "true"
@@ -34,6 +42,9 @@ erato:
       - name: file-storage
         configMapName: erato-local-erato-file-storage-config
         configMapKey: erato.file-storage.toml
+      - name: test-scenario
+        configMapName: erato-local-erato-test-scenario-config
+        configMapKey: erato.scenario.toml
       - name: frontend-env
         inlineContent: |
           [frontend.additional_environment]

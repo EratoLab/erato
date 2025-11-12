@@ -1,0 +1,17 @@
+# Tight budget test scenario - triggers budget errors
+# This scenario is used to test budget warning and error functionality
+
+[budget]
+enabled = true
+max_budget = 0.01
+budget_currency = "USD"
+warn_threshold = 0.7
+budget_period_days = 30
+
+[chat_providers.providers.main.model_capabilities]
+cost_input_tokens_per_1m = 1000000.0
+cost_output_tokens_per_1m = 1000000.0
+
+[frontend.additional_environment]
+K3D_TEST_SCENARIO = "tight-budget"
+
