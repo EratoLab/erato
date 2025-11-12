@@ -326,10 +326,15 @@ jobs:
           pnpm exec playwright install --with-deps
           ./scripts/generate_test_files.sh
 
-      - name: Run e2e tests
+      - name: Run e2e tests - Basic Scenario
         working-directory: ./e2e-tests
         run: |
-          pnpm exec playwright test --retries 2 --trace on --grep @ci
+          pnpm exec playwright test --project chromium-basic --project firefox-basic --retries 2 --trace on --grep @ci
+
+      - name: Run e2e tests - Tight Budget Scenario
+        working-directory: ./e2e-tests
+        run: |
+          pnpm exec playwright test --project chromium-tight-budget --project firefox-tight-budget --retries 2 --trace on --grep @ci
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4

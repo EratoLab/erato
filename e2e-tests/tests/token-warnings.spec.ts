@@ -94,7 +94,9 @@ test.describe("Token Usage Warnings", () => {
       // For 950 tokens, we need approximately 4750 characters
       // Using 79 repeats: 79 × 60 = 4740 chars ≈ 948 tokens (94.8%)
       const veryLongMessage =
-        "This is a test message to trigger critical token warnings. ".repeat(79);
+        "This is a test message to trigger critical token warnings. ".repeat(
+          79,
+        );
 
       await textbox.fill(veryLongMessage);
 
@@ -246,7 +248,9 @@ test.describe("Token Usage Warnings", () => {
       await fileChooser.setFiles("test-files/sample-report-compressed.pdf");
 
       // Wait for file upload to complete - look for the filename
-      await expect(page.getByText(/sample-report-compressed\.pdf/i)).toBeVisible({
+      await expect(
+        page.getByText(/sample-report-compressed\.pdf/i),
+      ).toBeVisible({
         timeout: 10000,
       });
 

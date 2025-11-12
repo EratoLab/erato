@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel, Field
 
+# Import shared k3d utilities
+from k3d_common import get_helm_scenario_args, validate_scenario, VALID_SCENARIOS
+
 
 class ScriptConfig(BaseModel):
     """Configuration for the setup script."""
@@ -28,6 +31,7 @@ class ScriptConfig(BaseModel):
     api_key: Optional[str] = None
     with_telepresence: bool = False
     file_storage_config_source: Optional[str] = None
+    test_scenario: str = "basic"
 
 
 class ClusterConfig(BaseModel):
@@ -509,8 +513,20 @@ def main():
         dest="file_storage_config_source",
         help="Source file for file storage config (e.g., 'config/erato.file-storage.toml')"
     )
+    parser.add_argument(
+        "--scenario",
+        default="basic",
+        choices=VALID_SCENARIOS,
+        help=f"Test scenario to deploy (default: basic). Choices: {', '.join(VALID_SCENARIOS)}"
+    )
     
     args = parser.parse_args()
+    
+    # Validate scenario
+    if not validate_scenario(args.scenario):
+        print(f"Error: Invalid scenario '{args.scenario}'", file=sys.stderr)
+        print(f"Valid scenarios: {', '.join(VALID_SCENARIOS)}", file=sys.stderr)
+        sys.exit(1)
     
     # Build configuration
     config = ScriptConfig(
@@ -522,7 +538,8 @@ def main():
         use_alt_erato_toml=args.use_alt_erato_toml or bool(args.api_key),
         api_key=args.api_key,
         with_telepresence=args.with_telepresence,
-        file_storage_config_source=args.file_storage_config_source
+        file_storage_config_source=args.file_storage_config_source,
+        test_scenario=args.scenario
     )
     
     cluster_config = ClusterConfig()
@@ -567,6 +584,10 @@ def main():
     # Handle file storage config
     file_storage_args = handle_file_storage_config(config)
     helm_args.extend(file_storage_args)
+    
+    # Handle test scenario
+    scenario_args = get_helm_scenario_args(config.test_scenario)
+    helm_args.extend(scenario_args)
     
     # Install components
     install_nginx_ingress()

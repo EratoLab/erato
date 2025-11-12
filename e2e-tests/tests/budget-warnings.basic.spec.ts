@@ -3,23 +3,14 @@ import { TAG_CI, TAG_NO_CI } from "./tags";
 import { chatIsReadyToChat } from "./shared";
 
 /**
- * Budget Warning Tests
+ * Budget Warning Tests - Basic Scenario (Mocked)
  *
- * These tests verify that budget warnings are displayed correctly when users
- * approach or exceed their configured budget limits.
- *
- * The warnings are displayed based on /api/v1beta/me/budget API response,
- * which can be mocked to test different scenarios.
- *
- * NOTE: These tests are currently skipped in CI (@no-ci tag) due to route mocking
- * timing issues with TanStack Query caching. See analysis for details:
- * - Route mocks may not be established before the query fires
- * - EUR currency formatting shows garbled output
- * - Tests pass locally but fail in CI environment
- * TODO: Fix by using page.reload() after setting up mocks or switching to MSW
+ * These tests verify that budget warnings are displayed correctly using
+ * mocked API responses. This allows testing various budget scenarios
+ * without requiring actual budget configurations.
  */
 
-test.describe("Budget Warnings", () => {
+test.describe("Budget Warnings (Mocked)", () => {
   test(
     "Shows warning when approaching budget limit (70% threshold)",
     { tag: TAG_NO_CI },
@@ -155,7 +146,9 @@ test.describe("Budget Warnings", () => {
       await chatIsReadyToChat(page);
 
       // Verify NO budget warning is shown
-      await expect(page.getByText("Approaching Budget Limit")).not.toBeVisible();
+      await expect(
+        page.getByText("Approaching Budget Limit"),
+      ).not.toBeVisible();
       await expect(page.getByText("Budget Limit Reached")).not.toBeVisible();
     },
   );
@@ -184,7 +177,9 @@ test.describe("Budget Warnings", () => {
       await chatIsReadyToChat(page);
 
       // Verify NO budget warning is shown
-      await expect(page.getByText("Approaching Budget Limit")).not.toBeVisible();
+      await expect(
+        page.getByText("Approaching Budget Limit"),
+      ).not.toBeVisible();
       await expect(page.getByText("Budget Limit Reached")).not.toBeVisible();
     },
   );
