@@ -1,8 +1,17 @@
+//! Configuration parsing and validation tests.
+
 use erato::config::AppConfig;
 use std::io::Write;
 use tempfile::Builder;
 use test_log::test;
 
+/// Tests OpenAI provider configuration parsing.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that basic OpenAI provider config with model and API key is correctly parsed.
 #[test]
 fn test_config_with_openai_provider() {
     // Create a temporary erato.toml file with the specified contents
@@ -67,6 +76,13 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     // The temp file will be automatically cleaned up when temp_file goes out of scope
 }
 
+/// Tests OpenAI provider configuration with custom base URL.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that OpenAI provider config with custom base URL, API key, and system prompt is correctly parsed and overrides defaults.
 #[test]
 fn test_config_with_openai_provider_and_custom_base_url() {
     // Create a temporary erato.toml file with additional configuration
@@ -140,6 +156,13 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(config.frontend_bundle_path, "./public");
 }
 
+/// Tests configuration with minimal required fields.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that configuration can be loaded with only provider_kind and model_name without API key or other optional fields.
 #[test]
 fn test_config_minimal_required_fields() {
     // Test that only the minimum required fields work
@@ -196,6 +219,13 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     );
 }
 
+/// Tests multiple chat providers configuration.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that multiple chat providers with priority order can be configured, and that provider lookup methods work correctly.
 #[test]
 fn test_config_with_multiple_chat_providers() {
     // Test the new multiple chat providers configuration
@@ -296,6 +326,13 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(secondary_config.model_name, "gpt-3.5-turbo");
 }
 
+/// Tests migration from single to multiple chat providers.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that legacy single chat_provider configuration is correctly migrated to the new multiple providers structure with "default" provider.
 #[test]
 fn test_config_migration_from_single_to_multiple_providers() {
     // Test that the old single chat_provider configuration is migrated to the new structure
@@ -367,6 +404,13 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(provider_config.model_name, "gpt-4");
 }
 
+/// Tests Azure OpenAI provider migration with multiple providers.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that Azure OpenAI providers are correctly migrated to OpenAI format with deployment URLs and API version parameters.
 #[test]
 fn test_config_azure_openai_migration_multiple_providers() {
     // Test that Azure OpenAI migration works for multiple providers in the new structure
@@ -503,6 +547,13 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(primary_config.model_name, "gpt-4");
 }
 
+/// Tests new Sentry integration configuration.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that Sentry DSN can be configured under the new integrations.sentry structure and is correctly retrieved.
 #[test]
 #[allow(deprecated)]
 fn test_config_with_new_sentry_integration() {
@@ -562,6 +613,13 @@ sentry_dsn = "https://test-key@sentry.io/12345"
     assert_eq!(config.sentry_dsn, None);
 }
 
+/// Tests backward compatibility with deprecated Sentry DSN field.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that the old sentry_dsn field is still recognized and correctly migrated to the new integrations.sentry structure.
 #[test]
 #[allow(deprecated)]
 fn test_config_with_old_deprecated_sentry_dsn() {
@@ -626,6 +684,13 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     );
 }
 
+/// Tests precedence when both old and new Sentry DSN configurations are present.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that the new integrations.sentry configuration takes precedence over the deprecated sentry_dsn field when both are present.
 #[test]
 #[allow(deprecated)]
 fn test_config_with_both_old_and_new_sentry_dsn() {
@@ -698,6 +763,13 @@ sentry_dsn = "https://new-key@sentry.io/12345"
     );
 }
 
+/// Tests Sentry DSN migration from deprecated field to new location.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that the migrate() method correctly moves sentry_dsn values from the deprecated field to integrations.sentry.sentry_dsn.
 #[test]
 #[allow(deprecated)]
 fn test_config_migration_sentry_dsn() {
@@ -764,6 +836,13 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     );
 }
 
+/// Tests that migration preserves new Sentry DSN configuration.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that the migrate() method does not overwrite an existing new integrations.sentry.sentry_dsn value with the deprecated sentry_dsn field.
 #[test]
 #[allow(deprecated)]
 fn test_config_migration_preserves_new_sentry_dsn() {
@@ -826,6 +905,13 @@ sentry_dsn = "https://new-key@sentry.io/12345"
     );
 }
 
+/// Tests summary provider configuration.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that summary configuration with specific provider ID and max token limit can be configured and correctly parsed.
 #[test]
 fn test_config_with_summary_configuration() {
     // Test the new summary configuration feature
@@ -903,6 +989,13 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(summarizer.model_display_name(), "GPT-4o Mini (Summarizer)");
 }
 
+/// Tests default summary configuration when not specified.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that summary configuration is optional and defaults to None values when not explicitly provided.
 #[test]
 fn test_config_with_default_summary_configuration() {
     // Test that summary configuration defaults work correctly
@@ -961,6 +1054,13 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(chat_providers.summary.max_tokens, None);
 }
 
+/// Tests model capabilities configuration.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that model capabilities including context size, support flags, and cost parameters are correctly parsed for multiple providers.
 #[test]
 fn test_config_with_model_capabilities() {
     // Create a temporary erato.toml file with model capabilities
@@ -1091,6 +1191,13 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = 
     assert_eq!(gpt4_config.model_capabilities.context_size_tokens, 8192);
 }
 
+/// Tests default model capabilities when not explicitly configured.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that model capabilities default to sensible values when not specified in the configuration.
 #[test]
 fn test_config_with_default_model_capabilities() {
     // Create a temporary erato.toml file without explicit model capabilities

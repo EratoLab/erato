@@ -1,3 +1,6 @@
+//! Tests using mocked LLM responses for streaming behavior validation.
+
+use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT};
 use crate::{test_app_state, MIGRATOR};
 use axum::http;
 use axum::Router;
@@ -11,7 +14,7 @@ use sqlx::postgres::Postgres;
 use sqlx::Pool;
 use std::time::Duration;
 
-/// Helper function to build an OpenAI-compatible SSE streaming chunk
+/// Helper function to build an OpenAI-compatible SSE streaming chunk.
 fn build_openai_chat_chunk(content: &str, finish_reason: Option<&str>) -> String {
     let delta = if content.is_empty() {
         json!({
@@ -70,6 +73,22 @@ fn build_delayed_streaming_response(chunks: Vec<&str>, delay_ms: u64) -> Vec<Bod
     actions
 }
 
+/// Test message submission with a mocked LLM server.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `uses-mocked-llm`
+/// - `sse-streaming`
+/// - `auth-required`
+///
+/// # Test Behavior
+/// This test verifies the complete message streaming flow with a mocked OpenAI-compatible
+/// LLM server. It validates:
+/// - Mock LLM server setup and configuration
+/// - SSE event stream parsing
+/// - Text delta collection and assembly
+/// - Event type validation (chat_created, user_message_saved, assistant_message_started, etc.)
+/// - Final message content verification
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_message_submit_with_mocked_llm(pool: Pool<Postgres>) {
     // Set up the mock LLM server
@@ -132,8 +151,8 @@ async fn test_message_submit_with_mocked_llm(pool: Pool<Postgres>) {
     let app_state = test_app_state(app_config, pool).await;
 
     // Create a test user
-    let issuer = "http://0.0.0.0:5556";
-    let subject = "CiQwOGE4Njg0Yi1kYjg4LTRiNzMtOTBhOS0zY2QxNjYxZjU0NjYSBWxvY2Fs";
+    let issuer = TEST_USER_ISSUER;
+    let subject = TEST_USER_SUBJECT;
     let _user = get_or_create_user(&app_state.db, issuer, subject, None)
         .await
         .expect("Failed to create user");
@@ -147,9 +166,6 @@ async fn test_message_submit_with_mocked_llm(pool: Pool<Postgres>) {
     let test_server =
         TestServer::new(app.into_make_service()).expect("Failed to create test server");
 
-    // Create a mock JWT token
-    let mock_jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IjMzNTUwZjNkZWE2MDFhNjlmODM1MmVkNDA3OTRhYTlmYWMzNDhhODAifQ.eyJpc3MiOiJodHRwOi8vMC4wLjAuMDo1NTU2Iiwic3ViIjoiQ2lRd09HRTROamcwWWkxa1lqZzRMVFJpTnpNdE9UQmhPUzB6WTJReE5qWXhaalUwTmpZU0JXeHZZMkZzIiwiYXVkIjoiZXhhbXBsZS1hcHAiLCJleHAiOjE3NDA2MDkzNTAsImlhdCI6MTc0MDUyMjk1MCwiYXRfaGFzaCI6IldVVjNiUWNEbFN4M2Vod3o2QTZkYnciLCJjX2hhc2giOiJHcHVSdW52Y25rTjR3bGY4Q1RYamh3IiwiZW1haWwiOiJhZG1pbkBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJuYW1lIjoiYWRtaW4ifQ.h8Fo6PAl2dG3xosBd6a6U6QAWalJvpX62-F3rJaS4hft7qnh9Sv_xDB2Cp1cjj-vS0e4xveDNuMGGnGKeUAk496q4xtuhwU9oUMoAsRQwnCXdp--_ngIG7QZK80h4jhvfutOc6Gltn0TTr-N5i8Yb9tW-ubVE68_-uX3lkx771MyJxgg9sL1YY7eKKEWx7UlRZEHmY6F134fY-ZFegrEnkESxi2qLTRo5hWSSIYmNlCSwStmNBBSPIOLl_Gu4wvqfPER5qXWgYn5dkISPZmcGVqyQuOBQkGOrAKMefvWP_Y97KHOwE9Od4au-Pgg7kuTA7Ywateg1VCdxLM3FMK-Sw";
-
     // Prepare the request body
     let request_body = json!({
         "user_message": "Tell me a greeting"
@@ -158,7 +174,7 @@ async fn test_message_submit_with_mocked_llm(pool: Pool<Postgres>) {
     // Make a request to the message submit endpoint with the mock JWT
     let response = test_server
         .post("/api/v1beta/me/messages/submitstream")
-        .add_header(http::header::AUTHORIZATION, format!("Bearer {}", mock_jwt))
+        .with_bearer_token(TEST_JWT_TOKEN)
         .json(&request_body)
         .await;
 

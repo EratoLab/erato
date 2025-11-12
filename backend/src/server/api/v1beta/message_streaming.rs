@@ -526,6 +526,9 @@ async fn stream_save_user_message<
     user_message: &str,
     input_files_ids: &[Uuid],
 ) -> Result<messages::Model, ()> {
+    // Note: Validation of previous_message_id role is now done in the calling function
+    // before the stream is started to return proper HTTP 400 errors
+
     // Create and save the user's message
     let user_message = json!({
         "role": "user",
@@ -1278,12 +1281,195 @@ async fn process_input_files(
     Ok(converted_files)
 }
 
+// ===== UNIFIED VALIDATION HELPERS =====
+
+/// Validates that a message exists and has the expected role.
+/// Returns the parsed message schema if successful, otherwise returns an HTTP error.
+async fn validate_message_role(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    message_id: &Uuid,
+    expected_role: MessageRole,
+    message_name: &str, // e.g., "previous_message_id", "current_message_id", "message_id"
+) -> Result<MessageSchema, (axum::http::StatusCode, String)> {
+    let message =
+        match get_message_by_id(&app_state.db, policy, &me_user.to_subject(), message_id).await {
+            Err(err) => {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    format!("Failed to get {}: {}", message_name, err),
+                ));
+            }
+            Ok(msg) => msg,
+        };
+
+    let message_parsed = match MessageSchema::validate(&message.raw_message) {
+        Err(err) => {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                format!("Failed to parse {}: {}", message_name, err),
+            ));
+        }
+        Ok(parsed) => parsed,
+    };
+
+    if message_parsed.role != expected_role {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            format!(
+                "The provided `{}` must be the message ID of a message with role `{}`.",
+                message_name,
+                match expected_role {
+                    MessageRole::User => "user",
+                    MessageRole::Assistant => "assistant",
+                    MessageRole::System => "system",
+                    MessageRole::Tool => "tool",
+                }
+            ),
+        ));
+    }
+
+    Ok(message_parsed)
+}
+
+/// Validation result for the regenerate endpoint
+struct RegenerateValidationResult {
+    #[allow(dead_code)] // current_message is validated but not directly used in the task
+    current_message: messages::Model,
+    previous_message: messages::Model,
+}
+
+/// Validates the regenerate endpoint requirements:
+/// - current_message_id must exist and be an assistant message
+/// - it must have a previous_message_id that exists and is a user message
+async fn validate_regenerate_request(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    current_message_id: &Uuid,
+) -> Result<RegenerateValidationResult, (axum::http::StatusCode, String)> {
+    // Validate current message exists and is an assistant message
+    let current_message = get_message_by_id(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        current_message_id,
+    )
+    .await
+    .map_err(|err| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            format!("Failed to get current_message_id: {}", err),
+        )
+    })?;
+
+    validate_message_role(
+        app_state,
+        policy,
+        me_user,
+        current_message_id,
+        MessageRole::Assistant,
+        "current_message_id",
+    )
+    .await?;
+
+    // Verify current message has a previous message
+    let previous_message_id = current_message.previous_message_id.ok_or((
+        axum::http::StatusCode::BAD_REQUEST,
+        "The current message has no previous message".to_string(),
+    ))?;
+
+    // Validate previous message exists and is a user message
+    let previous_message = get_message_by_id(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &previous_message_id,
+    )
+    .await
+    .map_err(|err| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            format!("Failed to get previous message: {}", err),
+        )
+    })?;
+
+    validate_message_role(
+        app_state,
+        policy,
+        me_user,
+        &previous_message_id,
+        MessageRole::User,
+        "previous message of the provided current_message_id",
+    )
+    .await?;
+
+    Ok(RegenerateValidationResult {
+        current_message,
+        previous_message,
+    })
+}
+
+/// Validates the submit endpoint requirements:
+/// - previous_message_id (if provided) must exist and be an assistant message
+async fn validate_submit_request(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    previous_message_id: Option<&Uuid>,
+) -> Result<(), (axum::http::StatusCode, String)> {
+    if let Some(prev_msg_id) = previous_message_id {
+        validate_message_role(
+            app_state,
+            policy,
+            me_user,
+            prev_msg_id,
+            MessageRole::Assistant,
+            "previous_message_id",
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+/// Validates the edit endpoint requirements:
+/// - message_id must exist and be a user message
+async fn validate_edit_request(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    message_id: &Uuid,
+) -> Result<messages::Model, (axum::http::StatusCode, String)> {
+    let message = get_message_by_id(&app_state.db, policy, &me_user.to_subject(), message_id)
+        .await
+        .map_err(|err| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                format!("Failed to get message: {}", err),
+            )
+        })?;
+
+    validate_message_role(
+        app_state,
+        policy,
+        me_user,
+        message_id,
+        MessageRole::User,
+        "message_id",
+    )
+    .await?;
+
+    Ok(message)
+}
+
 #[utoipa::path(
     post,
     path = "/me/messages/submitstream",
     request_body = MessageSubmitRequest,
     responses(
         (status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage),
+        (status = BAD_REQUEST, description = "When validation fails (e.g., invalid previous_message_id)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -1296,7 +1482,16 @@ pub async fn message_submit_sse(
     Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
     Json(request): Json<MessageSubmitRequest>,
-) -> Sse<impl Stream<Item = Result<Event, Report>>> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, (axum::http::StatusCode, String)> {
+    // Validate request parameters
+    validate_submit_request(
+        &app_state,
+        &policy,
+        &me_user,
+        request.previous_message_id.as_ref(),
+    )
+    .await?;
+
     // Create a channel for sending events
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
 
@@ -1496,11 +1691,11 @@ pub async fn message_submit_sse(
         }
     });
 
-    Sse::new(inspected_stream).keep_alive(
+    Ok(Sse::new(inspected_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
-    )
+    ))
 }
 
 #[utoipa::path(
@@ -1509,6 +1704,7 @@ pub async fn message_submit_sse(
     request_body = RegenerateMessageRequest,
     responses(
         (status = OK, content_type="text/event-stream", body = RegenerateMessageStreamingResponseMessage),
+        (status = BAD_REQUEST, description = "When validation fails (e.g., invalid message role)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -1521,59 +1717,28 @@ pub async fn regenerate_message_sse(
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
     Json(request): Json<RegenerateMessageRequest>,
-) -> Sse<impl Stream<Item = Result<Event, Report>>> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, (axum::http::StatusCode, String)> {
+    // Validate request parameters
+    let validation_result =
+        validate_regenerate_request(&app_state, &policy, &me_user, &request.current_message_id)
+            .await?;
+
     // Create a channel for sending events
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
 
+    // Move validated messages into the task
+    let previous_message = validation_result.previous_message;
+
+    // Clone IDs for the async task
+    let current_message_id = request.current_message_id;
+
     // Spawn a task to process the request and send events
     tokio::spawn(async move {
-        // Get the current message in order to get previous message ID
-        let current_message_res = get_message_by_id(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            &request.current_message_id,
-        )
-        .await;
-        if let Err(err) = current_message_res {
-            let _ = tx.send(Err(err)).await;
-            return Err(());
-        }
-        let current_message = current_message_res.unwrap();
-        // Verify that the current message is a assistant message
-        // TODO: Parse raw_message and verify
-        // if current_message.role != "assistant" {
-        //     let _ = tx.send(Err(eyre!("Current message is not an assistant message"))).await;
-        //     return Err(());
-        // }
-
-        // Get the previous message in order to get the chat + required message content
-        let previous_message_res = get_message_by_id(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            &current_message
-                .previous_message_id
-                .expect("Expected previous message ID"),
-        )
-        .await;
-        if let Err(err) = previous_message_res {
-            let _ = tx.send(Err(err)).await;
-            return Err(());
-        }
-        let previous_message = previous_message_res.unwrap();
-        // Verify that the previous message is a user message
-        // TODO: Parse raw_message and verify
-        // if previous_message.role != "user" {
-        //     let _ = tx.send(Err(eyre!("Previous message is not a user message"))).await;
-        //     return Err(());
-        // }
-
         let chat_res = get_chat_by_message_id(
             &app_state.db,
             &policy,
             &me_user.to_subject(),
-            &request.current_message_id,
+            &current_message_id,
         )
         .await;
         if let Err(err) = chat_res {
@@ -1723,11 +1888,11 @@ pub async fn regenerate_message_sse(
         }
     });
 
-    Sse::new(inspected_stream).keep_alive(
+    Ok(Sse::new(inspected_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
-    )
+    ))
 }
 
 #[utoipa::path(
@@ -1736,6 +1901,7 @@ pub async fn regenerate_message_sse(
     request_body = EditMessageRequest,
     responses(
         (status = OK, content_type="text/event-stream", body = EditMessageStreamingResponseMessage),
+        (status = BAD_REQUEST, description = "When validation fails (e.g., invalid message role)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -1748,41 +1914,26 @@ pub async fn edit_message_sse(
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
     Json(request): Json<EditMessageRequest>,
-) -> Sse<impl Stream<Item = Result<Event, Report>>> {
+) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, (axum::http::StatusCode, String)> {
+    // Validate request parameters
+    let message_to_edit =
+        validate_edit_request(&app_state, &policy, &me_user, &request.message_id).await?;
+
     // Create a channel for sending events
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
 
+    // Move request data into the task
+    let request_message_id = request.message_id;
+    let replace_user_message = request.replace_user_message;
+    let replace_input_files_ids = request.replace_input_files_ids;
+
     // Spawn a task to process the request and send events
     tokio::spawn(async move {
-        // Get the message to edit to get its chat and previous message
-        let message_to_edit_res = get_message_by_id(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            &request.message_id,
-        )
-        .await;
-        if let Err(err) = message_to_edit_res {
-            let _ = tx.send(Err(err)).await;
-            return Err(());
-        }
-        let message_to_edit = message_to_edit_res.unwrap();
-        let message_to_edit_inner_res = MessageSchema::validate(&message_to_edit.raw_message);
-        if let Err(err) = message_to_edit_inner_res {
-            let _ = tx.send(Err(err)).await;
-            return Err(());
-        }
-        let message_to_edit_inner = message_to_edit_inner_res.unwrap();
-        if message_to_edit_inner.role != MessageRole::User {
-            let _ = tx.send(Err(eyre!("The provided `message_id` must be the message ID of a message with role `user`."))).await;
-            return Err(());
-        }
-
         let chat_res = get_chat_by_message_id(
             &app_state.db,
             &policy,
             &me_user.to_subject(),
-            &request.message_id,
+            &request_message_id,
         )
         .await;
         if let Err(err) = chat_res {
@@ -1796,7 +1947,7 @@ pub async fn edit_message_sse(
             "role": "user",
             "content": vec![json!({
                 "content_type": "text",
-                "text": request.replace_user_message
+                "text": replace_user_message
             })],
             "name": me_user.0.id
         });
@@ -1813,7 +1964,7 @@ pub async fn edit_message_sse(
             Some(&message_to_edit.id),
             None,
             // TODO: Verify input file replacement behaviour in tests
-            &request.replace_input_files_ids,
+            &replace_input_files_ids,
             None, // User messages don't have generation parameters
             None, // User messages don't have generation metadata
         )
@@ -1854,7 +2005,7 @@ pub async fn edit_message_sse(
             &app_state,
             &policy,
             &me_user,
-            &request.replace_input_files_ids,
+            &replace_input_files_ids,
         )
         .await?;
         let prepare_chat_request_res = prepare_chat_request(
@@ -1983,9 +2134,9 @@ pub async fn edit_message_sse(
         }
     });
 
-    Sse::new(inspected_stream).keep_alive(
+    Ok(Sse::new(inspected_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
-    )
+    ))
 }
