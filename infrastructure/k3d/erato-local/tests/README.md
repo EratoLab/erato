@@ -11,7 +11,7 @@ cd infrastructure/k3d/erato-local
 helm unittest --with-subchart=false .
 ```
 
-This runs only the tests for the erato-local specific templates (Azurite, Dex, PostgreSQL cluster, etc.) and excludes the tests from the erato subchart dependency.
+This runs only the tests for the erato-local specific templates (Dex, PostgreSQL cluster, etc.) and excludes the tests from the erato subchart dependency.
 
 ### Run All Tests (Including Subcharts)
 ```bash
@@ -22,25 +22,24 @@ This runs all tests including those from the erato subchart. Note that some subc
 
 ### Run Specific Test Files
 ```bash
-# Run only Azurite tests
-helm unittest -f 'tests/azurite*_test.yaml' --with-subchart=false .
+# Run tests matching a pattern
+helm unittest -f 'tests/*_test.yaml' --with-subchart=false .
 ```
 
 ## Test Files
 
-| Test File | Description |
-|-----------|-------------|
-| `azurite_test.yaml` | Tests for Azurite storage components (PVC, Service, Deployment) |
-| `azurite-init-job_test.yaml` | Tests for Azurite initialization job |
+Currently, there are no erato-local specific test files. The chart uses SeaweedFS as a subchart dependency for object storage.
 
 ## Erato-Local Specific Templates
 
 The erato-local chart includes these local development templates:
-- `azurite.yaml` - Local blob storage for development
-- `azurite-init-job.yaml` - Initializes Azurite storage
 - `dex-*.yaml` - Local authentication provider
 - `postgres-cluster.yaml` - Local PostgreSQL database
 - `erato-toml-secret.yaml` - Configuration secret
+- `erato-file-storage-configmap.yaml` - File storage configuration
+
+The chart also uses these subchart dependencies:
+- SeaweedFS - S3-compatible object storage for file uploads
 
 ## Configuration
 
@@ -49,9 +48,8 @@ The `unittest.yaml` file contains test configuration. The key setting for erato-
 ## Expected Results
 
 When running `helm unittest --with-subchart=false .`:
-- ✅ **12 Azurite tests should pass**
-- ✅ **2 test suites should pass**
-- ✅ **All tests complete in ~200-300ms**
+- ✅ **All erato-local specific tests should pass**
+- ✅ **Tests complete quickly (typically under 1 second)**
 
 ## Troubleshooting
 
