@@ -14,14 +14,31 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub title_by_summary: Option<String>,
     pub archived_at: Option<DateTimeWithTimeZone>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub assistant_configuration: Option<Json>,
+    pub assistant_id: Option<Uuid>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::assistants::Entity",
+        from = "Column::AssistantId",
+        to = "super::assistants::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Assistants,
     #[sea_orm(has_many = "super::chat_file_uploads::Entity")]
     ChatFileUploads,
     #[sea_orm(has_many = "super::messages::Entity")]
     Messages,
+}
+
+impl Related<super::assistants::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Assistants.def()
+    }
 }
 
 impl Related<super::chat_file_uploads::Entity> for Entity {

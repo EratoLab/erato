@@ -11,7 +11,8 @@
     "deploy/0009_add_generation_paramters_generation_metadata_columns.sql",
     "deploy/0010_add_view_user_daily_token_usage.sql",
     "deploy/0011_adjust_view_user_daily_token_usage.sql",
-    "deploy/0012_migrate_file_uploads_relation_to_own_table.sql"
+    "deploy/0012_migrate_file_uploads_relation_to_own_table.sql",
+    "deploy/0013_add_assistants_table.sql"
   ],
-  "latest_change": "83d3bfe1e40b6a6267853e0b9b95265fcd7d210d"
+  "latest_change": "5c879ce1283ff1682615cfc2d170124f3bf78549"
 }
