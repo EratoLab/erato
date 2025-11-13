@@ -19,13 +19,34 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::assistant_file_uploads::Entity")]
+    AssistantFileUploads,
     #[sea_orm(has_many = "super::chat_file_uploads::Entity")]
     ChatFileUploads,
+}
+
+impl Related<super::assistant_file_uploads::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AssistantFileUploads.def()
+    }
 }
 
 impl Related<super::chat_file_uploads::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ChatFileUploads.def()
+    }
+}
+
+impl Related<super::assistants::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::assistant_file_uploads::Relation::Assistants.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::assistant_file_uploads::Relation::FileUploads
+                .def()
+                .rev(),
+        )
     }
 }
 

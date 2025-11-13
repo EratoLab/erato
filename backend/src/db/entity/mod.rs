@@ -2,6 +2,8 @@
 
 pub mod prelude;
 
+pub mod assistant_file_uploads;
+pub mod assistants;
 pub mod chat_file_uploads;
 pub mod chats;
 pub mod file_uploads;

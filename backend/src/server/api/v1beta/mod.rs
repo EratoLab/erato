@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+pub mod assistants;
 pub mod budget;
 pub mod me_profile_middleware;
 pub mod message_streaming;
@@ -6,10 +7,16 @@ pub mod token_usage;
 
 use crate::db::entity_ext::messages;
 use crate::models;
+use crate::models::assistant::create_standalone_file_upload;
 use crate::models::chat::{archive_chat, get_or_create_chat, get_recent_chats};
 use crate::models::message::{ContentPart, MessageSchema};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
+use crate::server::api::v1beta::assistants::{
+    archive_assistant, create_assistant, get_assistant, list_assistants, update_assistant,
+    ArchiveAssistantResponse, Assistant, AssistantFile, AssistantWithFiles, CreateAssistantRequest,
+    CreateAssistantResponse, UpdateAssistantRequest, UpdateAssistantResponse,
+};
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
     __path_edit_message_sse, __path_message_submit_sse, __path_regenerate_message_sse,
@@ -22,11 +29,11 @@ use crate::state::AppState;
 use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{middleware, Extension, Json, Router};
 use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
-use eyre::{OptionExt, Report, WrapErr};
+use eyre::{Report, WrapErr};
 use serde::{Deserialize, Serialize};
 use sqlx::types::{chrono, Uuid};
 use tower_http::limit::RequestBodyLimitLayer;
@@ -77,8 +84,17 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/token_usage/estimate",
             post(token_usage::token_usage_estimate),
         )
+        // Assistants routes - manually registered for clarity and consistency
+        .route("/assistants", post(create_assistant))
+        .route("/assistants", get(list_assistants))
+        .route("/assistants/{assistant_id}", get(get_assistant))
+        .route("/assistants/{assistant_id}", put(update_assistant))
+        .route(
+            "/assistants/{assistant_id}/archive",
+            post(archive_assistant),
+        )
         .route_layer(middleware::from_fn_with_state(
-            app_state,
+            app_state.clone(),
             me_profile_middleware::user_profile_middleware,
         ));
 
@@ -131,6 +147,14 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         ArchiveChatRequest,
         ArchiveChatResponse,
         ChatModel,
+        Assistant,
+        AssistantWithFiles,
+        AssistantFile,
+        CreateAssistantRequest,
+        CreateAssistantResponse,
+        UpdateAssistantRequest,
+        UpdateAssistantResponse,
+        ArchiveAssistantResponse,
         token_usage::TokenUsageRequest,
         token_usage::TokenUsageStats,
         token_usage::TokenUsageResponseFileItem,
@@ -315,12 +339,14 @@ pub struct FileUploadResponse {
 /// Upload files and return UUIDs for each
 ///
 /// This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
+/// If chat_id is provided, files are associated with that chat. If not provided, files are created
+/// as standalone uploads that can be linked to assistants later.
 #[utoipa::path(
     post,
     path = "/me/files",
     tag = "files",
     params(
-        ("chat_id" = String, Query, description = "The chat ID to associate the file with."),
+        ("chat_id" = Option<String>, Query, description = "Optional chat ID to associate the file with. If not provided, creates standalone files."),
     ),
     request_body(content = Vec<MultipartFormFile>, description = "Files to upload", content_type = "multipart/form-data"),
     responses(
@@ -336,19 +362,15 @@ pub async fn upload_file(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
     mut multipart: Multipart,
 ) -> Result<Json<FileUploadResponse>, StatusCode> {
-    let chat_id_str = params
-        .get("chat_id")
-        .ok_or_eyre("chat_id missing")
-        .map_err(|e| {
-            tracing::error!("Failed to process multipart form: {}", e);
+    // Parse the optional chat ID parameter
+    let chat_id = if let Some(chat_id_str) = params.get("chat_id") {
+        Some(Uuid::parse_str(chat_id_str).map_err(|e| {
+            tracing::error!("Invalid chat ID format: {}", e);
             StatusCode::BAD_REQUEST
-        })?;
-
-    // Parse the chat ID
-    let chat_id = Uuid::parse_str(chat_id_str).map_err(|e| {
-        tracing::error!("Invalid chat ID format: {}", e);
-        StatusCode::BAD_REQUEST
-    })?;
+        })?)
+    } else {
+        None
+    };
 
     let mut uploaded_files = Vec::new();
 
@@ -394,16 +416,30 @@ pub async fn upload_file(
         })?;
 
         // Store the file metadata in the database
-        let file_upload = models::file_upload::create_file_upload(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            &chat_id,
-            filename.clone(),
-            app_state.default_file_storage_provider_id(),
-            file_path,
-        )
-        .await
+        let file_upload = if let Some(ref chat_id) = chat_id {
+            // Create file upload linked to chat
+            models::file_upload::create_file_upload(
+                &app_state.db,
+                &policy,
+                &me_user.to_subject(),
+                chat_id,
+                filename.clone(),
+                app_state.default_file_storage_provider_id(),
+                file_path,
+            )
+            .await
+        } else {
+            // Create standalone file upload
+            create_standalone_file_upload(
+                &app_state.db,
+                &policy,
+                &me_user.to_subject(),
+                filename.clone(),
+                app_state.default_file_storage_provider_id(),
+                file_path,
+            )
+            .await
+        }
         .map_err(|e| {
             tracing::error!("Failed to create file upload record: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR

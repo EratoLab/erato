@@ -272,14 +272,14 @@
           "files"
         ],
         "summary": "Upload files and return UUIDs for each",
-        "description": "This endpoint accepts a multipart form with one or more files and returns UUIDs for each.",
+        "description": "This endpoint accepts a multipart form with one or more files and returns UUIDs for each.\nIf chat_id is provided, files are associated with that chat. If not provided, files are created\nas standalone uploads that can be linked to assistants later.",
         "operationId": "upload_file",
         "parameters": [
           {
             "name": "chat_id",
             "in": "query",
-            "description": "The chat ID to associate the file with.",
-            "required": true,
+            "description": "Optional chat ID to associate the file with. If not provided, creates standalone files.",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -665,6 +665,25 @@
   },
   "components": {
     "schemas": {
+      "ArchiveAssistantResponse": {
+        "type": "object",
+        "description": "Response when archiving an assistant",
+        "required": [
+          "id",
+          "archived_at"
+        ],
+        "properties": {
+          "archived_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the assistant was archived"
+          },
+          "id": {
+            "type": "string",
+            "description": "The ID of the archived assistant"
+          }
+        }
+      },
       "ArchiveChatRequest": {
         "type": "object",
         "description": "Request to archive a chat"
@@ -687,6 +706,120 @@
             "description": "The ID of the archived chat"
           }
         }
+      },
+      "Assistant": {
+        "type": "object",
+        "description": "An assistant model",
+        "required": [
+          "id",
+          "name",
+          "prompt",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "archived_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When this assistant was archived (null if not archived)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this assistant was created"
+          },
+          "default_chat_provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Default chat provider/model ID for this assistant"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional description of the assistant"
+          },
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the assistant"
+          },
+          "mcp_server_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "List of MCP server IDs available to this assistant"
+          },
+          "name": {
+            "type": "string",
+            "description": "The display name of the assistant"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "The system prompt used by the assistant"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this assistant was last updated"
+          }
+        }
+      },
+      "AssistantFile": {
+        "type": "object",
+        "description": "A file associated with an assistant",
+        "required": [
+          "id",
+          "filename",
+          "download_url"
+        ],
+        "properties": {
+          "download_url": {
+            "type": "string",
+            "description": "Pre-signed URL for downloading the file"
+          },
+          "filename": {
+            "type": "string",
+            "description": "The original filename"
+          },
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the file"
+          }
+        }
+      },
+      "AssistantWithFiles": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Assistant",
+            "description": "The assistant information"
+          },
+          {
+            "type": "object",
+            "required": [
+              "files"
+            ],
+            "properties": {
+              "files": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AssistantFile"
+                },
+                "description": "Files associated with this assistant"
+              }
+            }
+          }
+        ],
+        "description": "An assistant with its associated files"
       },
       "BudgetCurrency": {
         "type": "string",
@@ -961,6 +1094,67 @@
             "type": "string"
           }
         }
+      },
+      "CreateAssistantRequest": {
+        "type": "object",
+        "description": "Request to create a new assistant",
+        "required": [
+          "name",
+          "prompt"
+        ],
+        "properties": {
+          "default_chat_provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Default chat provider/model ID for this assistant"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional description of the assistant"
+          },
+          "file_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional list of file upload IDs to associate with this assistant"
+          },
+          "mcp_server_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "List of MCP server IDs available to this assistant"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the assistant"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "The system prompt for the assistant"
+          }
+        }
+      },
+      "CreateAssistantResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Assistant",
+            "description": "The created assistant"
+          }
+        ],
+        "description": "Response when creating an assistant"
       },
       "CreateChatRequest": {
         "type": "object",
@@ -2063,6 +2257,69 @@
             "type": "string"
           }
         }
+      },
+      "UpdateAssistantRequest": {
+        "type": "object",
+        "description": "Request to update an existing assistant",
+        "properties": {
+          "default_chat_provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional new default chat provider"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional new description for the assistant"
+          },
+          "file_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional list of file upload IDs to associate with this assistant"
+          },
+          "mcp_server_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional new list of MCP server IDs"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional new name for the assistant"
+          },
+          "prompt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional new prompt for the assistant"
+          }
+        }
+      },
+      "UpdateAssistantResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Assistant",
+            "description": "The updated assistant"
+          }
+        ],
+        "description": "Response when updating an assistant"
       },
       "UserProfile": {
         "type": "object",
