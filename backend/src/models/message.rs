@@ -538,9 +538,11 @@ impl GenerationInputMessages {
 }
 
 /// For now retrieves the last `n` (= default 10) messages in the chat to serve as input for generating the next message.
+/// Supports both a global system prompt and an optional assistant-specific prompt.
 pub async fn get_generation_input_messages_by_previous_message_id(
     conn: &DatabaseConnection,
     system_prompt: Option<String>,
+    assistant_prompt: Option<String>,
     previous_message_id: &Uuid,
     num_previous_messages: Option<usize>,
     new_generation_files: Vec<FileContentsForGeneration>,
@@ -593,16 +595,30 @@ pub async fn get_generation_input_messages_by_previous_message_id(
         }
     }
 
-    // Add system prompt if not present
+    // Add system prompts if not already present
+    // Only add prompts if there are no system messages in the input messages yet
     if !input_messages.iter().any(|m| m.role == MessageRole::System) {
+        let mut prompts_to_add = vec![];
+
+        // First add the global system prompt if present
         if let Some(prompt) = system_prompt {
-            input_messages.insert(
-                0,
-                InputMessage {
-                    role: MessageRole::System,
-                    content: ContentPart::Text(ContentPartText { text: prompt }),
-                },
-            );
+            prompts_to_add.push(InputMessage {
+                role: MessageRole::System,
+                content: ContentPart::Text(ContentPartText { text: prompt }),
+            });
+        }
+
+        // Then add the assistant prompt as a second system message if present
+        if let Some(prompt) = assistant_prompt {
+            prompts_to_add.push(InputMessage {
+                role: MessageRole::System,
+                content: ContentPart::Text(ContentPartText { text: prompt }),
+            });
+        }
+
+        // Insert all prompts at the beginning
+        for (i, prompt) in prompts_to_add.into_iter().enumerate() {
+            input_messages.insert(i, prompt);
         }
     }
 

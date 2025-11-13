@@ -722,7 +722,9 @@ pub async fn recent_chats(
 #[derive(Deserialize, ToSchema, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct CreateChatRequest {
-    // Optional fields for future extensibility
+    /// Optional assistant ID to base this chat on
+    #[serde(skip_serializing_if = "Option::is_none")]
+    assistant_id: Option<String>,
 }
 
 /// Response for create_chat endpoint
@@ -753,8 +755,37 @@ pub async fn create_chat(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
-    Json(_request): Json<CreateChatRequest>,
+    Json(request): Json<CreateChatRequest>,
 ) -> Result<Json<CreateChatResponse>, StatusCode> {
+    // Parse and validate assistant_id if provided
+    let assistant_id = if let Some(assistant_id_str) = request.assistant_id {
+        let parsed_id = Uuid::parse_str(&assistant_id_str).map_err(|_| {
+            tracing::error!("Invalid assistant ID format: {}", assistant_id_str);
+            StatusCode::BAD_REQUEST
+        })?;
+
+        // Verify user has access to the assistant
+        models::assistant::get_assistant_by_id(
+            &app_state.db,
+            &policy,
+            &me_user.to_subject(),
+            parsed_id,
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get assistant: {}", e);
+            if e.to_string().contains("not found") || e.to_string().contains("Access denied") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+        })?;
+
+        Some(parsed_id)
+    } else {
+        None
+    };
+
     // Create a new chat
     let (chat, _) = get_or_create_chat(
         &app_state.db,
@@ -762,6 +793,7 @@ pub async fn create_chat(
         &me_user.to_subject(),
         None,
         &me_user.0.id,
+        assistant_id.as_ref(),
     )
     .await
     .map_err(log_internal_server_error)?;

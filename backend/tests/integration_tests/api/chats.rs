@@ -3,7 +3,9 @@
 use axum::http;
 use axum::Router;
 use axum_test::TestServer;
+use erato::db::entity::{chats, messages};
 use erato::server::router::router;
+use sea_orm::{prelude::Uuid, ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
@@ -924,5 +926,207 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
             .as_bool()
             .unwrap_or(true),
         "Second user message should not be in the active thread"
+    );
+}
+
+/// Test creating a chat based on an assistant and verifying assistant configuration is applied.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+///
+/// # Test Behavior
+/// Verifies that:
+/// - A chat can be created with an assistant_id
+/// - The assistant_configuration is stored in the chat
+/// - Assistant prompt and files are applied when sending the first message
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_create_chat_with_assistant(pool: Pool<Postgres>) {
+    // Set up the test environment
+    let app_state = test_app_state(test_app_config(), pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Step 1: Upload a file as standalone (not associated with any chat)
+    let file_content = json!({
+        "name": "test_document",
+        "content": "This is a test file for the assistant."
+    })
+    .to_string();
+
+    let file_bytes = file_content.into_bytes();
+
+    let multipart_form = axum_test::multipart::MultipartForm::new().add_part(
+        "file",
+        axum_test::multipart::Part::bytes(file_bytes)
+            .file_name("test_document.json")
+            .mime_type("application/json"),
+    );
+
+    let upload_response = server
+        .post("/api/v1beta/me/files")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(multipart_form)
+        .await;
+
+    upload_response.assert_status_ok();
+    let upload_json: Value = upload_response.json();
+
+    // Get the file ID from the upload response
+    let file_id = upload_json["files"][0]["id"]
+        .as_str()
+        .expect("Expected file id in upload response");
+
+    // Step 2: Create an assistant with the uploaded file
+    let assistant_request = json!({
+        "name": "Test Assistant",
+        "description": "An assistant for testing",
+        "prompt": "You are a helpful test assistant.",
+        "mcp_server_ids": null,
+        "default_chat_provider": null,
+        "file_ids": [file_id]
+    });
+
+    let assistant_response = server
+        .post("/api/v1beta/assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&assistant_request)
+        .await;
+
+    assistant_response.assert_status(http::StatusCode::CREATED);
+    let assistant_json: Value = assistant_response.json();
+    let assistant_id = assistant_json["id"]
+        .as_str()
+        .expect("Expected id in assistant response");
+
+    // Step 3: Create a chat based on the assistant
+    let create_chat_request = json!({
+        "assistant_id": assistant_id
+    });
+
+    let create_chat_response = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&create_chat_request)
+        .await;
+
+    create_chat_response.assert_status_ok();
+    let create_chat_json: Value = create_chat_response.json();
+    let chat_id = create_chat_json["chat_id"]
+        .as_str()
+        .expect("Expected chat_id in response");
+
+    // Step 4: Verify the assistant has the file associated
+    let get_assistant_response = server
+        .get(&format!("/api/v1beta/assistants/{}", assistant_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    get_assistant_response.assert_status_ok();
+    let get_assistant_json: Value = get_assistant_response.json();
+    let assistant_files = get_assistant_json["files"]
+        .as_array()
+        .expect("Expected files array in assistant");
+
+    assert_eq!(
+        assistant_files.len(),
+        1,
+        "Assistant should have one file associated"
+    );
+    assert_eq!(
+        assistant_files[0]["id"].as_str().unwrap(),
+        file_id,
+        "Assistant file ID should match uploaded file"
+    );
+
+    // Step 5: Verify the chat has assistant_configuration stored
+    // We can verify this by checking the database directly
+    let chat_uuid = Uuid::parse_str(chat_id).expect("Invalid chat UUID");
+    let chat_record = chats::Entity::find_by_id(chat_uuid)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to fetch chat")
+        .expect("Chat not found");
+
+    assert!(
+        chat_record.assistant_configuration.is_some(),
+        "assistant_configuration should be set"
+    );
+
+    let config = chat_record.assistant_configuration.unwrap();
+    let stored_assistant_id = config["assistant_id"]
+        .as_str()
+        .expect("assistant_id should be in configuration");
+    assert_eq!(
+        stored_assistant_id, assistant_id,
+        "Stored assistant_id should match"
+    );
+
+    // Step 6: Send a message to the chat
+    let message_request = json!({
+        "existing_chat_id": chat_id,
+        "user_message": "Hello, test assistant!"
+    });
+
+    let message_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+
+    message_response.assert_status_ok();
+
+    // Step 7: Verify the response includes proper events
+    let response_text = message_response.text();
+    let lines: Vec<&str> = response_text.lines().collect();
+
+    // Helper to check if an event exists
+    let has_event = |event_type: &str| {
+        lines
+            .windows(2)
+            .any(|w| w[0] == format!("event: {}", event_type) && w[1].starts_with("data: "))
+    };
+
+    // Should have user_message_saved event
+    assert!(
+        has_event("user_message_saved"),
+        "Missing user_message_saved event"
+    );
+
+    // Should have assistant_message_completed event
+    assert!(
+        has_event("assistant_message_completed"),
+        "Missing assistant_message_completed event"
+    );
+
+    // Step 8: Verify that the generation_input_messages includes the assistant prompt
+    // We can check this by querying the messages table
+    let message_record = messages::Entity::find()
+        .filter(messages::Column::ChatId.eq(chat_uuid))
+        .filter(messages::Column::GenerationInputMessages.is_not_null())
+        .order_by_desc(messages::Column::CreatedAt)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to fetch message with generation inputs")
+        .expect("Message not found");
+
+    let gen_inputs = message_record
+        .generation_input_messages
+        .expect("Should have generation_input_messages");
+    let gen_inputs_str = serde_json::to_string(&gen_inputs).unwrap();
+
+    // Verify the assistant prompt is in the generation inputs
+    assert!(
+        gen_inputs_str.contains("You are a helpful test assistant."),
+        "Assistant prompt should be in generation inputs"
     );
 }

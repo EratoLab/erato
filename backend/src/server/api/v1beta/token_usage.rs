@@ -277,6 +277,7 @@ async fn prepare_input_messages(
     crate::models::message::get_generation_input_messages_by_previous_message_id(
         &app_state.db,
         system_prompt,
+        None, // No assistant prompt for token estimation
         previous_message_id,
         Some(10),
         files_for_generation,

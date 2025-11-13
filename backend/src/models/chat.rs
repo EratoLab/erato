@@ -10,7 +10,34 @@ use sea_orm::prelude::*;
 use sea_orm::{
     ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QueryOrder, QuerySelect,
 };
+use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::Utc;
+
+/// Configuration for a chat that is based on an assistant
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AssistantConfiguration {
+    /// The ID of the assistant this chat is based on
+    pub assistant_id: Uuid,
+}
+
+impl AssistantConfiguration {
+    /// Create a new assistant configuration
+    pub fn new(assistant_id: Uuid) -> Self {
+        Self { assistant_id }
+    }
+
+    /// Parse assistant configuration from a JSONB value
+    pub fn from_json(json: &serde_json::Value) -> Result<Self, Report> {
+        serde_json::from_value(json.clone())
+            .map_err(|e| eyre!("Failed to parse assistant configuration: {}", e))
+    }
+
+    /// Convert to a JSONB value for storage
+    pub fn to_json(&self) -> Result<serde_json::Value, Report> {
+        serde_json::to_value(self)
+            .map_err(|e| eyre!("Failed to serialize assistant configuration: {}", e))
+    }
+}
 
 /// Indicates whether a chat was newly created or already existed
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +57,7 @@ impl From<&chats::Model> for Resource {
 /// If `existing_chat_id` is provided, try to load the chat from the database.
 /// If the chat is not found, an error is returned.
 /// If `existing_chat_id` is not provided, create a new chat, with `owner_user_id` as the owner.
+/// If `assistant_id` is provided when creating a new chat, the assistant configuration will be stored.
 ///
 /// Returns a tuple of (chat model, creation status) where the status indicates whether
 /// the chat was newly created or already existed.
@@ -39,6 +67,7 @@ pub async fn get_or_create_chat(
     subject: &Subject,
     existing_chat_id: Option<&Uuid>,
     owner_user_id: &str,
+    assistant_id: Option<&Uuid>,
 ) -> Result<(chats::Model, ChatCreationStatus), Report> {
     if let Some(existing_chat_id) = existing_chat_id {
         let existing_chat: Option<chats::Model> =
@@ -51,8 +80,17 @@ pub async fn get_or_create_chat(
     } else {
         // Authorize that user is allowed to create a chat
         authorize!(policy, subject, &Resource::ChatSingleton, Action::Create)?;
+
+        // Build assistant_configuration JSON if assistant_id is provided
+        let assistant_configuration = if let Some(aid) = assistant_id {
+            Some(AssistantConfiguration::new(*aid).to_json()?)
+        } else {
+            None
+        };
+
         let new_chat = chats::ActiveModel {
             owner_user_id: ActiveValue::Set(owner_user_id.to_owned()),
+            assistant_configuration: ActiveValue::Set(assistant_configuration),
             ..Default::default()
         };
         let created_chat = chats::Entity::insert(new_chat)
@@ -89,10 +127,18 @@ pub async fn get_or_create_chat_by_previous_message_id(
             .ok_or_else(|| eyre!("Message with ID {} not found", message_id))?;
 
         // Use the chat_id from the message with get_or_create_chat
-        get_or_create_chat(conn, policy, subject, Some(&message.chat_id), owner_user_id).await
+        get_or_create_chat(
+            conn,
+            policy,
+            subject,
+            Some(&message.chat_id),
+            owner_user_id,
+            None,
+        )
+        .await
     } else {
         // No previous message ID, so create a new chat using get_or_create_chat
-        get_or_create_chat(conn, policy, subject, None, owner_user_id).await
+        get_or_create_chat(conn, policy, subject, None, owner_user_id, None).await
     }
 }
 
@@ -344,6 +390,46 @@ pub async fn get_last_chat_provider_id(
 
             return Ok(generation_params.generation_chat_provider_id);
         }
+    }
+
+    Ok(None)
+}
+
+/// Parse the assistant configuration from a chat model
+///
+/// Returns the parsed AssistantConfiguration if one is set, or None if not.
+pub fn parse_assistant_configuration(
+    chat: &chats::Model,
+) -> Result<Option<AssistantConfiguration>, Report> {
+    if let Some(ref config_json) = chat.assistant_configuration {
+        Ok(Some(AssistantConfiguration::from_json(config_json)?))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Get the assistant configuration for a chat if one is associated
+///
+/// Returns the full assistant details with files if an assistant is configured for the chat.
+/// Returns None if no assistant is configured.
+pub async fn get_chat_assistant_configuration(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat: &chats::Model,
+) -> Result<Option<crate::models::assistant::AssistantWithFiles>, Report> {
+    // Parse assistant configuration from chat
+    if let Some(config) = parse_assistant_configuration(chat)? {
+        // Get the full assistant details including files
+        let assistant_with_files = crate::models::assistant::get_assistant_with_files(
+            conn,
+            policy,
+            subject,
+            config.assistant_id,
+        )
+        .await?;
+
+        return Ok(Some(assistant_with_files));
     }
 
     Ok(None)
