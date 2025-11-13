@@ -169,6 +169,15 @@ pub struct ChatListStats {
     pub has_more: bool,
 }
 
+/// Represents an assistant with usage frequency statistics
+#[derive(Debug, Clone)]
+pub struct FrequentAssistant {
+    /// The assistant details
+    pub assistant: crate::models::assistant::AssistantWithFiles,
+    /// Number of chats created with this assistant
+    pub usage_count: i64,
+}
+
 /// Get the most recent chats for a user.
 ///
 /// Returns a tuple of (chats, stats) where:
@@ -269,6 +278,98 @@ pub async fn get_recent_chats(
     };
 
     Ok((recent_chats, stats))
+}
+
+/// Get the most frequently used assistants for a user over a specified time period.
+///
+/// Returns a list of assistants ordered by how many times they were used to create chats,
+/// filtered to chats created within the last `days` days.
+///
+/// # Arguments
+/// * `conn` - Database connection
+/// * `policy` - Policy engine for authorization
+/// * `subject` - Subject performing the query
+/// * `owner_user_id` - The user ID to query for
+/// * `limit` - Maximum number of assistants to return
+/// * `days` - Number of days to look back (e.g., 30 for last 30 days)
+pub async fn get_frequent_assistants(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    owner_user_id: &str,
+    limit: u64,
+    days: u32,
+) -> Result<Vec<FrequentAssistant>, Report> {
+    // Use raw SQL to efficiently query and group by assistant_id
+    // This query:
+    // 1. Filters chats by owner and date range
+    // 2. Extracts assistant_id from the JSONB assistant_configuration column
+    // 3. Groups by assistant_id and counts occurrences
+    // 4. Orders by count descending
+    // 5. Limits to the requested number
+    #[derive(Debug, FromQueryResult)]
+    struct AssistantUsageCount {
+        assistant_id: Uuid,
+        usage_count: i64,
+    }
+
+    let cutoff_date = Utc::now() - chrono::Duration::days(days as i64);
+
+    let usage_counts: Vec<AssistantUsageCount> =
+        AssistantUsageCount::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            r#"
+                SELECT 
+                    (assistant_configuration->>'assistant_id')::uuid as assistant_id,
+                    COUNT(*) as usage_count
+                FROM chats
+                WHERE owner_user_id = $1
+                    AND assistant_configuration IS NOT NULL
+                    AND assistant_configuration->>'assistant_id' IS NOT NULL
+                    AND created_at >= $2
+                GROUP BY assistant_configuration->>'assistant_id'
+                ORDER BY usage_count DESC
+                LIMIT $3
+            "#,
+            vec![
+                owner_user_id.into(),
+                cutoff_date.into(),
+                sea_orm::Value::BigInt(Some(limit as i64)),
+            ],
+        ))
+        .all(conn)
+        .await?;
+
+    // For each assistant_id, fetch the full assistant details
+    let mut frequent_assistants = Vec::new();
+    for usage in usage_counts {
+        // Get the full assistant details with files
+        match crate::models::assistant::get_assistant_with_files(
+            conn,
+            policy,
+            subject,
+            usage.assistant_id,
+        )
+        .await
+        {
+            Ok(assistant) => {
+                frequent_assistants.push(FrequentAssistant {
+                    assistant,
+                    usage_count: usage.usage_count,
+                });
+            }
+            Err(e) => {
+                // Log the error but continue - the assistant might have been deleted or user lost access
+                tracing::warn!(
+                    "Failed to fetch assistant {} for frequent assistants: {}",
+                    usage.assistant_id,
+                    e
+                );
+            }
+        }
+    }
+
+    Ok(frequent_assistants)
 }
 
 pub async fn get_chat_by_message_id(

@@ -1130,3 +1130,218 @@ async fn test_create_chat_with_assistant(pool: Pool<Postgres>) {
         "Assistant prompt should be in generation inputs"
     );
 }
+
+/// Test the frequent_assistants endpoint that returns assistants ordered by usage frequency.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+///
+/// # Test Behavior
+/// Verifies that the frequent_assistants endpoint returns assistants ordered by how many
+/// times they were used to create chats within the specified time period.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_frequent_assistants_endpoint(pool: Pool<Postgres>) {
+    // Set up the test environment
+    let app_state = test_app_state(test_app_config(), pool).await;
+
+    // Create a test user
+    let issuer = TEST_USER_ISSUER;
+    let subject = "test-subject-for-frequent-assistants";
+    let _user = erato::models::user::get_or_create_user(&app_state.db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create three assistants
+    let assistant1_request = json!({
+        "name": "Assistant 1",
+        "description": "First test assistant",
+        "prompt": "You are assistant 1.",
+        "mcp_server_ids": null,
+        "default_chat_provider": null,
+        "file_ids": []
+    });
+
+    let assistant1_response = server
+        .post("/api/v1beta/assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&assistant1_request)
+        .await;
+    assistant1_response.assert_status(http::StatusCode::CREATED);
+    let assistant1_json: Value = assistant1_response.json();
+    let assistant1_id = assistant1_json["id"].as_str().unwrap();
+
+    let assistant2_request = json!({
+        "name": "Assistant 2",
+        "description": "Second test assistant",
+        "prompt": "You are assistant 2.",
+        "mcp_server_ids": null,
+        "default_chat_provider": null,
+        "file_ids": []
+    });
+
+    let assistant2_response = server
+        .post("/api/v1beta/assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&assistant2_request)
+        .await;
+    assistant2_response.assert_status(http::StatusCode::CREATED);
+    let assistant2_json: Value = assistant2_response.json();
+    let assistant2_id = assistant2_json["id"].as_str().unwrap();
+
+    let assistant3_request = json!({
+        "name": "Assistant 3",
+        "description": "Third test assistant",
+        "prompt": "You are assistant 3.",
+        "mcp_server_ids": null,
+        "default_chat_provider": null,
+        "file_ids": []
+    });
+
+    let assistant3_response = server
+        .post("/api/v1beta/assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&assistant3_request)
+        .await;
+    assistant3_response.assert_status(http::StatusCode::CREATED);
+    let assistant3_json: Value = assistant3_response.json();
+    let assistant3_id = assistant3_json["id"].as_str().unwrap();
+
+    // Create chats with different assistants at different frequencies
+    // Assistant 2: 3 chats (most frequent)
+    for _ in 0..3 {
+        let create_chat_request = json!({
+            "assistant_id": assistant2_id
+        });
+        let response = server
+            .post("/api/v1beta/me/chats")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header(http::header::CONTENT_TYPE, "application/json")
+            .json(&create_chat_request)
+            .await;
+        response.assert_status_ok();
+    }
+
+    // Assistant 1: 2 chats (second most frequent)
+    for _ in 0..2 {
+        let create_chat_request = json!({
+            "assistant_id": assistant1_id
+        });
+        let response = server
+            .post("/api/v1beta/me/chats")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .add_header(http::header::CONTENT_TYPE, "application/json")
+            .json(&create_chat_request)
+            .await;
+        response.assert_status_ok();
+    }
+
+    // Assistant 3: 1 chat (least frequent)
+    let create_chat_request = json!({
+        "assistant_id": assistant3_id
+    });
+    let response = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&create_chat_request)
+        .await;
+    response.assert_status_ok();
+
+    // Now query the frequent_assistants endpoint
+    let frequent_response = server
+        .get("/api/v1beta/me/frequent_assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    frequent_response.assert_status_ok();
+    let frequent_json: Value = frequent_response.json();
+
+    // Verify the response structure
+    assert!(
+        frequent_json["assistants"].is_array(),
+        "Response should have an assistants array"
+    );
+    let assistants = frequent_json["assistants"].as_array().unwrap();
+
+    // Should have 3 assistants
+    assert_eq!(
+        assistants.len(),
+        3,
+        "Should return all 3 assistants that were used"
+    );
+
+    // Verify they are ordered by usage_count (descending)
+    assert_eq!(
+        assistants[0]["id"].as_str().unwrap(),
+        assistant2_id,
+        "Most frequent assistant should be first"
+    );
+    assert_eq!(
+        assistants[0]["usage_count"].as_i64().unwrap(),
+        3,
+        "Assistant 2 should have usage_count of 3"
+    );
+
+    assert_eq!(
+        assistants[1]["id"].as_str().unwrap(),
+        assistant1_id,
+        "Second most frequent assistant should be second"
+    );
+    assert_eq!(
+        assistants[1]["usage_count"].as_i64().unwrap(),
+        2,
+        "Assistant 1 should have usage_count of 2"
+    );
+
+    assert_eq!(
+        assistants[2]["id"].as_str().unwrap(),
+        assistant3_id,
+        "Least frequent assistant should be third"
+    );
+    assert_eq!(
+        assistants[2]["usage_count"].as_i64().unwrap(),
+        1,
+        "Assistant 3 should have usage_count of 1"
+    );
+
+    // Verify assistant details are included
+    assert_eq!(
+        assistants[0]["name"].as_str().unwrap(),
+        "Assistant 2",
+        "Assistant name should be included"
+    );
+    assert_eq!(
+        assistants[0]["prompt"].as_str().unwrap(),
+        "You are assistant 2.",
+        "Assistant prompt should be included"
+    );
+
+    // Test with limit parameter
+    let limited_response = server
+        .get("/api/v1beta/me/frequent_assistants?limit=2")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    limited_response.assert_status_ok();
+    let limited_json: Value = limited_response.json();
+
+    let limited_assistants = limited_json["assistants"].as_array().unwrap();
+    assert_eq!(
+        limited_assistants.len(),
+        2,
+        "Should only return 2 assistants when limit=2"
+    );
+    assert_eq!(
+        limited_assistants[0]["id"].as_str().unwrap(),
+        assistant2_id,
+        "First should still be the most frequent"
+    );
+}
