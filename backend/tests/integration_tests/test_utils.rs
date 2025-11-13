@@ -9,8 +9,12 @@ use axum::Router;
 use axum_test::{TestResponse, TestServer};
 use erato::config::AppConfig;
 use erato::state::AppState;
-use serde_json::Value;
+use mocktail::prelude::*;
+use mocktail::server::MockServerConfig;
+use serde_json::{json, Value};
 use std::io::Write;
+use std::net::{IpAddr, Ipv4Addr};
+use std::time::Duration;
 use tempfile::{Builder, NamedTempFile};
 
 // ============================================================================
@@ -318,4 +322,202 @@ pub fn extract_text_deltas(events: &[Event]) -> Vec<String> {
 /// The complete text assembled from all text_delta events
 pub fn extract_full_text(events: &[Event]) -> String {
     extract_text_deltas(events).join("")
+}
+
+// ============================================================================
+// Mock LLM Server Helpers
+// ============================================================================
+
+/// Helper function to build an OpenAI-compatible SSE streaming chunk.
+fn build_openai_chat_chunk(content: &str, finish_reason: Option<&str>) -> String {
+    let delta = if content.is_empty() {
+        json!({
+            "content": content,
+            "role": "assistant"
+        })
+    } else {
+        json!({
+            "content": content
+        })
+    };
+
+    let chunk = json!({
+        "id": "chatcmpl-mock-123",
+        "object": "chat.completion.chunk",
+        "created": 1234567890,
+        "model": "gpt-3.5-turbo",
+        "choices": [{
+            "index": 0,
+            "delta": delta,
+            "finish_reason": finish_reason
+        }]
+    });
+
+    format!("data: {}\n\n", chunk)
+}
+
+/// Helper function to build a delayed streaming response with multiple chunks
+fn build_delayed_streaming_response(chunks: Vec<&str>, delay_ms: u64) -> Vec<BodyAction> {
+    let mut actions = Vec::new();
+
+    // First chunk is typically an empty role message
+    actions.push(BodyAction::Bytes(build_openai_chat_chunk("", None).into()));
+
+    // Add each content chunk with delay
+    for (i, chunk) in chunks.iter().enumerate() {
+        if i > 0 {
+            actions.push(BodyAction::Delay(Duration::from_millis(delay_ms)));
+        }
+        actions.push(BodyAction::Bytes(
+            build_openai_chat_chunk(chunk, None).into(),
+        ));
+    }
+
+    // Add a small delay before the final chunk
+    actions.push(BodyAction::Delay(Duration::from_millis(delay_ms)));
+
+    // Final chunk with finish_reason
+    actions.push(BodyAction::Bytes(
+        build_openai_chat_chunk("", Some("stop")).into(),
+    ));
+
+    // OpenAI sends a final [DONE] message
+    actions.push(BodyAction::Bytes("data: [DONE]\n\n".into()));
+
+    actions
+}
+
+/// Configuration for a mock LLM server.
+pub struct MockLlmConfig {
+    /// The chunks to send in the streaming response
+    pub chunks: Vec<String>,
+    /// Delay between chunks in milliseconds
+    pub delay_ms: u64,
+    /// The provider ID to use in the config (defaults to "mock-llm")
+    pub provider_id: String,
+    /// The model name to use in the config (defaults to "gpt-3.5-turbo")
+    pub model_name: String,
+}
+
+impl Default for MockLlmConfig {
+    fn default() -> Self {
+        Self {
+            chunks: ["Hello", " from", " the", " mocked", " LLM!"]
+                .iter()
+                .map(|&s| s.to_string())
+                .collect(),
+            delay_ms: 50,
+            provider_id: "mock-llm".to_string(),
+            model_name: "gpt-3.5-turbo".to_string(),
+        }
+    }
+}
+
+/// Sets up a mock LLM server and returns an AppConfig configured to use it.
+///
+/// This utility function creates a mock OpenAI-compatible server that streams responses
+/// with the specified chunks and delays. It configures the app to use this mock server
+/// for all chat provider operations.
+///
+/// # Arguments
+/// * `config` - Optional mock configuration (uses default if not provided)
+///
+/// # Returns
+/// A tuple containing the AppConfig and the MockServer (keep the server alive during your test)
+///
+/// # Example
+/// ```no_run
+/// use crate::test_utils::setup_mock_llm_server;
+///
+/// let (app_config, _server) = setup_mock_llm_server(None);
+/// // Use app_config in your test
+/// ```
+pub async fn setup_mock_llm_server(config: Option<MockLlmConfig>) -> (AppConfig, MockServer) {
+    let config = config.unwrap_or_default();
+
+    // Convert String chunks to &str for the build function
+    let chunk_refs: Vec<&str> = config.chunks.iter().map(|s| s.as_str()).collect();
+
+    // Set up the mock LLM server
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post().path("/v1/chat/completions");
+
+        // Create a streaming response with the configured chunks
+        let streaming_actions = build_delayed_streaming_response(chunk_refs, config.delay_ms);
+
+        then.status(axum::http::StatusCode::OK)
+            .headers([
+                ("Content-Type", "text/event-stream"),
+                ("Cache-Control", "no-cache"),
+                ("Connection", "keep-alive"),
+            ])
+            .bytes_stream_with_delays(streaming_actions);
+    });
+
+    // Start the mock server
+    let mockserver_config = MockServerConfig {
+        listen_addr: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        ..Default::default()
+    };
+    let server = MockServer::new_http("llm-mock")
+        .with_config(mockserver_config)
+        .with_mocks(mocks);
+
+    // Start the server first
+    server.start().await.expect("Failed to start mock server");
+
+    // Get the mock server URL
+    let mock_url = server.url("/v1/");
+    let mock_url_str = mock_url.to_string();
+
+    // Create app config with the mock server URL
+    let app_config = AppConfig::config_schema_builder(None, true)
+        .unwrap()
+        .set_override(
+            format!(
+                "chat_providers.providers.{}.provider_kind",
+                config.provider_id
+            ),
+            "openai",
+        )
+        .unwrap()
+        .set_override(
+            format!("chat_providers.providers.{}.model_name", config.provider_id),
+            config.model_name,
+        )
+        .unwrap()
+        .set_override(
+            format!("chat_providers.providers.{}.base_url", config.provider_id),
+            mock_url_str,
+        )
+        .unwrap()
+        .set_override(
+            "chat_providers.priority_order",
+            vec![config.provider_id.as_str()],
+        )
+        .unwrap()
+        // Add model permissions to allow the mock-llm provider for all users
+        .set_override(
+            format!(
+                "model_permissions.rules.allow-{}.rule_type",
+                config.provider_id
+            ),
+            "allow-all",
+        )
+        .unwrap()
+        .set_override(
+            format!(
+                "model_permissions.rules.allow-{}.chat_provider_ids",
+                config.provider_id
+            ),
+            vec![config.provider_id.as_str()],
+        )
+        .unwrap()
+        .build()
+        .unwrap()
+        .try_deserialize()
+        .unwrap();
+
+    (app_config, server)
 }

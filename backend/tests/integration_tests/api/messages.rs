@@ -9,8 +9,10 @@ use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 
-use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT};
-use crate::{test_app_config, test_app_state};
+use crate::test_app_state;
+use crate::test_utils::{
+    setup_mock_llm_server, TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT,
+};
 
 /// Test message submission with SSE streaming.
 ///
@@ -25,8 +27,11 @@ use crate::{test_app_config, test_app_state};
 /// with all expected Server-Sent Event types.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_message_submit_stream(pool: Pool<Postgres>) {
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     // Create a test user
     let issuer = TEST_USER_ISSUER;
@@ -157,8 +162,11 @@ async fn test_message_submit_stream(pool: Pool<Postgres>) {
 /// for messages with file attachments.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_token_usage_estimate_with_file(pool: Pool<Postgres>) {
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+
     // Set up the test environment
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -380,7 +388,9 @@ async fn test_token_usage_estimate_with_file(pool: Pool<Postgres>) {
 /// returns a 500 error (internal server error from SSE stream).
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_message_submit_with_nonexistent_previous_message_id(pool: Pool<Postgres>) {
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
     let issuer = TEST_USER_ISSUER;
     let subject = TEST_USER_SUBJECT;
     let _user = get_or_create_user(&app_state.db, issuer, subject, None)
@@ -430,7 +440,9 @@ async fn test_message_submit_with_nonexistent_previous_message_id(pool: Pool<Pos
 /// another user message (instead of an assistant message) returns an error.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_message_submit_with_wrong_role_previous_message(pool: Pool<Postgres>) {
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
     let issuer = TEST_USER_ISSUER;
     let subject = TEST_USER_SUBJECT;
     let _user = get_or_create_user(&app_state.db, issuer, subject, None)

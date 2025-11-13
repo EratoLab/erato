@@ -1,7 +1,7 @@
 //! Actor and background worker tests.
 
-use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN};
-use crate::{test_app_config, test_app_state, MIGRATOR};
+use crate::test_utils::{setup_mock_llm_server, TestRequestAuthExt, TEST_JWT_TOKEN};
+use crate::{test_app_state, MIGRATOR};
 use axum_test::TestServer;
 use chrono::{Duration, Utc};
 use erato::actors::cleanup_worker::cleanup_archived_chats;
@@ -28,7 +28,7 @@ use sqlx::{Pool, Postgres};
 /// - Ensures recently archived chats are preserved
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_cleanup_logic(pool: Pool<Postgres>) {
-    let app_config = test_app_config();
+    let (app_config, _server) = setup_mock_llm_server(None).await;
     let app_state = test_app_state(app_config, pool).await;
 
     let server = TestServer::new(
@@ -117,7 +117,7 @@ async fn test_cleanup_logic(pool: Pool<Postgres>) {
 /// - Ensures file upload entries remain as orphaned records
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_cleanup_logic_with_file_uploads(pool: Pool<Postgres>) {
-    let app_config = test_app_config();
+    let (app_config, _server) = setup_mock_llm_server(None).await;
     let app_state = test_app_state(app_config, pool).await;
 
     let server = TestServer::new(
