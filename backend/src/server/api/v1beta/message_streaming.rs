@@ -466,6 +466,7 @@ async fn stream_get_or_create_chat<
             &me_user.to_subject(),
             Some(existing_chat_id),
             &me_user.0.id,
+            None, // No assistant_id when using existing chat
         )
         .await;
 
@@ -585,20 +586,68 @@ async fn stream_save_user_message<
 
 async fn prepare_chat_request(
     app_state: &AppState,
-    chat_id: Uuid,
+    policy: &PolicyEngine,
+    chat: &chats::Model,
     previous_message_id: &Uuid,
-    new_input_files: Vec<FileContentsForGeneration>,
+    mut new_input_files: Vec<FileContentsForGeneration>,
     user_groups: &[String],
     requested_chat_provider_id: Option<&str>,
 ) -> Result<(ChatRequest, ChatOptions, GenerationInputMessages), Report> {
+    // Create subject from chat owner
+    let subject = crate::policy::types::Subject::User(chat.owner_user_id.clone());
+
+    // Get assistant configuration if this chat is based on an assistant
+    let assistant_config = crate::models::chat::get_chat_assistant_configuration(
+        &app_state.db,
+        policy,
+        &subject,
+        chat,
+    )
+    .await?;
+
+    // Retrieve assistant prompt if assistant is configured
+    let assistant_prompt = assistant_config.as_ref().map(|a| a.prompt.clone());
+
+    // Check if this is the first user message in the chat
+    // We check this by seeing if the previous message (which we just saved) is the first message
+    let is_first_user_message = {
+        let message =
+            get_message_by_id(&app_state.db, policy, &subject, previous_message_id).await?;
+        message.previous_message_id.is_none()
+    };
+
+    // If this is the first message and assistant has files, add them to input files
+    if is_first_user_message {
+        if let Some(ref assistant) = assistant_config {
+            if !assistant.files.is_empty() {
+                tracing::debug!(
+                    "Adding {} assistant files to first message in chat",
+                    assistant.files.len()
+                );
+                let assistant_files =
+                    get_assistant_files_for_generation(app_state, &assistant.files).await?;
+                new_input_files.extend(assistant_files);
+            }
+        }
+    }
+
+    // Determine the chat provider to use
+    // If assistant has a default and user didn't specify, use assistant's default
+    let effective_chat_provider_id = requested_chat_provider_id.or_else(|| {
+        assistant_config
+            .as_ref()
+            .and_then(|a| a.default_chat_provider.as_deref())
+    });
+
     // Resolve system prompt dynamically based on chat provider configuration
     let chat_provider_config =
-        app_state.chat_provider_for_chatcompletion(requested_chat_provider_id, user_groups)?;
+        app_state.chat_provider_for_chatcompletion(effective_chat_provider_id, user_groups)?;
     let system_prompt = app_state.get_system_prompt(&chat_provider_config).await?;
 
     let generation_input_messages = get_generation_input_messages_by_previous_message_id(
         &app_state.db,
         system_prompt,
+        assistant_prompt,
         previous_message_id,
         Some(10),
         new_input_files,
@@ -610,9 +659,12 @@ async fn prepare_chat_request(
         .with_capture_tool_calls(true)
         .with_capture_usage(true);
 
-    let mcp_server_tools = app_state.mcp_servers.list_tools(chat_id).await;
+    // Get all MCP server tools and filter by assistant configuration
+    let all_mcp_server_tools = app_state.mcp_servers.list_tools(chat.id).await;
+    let filtered_mcp_tools =
+        filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
 
-    let tools = convert_mcp_tools_to_genai_tools(mcp_server_tools);
+    let tools = convert_mcp_tools_to_genai_tools(filtered_mcp_tools);
     if !tools.is_empty() {
         chat_request.tools = Some(tools);
     } else {
@@ -1281,6 +1333,87 @@ async fn process_input_files(
     Ok(converted_files)
 }
 
+/// Get assistant files and convert them to FileContentsForGeneration format
+///
+/// This function downloads and extracts text from files associated with an assistant.
+/// Unlike process_input_files, this doesn't require a sender for streaming events.
+async fn get_assistant_files_for_generation(
+    app_state: &AppState,
+    assistant_files: &[crate::models::assistant::FileInfo],
+) -> Result<Vec<FileContentsForGeneration>, Report> {
+    let mut converted_files = vec![];
+
+    for file_info in assistant_files {
+        // Get the file storage provider
+        let file_storage: &FileStorage = app_state
+            .file_storage_providers
+            .get(&file_info.file_storage_provider_id)
+            .ok_or_eyre("File storage provider not found")?;
+
+        // Read the file content
+        let file_bytes = file_storage
+            .read_file_to_bytes(&file_info.file_storage_path)
+            .await
+            .wrap_err(format!(
+                "Failed to read assistant file from storage: {}",
+                file_info.file_storage_path
+            ))?;
+
+        // Use parser_core to extract text from the file
+        match parser_core::parse(&file_bytes) {
+            Ok(text_with_possible_escapes) => {
+                let text = remove_null_characters(&text_with_possible_escapes);
+                tracing::debug!(
+                    "Successfully parsed assistant file {}: {} (text length: {})",
+                    file_info.filename,
+                    file_info.id,
+                    text.len()
+                );
+                converted_files.push(FileContentsForGeneration {
+                    id: file_info.id,
+                    filename: file_info.filename.clone(),
+                    contents_as_text: text,
+                });
+            }
+            Err(err) => {
+                tracing::warn!(
+                    "Failed to parse assistant file {}: {} - Error: {}. Skipping this file.",
+                    file_info.filename,
+                    file_info.id,
+                    err
+                );
+                // Don't fail the entire request if one file fails to parse
+            }
+        }
+    }
+
+    Ok(converted_files)
+}
+
+/// Filter MCP tools based on assistant configuration
+///
+/// If the assistant has specific mcp_server_ids configured, only tools from those servers are returned.
+/// If the assistant has no mcp_server_ids configured (None), all tools are returned.
+/// If no assistant is configured, all tools are returned.
+fn filter_mcp_tools_by_assistant(
+    all_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
+    assistant_config: Option<&crate::models::assistant::AssistantWithFiles>,
+) -> Vec<crate::services::mcp_session_manager::ManagedTool> {
+    // If no assistant or assistant has no specific MCP server restrictions, return all tools
+    if let Some(assistant) = assistant_config {
+        if let Some(ref allowed_server_ids) = assistant.mcp_server_ids {
+            // Filter tools to only those from allowed servers
+            return all_tools
+                .into_iter()
+                .filter(|tool| allowed_server_ids.contains(&tool.server_id))
+                .collect();
+        }
+    }
+
+    // No restrictions, return all tools
+    all_tools
+}
+
 // ===== UNIFIED VALIDATION HELPERS =====
 
 /// Validates that a message exists and has the expected role.
@@ -1565,7 +1698,8 @@ pub async fn message_submit_sse(
         .await?;
         let prepare_chat_request_res = prepare_chat_request(
             &app_state,
-            chat.id,
+            &policy,
+            &chat,
             &saved_user_message.id,
             files_for_generation.clone(),
             &me_user.0.groups,
@@ -1762,7 +1896,8 @@ pub async fn regenerate_message_sse(
 
         let prepare_chat_request_res = prepare_chat_request(
             &app_state,
-            chat.id,
+            &policy,
+            &chat,
             &previous_message.id,
             files_for_generation.clone(),
             &me_user.0.groups,
@@ -2010,7 +2145,8 @@ pub async fn edit_message_sse(
         .await?;
         let prepare_chat_request_res = prepare_chat_request(
             &app_state,
-            chat.id,
+            &policy,
+            &chat,
             &saved_user_message.id,
             files_for_generation.clone(),
             &me_user.0.groups,

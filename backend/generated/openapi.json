@@ -1158,7 +1158,16 @@
       },
       "CreateChatRequest": {
         "type": "object",
-        "description": "Request to create a new chat without an initial message"
+        "description": "Request to create a new chat without an initial message",
+        "properties": {
+          "assistant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional assistant ID to base this chat on"
+          }
+        }
       },
       "CreateChatResponse": {
         "type": "object",
