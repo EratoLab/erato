@@ -319,6 +319,56 @@
         }
       }
     },
+    "/api/v1beta/me/frequent_assistants": {
+      "get": {
+        "tags": [],
+        "operationId": "frequent_assistants",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of assistants to return. Defaults to 10 if not provided.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "description": "Number of days to look back for usage statistics. Defaults to 30 if not provided.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved frequently used assistants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrequentAssistantsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error while retrieving assistants"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/editstream": {
       "post": {
         "tags": [],
@@ -1397,6 +1447,44 @@
               "$ref": "#/components/schemas/FileUploadItem"
             },
             "description": "The list of uploaded files with their IDs and filenames"
+          }
+        }
+      },
+      "FrequentAssistantItem": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AssistantWithFiles",
+            "description": "The assistant details"
+          },
+          {
+            "type": "object",
+            "required": [
+              "usage_count"
+            ],
+            "properties": {
+              "usage_count": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Number of times this assistant was used to create chats"
+              }
+            }
+          }
+        ],
+        "description": "A frequently used assistant with usage statistics"
+      },
+      "FrequentAssistantsResponse": {
+        "type": "object",
+        "description": "Response for the frequent_assistants endpoint",
+        "required": [
+          "assistants"
+        ],
+        "properties": {
+          "assistants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FrequentAssistantItem"
+            },
+            "description": "The list of frequently used assistants"
           }
         }
       },

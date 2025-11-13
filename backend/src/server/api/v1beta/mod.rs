@@ -8,7 +8,9 @@ pub mod token_usage;
 use crate::db::entity_ext::messages;
 use crate::models;
 use crate::models::assistant::create_standalone_file_upload;
-use crate::models::chat::{archive_chat, get_or_create_chat, get_recent_chats};
+use crate::models::chat::{
+    archive_chat, get_frequent_assistants, get_or_create_chat, get_recent_chats,
+};
 use crate::models::message::{ContentPart, MessageSchema};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
@@ -61,6 +63,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/regeneratestream", post(regenerate_message_sse))
         .route("/messages/editstream", post(edit_message_sse))
         .route("/recent_chats", get(recent_chats))
+        .route("/frequent_assistants", get(frequent_assistants))
         .route("/chats", post(create_chat))
         .route("/files", post(upload_file))
         .route("/models", get(available_models))
@@ -115,6 +118,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         profile,
         chat_messages,
         recent_chats,
+        frequent_assistants,
         upload_file,
         message_submit_sse,
         regenerate_message_sse,
@@ -308,6 +312,23 @@ pub struct RecentChatsResponse {
     chats: Vec<RecentChat>,
     /// Statistics about the chat list
     stats: RecentChatStats,
+}
+
+/// A frequently used assistant with usage statistics
+#[derive(Debug, ToSchema, Serialize)]
+pub struct FrequentAssistantItem {
+    /// The assistant details
+    #[serde(flatten)]
+    assistant: AssistantWithFiles,
+    /// Number of times this assistant was used to create chats
+    usage_count: i64,
+}
+
+/// Response for the frequent_assistants endpoint
+#[derive(Debug, ToSchema, Serialize)]
+pub struct FrequentAssistantsResponse {
+    /// The list of frequently used assistants
+    assistants: Vec<FrequentAssistantItem>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -713,6 +734,106 @@ pub async fn recent_chats(
             returned_count: stats.returned_count,
             has_more: stats.has_more,
         },
+    };
+
+    Ok(Json(response))
+}
+
+#[utoipa::path(
+    get,
+    path = "/me/frequent_assistants",
+    params(
+        ("limit" = Option<u64>, Query, description = "Maximum number of assistants to return. Defaults to 10 if not provided."),
+        ("days" = Option<u32>, Query, description = "Number of days to look back for usage statistics. Defaults to 30 if not provided.")
+    ),
+    responses(
+        (status = OK, body = FrequentAssistantsResponse, description = "Successfully retrieved frequently used assistants"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error while retrieving assistants")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn frequent_assistants(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<FrequentAssistantsResponse>, StatusCode> {
+    // Parse limit and days from query parameters, with defaults
+    let limit = params
+        .get("limit")
+        .and_then(|l| l.parse::<u64>().ok())
+        .unwrap_or(10);
+    let days = params
+        .get("days")
+        .and_then(|d| d.parse::<u32>().ok())
+        .unwrap_or(30);
+
+    policy
+        .rebuild_data_if_needed(&app_state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to rebuild policy data: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Get the user ID from the MeProfile
+    let user_id = me_user.0.id.clone();
+
+    // Call the get_frequent_assistants function
+    let frequent = get_frequent_assistants(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &user_id,
+        limit,
+        days,
+    )
+    .await
+    .map_err(log_internal_server_error)?;
+
+    // Convert from model FrequentAssistant to API FrequentAssistantItem
+    let api_assistants: Vec<FrequentAssistantItem> = frequent
+        .into_iter()
+        .map(|fa| {
+            // Convert files to API format with download URLs
+            let api_files = fa
+                .assistant
+                .files
+                .into_iter()
+                .map(|file| AssistantFile {
+                    id: file.id.to_string(),
+                    filename: file.filename,
+                    download_url: format!("/api/v1beta/files/{}", file.id),
+                })
+                .collect();
+
+            // Convert the model assistant to the API AssistantWithFiles format
+            let api_assistant = AssistantWithFiles {
+                assistant: Assistant {
+                    id: fa.assistant.id.to_string(),
+                    name: fa.assistant.name,
+                    description: fa.assistant.description,
+                    prompt: fa.assistant.prompt,
+                    mcp_server_ids: fa.assistant.mcp_server_ids,
+                    default_chat_provider: fa.assistant.default_chat_provider,
+                    created_at: fa.assistant.created_at,
+                    updated_at: fa.assistant.updated_at,
+                    archived_at: fa.assistant.archived_at,
+                },
+                files: api_files,
+            };
+
+            FrequentAssistantItem {
+                assistant: api_assistant,
+                usage_count: fa.usage_count,
+            }
+        })
+        .collect();
+
+    let response = FrequentAssistantsResponse {
+        assistants: api_assistants,
     };
 
     Ok(Json(response))
