@@ -11,8 +11,8 @@ use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 
-use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN};
-use crate::{test_app_config, test_app_state};
+use crate::test_app_state;
+use crate::test_utils::{setup_mock_llm_server, TestRequestAuthExt, TEST_JWT_TOKEN};
 
 /// Test file upload to a chat.
 ///
@@ -27,7 +27,9 @@ use crate::{test_app_config, test_app_state};
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -164,7 +166,9 @@ async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_get_file_by_id(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -278,7 +282,9 @@ async fn test_get_file_by_id(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_create_chat_file_upload_message_flow(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()

@@ -10,8 +10,10 @@ use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 
-use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER};
-use crate::{test_app_config, test_app_state};
+use crate::test_app_state;
+use crate::test_utils::{
+    setup_mock_llm_server, TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER,
+};
 
 /// Test retrieving recent chats for the authenticated user.
 ///
@@ -25,7 +27,9 @@ use crate::{test_app_config, test_app_state};
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     // Create a test user
     let issuer = TEST_USER_ISSUER;
@@ -298,7 +302,9 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -558,7 +564,9 @@ async fn test_chat_messages_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -943,7 +951,9 @@ async fn test_chat_messages_with_regeneration(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_create_chat_with_assistant(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -1143,7 +1153,9 @@ async fn test_create_chat_with_assistant(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_frequent_assistants_endpoint(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     // Create a test user
     let issuer = TEST_USER_ISSUER;

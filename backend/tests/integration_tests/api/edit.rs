@@ -8,8 +8,8 @@ use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
 
-use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN};
-use crate::{test_app_config, test_app_state};
+use crate::test_app_state;
+use crate::test_utils::{setup_mock_llm_server, TestRequestAuthExt, TEST_JWT_TOKEN};
 
 // Helper structure for SSE events
 #[derive(Debug, Clone)]
@@ -75,7 +75,9 @@ async fn collect_sse_messages(response: axum_test::TestResponse) -> Vec<Event> {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_edit_message_stream(pool: Pool<Postgres>) {
     // Set up the test environment
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -262,7 +264,9 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
 async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool: Pool<Postgres>) {
     // Test for the specific bug where editing a message in a multi-message conversation
     // incorrectly truncates messages that should remain active
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     let app: Router = router(app_state.clone())
         .split_for_parts()
@@ -458,7 +462,9 @@ async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool:
 /// returns an appropriate error.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_edit_assistant_message_fails(pool: Pool<Postgres>) {
-    let app_state = test_app_state(test_app_config(), pool).await;
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
     let app: Router = router(app_state.clone())
         .split_for_parts()
         .0

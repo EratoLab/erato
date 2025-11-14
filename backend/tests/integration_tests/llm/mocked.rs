@@ -1,77 +1,17 @@
 //! Tests using mocked LLM responses for streaming behavior validation.
 
-use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT};
+use crate::test_utils::{
+    setup_mock_llm_server, MockLlmConfig, TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER,
+    TEST_USER_SUBJECT,
+};
 use crate::{test_app_state, MIGRATOR};
-use axum::http;
 use axum::Router;
 use axum_test::TestServer;
-use erato::config::AppConfig;
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
-use mocktail::prelude::*;
 use serde_json::{json, Value};
 use sqlx::postgres::Postgres;
 use sqlx::Pool;
-use std::time::Duration;
-
-/// Helper function to build an OpenAI-compatible SSE streaming chunk.
-fn build_openai_chat_chunk(content: &str, finish_reason: Option<&str>) -> String {
-    let delta = if content.is_empty() {
-        json!({
-            "content": content,
-            "role": "assistant"
-        })
-    } else {
-        json!({
-            "content": content
-        })
-    };
-
-    let chunk = json!({
-        "id": "chatcmpl-mock-123",
-        "object": "chat.completion.chunk",
-        "created": 1234567890,
-        "model": "gpt-3.5-turbo",
-        "choices": [{
-            "index": 0,
-            "delta": delta,
-            "finish_reason": finish_reason
-        }]
-    });
-
-    format!("data: {}\n\n", chunk)
-}
-
-/// Helper function to build a delayed streaming response with multiple chunks
-fn build_delayed_streaming_response(chunks: Vec<&str>, delay_ms: u64) -> Vec<BodyAction> {
-    let mut actions = Vec::new();
-
-    // First chunk is typically an empty role message
-    actions.push(BodyAction::Bytes(build_openai_chat_chunk("", None).into()));
-
-    // Add each content chunk with delay
-    for (i, chunk) in chunks.iter().enumerate() {
-        if i > 0 {
-            actions.push(BodyAction::Delay(Duration::from_millis(delay_ms)));
-        }
-        actions.push(BodyAction::Bytes(
-            build_openai_chat_chunk(chunk, None).into(),
-        ));
-    }
-
-    // Add a small delay before the final chunk
-    actions.push(BodyAction::Delay(Duration::from_millis(delay_ms)));
-
-    // Final chunk with finish_reason
-    actions.push(BodyAction::Bytes(
-        build_openai_chat_chunk("", Some("stop")).into(),
-    ));
-
-    // OpenAI sends a final [DONE] message
-    actions.push(BodyAction::Bytes("data: [DONE]\n\n".into()));
-
-    actions
-}
 
 /// Test message submission with a mocked LLM server.
 ///
@@ -91,61 +31,18 @@ fn build_delayed_streaming_response(chunks: Vec<&str>, delay_ms: u64) -> Vec<Bod
 /// - Final message content verification
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_message_submit_with_mocked_llm(pool: Pool<Postgres>) {
-    // Set up the mock LLM server
-    let mut mocks = MockSet::new();
-    mocks.mock(|when, then| {
-        when.post().path("/v1/chat/completions");
+    // Set up the mock LLM server with custom chunks
+    let mock_config = MockLlmConfig {
+        chunks: ["Hello", " from", " the", " mocked", " LLM!"]
+            .iter()
+            .map(|&s| s.to_string())
+            .collect(),
+        delay_ms: 50,
+        provider_id: "mock-llm".to_string(),
+        model_name: "gpt-3.5-turbo".to_string(),
+    };
 
-        // Create a simple streaming response with a few chunks
-        let chunks = vec!["Hello", " from", " the", " mocked", " LLM!"];
-        let streaming_actions = build_delayed_streaming_response(chunks, 50);
-
-        then.status(http::StatusCode::OK)
-            .headers([
-                ("Content-Type", "text/event-stream"),
-                ("Cache-Control", "no-cache"),
-                ("Connection", "keep-alive"),
-            ])
-            .bytes_stream_with_delays(streaming_actions);
-    });
-
-    // Start the mock server
-    let server = MockServer::new_http("llm-mock").with_mocks(mocks);
-    server.start().await.expect("Failed to start mock server");
-
-    // Get the mock server URL
-    let mock_url = server.url("/v1/");
-    let mock_url_str = mock_url.to_string();
-
-    // Create app config with the mock server URL
-    let app_config = AppConfig::config_schema_builder(None, true)
-        .unwrap()
-        .set_override("chat_providers.providers.mock-llm.provider_kind", "openai")
-        .unwrap()
-        .set_override(
-            "chat_providers.providers.mock-llm.model_name",
-            "gpt-3.5-turbo",
-        )
-        .unwrap()
-        .set_override("chat_providers.providers.mock-llm.base_url", mock_url_str)
-        .unwrap()
-        .set_override("chat_providers.priority_order", vec!["mock-llm"])
-        .unwrap()
-        // Add model permissions to allow the mock-llm provider for all users
-        .set_override(
-            "model_permissions.rules.allow-mock-llm.rule_type",
-            "allow-all",
-        )
-        .unwrap()
-        .set_override(
-            "model_permissions.rules.allow-mock-llm.chat_provider_ids",
-            vec!["mock-llm"],
-        )
-        .unwrap()
-        .build()
-        .unwrap()
-        .try_deserialize()
-        .unwrap();
+    let (app_config, _server) = setup_mock_llm_server(Some(mock_config)).await;
 
     // Create app state with the database connection
     let app_state = test_app_state(app_config, pool).await;
