@@ -4,6 +4,22 @@
  * @version
  */
 /**
+ * Response when archiving an assistant
+ */
+export type ArchiveAssistantResponse = {
+  /**
+   * When the assistant was archived
+   *
+   * @format date-time
+   */
+  archived_at: string;
+  /**
+   * The ID of the archived assistant
+   */
+  id: string;
+};
+
+/**
  * Request to archive a chat
  */
 export type ArchiveChatRequest = Record<string, any>;
@@ -22,6 +38,82 @@ export type ArchiveChatResponse = {
    * The ID of the archived chat
    */
   chat_id: string;
+};
+
+/**
+ * An assistant model
+ */
+export type Assistant = {
+  /**
+   * When this assistant was archived (null if not archived)
+   *
+   * @format date-time
+   */
+  archived_at?: null | undefined;
+  /**
+   * When this assistant was created
+   *
+   * @format date-time
+   */
+  created_at: string;
+  /**
+   * Default chat provider/model ID for this assistant
+   */
+  default_chat_provider?: null | undefined;
+  /**
+   * Optional description of the assistant
+   */
+  description?: null | undefined;
+  /**
+   * The unique ID of the assistant
+   */
+  id: string;
+  /**
+   * List of MCP server IDs available to this assistant
+   */
+  mcp_server_ids?: null | undefined;
+  /**
+   * The display name of the assistant
+   */
+  name: string;
+  /**
+   * The system prompt used by the assistant
+   */
+  prompt: string;
+  /**
+   * When this assistant was last updated
+   *
+   * @format date-time
+   */
+  updated_at: string;
+};
+
+/**
+ * A file associated with an assistant
+ */
+export type AssistantFile = {
+  /**
+   * Pre-signed URL for downloading the file
+   */
+  download_url: string;
+  /**
+   * The original filename
+   */
+  filename: string;
+  /**
+   * The unique ID of the file
+   */
+  id: string;
+};
+
+/**
+ * An assistant model
+ */
+export type AssistantWithFiles = Assistant & {
+  /**
+   * Files associated with this assistant
+   */
+  files: AssistantFile[];
 };
 
 export type BudgetCurrency = "EUR" | "USD";
@@ -189,9 +281,49 @@ export type ContentPartText = {
 };
 
 /**
+ * Request to create a new assistant
+ */
+export type CreateAssistantRequest = {
+  /**
+   * Default chat provider/model ID for this assistant
+   */
+  default_chat_provider?: null | undefined;
+  /**
+   * Optional description of the assistant
+   */
+  description?: null | undefined;
+  /**
+   * Optional list of file upload IDs to associate with this assistant
+   */
+  file_ids?: null | undefined;
+  /**
+   * List of MCP server IDs available to this assistant
+   */
+  mcp_server_ids?: null | undefined;
+  /**
+   * The name of the assistant
+   */
+  name: string;
+  /**
+   * The system prompt for the assistant
+   */
+  prompt: string;
+};
+
+/**
+ * An assistant model
+ */
+export type CreateAssistantResponse = Assistant;
+
+/**
  * Request to create a new chat without an initial message
  */
-export type CreateChatRequest = Record<string, any>;
+export type CreateChatRequest = {
+  /**
+   * Optional assistant ID to base this chat on
+   */
+  assistant_id?: null | undefined;
+};
 
 /**
  * Response for create_chat endpoint
@@ -277,6 +409,28 @@ export type FileUploadResponse = {
    * The list of uploaded files with their IDs and filenames
    */
   files: FileUploadItem[];
+};
+
+/**
+ * An assistant with its associated files
+ */
+export type FrequentAssistantItem = AssistantWithFiles & {
+  /**
+   * Number of times this assistant was used to create chats
+   *
+   * @format int64
+   */
+  usage_count: number;
+};
+
+/**
+ * Response for the frequent_assistants endpoint
+ */
+export type FrequentAssistantsResponse = {
+  /**
+   * The list of frequently used assistants
+   */
+  assistants: FrequentAssistantItem[];
 };
 
 export type Message = {
@@ -664,6 +818,41 @@ export type ToolUse = {
   tool_call_id: string;
   tool_name: string;
 };
+
+/**
+ * Request to update an existing assistant
+ */
+export type UpdateAssistantRequest = {
+  /**
+   * Optional new default chat provider
+   */
+  default_chat_provider?: null | undefined;
+  /**
+   * Optional new description for the assistant
+   */
+  description?: null | undefined;
+  /**
+   * Optional list of file upload IDs to associate with this assistant
+   */
+  file_ids?: null | undefined;
+  /**
+   * Optional new list of MCP server IDs
+   */
+  mcp_server_ids?: null | undefined;
+  /**
+   * Optional new name for the assistant
+   */
+  name?: null | undefined;
+  /**
+   * Optional new prompt for the assistant
+   */
+  prompt?: null | undefined;
+};
+
+/**
+ * An assistant model
+ */
+export type UpdateAssistantResponse = Assistant;
 
 export type UserProfile = {
   /**

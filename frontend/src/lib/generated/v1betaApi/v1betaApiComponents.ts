@@ -537,9 +537,9 @@ export const useCreateChat = (
 
 export type UploadFileQueryParams = {
   /**
-   * The chat ID to associate the file with.
+   * Optional chat ID to associate the file with. If not provided, creates standalone files.
    */
-  chat_id: string;
+  chat_id?: string;
 };
 
 export type UploadFileError = Fetcher.ErrorWrapper<undefined>;
@@ -548,11 +548,13 @@ export type UploadFileRequestBody = Schemas.MultipartFormFile[];
 
 export type UploadFileVariables = {
   body?: UploadFileRequestBody;
-  queryParams: UploadFileQueryParams;
+  queryParams?: UploadFileQueryParams;
 } & V1betaApiContext["fetcherOptions"];
 
 /**
  * This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
+ * If chat_id is provided, files are associated with that chat. If not provided, files are created
+ * as standalone uploads that can be linked to assistants later.
  */
 /**
  * WORKAROUND: This endpoint requires a multipart/form-data request.
@@ -589,6 +591,8 @@ export const fetchUploadFile = (
 
 /**
  * This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
+ * If chat_id is provided, files are associated with that chat. If not provided, files are created
+ * as standalone uploads that can be linked to assistants later.
  */
 export const useUploadFile = (
   options?: Omit<
@@ -609,6 +613,136 @@ export const useUploadFile = (
     mutationFn: (variables: UploadFileVariables) =>
       fetchUploadFile(deepMerge(fetcherOptions, variables)),
     ...options,
+  });
+};
+
+export type FrequentAssistantsQueryParams = {
+  /**
+   * Maximum number of assistants to return. Defaults to 10 if not provided.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  limit?: number;
+  /**
+   * Number of days to look back for usage statistics. Defaults to 30 if not provided.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  days?: number;
+};
+
+export type FrequentAssistantsError = Fetcher.ErrorWrapper<undefined>;
+
+export type FrequentAssistantsVariables = {
+  queryParams?: FrequentAssistantsQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchFrequentAssistants = (
+  variables: FrequentAssistantsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.FrequentAssistantsResponse,
+    FrequentAssistantsError,
+    undefined,
+    {},
+    FrequentAssistantsQueryParams,
+    {}
+  >({
+    url: "/api/v1beta/me/frequent_assistants",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function frequentAssistantsQuery(
+  variables: FrequentAssistantsVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.FrequentAssistantsResponse>;
+};
+
+export function frequentAssistantsQuery(
+  variables: FrequentAssistantsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.FrequentAssistantsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function frequentAssistantsQuery(
+  variables: FrequentAssistantsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/frequent_assistants",
+      operationId: "frequentAssistants",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchFrequentAssistants(variables, signal),
+  };
+}
+
+export const useSuspenseFrequentAssistants = <
+  TData = Schemas.FrequentAssistantsResponse,
+>(
+  variables: FrequentAssistantsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.FrequentAssistantsResponse,
+      FrequentAssistantsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.FrequentAssistantsResponse,
+    FrequentAssistantsError,
+    TData
+  >({
+    ...frequentAssistantsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useFrequentAssistants = <
+  TData = Schemas.FrequentAssistantsResponse,
+>(
+  variables: FrequentAssistantsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.FrequentAssistantsResponse,
+      FrequentAssistantsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.FrequentAssistantsResponse,
+    FrequentAssistantsError,
+    TData
+  >({
+    ...frequentAssistantsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
   });
 };
 
@@ -1291,6 +1425,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/budget";
       operationId: "budgetStatus";
       variables: BudgetStatusVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/frequent_assistants";
+      operationId: "frequentAssistants";
+      variables: FrequentAssistantsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/models";
