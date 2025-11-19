@@ -4,7 +4,7 @@ use crate::services::langfuse::{CreateTraceRequest, FinishGenerationRequest, Usa
 use eyre::Result;
 use genai::chat::{ChatRequest, Usage as GenAiUsage};
 use sea_orm::prelude::Uuid;
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Helper to create Langfuse FinishGenerationRequest from genai components
@@ -200,20 +200,20 @@ pub fn generate_langfuse_ids() -> (String, String) {
 pub fn generate_name_from_chat_request(chat_request: &ChatRequest) -> Option<String> {
     // Look for the first user message and extract a short name from it
     for message in &chat_request.messages {
-        if matches!(message.role, genai::chat::ChatRole::User) {
-            if let genai::chat::MessageContent::Text(text) = &message.content {
-                // Take first 50 characters and clean up for a name
-                let name = text
-                    .chars()
-                    .take(50)
-                    .collect::<String>()
-                    .trim()
-                    .replace('\n', " ")
-                    .replace('\r', "");
+        if matches!(message.role, genai::chat::ChatRole::User)
+            && let genai::chat::MessageContent::Text(text) = &message.content
+        {
+            // Take first 50 characters and clean up for a name
+            let name = text
+                .chars()
+                .take(50)
+                .collect::<String>()
+                .trim()
+                .replace('\n', " ")
+                .replace('\r', "");
 
-                if !name.is_empty() {
-                    return Some(name);
-                }
+            if !name.is_empty() {
+                return Some(name);
             }
         }
     }

@@ -1,18 +1,18 @@
 //! File upload and download API tests.
 
+use axum::Router;
 use axum::http;
 use axum::http::StatusCode;
-use axum::Router;
-use axum_test::multipart::{MultipartForm, Part};
 use axum_test::TestServer;
+use axum_test::multipart::{MultipartForm, Part};
 use erato::server::router::router;
 use sea_orm::prelude::Uuid;
-use serde_json::{json, Value};
-use sqlx::postgres::Postgres;
+use serde_json::{Value, json};
 use sqlx::Pool;
+use sqlx::postgres::Postgres;
 
 use crate::test_app_state;
-use crate::test_utils::{setup_mock_llm_server, TestRequestAuthExt, TEST_JWT_TOKEN};
+use crate::test_utils::{TEST_JWT_TOKEN, TestRequestAuthExt, setup_mock_llm_server};
 
 /// Test file upload to a chat.
 ///

@@ -15,16 +15,16 @@ use crate::models::message::{ContentPart, MessageSchema};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::assistants::{
-    archive_assistant, create_assistant, get_assistant, list_assistants, update_assistant,
     ArchiveAssistantResponse, Assistant, AssistantFile, AssistantWithFiles, CreateAssistantRequest,
-    CreateAssistantResponse, UpdateAssistantRequest, UpdateAssistantResponse,
+    CreateAssistantResponse, UpdateAssistantRequest, UpdateAssistantResponse, archive_assistant,
+    create_assistant, get_assistant, list_assistants, update_assistant,
 };
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
     __path_edit_message_sse, __path_message_submit_sse, __path_regenerate_message_sse,
-    edit_message_sse, message_submit_sse, regenerate_message_sse, EditMessageRequest,
-    EditMessageStreamingResponseMessage, MessageSubmitRequest,
-    MessageSubmitStreamingResponseMessage,
+    EditMessageRequest, EditMessageStreamingResponseMessage, MessageSubmitRequest,
+    MessageSubmitStreamingResponseMessage, edit_message_sse, message_submit_sse,
+    regenerate_message_sse,
 };
 use crate::services::sentry::log_internal_server_error;
 use crate::state::AppState;
@@ -32,12 +32,12 @@ use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
-use axum::{middleware, Extension, Json, Router};
+use axum::{Extension, Json, Router, middleware};
 use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
 use eyre::{Report, WrapErr};
 use serde::{Deserialize, Serialize};
-use sqlx::types::{chrono, Uuid};
+use sqlx::types::{Uuid, chrono};
 use tower_http::limit::RequestBodyLimitLayer;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;

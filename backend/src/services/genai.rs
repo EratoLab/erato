@@ -4,7 +4,7 @@ use genai::chat::ChatRequest;
 use genai::chat::ChatRole as GenAiChatRole;
 use genai::chat::MessageContent as GenAiMessageContent;
 use genai::chat::{ChatMessage, ToolResponse};
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 
 impl From<ContentPart> for GenAiMessageContent {
     fn from(content: ContentPart) -> Self {
@@ -79,16 +79,18 @@ pub fn into_openai_request_parts(chat_req: &ChatRequest) -> Result<OpenAIRequest
                 let content = match &msg.content {
                     GenAiMessageContent::Text(content) => json!(content),
                     GenAiMessageContent::Parts(parts) => {
-                        json!(parts
-                            .iter()
-                            .filter_map(|part| match part {
-                                genai::chat::ContentPart::Text(text) => {
-                                    Some(json!({"type": "text", "text": text.clone()}))
-                                }
-                                // For now, skip other content types as they're not in our current model
-                                _ => None,
-                            })
-                            .collect::<Vec<JsonValue>>())
+                        json!(
+                            parts
+                                .iter()
+                                .filter_map(|part| match part {
+                                    genai::chat::ContentPart::Text(text) => {
+                                        Some(json!({"type": "text", "text": text.clone()}))
+                                    }
+                                    // For now, skip other content types as they're not in our current model
+                                    _ => None,
+                                })
+                                .collect::<Vec<JsonValue>>()
+                        )
                     }
                     // Skip tool calls and responses in user messages for normalization
                     GenAiMessageContent::ToolCalls(_) => continue,

@@ -1,8 +1,8 @@
 //! Database migration tests and utilities.
 
 use futures::future::BoxFuture;
-use serde::de::StdError;
 use serde::Deserialize;
+use serde::de::StdError;
 use sqlx::migrate::{Migration, MigrationSource, MigrationType};
 use std::borrow::Cow;
 use std::fs;

@@ -1,5 +1,5 @@
 use crate::config::LangfuseConfig;
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};

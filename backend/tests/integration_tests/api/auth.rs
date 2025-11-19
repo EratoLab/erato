@@ -5,10 +5,10 @@ use axum_test::TestServer;
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
 use serde_json::Value;
-use sqlx::postgres::Postgres;
 use sqlx::Pool;
+use sqlx::postgres::Postgres;
 
-use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT};
+use crate::test_utils::{TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt};
 use crate::{test_app_config, test_app_state};
 
 /// Test the user profile endpoint with JWT authentication.

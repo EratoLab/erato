@@ -1,6 +1,6 @@
 use crate::state::AppState;
-use axum::http::StatusCode;
 use axum::Router;
+use axum::http::StatusCode;
 use eyre::Report;
 
 pub fn setup_sentry(

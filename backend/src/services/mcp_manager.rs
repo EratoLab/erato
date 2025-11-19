@@ -1,6 +1,6 @@
 use crate::config::AppConfig;
 use crate::services::mcp_session_manager::{ManagedTool, McpSessionManager};
-use eyre::{eyre, Report};
+use eyre::{Report, eyre};
 use genai::chat::Tool as GenaiTool;
 use genai::chat::{ToolCall as GenaiToolCall, ToolResponse};
 use rmcp::model::CallToolRequestParam;

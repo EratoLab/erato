@@ -5,7 +5,7 @@ use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
 use crate::state::AppState;
 use axum::extract::State;
 use axum::{Extension, Json};
-use eyre::{eyre, Report, WrapErr};
+use eyre::{Report, WrapErr, eyre};
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use tiktoken_rs::o200k_base;

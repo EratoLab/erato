@@ -1,8 +1,8 @@
 use crate::config::McpServerConfig;
-use eyre::{eyre, Report};
+use eyre::{Report, eyre};
+use rmcp::ClientHandler;
 use rmcp::service::{RoleClient, RunningService, ServiceExt};
 use rmcp::transport::{SseClientTransport, StreamableHttpClientTransport};
-use rmcp::ClientHandler;
 
 /// Create an MCP client service based on the transport type specified in the configuration
 /// Returns a RunningService which must be kept alive to maintain the connection

@@ -2,7 +2,7 @@
 //! See <https://openid.net/specs/openid-connect-core-1_0.html#IDToken> for required claims.
 //! See <https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims> for standard claims.
 
-use eyre::{eyre, Report};
+use eyre::{Report, eyre};
 use serde::Deserialize;
 use serde_json::Value;
 

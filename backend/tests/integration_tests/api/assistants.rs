@@ -1,15 +1,15 @@
 //! Assistant API endpoint integration tests.
 
-use axum::http;
 use axum::Router;
+use axum::http;
 use axum_test::TestServer;
 use erato::policy::engine::PolicyEngine;
 use erato::server::router::router;
-use serde_json::{json, Value};
-use sqlx::postgres::Postgres;
+use serde_json::{Value, json};
 use sqlx::Pool;
+use sqlx::postgres::Postgres;
 
-use crate::test_utils::{TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT};
+use crate::test_utils::{TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt};
 use crate::{test_app_config, test_app_state};
 
 /// Test creating an assistant via the model directly (bypassing API).

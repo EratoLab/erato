@@ -1,17 +1,17 @@
 //! Message submission and streaming API tests.
 
-use axum::http;
 use axum::Router;
+use axum::http;
 use axum_test::TestServer;
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
-use serde_json::{json, Value};
-use sqlx::postgres::Postgres;
+use serde_json::{Value, json};
 use sqlx::Pool;
+use sqlx::postgres::Postgres;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    setup_mock_llm_server, TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT,
+    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, setup_mock_llm_server,
 };
 
 /// Test message submission with SSE streaming.
@@ -128,10 +128,10 @@ async fn test_message_submit_stream(pool: Pool<Postgres>) {
         .iter()
         .find_map(|event| {
             let data = event.split("data:").nth(1).unwrap_or("").trim();
-            if let Ok(json) = serde_json::from_str::<Value>(data) {
-                if json["message_type"] == "assistant_message_completed" {
-                    return Some(json);
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return Some(json);
             }
             None
         })
@@ -481,10 +481,10 @@ async fn test_message_submit_with_wrong_role_previous_message(pool: Pool<Postgre
         .iter()
         .find_map(|event| {
             let data = event.split("data:").nth(1).unwrap_or("").trim();
-            if let Ok(json) = serde_json::from_str::<Value>(data) {
-                if json["message_type"] == "user_message_saved" {
-                    return json["message_id"].as_str().map(|s| s.to_string());
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(data)
+                && json["message_type"] == "user_message_saved"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
             }
             None
         })

@@ -1,15 +1,15 @@
 //! Message editing API tests.
 
-use axum::http;
 use axum::Router;
+use axum::http;
 use axum_test::TestServer;
 use erato::server::router::router;
-use serde_json::{json, Value};
-use sqlx::postgres::Postgres;
+use serde_json::{Value, json};
 use sqlx::Pool;
+use sqlx::postgres::Postgres;
 
 use crate::test_app_state;
-use crate::test_utils::{setup_mock_llm_server, TestRequestAuthExt, TEST_JWT_TOKEN};
+use crate::test_utils::{TEST_JWT_TOKEN, TestRequestAuthExt, setup_mock_llm_server};
 
 // Helper structure for SSE events
 #[derive(Debug, Clone)]
@@ -45,10 +45,10 @@ async fn collect_sse_messages(response: axum_test::TestResponse) -> Vec<Event> {
                 event.data = line["data: ".len()..].to_string();
             } else if line.starts_with("id: ") {
                 event.id = Some(line["id: ".len()..].to_string());
-            } else if line.starts_with("retry: ") {
-                if let Ok(retry) = line["retry: ".len()..].parse::<u32>() {
-                    event.retry = Some(retry);
-                }
+            } else if line.starts_with("retry: ")
+                && let Ok(retry) = line["retry: ".len()..].parse::<u32>()
+            {
+                event.retry = Some(retry);
             }
         }
 
@@ -106,10 +106,10 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
     let _assistant_message_id = messages
         .iter()
         .find_map(|msg| {
-            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
-                if json["message_type"] == "assistant_message_completed" {
-                    return Some(json["message_id"].as_str().unwrap().to_string());
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return Some(json["message_id"].as_str().unwrap().to_string());
             }
             None
         })
@@ -117,10 +117,10 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
     let initial_user_message_id = messages
         .iter()
         .find_map(|msg| {
-            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
-                if json["message_type"] == "user_message_saved" {
-                    return Some(json["message_id"].as_str().unwrap().to_string());
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data)
+                && json["message_type"] == "user_message_saved"
+            {
+                return Some(json["message_id"].as_str().unwrap().to_string());
             }
             None
         })
@@ -236,9 +236,11 @@ async fn test_edit_message_stream(pool: Pool<Postgres>) {
             text_content == first_message
         })
         .expect("Original message not found");
-    assert!(!original_message["is_message_in_active_thread"]
-        .as_bool()
-        .unwrap());
+    assert!(
+        !original_message["is_message_in_active_thread"]
+            .as_bool()
+            .unwrap()
+    );
 
     // Verify the new assistant message has no sibling
     let new_assistant_message = active_messages
@@ -292,10 +294,10 @@ async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool:
     let assistant_message_1_id = messages1
         .iter()
         .find_map(|msg| {
-            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
-                if json["message_type"] == "assistant_message_completed" {
-                    return Some(json["message_id"].as_str().unwrap().to_string());
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return Some(json["message_id"].as_str().unwrap().to_string());
             }
             None
         })
@@ -317,10 +319,10 @@ async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool:
     let _assistant_message_2_id = messages2
         .iter()
         .find_map(|msg| {
-            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
-                if json["message_type"] == "assistant_message_completed" {
-                    return Some(json["message_id"].as_str().unwrap().to_string());
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return Some(json["message_id"].as_str().unwrap().to_string());
             }
             None
         })
@@ -328,10 +330,10 @@ async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool:
     let user_message_2_id = messages2
         .iter()
         .find_map(|msg| {
-            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
-                if json["message_type"] == "user_message_saved" {
-                    return Some(json["message_id"].as_str().unwrap().to_string());
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data)
+                && json["message_type"] == "user_message_saved"
+            {
+                return Some(json["message_id"].as_str().unwrap().to_string());
             }
             None
         })
@@ -353,10 +355,10 @@ async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool:
     let final_assistant_message_id = edit_messages
         .iter()
         .find_map(|msg| {
-            if let Ok(json) = serde_json::from_str::<Value>(&msg.data) {
-                if json["message_type"] == "assistant_message_completed" {
-                    return Some(json["message"]["chat_id"].as_str().unwrap().to_string());
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(&msg.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return Some(json["message"]["chat_id"].as_str().unwrap().to_string());
             }
             None
         })
@@ -390,7 +392,10 @@ async fn test_edit_message_preserves_lineage_in_multi_message_conversation(pool:
         4,
         "Expected 4 active messages after editing middle message, but got {}. Active messages: {:?}",
         active_messages.len(),
-        active_messages.iter().map(|m| format!("{}:{}", m["role"], m["content"][0]["text"])).collect::<Vec<_>>()
+        active_messages
+            .iter()
+            .map(|m| format!("{}:{}", m["role"], m["content"][0]["text"]))
+            .collect::<Vec<_>>()
     );
 
     // Verify the first conversation (France) is preserved
@@ -497,10 +502,10 @@ async fn test_edit_assistant_message_fails(pool: Pool<Postgres>) {
         .iter()
         .find_map(|event| {
             let data = event.split("data:").nth(1).unwrap_or("").trim();
-            if let Ok(json) = serde_json::from_str::<Value>(data) {
-                if json["message_type"] == "assistant_message_started" {
-                    return json["message_id"].as_str().map(|s| s.to_string());
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(data)
+                && json["message_type"] == "assistant_message_started"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
             }
             None
         })

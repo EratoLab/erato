@@ -2,8 +2,8 @@
 
 use crate::MIGRATOR;
 use erato::models::user::get_or_create_user;
-use sqlx::postgres::Postgres;
 use sqlx::Pool;
+use sqlx::postgres::Postgres;
 
 /// Test creating and retrieving a user without an email address.
 ///

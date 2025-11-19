@@ -1,5 +1,5 @@
 use crate::models::user::get_or_create_user;
-use crate::normalize_profile::{normalize_profile, IdTokenProfile};
+use crate::normalize_profile::{IdTokenProfile, normalize_profile};
 use crate::policy::engine::PolicyEngine;
 use crate::policy::prelude::Subject;
 use crate::state::AppState;
@@ -9,7 +9,7 @@ use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;
 use headers::authorization::{Bearer, Credentials};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::ToSchema;

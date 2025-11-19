@@ -346,16 +346,12 @@ fn extract_system_prompt_from_langfuse_prompt(prompt: &LangfusePrompt) -> Result
             // For chat prompts, look for system message in the messages array
             if let Some(messages) = prompt.prompt.as_array() {
                 for message in messages {
-                    if let Some(message_obj) = message.as_object() {
-                        if let Some(role) = message_obj.get("role").and_then(|r| r.as_str()) {
-                            if role == "system" {
-                                if let Some(content) =
-                                    message_obj.get("content").and_then(|c| c.as_str())
-                                {
-                                    return Ok(content.to_string());
-                                }
-                            }
-                        }
+                    if let Some(message_obj) = message.as_object()
+                        && let Some(role) = message_obj.get("role").and_then(|r| r.as_str())
+                        && role == "system"
+                        && let Some(content) = message_obj.get("content").and_then(|c| c.as_str())
+                    {
+                        return Ok(content.to_string());
                     }
                 }
                 Err(eyre::eyre!(

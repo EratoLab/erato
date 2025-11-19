@@ -12,8 +12,8 @@ use erato::config::{
 use erato::services::file_storage::FileStorage;
 use erato::services::langfuse::LangfuseClient;
 use erato::state::AppState;
-use sqlx::postgres::Postgres;
 use sqlx::Pool;
+use sqlx::postgres::Postgres;
 use std::collections::HashMap;
 use std::default::Default;
 use std::sync::Arc;
@@ -29,10 +29,12 @@ mod test_utils;
 // Using a (possibly brittle?) life-before-main method to set the DATABASE_URL before any tests run.
 #[ctor]
 fn set_test_db_url() {
-    std::env::set_var(
-        "DATABASE_URL",
-        "postgres://eratouser:eratopw@127.0.0.1:5432/erato",
-    )
+    unsafe {
+        std::env::set_var(
+            "DATABASE_URL",
+            "postgres://eratouser:eratopw@127.0.0.1:5432/erato",
+        )
+    }
 }
 
 // TODO: More proper way would be via SqitchMigration but we can't build them in a static way yet.

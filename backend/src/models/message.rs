@@ -3,13 +3,13 @@ use crate::db::entity::prelude::*;
 use crate::models::pagination;
 use crate::policy::prelude::*;
 use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
-use eyre::{eyre, Report};
+use eyre::{Report, eyre};
 use sea_orm::prelude::*;
 use sea_orm::{
     ActiveValue, DatabaseConnection, EntityTrait, QueryOrder, QuerySelect, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{to_value, Value as JsonValue};
+use serde_json::{Value as JsonValue, to_value};
 use std::fmt;
 use utoipa::ToSchema;
 

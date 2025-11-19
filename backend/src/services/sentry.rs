@@ -1,9 +1,9 @@
 use crate::state::AppState;
+use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::Router;
 use eyre::Report;
-use sentry::{event_from_error, Hub};
+use sentry::{Hub, event_from_error};
 use std::error::Error;
 
 pub fn setup_sentry(
