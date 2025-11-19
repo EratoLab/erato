@@ -492,42 +492,54 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(azure_primary.model_name, "gpt-4");
     assert_eq!(azure_primary.model_display_name(), "Azure GPT-4 Primary");
     assert_eq!(azure_primary.api_key, None); // Should be moved to headers
-    assert!(azure_primary
-        .base_url
-        .as_ref()
-        .unwrap()
-        .contains("/openai/deployments/gpt-4/")); // Should be converted to deployment URL
-    assert!(azure_primary
-        .additional_request_parameters
-        .as_ref()
-        .unwrap()
-        .contains(&"api-version=2024-10-21".to_string()));
-    assert!(azure_primary
-        .additional_request_headers
-        .as_ref()
-        .unwrap()
-        .contains(&"api-key=primary-azure-key".to_string()));
+    assert!(
+        azure_primary
+            .base_url
+            .as_ref()
+            .unwrap()
+            .contains("/openai/deployments/gpt-4/")
+    ); // Should be converted to deployment URL
+    assert!(
+        azure_primary
+            .additional_request_parameters
+            .as_ref()
+            .unwrap()
+            .contains(&"api-version=2024-10-21".to_string())
+    );
+    assert!(
+        azure_primary
+            .additional_request_headers
+            .as_ref()
+            .unwrap()
+            .contains(&"api-key=primary-azure-key".to_string())
+    );
 
     let azure_backup = chat_providers.providers.get("azure_backup").unwrap();
     assert_eq!(azure_backup.provider_kind, "openai"); // Should be migrated to "openai"
     assert_eq!(azure_backup.model_name, "gpt-3.5-turbo");
     assert_eq!(azure_backup.model_display_name(), "Azure GPT-3.5 Backup");
     assert_eq!(azure_backup.api_key, None); // Should be moved to headers
-    assert!(azure_backup
-        .base_url
-        .as_ref()
-        .unwrap()
-        .contains("/openai/deployments/gpt-3.5-turbo/")); // Should be converted to deployment URL
-    assert!(azure_backup
-        .additional_request_parameters
-        .as_ref()
-        .unwrap()
-        .contains(&"api-version=2024-08-01-preview".to_string()));
-    assert!(azure_backup
-        .additional_request_headers
-        .as_ref()
-        .unwrap()
-        .contains(&"api-key=backup-azure-key".to_string()));
+    assert!(
+        azure_backup
+            .base_url
+            .as_ref()
+            .unwrap()
+            .contains("/openai/deployments/gpt-3.5-turbo/")
+    ); // Should be converted to deployment URL
+    assert!(
+        azure_backup
+            .additional_request_parameters
+            .as_ref()
+            .unwrap()
+            .contains(&"api-version=2024-08-01-preview".to_string())
+    );
+    assert!(
+        azure_backup
+            .additional_request_headers
+            .as_ref()
+            .unwrap()
+            .contains(&"api-key=backup-azure-key".to_string())
+    );
 
     // Test that regular OpenAI provider was not affected
     let openai_provider = chat_providers.providers.get("openai_provider").unwrap();

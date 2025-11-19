@@ -1,17 +1,17 @@
 //! Tests using mocked LLM responses for streaming behavior validation.
 
 use crate::test_utils::{
-    setup_mock_llm_server, MockLlmConfig, TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER,
-    TEST_USER_SUBJECT,
+    MockLlmConfig, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
+    setup_mock_llm_server,
 };
-use crate::{test_app_state, MIGRATOR};
+use crate::{MIGRATOR, test_app_state};
 use axum::Router;
 use axum_test::TestServer;
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
-use serde_json::{json, Value};
-use sqlx::postgres::Postgres;
+use serde_json::{Value, json};
 use sqlx::Pool;
+use sqlx::postgres::Postgres;
 
 /// Test message submission with a mocked LLM server.
 ///
@@ -180,10 +180,10 @@ async fn test_message_submit_with_mocked_llm(pool: Pool<Postgres>) {
         .iter()
         .find_map(|event| {
             let data = event.split("data:").nth(1).unwrap_or("").trim();
-            if let Ok(json) = serde_json::from_str::<Value>(data) {
-                if json["message_type"] == "assistant_message_completed" {
-                    return Some(json);
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return Some(json);
             }
             None
         })

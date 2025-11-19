@@ -11,7 +11,7 @@ use erato::config::AppConfig;
 use erato::state::AppState;
 use mocktail::prelude::*;
 use mocktail::server::MockServerConfig;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
@@ -237,10 +237,10 @@ pub fn parse_sse_events(response: &TestResponse) -> Vec<Event> {
                 event.data = line["data: ".len()..].to_string();
             } else if line.starts_with("id: ") {
                 event.id = Some(line["id: ".len()..].to_string());
-            } else if line.starts_with("retry: ") {
-                if let Ok(retry) = line["retry: ".len()..].parse::<u32>() {
-                    event.retry = Some(retry);
-                }
+            } else if line.starts_with("retry: ")
+                && let Ok(retry) = line["retry: ".len()..].parse::<u32>()
+            {
+                event.retry = Some(retry);
             }
         }
 
@@ -280,10 +280,10 @@ pub fn has_event_type(events: &[Event], message_type: &str) -> bool {
 /// The chat ID as a String, or None if no chat_created event is found
 pub fn extract_chat_id(events: &[Event]) -> Option<String> {
     events.iter().find_map(|event| {
-        if let Ok(json) = serde_json::from_str::<Value>(&event.data) {
-            if json["message_type"] == "chat_created" {
-                return json["chat_id"].as_str().map(|s| s.to_string());
-            }
+        if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+            && json["message_type"] == "chat_created"
+        {
+            return json["chat_id"].as_str().map(|s| s.to_string());
         }
         None
     })

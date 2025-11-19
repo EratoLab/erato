@@ -1,5 +1,5 @@
-use ractor::registry;
 use ractor::ActorRef;
+use ractor::registry;
 use ractor_actors::time::cron::Job;
 
 use crate::actors::cleanup_worker::CleanupWorkerMessage;

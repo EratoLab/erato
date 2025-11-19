@@ -5,7 +5,7 @@ use crate::db::entity_ext::prelude::*;
 use crate::models::message::GenerationParameters;
 use crate::models::pagination;
 use crate::policy::prelude::*;
-use eyre::{eyre, Report};
+use eyre::{Report, eyre};
 use sea_orm::prelude::*;
 use sea_orm::{
     ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QueryOrder, QuerySelect,
@@ -477,20 +477,20 @@ pub async fn get_last_chat_provider_id(
         .one(conn)
         .await?;
 
-    if let Some(message) = message {
-        if let Some(generation_params_json) = message.generation_parameters {
-            // Parse the generation_parameters JSON
-            let generation_params: GenerationParameters =
-                serde_json::from_value(generation_params_json).map_err(|e| {
-                    eyre!(
-                        "Failed to parse generation parameters for message {}: {}",
-                        message.id,
-                        e
-                    )
-                })?;
+    if let Some(message) = message
+        && let Some(generation_params_json) = message.generation_parameters
+    {
+        // Parse the generation_parameters JSON
+        let generation_params: GenerationParameters =
+            serde_json::from_value(generation_params_json).map_err(|e| {
+                eyre!(
+                    "Failed to parse generation parameters for message {}: {}",
+                    message.id,
+                    e
+                )
+            })?;
 
-            return Ok(generation_params.generation_chat_provider_id);
-        }
+        return Ok(generation_params.generation_chat_provider_id);
     }
 
     Ok(None)

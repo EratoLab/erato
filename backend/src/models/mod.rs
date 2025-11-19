@@ -57,7 +57,7 @@ pub mod pagination {
     }
 }
 
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 
 /// The latest migration change hash from the sqitch deployment

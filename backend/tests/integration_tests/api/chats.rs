@@ -1,18 +1,18 @@
 //! Chat listing and retrieval API tests.
 
-use axum::http;
 use axum::Router;
+use axum::http;
 use axum_test::TestServer;
 use erato::db::entity::{chats, messages};
 use erato::server::router::router;
-use sea_orm::{prelude::Uuid, ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-use serde_json::{json, Value};
-use sqlx::postgres::Postgres;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, prelude::Uuid};
+use serde_json::{Value, json};
 use sqlx::Pool;
+use sqlx::postgres::Postgres;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    setup_mock_llm_server, TestRequestAuthExt, TEST_JWT_TOKEN, TEST_USER_ISSUER,
+    TEST_JWT_TOKEN, TEST_USER_ISSUER, TestRequestAuthExt, setup_mock_llm_server,
 };
 
 /// Test retrieving recent chats for the authenticated user.

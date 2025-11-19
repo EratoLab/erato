@@ -1,6 +1,6 @@
 use crate::config::{AppConfig, McpServerConfig};
-use crate::services::mcp_transports::{create_mcp_service, EmptyClientHandler};
-use eyre::{eyre, Report};
+use crate::services::mcp_transports::{EmptyClientHandler, create_mcp_service};
+use eyre::{Report, eyre};
 use rmcp::model::{CallToolRequestParam, CallToolResult, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
 use sea_orm::prelude::Uuid;

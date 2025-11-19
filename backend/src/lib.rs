@@ -1,5 +1,5 @@
-use utoipa::openapi::{Info, OpenApiBuilder};
 use utoipa::OpenApi;
+use utoipa::openapi::{Info, OpenApiBuilder};
 
 use server::router::MainRouterApiDoc;
 

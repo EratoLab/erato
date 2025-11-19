@@ -1,16 +1,16 @@
-use axum::handler::HandlerWithoutStateExt;
 use axum::Extension;
+use axum::handler::HandlerWithoutStateExt;
 use eyre::Report;
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use erato::config::AppConfig;
 use erato::frontend_environment::{
-    build_frontend_environment, serve_files_with_script, FrontendBundlePath,
+    FrontendBundlePath, build_frontend_environment, serve_files_with_script,
 };
 use erato::models;
 use erato::services::sentry::{extend_with_sentry_layers, setup_sentry};
 use erato::state::AppState;
-use erato::{server, ApiDoc};
+use erato::{ApiDoc, server};
 use tower_http::cors::CorsLayer;
 
 #[tokio::main]

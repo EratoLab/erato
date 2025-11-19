@@ -1,14 +1,14 @@
 //! Actor and background worker tests.
 
-use crate::test_utils::{setup_mock_llm_server, TestRequestAuthExt, TEST_JWT_TOKEN};
-use crate::{test_app_state, MIGRATOR};
+use crate::test_utils::{TEST_JWT_TOKEN, TestRequestAuthExt, setup_mock_llm_server};
+use crate::{MIGRATOR, test_app_state};
 use axum_test::TestServer;
 use chrono::{Duration, Utc};
 use erato::actors::cleanup_worker::cleanup_archived_chats;
 use erato::db::entity::chats;
 use erato::db::entity::{chat_file_uploads, file_uploads};
 use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::{Pool, Postgres};
 
 /// Test the cleanup worker logic for archived chats.
@@ -61,10 +61,10 @@ async fn test_cleanup_logic(pool: Pool<Postgres>) {
             .iter()
             .find_map(|event| {
                 let data = event.split("data:").nth(1).unwrap_or("").trim();
-                if let Ok(json) = serde_json::from_str::<Value>(data) {
-                    if json["message_type"] == "chat_created" {
-                        return json["chat_id"].as_str().map(|s| s.to_string());
-                    }
+                if let Ok(json) = serde_json::from_str::<Value>(data)
+                    && json["message_type"] == "chat_created"
+                {
+                    return json["chat_id"].as_str().map(|s| s.to_string());
                 }
                 None
             })
@@ -148,10 +148,10 @@ async fn test_cleanup_logic_with_file_uploads(pool: Pool<Postgres>) {
         .iter()
         .find_map(|event| {
             let data = event.split("data:").nth(1).unwrap_or("").trim();
-            if let Ok(json) = serde_json::from_str::<Value>(data) {
-                if json["message_type"] == "chat_created" {
-                    return json["chat_id"].as_str().map(|s| s.to_string());
-                }
+            if let Ok(json) = serde_json::from_str::<Value>(data)
+                && json["message_type"] == "chat_created"
+            {
+                return json["chat_id"].as_str().map(|s| s.to_string());
             }
             None
         })

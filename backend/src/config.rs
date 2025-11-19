@@ -1,6 +1,6 @@
 use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment};
-use eyre::{eyre, OptionExt, Report};
+use eyre::{OptionExt, Report, eyre};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use utoipa::ToSchema;
@@ -153,7 +153,9 @@ impl AppConfig {
         let mut config = self;
 
         if let Some(additional_frontend_env) = config.additional_frontend_environment.clone() {
-            tracing::warn!("Config key `additional_frontend_environment` is deprecated. Please use `frontend.additional_environment` instead.");
+            tracing::warn!(
+                "Config key `additional_frontend_environment` is deprecated. Please use `frontend.additional_environment` instead."
+            );
             config
                 .frontend
                 .additional_environment
@@ -166,13 +168,17 @@ impl AppConfig {
             .additional_environment
             .get("THEME_CUSTOMER_NAME")
         {
-            tracing::warn!("The `additional_environment` key `THEME_CUSTOMER_NAME` is deprecated for setting the theme. Please use `frontend.theme` instead.");
+            tracing::warn!(
+                "The `additional_environment` key `THEME_CUSTOMER_NAME` is deprecated for setting the theme. Please use `frontend.theme` instead."
+            );
             config.frontend.theme = Some(theme_name.to_string());
         }
 
         // Migrate deprecated sentry_dsn to integrations.sentry.sentry_dsn
         if let Some(sentry_dsn) = config.sentry_dsn.clone() {
-            tracing::warn!("Config key `sentry_dsn` is deprecated. Please use `integrations.sentry.sentry_dsn` instead.");
+            tracing::warn!(
+                "Config key `sentry_dsn` is deprecated. Please use `integrations.sentry.sentry_dsn` instead."
+            );
             if config.integrations.sentry.sentry_dsn.is_none() {
                 config.integrations.sentry.sentry_dsn = Some(sentry_dsn);
             }
@@ -204,7 +210,9 @@ impl AppConfig {
 
         // Validate that Langfuse is configured if any chat provider uses it
         if config.any_chat_provider_uses_langfuse() && !config.integrations.langfuse.enabled {
-            panic!("Chat provider uses Langfuse system prompts but Langfuse integration is not enabled. Please set integrations.langfuse.enabled = true and configure the required Langfuse settings.");
+            panic!(
+                "Chat provider uses Langfuse system prompts but Langfuse integration is not enabled. Please set integrations.langfuse.enabled = true and configure the required Langfuse settings."
+            );
         }
 
         config
@@ -216,7 +224,9 @@ impl AppConfig {
         if self.chat_providers.is_none() {
             // Check if we have the old single chat_provider configured
             if let Some(chat_provider) = &self.chat_provider {
-                tracing::warn!("Config key `chat_provider` is deprecated. Please use `chat_providers.providers.<provider_id>` and `chat_providers.priority_order` instead.");
+                tracing::warn!(
+                    "Config key `chat_provider` is deprecated. Please use `chat_providers.providers.<provider_id>` and `chat_providers.priority_order` instead."
+                );
 
                 let mut providers = HashMap::new();
                 providers.insert("default".to_string(), chat_provider.clone());
@@ -231,7 +241,9 @@ impl AppConfig {
                 self.chat_provider = None;
             } else {
                 // No chat provider configured at all - this will be caught by validation later
-                tracing::error!("No chat provider configuration found. Please configure either `chat_provider` or `chat_providers`.");
+                tracing::error!(
+                    "No chat provider configuration found. Please configure either `chat_provider` or `chat_providers`."
+                );
             }
         }
 
@@ -306,7 +318,9 @@ impl AppConfig {
         } else {
             // If no new chat_providers config, ensure we have at least the old single provider configured
             if self.chat_provider.is_none() {
-                return Err(eyre!("No chat provider configuration found. Please configure either `chat_provider` or `chat_providers`."));
+                return Err(eyre!(
+                    "No chat provider configuration found. Please configure either `chat_provider` or `chat_providers`."
+                ));
             }
         }
         Ok(())
@@ -961,13 +975,13 @@ impl BudgetConfig {
                 return Err(eyre!("Budget is enabled but max_budget is not set"));
             }
 
-            if let Some(max_budget) = self.max_budget {
-                if max_budget <= 0.0 {
-                    return Err(eyre!(
-                        "max_budget must be greater than 0, got: {}",
-                        max_budget
-                    ));
-                }
+            if let Some(max_budget) = self.max_budget
+                && max_budget <= 0.0
+            {
+                return Err(eyre!(
+                    "max_budget must be greater than 0, got: {}",
+                    max_budget
+                ));
             }
 
             if self.warn_threshold < 0.0 || self.warn_threshold > 1.0 {

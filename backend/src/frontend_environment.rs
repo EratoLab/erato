@@ -2,7 +2,7 @@
 pub use self::axum::serve_files_with_script;
 use crate::config::AppConfig;
 use lol_html::html_content::ContentType;
-use lol_html::{element, HtmlRewriter, Settings};
+use lol_html::{HtmlRewriter, Settings, element};
 use ordered_multimap::ListOrderedMultimap;
 use serde::Deserialize;
 use serde_json::Value;
@@ -161,9 +161,9 @@ pub mod axum {
 
     use ::axum::http::{HeaderValue, Request};
     use ::axum::response::Response;
-    use ::axum::{http, BoxError, Extension};
-    use http_body_util::combinators::UnsyncBoxBody;
+    use ::axum::{BoxError, Extension, http};
     use http_body_util::BodyExt;
+    use http_body_util::combinators::UnsyncBoxBody;
     use std::convert::Infallible;
     use std::path::PathBuf;
     use tower_http::services::{ServeDir, ServeFile};
