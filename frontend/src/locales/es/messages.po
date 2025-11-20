@@ -109,6 +109,20 @@ msgstr "Asistente"
 msgid "Assistant avatar"
 msgstr "Avatar del asistente"
 
+#: src/pages/AssistantCreatePage.tsx
+msgid "Assistant created successfully!"
+msgstr ""
+
+#: src/pages/AssistantEditPage.tsx
+msgid "Assistant updated successfully!"
+msgstr ""
+
+#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantsListPage.tsx
+#: src/components/ui/Chat/FrequentAssistantsList.tsx
+msgid "Assistants"
+msgstr ""
+
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "Attach File"
 msgstr "Adjuntar archivo"
@@ -131,6 +145,7 @@ msgstr "Límite presupuestario alcanzado"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 #: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Cancel"
 msgstr "Cancelar"
 
@@ -178,6 +193,10 @@ msgstr "Cerrar superposición del modal"
 msgid "collapse sidebar"
 msgstr "contraer barra lateral"
 
+#: src/pages/AssistantCreatePage.tsx
+msgid "Configure a custom assistant with specific instructions and capabilities"
+msgstr ""
+
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Confirm"
 msgstr "Confirmar"
@@ -200,13 +219,52 @@ msgstr "Confirmar eliminación"
 msgid "Copy message"
 msgstr "Copiar mensaje"
 
+#: src/pages/AssistantsListPage.tsx
+msgid "Create and manage custom assistants with specific instructions and capabilities"
+msgstr ""
+
+#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantCreatePage.tsx
+#: src/pages/AssistantCreatePage.tsx
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Create Assistant"
+msgstr ""
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Create Your First Assistant"
+msgstr ""
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Create your first assistant to get started"
+msgstr ""
+
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Dark mode"
 msgstr "Modo oscuro"
 
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Default Files"
+msgstr ""
+
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Default Locale:"
 msgstr "Idioma predeterminado:"
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Default Model"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Define how the assistant should behave and respond"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Description"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Description must be less than 500 characters"
+msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "details for"
@@ -236,6 +294,17 @@ msgstr "Arrastra archivos aquí o haz clic para subir"
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Drop files to upload..."
 msgstr "Suelta archivos para subir..."
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Edit assistant"
+msgstr ""
+
+#: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantEditPage.tsx
+msgid "Edit Assistant"
+msgstr ""
 
 #: src/components/ui/Message/DefaultMessageControls.tsx
 #: src/components/ui/Message/DefaultMessageControls.tsx
@@ -281,6 +350,22 @@ msgstr "expandir barra lateral"
 #: src/components/ui/ToolCall/ToolCallDisplay.tsx
 msgid "failed"
 msgstr "falló"
+
+#: src/pages/AssistantCreatePage.tsx
+msgid "Failed to create assistant. Please try again."
+msgstr ""
+
+#: src/pages/AssistantEditPage.tsx
+msgid "Failed to load assistant. Please try again."
+msgstr ""
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Failed to load assistants. Please try again."
+msgstr ""
+
+#: src/pages/AssistantEditPage.tsx
+msgid "Failed to update assistant. Please try again."
+msgstr ""
 
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
@@ -342,6 +427,9 @@ msgstr "Me gusta el mensaje"
 #. js-lingui-explicit-id
 #: src/pages/NewChatPage.tsx
 #: src/pages/HomePage.tsx
+#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantCreatePage.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "branding.page_title_suffix"
 msgstr ""
@@ -353,6 +441,14 @@ msgstr "Cargar mensajes más antiguos"
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Loading"
 msgstr "Cargando"
+
+#: src/pages/AssistantEditPage.tsx
+msgid "Loading assistant..."
+msgstr ""
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Loading assistants..."
+msgstr ""
 
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "Loading file..."
@@ -384,6 +480,26 @@ msgstr "El mensaje excede el límite de tokens. Por favor, reduzca la longitud o
 msgid "messages"
 msgstr "mensajes"
 
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "My Assistant"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Name"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Name is required"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Name must be at least 2 characters"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Name must be less than 100 characters"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/pages/NewChatPage.tsx
 msgid "navigation.page.new_chat"
@@ -391,14 +507,20 @@ msgstr ""
 
 #: src/pages/SearchPage.tsx
 #: src/pages/SearchPage.tsx
+#: src/pages/AssistantsListPage.tsx
 #: src/components/ui/Search/SearchPageStructure.tsx
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/Chat.tsx
+#: src/components/ui/Assistant/AssistantsPageStructure.tsx
 msgid "New Chat"
 msgstr "Nuevo chat"
+
+#: src/pages/AssistantsListPage.tsx
+msgid "No assistants yet"
+msgstr ""
 
 #: src/pages/SearchPage.tsx
 msgid "No chats found"
@@ -419,6 +541,18 @@ msgstr "de"
 #: src/components/ui/Controls/DropdownMenu.tsx
 msgid "Open menu"
 msgstr "Abrir menú"
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Optional: Choose which model this assistant should use by default"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Optional: Describe what this assistant does"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Optional: Upload files that will be available to this assistant in every chat"
+msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallOutput.tsx
 msgid "Output"
@@ -476,8 +610,16 @@ msgstr "Eliminar todos los archivos"
 msgid "Reset to Browser Detection"
 msgstr "Restablecer a detección del navegador"
 
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Save Changes"
+msgstr ""
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Save edit"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Saving..."
 msgstr ""
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
@@ -564,6 +706,22 @@ msgstr "exitoso"
 msgid "Supported Locales:"
 msgstr "Idiomas compatibles:"
 
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "System Prompt"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "System prompt is required"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "System prompt must be at least 10 characters"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "System prompt must be less than 5000 characters"
+msgstr ""
+
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "System theme"
 msgstr "Tema del sistema"
@@ -575,6 +733,10 @@ msgstr "Probar cambios de idioma:"
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Thinking"
 msgstr "Pensando"
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "This assistant helps with..."
+msgstr ""
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
@@ -628,6 +790,14 @@ msgstr "Pruebe con palabras clave diferentes o verifique la ortografía"
 msgid "Type a message..."
 msgstr "Escriba un mensaje..."
 
+#: src/pages/AssistantEditPage.tsx
+msgid "Update your assistant's configuration and settings"
+msgstr ""
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Updated"
+msgstr ""
+
 #: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Upload Files"
@@ -650,6 +820,10 @@ msgstr "Avatar del usuario"
 msgid "Using tools"
 msgstr "Usando herramientas"
 
+#: src/components/ui/Chat/FrequentAssistantsList.tsx
+msgid "View all assistants"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/components/ui/WelcomeScreen.tsx
 #: src/components/ui/WelcomeScreen.tsx
@@ -659,6 +833,10 @@ msgstr "Bienvenido al Asistente IA"
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "You"
 msgstr "Tú"
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "You are a helpful assistant that..."
+msgstr ""
 
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You are using {percentUsed}% of your budget ({formattedSpending} of {formattedLimit})."
@@ -671,3 +849,7 @@ msgstr ""
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "Your"
 msgstr "Tu"
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Your Assistants"
+msgstr ""

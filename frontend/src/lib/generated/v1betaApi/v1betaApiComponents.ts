@@ -18,6 +18,366 @@ type QueryFnOptions = {
   signal?: AbortController["signal"];
 };
 
+export type ListAssistantsError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListAssistantsResponse = Schemas.Assistant[];
+
+export type ListAssistantsVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchListAssistants = (
+  variables: ListAssistantsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    ListAssistantsResponse,
+    ListAssistantsError,
+    undefined,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/assistants", method: "get", ...variables, signal });
+
+export function listAssistantsQuery(variables: ListAssistantsVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<ListAssistantsResponse>;
+};
+
+export function listAssistantsQuery(
+  variables: ListAssistantsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<ListAssistantsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listAssistantsQuery(
+  variables: ListAssistantsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/assistants",
+      operationId: "listAssistants",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListAssistants(variables, signal),
+  };
+}
+
+export const useSuspenseListAssistants = <TData = ListAssistantsResponse,>(
+  variables: ListAssistantsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      ListAssistantsResponse,
+      ListAssistantsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    ListAssistantsResponse,
+    ListAssistantsError,
+    TData
+  >({
+    ...listAssistantsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useListAssistants = <TData = ListAssistantsResponse,>(
+  variables: ListAssistantsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      ListAssistantsResponse,
+      ListAssistantsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    ListAssistantsResponse,
+    ListAssistantsError,
+    TData
+  >({
+    ...listAssistantsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type CreateAssistantError = Fetcher.ErrorWrapper<undefined>;
+
+export type CreateAssistantVariables = {
+  body: Schemas.CreateAssistantRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchCreateAssistant = (
+  variables: CreateAssistantVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.CreateAssistantResponse,
+    CreateAssistantError,
+    Schemas.CreateAssistantRequest,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/assistants", method: "post", ...variables, signal });
+
+export const useCreateAssistant = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.CreateAssistantResponse,
+      CreateAssistantError,
+      CreateAssistantVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.CreateAssistantResponse,
+    CreateAssistantError,
+    CreateAssistantVariables
+  >({
+    mutationFn: (variables: CreateAssistantVariables) =>
+      fetchCreateAssistant(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type GetAssistantPathParams = {
+  /**
+   * The ID of the assistant to retrieve
+   */
+  assistantId: string;
+};
+
+export type GetAssistantError = Fetcher.ErrorWrapper<undefined>;
+
+export type GetAssistantVariables = {
+  pathParams: GetAssistantPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchGetAssistant = (
+  variables: GetAssistantVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AssistantWithFiles,
+    GetAssistantError,
+    undefined,
+    {},
+    {},
+    GetAssistantPathParams
+  >({
+    url: "/api/v1beta/assistants/{assistantId}",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function getAssistantQuery(variables: GetAssistantVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.AssistantWithFiles>;
+};
+
+export function getAssistantQuery(
+  variables: GetAssistantVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.AssistantWithFiles>)
+    | reactQuery.SkipToken;
+};
+
+export function getAssistantQuery(
+  variables: GetAssistantVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/assistants/{assistantId}",
+      operationId: "getAssistant",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchGetAssistant(variables, signal),
+  };
+}
+
+export const useSuspenseGetAssistant = <TData = Schemas.AssistantWithFiles,>(
+  variables: GetAssistantVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.AssistantWithFiles,
+      GetAssistantError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.AssistantWithFiles,
+    GetAssistantError,
+    TData
+  >({
+    ...getAssistantQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGetAssistant = <TData = Schemas.AssistantWithFiles,>(
+  variables: GetAssistantVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.AssistantWithFiles,
+      GetAssistantError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.AssistantWithFiles,
+    GetAssistantError,
+    TData
+  >({
+    ...getAssistantQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type UpdateAssistantPathParams = {
+  /**
+   * The ID of the assistant to update
+   */
+  assistantId: string;
+};
+
+export type UpdateAssistantError = Fetcher.ErrorWrapper<undefined>;
+
+export type UpdateAssistantVariables = {
+  body?: Schemas.UpdateAssistantRequest;
+  pathParams: UpdateAssistantPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchUpdateAssistant = (
+  variables: UpdateAssistantVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.UpdateAssistantResponse,
+    UpdateAssistantError,
+    Schemas.UpdateAssistantRequest,
+    {},
+    {},
+    UpdateAssistantPathParams
+  >({
+    url: "/api/v1beta/assistants/{assistantId}",
+    method: "put",
+    ...variables,
+    signal,
+  });
+
+export const useUpdateAssistant = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.UpdateAssistantResponse,
+      UpdateAssistantError,
+      UpdateAssistantVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.UpdateAssistantResponse,
+    UpdateAssistantError,
+    UpdateAssistantVariables
+  >({
+    mutationFn: (variables: UpdateAssistantVariables) =>
+      fetchUpdateAssistant(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type ArchiveAssistantPathParams = {
+  /**
+   * The ID of the assistant to archive
+   */
+  assistantId: string;
+};
+
+export type ArchiveAssistantError = Fetcher.ErrorWrapper<undefined>;
+
+export type ArchiveAssistantVariables = {
+  body?: Schemas.ArchiveAssistantRequest;
+  pathParams: ArchiveAssistantPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchArchiveAssistant = (
+  variables: ArchiveAssistantVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ArchiveAssistantResponse,
+    ArchiveAssistantError,
+    Schemas.ArchiveAssistantRequest,
+    {},
+    {},
+    ArchiveAssistantPathParams
+  >({
+    url: "/api/v1beta/assistants/{assistantId}/archive",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useArchiveAssistant = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ArchiveAssistantResponse,
+      ArchiveAssistantError,
+      ArchiveAssistantVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ArchiveAssistantResponse,
+    ArchiveAssistantError,
+    ArchiveAssistantVariables
+  >({
+    mutationFn: (variables: ArchiveAssistantVariables) =>
+      fetchArchiveAssistant(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ChatsError = Fetcher.ErrorWrapper<undefined>;
 
 export type ChatsResponse = Schemas.Chat[];
@@ -1406,6 +1766,16 @@ export const useHealth = <TData = undefined,>(
 };
 
 export type QueryOperation =
+  | {
+      path: "/api/v1beta/assistants";
+      operationId: "listAssistants";
+      variables: ListAssistantsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/assistants/{assistantId}";
+      operationId: "getAssistant";
+      variables: GetAssistantVariables | reactQuery.SkipToken;
+    }
   | {
       path: "/api/v1beta/chats";
       operationId: "chats";

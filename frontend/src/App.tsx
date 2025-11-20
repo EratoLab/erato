@@ -4,8 +4,12 @@ import { Routes, Route, Link, Outlet, Navigate } from "react-router-dom";
 
 import { ClientProviders } from "./components/providers/ClientProviders";
 // Page Imports
+import AssistantsLayout from "./layouts/AssistantsLayout";
 import ChatLayout from "./layouts/ChatLayout";
 import SearchLayout from "./layouts/SearchLayout";
+import AssistantCreatePage from "./pages/AssistantCreatePage";
+import AssistantEditPage from "./pages/AssistantEditPage";
+import AssistantsListPage from "./pages/AssistantsListPage";
 import ChatDetailPage from "./pages/ChatDetailPage";
 import HomePage from "./pages/HomePage";
 import NewChatPage from "./pages/NewChatPage";
@@ -66,6 +70,12 @@ function AppRoutes() {
         {/* Search section with its own layout */}
         <Route path="search" element={<SearchLayout />}>
           <Route index element={<SearchPage />} />
+        </Route>
+        {/* Assistants section with its own layout */}
+        <Route path="assistants" element={<AssistantsLayout />}>
+          <Route index element={<AssistantsListPage />} />
+          <Route path="new" element={<AssistantCreatePage />} />
+          <Route path=":id/edit" element={<AssistantEditPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>

@@ -128,7 +128,12 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         archive_chat_endpoint,
         token_usage::token_usage_estimate,
         available_models,
-        budget::budget_status
+        budget::budget_status,
+        assistants::create_assistant,
+        assistants::list_assistants,
+        assistants::get_assistant,
+        assistants::update_assistant,
+        assistants::archive_assistant
     ),
     components(schemas(
         Message,

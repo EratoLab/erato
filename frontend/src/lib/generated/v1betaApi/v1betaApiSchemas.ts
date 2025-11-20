@@ -4,6 +4,11 @@
  * @version
  */
 /**
+ * Request to archive an assistant
+ */
+export type ArchiveAssistantRequest = Record<string, any>;
+
+/**
  * Response when archiving an assistant
  */
 export type ArchiveAssistantResponse = {

@@ -31,6 +31,14 @@ interface AuthFeatureConfig {
 }
 
 /**
+ * Configuration for assistants feature
+ */
+interface AssistantsFeatureConfig {
+  /** Whether the assistants feature is enabled */
+  enabled: boolean;
+}
+
+/**
  * Complete feature configuration interface
  */
 interface FeatureConfig {
@@ -40,6 +48,8 @@ interface FeatureConfig {
   chatInput: ChatInputFeatureConfig;
   /** Authentication feature flags */
   auth: AuthFeatureConfig;
+  /** Assistants feature flags */
+  assistants: AssistantsFeatureConfig;
 }
 
 const FeatureConfigContext = createContext<FeatureConfig | null>(null);
@@ -78,6 +88,9 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
       },
       auth: {
         showLogout: !environment.disableLogout,
+      },
+      assistants: {
+        enabled: environment.assistantsEnabled,
       },
     };
   }, []); // Empty deps - only compute once
@@ -161,4 +174,21 @@ export function useChatInputFeature(): ChatInputFeatureConfig {
 export function useAuthFeature(): AuthFeatureConfig {
   const config = useFeatureConfig();
   return config.auth;
+}
+
+/**
+ * Convenience hook for accessing assistants feature configuration.
+ *
+ * @returns Assistants feature configuration
+ * @throws {Error} If used outside of FeatureConfigProvider
+ *
+ * @example
+ * ```tsx
+ * const { enabled } = useAssistantsFeature();
+ * return enabled ? <FrequentAssistantsList /> : null;
+ * ```
+ */
+export function useAssistantsFeature(): AssistantsFeatureConfig {
+  const config = useFeatureConfig();
+  return config.assistants;
 }
