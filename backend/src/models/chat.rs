@@ -118,6 +118,7 @@ pub async fn get_or_create_chat_by_previous_message_id(
     subject: &Subject,
     previous_message_id: Option<&Uuid>,
     owner_user_id: &str,
+    assistant_id: Option<&Uuid>,
 ) -> Result<(chats::Model, ChatCreationStatus), Report> {
     if let Some(message_id) = previous_message_id {
         // Find the message to get its chat_id
@@ -127,18 +128,23 @@ pub async fn get_or_create_chat_by_previous_message_id(
             .ok_or_else(|| eyre!("Message with ID {} not found", message_id))?;
 
         // Use the chat_id from the message with get_or_create_chat
+        // Note: We pass None for assistant_id here because we're referencing an existing chat
+        // by its chat_id. The existing chat already has its assistant_configuration stored,
+        // and get_or_create_chat will return that existing chat without using the assistant_id
+        // parameter (which is only used when creating a NEW chat).
         get_or_create_chat(
             conn,
             policy,
             subject,
             Some(&message.chat_id),
             owner_user_id,
-            None,
+            None, // assistant_id is ignored when existing_chat_id is provided
         )
         .await
     } else {
         // No previous message ID, so create a new chat using get_or_create_chat
-        get_or_create_chat(conn, policy, subject, None, owner_user_id, None).await
+        // Pass assistant_id here so it gets stored in the new chat's assistant_configuration
+        get_or_create_chat(conn, policy, subject, None, owner_user_id, assistant_id).await
     }
 }
 
@@ -154,6 +160,10 @@ pub struct RecentChat {
     pub owner_user_id: String,
     /// The chat provider ID used for the most recent message
     pub last_chat_provider_id: Option<String>,
+    /// The assistant ID if this chat is based on an assistant
+    pub assistant_id: Option<Uuid>,
+    /// The name of the assistant if this chat is based on an assistant
+    pub assistant_name: Option<String>,
 }
 
 /// Statistics for a list of chats
@@ -193,7 +203,7 @@ pub async fn get_recent_chats(
     include_archived: bool,
 ) -> Result<(Vec<RecentChat>, ChatListStats), Report> {
     // Query the most recent chats for the user.
-    // Query the chats belongin to a user, and join with the chats_latest_message view.
+    // Query the chats belonging to a user, and join with the chats_latest_message view and assistants.
     let mut query = Chats::find()
         .filter(chats::Column::OwnerUserId.eq(owner_user_id))
         .find_also_related(chats_latest_message::Entity)
@@ -255,6 +265,24 @@ pub async fn get_recent_chats(
             .await
             .unwrap_or(None);
 
+        // Get assistant info if this chat has an assistant
+        let (assistant_id, assistant_name) = if let Some(aid) = chat.assistant_id {
+            // Fetch the assistant to get its name
+            let assistant_opt = crate::db::entity::prelude::Assistants::find_by_id(aid)
+                .one(conn)
+                .await
+                .ok()
+                .flatten();
+            
+            if let Some(assistant) = assistant_opt {
+                (Some(aid), Some(assistant.name))
+            } else {
+                (Some(aid), None)
+            }
+        } else {
+            (None, None)
+        };
+
         recent_chats.push(RecentChat {
             id: chat.id.to_string(),
             // Use the chat's title_by_summary if available, otherwise use a default
@@ -264,8 +292,10 @@ pub async fn get_recent_chats(
                 .unwrap_or_else(|| "Untitled Chat".to_string()),
             last_message_at: latest_message.latest_message_at,
             archived_at: chat.archived_at,
-            last_chat_provider_id,
             owner_user_id: chat.owner_user_id.clone(),
+            last_chat_provider_id,
+            assistant_id,
+            assistant_name,
         });
     }
 
@@ -344,11 +374,13 @@ pub async fn get_frequent_assistants(
     let mut frequent_assistants = Vec::new();
     for usage in usage_counts {
         // Get the full assistant details with files
+        // Pass allow_archived=false to exclude archived assistants from the list
         match crate::models::assistant::get_assistant_with_files(
             conn,
             policy,
             subject,
             usage.assistant_id,
+            false, // Don't include archived assistants in frequent list
         )
         .await
         {
@@ -359,9 +391,9 @@ pub async fn get_frequent_assistants(
                 });
             }
             Err(e) => {
-                // Log the error but continue - the assistant might have been deleted or user lost access
-                tracing::warn!(
-                    "Failed to fetch assistant {} for frequent assistants: {}",
+                // Log the error but continue - the assistant might be archived, deleted, or user lost access
+                tracing::debug!(
+                    "Skipping assistant {} from frequent assistants (likely archived or inaccessible): {}",
                     usage.assistant_id,
                     e
                 );
@@ -522,11 +554,14 @@ pub async fn get_chat_assistant_configuration(
     // Parse assistant configuration from chat
     if let Some(config) = parse_assistant_configuration(chat)? {
         // Get the full assistant details including files
+        // Pass allow_archived=true because we need to support existing chats
+        // that were created with an assistant that's now archived
         let assistant_with_files = crate::models::assistant::get_assistant_with_files(
             conn,
             policy,
             subject,
             config.assistant_id,
+            true, // Allow archived for existing chats
         )
         .await?;
 

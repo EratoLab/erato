@@ -282,11 +282,13 @@ pub async fn get_assistant(
     let assistant_id = Uuid::parse_str(&assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Get the assistant with files
+    // User-facing endpoint: exclude archived assistants
     let assistant_with_files = assistant::get_assistant_with_files(
         &app_state.db,
         &policy,
         &me_user.to_subject(),
         assistant_id,
+        false, // Exclude archived assistants
     )
     .await
     .map_err(|e| {
@@ -378,11 +380,13 @@ pub async fn update_assistant(
     // Process file associations if provided
     if let Some(new_file_ids_opt) = request.file_ids {
         // Get the current files for this assistant
+        // Exclude archived when updating (user can't update archived assistants)
         let assistant_with_files = assistant::get_assistant_with_files(
             &app_state.db,
             &policy,
             &me_user.to_subject(),
             assistant_id,
+            false, // User is updating, must be non-archived
         )
         .await
         .map_err(log_internal_server_error)?;

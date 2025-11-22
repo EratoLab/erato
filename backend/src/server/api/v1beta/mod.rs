@@ -248,6 +248,10 @@ pub struct RecentChat {
     /// NOTE: Currently this is true only for the chat owner. In the future,
     /// this may include collaborators/roles/policy-based permissions.
     can_edit: bool,
+    /// The assistant ID if this chat is based on an assistant
+    assistant_id: Option<String>,
+    /// The name of the assistant if this chat is based on an assistant
+    assistant_name: Option<String>,
 }
 
 /// A message in a chat
@@ -727,6 +731,8 @@ pub async fn recent_chats(
             last_chat_provider_id: chat.last_chat_provider_id.clone(),
             last_model,
             can_edit,
+            assistant_id: chat.assistant_id.map(|id| id.to_string()),
+            assistant_name: chat.assistant_name,
         });
     }
 

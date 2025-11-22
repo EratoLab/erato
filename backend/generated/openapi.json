@@ -1,8 +1,5 @@
-{
-  "openapi": "3.1.0",
-  "info": {
-    "title": "",
-    "description": "The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under here. All of the resources there are scoped to what is accessible by the authenticated identity.\n- `/api/v1beta/me` <- Everything under this path is scoped to the subject of the authenticated identity.\nThis means that the identity may be authorized to view more resources, but this is the default view for them.\nE.g. the chats route scoped under there will only list the chats created by the user, but the user may be authorized to also view chats shared by other users.\n",
+OpenAPI documentation generated successfully at ./generated/openapi.json
+The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under here. All of the resources there are scoped to what is accessible by the authenticated identity.\n- `/api/v1beta/me` <- Everything under this path is scoped to the subject of the authenticated identity.\nThis means that the identity may be authorized to view more resources, but this is the default view for them.\nE.g. the chats route scoped under there will only list the chats created by the user, but the user may be authorized to also view chats shared by other users.\n",
     "version": ""
   },
   "paths": {
@@ -1752,6 +1749,15 @@
           "user_message"
         ],
         "properties": {
+          "assistant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Optional assistant ID to associate with the chat when creating a new chat.\nIf provided with an existing_chat_id, this field is ignored.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          },
           "chat_provider_id": {
             "type": [
               "string",
@@ -2167,6 +2173,20 @@
             ],
             "format": "date-time",
             "description": "When this chat was archived by the user."
+          },
+          "assistant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The assistant ID if this chat is based on an assistant"
+          },
+          "assistant_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The name of the assistant if this chat is based on an assistant"
           },
           "can_edit": {
             "type": "boolean",
