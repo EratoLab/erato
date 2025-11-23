@@ -6,9 +6,7 @@
 #![allow(clippy::manual_strip)]
 
 use ctor::ctor;
-use erato::config::{
-    AppConfig, FileStorageProviderConfig, LangfuseConfig, StorageProviderSpecificConfigMerged,
-};
+use erato::config::{AppConfig, LangfuseConfig};
 use erato::services::file_storage::FileStorage;
 use erato::services::langfuse::LangfuseClient;
 use erato::state::AppState;
@@ -41,41 +39,34 @@ fn set_test_db_url() {
 // pub static MIGRATOR: sqlx::migrate::Migrator = Migrator::new(SqitchMigrationSource::new(PathBuf::from("./sqitch/sqitch_summary.json")));
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./sqitch/deploy");
 
-pub fn test_app_config() -> AppConfig {
-    let mut builder = AppConfig::config_schema_builder(None, true).unwrap();
-    builder = builder
-        .set_override("chat_provider.provider_kind", "ollama")
-        .unwrap();
-    builder = builder
-        .set_override("chat_provider.model_name", "smollm2:135m")
-        .unwrap();
-    builder = builder
-        .set_override("chat_provider.base_url", "http://localhost:12434/v1/")
-        .unwrap();
-
-    let config_schema = builder.build().unwrap();
-    config_schema.try_deserialize().unwrap()
-}
+// pub fn test_app_config() -> AppConfig {
+//     let mut builder = AppConfig::config_schema_builder(None, true).unwrap();
+//     builder = builder
+//         .set_override("chat_provider.provider_kind", "ollama")
+//         .unwrap();
+//     builder = builder
+//         .set_override("chat_provider.model_name", "smollm2:135m")
+//         .unwrap();
+//     builder = builder
+//         .set_override("chat_provider.base_url", "http://localhost:12434/v1/")
+//         .unwrap();
+//
+//     let config_schema = builder.build().unwrap();
+//     config_schema.try_deserialize().unwrap()
+// }
 
 pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppState {
     let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
     let mut file_storage_providers = HashMap::new();
 
-    let provider = FileStorage::from_config(&FileStorageProviderConfig {
-        display_name: None,
-        provider_kind: "s3".to_string(),
-        config: StorageProviderSpecificConfigMerged {
-            endpoint: Some("http://localhost:9000".to_string()),
-            bucket: Some("erato-storage".to_string()),
-            region: Some("us-east-1".to_string()),
-            access_key_id: Some("erato-app-user".to_string()),
-            secret_access_key: Some("erato-app-password".to_string()),
-            ..StorageProviderSpecificConfigMerged::default()
-        },
-        max_upload_size_kb: None,
-    })
-    .unwrap();
-    file_storage_providers.insert("local_minio".to_owned(), provider);
+    let provider = FileStorage::from_config(
+        app_config
+            .file_storage_providers
+            .get("minio")
+            .expect("Unable to get `minio` filestorage from app_config"),
+    )
+    .expect("Unable to instantiate FileStorage");
+    file_storage_providers.insert("minio".to_owned(), provider);
 
     let actor_manager =
         erato::actors::manager::ActorManager::new(db.clone(), app_config.clone()).await;

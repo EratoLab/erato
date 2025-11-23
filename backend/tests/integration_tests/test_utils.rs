@@ -472,52 +472,94 @@ pub async fn setup_mock_llm_server(config: Option<MockLlmConfig>) -> (AppConfig,
     let mock_url_str = mock_url.to_string();
 
     // Create app config with the mock server URL
-    let app_config = AppConfig::config_schema_builder(None, true)
-        .unwrap()
-        .set_override(
-            format!(
-                "chat_providers.providers.{}.provider_kind",
-                config.provider_id
-            ),
-            "openai",
-        )
-        .unwrap()
-        .set_override(
-            format!("chat_providers.providers.{}.model_name", config.provider_id),
-            config.model_name,
-        )
-        .unwrap()
-        .set_override(
-            format!("chat_providers.providers.{}.base_url", config.provider_id),
-            mock_url_str,
-        )
-        .unwrap()
-        .set_override(
-            "chat_providers.priority_order",
-            vec![config.provider_id.as_str()],
-        )
-        .unwrap()
-        // Add model permissions to allow the mock-llm provider for all users
-        .set_override(
-            format!(
-                "model_permissions.rules.allow-{}.rule_type",
-                config.provider_id
-            ),
-            "allow-all",
-        )
-        .unwrap()
-        .set_override(
-            format!(
-                "model_permissions.rules.allow-{}.chat_provider_ids",
-                config.provider_id
-            ),
-            vec![config.provider_id.as_str()],
-        )
-        .unwrap()
-        .build()
-        .unwrap()
-        .try_deserialize()
-        .unwrap();
+    let app_config = hermetic_app_config(Some(config), Some(mock_url_str));
 
     (app_config, server)
+}
+
+pub fn hermetic_app_config(
+    mock_llm_config: Option<MockLlmConfig>,
+    mock_url_str: Option<String>,
+) -> AppConfig {
+    let mut app_config = AppConfig::config_schema_builder(None, false).unwrap();
+    if let Some(mock_llm_config) = mock_llm_config {
+        app_config = app_config
+            .set_override(
+                format!(
+                    "chat_providers.providers.{}.provider_kind",
+                    mock_llm_config.provider_id
+                ),
+                "openai",
+            )
+            .unwrap()
+            .set_override(
+                format!(
+                    "chat_providers.providers.{}.model_name",
+                    mock_llm_config.provider_id
+                ),
+                mock_llm_config.model_name,
+            )
+            .unwrap()
+            .set_override(
+                format!(
+                    "chat_providers.providers.{}.base_url",
+                    mock_llm_config.provider_id
+                ),
+                mock_url_str,
+            )
+            .unwrap()
+            .set_override(
+                "chat_providers.priority_order",
+                vec![mock_llm_config.provider_id.as_str()],
+            )
+            .unwrap()
+            // Add model permissions to allow the mock-llm provider for all users
+            .set_override(
+                format!(
+                    "model_permissions.rules.allow-{}.rule_type",
+                    mock_llm_config.provider_id
+                ),
+                "allow-all",
+            )
+            .unwrap()
+            .set_override(
+                format!(
+                    "model_permissions.rules.allow-{}.chat_provider_ids",
+                    mock_llm_config.provider_id
+                ),
+                vec![mock_llm_config.provider_id.as_str()],
+            )
+            .unwrap();
+    }
+
+    app_config = app_config
+        // Set file storage provider override to match the template in erato.template.toml
+        .set_override("file_storage_providers.minio.provider_kind", "s3")
+        .unwrap()
+        .set_override(
+            "file_storage_providers.minio.config.endpoint",
+            "http://127.0.0.1:9000",
+        )
+        .unwrap()
+        .set_override(
+            "file_storage_providers.minio.config.bucket",
+            "erato-storage",
+        )
+        .unwrap()
+        .set_override("file_storage_providers.minio.config.region", "us-east-1")
+        .unwrap()
+        .set_override(
+            "file_storage_providers.minio.config.access_key_id",
+            "erato-app-user",
+        )
+        .unwrap()
+        .set_override(
+            "file_storage_providers.minio.config.secret_access_key",
+            "erato-app-password",
+        )
+        .unwrap()
+        .set_override("experimental_assistants.enabled", true)
+        .unwrap();
+
+    app_config.build().unwrap().try_deserialize().unwrap()
 }
