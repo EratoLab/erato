@@ -105,6 +105,8 @@ pub struct MessageSubmitStreamingResponseToolCallUpdate {
     tool_name: String,
     input: Option<JsonValue>,
     status: ToolCallStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     progress_message: Option<String>,
     output: Option<JsonValue>,
 }

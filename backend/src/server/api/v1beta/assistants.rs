@@ -19,18 +19,26 @@ pub struct Assistant {
     /// The display name of the assistant
     pub name: String,
     /// Optional description of the assistant
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub description: Option<String>,
     /// The system prompt used by the assistant
     pub prompt: String,
     /// List of MCP server IDs available to this assistant
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub mcp_server_ids: Option<Vec<String>>,
     /// Default chat provider/model ID for this assistant
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub default_chat_provider: Option<String>,
     /// When this assistant was created
     pub created_at: DateTime<FixedOffset>,
     /// When this assistant was last updated
     pub updated_at: DateTime<FixedOffset>,
-    /// When this assistant was archived (null if not archived)
+    /// When this assistant was archived
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub archived_at: Option<DateTime<FixedOffset>>,
 }
 

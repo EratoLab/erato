@@ -1,5 +1,8 @@
-OpenAPI documentation generated successfully at ./generated/openapi.json
-The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under here. All of the resources there are scoped to what is accessible by the authenticated identity.\n- `/api/v1beta/me` <- Everything under this path is scoped to the subject of the authenticated identity.\nThis means that the identity may be authorized to view more resources, but this is the default view for them.\nE.g. the chats route scoped under there will only list the chats created by the user, but the user may be authorized to also view chats shared by other users.\n",
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "",
+    "description": "The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under here. All of the resources there are scoped to what is accessible by the authenticated identity.\n- `/api/v1beta/me` <- Everything under this path is scoped to the subject of the authenticated identity.\nThis means that the identity may be authorized to view more resources, but this is the default view for them.\nE.g. the chats route scoped under there will only list the chats created by the user, but the user may be authorized to also view chats shared by other users.\n",
     "version": ""
   },
   "paths": {
@@ -1013,12 +1016,9 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
         ],
         "properties": {
           "archived_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "format": "date-time",
-            "description": "When this assistant was archived (null if not archived)"
+            "description": "When this assistant was archived"
           },
           "created_at": {
             "type": "string",
@@ -1026,17 +1026,11 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
             "description": "When this assistant was created"
           },
           "default_chat_provider": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "Default chat provider/model ID for this assistant"
           },
           "description": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "Optional description of the assistant"
           },
           "id": {
@@ -1044,10 +1038,7 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
             "description": "The unique ID of the assistant"
           },
           "mcp_server_ids": {
-            "type": [
-              "array",
-              "null"
-            ],
+            "type": "array",
             "items": {
               "type": "string"
             },
@@ -1130,38 +1121,22 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
         ],
         "properties": {
           "budget_currency": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/BudgetCurrency",
-                "description": "The currency configured for display purposes"
-              }
-            ]
+            "$ref": "#/components/schemas/BudgetCurrency",
+            "description": "The currency configured for display purposes"
           },
           "budget_limit": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": "number",
             "format": "double",
             "description": "The budget limit for the time period (unit-less)"
           },
           "budget_period_days": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": "integer",
             "format": "int32",
             "description": "Number of days in the current budget period",
             "minimum": 0
           },
           "current_spending": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": "number",
             "format": "double",
             "description": "Current spending in the budget period for the user (unit-less)"
           },
@@ -1170,10 +1145,7 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
             "description": "Whether the budget feature is enabled"
           },
           "warn_threshold": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": "number",
             "format": "double",
             "description": "The warning threshold (0.0 to 1.0)"
           }
@@ -1237,10 +1209,7 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
             "description": "Whether this message is in the active thread"
           },
           "previous_message_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The ID of the previous message in the thread, if any"
           },
           "role": {
@@ -1248,10 +1217,7 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
             "description": "Role of the message sender. May be on of \"user\", \"assistant\", \"system\""
           },
           "sibling_message_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The unique ID of the sibling message, if any"
           },
           "updated_at": {
@@ -2107,10 +2073,7 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
             ]
           },
           "progress_message": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "status": {
             "$ref": "#/components/schemas/ToolCallStatus"
@@ -2167,25 +2130,16 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
         ],
         "properties": {
           "archived_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "format": "date-time",
             "description": "When this chat was archived by the user."
           },
           "assistant_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The assistant ID if this chat is based on an assistant"
           },
           "assistant_name": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The name of the assistant if this chat is based on an assistant"
           },
           "can_edit": {
@@ -2203,10 +2157,7 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
             "type": "string"
           },
           "last_chat_provider_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The chat provider ID used for the most recent message"
           },
           "last_message_at": {
@@ -2215,15 +2166,8 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
             "description": "Time of the last message in the chat."
           },
           "last_model": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ChatModel",
-                "description": "The model information for the most recent message, if available"
-              }
-            ]
+            "$ref": "#/components/schemas/ChatModel",
+            "description": "The model information for the most recent message, if available"
           },
           "title_by_summary": {
             "type": "string",
@@ -2694,10 +2638,7 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
         ],
         "properties": {
           "email": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The user's email address. Shouldn't be used as a unique identifier, as it may change."
           },
           "groups": {
@@ -2711,17 +2652,11 @@ The main API structure\n\n- `/api/v1beta/` <- Most of the API is nested under he
             "type": "string"
           },
           "name": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The user's display name."
           },
           "picture": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The user's profile picture URL."
           },
           "preferred_language": {

@@ -15,14 +15,24 @@ pub struct BudgetStatusResponse {
     /// Whether the budget feature is enabled
     enabled: bool,
     /// Number of days in the current budget period
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     budget_period_days: Option<u32>,
     /// Current spending in the budget period for the user (unit-less)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     current_spending: Option<f64>,
     /// The warning threshold (0.0 to 1.0)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     warn_threshold: Option<f64>,
     /// The budget limit for the time period (unit-less)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     budget_limit: Option<f64>,
     /// The currency configured for display purposes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     budget_currency: Option<BudgetCurrency>,
 }
 

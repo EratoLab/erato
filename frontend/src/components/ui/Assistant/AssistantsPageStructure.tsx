@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { useEffect, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { ChatHistorySidebar } from "@/components/ui/Chat/ChatHistorySidebar";
 import { useSidebar } from "@/hooks/ui";
@@ -29,6 +29,8 @@ export default function AssistantsPageStructure({
 
   const { profile } = useProfile();
   const { isOpen: sidebarCollapsed, toggle: onToggleCollapse } = useSidebar();
+
+  const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
   const prevPathnameRef = useRef<string>(pathname);
@@ -43,6 +45,7 @@ export default function AssistantsPageStructure({
   }, [pathname]);
 
   // Convert the chat history data to the format expected by the sidebar
+  // Convert the chat history data to the format expected by the sidebar
   const sessions: ChatSession[] = Array.isArray(chatHistory)
     ? chatHistory.map((chat) => ({
         id: chat.id,
@@ -56,6 +59,7 @@ export default function AssistantsPageStructure({
           },
           fileCount: chat.file_uploads.length,
         },
+        assistantId: chat.assistant_id as string | null | undefined,
       }))
     : [];
 
@@ -86,8 +90,7 @@ export default function AssistantsPageStructure({
   // Handle assistant selection - create chat with assistant
   const handleAssistantSelect = (assistantId: string) => {
     logger.log("[ASSISTANTS_FLOW] Assistant selected:", assistantId);
-    // TODO: Implement createNewChatWithAssistant in next phase
-    console.log("Create chat with assistant:", assistantId);
+    navigate(`/a/${assistantId}`);
   };
 
   logger.log(
@@ -117,4 +120,5 @@ export default function AssistantsPageStructure({
     </div>
   );
 }
+
 

@@ -238,10 +238,16 @@ pub struct RecentChat {
     /// Files uploaded to this chat
     file_uploads: Vec<FileUploadItem>,
     /// When this chat was archived by the user.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     archived_at: Option<DateTime<FixedOffset>>,
     /// The chat provider ID used for the most recent message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     last_chat_provider_id: Option<String>,
     /// The model information for the most recent message, if available
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     last_model: Option<ChatModel>,
     /// Whether the current user can edit this chat (e.g., edit messages)
     ///
@@ -249,8 +255,12 @@ pub struct RecentChat {
     /// this may include collaborators/roles/policy-based permissions.
     can_edit: bool,
     /// The assistant ID if this chat is based on an assistant
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     assistant_id: Option<String>,
     /// The name of the assistant if this chat is based on an assistant
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     assistant_name: Option<String>,
 }
 
@@ -270,8 +280,12 @@ pub struct ChatMessage {
     /// When the message was last updated
     updated_at: DateTime<FixedOffset>,
     /// The ID of the previous message in the thread, if any
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     previous_message_id: Option<String>,
     /// The unique ID of the sibling message, if any
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     sibling_message_id: Option<String>,
     /// Whether this message is in the active thread
     is_message_in_active_thread: bool,
