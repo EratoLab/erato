@@ -23,6 +23,13 @@ export interface ThemeLocationConfig {
    * @returns Path to the logo file
    */
   getLogoPath: (themeName: string | undefined, isDark: boolean) => string;
+
+  /**
+   * Function to determine assistant avatar path
+   * @param themeName The name of the loaded theme
+   * @returns Path to the assistant avatar file, or null if not available
+   */
+  getAssistantAvatarPath: (themeName: string | undefined) => string | null;
 }
 
 /**
@@ -81,6 +88,28 @@ export const defaultThemeConfig: ThemeLocationConfig = {
       ? "/custom-theme/logo-dark.svg"
       : "/custom-theme/logo.svg";
     return defaultPath;
+  },
+
+  getAssistantAvatarPath: (themeName) => {
+    // 1. Check environment variable for complete path override
+    const { themeAssistantAvatarPath, themePath, themeCustomerName } = env();
+
+    if (themeAssistantAvatarPath) {
+      return themeAssistantAvatarPath;
+    }
+
+    // 2. Check for theme path override
+    if (themePath) {
+      return `${themePath}/assistant-avatar.svg`;
+    }
+
+    // 3. If a customer name is specified, use customer-specific subfolder
+    if (themeCustomerName) {
+      return `/custom-theme/${themeCustomerName}/assistant-avatar.svg`;
+    }
+
+    // 4. No default fallback - return null if no custom avatar is configured
+    return null;
   },
 };
 

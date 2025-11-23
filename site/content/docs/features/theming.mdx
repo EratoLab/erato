@@ -1,3 +1,190 @@
 # Theming
 
-🚧Work in progress 🚧
+Erato supports extensive theming capabilities to match your brand identity. You can customize colors, logos, and assistant avatars.
+
+## Theme Configuration
+
+Themes are configured in the backend configuration file (`erato.toml`) and consist of:
+
+1. **Theme Directory** - A folder containing all theme assets
+2. **Theme Configuration** - JSON file defining colors and styles
+3. **Static Assets** - Logos and avatar images
+
+### Setting Up a Custom Theme
+
+1. **Configure the theme name** in `erato.toml`:
+
+```toml
+[frontend]
+theme = "my-company"
+```
+
+2. **Create the theme directory** in the frontend bundle:
+
+```
+public/custom-theme/my-company/
+├── theme.json              # Theme configuration
+├── logo.svg                # Application logo (light mode)
+├── logo-dark.svg           # Application logo (dark mode, optional)
+└── assistant-avatar.svg    # Assistant avatar (optional)
+```
+
+## Theme Structure
+
+### theme.json
+
+The `theme.json` file defines the color scheme for both light and dark modes:
+
+```json
+{
+  "name": "My Company Theme",
+  "theme": {
+    "light": {
+      "colors": {
+        "background": {
+          "primary": "#ffffff",
+          "secondary": "#f5f5f5"
+        },
+        "foreground": {
+          "primary": "#000000",
+          "accent": "#0066cc"
+        },
+        "avatar": {
+          "assistant": {
+            "background": "#0066cc",
+            "foreground": "#ffffff"
+          },
+          "user": {
+            "background": "#666666",
+            "foreground": "#ffffff"
+          }
+        }
+      }
+    },
+    "dark": {
+      "colors": {
+        "background": {
+          "primary": "#1a1a1a",
+          "secondary": "#2d2d2d"
+        },
+        "foreground": {
+          "primary": "#ffffff",
+          "accent": "#4d94ff"
+        },
+        "avatar": {
+          "assistant": {
+            "background": "#4d94ff",
+            "foreground": "#ffffff"
+          },
+          "user": {
+            "background": "#888888",
+            "foreground": "#ffffff"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## Custom Logos
+
+Place logo files in your theme directory:
+
+- `logo.svg` - Main application logo (required)
+- `logo-dark.svg` - Dark mode logo (optional, falls back to `logo.svg`)
+
+## Custom Assistant Avatar
+
+You can customize the assistant's profile picture by adding an `assistant-avatar.svg` (or other image format) to your theme directory.
+
+### Using the Theme Directory
+
+When you have a theme configured, place the avatar file in:
+
+```
+public/custom-theme/my-company/assistant-avatar.svg
+```
+
+The avatar will be automatically detected and used.
+
+### Using Additional Environment Configuration
+
+You can also override the assistant avatar path using the `additional_environment` configuration:
+
+```toml
+[frontend]
+theme = "my-company"
+additional_environment = { "THEME_ASSISTANT_AVATAR_PATH" = "/custom-theme/my-company/assistant-avatar.svg" }
+```
+
+### Supported Image Formats
+
+- SVG (recommended for scalability and quality)
+- PNG, JPG, or other browser-supported image formats
+
+### Fallback Behavior
+
+If no custom avatar is provided, the assistant will display with:
+- A colored circle using the theme's `avatar.assistant.background` color
+- The letter "A" in the `avatar.assistant.foreground` color
+
+## Environment Variables
+
+You can also configure theme assets using environment variables (useful for development):
+
+- `VITE_CUSTOMER_NAME` - Theme directory name
+- `VITE_LOGO_PATH` - Override logo path (light mode)
+- `VITE_LOGO_DARK_PATH` - Override logo path (dark mode)
+- `VITE_ASSISTANT_AVATAR_PATH` - Override assistant avatar path
+
+## Deployment
+
+### Docker
+
+Mount your theme directory into the container:
+
+```bash
+docker run -v ./my-theme:/app/public/custom-theme/my-company erato-image
+```
+
+### Kubernetes
+
+Use a ConfigMap to store your theme:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: erato-theme
+data:
+  theme.json: |
+    {
+      "name": "My Theme",
+      "theme": { ... }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erato
+spec:
+  template:
+    spec:
+      containers:
+      - name: erato
+        volumeMounts:
+        - name: theme
+          mountPath: /app/public/custom-theme/my-company
+      volumes:
+      - name: theme
+        configMap:
+          name: erato-theme
+```
+
+For logos and avatars (binary files), use an init container or a PersistentVolume.
+
+## See Also
+
+- [Configuration Reference](../configuration) - Complete configuration options
+- [Frontend README](https://github.com/erato-ai/erato/blob/main/frontend/README.md) - Detailed theme development guide

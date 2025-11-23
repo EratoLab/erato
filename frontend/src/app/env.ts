@@ -5,6 +5,7 @@ export type Env = {
   themeConfigPath: string | null;
   themeLogoPath: string | null;
   themeLogoDarkPath: string | null;
+  themeAssistantAvatarPath: string | null;
   disableUpload: boolean;
   disableChatInputAutofocus: boolean;
   disableLogout: boolean;
@@ -20,6 +21,7 @@ declare global {
     THEME_CONFIG_PATH?: string;
     THEME_LOGO_PATH?: string;
     THEME_LOGO_DARK_PATH?: string;
+    THEME_ASSISTANT_AVATAR_PATH?: string;
     DISABLE_UPLOAD?: boolean;
     DISABLE_CHAT_INPUT_AUTOFOCUS?: boolean;
     DISABLE_LOGOUT?: boolean;
@@ -58,6 +60,13 @@ export const env = (): Env => {
   if (themeLogoDarkPath === "") {
     themeLogoDarkPath = null;
   }
+  let themeAssistantAvatarPath =
+    import.meta.env.VITE_ASSISTANT_AVATAR_PATH ??
+    window.THEME_ASSISTANT_AVATAR_PATH ??
+    null;
+  if (themeAssistantAvatarPath === "") {
+    themeAssistantAvatarPath = null;
+  }
 
   const disableUpload =
     import.meta.env.VITE_DISABLE_UPLOAD === "true"
@@ -83,6 +92,7 @@ export const env = (): Env => {
     themeConfigPath,
     themeLogoPath,
     themeLogoDarkPath,
+    themeAssistantAvatarPath,
     disableUpload,
     disableChatInputAutofocus,
     disableLogout,
