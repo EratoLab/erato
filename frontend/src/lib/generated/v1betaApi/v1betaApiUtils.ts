@@ -21,7 +21,7 @@ export function deepMerge<Target, Source>(
   for (const key in source) {
     if (source[key] instanceof Object)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      Object.assign(source[key], deepMerge((target as any)[key], source[key]));
+      Object.assign(source[key], deepMerge((target && (target as any)[key]) || {}, source[key]));
   }
   Object.assign(target || {}, source);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

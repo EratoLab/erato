@@ -83,9 +83,9 @@ pub struct CreateAssistantRequest {
 /// Response when creating an assistant
 #[derive(Debug, Serialize, ToSchema)]
 pub struct CreateAssistantResponse {
-    /// The created assistant
+    /// The created assistant with files
     #[serde(flatten)]
-    pub assistant: Assistant,
+    pub assistant: AssistantWithFiles,
 }
 
 /// Request to update an existing assistant
@@ -108,9 +108,9 @@ pub struct UpdateAssistantRequest {
 /// Response when updating an assistant
 #[derive(Debug, Serialize, ToSchema)]
 pub struct UpdateAssistantResponse {
-    /// The updated assistant
+    /// The updated assistant with files
     #[serde(flatten)]
-    pub assistant: Assistant,
+    pub assistant: AssistantWithFiles,
 }
 
 /// Request to archive an assistant
@@ -135,7 +135,7 @@ pub struct ArchiveAssistantResponse {
     tag = "assistants",
     request_body = CreateAssistantRequest,
     responses(
-        (status = CREATED, body = CreateAssistantResponse, description = "Successfully created the assistant"),
+        (status = CREATED, body = AssistantWithFiles, description = "Successfully created the assistant"),
         (status = BAD_REQUEST, description = "Invalid request data"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error")
@@ -200,19 +200,44 @@ pub async fn create_assistant(
         created_assistant.id
     );
 
+    // Fetch the created assistant with files to return in the response
+    let assistant_with_files = assistant::get_assistant_with_files(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        created_assistant.id,
+        false, // Exclude archived
+    )
+    .await
+    .map_err(log_internal_server_error)?;
+
+    // Convert files to API format
+    let api_files = assistant_with_files
+        .files
+        .into_iter()
+        .map(|file| AssistantFile {
+            id: file.id.to_string(),
+            filename: file.filename,
+            download_url: format!("/api/v1beta/files/{}", file.id),
+        })
+        .collect();
+
     Ok((
         StatusCode::CREATED,
         Json(CreateAssistantResponse {
-            assistant: Assistant {
-                id: created_assistant.id.to_string(),
-                name: created_assistant.name,
-                description: created_assistant.description,
-                prompt: created_assistant.prompt,
-                mcp_server_ids: created_assistant.mcp_server_ids,
-                default_chat_provider: created_assistant.default_chat_provider,
-                created_at: created_assistant.created_at,
-                updated_at: created_assistant.updated_at,
-                archived_at: created_assistant.archived_at,
+            assistant: AssistantWithFiles {
+                assistant: Assistant {
+                    id: assistant_with_files.id.to_string(),
+                    name: assistant_with_files.name,
+                    description: assistant_with_files.description,
+                    prompt: assistant_with_files.prompt,
+                    mcp_server_ids: assistant_with_files.mcp_server_ids,
+                    default_chat_provider: assistant_with_files.default_chat_provider,
+                    created_at: assistant_with_files.created_at,
+                    updated_at: assistant_with_files.updated_at,
+                    archived_at: assistant_with_files.archived_at,
+                },
+                files: api_files,
             },
         }),
     ))
@@ -344,7 +369,7 @@ pub async fn get_assistant(
     ),
     request_body = UpdateAssistantRequest,
     responses(
-        (status = OK, body = UpdateAssistantResponse, description = "Successfully updated the assistant"),
+        (status = OK, body = AssistantWithFiles, description = "Successfully updated the assistant"),
         (status = BAD_REQUEST, description = "Invalid assistant ID format or request data"),
         (status = NOT_FOUND, description = "Assistant not found or access denied"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
@@ -471,17 +496,42 @@ pub async fn update_assistant(
         updated_assistant.id
     );
 
+    // Fetch the updated assistant with files to return in the response
+    let assistant_with_files = assistant::get_assistant_with_files(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        assistant_id,
+        false, // Exclude archived
+    )
+    .await
+    .map_err(log_internal_server_error)?;
+
+    // Convert files to API format
+    let api_files = assistant_with_files
+        .files
+        .into_iter()
+        .map(|file| AssistantFile {
+            id: file.id.to_string(),
+            filename: file.filename,
+            download_url: format!("/api/v1beta/files/{}", file.id),
+        })
+        .collect();
+
     Ok(Json(UpdateAssistantResponse {
-        assistant: Assistant {
-            id: updated_assistant.id.to_string(),
-            name: updated_assistant.name,
-            description: updated_assistant.description,
-            prompt: updated_assistant.prompt,
-            mcp_server_ids: updated_assistant.mcp_server_ids,
-            default_chat_provider: updated_assistant.default_chat_provider,
-            created_at: updated_assistant.created_at,
-            updated_at: updated_assistant.updated_at,
-            archived_at: updated_assistant.archived_at,
+        assistant: AssistantWithFiles {
+            assistant: Assistant {
+                id: assistant_with_files.id.to_string(),
+                name: assistant_with_files.name,
+                description: assistant_with_files.description,
+                prompt: assistant_with_files.prompt,
+                mcp_server_ids: assistant_with_files.mcp_server_ids,
+                default_chat_provider: assistant_with_files.default_chat_provider,
+                created_at: assistant_with_files.created_at,
+                updated_at: assistant_with_files.updated_at,
+                archived_at: assistant_with_files.archived_at,
+            },
+            files: api_files,
         },
     }))
 }

@@ -319,9 +319,9 @@ export type CreateAssistantRequest = {
 };
 
 /**
- * An assistant model
+ * An assistant with its associated files
  */
-export type CreateAssistantResponse = Assistant;
+export type CreateAssistantResponse = AssistantWithFiles;
 
 /**
  * Request to create a new chat without an initial message
@@ -877,9 +877,9 @@ export type UpdateAssistantRequest = {
 };
 
 /**
- * An assistant model
+ * An assistant with its associated files
  */
-export type UpdateAssistantResponse = Assistant;
+export type UpdateAssistantResponse = AssistantWithFiles;
 
 export type UserProfile = {
   /**

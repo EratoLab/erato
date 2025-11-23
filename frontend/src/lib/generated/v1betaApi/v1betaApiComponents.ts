@@ -129,7 +129,7 @@ export const fetchCreateAssistant = (
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.CreateAssistantResponse,
+    Schemas.AssistantWithFiles,
     CreateAssistantError,
     Schemas.CreateAssistantRequest,
     {},
@@ -140,7 +140,7 @@ export const fetchCreateAssistant = (
 export const useCreateAssistant = (
   options?: Omit<
     reactQuery.UseMutationOptions<
-      Schemas.CreateAssistantResponse,
+      Schemas.AssistantWithFiles,
       CreateAssistantError,
       CreateAssistantVariables
     >,
@@ -149,7 +149,7 @@ export const useCreateAssistant = (
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
-    Schemas.CreateAssistantResponse,
+    Schemas.AssistantWithFiles,
     CreateAssistantError,
     CreateAssistantVariables
   >({
@@ -289,7 +289,7 @@ export const fetchUpdateAssistant = (
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.UpdateAssistantResponse,
+    Schemas.AssistantWithFiles,
     UpdateAssistantError,
     Schemas.UpdateAssistantRequest,
     {},
@@ -305,7 +305,7 @@ export const fetchUpdateAssistant = (
 export const useUpdateAssistant = (
   options?: Omit<
     reactQuery.UseMutationOptions<
-      Schemas.UpdateAssistantResponse,
+      Schemas.AssistantWithFiles,
       UpdateAssistantError,
       UpdateAssistantVariables
     >,
@@ -314,7 +314,7 @@ export const useUpdateAssistant = (
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
-    Schemas.UpdateAssistantResponse,
+    Schemas.AssistantWithFiles,
     UpdateAssistantError,
     UpdateAssistantVariables
   >({
