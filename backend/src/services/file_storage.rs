@@ -32,9 +32,14 @@ impl FileStorage {
 
     fn access_from_config_s3(config: &StorageProviderS3Config) -> Result<Operator, Report> {
         let mut builder = opendal::services::S3::default().bucket(config.bucket.as_str());
+
+        // When using a custom endpoint (e.g., MinIO), we need to:
+        // 1. NOT enable virtual host style (MinIO uses path-style URLs)
+        // 2. Disable loading AWS credentials from environment/config files
         if let Some(val) = &config.endpoint {
-            builder = builder.endpoint(val);
+            builder = builder.endpoint(val).disable_config_load();
         }
+
         if let Some(val) = &config.root {
             builder = builder.root(val);
         }

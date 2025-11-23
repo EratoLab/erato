@@ -61,9 +61,8 @@ export default function AssistantEditPage() {
         ...(formData.defaultModel?.chat_provider_id && {
           default_chat_provider: formData.defaultModel.chat_provider_id,
         }),
-        ...(formData.files.length > 0 && {
-          file_ids: formData.files.map((f) => f.id),
-        }),
+        // Always include file_ids to allow clearing files when empty
+        file_ids: formData.files.map((f) => f.id),
         ...(formData.mcpServerIds.length > 0 && {
           mcp_server_ids: formData.mcpServerIds,
         }),

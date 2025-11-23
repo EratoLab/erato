@@ -27,6 +27,12 @@ const fetchUploadFileJSDoc = `
  */
 `;
 
+// --- Fix deepMerge function in v1betaApiUtils.ts ---
+const utilsFile = path.join(targetDir, "v1betaApiUtils.ts");
+const deepMergeBugPattern =
+  /Object\.assign\(source\[key\], deepMerge\(\(target as any\)\[key\], source\[key\]\)\);/g;
+const deepMergeFix = `Object.assign(source[key], deepMerge((target && (target as any)[key]) || {}, source[key]));`;
+
 async function patchVoidTypes(filePath) {
   try {
     const content = await fs.readFile(filePath, "utf8");
@@ -100,6 +106,28 @@ async function addJSDocToFileUpload(filePath) {
   return false; // Indicate no change
 }
 
+async function fixDeepMerge(filePath) {
+  try {
+    let content = await fs.readFile(filePath, "utf8");
+    const relativeFilePath = path.relative(process.cwd(), filePath);
+
+    if (deepMergeBugPattern.test(content)) {
+      console.log(`Found deepMerge bug in: ${relativeFilePath}`);
+      const newContent = content.replace(deepMergeBugPattern, deepMergeFix);
+      if (newContent !== content) {
+        await fs.writeFile(filePath, newContent, "utf8");
+        console.log(`Fixed deepMerge bug in: ${relativeFilePath}`);
+        return true; // Indicate change
+      }
+    } else {
+      console.log(`No deepMerge bug found in: ${relativeFilePath}`);
+    }
+  } catch (error) {
+    console.error(`Error fixing deepMerge in ${filePath}:`, error);
+  }
+  return false; // Indicate no change
+}
+
 async function run() {
   console.log(`Scanning ${targetDir} for post-processing...`);
   let changesMade = false;
@@ -124,6 +152,11 @@ async function run() {
 
     // Add JSDoc specifically to components file
     if (await addJSDocToFileUpload(componentsFile)) {
+      changesMade = true;
+    }
+
+    // Fix deepMerge function in utils file
+    if (await fixDeepMerge(utilsFile)) {
       changesMade = true;
     }
 

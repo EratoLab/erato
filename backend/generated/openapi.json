@@ -62,7 +62,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateAssistantResponse"
+                  "$ref": "#/components/schemas/AssistantWithFiles"
                 }
               }
             }
@@ -165,7 +165,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateAssistantResponse"
+                  "$ref": "#/components/schemas/AssistantWithFiles"
                 }
               }
             }
@@ -1410,8 +1410,8 @@
       "CreateAssistantResponse": {
         "allOf": [
           {
-            "$ref": "#/components/schemas/Assistant",
-            "description": "The created assistant"
+            "$ref": "#/components/schemas/AssistantWithFiles",
+            "description": "The created assistant with files"
           }
         ],
         "description": "Response when creating an assistant"
@@ -2623,8 +2623,8 @@
       "UpdateAssistantResponse": {
         "allOf": [
           {
-            "$ref": "#/components/schemas/Assistant",
-            "description": "The updated assistant"
+            "$ref": "#/components/schemas/AssistantWithFiles",
+            "description": "The updated assistant with files"
           }
         ],
         "description": "Response when updating an assistant"
