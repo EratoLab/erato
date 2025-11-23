@@ -7,6 +7,7 @@ import { ErrorBoundary } from "react-error-boundary";
 import { useNavigate, useLocation } from "react-router-dom";
 
 import { env } from "@/app/env";
+import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
@@ -15,7 +16,6 @@ import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { SidebarToggleIcon, SearchIcon, EditIcon } from "../icons";
-import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
@@ -194,7 +194,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const navigate = useNavigate();
     const location = useLocation();
     const isOnSearchPage = location.pathname === "/search";
-    
+
     // Get assistants feature flag
     const { enabled: assistantsEnabled } = useAssistantsFeature();
 

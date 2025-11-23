@@ -91,6 +91,24 @@ export function createLogger(
   return {
     log: (message: string, data?: unknown) =>
       debugLog(defaultCategory, `[${componentName}] ${message}`, data),
+    warn: (message: string, data?: unknown) => {
+      const timestamp = new Date().toISOString().split("T")[1].replace("Z", "");
+      const prefix = `[${timestamp}][${defaultCategory}][${componentName}]`;
+      if (data !== undefined) {
+        console.warn(`${prefix} ${message}`, data);
+      } else {
+        console.warn(`${prefix} ${message}`);
+      }
+    },
+    error: (message: string, error?: unknown) => {
+      const timestamp = new Date().toISOString().split("T")[1].replace("Z", "");
+      const prefix = `[${timestamp}][${defaultCategory}][${componentName}]`;
+      if (error !== undefined) {
+        console.error(`${prefix} ${message}`, error);
+      } else {
+        console.error(`${prefix} ${message}`);
+      }
+    },
     time: <T>(label: string, fn: () => T) =>
       debugTime(defaultCategory, `[${componentName}] ${label}`, fn),
   };

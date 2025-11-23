@@ -65,7 +65,6 @@ export function mapApiMessageToUiMessage(
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     input_files_ids: apiMessage.input_files_ids || undefined,
     previous_message_id:
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
       apiMessage.previous_message_id &&
       typeof apiMessage.previous_message_id === "string"
         ? apiMessage.previous_message_id

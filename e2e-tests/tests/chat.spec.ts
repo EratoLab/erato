@@ -11,7 +11,7 @@ test(
 
     // Start waiting for file chooser before clicking the button
     const fileChooserPromise = page.waitForEvent("filechooser");
-    await page.getByLabel("Upload Files").click();
+    await page.getByRole("button", { name: "Upload Files" }).click();
     const fileChooser = await fileChooserPromise;
 
     const filePath = "test-files/sample-report-compressed.pdf";
@@ -68,7 +68,7 @@ test(
 
     // Start waiting for file chooser before clicking the button
     const fileChooserPromise = page.waitForEvent("filechooser");
-    await page.getByLabel("Upload Files").click();
+    await page.getByRole("button", { name: "Upload Files" }).click();
     const fileChooser = await fileChooserPromise;
 
     const filePath = "test-files/big-file-20mb.pdf";

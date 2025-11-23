@@ -1,21 +1,25 @@
 import { t } from "@lingui/core/macro";
+import { useQueryClient } from "@tanstack/react-query";
+import * as reactQuery from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
-import { Alert } from "@/components/ui/Feedback/Alert";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
+import { Alert } from "@/components/ui/Feedback/Alert";
 import {
   useAvailableModels,
   useGetAssistant,
   useUpdateAssistant,
+  listAssistantsQuery,
+  getAssistantQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import type { UpdateAssistantRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 import type { AssistantFormData } from "@/components/ui/Assistant/AssistantForm";
 
 export default function AssistantEditPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -26,7 +30,7 @@ export default function AssistantEditPage() {
     isLoading: isLoadingAssistant,
     error: loadError,
   } = useGetAssistant(
-    id ? { pathParams: { assistantId: id } } : { skip: true } as any,
+    id ? { pathParams: { assistantId: id } } : reactQuery.skipToken,
   );
 
   // Fetch available models
@@ -48,24 +52,41 @@ export default function AssistantEditPage() {
       setErrorMessage("");
       setSuccessMessage("");
 
+      // Build the request body with proper typing
+      // Note: Generated types are incomplete, so we use type assertion
+      const requestBody = {
+        name: formData.name,
+        prompt: formData.prompt,
+        ...(formData.description && { description: formData.description }),
+        ...(formData.defaultModel?.chat_provider_id && {
+          default_chat_provider: formData.defaultModel.chat_provider_id,
+        }),
+        ...(formData.files.length > 0 && {
+          file_ids: formData.files.map((f) => f.id),
+        }),
+        ...(formData.mcpServerIds.length > 0 && {
+          mcp_server_ids: formData.mcpServerIds,
+        }),
+      } as unknown as Parameters<typeof updateAssistant>[0]["body"];
+
       await updateAssistant({
         pathParams: { assistantId: id },
-        body: {
-          name: formData.name,
-          prompt: formData.prompt,
-          description: formData.description || undefined,
-          default_chat_provider: formData.defaultModel?.chat_provider_id || undefined,
-          file_ids: formData.files.length > 0 
-            ? formData.files.map(f => f.id) 
-            : undefined,
-          mcp_server_ids: formData.mcpServerIds.length > 0 
-            ? formData.mcpServerIds 
-            : undefined,
-        } as any,
+        body: requestBody,
       });
 
       setSuccessMessage(t`Assistant updated successfully!`);
-      
+
+      // Invalidate queries
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: listAssistantsQuery({}).queryKey,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: getAssistantQuery({ pathParams: { assistantId: id } })
+            .queryKey,
+        }),
+      ]);
+
       // Navigate back to assistants list after a short delay
       setTimeout(() => {
         navigate("/assistants");
@@ -113,20 +134,22 @@ export default function AssistantEditPage() {
 
   // Find the selected model from available models
   const defaultChatProvider = assistant.default_chat_provider;
-  const selectedModel = defaultChatProvider != null && defaultChatProvider != undefined
-    ? availableModels.find((m: { chat_provider_id: string }) => 
-        m.chat_provider_id === defaultChatProvider
-      ) ?? null
-    : null;
+  const selectedModel =
+    defaultChatProvider != null
+      ? (availableModels.find(
+          (m: { chat_provider_id: string }) =>
+            m.chat_provider_id === defaultChatProvider,
+        ) ?? null)
+      : null;
 
   // Prepare initial form data
   const initialData: Partial<AssistantFormData> = {
     name: assistant.name,
-    description: assistant.description || "",
+    description: assistant.description ?? "",
     prompt: assistant.prompt,
     defaultModel: selectedModel,
-    files: assistant.files || [],
-    mcpServerIds: assistant.mcp_server_ids || [],
+    files: assistant.files,
+    mcpServerIds: assistant.mcp_server_ids ?? [],
   };
 
   return (
@@ -157,4 +180,3 @@ export default function AssistantEditPage() {
     </div>
   );
 }
-

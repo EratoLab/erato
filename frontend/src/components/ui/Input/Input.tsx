@@ -73,10 +73,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     ref,
   ) => {
     const inputId = props.id;
+    // eslint-disable-next-line lingui/no-unlocalized-strings
     const errorId = error && inputId ? `${inputId}-error` : undefined;
 
     // Combine aria-describedby with error id if present
-    const describedBy = [ariaDescribedBy, errorId].filter(Boolean).join(" ") || undefined;
+    const describedBy =
+      [ariaDescribedBy, errorId].filter(Boolean).join(" ") || undefined;
 
     return (
       <div className="w-full">
@@ -88,7 +90,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           placeholder={placeholder}
           disabled={disabled}
           aria-label={ariaLabel}
-          aria-describedby={describedBy || undefined}
+          aria-describedby={describedBy ?? undefined}
           aria-invalid={!!error}
           className={clsx(
             // Base styles
@@ -126,4 +128,3 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 Input.displayName = "Input";
-

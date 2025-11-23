@@ -1195,7 +1195,10 @@ pub async fn generate_chat_summary(
     tracing::debug!(
         "[SUMMARY] First message content (chat_id={}): '{}'",
         chat.id,
-        first_message_content_text.chars().take(100).collect::<String>()
+        first_message_content_text
+            .chars()
+            .take(100)
+            .collect::<String>()
     );
 
     let prompt = format!(
@@ -1212,15 +1215,19 @@ pub async fn generate_chat_summary(
         .with_max_tokens(max_tokens);
 
     // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
-    let chat_provider = app_state.chat_provider_for_summary()
-        .wrap_err_with(|| format!("[SUMMARY] Failed to get chat provider for summary (chat_id={})", chat.id))?;
-    
+    let chat_provider = app_state.chat_provider_for_summary().wrap_err_with(|| {
+        format!(
+            "[SUMMARY] Failed to get chat provider for summary (chat_id={})",
+            chat.id
+        )
+    })?;
+
     tracing::debug!(
         "[SUMMARY] Using provider '{}' for summary generation (chat_id={})",
         chat_provider.model_name,
         chat.id
     );
-    
+
     if chat_provider.model_name.starts_with("o1-")
         || chat_provider.model_name.starts_with("o2-")
         || chat_provider.model_name.starts_with("o3-")
@@ -1234,11 +1241,21 @@ pub async fn generate_chat_summary(
         .genai_for_summary()?
         .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
         .await
-        .wrap_err_with(|| format!("[SUMMARY] Failed to generate chat summary via API (chat_id={})", chat.id))?;
+        .wrap_err_with(|| {
+            format!(
+                "[SUMMARY] Failed to generate chat summary via API (chat_id={})",
+                chat.id
+            )
+        })?;
 
     let summary = summary_completion
         .first_text()
-        .ok_or_else(|| eyre!("[SUMMARY] No text content in summary response (chat_id={})", chat.id))?
+        .ok_or_else(|| {
+            eyre!(
+                "[SUMMARY] No text content in summary response (chat_id={})",
+                chat.id
+            )
+        })?
         .to_string();
 
     tracing::info!(
@@ -1256,7 +1273,12 @@ pub async fn generate_chat_summary(
         summary.clone(),
     )
     .await
-    .wrap_err_with(|| format!("[SUMMARY] Failed to update chat summary in database (chat_id={})", chat.id))?;
+    .wrap_err_with(|| {
+        format!(
+            "[SUMMARY] Failed to update chat summary in database (chat_id={})",
+            chat.id
+        )
+    })?;
 
     tracing::info!(
         "[SUMMARY] Successfully saved summary to database for chat_id={}",

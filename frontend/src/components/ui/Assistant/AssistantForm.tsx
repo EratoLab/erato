@@ -99,82 +99,95 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   className,
 }) => {
   const [formData, setFormData] = useState<AssistantFormData>({
-    name: initialData?.name || "",
-    description: initialData?.description || "",
-    prompt: initialData?.prompt || "",
-    defaultModel: initialData?.defaultModel || null,
-    files: initialData?.files || [],
-    mcpServerIds: initialData?.mcpServerIds || [],
+    name: initialData?.name ?? "",
+    description: initialData?.description ?? "",
+    prompt: initialData?.prompt ?? "",
+    defaultModel: initialData?.defaultModel ?? null,
+    files: initialData?.files ?? [],
+    mcpServerIds: initialData?.mcpServerIds ?? [],
   });
 
-  const [errors, setErrors] = useState<Partial<Record<keyof AssistantFormData, string>>>({});
-  const [touched, setTouched] = useState<Partial<Record<keyof AssistantFormData, boolean>>>({});
+  const [errors, setErrors] = useState<
+    Partial<Record<keyof AssistantFormData, string>>
+  >({});
+  const [touched, setTouched] = useState<
+    Partial<Record<keyof AssistantFormData, boolean>>
+  >({});
 
   // Validation
-  const validateField = useCallback((field: keyof AssistantFormData, value: string | ChatModel | null | FileUploadItem[] | string[]): string => {
-    switch (field) {
-      case "name": {
-        const nameValue = value as string;
-        if (!nameValue || nameValue.trim().length === 0) {
-          return t`Name is required`;
+  const validateField = useCallback(
+    (
+      field: keyof AssistantFormData,
+      value: string | ChatModel | null | FileUploadItem[] | string[],
+    ): string => {
+      switch (field) {
+        case "name": {
+          const nameValue = value as string;
+          if (!nameValue || nameValue.trim().length === 0) {
+            return t`Name is required`;
+          }
+          if (nameValue.trim().length < 2) {
+            return t`Name must be at least 2 characters`;
+          }
+          if (nameValue.length > 100) {
+            return t`Name must be less than 100 characters`;
+          }
+          return "";
         }
-        if (nameValue.trim().length < 2) {
-          return t`Name must be at least 2 characters`;
-        }
-        if (nameValue.length > 100) {
-          return t`Name must be less than 100 characters`;
-        }
-        return "";
-      }
 
-      case "description": {
-        const descValue = value as string;
-        if (descValue && descValue.length > 500) {
-          return t`Description must be less than 500 characters`;
+        case "description": {
+          const descValue = value as string;
+          if (descValue && descValue.length > 500) {
+            return t`Description must be less than 500 characters`;
+          }
+          return "";
         }
-        return "";
-      }
 
-      case "prompt": {
-        const promptValue = value as string;
-        if (!promptValue || promptValue.trim().length === 0) {
-          return t`System prompt is required`;
+        case "prompt": {
+          const promptValue = value as string;
+          if (!promptValue || promptValue.trim().length === 0) {
+            return t`System prompt is required`;
+          }
+          if (promptValue.trim().length < 10) {
+            return t`System prompt must be at least 10 characters`;
+          }
+          if (promptValue.length > 5000) {
+            return t`System prompt must be less than 5000 characters`;
+          }
+          return "";
         }
-        if (promptValue.trim().length < 10) {
-          return t`System prompt must be at least 10 characters`;
-        }
-        if (promptValue.length > 5000) {
-          return t`System prompt must be less than 5000 characters`;
-        }
-        return "";
-      }
 
-      default:
-        return "";
-    }
-  }, []);
+        default:
+          return "";
+      }
+    },
+    [],
+  );
 
   const validateForm = useCallback((): boolean => {
     const newErrors: Partial<Record<keyof AssistantFormData, string>> = {};
-    
+
     newErrors.name = validateField("name", formData.name);
     newErrors.description = validateField("description", formData.description);
     newErrors.prompt = validateField("prompt", formData.prompt);
 
     setErrors(newErrors);
-    
-    return !Object.values(newErrors).some(error => error !== "");
+
+    return !Object.values(newErrors).some((error) => error !== "");
   }, [formData, validateField]);
 
   // Field change handlers
   const handleFieldChange = useCallback(
-    (field: keyof AssistantFormData, value: string | ChatModel | null | FileUploadItem[] | string[]) => {
-      setFormData(prev => ({ ...prev, [field]: value }));
-      
+    (
+      field: keyof AssistantFormData,
+      value: string | ChatModel | null | FileUploadItem[] | string[],
+    ) => {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+
       // Validate on change if field has been touched
       if (touched[field]) {
         const error = validateField(field, value);
-        setErrors(prev => ({ ...prev, [field]: error }));
+        setErrors((prev) => ({ ...prev, [field]: error }));
       }
     },
     [touched, validateField],
@@ -182,38 +195,38 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
 
   const handleFieldBlur = useCallback(
     (field: keyof AssistantFormData) => {
-      setTouched(prev => ({ ...prev, [field]: true }));
+      setTouched((prev) => ({ ...prev, [field]: true }));
       const error = validateField(field, formData[field]);
-      setErrors(prev => ({ ...prev, [field]: error }));
+      setErrors((prev) => ({ ...prev, [field]: error }));
     },
     [formData, validateField],
   );
 
   // File handling
   const handleFilesUploaded = useCallback((files: FileUploadItem[]) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       files: [...prev.files, ...files],
     }));
   }, []);
 
   const handleFileRemove = useCallback((fileId: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      files: prev.files.filter(f => f.id !== fileId),
+      files: prev.files.filter((f) => f.id !== fileId),
     }));
   }, []);
 
   // Model selection
   const handleModelSelect = useCallback((model: ChatModel | null) => {
-    setFormData(prev => ({ ...prev, defaultModel: model }));
+    setFormData((prev) => ({ ...prev, defaultModel: model }));
   }, []);
 
   // Form submission
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      
+
       // Mark all fields as touched
       setTouched({
         name: true,
@@ -235,22 +248,19 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     [formData, onSubmit, validateForm],
   );
 
-  const isFormValid = !Object.values(errors).some(error => error !== "") && 
-                      formData.name.trim().length > 0 && 
-                      formData.prompt.trim().length > 0;
+  const isFormValid =
+    !Object.values(errors).some((error) => error !== "") &&
+    formData.name.trim().length > 0 &&
+    formData.prompt.trim().length > 0;
 
   return (
     <form onSubmit={handleSubmit} className={className}>
       <div className="space-y-5">
         {/* Success message */}
-        {successMessage && (
-          <Alert type="success">{successMessage}</Alert>
-        )}
+        {successMessage && <Alert type="success">{successMessage}</Alert>}
 
         {/* Error message */}
-        {errorMessage && (
-          <Alert type="error">{errorMessage}</Alert>
-        )}
+        {errorMessage && <Alert type="error">{errorMessage}</Alert>}
 
         {/* Name field */}
         <FormField
@@ -336,14 +346,22 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
             <FileUploadButton
               onFilesUploaded={handleFilesUploaded}
               disabled={isSubmitting}
-              acceptedFileTypes={["pdf", "document", "text", "spreadsheet", "image"]}
+              acceptedFileTypes={[
+                "pdf",
+                "document",
+                "text",
+                "spreadsheet",
+                "image",
+              ]}
             />
             {formData.files.length > 0 && (
               <FileAttachmentsPreview
                 attachedFiles={formData.files}
                 maxFiles={5}
                 onRemoveFile={handleFileRemove}
-                onRemoveAllFiles={() => setFormData(prev => ({ ...prev, files: [] }))}
+                onRemoveAllFiles={() =>
+                  setFormData((prev) => ({ ...prev, files: [] }))
+                }
                 showFileTypes
               />
             )}
@@ -381,4 +399,3 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 AssistantForm.displayName = "AssistantForm";
-

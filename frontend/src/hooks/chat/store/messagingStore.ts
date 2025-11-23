@@ -1,10 +1,14 @@
 import { create } from "zustand";
 
+import { createLogger } from "@/utils/debugLogger";
+
 import type {
   Value,
   ToolCallStatus,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
+
+const logger = createLogger("STATE", "messagingStore");
 
 // Tool call tracking types
 export interface ToolCall {
@@ -68,7 +72,7 @@ export const useMessagingStore = create<MessagingStore>((set) => {
       set((prev) => {
         const newState = { ...prev.streaming, ...update };
         if (process.env.NODE_ENV === "development") {
-          console.log("[DEBUG_STORE] messagingStore: setStreaming called.", {
+          logger.log("setStreaming called.", {
             prevStreaming: prev.streaming,
             update,
             newStreaming: newState,
@@ -82,7 +86,7 @@ export const useMessagingStore = create<MessagingStore>((set) => {
     resetStreaming: () => {
       set((prev) => {
         if (process.env.NODE_ENV === "development") {
-          console.log("[DEBUG_STORE] messagingStore: resetStreaming called.", {
+          logger.log("resetStreaming called.", {
             prevStreaming: prev.streaming,
             newStreaming: initialStreamingState,
           });
@@ -94,7 +98,7 @@ export const useMessagingStore = create<MessagingStore>((set) => {
       set((prev) => {
         const newUserMessages = { ...prev.userMessages, [message.id]: message };
         if (process.env.NODE_ENV === "development") {
-          console.log("[DEBUG_STORE] messagingStore: addUserMessage called.", {
+          logger.log("addUserMessage called.", {
             messageId: message.id,
             newUserMessagesCount: Object.keys(newUserMessages).length,
           });
@@ -107,10 +111,9 @@ export const useMessagingStore = create<MessagingStore>((set) => {
     clearUserMessages: () => {
       set((prev) => {
         if (process.env.NODE_ENV === "development") {
-          console.log(
-            "[DEBUG_STORE] messagingStore: clearUserMessages called.",
-            { prevUserMessagesCount: Object.keys(prev.userMessages).length },
-          );
+          logger.log("clearUserMessages called.", {
+            prevUserMessagesCount: Object.keys(prev.userMessages).length,
+          });
         }
         return { ...prev, userMessages: {} };
       });
@@ -140,16 +143,13 @@ export const useMessagingStore = create<MessagingStore>((set) => {
           return prev;
         }
         if (process.env.NODE_ENV === "development") {
-          console.log(
-            "[DEBUG_STORE] messagingStore: clearCompletedUserMessages processed.",
-            {
-              prevUserMessagesCount: Object.keys(originalUserMessages).length,
-              nextUserMessagesCount: Object.keys(nextUserMessages).length,
-              removedCount:
-                Object.keys(originalUserMessages).length -
-                Object.keys(nextUserMessages).length,
-            },
-          );
+          logger.log("clearCompletedUserMessages processed.", {
+            prevUserMessagesCount: Object.keys(originalUserMessages).length,
+            nextUserMessagesCount: Object.keys(nextUserMessages).length,
+            removedCount:
+              Object.keys(originalUserMessages).length -
+              Object.keys(nextUserMessages).length,
+          });
         }
         return { ...prev, userMessages: nextUserMessages };
       });
@@ -157,7 +157,7 @@ export const useMessagingStore = create<MessagingStore>((set) => {
     setError: (error) =>
       set((prev) => {
         if (process.env.NODE_ENV === "development") {
-          console.log("[DEBUG_STORE] messagingStore: setError called.", {
+          logger.log("setError called.", {
             prevError: prev.error,
             newError: error,
           });
@@ -167,13 +167,10 @@ export const useMessagingStore = create<MessagingStore>((set) => {
     setAwaitingFirstStreamChunkForNewChat: (isAwaiting) =>
       set((prev) => {
         if (process.env.NODE_ENV === "development") {
-          console.log(
-            "[DEBUG_STORE] messagingStore: setAwaitingFirstStreamChunkForNewChat called.",
-            {
-              prevIsAwaiting: prev.isAwaitingFirstStreamChunkForNewChat,
-              newIsAwaiting: isAwaiting,
-            },
-          );
+          logger.log("setAwaitingFirstStreamChunkForNewChat called.", {
+            prevIsAwaiting: prev.isAwaitingFirstStreamChunkForNewChat,
+            newIsAwaiting: isAwaiting,
+          });
         }
         return {
           ...prev,
@@ -183,13 +180,10 @@ export const useMessagingStore = create<MessagingStore>((set) => {
     setNewlyCreatedChatIdInStore: (chatId) =>
       set((prev) => {
         if (process.env.NODE_ENV === "development") {
-          console.log(
-            "[DEBUG_STORE] messagingStore: setNewlyCreatedChatIdInStore called.",
-            {
-              prevNewlyCreatedChatId: prev.newlyCreatedChatId,
-              newNewlyCreatedChatId: chatId,
-            },
-          );
+          logger.log("setNewlyCreatedChatIdInStore called.", {
+            prevNewlyCreatedChatId: prev.newlyCreatedChatId,
+            newNewlyCreatedChatId: chatId,
+          });
         }
         return {
           ...prev,
@@ -199,13 +193,10 @@ export const useMessagingStore = create<MessagingStore>((set) => {
     setNavigationTransition: (inTransition) =>
       set((prev) => {
         if (process.env.NODE_ENV === "development") {
-          console.log(
-            "[DEBUG_STORE] messagingStore: setNavigationTransition called.",
-            {
-              prevIsInNavigationTransition: prev.isInNavigationTransition,
-              newIsInNavigationTransition: inTransition,
-            },
-          );
+          logger.log("setNavigationTransition called.", {
+            prevIsInNavigationTransition: prev.isInNavigationTransition,
+            newIsInNavigationTransition: inTransition,
+          });
         }
         return {
           ...prev,

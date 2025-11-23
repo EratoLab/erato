@@ -7,6 +7,7 @@ import {
   type UploadFileVariables,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useUploadFeature } from "@/providers/FeatureConfigProvider";
+import { createLogger } from "@/utils/debugLogger";
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
 
 import {
@@ -23,6 +24,8 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 import type { FileRejection } from "react-dropzone";
+
+const logger = createLogger("HOOK", "useFileDropzone");
 
 interface UseFileDropzoneProps {
   /** Array of accepted file types */
@@ -96,7 +99,7 @@ export function useFileDropzone({
   // Add create chat mutation for silent chat creation
   const createChatMutation = useCreateChat({
     onError: (error) => {
-      console.error("Failed to create chat for file upload:", error);
+      logger.error("Failed to create chat for file upload:", error);
       setError(
         // eslint-disable-next-line lingui/no-unlocalized-strings
         new UploadUnknownError("Failed to prepare chat for file upload"),
@@ -142,19 +145,14 @@ export function useFileDropzone({
 
         // If no chatId exists, create one silently first
         if (!uploadChatId) {
-          console.log("[FILE_UPLOAD] Creating silent chat for file uploads");
+          logger.log("Creating silent chat for file uploads");
           const createChatResult = await createChatMutation.mutateAsync({
             body: {},
           });
-          console.log(
-            "[FILE_UPLOAD] Silent chat creation result:",
-            createChatResult,
-          );
+          logger.log("Silent chat creation result:", createChatResult);
           uploadChatId = createChatResult.chat_id;
           // Set the silentChatId in the store
-          console.log(
-            `[FILE_UPLOAD] Setting silentChatId in store: ${uploadChatId}`,
-          );
+          logger.log(`Setting silentChatId in store: ${uploadChatId}`);
           setSilentChatId(uploadChatId);
         }
 
@@ -182,12 +180,9 @@ export function useFileDropzone({
         try {
           // Use type assertion on the variables object for the call
           result = await fetchUploadFile(variables as UploadFileVariables);
-          console.log(
-            "[FILE_UPLOAD] File upload API call successful, result:",
-            result,
-          );
+          logger.log("File upload API call successful, result:", result);
         } catch (uploadError) {
-          console.error("Error calling fetchUploadFile:", uploadError);
+          logger.error("Error calling fetchUploadFile:", uploadError);
 
           // Check for fetch-like error with status
           if (isUploadTooLarge(uploadError)) {
@@ -207,7 +202,7 @@ export function useFileDropzone({
           uploadedItems = result.files; // Store the result
         }
       } catch (err) {
-        console.error("Error uploading files (outer catch):", err);
+        logger.error("Error uploading files (outer catch):", err);
         const isKnownError =
           err instanceof UploadTooLargeError ||
           err instanceof UploadUnknownError;

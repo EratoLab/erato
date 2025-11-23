@@ -103,20 +103,26 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     forwardedRef,
   ) => {
     const internalRef = useRef<HTMLTextAreaElement>(null);
+
+    // Properly handle the forwarded ref
     const textareaRef =
-      (forwardedRef as React.RefObject<HTMLTextAreaElement>) || internalRef;
+      typeof forwardedRef === "object" && forwardedRef !== null
+        ? forwardedRef
+        : internalRef;
 
     const textareaId = props.id;
+    // eslint-disable-next-line lingui/no-unlocalized-strings
     const errorId = error && textareaId ? `${textareaId}-error` : undefined;
 
     // Combine aria-describedby with error id if present
-    const describedBy = [ariaDescribedBy, errorId].filter(Boolean).join(" ") || undefined;
+    const describedBy =
+      [ariaDescribedBy, errorId].filter(Boolean).join(" ") || undefined;
 
     // Auto-resize functionality
     useEffect(() => {
       if (!autoResize) return;
       const textarea = textareaRef.current;
-      if (!textarea) return;
+      if (textarea === null) return;
 
       const minHeight = rows * 24; // Approximate line height
       const maxHeight = maxRows * 24;
@@ -140,7 +146,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           disabled={disabled}
           rows={autoResize ? undefined : rows}
           aria-label={ariaLabel}
-          aria-describedby={describedBy || undefined}
+          aria-describedby={describedBy ?? undefined}
           aria-invalid={!!error}
           className={clsx(
             // Base styles
@@ -182,4 +188,3 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 Textarea.displayName = "Textarea";
-

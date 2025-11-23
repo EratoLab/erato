@@ -44,6 +44,7 @@ describe("FeatureConfigProvider", () => {
       disableUpload: false,
       disableChatInputAutofocus: false,
       disableLogout: false,
+      assistantsEnabled: false,
     });
   });
 
@@ -82,6 +83,9 @@ describe("FeatureConfigProvider", () => {
         auth: {
           showLogout: true,
         },
+        assistants: {
+          enabled: false,
+        },
       });
     });
 
@@ -96,6 +100,7 @@ describe("FeatureConfigProvider", () => {
         disableUpload: true, // Disabled
         disableChatInputAutofocus: false,
         disableLogout: false,
+        assistantsEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -118,6 +123,7 @@ describe("FeatureConfigProvider", () => {
         disableUpload: false,
         disableChatInputAutofocus: true, // Disabled
         disableLogout: false,
+        assistantsEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -140,6 +146,7 @@ describe("FeatureConfigProvider", () => {
         disableUpload: false,
         disableChatInputAutofocus: false,
         disableLogout: true, // Disabled
+        assistantsEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -162,6 +169,7 @@ describe("FeatureConfigProvider", () => {
         disableUpload: true,
         disableChatInputAutofocus: true,
         disableLogout: true,
+        assistantsEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -210,6 +218,7 @@ describe("FeatureConfigProvider", () => {
         disableUpload: true,
         disableChatInputAutofocus: false,
         disableLogout: false,
+        assistantsEnabled: false,
       });
 
       const { result } = renderHook(() => useUploadFeature(), {
@@ -256,6 +265,7 @@ describe("FeatureConfigProvider", () => {
         disableUpload: false,
         disableChatInputAutofocus: true,
         disableLogout: false,
+        assistantsEnabled: false,
       });
 
       const { result } = renderHook(() => useChatInputFeature(), {
@@ -302,6 +312,7 @@ describe("FeatureConfigProvider", () => {
         disableUpload: false,
         disableChatInputAutofocus: false,
         disableLogout: true,
+        assistantsEnabled: false,
       });
 
       const { result } = renderHook(() => useAuthFeature(), {

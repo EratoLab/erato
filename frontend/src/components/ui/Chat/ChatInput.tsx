@@ -12,6 +12,7 @@ import {
   useUploadFeature,
   useChatInputFeature,
 } from "@/providers/FeatureConfigProvider";
+import { createLogger } from "@/utils/debugLogger";
 
 import { ArrowUpIcon } from "../icons";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
@@ -25,6 +26,8 @@ import type {
   ChatModel,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
+
+const logger = createLogger("UI", "ChatInput");
 
 interface ChatInputProps {
   onSendMessage: (
@@ -98,7 +101,7 @@ export const ChatInput = ({
   editInitialContent,
   initialModel,
 }: ChatInputProps) => {
-  const [message, setMessage] = useState(" ");
+  const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
@@ -160,7 +163,7 @@ export const ChatInput = ({
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
 
   // Log attachedFiles received from the hook
-  console.log("[ChatInput] Received attachedFiles from hook:", attachedFiles);
+  logger.log("Received attachedFiles from hook:", attachedFiles);
 
   // Prefill message when entering edit mode
   useEffect(() => {
@@ -182,16 +185,15 @@ export const ChatInput = ({
         return;
       }
 
-      console.log(
-        "[CHAT_FLOW] ChatInput - Submit:",
-        { mode, editMessageId },
-        messageContent.substring(0, 20) +
+      logger.log("Submit:", {
+        mode,
+        editMessageId,
+        messagePreview:
+          messageContent.substring(0, 20) +
           (messageContent.length > 20 ? "..." : ""),
-        "files:",
-        inputFileIds,
-        "model:",
-        selectedModel?.chat_provider_id,
-      );
+        files: inputFileIds,
+        model: selectedModel?.chat_provider_id,
+      });
       if (mode === "edit" && onEditMessage && editMessageId) {
         onEditMessage(editMessageId, messageContent, inputFileIds);
       } else {
@@ -272,8 +274,8 @@ export const ChatInput = ({
     !isAnyTokenLimitExceeded;
 
   // Log just before rendering the component and its preview section
-  console.log(
-    "[ChatInput] Rendering component. Preview should render if attachedFiles > 0. attachedFiles:",
+  logger.log(
+    "Rendering component. Preview should render if attachedFiles > 0. attachedFiles:",
     attachedFiles,
   );
 

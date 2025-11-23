@@ -50,7 +50,7 @@ export const chatIsReadyToChat = async (
   await expect(textbox).toBeVisible();
   await expect(textbox).toBeEnabled();
   if (args?.expectAssistantResponse) {
-    await expect(page.getByText("Assistant")).toBeVisible();
+    await expect(page.getByTestId("message-assistant")).toBeVisible();
   }
   await expect(page.getByText("Loading")).toHaveCount(0);
 };
@@ -335,12 +335,11 @@ export const waitForEditModeToEnd = async (page: Page) => {
  * Wait for Erato page to be properly loaded by checking for API_ROOT_URL.
  */
 async function waitForEratoPageReady(page: Page): Promise<void> {
-  await page.waitForFunction(
-    () => {
-      return (window as any).API_ROOT_URL !== undefined;
-    },
-    { timeout: 10000 },
-  );
+  // Wait until either API_ROOT_URL is set or [data-testid="message-list"] exists
+  await Promise.race([
+    page.waitForFunction(() => (window as any).API_ROOT_URL !== undefined, { timeout: 10000 }),
+    page.getByTestId("message-list").waitFor({ timeout: 10000 }),
+  ]);
 }
 
 /**

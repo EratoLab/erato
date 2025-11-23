@@ -2,10 +2,11 @@ import { t } from "@lingui/core/macro";
 import { memo } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { InteractiveContainer } from "../Container/InteractiveContainer";
-import { EditIcon } from "../icons";
 import { useFrequentAssistants } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { createLogger } from "@/utils/debugLogger";
+
+import { InteractiveContainer } from "../Container/InteractiveContainer";
+import { EditIcon } from "../icons";
 
 const logger = createLogger("UI", "FrequentAssistantsList");
 
@@ -27,7 +28,10 @@ const AssistantItem = memo<{
       onClick={onSelect}
       className="flex items-center gap-3 rounded-lg px-3 py-2 pl-10 text-left hover:bg-theme-bg-hover"
     >
-      <span className="flex-1 truncate font-medium text-theme-fg-primary" title={name}>
+      <span
+        className="flex-1 truncate font-medium text-theme-fg-primary"
+        title={name}
+      >
         {name}
       </span>
     </InteractiveContainer>
@@ -50,7 +54,9 @@ const AssistantsNavigationItem = memo<{
         }
         // Prevent default navigation for normal clicks
         e.preventDefault();
-        logger.log("[ASSISTANTS_FLOW] Assistants navigation clicked in sidebar");
+        logger.log(
+          "[ASSISTANTS_FLOW] Assistants navigation clicked in sidebar",
+        );
         onNavigate();
       }}
       className="block"
@@ -72,7 +78,7 @@ AssistantsNavigationItem.displayName = "AssistantsNavigationItem";
 
 /**
  * FrequentAssistantsList component
- * 
+ *
  * Displays frequently used assistants in the sidebar.
  * Clicking an assistant starts a new chat with that assistant's configuration.
  * The section header navigates to the full assistants list page.
@@ -80,7 +86,7 @@ AssistantsNavigationItem.displayName = "AssistantsNavigationItem";
 export const FrequentAssistantsList = memo<FrequentAssistantsListProps>(
   ({ onAssistantSelect, limit = 5 }) => {
     const navigate = useNavigate();
-    
+
     // Fetch frequent assistants
     const { data, isLoading, error } = useFrequentAssistants({
       queryParams: { limit },
@@ -94,12 +100,13 @@ export const FrequentAssistantsList = memo<FrequentAssistantsListProps>(
       navigate("/assistants");
     };
 
-    // Handle assistant click
+    // Handle assistant click - navigate to assistant's chat space
     const handleAssistantClick = (assistantId: string) => {
-      logger.log("[ASSISTANTS_FLOW] Assistant clicked:", assistantId);
-      if (onAssistantSelect) {
-        onAssistantSelect(assistantId);
-      }
+      logger.log(
+        "[ASSISTANTS_FLOW] Assistant clicked, navigating to chat space:",
+        assistantId,
+      );
+      navigate(`/a/${assistantId}`);
     };
 
     // Don't render section if loading failed
@@ -114,7 +121,7 @@ export const FrequentAssistantsList = memo<FrequentAssistantsListProps>(
 
         {/* Loading state */}
         {isLoading && (
-          <div className="flex justify-center py-4 px-2">
+          <div className="flex justify-center px-2 py-4">
             <div className="size-5 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
           </div>
         )}
@@ -139,4 +146,3 @@ export const FrequentAssistantsList = memo<FrequentAssistantsListProps>(
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 FrequentAssistantsList.displayName = "FrequentAssistantsList";
-

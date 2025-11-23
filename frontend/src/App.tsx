@@ -4,9 +4,11 @@ import { Routes, Route, Link, Outlet, Navigate } from "react-router-dom";
 
 import { ClientProviders } from "./components/providers/ClientProviders";
 // Page Imports
+import AssistantChatLayout from "./layouts/AssistantChatLayout";
 import AssistantsLayout from "./layouts/AssistantsLayout";
 import ChatLayout from "./layouts/ChatLayout";
 import SearchLayout from "./layouts/SearchLayout";
+import AssistantChatSpacePage from "./pages/AssistantChatSpacePage";
 import AssistantCreatePage from "./pages/AssistantCreatePage";
 import AssistantEditPage from "./pages/AssistantEditPage";
 import AssistantsListPage from "./pages/AssistantsListPage";
@@ -66,6 +68,13 @@ function AppRoutes() {
           {/* Default /chat to /chat/new */}
           <Route path="new" element={<NewChatPage />} />
           <Route path=":id" element={<ChatDetailPage />} />
+        </Route>
+        {/* Assistant chat space - /a/:assistantId shows assistant welcome + past chats */}
+        <Route path="a">
+          <Route path=":assistantId" element={<AssistantChatLayout />}>
+            <Route index element={<AssistantChatSpacePage />} />
+            <Route path=":chatId" element={<AssistantChatSpacePage />} />
+          </Route>
         </Route>
         {/* Search section with its own layout */}
         <Route path="search" element={<SearchLayout />}>

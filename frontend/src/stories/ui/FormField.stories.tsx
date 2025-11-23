@@ -158,116 +158,116 @@ const CompleteFormExampleComponent = () => {
     description: "",
   });
 
-    const validateEmail = (email: string) => {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return emailRegex.test(email);
-    };
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
 
-    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
-      setFormData({ ...formData, name: value });
-      if (value.length < 2) {
-        setErrors({ ...errors, name: "Name must be at least 2 characters" });
-      } else {
-        setErrors({ ...errors, name: "" });
-      }
-    };
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFormData({ ...formData, name: value });
+    if (value.length < 2) {
+      setErrors({ ...errors, name: "Name must be at least 2 characters" });
+    } else {
+      setErrors({ ...errors, name: "" });
+    }
+  };
 
-    const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
-      setFormData({ ...formData, email: value });
-      if (!validateEmail(value) && value.length > 0) {
-        setErrors({ ...errors, email: "Please enter a valid email address" });
-      } else {
-        setErrors({ ...errors, email: "" });
-      }
-    };
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFormData({ ...formData, email: value });
+    if (!validateEmail(value) && value.length > 0) {
+      setErrors({ ...errors, email: "Please enter a valid email address" });
+    } else {
+      setErrors({ ...errors, email: "" });
+    }
+  };
 
-    const handleDescriptionChange = (
-      e: React.ChangeEvent<HTMLTextAreaElement>,
-    ) => {
-      const value = e.target.value;
-      setFormData({ ...formData, description: value });
-      if (value.length > 0 && value.length < 10) {
-        setErrors({
-          ...errors,
-          description: "Description must be at least 10 characters",
-        });
-      } else {
-        setErrors({ ...errors, description: "" });
-      }
-    };
+  const handleDescriptionChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    const value = e.target.value;
+    setFormData({ ...formData, description: value });
+    if (value.length > 0 && value.length < 10) {
+      setErrors({
+        ...errors,
+        description: "Description must be at least 10 characters",
+      });
+    } else {
+      setErrors({ ...errors, description: "" });
+    }
+  };
 
-    return (
-      <div className="w-[500px] space-y-4 rounded-lg border border-theme-border bg-theme-bg-primary p-6">
-        <h2 className="text-xl font-semibold text-theme-fg-primary">
-          Create Assistant
-        </h2>
+  return (
+    <div className="w-[500px] space-y-4 rounded-lg border border-theme-border bg-theme-bg-primary p-6">
+      <h2 className="text-xl font-semibold text-theme-fg-primary">
+        Create Assistant
+      </h2>
 
-        <FormField
-          label="Assistant Name"
-          required
+      <FormField
+        label="Assistant Name"
+        required
+        error={errors.name}
+        htmlFor="assistant-name"
+      >
+        <Input
+          id="assistant-name"
+          value={formData.name}
+          onChange={handleNameChange}
+          placeholder="My Helper Assistant"
           error={errors.name}
-          htmlFor="assistant-name"
-        >
-          <Input
-            id="assistant-name"
-            value={formData.name}
-            onChange={handleNameChange}
-            placeholder="My Helper Assistant"
-            error={errors.name}
-          />
-        </FormField>
+        />
+      </FormField>
 
-        <FormField
-          label="Email Notifications"
-          required
+      <FormField
+        label="Email Notifications"
+        required
+        error={errors.email}
+        helpText="We'll send updates about your assistant"
+        htmlFor="assistant-email"
+      >
+        <Input
+          id="assistant-email"
+          type="email"
+          value={formData.email}
+          onChange={handleEmailChange}
+          placeholder="you@example.com"
           error={errors.email}
-          helpText="We'll send updates about your assistant"
-          htmlFor="assistant-email"
-        >
-          <Input
-            id="assistant-email"
-            type="email"
-            value={formData.email}
-            onChange={handleEmailChange}
-            placeholder="you@example.com"
-            error={errors.email}
-          />
-        </FormField>
+        />
+      </FormField>
 
-        <FormField
-          label="Description"
+      <FormField
+        label="Description"
+        error={errors.description}
+        helpText="Describe what your assistant does"
+        htmlFor="assistant-description"
+      >
+        <Textarea
+          id="assistant-description"
+          value={formData.description}
+          onChange={handleDescriptionChange}
+          placeholder="This assistant helps with..."
+          rows={4}
           error={errors.description}
-          helpText="Describe what your assistant does"
-          htmlFor="assistant-description"
-        >
-          <Textarea
-            id="assistant-description"
-            value={formData.description}
-            onChange={handleDescriptionChange}
-            placeholder="This assistant helps with..."
-            rows={4}
-            error={errors.description}
-          />
-        </FormField>
+        />
+      </FormField>
 
-        <div className="flex gap-2 pt-2">
-          <button
-            type="button"
-            className="rounded-lg border border-theme-border bg-theme-bg-secondary px-4 py-2 text-sm font-medium text-theme-fg-secondary hover:bg-theme-bg-hover"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="rounded-lg bg-neutral-800 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700"
-          >
-            Create Assistant
-          </button>
-        </div>
+      <div className="flex gap-2 pt-2">
+        <button
+          type="button"
+          className="rounded-lg border border-theme-border bg-theme-bg-secondary px-4 py-2 text-sm font-medium text-theme-fg-secondary hover:bg-theme-bg-hover"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="rounded-lg bg-neutral-800 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700"
+        >
+          Create Assistant
+        </button>
       </div>
-    );
+    </div>
+  );
 };
 
 export const CompleteFormExample: Story = {
@@ -335,11 +335,7 @@ export const WithDisabledInput: Story = {
         helpText="This field is automatically generated"
         htmlFor="system-field"
       >
-        <Input
-          id="system-field"
-          value="auto-generated-value"
-          disabled
-        />
+        <Input id="system-field" value="auto-generated-value" disabled />
       </FormField>
     </div>
   ),
@@ -369,4 +365,3 @@ export const MonospaceInForm: Story = {
     </div>
   ),
 };
-

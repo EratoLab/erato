@@ -9,6 +9,8 @@
  * a custom implementation for more advanced features.
  */
 
+import { createLogger } from "../debugLogger";
+
 // SSE event interface
 export interface SSEEvent {
   data: string;
@@ -26,6 +28,8 @@ export interface SSEOptions {
   method?: "GET" | "POST"; // HTTP method to use
   body?: string; // Request body for POST requests
 }
+
+const logger = createLogger("NETWORK", "SSE_CLIENT");
 
 /**
  * Creates an SSE connection to the specified URL
@@ -45,16 +49,14 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
     body,
   } = options;
 
-  console.log(
-    `[CHAT_FLOW] SSE Client - Creating ${method} connection to: ${url}`,
-  );
+  logger.log(`Creating ${method} connection to: ${url}`);
 
   let abortController: AbortController | null = null;
   let isConnected = false;
 
   // For GET requests, use the native EventSource
   if (method === "GET" && typeof EventSource !== "undefined") {
-    console.log("[CHAT_FLOW] SSE Client - Using native EventSource for GET");
+    logger.log("Using native EventSource for GET");
     // Create URL with query params if there's a body for GET
     const requestUrl = body
       ? `${url}?${new URLSearchParams({ data: body }).toString()}`
@@ -63,15 +65,13 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
     const eventSource = new EventSource(requestUrl);
 
     eventSource.onopen = () => {
-      console.log(
-        "[CHAT_FLOW] SSE Client - Native EventSource connection opened",
-      );
+      logger.log("Native EventSource connection opened");
       isConnected = true;
       onOpen?.();
     };
 
     eventSource.onerror = (event: Event) => {
-      console.log("[CHAT_FLOW] SSE Client - Native EventSource error:", event);
+      logger.log("Native EventSource error:", event);
       isConnected = false;
       onError?.(event);
     };
@@ -91,9 +91,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
     // Return cleanup function
     return () => {
       if (isConnected) {
-        console.log(
-          "[CHAT_FLOW] SSE Client - Closing native EventSource connection",
-        );
+        logger.log("Closing native EventSource connection");
         eventSource.close();
         isConnected = false;
         onClose?.();
@@ -102,10 +100,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
   }
 
   // For POST requests or environments without EventSource, use fetch
-  console.log(
-    "[CHAT_FLOW] SSE Client - Using fetch-based approach for",
-    method,
-  );
+  logger.log("Using fetch-based approach for", method);
   abortController = new AbortController();
   const { signal } = abortController;
 
@@ -133,9 +128,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
     const reader = stream.getReader(); // Get the reader
 
     try {
-      console.log(
-        "[CHAT_FLOW] SSE Client - Stream connected, starting to read using async generator", // Updated log
-      );
+      logger.log("Stream connected, starting to read using async generator");
       isConnected = true;
       onOpen?.();
 
@@ -152,9 +145,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         buffer = lines.pop() ?? "";
 
         if (lines.length > 0) {
-          console.log(
-            `[CHAT_FLOW] SSE Client - Received ${lines.length} events`,
-          );
+          logger.log(`Received ${lines.length} events`);
         }
 
         for (const line of lines) {
@@ -186,20 +177,18 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
           if (eventData.data && eventData.data.trim() !== "") {
             onMessage?.(eventData);
           } else {
-            console.log(
-              "[CHAT_FLOW] SSE Client - Skipping event with empty data",
-            );
+            logger.log("Skipping event with empty data");
           }
         }
       }
       // Generator finishes when stream ends, reader lock released in generator's finally
-      console.log("[CHAT_FLOW] SSE Client - Stream ended (async generator)");
+      logger.log("Stream ended (async generator)");
       isConnected = false;
       onClose?.();
     } catch (err) {
       // Catch errors during stream processing or generator execution
       const error = err instanceof Error ? err : new Error(String(err));
-      console.log("[CHAT_FLOW] SSE Client - Stream error:", error.message);
+      logger.log("Stream error:", error.message);
 
       // Create an event-like object
       const errorEvent = new Event("error");
@@ -214,15 +203,11 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
   // Execute the fetch request
   void (async () => {
     try {
-      console.log(
-        `[CHAT_FLOW] SSE Client - Initiating ${method} fetch request`,
-      );
+      logger.log(`Initiating ${method} fetch request`);
 
       // Add a guard to check if already aborted
       if (signal.aborted) {
-        console.log(
-          "[CHAT_FLOW] SSE Client - Request already aborted before fetch",
-        );
+        logger.log("Request already aborted before fetch");
         return;
       }
 
@@ -241,40 +226,36 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
 
       if (!response.ok) {
         const errorMsg = `SSE request failed: ${response.status} ${response.statusText}`;
-        console.log("[CHAT_FLOW] SSE Client - Fetch error:", errorMsg);
+        logger.log("Fetch error:", errorMsg);
         throw new Error(errorMsg);
       }
 
       if (!response.body) {
-        console.log("[CHAT_FLOW] SSE Client - Error: Response has no body");
+        logger.log("Error: Response has no body");
         throw new Error("Response has no body");
       }
 
       // Check if connection was aborted while fetching
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (signal.aborted) {
-        console.log(
-          "[CHAT_FLOW] SSE Client - Connection aborted after fetch but before reading stream",
-        );
+        logger.log("Connection aborted after fetch but before reading stream");
         return;
       }
 
-      console.log(
-        "[CHAT_FLOW] SSE Client - Fetch successful, processing stream",
-      );
+      logger.log("Fetch successful, processing stream");
       // Read the stream using the updated function with the async generator
       await readSSEStream(response.body); // Pass the stream directly
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         // This is just a normal abort, not an error
-        console.log("[CHAT_FLOW] SSE Client - Request aborted");
+        logger.log("Request aborted");
         isConnected = false;
         onClose?.();
         return;
       }
 
       const error = err instanceof Error ? err : new Error(String(err));
-      console.log("[CHAT_FLOW] SSE Client - Fetch error:", error.message);
+      logger.log("Fetch error:", error.message);
 
       // Create an event-like object
       const errorEvent = new Event("error");
@@ -288,7 +269,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
   // Return cleanup function
   return () => {
     if (abortController) {
-      console.log("[CHAT_FLOW] SSE Client - Aborting fetch request");
+      logger.log("Aborting fetch request");
       abortController.abort();
       abortController = null;
       isConnected = false;

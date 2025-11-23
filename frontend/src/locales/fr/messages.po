@@ -77,6 +77,10 @@ msgstr "Tous les types de fichiers acceptés"
 msgid "upload.error.unknown"
 msgstr ""
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "And"
+msgstr ""
+
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "Approaching Budget Limit"
 msgstr "Limite budgétaire approchée"
@@ -100,6 +104,7 @@ msgstr "Êtes-vous sûr de vouloir supprimer ce chat ?"
 msgid "branding.welcomeScreen.description"
 msgstr "Posez des questions et obtenez des réponses utiles de notre assistant IA."
 
+#: src/pages/AssistantChatSpacePage.tsx
 #: src/components/ui/Chat/ChatMessage.tsx
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "Assistant"
@@ -193,6 +198,10 @@ msgstr "Fermer le fond de modal"
 msgid "collapse sidebar"
 msgstr "réduire la barre latérale"
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "Configuration"
+msgstr ""
+
 #: src/pages/AssistantCreatePage.tsx
 msgid "Configure a custom assistant with specific instructions and capabilities"
 msgstr ""
@@ -242,6 +251,7 @@ msgstr ""
 msgid "Dark mode"
 msgstr "Mode sombre"
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Default Files"
 msgstr ""
@@ -306,6 +316,10 @@ msgstr ""
 msgid "Edit Assistant"
 msgstr ""
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "Edit Assistant Settings"
+msgstr ""
+
 #: src/components/ui/Message/DefaultMessageControls.tsx
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "Edit message"
@@ -356,6 +370,7 @@ msgid "Failed to create assistant. Please try again."
 msgstr ""
 
 #: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
 msgid "Failed to load assistant. Please try again."
 msgstr ""
 
@@ -430,6 +445,8 @@ msgstr "J'aime ce message"
 #: src/pages/AssistantsListPage.tsx
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantCreatePage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "branding.page_title_suffix"
 msgstr ""
@@ -443,6 +460,7 @@ msgid "Loading"
 msgstr "Chargement"
 
 #: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
 msgid "Loading assistant..."
 msgstr ""
 
@@ -479,6 +497,10 @@ msgstr "Le message dépasse la limite de tokens. Veuillez réduire la longueur o
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "messages"
 msgstr "messages"
+
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "more conversations..."
+msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "My Assistant"
@@ -694,6 +716,10 @@ msgstr "Une erreur s'est produite"
 msgid "Something went wrong while loading the chat interface."
 msgstr "Une erreur s'est produite lors du chargement de l'interface de chat."
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "Start typing below to begin a new conversation"
+msgstr ""
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
 msgstr "Succès"
@@ -706,6 +732,7 @@ msgstr "réussi"
 msgid "Supported Locales:"
 msgstr ""
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "System Prompt"
 msgstr ""
@@ -790,6 +817,11 @@ msgstr "Essayez des mots-clés différents ou vérifiez l'orthographe"
 msgid "Type a message..."
 msgstr "Tapez un message..."
 
+#: src/pages/AssistantChatSpacePage.tsx
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "Untitled Chat"
+msgstr ""
+
 #: src/pages/AssistantEditPage.tsx
 msgid "Update your assistant's configuration and settings"
 msgstr ""
@@ -852,4 +884,8 @@ msgstr "Votre"
 
 #: src/pages/AssistantsListPage.tsx
 msgid "Your Assistants"
+msgstr ""
+
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "Your conversations with this assistant"
 msgstr ""

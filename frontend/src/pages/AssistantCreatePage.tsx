@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -7,13 +8,14 @@ import { PageHeader } from "@/components/ui/Container/PageHeader";
 import {
   useAvailableModels,
   useCreateAssistant,
+  listAssistantsQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import type { CreateAssistantRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 import type { AssistantFormData } from "@/components/ui/Assistant/AssistantForm";
 
 export default function AssistantCreatePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -33,23 +35,34 @@ export default function AssistantCreatePage() {
       setErrorMessage("");
       setSuccessMessage("");
 
+      // Build the request body with proper typing
+      // Note: Generated types are incomplete, so we use type assertion
+      const requestBody = {
+        name: formData.name,
+        prompt: formData.prompt,
+        ...(formData.description && { description: formData.description }),
+        ...(formData.defaultModel?.chat_provider_id && {
+          default_chat_provider: formData.defaultModel.chat_provider_id,
+        }),
+        ...(formData.files.length > 0 && {
+          file_ids: formData.files.map((f) => f.id),
+        }),
+        ...(formData.mcpServerIds.length > 0 && {
+          mcp_server_ids: formData.mcpServerIds,
+        }),
+      } as unknown as Parameters<typeof createAssistant>[0]["body"];
+
       await createAssistant({
-        body: {
-          name: formData.name,
-          prompt: formData.prompt,
-          description: formData.description || undefined,
-          default_chat_provider: formData.defaultModel?.chat_provider_id || undefined,
-          file_ids: formData.files.length > 0 
-            ? formData.files.map(f => f.id) 
-            : undefined,
-          mcp_server_ids: formData.mcpServerIds.length > 0 
-            ? formData.mcpServerIds 
-            : undefined,
-        } as any,
+        body: requestBody,
       });
 
       setSuccessMessage(t`Assistant created successfully!`);
-      
+
+      // Invalidate assistants list query
+      await queryClient.invalidateQueries({
+        queryKey: listAssistantsQuery({}).queryKey,
+      });
+
       // Navigate to assistants list after a short delay
       setTimeout(() => {
         navigate("/assistants");
@@ -91,4 +104,3 @@ export default function AssistantCreatePage() {
     </div>
   );
 }
-

@@ -17,6 +17,8 @@ import {
 // Import context and merge utility
 // import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
 import { deepMerge } from "@/lib/generated/v1betaApi/v1betaApiUtils";
+import { getChatUrl } from "@/utils/chat/urlUtils";
+import { createLogger } from "@/utils/debugLogger";
 
 // Import the correct response type and the RecentChat type from schemas
 // No longer needed after switching to invalidateQueries:
@@ -24,6 +26,8 @@ import { deepMerge } from "@/lib/generated/v1betaApi/v1betaApiUtils";
 //   RecentChatsResponse,
 //   RecentChat,
 // } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const logger = createLogger("HOOK", "useChatHistory");
 
 interface ChatHistoryState {
   isNewChatPending: boolean; // Flag to indicate a new chat navigation is in progress
@@ -40,10 +44,7 @@ export const useChatHistoryStore = create<ChatHistoryState>((set) => {
   };
 
   // Add debugging for state changes
-  console.log(
-    "[CHAT_FLOW] Initializing chat history store with state:",
-    initialState,
-  );
+  logger.log("Initializing chat history store with state:", initialState);
 
   return initialState;
 });
@@ -52,7 +53,7 @@ export function useChatHistory() {
   // const router = useRouter(); // Removed Next.js router
   const navigate = useNavigate(); // Added React Router navigate
   const location = useLocation();
-  const params = useParams<{ id?: string }>();
+  const params = useParams<{ id?: string; chatId?: string }>();
   const queryClient = useQueryClient();
 
   // Derive currentChatId from URL (single source of truth)
@@ -61,9 +62,10 @@ export function useChatHistory() {
     if (location.pathname === "/chat/new" || location.pathname === "/chat") {
       return null;
     }
-    // Extract ID from /chat/:id
-    return params.id ?? null;
-  }, [location.pathname, params.id]);
+    // Extract ID from /chat/:id or /a/:assistantId/:chatId
+    // For assistant routes, chatId param takes precedence
+    return params.chatId ?? params.id ?? null;
+  }, [location.pathname, params.id, params.chatId]);
 
   // Get context to access fetcherOptions - contextFetcherOptions removed as it was unused after introducing stableEmptyFetcherOptions
   // const { fetcherOptions: contextFetcherOptions } = useV1betaApiContext();
@@ -84,46 +86,41 @@ export function useChatHistory() {
   // Extract chats from the response structure, defaulting to a stable empty array reference
   const chats = data?.chats ?? emptyChats;
 
-  // Navigate to a specific chat
+  // Navigate to a specific chat (assistant-aware)
   const navigateToChat = useCallback(
     (chatId: string) => {
       // If a new chat navigation is pending, don't override the current chat ID
       if (isNewChatPending) {
-        console.log(
-          `[DEBUG_REDIRECT] navigateToChat BLOCKED: Navigation to ${chatId} is prevented because isNewChatPending is true. This is expected behavior during certain operations.`,
+        logger.log(
+          `navigateToChat BLOCKED: Navigation to ${chatId} is prevented because isNewChatPending is true. This is expected behavior during certain operations.`,
         );
         return;
       }
 
-      console.log(
-        `[DEBUG_REDIRECT] navigateToChat: Successfully navigating to chat: ${chatId}`,
-      );
+      // Look up the chat to check if it has an assistant
+      const chat = chats.find((c) => c.id === chatId);
+      const url = getChatUrl(chatId, chat?.assistant_id);
 
-      // Make sure we actually navigate to the chat URL using the router
-      // Use replace to ensure a clean navigation
-      // router.push(`/chat/${chatId}`);
-      navigate(`/chat/${chatId}`); // Replaced router.push with navigate
+      logger.log(`navigateToChat: Navigating to ${url}`);
+      navigate(url);
     },
-    // [router, setCurrentChatId, isNewChatPending],
-    [navigate, isNewChatPending], // Updated dependency array
+    [navigate, isNewChatPending, chats],
   );
 
   // Create a new chat and navigate to it
   const createNewChat = useCallback(async () => {
     try {
-      console.log(
-        "[DEBUG_REDIRECT] Creating new chat - navigating to /chat/new",
-      );
+      logger.log("Creating new chat - navigating to /chat/new");
 
       // Set the pending flag first to prevent unwanted changes during navigation
-      console.log("[DEBUG_REDIRECT] Setting isNewChatPending to TRUE");
+      logger.log("Setting isNewChatPending to TRUE");
       setNewChatPending(true);
 
       // Make sure the store state gets updated immediately before navigation
       // This is necessary to avoid state inconsistency during navigation
       await Promise.resolve(); // Force microtask queue to flush
 
-      console.log("[CHAT_FLOW] Store updated, navigating to /chat/new");
+      logger.log("Store updated, navigating to /chat/new");
 
       // For more reliable navigation with Next.js App Router, use replace instead of push
       // This prevents issues with the router queue and history management
@@ -134,11 +131,9 @@ export function useChatHistory() {
 
       return `temp-${Date.now()}`;
     } catch (error) {
-      console.error("Failed to create new chat:", error);
+      logger.log("Failed to create new chat:", error);
       // Reset the pending flag if there's an error
-      console.log(
-        "[DEBUG_REDIRECT] Error in createNewChat - setting isNewChatPending to FALSE",
-      );
+      logger.log("Error in createNewChat - setting isNewChatPending to FALSE");
       setNewChatPending(false);
       throw error;
     }
@@ -173,7 +168,7 @@ export function useChatHistory() {
         }
         // If not the current chat, no navigation occurs.
       } catch (error) {
-        console.error(`Failed to archive chat ${chatId}:`, error);
+        logger.log(`Failed to archive chat ${chatId}:`, error);
         // Consider adding error handling, e.g., show a notification
         // If using optimistic updates, would need to revert changes here
         throw error; // Re-throw error for potential handling upstream

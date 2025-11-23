@@ -62,4 +62,3 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 PageHeader.displayName = "PageHeader";
-

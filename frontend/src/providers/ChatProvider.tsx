@@ -59,6 +59,8 @@ interface ChatContextValue {
   sendMessage: (
     content: string,
     inputFileIds?: string[],
+    modelId?: string,
+    assistantId?: string,
   ) => Promise<string | undefined>;
   editMessage: (
     messageId: string,

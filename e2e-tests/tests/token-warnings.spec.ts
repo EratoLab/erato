@@ -241,7 +241,7 @@ test.describe("Token Usage Warnings", () => {
 
       // Upload a file that will contribute to token usage
       const fileChooserPromise = page.waitForEvent("filechooser");
-      await page.getByLabel("Upload Files").click();
+      await page.getByRole("button", { name: "Upload Files" }).click();
       const fileChooser = await fileChooserPromise;
 
       // Use the existing sample PDF which has text content

@@ -77,6 +77,10 @@ msgstr "All file types accepted"
 msgid "upload.error.unknown"
 msgstr "An unknown error occurred during upload. Please reload the page and try again."
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "And"
+msgstr "And"
+
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "Approaching Budget Limit"
 msgstr "Approaching Budget Limit"
@@ -100,6 +104,7 @@ msgstr "Are you sure you want to remove this chat?"
 msgid "branding.welcomeScreen.description"
 msgstr "Ask questions and get helpful responses from our AI assistant."
 
+#: src/pages/AssistantChatSpacePage.tsx
 #: src/components/ui/Chat/ChatMessage.tsx
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "Assistant"
@@ -193,6 +198,10 @@ msgstr "Close modal overlay"
 msgid "collapse sidebar"
 msgstr "collapse sidebar"
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "Configuration"
+msgstr "Configuration"
+
 #: src/pages/AssistantCreatePage.tsx
 msgid "Configure a custom assistant with specific instructions and capabilities"
 msgstr "Configure a custom assistant with specific instructions and capabilities"
@@ -242,6 +251,7 @@ msgstr "Create your first assistant to get started"
 msgid "Dark mode"
 msgstr "Dark mode"
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Default Files"
 msgstr "Default Files"
@@ -306,6 +316,10 @@ msgstr "Edit assistant"
 msgid "Edit Assistant"
 msgstr "Edit Assistant"
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "Edit Assistant Settings"
+msgstr "Edit Assistant Settings"
+
 #: src/components/ui/Message/DefaultMessageControls.tsx
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "Edit message"
@@ -356,6 +370,7 @@ msgid "Failed to create assistant. Please try again."
 msgstr "Failed to create assistant. Please try again."
 
 #: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
 msgid "Failed to load assistant. Please try again."
 msgstr "Failed to load assistant. Please try again."
 
@@ -430,6 +445,8 @@ msgstr "Like message"
 #: src/pages/AssistantsListPage.tsx
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantCreatePage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "branding.page_title_suffix"
 msgstr "LLM Chat"
@@ -443,6 +460,7 @@ msgid "Loading"
 msgstr "Loading"
 
 #: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
 msgid "Loading assistant..."
 msgstr "Loading assistant..."
 
@@ -479,6 +497,10 @@ msgstr "Message exceeds token limit. Please reduce length or remove files."
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "messages"
 msgstr "messages"
+
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "more conversations..."
+msgstr "more conversations..."
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "My Assistant"
@@ -694,6 +716,10 @@ msgstr "Something went wrong"
 msgid "Something went wrong while loading the chat interface."
 msgstr "Something went wrong while loading the chat interface."
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "Start typing below to begin a new conversation"
+msgstr "Start typing below to begin a new conversation"
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
 msgstr "Success"
@@ -706,6 +732,7 @@ msgstr "successful"
 msgid "Supported Locales:"
 msgstr "Supported Locales:"
 
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "System Prompt"
 msgstr "System Prompt"
@@ -790,6 +817,11 @@ msgstr "Try different keywords or check your spelling"
 msgid "Type a message..."
 msgstr "Type a message..."
 
+#: src/pages/AssistantChatSpacePage.tsx
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "Untitled Chat"
+msgstr "Untitled Chat"
+
 #: src/pages/AssistantEditPage.tsx
 msgid "Update your assistant's configuration and settings"
 msgstr "Update your assistant's configuration and settings"
@@ -853,3 +885,7 @@ msgstr "Your"
 #: src/pages/AssistantsListPage.tsx
 msgid "Your Assistants"
 msgstr "Your Assistants"
+
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+msgid "Your conversations with this assistant"
+msgstr "Your conversations with this assistant"

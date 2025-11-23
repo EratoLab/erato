@@ -273,7 +273,7 @@ pub async fn get_recent_chats(
                 .await
                 .ok()
                 .flatten();
-            
+
             if let Some(assistant) = assistant_opt {
                 (Some(aid), Some(assistant.name))
             } else {

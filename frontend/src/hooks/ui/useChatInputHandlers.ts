@@ -6,8 +6,12 @@
  */
 import { useState, useCallback } from "react";
 
+import { createLogger } from "@/utils/debugLogger";
+
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FormEvent } from "react";
+
+const logger = createLogger("HOOK", "useChatInputHandlers");
 
 interface UseChatInputHandlersResult {
   /** Currently attached files */
@@ -48,10 +52,7 @@ export function useChatInputHandlers(
   // Handle uploaded files
   const handleFilesUploaded = useCallback(
     (files: FileUploadItem[]) => {
-      console.log(
-        "[ChatInputHandlers] handleFilesUploaded called with:",
-        files,
-      );
+      logger.log("handleFilesUploaded called with:", files);
       setAttachedFiles((prevFiles) => {
         // Limit to maxFiles
         const combinedFiles = [...prevFiles, ...files];
@@ -62,10 +63,7 @@ export function useChatInputHandlers(
           handleFileAttachments(limitedFiles);
         }
 
-        console.log(
-          "[ChatInputHandlers] Updated attachedFiles state:",
-          limitedFiles,
-        );
+        logger.log("Updated attachedFiles state:", limitedFiles);
         return limitedFiles;
       });
     },
@@ -78,9 +76,7 @@ export function useChatInputHandlers(
       const fileId =
         typeof fileIdOrFile === "string" ? fileIdOrFile : fileIdOrFile.id;
 
-      console.log(
-        `[ChatInputHandlers] handleRemoveFile called for ID: ${fileId}`,
-      );
+      logger.log(`handleRemoveFile called for ID: ${fileId}`);
       setAttachedFiles((prevFiles) => {
         const updatedFiles = prevFiles.filter((file) => file.id !== fileId);
 
@@ -89,10 +85,7 @@ export function useChatInputHandlers(
           handleFileAttachments(updatedFiles);
         }
 
-        console.log(
-          "[ChatInputHandlers] Updated attachedFiles state after removal:",
-          updatedFiles,
-        );
+        logger.log("Updated attachedFiles state after removal:", updatedFiles);
         return updatedFiles;
       });
     },
@@ -101,7 +94,7 @@ export function useChatInputHandlers(
 
   // Handle removing all files
   const handleRemoveAllFiles = useCallback(() => {
-    console.log("[ChatInputHandlers] handleRemoveAllFiles called");
+    logger.log("handleRemoveAllFiles called");
     setAttachedFiles([]);
 
     // Notify parent component if handler provided

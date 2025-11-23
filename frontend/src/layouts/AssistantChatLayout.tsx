@@ -1,6 +1,5 @@
 import { Outlet } from "react-router-dom";
 
-import AssistantsPageStructure from "@/components/ui/Assistant/AssistantsPageStructure";
 import { RootProvider } from "@/providers/RootProvider";
 
 import type { FileType } from "@/utils/fileTypes";
@@ -13,15 +12,12 @@ const ACCEPTED_FILE_TYPES: FileType[] = [
   "image",
 ];
 
-export default function AssistantsLayout() {
+export default function AssistantChatLayout() {
   return (
     <RootProvider acceptedFileTypes={ACCEPTED_FILE_TYPES}>
-      <AssistantsPageStructure>
-        {/* 
-          Assistants pages (List, Create, Edit) will be rendered here.
-        */}
+      <div className="flex size-full flex-col bg-theme-bg-primary">
         <Outlet />
-      </AssistantsPageStructure>
+      </div>
     </RootProvider>
   );
 }

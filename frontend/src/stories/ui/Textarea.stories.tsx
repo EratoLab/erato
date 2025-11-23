@@ -69,7 +69,8 @@ export const WithValue: Story = {
 // With placeholder
 export const WithPlaceholder: Story = {
   args: {
-    placeholder: "Enter your description here...\nYou can write multiple lines.",
+    placeholder:
+      "Enter your description here...\nYou can write multiple lines.",
     rows: 4,
   },
   render: (args) => (
@@ -252,4 +253,3 @@ Always be clear, concise, and provide working examples when possible.`,
 export const CodePromptExample: Story = {
   render: () => <CodePromptExampleComponent />,
 };
-

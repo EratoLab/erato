@@ -32,4 +32,5 @@ export interface ChatSession {
   updatedAt: string;
   messages: Message[];
   metadata?: ChatSessionMetadata;
+  assistantId?: string | null;
 }
