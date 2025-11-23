@@ -1,8 +1,9 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 // import Image from "next/image"; // Removed Next.js Image import
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 
+import { defaultThemeConfig } from "@/config/themeConfig";
 import { mapApiUserProfileToUiProfile } from "@/utils/adapters/userProfileAdapter";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -22,6 +23,16 @@ export const Avatar = React.memo<AvatarProps>(
       () => mapApiUserProfileToUiProfile(userProfile),
       [userProfile],
     );
+
+    const [imageLoadFailed, setImageLoadFailed] = useState(false);
+
+    // Compute assistant avatar path once
+    const assistantAvatarPath = useMemo(() => {
+      if (typeof userOrAssistant !== "undefined" && !userOrAssistant) {
+        return defaultThemeConfig.getAssistantAvatarPath(undefined);
+      }
+      return null;
+    }, [userOrAssistant]);
 
     const getInitials = () => {
       if (typeof userOrAssistant !== "undefined" && !userOrAssistant) {
@@ -59,12 +70,18 @@ export const Avatar = React.memo<AvatarProps>(
         data-testid="avatar-identity"
         aria-label={!userOrAssistant ? t`Assistant avatar` : t`User avatar`}
       >
-        {uiProfile?.avatarUrl && !userOrAssistant ? (
-          <img // Changed from Image to img
+        {uiProfile?.avatarUrl && userOrAssistant ? (
+          <img
             src={uiProfile.avatarUrl}
             alt={t`User avatar`}
-            className="size-full rounded-full object-cover" // Added w-full h-full
-            // Removed Next.js specific props: fill, sizes
+            className="size-full rounded-full object-cover"
+          />
+        ) : assistantAvatarPath && !imageLoadFailed && !userOrAssistant ? (
+          <img
+            src={assistantAvatarPath}
+            alt={t`Assistant avatar`}
+            className="size-full rounded-full object-cover"
+            onError={() => setImageLoadFailed(true)}
           />
         ) : (
           <span>{getInitials()}</span>
