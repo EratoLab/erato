@@ -93,7 +93,10 @@ test(
     await expectIsDarkPage(page, "Page should be dark by default");
     // Toggle to light and check if it persists after reload
     await page.getByRole("button", { name: "expand sidebar" }).click();
-    await page.locator("button").filter({ hasText: "A" }).click();
+    await page
+      .getByRole("button")
+      .filter({ has: page.getByTestId("avatar-identity") })
+      .click();
     await page.getByRole("menuitem", { name: "Light mode" }).click();
     await expectIsLightPage(
       page,
@@ -115,7 +118,10 @@ test(
     await expectIsLightPage(page, "Page should be light by default");
     // Toggle to light and check if it persists after reload
     await page.getByRole("button", { name: "expand sidebar" }).click();
-    await page.locator("button").filter({ hasText: "A" }).click();
+    await page
+      .getByRole("button")
+      .filter({ has: page.getByTestId("avatar-identity") })
+      .click();
     await page.getByRole("menuitem", { name: "Dark mode" }).click();
     await expectIsDarkPage(
       page,

@@ -66,6 +66,7 @@ export interface SubmitStreamRequestBody {
   existing_chat_id?: string;
   input_files_ids?: string[];
   chat_provider_id?: string;
+  assistant_id?: string;
 }
 
 /**
@@ -75,6 +76,7 @@ export interface SubmitStreamRequestBody {
  * @param previousMessageId Optional ID of the previous assistant message.
  * @param currentChatId Optional existing chat ID (could be active or silent chat ID).
  * @param modelId Optional chat provider ID for model selection.
+ * @param assistantId Optional assistant ID to associate with the chat.
  * @returns The request body object.
  */
 export function constructSubmitStreamRequestBody(
@@ -83,6 +85,7 @@ export function constructSubmitStreamRequestBody(
   previousMessageId?: string,
   currentChatId?: string | null, // Combined chatId or silentChatId
   modelId?: string,
+  assistantId?: string,
 ): SubmitStreamRequestBody {
   const body: SubmitStreamRequestBody = {
     user_message: userMessageContent,
@@ -99,6 +102,9 @@ export function constructSubmitStreamRequestBody(
   }
   if (modelId) {
     body.chat_provider_id = modelId;
+  }
+  if (assistantId) {
+    body.assistant_id = assistantId;
   }
 
   return body;

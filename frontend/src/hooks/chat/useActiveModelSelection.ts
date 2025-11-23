@@ -7,8 +7,11 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 
 import { useAvailableModels } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { createLogger } from "@/utils/debugLogger";
 
 import type { ChatModel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const logger = createLogger("HOOK", "useActiveModelSelection");
 
 interface UseActiveModelSelectionParams {
   initialModel?: ChatModel | null;
@@ -40,28 +43,22 @@ export function useActiveModelSelection({
         (model) => model.chat_provider_id === initialModel.chat_provider_id,
       );
       if (modelExists) {
-        console.log(
-          "[ACTIVE_MODEL_SELECTION] Initializing with chat last model:",
-          {
-            modelId: initialModel.chat_provider_id,
-            modelName: initialModel.model_display_name,
-          },
-        );
+        logger.log("Initializing with chat last model:", {
+          modelId: initialModel.chat_provider_id,
+          modelName: initialModel.model_display_name,
+        });
         setSelectedModel(initialModel);
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       } else if (defaultModel) {
-        console.log(
-          "[ACTIVE_MODEL_SELECTION] Initial model no longer available, using default:",
-          {
-            unavailableModelId: initialModel.chat_provider_id,
-            defaultModelId: defaultModel.chat_provider_id,
-          },
-        );
+        logger.log("Initial model no longer available, using default:", {
+          unavailableModelId: initialModel.chat_provider_id,
+          defaultModelId: defaultModel.chat_provider_id,
+        });
         setSelectedModel(defaultModel);
       }
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     } else if (defaultModel) {
-      console.log("[ACTIVE_MODEL_SELECTION] Initializing with default model:", {
+      logger.log("Initializing with default model:", {
         modelId: defaultModel.chat_provider_id,
         modelName: defaultModel.model_display_name,
       });
@@ -81,7 +78,7 @@ export function useActiveModelSelection({
   // Handle model selection changes
   const handleModelChange = useCallback(
     (model: ChatModel) => {
-      console.log("[ACTIVE_MODEL_SELECTION] Model changed:", {
+      logger.log("Model changed:", {
         from: selectedModel?.chat_provider_id ?? "none",
         to: model.chat_provider_id,
         modelName: model.model_display_name,

@@ -105,6 +105,8 @@ pub struct MessageSubmitStreamingResponseToolCallUpdate {
     tool_name: String,
     input: Option<JsonValue>,
     status: ToolCallStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     progress_message: Option<String>,
     output: Option<JsonValue>,
 }
@@ -167,6 +169,10 @@ pub struct MessageSubmitRequest {
     #[schema(example = "primary")]
     /// The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
     chat_provider_id: Option<String>,
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// Optional assistant ID to associate with the chat when creating a new chat.
+    /// If provided with an existing_chat_id, this field is ignored.
+    assistant_id: Option<Uuid>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -456,6 +462,7 @@ async fn stream_get_or_create_chat<
     me_user: &MeProfile,
     previous_message_id: Option<&Uuid>,
     existing_chat_id: Option<&Uuid>,
+    assistant_id: Option<&Uuid>,
 ) -> Result<(chats::Model, ChatCreationStatus), ()> {
     // If existing_chat_id is provided, use it directly
     if let Some(existing_chat_id) = existing_chat_id {
@@ -484,13 +491,14 @@ async fn stream_get_or_create_chat<
             }
         }
     } else {
-        // Get or create the chat using the previous message ID
+        // Get or create the chat using the previous message ID and assistant_id
         let result = get_or_create_chat_by_previous_message_id(
             &app_state.db,
             policy,
             &me_user.to_subject(),
             previous_message_id,
             &me_user.0.id,
+            assistant_id,
         )
         .await;
 
@@ -1174,8 +1182,24 @@ pub async fn generate_chat_summary(
     chat: &chats::Model,
     first_message: &messages::Model,
 ) -> Result<(), Report> {
+    tracing::info!(
+        "[SUMMARY] Starting generation for chat_id={}, user_id={}, has_assistant={}",
+        chat.id,
+        me_user.0.id,
+        chat.assistant_configuration.is_some()
+    );
+
     let first_message_content = MessageSchema::validate(&first_message.raw_message)?;
     let first_message_content_text = first_message_content.full_text();
+
+    tracing::debug!(
+        "[SUMMARY] First message content (chat_id={}): '{}'",
+        chat.id,
+        first_message_content_text
+            .chars()
+            .take(100)
+            .collect::<String>()
+    );
 
     let prompt = format!(
         "Generate a summary for the topic of the following chat, based on the first message to the chat. The summary should be a short single sentence description like e.g. `Regex Search-and-Replace with Ripgrep` or `Explain a customer support flow`. Only return that sentence and nothing else. The chat message : {}",
@@ -1191,7 +1215,19 @@ pub async fn generate_chat_summary(
         .with_max_tokens(max_tokens);
 
     // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
-    let chat_provider = app_state.chat_provider_for_summary()?;
+    let chat_provider = app_state.chat_provider_for_summary().wrap_err_with(|| {
+        format!(
+            "[SUMMARY] Failed to get chat provider for summary (chat_id={})",
+            chat.id
+        )
+    })?;
+
+    tracing::debug!(
+        "[SUMMARY] Using provider '{}' for summary generation (chat_id={})",
+        chat_provider.model_name,
+        chat.id
+    );
+
     if chat_provider.model_name.starts_with("o1-")
         || chat_provider.model_name.starts_with("o2-")
         || chat_provider.model_name.starts_with("o3-")
@@ -1200,16 +1236,33 @@ pub async fn generate_chat_summary(
         chat_options = chat_options.with_reasoning_effort(ReasoningEffort::Low);
     }
 
+    tracing::debug!("[SUMMARY] Calling genai API (chat_id={})", chat.id);
     let summary_completion = app_state
         .genai_for_summary()?
         .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
         .await
-        .context("Failed to generate chat summary")?;
+        .wrap_err_with(|| {
+            format!(
+                "[SUMMARY] Failed to generate chat summary via API (chat_id={})",
+                chat.id
+            )
+        })?;
 
     let summary = summary_completion
         .first_text()
-        .ok_or_else(|| eyre!("No captured content in chat stream end event, or not of type Text"))?
+        .ok_or_else(|| {
+            eyre!(
+                "[SUMMARY] No text content in summary response (chat_id={})",
+                chat.id
+            )
+        })?
         .to_string();
+
+    tracing::info!(
+        "[SUMMARY] Generated summary for chat_id={}: '{}'",
+        chat.id,
+        summary
+    );
 
     // Update the chat with the generated summary
     crate::models::chat::update_chat_summary(
@@ -1217,10 +1270,20 @@ pub async fn generate_chat_summary(
         policy,
         &me_user.to_subject(),
         &chat.id,
-        summary,
+        summary.clone(),
     )
     .await
-    .wrap_err("Failed to update chat summary")?;
+    .wrap_err_with(|| {
+        format!(
+            "[SUMMARY] Failed to update chat summary in database (chat_id={})",
+            chat.id
+        )
+    })?;
+
+    tracing::info!(
+        "[SUMMARY] Successfully saved summary to database for chat_id={}",
+        chat.id
+    );
 
     Ok(())
 }
@@ -1638,6 +1701,7 @@ pub async fn message_submit_sse(
                 &me_user,
                 request.previous_message_id.as_ref(),
                 request.existing_chat_id.as_ref(),
+                request.assistant_id.as_ref(),
             )
             .await?;
 

@@ -1,6 +1,10 @@
 import { useCallback } from "react";
 
+import { createLogger } from "@/utils/debugLogger";
+
 import type { MessageAction } from "@/types/message-controls";
+
+const logger = createLogger("HOOK", "useChatActions");
 
 interface UseChatActionsProps {
   switchSession: (sessionId: string) => void;
@@ -8,6 +12,7 @@ interface UseChatActionsProps {
     content: string,
     inputFileIds?: string[],
     modelId?: string,
+    assistantId?: string,
   ) => Promise<string | undefined>;
   onMessageAction?: (action: MessageAction) => Promise<boolean>;
 }
@@ -19,12 +24,12 @@ export function useChatActions({
 }: UseChatActionsProps) {
   const handleSessionSelect = useCallback(
     (sessionId: string, customHandler?: (sessionId: string) => void) => {
-      console.log(`[CHAT_FLOW] Session select: ${sessionId}`);
+      logger.log(`Session select: ${sessionId}`);
 
       // Don't try to navigate to null or empty strings
       if (!sessionId || sessionId === "null") {
-        console.warn(
-          "[CHAT_FLOW] Attempted to select a session with invalid ID:",
+        logger.warn(
+          "Attempted to select a session with invalid ID:",
           sessionId,
         );
         return;
@@ -32,13 +37,11 @@ export function useChatActions({
 
       if (customHandler) {
         // Use custom handler if provided
-        console.log("[CHAT_FLOW] Using custom session select handler");
+        logger.log("Using custom session select handler");
         customHandler(sessionId);
       } else {
         // Otherwise use the default behavior
-        console.log(
-          "[CHAT_FLOW] Using default session select handler to switch session",
-        );
+        logger.log("Using default session select handler to switch session");
         // Explicitly call switchSession to navigate to the selected chat
         switchSession(sessionId);
       }
@@ -47,9 +50,14 @@ export function useChatActions({
   );
 
   const handleSendMessage = useCallback(
-    (message: string, inputFileIds?: string[], modelId?: string) => {
+    (
+      message: string,
+      inputFileIds?: string[],
+      modelId?: string,
+      assistantId?: string,
+    ) => {
       if (message.trim() || (inputFileIds && inputFileIds.length > 0)) {
-        return sendMessage(message, inputFileIds, modelId);
+        return sendMessage(message, inputFileIds, modelId, assistantId);
       }
       return Promise.resolve(undefined);
     },

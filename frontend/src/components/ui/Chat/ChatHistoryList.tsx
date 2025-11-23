@@ -4,12 +4,16 @@ import clsx from "clsx";
 import { memo, useEffect } from "react";
 
 import { MessageTimestamp } from "@/components/ui";
+import { getChatUrl } from "@/utils/chat/urlUtils";
+import { createLogger } from "@/utils/debugLogger";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { LogOutIcon } from "../icons";
 
 import type { ChatSession } from "@/types/chat";
+
+const logger = createLogger("UI", "ChatHistoryList");
 
 export interface ChatHistoryListProps {
   sessions: ChatSession[];
@@ -54,7 +58,7 @@ const ChatHistoryListItem = memo<{
     showTimestamps = true,
   }) => (
     <a
-      href={`/chat/${session.id}`}
+      href={getChatUrl(session.id, session.assistantId)}
       onClick={(e) => {
         // Allow cmd/ctrl-click to open in new tab
         if (e.metaKey || e.ctrlKey) {
@@ -187,7 +191,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             layout={layout}
             showTimestamps={showTimestamps}
             onSelect={() => {
-              console.log(`[CHAT_FLOW] Session item click: ${session.id}`);
+              logger.log(`Session item click: ${session.id}`);
               onSessionSelect(session.id);
             }}
             onArchive={

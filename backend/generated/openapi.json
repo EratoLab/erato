@@ -6,6 +6,249 @@
     "version": ""
   },
   "paths": {
+    "/api/v1beta/assistants": {
+      "get": {
+        "tags": [
+          "assistants"
+        ],
+        "summary": "List all assistants available to the user",
+        "operationId": "list_assistants",
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved user's assistants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Assistant"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "assistants"
+        ],
+        "summary": "Create a new assistant",
+        "operationId": "create_assistant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAssistantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successfully created the assistant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateAssistantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistants/{assistant_id}": {
+      "get": {
+        "tags": [
+          "assistants"
+        ],
+        "summary": "Get a specific assistant with its files",
+        "operationId": "get_assistant",
+        "parameters": [
+          {
+            "name": "assistant_id",
+            "in": "path",
+            "description": "The ID of the assistant to retrieve",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved the assistant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantWithFiles"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid assistant ID format"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "Assistant not found or access denied"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "assistants"
+        ],
+        "summary": "Update an existing assistant",
+        "operationId": "update_assistant",
+        "parameters": [
+          {
+            "name": "assistant_id",
+            "in": "path",
+            "description": "The ID of the assistant to update",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAssistantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully updated the assistant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateAssistantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid assistant ID format or request data"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "Assistant not found or access denied"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/assistants/{assistant_id}/archive": {
+      "post": {
+        "tags": [
+          "assistants"
+        ],
+        "summary": "Archive an assistant",
+        "operationId": "archive_assistant",
+        "parameters": [
+          {
+            "name": "assistant_id",
+            "in": "path",
+            "description": "The ID of the assistant to archive",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveAssistantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully archived the assistant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveAssistantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid assistant ID format"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "Assistant not found or access denied"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/chats": {
       "get": {
         "tags": [],
@@ -715,6 +958,10 @@
   },
   "components": {
     "schemas": {
+      "ArchiveAssistantRequest": {
+        "type": "object",
+        "description": "Request to archive an assistant"
+      },
       "ArchiveAssistantResponse": {
         "type": "object",
         "description": "Response when archiving an assistant",
@@ -769,12 +1016,9 @@
         ],
         "properties": {
           "archived_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "format": "date-time",
-            "description": "When this assistant was archived (null if not archived)"
+            "description": "When this assistant was archived"
           },
           "created_at": {
             "type": "string",
@@ -782,17 +1026,11 @@
             "description": "When this assistant was created"
           },
           "default_chat_provider": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "Default chat provider/model ID for this assistant"
           },
           "description": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "Optional description of the assistant"
           },
           "id": {
@@ -800,10 +1038,7 @@
             "description": "The unique ID of the assistant"
           },
           "mcp_server_ids": {
-            "type": [
-              "array",
-              "null"
-            ],
+            "type": "array",
             "items": {
               "type": "string"
             },
@@ -886,38 +1121,22 @@
         ],
         "properties": {
           "budget_currency": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/BudgetCurrency",
-                "description": "The currency configured for display purposes"
-              }
-            ]
+            "$ref": "#/components/schemas/BudgetCurrency",
+            "description": "The currency configured for display purposes"
           },
           "budget_limit": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": "number",
             "format": "double",
             "description": "The budget limit for the time period (unit-less)"
           },
           "budget_period_days": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": "integer",
             "format": "int32",
             "description": "Number of days in the current budget period",
             "minimum": 0
           },
           "current_spending": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": "number",
             "format": "double",
             "description": "Current spending in the budget period for the user (unit-less)"
           },
@@ -926,10 +1145,7 @@
             "description": "Whether the budget feature is enabled"
           },
           "warn_threshold": {
-            "type": [
-              "number",
-              "null"
-            ],
+            "type": "number",
             "format": "double",
             "description": "The warning threshold (0.0 to 1.0)"
           }
@@ -993,10 +1209,7 @@
             "description": "Whether this message is in the active thread"
           },
           "previous_message_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The ID of the previous message in the thread, if any"
           },
           "role": {
@@ -1004,10 +1217,7 @@
             "description": "Role of the message sender. May be on of \"user\", \"assistant\", \"system\""
           },
           "sibling_message_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The unique ID of the sibling message, if any"
           },
           "updated_at": {
@@ -1505,6 +1715,15 @@
           "user_message"
         ],
         "properties": {
+          "assistant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Optional assistant ID to associate with the chat when creating a new chat.\nIf provided with an existing_chat_id, this field is ignored.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          },
           "chat_provider_id": {
             "type": [
               "string",
@@ -1854,10 +2073,7 @@
             ]
           },
           "progress_message": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "status": {
             "$ref": "#/components/schemas/ToolCallStatus"
@@ -1914,12 +2130,17 @@
         ],
         "properties": {
           "archived_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "format": "date-time",
             "description": "When this chat was archived by the user."
+          },
+          "assistant_id": {
+            "type": "string",
+            "description": "The assistant ID if this chat is based on an assistant"
+          },
+          "assistant_name": {
+            "type": "string",
+            "description": "The name of the assistant if this chat is based on an assistant"
           },
           "can_edit": {
             "type": "boolean",
@@ -1936,10 +2157,7 @@
             "type": "string"
           },
           "last_chat_provider_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The chat provider ID used for the most recent message"
           },
           "last_message_at": {
@@ -1948,15 +2166,8 @@
             "description": "Time of the last message in the chat."
           },
           "last_model": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ChatModel",
-                "description": "The model information for the most recent message, if available"
-              }
-            ]
+            "$ref": "#/components/schemas/ChatModel",
+            "description": "The model information for the most recent message, if available"
           },
           "title_by_summary": {
             "type": "string",
@@ -2427,10 +2638,7 @@
         ],
         "properties": {
           "email": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The user's email address. Shouldn't be used as a unique identifier, as it may change."
           },
           "groups": {
@@ -2444,17 +2652,11 @@
             "type": "string"
           },
           "name": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The user's display name."
           },
           "picture": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The user's profile picture URL."
           },
           "preferred_language": {

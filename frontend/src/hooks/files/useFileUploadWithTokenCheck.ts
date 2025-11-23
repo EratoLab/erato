@@ -8,12 +8,15 @@ import {
   useTokenUsageEstimation,
   getTokenEstimationQueryKey,
 } from "@/hooks/chat/useTokenUsageEstimation";
+import { createLogger } from "@/utils/debugLogger";
 
 import { useFileDropzone } from "./useFileDropzone";
 
 import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
+
+const logger = createLogger("HOOK", "useFileUploadWithTokenCheck");
 
 interface UseFileUploadWithTokenCheckOptions {
   /** Current message text to use for token estimation */
@@ -120,9 +123,7 @@ export function useFileUploadWithTokenCheck({
           const cachedEstimation = queryClient.getQueryData(queryKey);
 
           if (!cachedEstimation) {
-            console.log(
-              "[FILE_UPLOAD_TOKEN_CHECK] No cached estimation, requesting new one",
-            );
+            logger.log("No cached estimation, requesting new one");
 
             // Perform estimation and update the cache
             const messageForEstimation = message || " ";
@@ -133,15 +134,13 @@ export function useFileUploadWithTokenCheck({
               previousMessageId,
             );
           } else {
-            console.log(
-              "[FILE_UPLOAD_TOKEN_CHECK] Using cached token estimation",
-            );
+            logger.log("Using cached token estimation");
           }
         }
 
         return uploadedItems;
       } catch (error) {
-        console.error("Error in file upload with token check:", error);
+        logger.error("Error in file upload with token check:", error);
         if (!(error instanceof Error && error.message.includes("token"))) {
           clearLastEstimation();
         }

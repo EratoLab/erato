@@ -121,18 +121,29 @@ pub async fn get_user_assistants(
     Ok(user_assistants)
 }
 
-/// Get an assistant by ID (user must be the owner)
-pub async fn get_assistant_by_id(
+/// Internal function to get an assistant by ID with optional archived filter
+///
+/// This allows retrieving archived assistants for internal operations like
+/// continuing chats that were created with an assistant that's now archived.
+async fn get_assistant_by_id_internal(
     conn: &DatabaseConnection,
-    _policy: &PolicyEngine,
     subject: &Subject,
     assistant_id: Uuid,
+    allow_archived: bool,
 ) -> Result<assistants::Model, Report> {
-    // Find the assistant
-    let assistant = Assistants::find_by_id(assistant_id)
-        .one(conn)
-        .await?
-        .wrap_err("Assistant not found")?;
+    // Build query
+    let mut query = Assistants::find_by_id(assistant_id);
+
+    // Only filter out archived assistants if not allowed
+    if !allow_archived {
+        query = query.filter(assistants::Column::ArchivedAt.is_null());
+    }
+
+    let assistant = query.one(conn).await?.wrap_err(if allow_archived {
+        "Assistant not found"
+    } else {
+        "Assistant not found or archived"
+    })?;
 
     // Get the user ID from subject (subject contains the user UUID)
     let crate::policy::types::Subject::User(user_id_str) = &subject;
@@ -152,15 +163,35 @@ pub async fn get_assistant_by_id(
     Ok(assistant)
 }
 
-/// Get an assistant with its associated files
-pub async fn get_assistant_with_files(
+/// Get an assistant by ID (user must be the owner)
+///
+/// This function excludes archived assistants. For user-facing API endpoints only.
+/// For internal operations that need to access archived assistants (e.g., continuing
+/// a chat with an archived assistant), use get_assistant_by_id_internal.
+pub async fn get_assistant_by_id(
     conn: &DatabaseConnection,
-    policy: &PolicyEngine,
+    _policy: &PolicyEngine,
     subject: &Subject,
     assistant_id: Uuid,
+) -> Result<assistants::Model, Report> {
+    get_assistant_by_id_internal(conn, subject, assistant_id, false).await
+}
+
+/// Get an assistant with its associated files
+///
+/// The `allow_archived` parameter controls whether archived assistants can be retrieved:
+/// - `true`: For internal operations (e.g., loading assistant config for existing chats)
+/// - `false`: For user-facing features (e.g., frequent assistants list)
+pub async fn get_assistant_with_files(
+    conn: &DatabaseConnection,
+    _policy: &PolicyEngine,
+    subject: &Subject,
+    assistant_id: Uuid,
+    allow_archived: bool,
 ) -> Result<AssistantWithFiles, Report> {
     // Get the assistant (includes ownership check)
-    let assistant = get_assistant_by_id(conn, policy, subject, assistant_id).await?;
+    let assistant =
+        get_assistant_by_id_internal(conn, subject, assistant_id, allow_archived).await?;
 
     // Get associated files through the join table
     let files = FileUploads::find()

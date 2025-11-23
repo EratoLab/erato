@@ -1,3 +1,5 @@
+import { createLogger } from "@/utils/debugLogger";
+
 import { useMessagingStore } from "../store/messagingStore";
 
 import type {
@@ -5,6 +7,8 @@ import type {
   ContentPart,
   ContentPartText,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const logger = createLogger("EVENT", "handleUserMessageSaved");
 
 /**
  * Extracts text content from ContentPart array
@@ -58,15 +62,12 @@ export function handleUserMessageSaved(
     !serverConfirmedMessage.id ||
     typeof serverConfirmedMessageContent !== "string"
   ) {
-    console.error(
-      "[DEBUG_STREAMING] handleUserMessageSaved: Invalid server-confirmed message structure:",
-      responseData,
-    );
+    logger.error("Invalid server-confirmed message structure:", responseData);
     return;
   }
 
-  console.log(
-    `[DEBUG_STREAMING] handleUserMessageSaved: Server confirmed user message. Message ID: ${serverConfirmedMessage.id}, Content: "${serverConfirmedMessageContent.substring(0, 50)}..."`,
+  logger.log(
+    `Server confirmed user message. Message ID: ${serverConfirmedMessage.id}, Content: "${serverConfirmedMessageContent.substring(0, 50)}..."`,
   );
 
   useMessagingStore.setState((prevState) => {
@@ -97,25 +98,25 @@ export function handleUserMessageSaved(
       newUserMessages[finalUserMessage.id] = finalUserMessage; // Add message with real ID
 
       if (process.env.NODE_ENV === "development") {
-        console.log(
-          `[DEBUG_STREAMING] handleUserMessageSaved: User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${finalUserMessage.content.substring(0, 50)}..."`,
+        logger.log(
+          `User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${finalUserMessage.content.substring(0, 50)}..."`,
         );
       }
       return { ...prevState, userMessages: newUserMessages };
     } else {
       // If no matching temp message found, log a warning.
       // This could happen if the message was cleared or if there's a mismatch.
-      console.warn(
-        `[DEBUG_STREAMING] handleUserMessageSaved: No temporary user message found to update for content: "${serverConfirmedMessageContent.substring(0, 100)}...". This might happen if the message was cleared or if there is a data mismatch.`,
-        "Server confirmed message:",
-        serverConfirmedMessage,
-        "Current user messages in store before update:",
-        prevState.userMessages, // Log the state before attempting update
+      logger.warn(
+        `No temporary user message found to update for content: "${serverConfirmedMessageContent.substring(0, 100)}...". This might happen if the message was cleared or if there is a data mismatch.`,
+        {
+          serverConfirmedMessage,
+          previousUserMessages: prevState.userMessages, // Log the state before attempting update
+        },
       );
     }
     // If no temp message was found to replace, return the previous state unchanged
-    console.log(
-      "[DEBUG_STREAMING] handleUserMessageSaved: No matching temporary message found, returning previous state.",
+    logger.log(
+      "No matching temporary message found, returning previous state.",
       {
         serverContent: serverConfirmedMessageContent,
         currentMessages: prevState.userMessages,

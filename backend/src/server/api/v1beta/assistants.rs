@@ -19,18 +19,26 @@ pub struct Assistant {
     /// The display name of the assistant
     pub name: String,
     /// Optional description of the assistant
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub description: Option<String>,
     /// The system prompt used by the assistant
     pub prompt: String,
     /// List of MCP server IDs available to this assistant
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub mcp_server_ids: Option<Vec<String>>,
     /// Default chat provider/model ID for this assistant
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub default_chat_provider: Option<String>,
     /// When this assistant was created
     pub created_at: DateTime<FixedOffset>,
     /// When this assistant was last updated
     pub updated_at: DateTime<FixedOffset>,
-    /// When this assistant was archived (null if not archived)
+    /// When this assistant was archived
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub archived_at: Option<DateTime<FixedOffset>>,
 }
 
@@ -282,11 +290,13 @@ pub async fn get_assistant(
     let assistant_id = Uuid::parse_str(&assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Get the assistant with files
+    // User-facing endpoint: exclude archived assistants
     let assistant_with_files = assistant::get_assistant_with_files(
         &app_state.db,
         &policy,
         &me_user.to_subject(),
         assistant_id,
+        false, // Exclude archived assistants
     )
     .await
     .map_err(|e| {
@@ -378,11 +388,13 @@ pub async fn update_assistant(
     // Process file associations if provided
     if let Some(new_file_ids_opt) = request.file_ids {
         // Get the current files for this assistant
+        // Exclude archived when updating (user can't update archived assistants)
         let assistant_with_files = assistant::get_assistant_with_files(
             &app_state.db,
             &policy,
             &me_user.to_subject(),
             assistant_id,
+            false, // User is updating, must be non-archived
         )
         .await
         .map_err(log_internal_server_error)?;

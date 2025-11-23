@@ -18,10 +18,16 @@ use utoipa::ToSchema;
 pub struct UserProfile {
     pub id: String,
     /// The user's email address. Shouldn't be used as a unique identifier, as it may change.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub email: Option<String>,
     /// The user's display name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub name: Option<String>,
     /// The user's profile picture URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub picture: Option<String>,
     /// The user's preferred language.
     ///

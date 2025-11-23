@@ -15,7 +15,10 @@ import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { MessageList } from "../MessageList/MessageList";
 
 import type { ChatMessage } from "../MessageList/MessageList";
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  FileUploadItem,
+  ChatModel,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 import type {
   MessageAction,
@@ -71,6 +74,10 @@ export interface ChatProps {
   customSessionSelect?: (sessionId: string) => void;
   /** Optional custom component to show when there are no messages */
   emptyStateComponent?: React.ReactNode;
+  /** Optional assistant ID for context-aware sending */
+  assistantId?: string;
+  /** Optional initial model to use (overrides chat history model) */
+  initialModelOverride?: ChatModel | null;
 }
 
 /**
@@ -96,6 +103,8 @@ export const Chat = ({
   acceptedFileTypes,
   customSessionSelect,
   emptyStateComponent,
+  assistantId,
+  initialModelOverride,
 }: ChatProps) => {
   // Use the sidebar context
   const { isOpen: sidebarCollapsed, toggle: onToggleCollapse } = useSidebar();
@@ -154,9 +163,10 @@ export const Chat = ({
       logger.log("[CHAT_FLOW] Chat - handleSendMessage called", {
         files: inputFileIds,
         model: modelId,
+        assistantId,
       });
 
-      baseHandleSendMessage(message, inputFileIds, modelId)
+      baseHandleSendMessage(message, inputFileIds, modelId, assistantId)
         .then(() => {
           logger.log("[CHAT_FLOW] Message sent, refreshing chats");
           return refreshChats();
@@ -165,7 +175,7 @@ export const Chat = ({
           logger.log("[CHAT_FLOW] Error sending message:", error);
         });
     },
-    [baseHandleSendMessage, refreshChats],
+    [baseHandleSendMessage, refreshChats, assistantId],
   );
 
   // Local edit state (simple UX; further polish can come later)
@@ -176,7 +186,7 @@ export const Chat = ({
 
   // Debug logging for edit state changes
   useEffect(() => {
-    console.log("[DEBUG_EDIT_STATE] Edit state changed:", editState);
+    logger.log("Edit state changed:", editState);
   }, [editState]);
 
   const cancelEdit = useCallback(() => setEditState({ mode: "compose" }), []);
@@ -263,7 +273,7 @@ export const Chat = ({
   // Restore placeholder definitions for props passed to MessageList
   const hasOlderMessages = false;
   const loadOlderMessages = () => {
-    logger.log("loadOlderMessages called (placeholder)");
+    // Pagination not yet implemented
   };
 
   // Restore a basic handleFileAttachments function needed by ChatInput
@@ -277,8 +287,8 @@ export const Chat = ({
   }, []);
 
   if (process.env.NODE_ENV === "development") {
-    console.log(
-      `[DEBUG_UI] Chat.tsx rendering. chatLoading: ${chatLoading}, currentChatId: ${currentChatId ?? ""}, sidebarCollapsed: ${sidebarCollapsed}, messagesCount: ${Object.keys(messages).length}`,
+    logger.log(
+      `Chat.tsx rendering. chatLoading: ${chatLoading}, currentChatId: ${currentChatId ?? ""}, sidebarCollapsed: ${sidebarCollapsed}, messagesCount: ${Object.keys(messages).length}`,
     );
   }
 
@@ -331,21 +341,18 @@ export const Chat = ({
             onMessageAction={async (action: MessageAction) => {
               // Intercept edit/regenerate here to route to local handlers
               if (action.type === "edit") {
-                console.log(
-                  `[EDIT_DEBUG] ==> Edit action called with messageId: ${action.messageId}`,
+                logger.log(
+                  `Edit action called with messageId: ${action.messageId}`,
                 );
 
                 // Find the message directly from the messages object
                 const messageToEdit = messages[action.messageId];
-                console.log(
-                  `[EDIT_DEBUG] Available message keys:`,
-                  Object.keys(messages),
-                );
-                console.log(`[EDIT_DEBUG] Looking up message:`, messageToEdit);
+                logger.log(`Available message keys:`, Object.keys(messages));
+                logger.log(`Looking up message:`, messageToEdit);
 
                 if (messageToEdit.role === "user") {
-                  console.log(
-                    `[EDIT_DEBUG] ==> Setting editState: messageId=${action.messageId}, content="${messageToEdit.content}"`,
+                  logger.log(
+                    `Setting editState: messageId=${action.messageId}, content="${messageToEdit.content}"`,
                   );
 
                   // Use React's functional update to ensure we get the latest state
@@ -355,10 +362,10 @@ export const Chat = ({
                     initialContent: messageToEdit.content,
                   }));
 
-                  console.log(`[EDIT_DEBUG] ==> editState set successfully`);
+                  logger.log(`editState set successfully`);
                 } else {
-                  console.error(
-                    `[EDIT_DEBUG] Cannot edit message ${action.messageId}: not found or not a user message`,
+                  logger.log(
+                    `Cannot edit message ${action.messageId}: not found or not a user message`,
                     {
                       messageToEdit,
                       role: messageToEdit.role,
@@ -403,7 +410,7 @@ export const Chat = ({
             editInitialContent={
               editState.mode === "edit" ? editState.initialContent : undefined
             }
-            initialModel={currentChatLastModel}
+            initialModel={initialModelOverride ?? currentChatLastModel}
           />
         </div>
       </ChatErrorBoundary>

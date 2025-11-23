@@ -4,6 +4,27 @@
  * @version
  */
 /**
+ * Request to archive an assistant
+ */
+export type ArchiveAssistantRequest = Record<string, any>;
+
+/**
+ * Response when archiving an assistant
+ */
+export type ArchiveAssistantResponse = {
+  /**
+   * When the assistant was archived
+   *
+   * @format date-time
+   */
+  archived_at: string;
+  /**
+   * The ID of the archived assistant
+   */
+  id: string;
+};
+
+/**
  * Request to archive a chat
  */
 export type ArchiveChatRequest = Record<string, any>;
@@ -24,32 +45,111 @@ export type ArchiveChatResponse = {
   chat_id: string;
 };
 
+/**
+ * An assistant model
+ */
+export type Assistant = {
+  /**
+   * When this assistant was archived
+   *
+   * @format date-time
+   */
+  archived_at?: string;
+  /**
+   * When this assistant was created
+   *
+   * @format date-time
+   */
+  created_at: string;
+  /**
+   * Default chat provider/model ID for this assistant
+   */
+  default_chat_provider?: string;
+  /**
+   * Optional description of the assistant
+   */
+  description?: string;
+  /**
+   * The unique ID of the assistant
+   */
+  id: string;
+  /**
+   * List of MCP server IDs available to this assistant
+   */
+  mcp_server_ids?: string[];
+  /**
+   * The display name of the assistant
+   */
+  name: string;
+  /**
+   * The system prompt used by the assistant
+   */
+  prompt: string;
+  /**
+   * When this assistant was last updated
+   *
+   * @format date-time
+   */
+  updated_at: string;
+};
+
+/**
+ * A file associated with an assistant
+ */
+export type AssistantFile = {
+  /**
+   * Pre-signed URL for downloading the file
+   */
+  download_url: string;
+  /**
+   * The original filename
+   */
+  filename: string;
+  /**
+   * The unique ID of the file
+   */
+  id: string;
+};
+
+/**
+ * An assistant model
+ */
+export type AssistantWithFiles = Assistant & {
+  /**
+   * Files associated with this assistant
+   */
+  files: AssistantFile[];
+};
+
 export type BudgetCurrency = "EUR" | "USD";
 
 /**
  * Budget status information for the current user
  */
 export type BudgetStatusResponse = {
-  budget_currency?: null | BudgetCurrency;
+  /**
+   * The currency configured for display purposes
+   */
+  budget_currency?: BudgetCurrency;
   /**
    * The budget limit for the time period (unit-less)
    *
    * @format double
    */
-  budget_limit?: null | undefined;
+  budget_limit?: number;
   /**
    * Number of days in the current budget period
    *
    * @format int32
    * @minimum 0
    */
-  budget_period_days?: null | undefined;
+  budget_period_days?: number;
   /**
    * Current spending in the budget period for the user (unit-less)
    *
    * @format double
    */
-  current_spending?: null | undefined;
+  current_spending?: number;
   /**
    * Whether the budget feature is enabled
    */
@@ -59,7 +159,7 @@ export type BudgetStatusResponse = {
    *
    * @format double
    */
-  warn_threshold?: null | undefined;
+  warn_threshold?: number;
 };
 
 /**
@@ -102,7 +202,7 @@ export type ChatMessage = {
   /**
    * The ID of the previous message in the thread, if any
    */
-  previous_message_id?: null | undefined;
+  previous_message_id?: string;
   /**
    * Role of the message sender. May be on of "user", "assistant", "system"
    */
@@ -110,7 +210,7 @@ export type ChatMessage = {
   /**
    * The unique ID of the sibling message, if any
    */
-  sibling_message_id?: null | undefined;
+  sibling_message_id?: string;
   /**
    * When the message was last updated
    *
@@ -189,9 +289,49 @@ export type ContentPartText = {
 };
 
 /**
+ * Request to create a new assistant
+ */
+export type CreateAssistantRequest = {
+  /**
+   * Default chat provider/model ID for this assistant
+   */
+  default_chat_provider?: null | undefined;
+  /**
+   * Optional description of the assistant
+   */
+  description?: null | undefined;
+  /**
+   * Optional list of file upload IDs to associate with this assistant
+   */
+  file_ids?: null | undefined;
+  /**
+   * List of MCP server IDs available to this assistant
+   */
+  mcp_server_ids?: null | undefined;
+  /**
+   * The name of the assistant
+   */
+  name: string;
+  /**
+   * The system prompt for the assistant
+   */
+  prompt: string;
+};
+
+/**
+ * An assistant model
+ */
+export type CreateAssistantResponse = Assistant;
+
+/**
  * Request to create a new chat without an initial message
  */
-export type CreateChatRequest = Record<string, any>;
+export type CreateChatRequest = {
+  /**
+   * Optional assistant ID to base this chat on
+   */
+  assistant_id?: null | undefined;
+};
 
 /**
  * Response for create_chat endpoint
@@ -279,11 +419,41 @@ export type FileUploadResponse = {
   files: FileUploadItem[];
 };
 
+/**
+ * An assistant with its associated files
+ */
+export type FrequentAssistantItem = AssistantWithFiles & {
+  /**
+   * Number of times this assistant was used to create chats
+   *
+   * @format int64
+   */
+  usage_count: number;
+};
+
+/**
+ * Response for the frequent_assistants endpoint
+ */
+export type FrequentAssistantsResponse = {
+  /**
+   * The list of frequently used assistants
+   */
+  assistants: FrequentAssistantItem[];
+};
+
 export type Message = {
   id: string;
 };
 
 export type MessageSubmitRequest = {
+  /**
+   * Optional assistant ID to associate with the chat when creating a new chat.
+   * If provided with an existing_chat_id, this field is ignored.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  assistant_id?: null | undefined;
   /**
    * The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
    *
@@ -403,7 +573,7 @@ export type MessageSubmitStreamingResponseToolCallUpdate = {
    */
   message_id: string;
   output?: null | Value;
-  progress_message?: null | undefined;
+  progress_message?: string;
   status: ToolCallStatus;
   tool_call_id: string;
   tool_name: string;
@@ -431,7 +601,15 @@ export type RecentChat = {
    *
    * @format date-time
    */
-  archived_at?: null | undefined;
+  archived_at?: string;
+  /**
+   * The assistant ID if this chat is based on an assistant
+   */
+  assistant_id?: string;
+  /**
+   * The name of the assistant if this chat is based on an assistant
+   */
+  assistant_name?: string;
   /**
    * Whether the current user can edit this chat (e.g., edit messages)
    *
@@ -447,14 +625,17 @@ export type RecentChat = {
   /**
    * The chat provider ID used for the most recent message
    */
-  last_chat_provider_id?: null | undefined;
+  last_chat_provider_id?: string;
   /**
    * Time of the last message in the chat.
    *
    * @format date-time
    */
   last_message_at: string;
-  last_model?: null | ChatModel;
+  /**
+   * The model information for the most recent message, if available
+   */
+  last_model?: ChatModel;
   /**
    * Title of the chat, as generated by a summary of the chat.
    */
@@ -665,11 +846,46 @@ export type ToolUse = {
   tool_name: string;
 };
 
+/**
+ * Request to update an existing assistant
+ */
+export type UpdateAssistantRequest = {
+  /**
+   * Optional new default chat provider
+   */
+  default_chat_provider?: null | undefined;
+  /**
+   * Optional new description for the assistant
+   */
+  description?: null | undefined;
+  /**
+   * Optional list of file upload IDs to associate with this assistant
+   */
+  file_ids?: null | undefined;
+  /**
+   * Optional new list of MCP server IDs
+   */
+  mcp_server_ids?: null | undefined;
+  /**
+   * Optional new name for the assistant
+   */
+  name?: null | undefined;
+  /**
+   * Optional new prompt for the assistant
+   */
+  prompt?: null | undefined;
+};
+
+/**
+ * An assistant model
+ */
+export type UpdateAssistantResponse = Assistant;
+
 export type UserProfile = {
   /**
    * The user's email address. Shouldn't be used as a unique identifier, as it may change.
    */
-  email?: null | undefined;
+  email?: string;
   /**
    * List of groups the user belongs to.
    *
@@ -681,11 +897,11 @@ export type UserProfile = {
   /**
    * The user's display name.
    */
-  name?: null | undefined;
+  name?: string;
   /**
    * The user's profile picture URL.
    */
-  picture?: null | undefined;
+  picture?: string;
   /**
    * The user's preferred language.
    *

@@ -91,8 +91,8 @@ export class MockDataGenerator {
       updated_at: new Date().toISOString(),
       input_files_ids: [],
       is_message_in_active_thread: true,
-      previous_message_id: null,
-      sibling_message_id: null,
+      previous_message_id: undefined,
+      sibling_message_id: undefined,
       ...overrides,
     };
   }

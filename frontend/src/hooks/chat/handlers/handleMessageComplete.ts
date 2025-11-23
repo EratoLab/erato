@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
+import { createLogger } from "@/utils/debugLogger";
+
 import { useMessagingStore } from "../store/messagingStore";
 
 import type { useExplicitNavigation } from "../useExplicitNavigation";
@@ -7,6 +9,8 @@ import type {
   ContentPart,
   ContentPartText,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const logger = createLogger("EVENT", "handleMessageComplete");
 
 /**
  * Extracts text content from ContentPart array
@@ -47,7 +51,7 @@ export const handleMessageComplete = (
   const initialUserMessagesObject = initialStoreState.userMessages || {};
   const initialUserMessagesArray = Object.values(initialUserMessagesObject);
 
-  console.log("[DEBUG_LOGGING] handleMessageComplete: BEGIN.", {
+  logger.log("BEGIN.", {
     streamingState: JSON.stringify(currentStreamingState),
     userMessagesCount: initialUserMessagesArray.length,
     userMessages: JSON.stringify(initialUserMessagesArray),
@@ -66,8 +70,8 @@ export const handleMessageComplete = (
     currentStreamingState.content; // Fallback to current streaming content if somehow not in response
 
   if (process.env.NODE_ENV === "development") {
-    // console.log(
-    //   "[CHAT_FLOW] Assistant message completed. Real ID:",
+    // logger.log(
+    //   "Assistant message completed. Real ID:",
     //   realMessageId,
     //   "Final content snippet:",
     //   finalContent.substring(0, 50),
@@ -76,8 +80,8 @@ export const handleMessageComplete = (
 
   // Update streaming state to indicate completion
   // Set isFinalizing to true while refetch/cleanup happens
-  console.log(
-    `[DEBUG_STREAMING] handleMessageComplete: Setting streaming store. Real Message ID: ${realMessageId || null}, isStreaming: false, isFinalizing: true, Final Content: "${finalContent.substring(0, 100)}..."`,
+  logger.log(
+    `Setting streaming store. Real Message ID: ${realMessageId || null}, isStreaming: false, isFinalizing: true, Final Content: "${finalContent.substring(0, 100)}..."`,
   );
   setStreaming({
     isStreaming: false,
@@ -92,29 +96,40 @@ export const handleMessageComplete = (
   const finalUserMessagesObject = storeAfterSetStreaming.userMessages || {};
   const finalUserMessagesArray = Object.values(finalUserMessagesObject);
 
-  console.log(
-    "[DEBUG_LOGGING] handleMessageComplete: END (after setStreaming).",
-    {
-      streamingState: JSON.stringify(storeAfterSetStreaming.streaming),
-      userMessagesCount: finalUserMessagesArray.length,
-      userMessages: JSON.stringify(finalUserMessagesArray),
-      fullStoreAfterSetStreaming: JSON.stringify(storeAfterSetStreaming), // Keep for context
-    },
-  );
+  logger.log("END (after setStreaming).", {
+    streamingState: JSON.stringify(storeAfterSetStreaming.streaming),
+    userMessagesCount: finalUserMessagesArray.length,
+    userMessages: JSON.stringify(finalUserMessagesArray),
+    fullStoreAfterSetStreaming: JSON.stringify(storeAfterSetStreaming), // Keep for context
+  });
 
   // Add explicit navigation logic
   if (explicitNav) {
     const store = useMessagingStore.getState();
     const newlyCreatedChatId = store.newlyCreatedChatId;
 
-    if (
-      newlyCreatedChatId &&
-      explicitNav.shouldNavigateFromNewChat(newlyCreatedChatId)
-    ) {
-      console.log(
-        `[EXPLICIT_NAV] Message completed, triggering navigation to: ${newlyCreatedChatId}`,
-      );
-      explicitNav.performNavigation(newlyCreatedChatId, "message_completed");
+    if (newlyCreatedChatId) {
+      // Check if we're on an assistant page first
+      if (
+        explicitNav.currentAssistantId &&
+        explicitNav.shouldNavigateFromAssistant(newlyCreatedChatId)
+      ) {
+        logger.log(
+          `Message completed on assistant page, navigating to: /a/${explicitNav.currentAssistantId}/${newlyCreatedChatId}`,
+        );
+        explicitNav.navigateToAssistantChat(
+          explicitNav.currentAssistantId,
+          newlyCreatedChatId,
+          "message_completed",
+        );
+      }
+      // Otherwise check if we should navigate from /chat/new
+      else if (explicitNav.shouldNavigateFromNewChat(newlyCreatedChatId)) {
+        logger.log(
+          `Message completed, triggering navigation to: /chat/${newlyCreatedChatId}`,
+        );
+        explicitNav.performNavigation(newlyCreatedChatId, "message_completed");
+      }
     }
   }
 };

@@ -7,8 +7,11 @@
 import { useMemo } from "react";
 
 import { useAvailableModels } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { createLogger } from "@/utils/debugLogger";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const logger = createLogger("HOOK", "useModelHistory");
 
 interface UseModelHistoryParams {
   currentChatId: string | null;
@@ -37,14 +40,14 @@ export function useModelHistory({
         (model) => model.chat_provider_id === lastModel.chat_provider_id,
       );
       if (modelExists) {
-        console.log("[MODEL_HISTORY] Found last used model for current chat:", {
+        logger.log("Found last used model for current chat:", {
           chatId: currentChatId,
           modelId: lastModel.chat_provider_id,
           modelName: lastModel.model_display_name,
         });
         return lastModel;
       } else {
-        console.log("[MODEL_HISTORY] Last used model no longer available:", {
+        logger.log("Last used model no longer available:", {
           chatId: currentChatId,
           unavailableModelId: lastModel.chat_provider_id,
           availableModels: availableModels.map((m) => m.chat_provider_id),

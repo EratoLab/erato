@@ -7,9 +7,11 @@ import { ErrorBoundary } from "react-error-boundary";
 import { useNavigate, useLocation } from "react-router-dom";
 
 import { env } from "@/app/env";
+import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
+import { FrequentAssistantsList } from "./FrequentAssistantsList";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
@@ -48,6 +50,10 @@ export interface ChatHistorySidebarProps {
   isLoading: boolean;
   error?: Error;
   userProfile?: UserProfile;
+  /**
+   * Callback when an assistant is selected to start a new chat
+   */
+  onAssistantSelect?: (assistantId: string) => void;
 }
 
 const ChatHistoryHeader = memo<{
@@ -181,12 +187,16 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     isLoading,
     error,
     userProfile,
+    onAssistantSelect,
   }) => {
     const ref = useRef<HTMLElement>(null);
     const [width, setWidth] = useState(minWidth);
     const navigate = useNavigate();
     const location = useLocation();
     const isOnSearchPage = location.pathname === "/search";
+
+    // Get assistants feature flag
+    const { enabled: assistantsEnabled } = useAssistantsFeature();
 
     // Only use ResizeObserver in the browser
     const isBrowser = typeof window !== "undefined";
@@ -274,6 +284,18 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
               {/* Divider */}
               <div className="mx-2 my-1 border-t border-theme-border" />
+
+              {/* Assistants Section */}
+              {assistantsEnabled && (
+                <>
+                  <FrequentAssistantsList
+                    onAssistantSelect={onAssistantSelect}
+                    limit={5}
+                  />
+                  {/* Divider after assistants */}
+                  <div className="mx-2 my-1 border-t border-theme-border" />
+                </>
+              )}
 
               {/* Chat History */}
               {error ? (

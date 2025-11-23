@@ -56,6 +56,7 @@ export const Avatar = React.memo<AvatarProps>(
           sizeClasses[size],
           className,
         )}
+        data-testid="avatar-identity"
         aria-label={!userOrAssistant ? t`Assistant avatar` : t`User avatar`}
       >
         {uiProfile?.avatarUrl && !userOrAssistant ? (
