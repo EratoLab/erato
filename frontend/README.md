@@ -208,6 +208,7 @@ The theme system uses a configuration-based approach that can be customized in s
    - `VITE_THEME_CONFIG_PATH`: Override path to theme.json file
    - `VITE_LOGO_PATH`: Path to logo for light mode
    - `VITE_LOGO_DARK_PATH`: Path to logo for dark mode
+   - `VITE_ASSISTANT_AVATAR_PATH`: Path to assistant avatar image
 
 2. **Customer Themes Directory**:
 
@@ -259,6 +260,35 @@ You can also provide custom logos for your theme:
    - `/custom-theme/{customer-name}/logo.svg` - Main logo
    - `/custom-theme/{customer-name}/logo-dark.svg` - Dark mode logo (optional)
 
+### Custom Assistant Avatar
+
+You can customize the assistant's avatar image to match your branding:
+
+1. **Using Customer Theme Directory**:
+
+   Place your avatar file in the same directory as your theme.json:
+
+   - `/custom-theme/{customer-name}/assistant-avatar.svg` - Assistant avatar image
+
+   The avatar will be automatically detected and loaded when available.
+
+2. **Using Environment Variables**:
+
+   Override the assistant avatar path completely:
+
+   ```bash
+   VITE_ASSISTANT_AVATAR_PATH=/path/to/custom-assistant-avatar.svg
+   ```
+
+3. **Supported File Formats**:
+
+   - SVG (recommended for scalability)
+   - PNG, JPG, or other image formats supported by browsers
+
+4. **Fallback Behavior**:
+
+   If no custom avatar is provided, the assistant will display with a colored circle containing the letter "A" (styled using the theme's `avatar.assistant` colors from theme.json).
+
 ### Extending the Theme System
 
 The theme system uses a configuration-based approach that can be extended:
@@ -275,6 +305,16 @@ Mount your custom theme into the container:
 
 ```bash
 docker run -v ./my-theme:/app/custom-theme/my-customer your-app-image
+```
+
+Your theme directory structure should include:
+
+```
+my-theme/
+├── theme.json              # Theme configuration
+├── logo.svg                # Application logo (light mode)
+├── logo-dark.svg           # Application logo (dark mode, optional)
+└── assistant-avatar.svg    # Assistant avatar (optional)
 ```
 
 #### Kubernetes
