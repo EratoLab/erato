@@ -26,7 +26,12 @@ public/custom-theme/my-company/
 ├── theme.json              # Theme configuration
 ├── logo.svg                # Application logo (light mode)
 ├── logo-dark.svg           # Application logo (dark mode, optional)
-└── assistant-avatar.svg    # Assistant avatar (optional)
+├── assistant-avatar.svg    # Assistant avatar (optional)
+└── locales/                # Custom translations (optional)
+    ├── en/
+    │   └── messages.po
+    └── de/
+        └── messages.po
 ```
 
 ## Theme Structure
@@ -93,6 +98,77 @@ Place logo files in your theme directory:
 
 - `logo.svg` - Main application logo (required)
 - `logo-dark.svg` - Dark mode logo (optional, falls back to `logo.svg`)
+
+## Custom Language Files {#custom-language-files}
+
+You can customize translation strings to match your brand's tone and terminology. This is particularly useful for:
+
+- Changing the assistant name (e.g., "Your Company KI Assistent")
+- Choosing formal vs. informal forms of address (e.g., "Du" vs. "Sie" in German)
+- Adapting welcome screen messages
+
+### Directory Structure
+
+Create language files in your theme directory:
+
+```
+public/custom-theme/my-company/
+├── theme.json
+├── logo.svg
+├── assistant-avatar.svg
+└── locales/
+    ├── en/
+    │   └── messages.po
+    ├── de/
+    │   └── messages.po
+    └── fr/
+        └── messages.po
+```
+
+### Available Branding Translation IDs {#available-branding-translation-ids}
+
+These translation IDs are designed for brand customization and have stable IDs guaranteed across versions:
+
+| ID | Purpose | Default (en) | Default (de) |
+|----|---------|--------------|--------------|
+| `branding.assistant_name` | The name/label shown for AI messages | "Assistant" | "Assistent" |
+| `branding.user_form_of_address` | Generic label for user messages (fallback when no user name available) | "You" | "Du" |
+| `branding.welcomeScreen.title` | Welcome screen heading | "Welcome to AI Assistant" | "Willkommen beim KI-Assistenten" |
+| `branding.welcomeScreen.subtitle` | Welcome screen subheading | "Get expert help..." | "Erhalten Sie Expertenunterstützung..." |
+| `branding.welcomeScreen.description` | Welcome screen description text | "Ask questions..." | "Stellen Sie Fragen..." |
+| `branding.page_title_suffix` | Browser tab title suffix | "LLM Chat" | "" |
+
+### Example: Custom Translations {#example-custom-translations}
+
+**messages.po** (for German):
+```po
+msgid ""
+msgstr ""
+"Language: de\n"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "branding.assistant_name"
+msgstr "Your Company KI Assistent"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "branding.user_form_of_address"
+msgstr "Sie"
+```
+
+> **Note:** The `.po` files are the source of truth. In development, you can edit both, but only `.po` files should be version controlled.
+> 
+> For technical details on how the translation override system works, see [Internationalization (i18n)](./internationalization_i18n#how-theme-translation-overrides-work).
+
+### User Display Name Priority
+
+When displaying user messages, the system follows this priority:
+
+1. **User's actual name** (from `userProfile.name`) - e.g., "Daniel Schmidt"
+2. **Form of address** (`branding.user_form_of_address`) - e.g., "Du", "Sie", "You"
+
+This allows personalization when user identity is known, while maintaining your brand's preferred formality level for anonymous users.
 
 ## Custom Assistant Avatar
 
@@ -187,5 +263,6 @@ For logos and avatars (binary files), use an init container or a PersistentVolum
 
 ## See Also
 
+- [Internationalization (i18n)](./internationalization_i18n) - Language support and how translation overrides work technically
 - [Configuration Reference](../configuration) - Complete configuration options
 - [Frontend README](https://github.com/erato-ai/erato/blob/main/frontend/README.md) - Detailed theme development guide

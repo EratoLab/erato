@@ -30,9 +30,53 @@ If a language you are looking for is not currently supported, please reach out t
 
 The translation strings are stored in `messages.po` files in the `frontend/src/locales/<LOCALE_CODE>` directories.
 
-Individual translation strings can also be overriden on a [per-theme basis](./theming), to allow for customization e.g. to fit organizational branding and communication style.
+Individual translation strings can also be overridden on a [per-theme basis](./theming), to allow for customization e.g. to fit organizational branding and communication style.
 
-To do that, create a `messages.po` file in the `frontend/public/custom-theme/<THEME_NAME>/locales/<LOCALE_CODE>` directory, and override the translation strings you want to change.
-For this to work, the custom theme must be present during the build process.
+### How Theme Translation Overrides Work {#how-theme-translation-overrides-work}
 
-Only translation strings marked with the `js-lingui-explicit-id` comment have stable ID and are suitable for overriding.
+1. **Default translations** are loaded from `frontend/src/locales/<LOCALE_CODE>/messages.po`
+2. **Custom theme translations** are loaded from `frontend/public/custom-theme/<THEME_NAME>/locales/<LOCALE_CODE>/messages.po`
+3. **Custom translations take precedence** - they override default translations for matching IDs
+4. **Merged at runtime** - the system combines both sets of translations dynamically
+
+### Creating Custom Theme Translations
+
+To override translations for your theme:
+
+1. Create the directory structure:
+   ```
+   frontend/public/custom-theme/<THEME_NAME>/locales/<LOCALE_CODE>/
+   ```
+
+2. Add your custom translations in `messages.po` files
+
+3. Only override the specific strings you want to customize
+
+### Example: Custom Theme Translations
+
+See the [Theming documentation](./theming#example-custom-translations) for complete examples of custom translation files.
+
+### Stable Translation IDs
+
+Only translation strings marked with the `#. js-lingui-explicit-id` comment have stable IDs and are suitable for overriding.
+
+These IDs are guaranteed to remain consistent across versions. Regular translation strings (without explicit IDs) may change and should not be relied upon for theme customization.
+
+#### Branding-Specific Translation IDs
+
+Translation IDs with the `branding.*` prefix are specifically designed for brand customization and have stable IDs.
+
+See the [Theming documentation](./theming#available-branding-translation-ids) for a complete table of available branding translation IDs with their purposes and default values in different languages.
+
+### Build-Time Requirements
+
+For custom theme translations to work:
+
+1. The custom theme directory must be present during the frontend build process
+2. Both `.po` files should exist
+3. The theme name must match the `VITE_CUSTOMER_NAME` environment variable or backend configuration
+
+## See Also
+
+- [Theming](./theming) - Complete theming guide including custom translations
+- [Configuration Reference](../configuration) - Backend configuration options
