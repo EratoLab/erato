@@ -204,8 +204,12 @@ pub async fn get_recent_chats(
     offset: u64,
     include_archived: bool,
 ) -> Result<(Vec<RecentChat>, ChatListStats), Report> {
+    use crate::db::entity::assistants;
+    use crate::db::entity::prelude::Assistants;
+    use std::collections::HashMap;
+
     // Query the most recent chats for the user.
-    // Query the chats belonging to a user, and join with the chats_latest_message view and assistants.
+    // Query the chats belonging to a user, and join with the chats_latest_message view.
     let mut query = Chats::find()
         .filter(chats::Column::OwnerUserId.eq(owner_user_id))
         .find_also_related(chats_latest_message::Entity)
@@ -255,51 +259,86 @@ pub async fn get_recent_chats(
         }
     }
 
-    // Collect recent chats with last chat provider IDs
-    let mut recent_chats = Vec::new();
-    for (chat, latest_message) in authorized_chats.iter() {
-        let latest_message = latest_message
-            .as_ref()
-            .expect("Latest message should never be None");
+    // Collect all chat IDs for batch queries
+    let chat_ids: Vec<Uuid> = authorized_chats.iter().map(|(chat, _)| chat.id).collect();
 
-        // Get the last chat provider ID for this chat
-        let last_chat_provider_id = get_last_chat_provider_id(conn, &chat.id)
-            .await
-            .unwrap_or(None);
+    // Collect all assistant IDs that need to be fetched
+    let assistant_ids: Vec<Uuid> = authorized_chats
+        .iter()
+        .filter_map(|(chat, _)| chat.assistant_id)
+        .collect();
 
-        // Get assistant info if this chat has an assistant
-        let (assistant_id, assistant_name) = if let Some(aid) = chat.assistant_id {
-            // Fetch the assistant to get its name
-            let assistant_opt = crate::db::entity::prelude::Assistants::find_by_id(aid)
-                .one(conn)
-                .await
-                .ok()
-                .flatten();
+    // Batch query: Get all assistants in a single query
+    let assistants_map: HashMap<Uuid, String> = if !assistant_ids.is_empty() {
+        Assistants::find()
+            .filter(assistants::Column::Id.is_in(assistant_ids))
+            .all(conn)
+            .await?
+            .into_iter()
+            .map(|a| (a.id, a.name))
+            .collect()
+    } else {
+        HashMap::new()
+    };
 
-            if let Some(assistant) = assistant_opt {
-                (Some(aid), Some(assistant.name))
-            } else {
-                (Some(aid), None)
+    // Batch query: Get the most recent message with generation_parameters for each chat
+    // We query all messages that could be the "last" one, then pick the latest per chat in memory
+    let last_provider_ids_map: HashMap<Uuid, Option<String>> = if !chat_ids.is_empty() {
+        let messages_with_params: Vec<messages::Model> = Messages::find()
+            .filter(messages::Column::ChatId.is_in(chat_ids.clone()))
+            .filter(messages::Column::IsMessageInActiveThread.eq(true))
+            .filter(messages::Column::GenerationParameters.is_not_null())
+            .order_by_desc(messages::Column::CreatedAt)
+            .all(conn)
+            .await?;
+
+        // Group by chat_id and take the first (most recent) for each
+        let mut map: HashMap<Uuid, Option<String>> = HashMap::new();
+        for msg in messages_with_params {
+            // Only insert if we haven't seen this chat_id yet (first = most recent due to ORDER BY)
+            if let std::collections::hash_map::Entry::Vacant(e) = map.entry(msg.chat_id) {
+                let provider_id = msg.generation_parameters.and_then(|params| {
+                    serde_json::from_value::<GenerationParameters>(params)
+                        .ok()
+                        .and_then(|gp| gp.generation_chat_provider_id)
+                });
+                e.insert(provider_id);
             }
-        } else {
-            (None, None)
-        };
+        }
+        map
+    } else {
+        HashMap::new()
+    };
 
-        recent_chats.push(RecentChat {
-            id: chat.id.to_string(),
-            // Use the chat's title_by_summary if available, otherwise use a default
-            title_by_summary: chat
-                .title_by_summary
-                .clone()
-                .unwrap_or_else(|| "Untitled Chat".to_string()),
-            last_message_at: latest_message.latest_message_at,
-            archived_at: chat.archived_at,
-            owner_user_id: chat.owner_user_id.clone(),
-            last_chat_provider_id,
-            assistant_id,
-            assistant_name,
-        });
-    }
+    // Assemble the final results using the pre-fetched data
+    let recent_chats: Vec<RecentChat> = authorized_chats
+        .iter()
+        .map(|(chat, latest_message)| {
+            let latest_message = latest_message
+                .as_ref()
+                .expect("Latest message should never be None");
+
+            let last_chat_provider_id = last_provider_ids_map.get(&chat.id).cloned().flatten();
+
+            let assistant_name = chat
+                .assistant_id
+                .and_then(|aid| assistants_map.get(&aid).cloned());
+
+            RecentChat {
+                id: chat.id.to_string(),
+                title_by_summary: chat
+                    .title_by_summary
+                    .clone()
+                    .unwrap_or_else(|| "Untitled Chat".to_string()),
+                last_message_at: latest_message.latest_message_at,
+                archived_at: chat.archived_at,
+                owner_user_id: chat.owner_user_id.clone(),
+                last_chat_provider_id,
+                assistant_id: chat.assistant_id,
+                assistant_name,
+            }
+        })
+        .collect();
 
     // Create the statistics object
     let stats = ChatListStats {

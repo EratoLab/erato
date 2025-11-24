@@ -3,6 +3,7 @@ pub mod assistants;
 pub mod budget;
 pub mod me_profile_middleware;
 pub mod message_streaming;
+pub mod policy_engine_middleware;
 pub mod token_usage;
 
 use crate::db::entity_ext::messages;
@@ -14,6 +15,7 @@ use crate::models::chat::{
 use crate::models::message::{ContentPart, MessageSchema};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
+use crate::policy::types::Subject;
 use crate::server::api::v1beta::assistants::{
     ArchiveAssistantResponse, Assistant, AssistantFile, AssistantWithFiles, CreateAssistantRequest,
     CreateAssistantResponse, UpdateAssistantRequest, UpdateAssistantResponse, archive_assistant,
@@ -26,6 +28,7 @@ use crate::server::api::v1beta::message_streaming::{
     MessageSubmitStreamingResponseMessage, edit_message_sse, message_submit_sse,
     regenerate_message_sse,
 };
+use crate::services::file_storage::FileStorage;
 use crate::services::sentry::log_internal_server_error;
 use crate::state::AppState;
 use axum::extract::{DefaultBodyLimit, Path, State};
@@ -39,6 +42,7 @@ use eyre::{Report, WrapErr};
 use serde::{Deserialize, Serialize};
 use sqlx::types::{Uuid, chrono};
 use tower_http::limit::RequestBodyLimitLayer;
+use tracing::instrument;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 
@@ -70,6 +74,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/budget", get(budget::budget_status))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
+            policy_engine_middleware::policy_engine_middleware,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            app_state.clone(),
             me_profile_middleware::user_profile_middleware,
         ))
         // RequestBodyLimitLayer is used in addition to DefaultBodyLimit,
@@ -96,6 +104,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/assistants/{assistant_id}/archive",
             post(archive_assistant),
         )
+        .route_layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            policy_engine_middleware::policy_engine_middleware,
+        ))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             me_profile_middleware::user_profile_middleware,
@@ -691,26 +703,82 @@ pub async fn recent_chats(
     .map_err(log_internal_server_error)?;
 
     // Convert from model RecentChat to API RecentChat
-    let mut api_chats = Vec::with_capacity(model_chats.len());
-    for chat in model_chats {
-        // For each chat, get its file uploads
-        let chat_id = Uuid::parse_str(&chat.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let available_models = app_state.available_models(&me_user.0.groups);
+    let api_chats = extend_recent_chats_to_api_model(
+        model_chats,
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &me_user.0.id,
+        &app_state.file_storage_providers,
+        &available_models,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to extend recent chats: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-        let file_uploads = models::file_upload::get_chat_file_uploads_with_urls(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            &chat_id,
-            &app_state.file_storage_providers,
-        )
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to get file uploads for chat {}: {}", chat.id, e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    // Create the response with chats and stats
+    let response = RecentChatsResponse {
+        chats: api_chats,
+        stats: RecentChatStats {
+            total_count: stats.total_count,
+            current_offset: stats.current_offset,
+            returned_count: stats.returned_count,
+            has_more: stats.has_more,
+        },
+    };
+
+    Ok(Json(response))
+}
+
+/// Extends model RecentChat objects to full API RecentChat objects.
+/// Fetches file uploads for each chat in parallel.
+#[instrument(skip_all)]
+async fn extend_recent_chats_to_api_model(
+    model_chats: Vec<models::chat::RecentChat>,
+    db: &sea_orm::DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    current_user_id: &str,
+    file_storage_providers: &std::collections::HashMap<String, FileStorage>,
+    available_models: &[(String, String)],
+) -> Result<Vec<RecentChat>, Report> {
+    use futures::future::join_all;
+
+    // Create futures for fetching file uploads for each chat in parallel
+    let file_upload_futures: Vec<_> = model_chats
+        .iter()
+        .map(|chat| {
+            let chat_id = chat.id.clone();
+            async move {
+                let chat_uuid = Uuid::parse_str(&chat_id)
+                    .wrap_err_with(|| format!("Invalid chat UUID: {}", chat_id))?;
+                let uploads = models::file_upload::get_chat_file_uploads_with_urls(
+                    db,
+                    policy,
+                    subject,
+                    &chat_uuid,
+                    file_storage_providers,
+                )
+                .await
+                .wrap_err_with(|| format!("Failed to get file uploads for chat {}", chat_id))?;
+                Ok::<_, Report>(uploads)
+            }
+        })
+        .collect();
+
+    // Execute all file upload fetches in parallel
+    let file_uploads_results = join_all(file_upload_futures).await;
+
+    // Build the API RecentChat objects
+    let mut api_chats = Vec::with_capacity(model_chats.len());
+    for (chat, file_uploads_result) in model_chats.into_iter().zip(file_uploads_results) {
+        let file_uploads = file_uploads_result?;
 
         // Convert file uploads to FileUploadItem
-        let file_upload_items = file_uploads
+        let file_upload_items: Vec<FileUploadItem> = file_uploads
             .into_iter()
             .map(|upload| FileUploadItem {
                 id: upload.id.to_string(),
@@ -721,20 +789,18 @@ pub async fn recent_chats(
 
         // Get the last model information based on the last chat provider ID
         let last_model = if let Some(ref provider_id) = chat.last_chat_provider_id {
-            // Check if this provider_id exists in the current available models
-            let available_models = app_state.available_models(&me_user.0.groups);
             available_models
-                .into_iter()
+                .iter()
                 .find(|(id, _)| id == provider_id)
                 .map(|(provider_id, display_name)| ChatModel {
-                    chat_provider_id: provider_id,
-                    model_display_name: display_name,
+                    chat_provider_id: provider_id.clone(),
+                    model_display_name: display_name.clone(),
                 })
         } else {
             None
         };
 
-        let can_edit = permissions::can_user_edit_chat(&me_user.0.id, &chat.owner_user_id);
+        let can_edit = permissions::can_user_edit_chat(current_user_id, &chat.owner_user_id);
 
         api_chats.push(RecentChat {
             id: chat.id,
@@ -750,18 +816,7 @@ pub async fn recent_chats(
         });
     }
 
-    // Create the response with chats and stats
-    let response = RecentChatsResponse {
-        chats: api_chats,
-        stats: RecentChatStats {
-            total_count: stats.total_count,
-            current_offset: stats.current_offset,
-            returned_count: stats.returned_count,
-            has_more: stats.has_more,
-        },
-    };
-
-    Ok(Json(response))
+    Ok(api_chats)
 }
 
 #[utoipa::path(
@@ -933,7 +988,7 @@ pub async fn create_chat(
     };
 
     // Create a new chat
-    let (chat, _) = get_or_create_chat(
+    let (chat, chat_status) = get_or_create_chat(
         &app_state.db,
         &policy,
         &me_user.to_subject(),
@@ -943,6 +998,11 @@ pub async fn create_chat(
     )
     .await
     .map_err(log_internal_server_error)?;
+
+    // Invalidate policy engine if a new chat was created
+    if chat_status == models::chat::ChatCreationStatus::Created {
+        app_state.global_policy_engine.invalidate_data().await;
+    }
 
     Ok(Json(CreateChatResponse {
         chat_id: chat.id.to_string(),
@@ -1070,7 +1130,7 @@ pub async fn archive_chat_endpoint(
             }
         })?;
 
-    policy.invalidate_data().await;
+    app_state.global_policy_engine.invalidate_data().await;
 
     // Check if archived_at is set (it should be)
     let archived_at = updated_chat.archived_at.ok_or_else(|| {

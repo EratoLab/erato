@@ -1,16 +1,51 @@
-use crate::models::chat::get_all_chats;
+use crate::db::entity_ext::chats;
 use crate::policy::types::{
     Action, Resource, ResourceId, ResourceKind, Subject, SubjectId, SubjectKind,
 };
 use axum::http::StatusCode;
 use eyre::{Report, WrapErr, eyre};
 use regorus::Engine;
-use sea_orm::DatabaseConnection;
+use sea_orm::prelude::Uuid;
+use sea_orm::{DatabaseConnection, EntityTrait, FromQueryResult, QuerySelect};
 use serde_json::{Value as JsonValue, json};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::instrument;
 
 const BACKEND_POLICY: &str = include_str!("../../policy/backend/backend.rego");
+
+/// Minimal chat attributes required for policy evaluation.
+#[derive(Debug, FromQueryResult)]
+struct ChatPolicyAttributes {
+    id: Uuid,
+    owner_user_id: String,
+}
+
+/// Fetch minimal chat data required for policy evaluation.
+/// Only queries the `id` and `owner_user_id` fields.
+async fn fetch_chat_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
+    let chats: Vec<ChatPolicyAttributes> = chats::Entity::find()
+        .select_only()
+        .column(chats::Column::Id)
+        .column(chats::Column::OwnerUserId)
+        .into_model::<ChatPolicyAttributes>()
+        .all(db)
+        .await?;
+
+    let mut chat_attributes = serde_json::Map::new();
+    for chat in chats {
+        let id_str = chat.id.to_string();
+        chat_attributes.insert(
+            id_str.clone(),
+            json!({
+                "id": id_str,
+                "owner_id": chat.owner_user_id,
+            }),
+        );
+    }
+
+    Ok(json!(chat_attributes))
+}
 
 // Define a macro that routes to the appropriate authorize implementation based on argument count
 macro_rules! authorize {
@@ -53,7 +88,6 @@ impl PolicyEngine {
     #[allow(unused)]
     pub fn new() -> Self {
         let mut engine = Engine::new();
-        engine.set_rego_v1(true);
         engine
             .add_policy("backend".to_string(), BACKEND_POLICY.to_string())
             .map_err(|err| eyre!(Box::new(err)))
@@ -62,6 +96,17 @@ impl PolicyEngine {
         Self {
             engine: Arc::new(RwLock::new(engine)),
             data_needs_rebuild: Arc::new(RwLock::new(true)),
+        }
+    }
+
+    /// Clone the engine for use in a request handler.
+    /// Unlike regular Clone, this creates an independent `data_needs_rebuild` state
+    /// set to `false`, so that invalidating the global engine doesn't affect
+    /// cloned request-scoped engines.
+    pub fn clone_for_request(&self) -> Self {
+        Self {
+            engine: self.engine.clone(),
+            data_needs_rebuild: Arc::new(RwLock::new(false)),
         }
     }
 
@@ -80,20 +125,14 @@ impl PolicyEngine {
         // info!("Invalidated policy data");
     }
 
+    #[instrument(skip_all)]
     pub async fn rebuild_data(&self, db: &DatabaseConnection) -> Result<(), Report> {
-        let all_chats = get_all_chats(db).await?;
-        let mut chat_attributes = serde_json::Map::new();
-        for chat in all_chats {
-            chat_attributes.insert(
-                chat.id.to_string(),
-                json!({
-                    "id": chat.id.to_string(),
-                    "owner_id": chat.owner_user_id,
-                }),
-            );
-        }
+        // Fetch policy data for each resource type
+        let chat_data = fetch_chat_policy_data(db).await?;
+
+        // Combine all resource attributes
         let resource_attributes = json!({
-            "chat": chat_attributes
+            "chat": chat_data
         });
         let policy_data = json!({ "resource_attributes": resource_attributes });
 
@@ -102,8 +141,32 @@ impl PolicyEngine {
         Ok(())
     }
 
+    /// Add a single chat's attributes to the policy data.
+    /// This is used to incrementally update the policy data after creating a new chat
+    /// without requiring a full rebuild from the database.
+    pub async fn add_chat_attributes(&self, chat_id: &str, owner_id: &str) -> Result<(), Report> {
+        let chat_data = json!({
+            "resource_attributes": {
+                "chat": {
+                    chat_id: {
+                        "id": chat_id,
+                        "owner_id": owner_id
+                    }
+                }
+            }
+        });
+
+        let mut guard = self.engine.write().await;
+        guard
+            .add_data_json(&chat_data.to_string())
+            .map_err(|e| eyre!(e))?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
     pub async fn rebuild_data_if_needed(&self, db: &DatabaseConnection) -> Result<(), Report> {
         let data_needs_rebuild = { *self.data_needs_rebuild.read().await };
+        tracing::trace!(data_needs_rebuild = data_needs_rebuild);
         if data_needs_rebuild {
             self.rebuild_data(db).await?;
         }

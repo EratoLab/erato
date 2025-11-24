@@ -1,5 +1,6 @@
 use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig};
+use crate::policy::engine::PolicyEngine;
 use crate::services::file_storage::FileStorage;
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
@@ -13,7 +14,72 @@ use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use tracing::instrument;
+
+/// Wrapper around PolicyEngine that tracks when it was last rebuilt
+/// This is used for the global policy engine instance in AppState
+#[derive(Debug, Clone)]
+pub struct GlobalPolicyEngine {
+    engine: PolicyEngine,
+    last_rebuild_time: Arc<RwLock<Option<Instant>>>,
+}
+
+impl Default for GlobalPolicyEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl GlobalPolicyEngine {
+    pub fn new() -> Self {
+        Self {
+            engine: PolicyEngine::new(),
+            last_rebuild_time: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// Check if the policy data needs rebuilding based on time threshold
+    /// Returns true if data has never been built or if more than the specified duration has passed
+    async fn needs_time_based_rebuild(&self, threshold: Duration) -> bool {
+        let last_rebuild = self.last_rebuild_time.read().await;
+        match *last_rebuild {
+            None => true, // Never been rebuilt
+            Some(instant) => instant.elapsed() > threshold,
+        }
+    }
+
+    /// Rebuild data if needed based on time threshold or explicit invalidation
+    /// Returns a request-scoped PolicyEngine clone for use in the request handler
+    #[instrument(skip_all)]
+    pub async fn get_engine_with_rebuild_check(
+        &self,
+        db: &DatabaseConnection,
+        time_threshold: Duration,
+    ) -> Result<PolicyEngine, Report> {
+        let needs_time_rebuild = self.needs_time_based_rebuild(time_threshold).await;
+
+        if needs_time_rebuild {
+            tracing::debug!("Policy data needs time-based rebuild, rebuilding...");
+            self.engine.rebuild_data(db).await?;
+            *self.last_rebuild_time.write().await = Some(Instant::now());
+        } else {
+            // Even if time hasn't elapsed, check if data was explicitly invalidated
+            self.engine.rebuild_data_if_needed(db).await?;
+        }
+
+        // Use clone_for_request to create an independent data_needs_rebuild state
+        // This prevents invalidate_data() on the global engine from affecting
+        // request-scoped clones during request processing
+        Ok(self.engine.clone_for_request())
+    }
+
+    /// Invalidate the policy data, forcing a rebuild on next access
+    pub async fn invalidate_data(&self) {
+        self.engine.invalidate_data().await;
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct AppState {
@@ -24,6 +90,7 @@ pub struct AppState {
     pub config: AppConfig,
     pub actor_manager: ActorManager,
     pub langfuse_client: LangfuseClient,
+    pub global_policy_engine: GlobalPolicyEngine,
 }
 
 impl AppState {
@@ -42,6 +109,9 @@ impl AppState {
         let actor_manager = ActorManager::new(db.clone(), config.clone()).await;
         let langfuse_client = LangfuseClient::from_config(&config.integrations.langfuse)?;
 
+        // Initialize the global policy engine
+        let global_policy_engine = GlobalPolicyEngine::new();
+
         Ok(Self {
             db,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
@@ -50,6 +120,7 @@ impl AppState {
             config,
             actor_manager,
             langfuse_client,
+            global_policy_engine,
         })
     }
 

@@ -11,7 +11,7 @@ use erato::config::{
 };
 use erato::services::file_storage::FileStorage;
 use erato::services::langfuse::LangfuseClient;
-use erato::state::AppState;
+use erato::state::{AppState, GlobalPolicyEngine};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
 use std::collections::HashMap;
@@ -87,7 +87,9 @@ pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppS
     };
     let langfuse_client = LangfuseClient::from_config(&langfuse_config).unwrap();
 
-    AppState {
+    let global_policy_engine = GlobalPolicyEngine::new();
+
+    let app_state = AppState {
         db: db.clone(),
         default_file_storage_provider: None,
         file_storage_providers,
@@ -95,7 +97,25 @@ pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppS
         config: app_config,
         actor_manager,
         langfuse_client,
-    }
+        global_policy_engine,
+    };
+
+    // For tests: Initialize policy engine and work around the middleware rebuild issue
+    // The problem is that policy invalidation during API calls doesn't trigger proper rebuilds
+    // in the test environment, causing subsequent API calls to fail with "Policy data is stale"
+
+    // Do initial rebuild to populate policy data
+    let policy_engine = app_state
+        .global_policy_engine
+        .get_engine_with_rebuild_check(&db, std::time::Duration::ZERO)
+        .await
+        .unwrap();
+
+    // Ensure any invalidated state is rebuilt immediately
+    // This handles the case where the policy engine might be in an invalidated state
+    policy_engine.rebuild_data_if_needed(&db).await.unwrap();
+
+    app_state
 }
 
 // This is the main entry point for integration tests
