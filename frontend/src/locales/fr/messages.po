@@ -90,6 +90,14 @@ msgstr "Limite budgétaire approchée"
 msgid "Approaching Token Limit"
 msgstr "Limite de tokens bientôt atteinte"
 
+#: src/pages/AssistantsListPage.tsx
+msgid "Archive"
+msgstr ""
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Are you sure you want to archive this assistant?"
+msgstr ""
+
 #: src/components/ui/Controls/DropdownMenu.tsx
 #: src/components/ui/Controls/Button.tsx
 msgid "Are you sure you want to proceed?"
@@ -104,12 +112,14 @@ msgstr "Êtes-vous sûr de vouloir supprimer ce chat ?"
 msgid "branding.welcomeScreen.description"
 msgstr "Posez des questions et obtenez des réponses utiles de notre assistant IA."
 
+#. js-lingui-explicit-id
 #: src/pages/AssistantChatSpacePage.tsx
 #: src/components/ui/Chat/ChatMessage.tsx
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "Assistant"
+msgid "branding.assistant_name"
 msgstr "Assistant"
 
+#: src/components/ui/Feedback/Avatar.tsx
 #: src/components/ui/Feedback/Avatar.tsx
 msgid "Assistant avatar"
 msgstr "Avatar de l'assistant"
@@ -219,6 +229,10 @@ msgstr "Confirmer l'action"
 msgid "Confirm Action"
 msgstr "Confirmer l'action"
 
+#: src/pages/AssistantsListPage.tsx
+msgid "Confirm Archive"
+msgstr ""
+
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "Confirm Removal"
 msgstr "Confirmer la suppression"
@@ -306,7 +320,7 @@ msgid "Drop files to upload..."
 msgstr "Déposez les fichiers pour les télécharger..."
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Edit assistant"
+msgid "Edit"
 msgstr ""
 
 #: src/pages/AssistantEditPage.tsx
@@ -442,17 +456,6 @@ msgstr "J'aime ce message"
 #. js-lingui-explicit-id
 #: src/pages/NewChatPage.tsx
 #: src/pages/HomePage.tsx
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
-#: src/pages/AssistantChatSpacePage.tsx
-msgid "branding.assistant_name"
-msgstr "Assistant"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
-msgid "branding.user_form_of_address"
-msgstr "Vous"
-
 #: src/pages/AssistantsListPage.tsx
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantCreatePage.tsx
@@ -873,8 +876,10 @@ msgstr ""
 msgid "branding.welcomeScreen.title"
 msgstr "Bienvenue dans l'Assistant IA"
 
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "You"
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "branding.user_form_of_address"
 msgstr "Vous"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
@@ -888,10 +893,6 @@ msgstr ""
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You have reached or exceeded your budget limit of {formattedLimit}. Current spending: {formattedSpending}."
 msgstr ""
-
-#: src/components/ui/Chat/ChatMessage.tsx
-msgid "Your"
-msgstr "Votre"
 
 #: src/pages/AssistantsListPage.tsx
 msgid "Your Assistants"

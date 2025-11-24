@@ -32,27 +32,27 @@ msgstr "{0, plural, =0 {Keine Dateien} one {# Datei} other {# Dateien}}"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"
-msgstr ""
+msgstr "• Browsersprache in den Einstellungen ändern und neu laden"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Check that UI updates immediately when locale changes"
-msgstr ""
+msgstr "• Prüfen, ob die Benutzeroberfläche sofort aktualisiert wird, wenn sich die Sprache ändert"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Click locale buttons to test switching languages (session only)"
-msgstr ""
+msgstr "• Sprachschaltflächen anklicken, um den Sprachwechsel zu testen (nur für diese Sitzung)"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Note: Locale changes are not persisted across page refreshes"
-msgstr ""
+msgstr "• Hinweis: Sprachänderungen werden beim Neuladen der Seite nicht gespeichert"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Use \"Reset to Browser Detection\" to test fresh detection"
-msgstr ""
+msgstr "• \"Auf Browsererkennung zurücksetzen\" verwenden, um die Erkennung neu zu testen"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "1 file"
-msgstr ""
+msgstr "1 Datei"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -75,11 +75,11 @@ msgstr "Alle Dateitypen akzeptiert"
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
 msgid "upload.error.unknown"
-msgstr ""
+msgstr "Unbekannter Fehler beim Hochladen"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "And"
-msgstr ""
+msgstr "Und"
 
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "Approaching Budget Limit"
@@ -89,6 +89,14 @@ msgstr "Budgetlimit wird erreicht"
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Approaching Token Limit"
 msgstr "Token-Limit wird erreicht"
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Archive"
+msgstr "Archivieren"
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Are you sure you want to archive this assistant?"
+msgstr "Möchten Sie diesen Assistenten wirklich archivieren?"
 
 #: src/components/ui/Controls/DropdownMenu.tsx
 #: src/components/ui/Controls/Button.tsx
@@ -104,29 +112,31 @@ msgstr "Möchten Sie diesen Chat wirklich entfernen?"
 msgid "branding.welcomeScreen.description"
 msgstr "Stellen Sie Fragen und erhalten Sie hilfreiche Antworten von unserem KI-Assistenten."
 
+#. js-lingui-explicit-id
 #: src/pages/AssistantChatSpacePage.tsx
 #: src/components/ui/Chat/ChatMessage.tsx
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "Assistant"
+msgid "branding.assistant_name"
 msgstr "Assistent"
 
+#: src/components/ui/Feedback/Avatar.tsx
 #: src/components/ui/Feedback/Avatar.tsx
 msgid "Assistant avatar"
 msgstr "Assistent-Avatar"
 
 #: src/pages/AssistantCreatePage.tsx
 msgid "Assistant created successfully!"
-msgstr ""
+msgstr "Assistent erfolgreich erstellt!"
 
 #: src/pages/AssistantEditPage.tsx
 msgid "Assistant updated successfully!"
-msgstr ""
+msgstr "Assistent erfolgreich aktualisiert!"
 
 #: src/pages/AssistantsListPage.tsx
 #: src/pages/AssistantsListPage.tsx
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
 msgid "Assistants"
-msgstr ""
+msgstr "Assistenten"
 
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "Attach File"
@@ -142,7 +152,7 @@ msgstr "Gesprächsanfang"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Browser Language:"
-msgstr ""
+msgstr "Browsersprache:"
 
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "Budget Limit Reached"
@@ -200,11 +210,11 @@ msgstr "Seitenleiste einklappen"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Configuration"
-msgstr ""
+msgstr "Konfiguration"
 
 #: src/pages/AssistantCreatePage.tsx
 msgid "Configure a custom assistant with specific instructions and capabilities"
-msgstr ""
+msgstr "Konfigurieren Sie einen benutzerdefinierten Assistenten mit spezifischen Anweisungen und Fähigkeiten"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Confirm"
@@ -219,6 +229,10 @@ msgstr "Aktion bestätigen"
 msgid "Confirm Action"
 msgstr "Aktion bestätigen"
 
+#: src/pages/AssistantsListPage.tsx
+msgid "Confirm Archive"
+msgstr "Archivierung bestätigen"
+
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "Confirm Removal"
 msgstr "Entfernung bestätigen"
@@ -230,22 +244,22 @@ msgstr "Nachricht kopieren"
 
 #: src/pages/AssistantsListPage.tsx
 msgid "Create and manage custom assistants with specific instructions and capabilities"
-msgstr ""
+msgstr "Erstellen und verwalten Sie benutzerdefinierte Assistenten mit spezifischen Anweisungen und Fähigkeiten"
 
 #: src/pages/AssistantsListPage.tsx
 #: src/pages/AssistantCreatePage.tsx
 #: src/pages/AssistantCreatePage.tsx
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Create Assistant"
-msgstr ""
+msgstr "Assistent erstellen"
 
 #: src/pages/AssistantsListPage.tsx
 msgid "Create Your First Assistant"
-msgstr ""
+msgstr "Erstellen Sie Ihren ersten Assistenten"
 
 #: src/pages/AssistantsListPage.tsx
 msgid "Create your first assistant to get started"
-msgstr ""
+msgstr "Erstellen Sie Ihren ersten Assistenten, um loszulegen"
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Dark mode"
@@ -254,27 +268,27 @@ msgstr "Dunkler Modus"
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Default Files"
-msgstr ""
+msgstr "Standarddateien"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Default Locale:"
-msgstr ""
+msgstr "Standardsprache:"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Default Model"
-msgstr ""
+msgstr "Standardmodell"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Define how the assistant should behave and respond"
-msgstr ""
+msgstr "Legen Sie fest, wie der Assistent sich verhalten und antworten soll"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Description"
-msgstr ""
+msgstr "Beschreibung"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Description must be less than 500 characters"
-msgstr ""
+msgstr "Beschreibung muss weniger als 500 Zeichen lang sein"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "details for"
@@ -282,7 +296,7 @@ msgstr "Details für"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Detected Locale:"
-msgstr ""
+msgstr "Erkannte Sprache:"
 
 #: src/components/ui/Message/DefaultMessageControls.tsx
 #: src/components/ui/Message/DefaultMessageControls.tsx
@@ -306,19 +320,19 @@ msgid "Drop files to upload..."
 msgstr "Dateien zum Hochladen loslassen..."
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Edit assistant"
-msgstr ""
+msgid "Edit"
+msgstr "Bearbeiten"
 
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantEditPage.tsx
 msgid "Edit Assistant"
-msgstr ""
+msgstr "Assistent bearbeiten"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Edit Assistant Settings"
-msgstr ""
+msgstr "Assistenten-Einstellungen bearbeiten"
 
 #: src/components/ui/Message/DefaultMessageControls.tsx
 #: src/components/ui/Message/DefaultMessageControls.tsx
@@ -327,7 +341,7 @@ msgstr "Nachricht bearbeiten"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Edit your message..."
-msgstr ""
+msgstr "Bearbeiten Sie Ihre Nachricht..."
 
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "End of conversation"
@@ -367,20 +381,20 @@ msgstr "fehlgeschlagen"
 
 #: src/pages/AssistantCreatePage.tsx
 msgid "Failed to create assistant. Please try again."
-msgstr ""
+msgstr "Fehler beim Erstellen des Assistenten. Bitte versuchen Sie es erneut."
 
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantChatSpacePage.tsx
 msgid "Failed to load assistant. Please try again."
-msgstr ""
+msgstr "Fehler beim Laden des Assistenten. Bitte versuchen Sie es erneut."
 
 #: src/pages/AssistantsListPage.tsx
 msgid "Failed to load assistants. Please try again."
-msgstr ""
+msgstr "Fehler beim Laden der Assistenten. Bitte versuchen Sie es erneut."
 
 #: src/pages/AssistantEditPage.tsx
 msgid "Failed to update assistant. Please try again."
-msgstr ""
+msgstr "Fehler beim Aktualisieren des Assistenten. Bitte versuchen Sie es erneut."
 
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
@@ -389,11 +403,11 @@ msgstr "Datei"
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
-msgstr ""
+msgstr "Datei ist zu groß"
 
 #: src/pages/SearchPage.tsx
 msgid "Found {resultsCount} results"
-msgstr ""
+msgstr "{resultsCount} Ergebnisse gefunden"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WelcomeScreen.tsx
@@ -416,7 +430,7 @@ msgstr "Details ausblenden"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "How to Test:"
-msgstr ""
+msgstr "So testen Sie:"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "In Progress"
@@ -442,17 +456,6 @@ msgstr "Nachricht gefällt mir"
 #. js-lingui-explicit-id
 #: src/pages/NewChatPage.tsx
 #: src/pages/HomePage.tsx
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
-#: src/pages/AssistantChatSpacePage.tsx
-msgid "branding.assistant_name"
-msgstr "Assistent"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
-msgid "branding.user_form_of_address"
-msgstr "Du"
-
 #: src/pages/AssistantsListPage.tsx
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantCreatePage.tsx
@@ -873,9 +876,11 @@ msgstr ""
 msgid "branding.welcomeScreen.title"
 msgstr "Willkommen beim KI-Assistenten"
 
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
-msgid "You"
-msgstr "Sie"
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "branding.user_form_of_address"
+msgstr "Du"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "You are a helpful assistant that..."
@@ -888,10 +893,6 @@ msgstr ""
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You have reached or exceeded your budget limit of {formattedLimit}. Current spending: {formattedSpending}."
 msgstr ""
-
-#: src/components/ui/Chat/ChatMessage.tsx
-msgid "Your"
-msgstr "Ihre"
 
 #: src/pages/AssistantsListPage.tsx
 msgid "Your Assistants"
