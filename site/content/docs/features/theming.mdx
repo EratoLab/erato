@@ -126,6 +126,7 @@ additional_environment = { "THEME_ASSISTANT_AVATAR_PATH" = "/custom-theme/my-com
 ### Fallback Behavior
 
 If no custom avatar is provided, the assistant will display with:
+
 - A colored circle using the theme's `avatar.assistant.background` color
 - The letter "A" in the `avatar.assistant.foreground` color
 
@@ -172,14 +173,14 @@ spec:
   template:
     spec:
       containers:
-      - name: erato
-        volumeMounts:
-        - name: theme
-          mountPath: /app/public/custom-theme/my-company
+        - name: erato
+          volumeMounts:
+            - name: theme
+              mountPath: /app/public/custom-theme/my-company
       volumes:
-      - name: theme
-        configMap:
-          name: erato-theme
+        - name: theme
+          configMap:
+            name: erato-theme
 ```
 
 For logos and avatars (binary files), use an init container or a PersistentVolume.

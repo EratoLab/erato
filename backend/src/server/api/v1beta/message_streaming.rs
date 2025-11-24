@@ -40,6 +40,7 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamExt as _;
 use tracing;
+use tracing::{Instrument, Span, instrument};
 use utoipa::ToSchema;
 
 #[derive(Serialize, ToSchema)]
@@ -118,6 +119,11 @@ trait SendAsSseEvent {
     async fn send_event(&self, tx: Sender<Result<Event, Report>>) -> Result<(), ()> {
         match self.data_json() {
             Ok(json) => {
+                tracing::trace!(
+                    tag = self.tag(),
+                    data_json = json.as_str(),
+                    "Sending response event"
+                );
                 if let Err(err) = tx
                     .send(Ok(Event::default().event(self.tag()).data(json)))
                     .await
@@ -682,6 +688,7 @@ async fn prepare_chat_request(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
 async fn stream_generate_chat_completion<
     MSG: SendAsSseEvent
         + From<MessageSubmitStreamingResponseMessageTextDelta>
@@ -1166,7 +1173,10 @@ async fn stream_update_assistant_message_completion<
         message: updated_assistant_message_wrapped,
     }
     .into();
-    message_completed_event.send_event(tx.clone()).await?;
+    message_completed_event
+        .send_event(tx.clone())
+        .in_current_span()
+        .await?;
 
     policy.invalidate_data().await;
 
@@ -1175,6 +1185,7 @@ async fn stream_update_assistant_message_completion<
 
 // TODO: Allow specifying different model for summary, so we don't use reasoning models for it.
 /// Generate a summary of the chat, based on the first message to the chat.
+#[instrument(skip_all)]
 pub async fn generate_chat_summary(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -1692,193 +1703,202 @@ pub async fn message_submit_sse(
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
 
     // Spawn a task to process the request and send events
-    tokio::spawn(async move {
-        let (chat, chat_status) =
-            stream_get_or_create_chat::<MessageSubmitStreamingResponseMessage>(
+    tokio::spawn(
+        async move {
+            let (chat, chat_status) =
+                stream_get_or_create_chat::<MessageSubmitStreamingResponseMessage>(
+                    tx.clone(),
+                    &app_state,
+                    &policy,
+                    &me_user,
+                    request.previous_message_id.as_ref(),
+                    request.existing_chat_id.as_ref(),
+                    request.assistant_id.as_ref(),
+                )
+                .await?;
+
+            if chat_status == ChatCreationStatus::Created {
+                let policy_rebuild = policy.rebuild_data(&app_state.db).await;
+                if let Err(err) = policy_rebuild {
+                    let _ = tx
+                        .send(Err(err).wrap_err("Failed to rebuild policy data"))
+                        .await;
+                    return Err(());
+                }
+            }
+
+            let saved_user_message =
+                stream_save_user_message::<MessageSubmitStreamingResponseMessage>(
+                    tx.clone(),
+                    &app_state,
+                    &policy,
+                    &me_user,
+                    &chat,
+                    request.previous_message_id.as_ref(),
+                    &request.user_message,
+                    &request.input_files_ids,
+                )
+                .await?;
+
+            if chat_status == ChatCreationStatus::Created
+                || (chat_status == ChatCreationStatus::Existing
+                    && request.previous_message_id.is_none())
+            {
+                let app_state_clone = app_state.clone();
+                let policy_clone = policy.clone();
+                let me_user_clone = me_user.clone();
+                let chat_clone = chat.clone();
+                let saved_user_message_clone = saved_user_message.clone();
+                let chat_summary_span = tracing::info_span!("Generating chat summary");
+                chat_summary_span.follows_from(Span::current());
+                tokio::spawn(
+                    async move {
+                        let summary_res = generate_chat_summary(
+                            &app_state_clone,
+                            &policy_clone,
+                            &me_user_clone,
+                            &chat_clone,
+                            &saved_user_message_clone,
+                        )
+                        .await;
+                        if let Err(ref summary) = summary_res {
+                            capture_report(summary);
+                        }
+                        Ok::<(), Report>(())
+                    }
+                    .instrument(chat_summary_span),
+                );
+            }
+
+            let files_for_generation = process_input_files(
                 tx.clone(),
                 &app_state,
                 &policy,
                 &me_user,
-                request.previous_message_id.as_ref(),
-                request.existing_chat_id.as_ref(),
-                request.assistant_id.as_ref(),
+                &request.input_files_ids,
             )
             .await?;
-
-        if chat_status == ChatCreationStatus::Created {
-            let policy_rebuild = policy.rebuild_data(&app_state.db).await;
-            if let Err(err) = policy_rebuild {
-                let _ = tx
-                    .send(Err(err).wrap_err("Failed to rebuild policy data"))
-                    .await;
-                return Err(());
-            }
-        }
-
-        let saved_user_message = stream_save_user_message::<MessageSubmitStreamingResponseMessage>(
-            tx.clone(),
-            &app_state,
-            &policy,
-            &me_user,
-            &chat,
-            request.previous_message_id.as_ref(),
-            &request.user_message,
-            &request.input_files_ids,
-        )
-        .await?;
-
-        if chat_status == ChatCreationStatus::Created
-            || (chat_status == ChatCreationStatus::Existing
-                && request.previous_message_id.is_none())
-        {
-            let app_state_clone = app_state.clone();
-            let policy_clone = policy.clone();
-            let me_user_clone = me_user.clone();
-            let chat_clone = chat.clone();
-            let saved_user_message_clone = saved_user_message.clone();
-            tokio::spawn(async move {
-                let summary_res = generate_chat_summary(
-                    &app_state_clone,
-                    &policy_clone,
-                    &me_user_clone,
-                    &chat_clone,
-                    &saved_user_message_clone,
-                )
-                .await;
-                if let Err(ref summary) = summary_res {
-                    capture_report(summary);
-                }
-                Ok::<(), Report>(())
-            });
-        }
-
-        let files_for_generation = process_input_files(
-            tx.clone(),
-            &app_state,
-            &policy,
-            &me_user,
-            &request.input_files_ids,
-        )
-        .await?;
-        let prepare_chat_request_res = prepare_chat_request(
-            &app_state,
-            &policy,
-            &chat,
-            &saved_user_message.id,
-            files_for_generation.clone(),
-            &me_user.0.groups,
-            request.chat_provider_id.as_deref(),
-        )
-        .await;
-        if let Err(err) = prepare_chat_request_res {
-            let _ = tx.send(Err(err)).await;
-            return Err(());
-        }
-        let (chat_request, chat_options, generation_input_messages) =
-            prepare_chat_request_res.unwrap();
-
-        // ---- SAVE INITIAL EMPTY ASSISTANT MESSAGE ----
-        let empty_assistant_message_json = json!({
-            "role": "assistant",
-            "content": [], // Empty content
-        });
-
-        // Determine the chat provider ID that will be used for generation
-        // Use the user's allowlist to filter available providers
-        let chat_provider_allowlist =
-            app_state.determine_chat_provider_allowlist_for_user(&me_user.0.groups);
-        let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
-            .as_ref()
-            .map(|list| list.iter().map(|s| s.as_str()).collect());
-
-        let chat_provider_id = app_state
-            .config
-            .determine_chat_provider(
-                allowlist_refs.as_deref(),
+            let prepare_chat_request_res = prepare_chat_request(
+                &app_state,
+                &policy,
+                &chat,
+                &saved_user_message.id,
+                files_for_generation.clone(),
+                &me_user.0.groups,
                 request.chat_provider_id.as_deref(),
             )
-            .unwrap_or("unknown")
-            .to_string();
-        let generation_parameters = GenerationParameters {
-            generation_chat_provider_id: Some(chat_provider_id.clone()),
-        };
-
-        let initial_assistant_message = match submit_message(
-            &app_state.db,
-            &policy,
-            &me_user.to_subject(),
-            &chat.id,
-            empty_assistant_message_json,
-            Some(&saved_user_message.id), // Previous is the user message
-            None,                         // No sibling for a new message
-            Some(generation_input_messages.clone()), // Save generation inputs
-            &[],                          // Assistant messages don't have input files themselves
-            Some(generation_parameters),  // Save generation parameters with chat provider ID
-            None, // Generation metadata will be added later when stream completes
-        )
-        .await
-        {
-            Ok(msg) => msg,
-            Err(err) => {
-                let _ = tx
-                    .send(Err(err).wrap_err("Failed to submit initial assistant message"))
-                    .await;
+            .await;
+            if let Err(err) = prepare_chat_request_res {
+                let _ = tx.send(Err(err)).await;
                 return Err(());
             }
-        };
+            let (chat_request, chat_options, generation_input_messages) =
+                prepare_chat_request_res.unwrap();
 
-        // ---- EMIT AssistantMessageStarted ----
-        let assistant_started_event: MessageSubmitStreamingResponseMessage =
-            MessageSubmitStreamingResponseAssistantMessageStarted {
-                message_id: initial_assistant_message.id,
-            }
-            .into();
-        if let Err(()) = assistant_started_event.send_event(tx.clone()).await {
-            return Err(()); // Propagate error if send_event failed
-        }
-        // ---- END EMIT AssistantMessageStarted ----
+            // ---- SAVE INITIAL EMPTY ASSISTANT MESSAGE ----
+            let empty_assistant_message_json = json!({
+                "role": "assistant",
+                "content": [], // Empty content
+            });
 
-        let (end_content, generation_metadata) =
-            stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
-                tx.clone(),
-                &app_state,
-                chat_request,
-                chat_options,
-                initial_assistant_message.id, // Pass assistant_message_id
-                me_user.0.id.clone(),         // Pass user_id
-                chat.id,                      // Pass chat_id
-                Some(chat_provider_id.as_str()), // Pass chat_provider_id
-                &me_user.0.groups,            // Pass user_groups
-            )
-            .await?;
+            // Determine the chat provider ID that will be used for generation
+            // Use the user's allowlist to filter available providers
+            let chat_provider_allowlist =
+                app_state.determine_chat_provider_allowlist_for_user(&me_user.0.groups);
+            let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
+                .as_ref()
+                .map(|list| list.iter().map(|s| s.as_str()).collect());
 
-        // Update the assistant message with generation metadata if available
-        if let Some(metadata) = generation_metadata
-            && let Err(err) = update_message_generation_metadata(
+            let chat_provider_id = app_state
+                .config
+                .determine_chat_provider(
+                    allowlist_refs.as_deref(),
+                    request.chat_provider_id.as_deref(),
+                )
+                .unwrap_or("unknown")
+                .to_string();
+            let generation_parameters = GenerationParameters {
+                generation_chat_provider_id: Some(chat_provider_id.clone()),
+            };
+
+            let initial_assistant_message = match submit_message(
                 &app_state.db,
                 &policy,
                 &me_user.to_subject(),
-                &initial_assistant_message.id,
-                metadata,
+                &chat.id,
+                empty_assistant_message_json,
+                Some(&saved_user_message.id), // Previous is the user message
+                None,                         // No sibling for a new message
+                Some(generation_input_messages.clone()), // Save generation inputs
+                &[], // Assistant messages don't have input files themselves
+                Some(generation_parameters), // Save generation parameters with chat provider ID
+                None, // Generation metadata will be added later when stream completes
             )
             .await
-        {
-            tracing::warn!("Failed to update generation metadata: {}", err);
-            // Don't fail the entire request if metadata update fails
+            {
+                Ok(msg) => msg,
+                Err(err) => {
+                    let _ = tx
+                        .send(Err(err).wrap_err("Failed to submit initial assistant message"))
+                        .await;
+                    return Err(());
+                }
+            };
+
+            // ---- EMIT AssistantMessageStarted ----
+            let assistant_started_event: MessageSubmitStreamingResponseMessage =
+                MessageSubmitStreamingResponseAssistantMessageStarted {
+                    message_id: initial_assistant_message.id,
+                }
+                .into();
+            if let Err(()) = assistant_started_event.send_event(tx.clone()).await {
+                return Err(()); // Propagate error if send_event failed
+            }
+            // ---- END EMIT AssistantMessageStarted ----
+
+            let (end_content, generation_metadata) =
+                stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
+                    tx.clone(),
+                    &app_state,
+                    chat_request,
+                    chat_options,
+                    initial_assistant_message.id, // Pass assistant_message_id
+                    me_user.0.id.clone(),         // Pass user_id
+                    chat.id,                      // Pass chat_id
+                    Some(chat_provider_id.as_str()), // Pass chat_provider_id
+                    &me_user.0.groups,            // Pass user_groups
+                )
+                .await?;
+
+            // Update the assistant message with generation metadata if available
+            if let Some(metadata) = generation_metadata
+                && let Err(err) = update_message_generation_metadata(
+                    &app_state.db,
+                    &policy,
+                    &me_user.to_subject(),
+                    &initial_assistant_message.id,
+                    metadata,
+                )
+                .await
+            {
+                tracing::warn!("Failed to update generation metadata: {}", err);
+                // Don't fail the entire request if metadata update fails
+            }
+
+            stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
+                tx.clone(),
+                &app_state,
+                &policy,
+                end_content,
+                &me_user,
+                initial_assistant_message.id,
+            )
+            .await?;
+
+            Ok::<(), ()>(())
         }
-
-        stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
-            tx.clone(),
-            &app_state,
-            &policy,
-            end_content,
-            &me_user,
-            initial_assistant_message.id,
-        )
-        .await?;
-
-        Ok::<(), ()>(())
-    });
+        .in_current_span(),
+    );
 
     // Convert the receiver into a stream and return it
     let receiver_stream = tokio_stream::wrappers::ReceiverStream::<Result<Event, Report>>::new(rx);

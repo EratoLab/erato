@@ -845,6 +845,43 @@ pub struct IntegrationsConfig {
     pub langfuse: LangfuseConfig,
     #[serde(default)]
     pub sentry: SentryConfig,
+    #[serde(default)]
+    pub otel: OtelConfig,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct OtelConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_otel_endpoint")]
+    pub endpoint: String,
+    #[serde(default = "default_otel_protocol")]
+    pub protocol: String,
+    #[serde(default = "default_service_name")]
+    pub service_name: String,
+}
+
+impl Default for OtelConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: default_otel_endpoint(),
+            protocol: default_otel_protocol(),
+            service_name: default_service_name(),
+        }
+    }
+}
+
+fn default_otel_endpoint() -> String {
+    "http://localhost:4318".to_string()
+}
+
+fn default_otel_protocol() -> String {
+    "http".to_string()
+}
+
+fn default_service_name() -> String {
+    "erato-backend".to_string()
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]

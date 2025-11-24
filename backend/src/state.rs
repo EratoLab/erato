@@ -9,10 +9,11 @@ use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
 use genai::{Client as GenaiClient, ModelIden, ServiceTarget};
 use reqwest;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-use sea_orm::{Database, DatabaseConnection};
+use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
+use tracing::instrument;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
@@ -27,7 +28,10 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
-        let db = Database::connect(&config.database_url).await?;
+        let db_connect_options = ConnectOptions::new(&config.database_url);
+        // TODO: Change level to Debug, but that also seems to deactivate some other logging (e.g. Errors during request?)
+        // db_connect_options.sqlx_logging_level(LevelFilter::Debug);
+        let db = Database::connect(db_connect_options).await?;
         let file_storage_providers = Self::build_file_storage_providers(&config)?;
         let mcp_servers = Arc::new(McpServers::new(&config));
 
@@ -121,6 +125,7 @@ impl AppState {
 
     /// Determines chat provider allowlist for a user based on their group memberships.
     /// Uses the model_permissions configuration to filter available chat providers.
+    #[instrument(skip_all)]
     pub fn determine_chat_provider_allowlist_for_user(
         &self,
         user_groups: &[String],

@@ -33,6 +33,13 @@ chat_provider_ids = ["test-token-limit"]
 # [integrations.sentry]
 # sentry_dsn = "https://your-sentry-dsn@sentry.io/project-id"
 
+# Example OpenTelemetry integration configuration
+# [integrations.otel]
+# enabled = true
+# endpoint = "http://localhost:4318"
+# protocol = "http" # "http" or "grpc"
+# service_name = "erato-backend"
+
 # Frontend configuration options for embedded scenarios
 # [frontend]
 # # Whether to disable file upload functionality in the UI (default: false)

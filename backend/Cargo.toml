@@ -13,13 +13,13 @@ path = "./src/gen_openapi.rs"
 axum = { version = "0.8.4", features = ["macros"] }
 axum-extra = { version = "0.10.1", features = ["typed-header", "multipart"] }
 headers = "0.4.0"
-tower-http = { version = "0.6.2",  features = ["fs", "cors", "limit"] }
+tower-http = { version = "0.6.2",  features = ["fs", "cors", "limit", "trace"] }
 sea-orm = { version = "1.1.10",  features = ["runtime-tokio", "sqlx-postgres", "runtime-tokio-native-tls"]}
 sqlx = { version = "0.8.5", features=["postgres", "runtime-tokio", "runtime-tokio-native-tls"] }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
 tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
-tracing-subscriber = "0.3.19"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 tracing = "0.1.41"
 synonym = "0.1.5"
 regorus = "0.2.8"
@@ -43,7 +43,6 @@ genai = { version = "0.4.0-WIP", git = "https://github.com/EratoLab/rust-genai.g
 reqwest = { version = "0.12.12", features = ["multipart"] }
 opendal = { version = "0.52.0", features = ["services-s3", "services-azblob"] }
 
-sentry-tower = { version = "0.41.0", optional = true, features = ["http"] }
 parser-core = "0.1.3"
 tiktoken-rs = "0.6.0"
 rmcp = { version = "0.8", features = ["client", "reqwest", "transport-sse-client-reqwest", "transport-streamable-http-client-reqwest"] }
@@ -52,6 +51,14 @@ ractor_actors = { version = "0.4.9", features = ["time"] }
 chrono = "0.4"
 cron = "0.12.1"
 
+# Dependencies: Observability
+sentry-tower = { version = "0.41.0", optional = true, features = ["http"] }
+opentelemetry = "0.31.0"
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio-current-thread"] }
+opentelemetry-otlp = { version = "0.31.0", default-features = false, features = ["grpc-tonic", "http-proto", "reqwest-blocking-client", "trace", "metrics", "logs", "internal-logs" ] }
+opentelemetry-semantic-conventions = "0.29.0"
+tracing-opentelemetry = "0.32.0"
+axum-tracing-opentelemetry = "0.32.2"
 [dependencies.sentry]
 version = "0.41.0"
 optional = true

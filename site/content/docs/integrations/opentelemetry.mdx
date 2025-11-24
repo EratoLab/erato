@@ -1,0 +1,43 @@
+# OpenTelemetry
+
+Erato provides support for [OpenTelemetry](https://opentelemetry.io/) for comprehensive system observability.
+
+## Features
+
+- **Distributed Tracing**: Captures detailed traces of requests, actor interactions, and background tasks.
+- **Standard Compliance**: Fully compatible with the OpenTelemetry standard.
+- **Flexible Exporters**: Supports both HTTP and gRPC protocols for sending traces to collectors.
+- **Custom Groups**: Allows fine-grained control over logging verbosity for specific subsystems (e.g., Langfuse integration).
+
+## Configuration
+
+### Basic Setup
+
+To enable OpenTelemetry tracing, configure the `[integrations.otel]` section in your `erato.toml`:
+
+```toml filename="erato.toml"
+[integrations.otel]
+enabled = true
+endpoint = "http://localhost:4318" # or your collector endpoint
+service_name = "erato-backend"     # optional
+protocol = "http"                  # "http" or "grpc"
+```
+
+### Configuration Options
+
+For detailed configuration options and examples, see the [Configuration Reference](../configuration#integrationsotel) documentation.
+
+## Tracing Groups
+
+Erato uses a custom grouping mechanism to allow enabling detailed logs for specific subsystems without enabling debug logs for the entire application or manually specifying multiple module paths.
+
+To enable a group, add it to your `RUST_LOG` environment variable or configuration:
+
+```bash
+# Enable info logs generally, but debug logs for Langfuse integration
+RUST_LOG="info,erato_system::langfuse=debug"
+```
+
+Currently supported groups:
+
+- **`erato_system::langfuse`**

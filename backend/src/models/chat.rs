@@ -12,6 +12,7 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::Utc;
+use tracing::instrument;
 
 /// Configuration for a chat that is based on an assistant
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -193,6 +194,7 @@ pub struct FrequentAssistant {
 /// Returns a tuple of (chats, stats) where:
 /// - chats: Vec<RecentChat> - The list of recent chats
 /// - stats: ChatListStats - Statistics about the chat list
+#[instrument(skip_all)]
 pub async fn get_recent_chats(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
