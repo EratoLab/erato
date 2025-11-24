@@ -61,7 +61,7 @@ export default function AssistantChatSpacePage() {
     if (assistant) {
       document.title = `${assistant.name} - ${t({ id: "branding.page_title_suffix" })}`;
     } else {
-      document.title = `${t`Assistant`} - ${t({ id: "branding.page_title_suffix" })}`;
+      document.title = `${t({ id: "branding.assistant_name", message: "Assistant" })} - ${t({ id: "branding.page_title_suffix" })}`;
     }
   }, [assistant]);
 

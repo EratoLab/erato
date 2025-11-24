@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 import clsx from "clsx";
 import { memo, useState } from "react";
 
@@ -68,6 +69,12 @@ export const ChatMessage = memo(function ChatMessage({
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
 
+  // Get user display name - use profile name if available, otherwise use form of address
+  const userDisplayName = isUser
+    ? (userProfile?.name ??
+      t({ id: "branding.user_form_of_address", message: "You" }))
+    : t({ id: "branding.assistant_name", message: "Assistant" });
+
   // Get streaming state to check for tool calls
   const { streaming } = useMessagingStore();
   const hasToolCalls = Object.keys(streaming.toolCalls).length > 0;
@@ -97,7 +104,7 @@ export const ChatMessage = memo(function ChatMessage({
       )}
       role="log"
       aria-live="polite"
-      aria-label={`${isUser ? t`Your` : t`Assistant`} ${t`message`}`}
+      aria-label={`${userDisplayName} ${t`message`}`}
       data-testid={`message-${role}`}
       data-message-id={message.id}
     >
@@ -109,7 +116,13 @@ export const ChatMessage = memo(function ChatMessage({
         <div className="min-w-0 flex-1 break-words">
           <div className="flex items-start justify-between">
             <div className="mb-1 text-sm font-semibold text-theme-fg-primary">
-              {isUser ? t`You` : t`Assistant`}
+              {isUser ? (
+                (userProfile?.name ?? (
+                  <Trans id="branding.user_form_of_address">You</Trans>
+                ))
+              ) : (
+                <Trans id="branding.assistant_name">Assistant</Trans>
+              )}
             </div>
           </div>
 
