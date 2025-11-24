@@ -6,6 +6,7 @@ use eyre::{ContextCompat, OptionExt, Report};
 use sea_orm::prelude::*;
 use sea_orm::{ActiveValue, DatabaseConnection, JoinType, QuerySelect};
 use sqlx::types::Uuid;
+use tracing::instrument;
 
 /// Create a new file upload record in the database and associate it with a chat
 pub async fn create_file_upload(
@@ -166,6 +167,7 @@ pub async fn get_file_upload_with_url(
 }
 
 /// Get all file uploads for a chat, with pre-signed download URLs
+#[instrument(skip_all)]
 pub async fn get_chat_file_uploads_with_urls(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,

@@ -907,6 +907,46 @@ sentry_dsn = "https://public@sentry.example.com/1"
 
 See the [Sentry Integration](./integrations/sentry) documentation for detailed setup instructions.
 
+#### `integrations.otel`
+
+Configuration for [OpenTelemetry](./integrations/opentelemetry) tracing.
+
+##### `integrations.otel.enabled`
+
+Whether OpenTelemetry tracing is enabled.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+##### `integrations.otel.endpoint`
+
+The endpoint URL of the OpenTelemetry collector.
+
+**Default value:** `"http://localhost:4318"`
+
+**Type:** `string`
+
+**Example:** `"http://localhost:4318"` or `"http://otel-collector:4317"`
+
+##### `integrations.otel.protocol`
+
+The protocol to use for exporting traces.
+
+**Default value:** `"http"`
+
+**Type:** `string`
+
+**Supported values:** `"http"`, `"grpc"`
+
+##### `integrations.otel.service_name`
+
+The service name to identify this application in traces.
+
+**Default value:** `"erato-backend"`
+
+**Type:** `string`
+
 ### `mcp_servers`
 
 Configuration for Model Context Protocol (MCP) servers that extend Erato's capabilities through custom tools and integrations.

@@ -1,5 +1,6 @@
 use axum::Extension;
 use axum::handler::HandlerWithoutStateExt;
+use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use eyre::Report;
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
@@ -15,8 +16,6 @@ use tower_http::cors::CorsLayer;
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    // initialize tracing
-    tracing_subscriber::fmt::init();
     color_eyre::install()?;
     let loaded_dotenv_files = dotenv_flow::dotenv_flow().ok();
     if let Some(loaded_dotenv_files) = loaded_dotenv_files {
@@ -26,6 +25,9 @@ async fn main() -> Result<(), Report> {
     }
 
     let config = AppConfig::new_for_app(None)?;
+
+    // initialize tracing
+    let _telemetry_guard = erato::telemetry::init_telemetry(&config)?;
 
     let mut _sentry_guard = None;
     setup_sentry(
@@ -64,6 +66,10 @@ async fn main() -> Result<(), Report> {
         )))
         .layer(Extension(build_frontend_environment(&config)))
         .layer(CorsLayer::very_permissive())
+        // include trace context as header into the response
+        .layer(OtelInResponseLayer)
+        //start OpenTelemetry trace on incoming request
+        .layer(OtelAxumLayer::default())
         .with_state(state);
 
     println!();
