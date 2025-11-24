@@ -442,6 +442,17 @@ msgstr "Lubię wiadomość"
 #. js-lingui-explicit-id
 #: src/pages/NewChatPage.tsx
 #: src/pages/HomePage.tsx
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
+msgid "branding.assistant_name"
+msgstr "Asystent"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "branding.user_form_of_address"
+msgstr "Ty"
+
 #: src/pages/AssistantsListPage.tsx
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantCreatePage.tsx

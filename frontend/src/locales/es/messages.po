@@ -442,6 +442,17 @@ msgstr "Me gusta el mensaje"
 #. js-lingui-explicit-id
 #: src/pages/NewChatPage.tsx
 #: src/pages/HomePage.tsx
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
+msgid "branding.assistant_name"
+msgstr "Asistente"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "branding.user_form_of_address"
+msgstr "Tú"
+
 #: src/pages/AssistantsListPage.tsx
 #: src/pages/AssistantEditPage.tsx
 #: src/pages/AssistantCreatePage.tsx
