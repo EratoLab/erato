@@ -11,6 +11,7 @@ use headers::authorization::{Bearer, Credentials};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tracing::instrument;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -75,6 +76,7 @@ impl MeProfile {
     }
 }
 
+#[instrument(skip_all)]
 pub async fn user_profile_from_token(
     app_state: &AppState,
     token: &str,

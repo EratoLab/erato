@@ -1,17 +1,51 @@
-use crate::models::chat::get_all_chats;
+use crate::db::entity_ext::chats;
 use crate::policy::types::{
     Action, Resource, ResourceId, ResourceKind, Subject, SubjectId, SubjectKind,
 };
 use axum::http::StatusCode;
 use eyre::{Report, WrapErr, eyre};
 use regorus::Engine;
-use sea_orm::DatabaseConnection;
+use sea_orm::prelude::Uuid;
+use sea_orm::{DatabaseConnection, EntityTrait, FromQueryResult, QuerySelect};
 use serde_json::{Value as JsonValue, json};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::instrument;
 
 const BACKEND_POLICY: &str = include_str!("../../policy/backend/backend.rego");
+
+/// Minimal chat attributes required for policy evaluation.
+#[derive(Debug, FromQueryResult)]
+struct ChatPolicyAttributes {
+    id: Uuid,
+    owner_user_id: String,
+}
+
+/// Fetch minimal chat data required for policy evaluation.
+/// Only queries the `id` and `owner_user_id` fields.
+async fn fetch_chat_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
+    let chats: Vec<ChatPolicyAttributes> = chats::Entity::find()
+        .select_only()
+        .column(chats::Column::Id)
+        .column(chats::Column::OwnerUserId)
+        .into_model::<ChatPolicyAttributes>()
+        .all(db)
+        .await?;
+
+    let mut chat_attributes = serde_json::Map::new();
+    for chat in chats {
+        let id_str = chat.id.to_string();
+        chat_attributes.insert(
+            id_str.clone(),
+            json!({
+                "id": id_str,
+                "owner_id": chat.owner_user_id,
+            }),
+        );
+    }
+
+    Ok(json!(chat_attributes))
+}
 
 // Define a macro that routes to the appropriate authorize implementation based on argument count
 macro_rules! authorize {
@@ -93,19 +127,12 @@ impl PolicyEngine {
 
     #[instrument(skip_all)]
     pub async fn rebuild_data(&self, db: &DatabaseConnection) -> Result<(), Report> {
-        let all_chats = get_all_chats(db).await?;
-        let mut chat_attributes = serde_json::Map::new();
-        for chat in all_chats {
-            chat_attributes.insert(
-                chat.id.to_string(),
-                json!({
-                    "id": chat.id.to_string(),
-                    "owner_id": chat.owner_user_id,
-                }),
-            );
-        }
+        // Fetch policy data for each resource type
+        let chat_data = fetch_chat_policy_data(db).await?;
+
+        // Combine all resource attributes
         let resource_attributes = json!({
-            "chat": chat_attributes
+            "chat": chat_data
         });
         let policy_data = json!({ "resource_attributes": resource_attributes });
 
