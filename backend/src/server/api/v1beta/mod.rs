@@ -3,6 +3,7 @@ pub mod assistants;
 pub mod budget;
 pub mod me_profile_middleware;
 pub mod message_streaming;
+pub mod policy_engine_middleware;
 pub mod token_usage;
 
 use crate::db::entity_ext::messages;
@@ -70,6 +71,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/budget", get(budget::budget_status))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
+            policy_engine_middleware::policy_engine_middleware,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            app_state.clone(),
             me_profile_middleware::user_profile_middleware,
         ))
         // RequestBodyLimitLayer is used in addition to DefaultBodyLimit,
@@ -96,6 +101,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/assistants/{assistant_id}/archive",
             post(archive_assistant),
         )
+        .route_layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            policy_engine_middleware::policy_engine_middleware,
+        ))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             me_profile_middleware::user_profile_middleware,
@@ -933,7 +942,7 @@ pub async fn create_chat(
     };
 
     // Create a new chat
-    let (chat, _) = get_or_create_chat(
+    let (chat, chat_status) = get_or_create_chat(
         &app_state.db,
         &policy,
         &me_user.to_subject(),
@@ -943,6 +952,11 @@ pub async fn create_chat(
     )
     .await
     .map_err(log_internal_server_error)?;
+
+    // Invalidate policy engine if a new chat was created
+    if chat_status == models::chat::ChatCreationStatus::Created {
+        app_state.global_policy_engine.invalidate_data().await;
+    }
 
     Ok(Json(CreateChatResponse {
         chat_id: chat.id.to_string(),
@@ -1070,7 +1084,7 @@ pub async fn archive_chat_endpoint(
             }
         })?;
 
-    policy.invalidate_data().await;
+    app_state.global_policy_engine.invalidate_data().await;
 
     // Check if archived_at is set (it should be)
     let archived_at = updated_chat.archived_at.ok_or_else(|| {

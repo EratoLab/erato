@@ -1,6 +1,5 @@
 use crate::models::user::get_or_create_user;
 use crate::normalize_profile::{IdTokenProfile, normalize_profile};
-use crate::policy::engine::PolicyEngine;
 use crate::policy::prelude::Subject;
 use crate::state::AppState;
 use axum::extract::{Request, State};
@@ -115,6 +114,11 @@ pub async fn user_profile_from_token(
     Ok(user_profile)
 }
 
+/// Middleware that extracts and validates user profile from JWT token
+///
+/// This middleware decodes the JWT token from the Authorization header,
+/// normalizes the profile data, creates or retrieves the user from the database,
+/// and adds the user profile to the request extensions for use by downstream handlers.
 pub(crate) async fn user_profile_middleware(
     State(app_state): State<AppState>,
     mut req: Request,
@@ -128,17 +132,6 @@ pub(crate) async fn user_profile_middleware(
 
     if let Ok(current_user) = user_profile_from_token(&app_state, auth_header.token()).await {
         req.extensions_mut().insert(MeProfile(current_user));
-        // Initialize a new PolicyEngine for this request
-        let policy_engine = PolicyEngine::new();
-        // Optionally, you could rebuild data here if needed:
-        policy_engine
-            .rebuild_data(&app_state.db)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to build policy engine: {:?}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-        req.extensions_mut().insert(policy_engine);
         Ok(next.run(req).await)
     } else {
         Err(StatusCode::UNAUTHORIZED)

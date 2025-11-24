@@ -1178,7 +1178,7 @@ async fn stream_update_assistant_message_completion<
         .in_current_span()
         .await?;
 
-    policy.invalidate_data().await;
+    app_state.global_policy_engine.invalidate_data().await;
 
     Ok(())
 }
@@ -1717,14 +1717,15 @@ pub async fn message_submit_sse(
                 )
                 .await?;
 
-            if chat_status == ChatCreationStatus::Created {
-                let policy_rebuild = policy.rebuild_data(&app_state.db).await;
-                if let Err(err) = policy_rebuild {
-                    let _ = tx
-                        .send(Err(err).wrap_err("Failed to rebuild policy data"))
-                        .await;
-                    return Err(());
-                }
+            // Rebuild policy data if a new chat was created, so subsequent authorization
+            // checks in this request can see the new chat
+            if chat_status == ChatCreationStatus::Created
+                && let Err(err) = policy.rebuild_data(&app_state.db).await
+            {
+                let _ = tx
+                    .send(Err(err).wrap_err("Failed to rebuild policy data after chat creation"))
+                    .await;
+                return Err(());
             }
 
             let saved_user_message =

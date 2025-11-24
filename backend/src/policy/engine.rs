@@ -9,6 +9,7 @@ use sea_orm::DatabaseConnection;
 use serde_json::{Value as JsonValue, json};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::instrument;
 
 const BACKEND_POLICY: &str = include_str!("../../policy/backend/backend.rego");
 
@@ -65,6 +66,17 @@ impl PolicyEngine {
         }
     }
 
+    /// Clone the engine for use in a request handler.
+    /// Unlike regular Clone, this creates an independent `data_needs_rebuild` state
+    /// set to `false`, so that invalidating the global engine doesn't affect
+    /// cloned request-scoped engines.
+    pub fn clone_for_request(&self) -> Self {
+        Self {
+            engine: self.engine.clone(),
+            data_needs_rebuild: Arc::new(RwLock::new(false)),
+        }
+    }
+
     async fn set_data(&self, data: JsonValue) -> Result<(), Report> {
         let mut guard = self.engine.write().await;
         guard.clear_data();
@@ -80,6 +92,7 @@ impl PolicyEngine {
         // info!("Invalidated policy data");
     }
 
+    #[instrument(skip_all)]
     pub async fn rebuild_data(&self, db: &DatabaseConnection) -> Result<(), Report> {
         let all_chats = get_all_chats(db).await?;
         let mut chat_attributes = serde_json::Map::new();
@@ -102,8 +115,32 @@ impl PolicyEngine {
         Ok(())
     }
 
+    /// Add a single chat's attributes to the policy data.
+    /// This is used to incrementally update the policy data after creating a new chat
+    /// without requiring a full rebuild from the database.
+    pub async fn add_chat_attributes(&self, chat_id: &str, owner_id: &str) -> Result<(), Report> {
+        let chat_data = json!({
+            "resource_attributes": {
+                "chat": {
+                    chat_id: {
+                        "id": chat_id,
+                        "owner_id": owner_id
+                    }
+                }
+            }
+        });
+
+        let mut guard = self.engine.write().await;
+        guard
+            .add_data_json(&chat_data.to_string())
+            .map_err(|e| eyre!(e))?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
     pub async fn rebuild_data_if_needed(&self, db: &DatabaseConnection) -> Result<(), Report> {
         let data_needs_rebuild = { *self.data_needs_rebuild.read().await };
+        tracing::trace!(data_needs_rebuild = data_needs_rebuild);
         if data_needs_rebuild {
             self.rebuild_data(db).await?;
         }
