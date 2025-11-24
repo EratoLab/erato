@@ -54,7 +54,6 @@ impl PolicyEngine {
     #[allow(unused)]
     pub fn new() -> Self {
         let mut engine = Engine::new();
-        engine.set_rego_v1(true);
         engine
             .add_policy("backend".to_string(), BACKEND_POLICY.to_string())
             .map_err(|err| eyre!(Box::new(err)))
