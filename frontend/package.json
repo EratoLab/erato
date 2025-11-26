@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit",
     "check": "pnpm lint:strict && pnpm typecheck",
     "i18n:extract": "lingui extract --clean",
+    "i18n:extract:check": "./scripts/check-i18n-extract.sh",
     "i18n:compile": "lingui compile",
     "i18n:watch": "lingui extract --watch"
   },
