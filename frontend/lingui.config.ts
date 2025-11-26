@@ -1,5 +1,5 @@
 import { defineConfig } from "@lingui/cli";
-import { formatter as poFormatter } from "@lingui/format-po";
+import { sectionedPoFormatter } from "./src/locales/sectionedPoFormatter";
 
 export default defineConfig({
   sourceLocale: "en",
@@ -17,6 +17,6 @@ export default defineConfig({
     },
   ],
   compileNamespace: "json", // Generate JSON files, as those can be more easily loaded dynamically for the custom-theme
-  // Use industry-standard PO format
-  format: poFormatter({ lineNumbers: false }),
+  // Use sectioned PO format that groups explicit IDs and unstable IDs separately
+  format: sectionedPoFormatter({ lineNumbers: false }),
 });
