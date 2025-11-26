@@ -264,7 +264,11 @@ jobs:
         working-directory: ./frontend
         run: pnpm install
 
-      - name: "Setup frontend tests"
+      - name: "Check i18n catalogs are up-to-date"
+        working-directory: ./frontend
+        run: ./scripts/check-i18n-extract.sh
+
+      - name: "Compile i18n messages"
         working-directory: ./frontend
         run: pnpm run i18n:compile
 
