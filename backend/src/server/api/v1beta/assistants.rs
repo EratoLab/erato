@@ -195,7 +195,7 @@ pub async fn create_assistant(
 
     tracing::info!(
         "User {} created assistant '{}' with ID: {}",
-        me_user.0.id,
+        me_user.id,
         created_assistant.name,
         created_assistant.id
     );
@@ -491,7 +491,7 @@ pub async fn update_assistant(
 
     tracing::info!(
         "User {} updated assistant '{}' with ID: {}",
-        me_user.0.id,
+        me_user.id,
         updated_assistant.name,
         updated_assistant.id
     );
@@ -580,7 +580,7 @@ pub async fn archive_assistant(
 
     tracing::info!(
         "User {} archived assistant '{}' with ID: {}",
-        me_user.0.id,
+        me_user.id,
         archived_assistant.name,
         archived_assistant.id
     );

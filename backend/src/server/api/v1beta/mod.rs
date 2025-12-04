@@ -4,6 +4,7 @@ pub mod budget;
 pub mod me_profile_middleware;
 pub mod message_streaming;
 pub mod policy_engine_middleware;
+pub mod sharepoint;
 pub mod token_usage;
 
 use crate::db::entity_ext::messages;
@@ -70,6 +71,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/frequent_assistants", get(frequent_assistants))
         .route("/chats", post(create_chat))
         .route("/files", post(upload_file))
+        .route("/files/link", post(link_file))
         .route("/models", get(available_models))
         .route("/budget", get(budget::budget_status))
         .route_layer(middleware::from_fn_with_state(
@@ -104,6 +106,23 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/assistants/{assistant_id}/archive",
             post(archive_assistant),
         )
+        // Sharepoint/OneDrive integration routes
+        .route(
+            "/integrations/sharepoint/all-drives",
+            get(sharepoint::all_drives),
+        )
+        .route(
+            "/integrations/sharepoint/drives/{drive_id}",
+            get(sharepoint::get_drive_root),
+        )
+        .route(
+            "/integrations/sharepoint/drives/{drive_id}/items/{item_id}",
+            get(sharepoint::get_drive_item),
+        )
+        .route(
+            "/integrations/sharepoint/drives/{drive_id}/items/{item_id}/children",
+            get(sharepoint::get_drive_item_children),
+        )
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             policy_engine_middleware::policy_engine_middleware,
@@ -132,6 +151,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         recent_chats,
         frequent_assistants,
         upload_file,
+        link_file,
         message_submit_sse,
         regenerate_message_sse,
         edit_message_sse,
@@ -145,7 +165,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         assistants::list_assistants,
         assistants::get_assistant,
         assistants::update_assistant,
-        assistants::archive_assistant
+        assistants::archive_assistant,
+        sharepoint::all_drives,
+        sharepoint::get_drive_root,
+        sharepoint::get_drive_item,
+        sharepoint::get_drive_item_children
     ),
     components(schemas(
         Message,
@@ -158,6 +182,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         RecentChatsResponse,
         FileUploadItem,
         FileUploadResponse,
+        LinkFileRequest,
+        SharepointProviderMetadata,
         MessageSubmitStreamingResponseMessage,
         UserProfile,
         MessageSubmitRequest,
@@ -181,7 +207,12 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         token_usage::TokenUsageResponseFileItem,
         token_usage::TokenUsageResponse,
         budget::BudgetStatusResponse,
-        crate::config::BudgetCurrency
+        crate::config::BudgetCurrency,
+        sharepoint::Drive,
+        sharepoint::DriveItem,
+        sharepoint::AllDrivesResponse,
+        sharepoint::DriveItemsResponse,
+        sharepoint::DriveItemResponse
     ))
 )]
 pub struct ApiV1ApiDoc;
@@ -226,7 +257,7 @@ pub async fn profile(
     State(_app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<UserProfile>, StatusCode> {
-    Ok(Json(me_user.0))
+    Ok(Json(me_user.profile.clone()))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -392,6 +423,26 @@ pub struct FileUploadResponse {
     files: Vec<FileUploadItem>,
 }
 
+/// SharePoint-specific metadata for linking files
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SharepointProviderMetadata {
+    /// The ID of the drive containing the file
+    pub drive_id: String,
+    /// The ID of the file item
+    pub item_id: String,
+}
+
+/// Request to link an external file (SharePoint, Google Drive, etc.)
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct LinkFileRequest {
+    /// The source/provider type: "sharepoint" (future: "google_drive", etc.)
+    pub source: String,
+    /// Optional chat ID to associate the file with. If not provided, creates standalone files.
+    pub chat_id: Option<String>,
+    /// Provider-specific metadata (e.g., drive_id, item_id for SharePoint)
+    pub provider_metadata: serde_json::Value,
+}
+
 /// Upload files and return UUIDs for each
 ///
 /// This endpoint accepts a multipart form with one or more files and returns UUIDs for each.
@@ -512,7 +563,7 @@ pub async fn upload_file(
 
         tracing::info!(
             "User {} uploaded file '{}' with size {} bytes, assigned ID: {}",
-            me_user.0.id,
+            me_user.id,
             filename,
             size_bytes,
             file_upload.id
@@ -534,6 +585,152 @@ pub async fn upload_file(
     // Return the list of uploaded files
     Ok(Json(FileUploadResponse {
         files: uploaded_files,
+    }))
+}
+
+/// Link an external file (SharePoint, Google Drive, etc.) and return a file upload record
+///
+/// This endpoint creates a file upload record that references an external file,
+/// allowing it to be used in chat messages or attached to assistants.
+/// If chat_id is provided, the file is associated with that chat. If not provided,
+/// the file is created as a standalone upload.
+#[utoipa::path(
+    post,
+    path = "/me/files/link",
+    tag = "files",
+    request_body = LinkFileRequest,
+    responses(
+        (status = OK, body = FileUploadResponse),
+        (status = BAD_REQUEST, description = "Invalid request or unsupported source"),
+        (status = UNAUTHORIZED, description = "No access token available for external provider"),
+        (status = NOT_FOUND, description = "File not found or integration not enabled"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error"),
+    )
+)]
+pub async fn link_file(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+    Json(request): Json<LinkFileRequest>,
+) -> Result<Json<FileUploadResponse>, StatusCode> {
+    match request.source.as_str() {
+        "sharepoint" => link_sharepoint_file_impl(&app_state, &me_user, &policy, &request).await,
+        _ => {
+            tracing::error!("Unsupported file source: {}", request.source);
+            Err(StatusCode::BAD_REQUEST)
+        }
+    }
+}
+
+/// Implementation for linking SharePoint files
+async fn link_sharepoint_file_impl(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    policy: &PolicyEngine,
+    request: &LinkFileRequest,
+) -> Result<Json<FileUploadResponse>, StatusCode> {
+    use graph_rs_sdk::{GraphClient, GraphClientConfiguration};
+
+    // Check if SharePoint integration is enabled
+    if !app_state
+        .config
+        .integrations
+        .experimental_sharepoint
+        .enabled
+    {
+        tracing::warn!("Sharepoint integration is not enabled");
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Get access token from user profile
+    let access_token = me_user.access_token.as_deref().ok_or_else(|| {
+        tracing::error!("No access token available for Sharepoint integration");
+        StatusCode::UNAUTHORIZED
+    })?;
+
+    // Parse the provider metadata for SharePoint
+    let metadata: SharepointProviderMetadata =
+        serde_json::from_value(request.provider_metadata.clone()).map_err(|e| {
+            tracing::error!("Invalid SharePoint metadata: {}", e);
+            StatusCode::BAD_REQUEST
+        })?;
+
+    // Parse the optional chat ID
+    let chat_id = if let Some(chat_id_str) = &request.chat_id {
+        Some(Uuid::parse_str(chat_id_str).map_err(|e| {
+            tracing::error!("Invalid chat ID: {}", e);
+            StatusCode::BAD_REQUEST
+        })?)
+    } else {
+        None
+    };
+
+    // Create Graph client and get file info from MS Graph to retrieve the filename
+    let client = GraphClient::from(GraphClientConfiguration::new().access_token(access_token));
+
+    let response = client
+        .drive(&metadata.drive_id)
+        .item(&metadata.item_id)
+        .get_items()
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get file info from Sharepoint: {:?}", e);
+            StatusCode::NOT_FOUND
+        })?;
+
+    let item_json: serde_json::Value = response.json().await.map_err(|e| {
+        tracing::error!("Failed to parse file info response: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let filename = item_json
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            tracing::error!("No filename found in MS Graph response");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .to_string();
+
+    // Verify it's a file, not a folder
+    if item_json.get("folder").is_some() {
+        tracing::error!("Cannot link a folder as a file");
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Create the file upload record
+    let file_upload = models::file_upload::create_sharepoint_file_upload(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        chat_id.as_ref(),
+        filename.clone(),
+        metadata.drive_id,
+        metadata.item_id,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to create file upload record: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Generate a placeholder download URL (SharePoint URLs require access token at request time)
+    let download_url = format!("/api/v1beta/files/{}", file_upload.id);
+
+    tracing::info!(
+        "User {} linked SharePoint file '{}', assigned ID: {}",
+        me_user.id,
+        filename,
+        file_upload.id
+    );
+
+    Ok(Json(FileUploadResponse {
+        files: vec![FileUploadItem {
+            id: file_upload.id.to_string(),
+            filename,
+            download_url,
+        }],
     }))
 }
 
@@ -687,7 +884,7 @@ pub async fn recent_chats(
         })?;
 
     // Get the user ID from the MeProfile
-    let user_id = me_user.0.id.clone();
+    let user_id = me_user.id.clone();
 
     // Call the get_recent_chats function
     let (model_chats, stats) = get_recent_chats(
@@ -703,13 +900,13 @@ pub async fn recent_chats(
     .map_err(log_internal_server_error)?;
 
     // Convert from model RecentChat to API RecentChat
-    let available_models = app_state.available_models(&me_user.0.groups);
+    let available_models = app_state.available_models(&me_user.groups);
     let api_chats = extend_recent_chats_to_api_model(
         model_chats,
         &app_state.db,
         &policy,
         &me_user.to_subject(),
-        &me_user.0.id,
+        &me_user.id,
         &app_state.file_storage_providers,
         &available_models,
     )
@@ -859,7 +1056,7 @@ pub async fn frequent_assistants(
         })?;
 
     // Get the user ID from the MeProfile
-    let user_id = me_user.0.id.clone();
+    let user_id = me_user.id.clone();
 
     // Call the get_frequent_assistants function
     let frequent = get_frequent_assistants(
@@ -993,7 +1190,7 @@ pub async fn create_chat(
         &policy,
         &me_user.to_subject(),
         None,
-        &me_user.0.id,
+        &me_user.id,
         assistant_id.as_ref(),
     )
     .await
@@ -1166,7 +1363,7 @@ pub async fn available_models(
     Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<Vec<ChatModel>>, StatusCode> {
     let models = app_state
-        .available_models(&me_user.0.groups)
+        .available_models(&me_user.groups)
         .into_iter()
         .map(|(provider_id, display_name)| ChatModel {
             chat_provider_id: provider_id,

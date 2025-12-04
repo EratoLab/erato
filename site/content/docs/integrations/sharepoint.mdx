@@ -1,0 +1,61 @@
+# SharePoint / OneDrive
+
+Erato provides experimental support for [Microsoft SharePoint and OneDrive](https://www.microsoft.com/en-us/microsoft-365/sharepoint/collaboration) integration, allowing users to attach files from their Microsoft cloud storage directly to chats.
+
+## Overview
+
+When enabled, users can:
+
+- Browse their OneDrive and SharePoint drives
+- Attach files from SharePoint/OneDrive to chats
+- Use SharePoint files with assistants
+- Reference SharePoint files in messages for AI processing
+
+The integration uses the Microsoft Graph API to access files. Users must authenticate with an identity provider that provides a valid Microsoft access token with the appropriate permissions.
+
+## Prerequisites
+
+Before enabling the SharePoint integration, ensure:
+
+1. **OIDC Provider**: Your SSO/OIDC provider (e.g., Microsoft Entra ID / Azure AD) is configured to issue access tokens with Microsoft Graph API permissions
+2. **Token Forwarding**: Your authentication proxy (e.g., oauth2-proxy) forwards the access token to the backend via the `X-Forwarded-Access-Token` header
+3. **Graph API Permissions**: The access token has at least `Files.Read` permission for the Microsoft Graph API
+
+## Configuration
+
+To enable the SharePoint/OneDrive integration, add the following to your configuration:
+
+```toml filename="erato.toml"
+[integrations.experimental_sharepoint]
+enabled = true
+```
+
+### Configuration Options
+
+| Option                  | Type    | Default | Description                                                                 |
+| ----------------------- | ------- | ------- | --------------------------------------------------------------------------- |
+| `enabled`               | boolean | `false` | Whether the SharePoint integration is enabled                               |
+| `file_upload_enabled`   | boolean | `true`  | Whether file linking from SharePoint is enabled                             |
+| `auth_via_access_token` | boolean | `true`  | Use the user's forwarded access token for MS Graph API (currently required) |
+
+### Full Example
+
+```toml filename="erato.toml"
+[integrations.experimental_sharepoint]
+enabled = true
+file_upload_enabled = true
+auth_via_access_token = true
+```
+
+## Authentication Flow
+
+1. User authenticates via your OIDC provider (e.g., Microsoft Entra ID)
+2. The OIDC provider issues an access token with MS Graph permissions
+3. oauth2-proxy (or similar) forwards the token via `X-Forwarded-Access-Token` header
+4. Erato backend uses this token to call the Microsoft Graph API on behalf of the user
+
+## Limitations
+
+- **Experimental**: This feature is currently experimental and may change in future releases
+- **Token-based auth only**: Currently requires the user's access token to be forwarded; service account authentication is not yet supported
+- **Read-only**: Files are referenced by ID; Erato does not upload files to SharePoint

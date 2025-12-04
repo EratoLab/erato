@@ -114,7 +114,7 @@ pub async fn token_usage_estimate(
             &app_state,
             &prev_msg_id,
             files_for_generation.clone(),
-            &me_user.0.groups,
+            &me_user.groups,
             request.chat_provider_id.as_deref(),
         )
         .await
@@ -209,7 +209,7 @@ pub async fn token_usage_estimate(
 
     // Get the chat provider configuration to determine max context tokens
     let chat_provider_config = match app_state
-        .chat_provider_for_chatcompletion(request.chat_provider_id.as_deref(), &me_user.0.groups)
+        .chat_provider_for_chatcompletion(request.chat_provider_id.as_deref(), &me_user.groups)
     {
         Ok(config) => config,
         Err(err) => {
@@ -222,7 +222,7 @@ pub async fn token_usage_estimate(
 
     // Determine which chat provider ID was actually used
     let chat_provider_allowlist =
-        app_state.determine_chat_provider_allowlist_for_user(&me_user.0.groups);
+        app_state.determine_chat_provider_allowlist_for_user(&me_user.groups);
     let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
         .as_ref()
         .map(|list| list.iter().map(|s| s.as_str()).collect());

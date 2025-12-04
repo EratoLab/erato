@@ -129,18 +129,19 @@ public/custom-theme/my-company/
 
 These translation IDs are designed for brand customization and have stable IDs guaranteed across versions:
 
-| ID | Purpose | Default (en) | Default (de) |
-|----|---------|--------------|--------------|
-| `branding.assistant_name` | The name/label shown for AI messages | "Assistant" | "Assistent" |
-| `branding.user_form_of_address` | Generic label for user messages (fallback when no user name available) | "You" | "Du" |
-| `branding.welcomeScreen.title` | Welcome screen heading | "Welcome to AI Assistant" | "Willkommen beim KI-Assistenten" |
-| `branding.welcomeScreen.subtitle` | Welcome screen subheading | "Get expert help..." | "Erhalten Sie Expertenunterstützung..." |
-| `branding.welcomeScreen.description` | Welcome screen description text | "Ask questions..." | "Stellen Sie Fragen..." |
-| `branding.page_title_suffix` | Browser tab title suffix | "LLM Chat" | "" |
+| ID                                   | Purpose                                                                | Default (en)              | Default (de)                            |
+| ------------------------------------ | ---------------------------------------------------------------------- | ------------------------- | --------------------------------------- |
+| `branding.assistant_name`            | The name/label shown for AI messages                                   | "Assistant"               | "Assistent"                             |
+| `branding.user_form_of_address`      | Generic label for user messages (fallback when no user name available) | "You"                     | "Du"                                    |
+| `branding.welcomeScreen.title`       | Welcome screen heading                                                 | "Welcome to AI Assistant" | "Willkommen beim KI-Assistenten"        |
+| `branding.welcomeScreen.subtitle`    | Welcome screen subheading                                              | "Get expert help..."      | "Erhalten Sie Expertenunterstützung..." |
+| `branding.welcomeScreen.description` | Welcome screen description text                                        | "Ask questions..."        | "Stellen Sie Fragen..."                 |
+| `branding.page_title_suffix`         | Browser tab title suffix                                               | "LLM Chat"                | ""                                      |
 
 ### Example: Custom Translations
 
 **messages.po** (for German):
+
 ```po
 msgid ""
 msgstr ""
@@ -158,7 +159,7 @@ msgstr "Sie"
 ```
 
 > **Note:** The `.po` files are the source of truth. In development, you can edit both, but only `.po` files should be version controlled.
-> 
+>
 > For technical details on how the translation override system works, see [Internationalization (i18n)](./internationalization_i18n#how-theme-translation-overrides-work).
 
 ### User Display Name Priority

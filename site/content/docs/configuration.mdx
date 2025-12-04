@@ -947,6 +947,52 @@ The service name to identify this application in traces.
 
 **Type:** `string`
 
+#### `integrations.experimental_sharepoint`
+
+Configuration for the experimental [SharePoint/OneDrive](./integrations/sharepoint) integration. This allows users to attach files from their Microsoft cloud storage directly to chats.
+
+**Note:** This is an experimental feature. The configuration key will be renamed to `integrations.sharepoint` once the feature has stabilized.
+
+##### `integrations.experimental_sharepoint.enabled`
+
+Whether the SharePoint/OneDrive integration is enabled.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+##### `integrations.experimental_sharepoint.file_upload_enabled`
+
+Whether file linking from SharePoint is enabled. When disabled, users can browse their drives but cannot link files to chats.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+##### `integrations.experimental_sharepoint.auth_via_access_token`
+
+Whether to use the user's forwarded access token for Microsoft Graph API authentication. Currently, this is the only supported authentication method.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[integrations.experimental_sharepoint]
+enabled = true
+file_upload_enabled = true
+auth_via_access_token = true
+```
+
+**Prerequisites:**
+
+- Your OIDC provider (e.g., Microsoft Entra ID) must issue access tokens with Microsoft Graph API permissions (`Files.Read` or `Files.ReadWrite`)
+- Your authentication proxy (e.g., oauth2-proxy) must forward the access token via the `X-Forwarded-Access-Token` header
+
+See the [SharePoint/OneDrive Integration](./integrations/sharepoint) documentation for detailed setup instructions.
+
 ### `mcp_servers`
 
 Configuration for Model Context Protocol (MCP) servers that extend Erato's capabilities through custom tools and integrations.
