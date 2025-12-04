@@ -8,8 +8,10 @@ use serde_json::Value;
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
 
-use crate::test_utils::{TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt};
-use crate::{test_app_config, test_app_state};
+use crate::test_app_state;
+use crate::test_utils::{
+    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, hermetic_app_config,
+};
 
 /// Test the user profile endpoint with JWT authentication.
 ///
@@ -22,7 +24,7 @@ use crate::{test_app_config, test_app_state};
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_profile_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
 
     // Create a test user
     let issuer = TEST_USER_ISSUER;

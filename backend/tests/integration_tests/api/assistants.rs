@@ -9,8 +9,10 @@ use serde_json::{Value, json};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
 
-use crate::test_utils::{TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt};
-use crate::{test_app_config, test_app_state};
+use crate::test_app_state;
+use crate::test_utils::{
+    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, hermetic_app_config,
+};
 
 /// Test creating an assistant via the model directly (bypassing API).
 ///
@@ -24,7 +26,7 @@ async fn test_create_assistant_model_directly(pool: Pool<Postgres>) {
     println!("Starting assistant model test");
 
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
 
     // Create a test user - use TEST_USER_SUBJECT to match TEST_JWT_TOKEN
     let issuer = TEST_USER_ISSUER;
@@ -76,7 +78,7 @@ async fn test_create_assistant_model_directly(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_list_assistants_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
 
     // Create a test user - use TEST_USER_SUBJECT to match TEST_JWT_TOKEN
     let issuer = TEST_USER_ISSUER;
@@ -171,7 +173,7 @@ async fn test_list_assistants_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_get_assistant_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
 
     // Create a test user - use TEST_USER_SUBJECT to match TEST_JWT_TOKEN
     let issuer = TEST_USER_ISSUER;
@@ -232,7 +234,7 @@ async fn test_get_assistant_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
 
     // Create a test user - use TEST_USER_SUBJECT to match TEST_JWT_TOKEN
     let issuer = TEST_USER_ISSUER;
@@ -299,7 +301,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_archive_assistant_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
 
     // Create a test user - use TEST_USER_SUBJECT to match TEST_JWT_TOKEN
     let issuer = TEST_USER_ISSUER;
@@ -378,7 +380,7 @@ async fn test_archive_assistant_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_assistant_authorization(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
 
     // Create two test users
     let user1_subject = "test-subject-1-for-auth";
@@ -469,7 +471,7 @@ async fn test_assistant_authorization(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_assistant_error_cases(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
 
     // Create a test user - use TEST_USER_SUBJECT to match TEST_JWT_TOKEN
     let issuer = TEST_USER_ISSUER;
@@ -563,7 +565,7 @@ async fn test_assistant_error_cases(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(test_app_config(), pool).await;
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
 
     // Create a test user - use TEST_USER_SUBJECT to match TEST_JWT_TOKEN
     let issuer = TEST_USER_ISSUER;
