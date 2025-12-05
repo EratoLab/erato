@@ -190,6 +190,11 @@ impl AppConfig {
             panic!("Invalid Langfuse configuration: {}", e);
         }
 
+        // Validate Sharepoint configuration
+        if let Err(e) = config.integrations.experimental_sharepoint.validate() {
+            panic!("Invalid Sharepoint configuration: {}", e);
+        }
+
         // Migrate single chat_provider to new chat_providers structure and handle Azure OpenAI migration
         config = config.migrate_chat_providers();
 
@@ -840,6 +845,44 @@ pub struct ExperimentalAssistantsConfig {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct ExperimentalSharepointConfig {
+    // Whether the experimental Sharepoint/OneDrive integration is enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    // Whether file upload from Sharepoint/OneDrive is enabled.
+    // Only has an effect if `enabled` is `true`.
+    // Defaults to `true` when the integration is enabled.
+    #[serde(default = "default_true")]
+    pub file_upload_enabled: bool,
+
+    // Whether to use the user's existing access token for MS Graph API calls.
+    // Currently this must be `true` when the integration is enabled.
+    // In the future, there may be alternative authentication methods.
+    // Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub auth_via_access_token: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl ExperimentalSharepointConfig {
+    /// Validates the Sharepoint configuration.
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.enabled && !self.auth_via_access_token {
+            return Err(eyre!(
+                "Sharepoint integration is enabled but auth_via_access_token is false. \
+                 Currently, auth_via_access_token must be true when Sharepoint is enabled."
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
 pub struct IntegrationsConfig {
     #[serde(default)]
     pub langfuse: LangfuseConfig,
@@ -847,6 +890,8 @@ pub struct IntegrationsConfig {
     pub sentry: SentryConfig,
     #[serde(default)]
     pub otel: OtelConfig,
+    #[serde(default)]
+    pub experimental_sharepoint: ExperimentalSharepointConfig,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]

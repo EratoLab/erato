@@ -1,7 +1,7 @@
 use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig};
 use crate::policy::engine::PolicyEngine;
-use crate::services::file_storage::FileStorage;
+use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
 use eyre::Report;
@@ -350,6 +350,20 @@ impl AppState {
             let provider = FileStorage::from_config(provider_config)?;
             file_storage_providers.insert(provider_config_id.clone(), provider);
         }
+
+        // Register Sharepoint file storage if the integration is enabled
+        if config.integrations.experimental_sharepoint.enabled
+            && config
+                .integrations
+                .experimental_sharepoint
+                .file_upload_enabled
+        {
+            file_storage_providers.insert(
+                SHAREPOINT_PROVIDER_ID.to_string(),
+                FileStorage::sharepoint(),
+            );
+        }
+
         Ok(file_storage_providers)
     }
 

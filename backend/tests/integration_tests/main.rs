@@ -7,7 +7,7 @@
 
 use ctor::ctor;
 use erato::config::{AppConfig, LangfuseConfig};
-use erato::services::file_storage::FileStorage;
+use erato::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use erato::services::langfuse::LangfuseClient;
 use erato::state::{AppState, GlobalPolicyEngine};
 use sqlx::Pool;
@@ -56,6 +56,33 @@ pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./sqitch/deploy")
 // }
 
 pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppState {
+    test_app_state_internal(app_config, pool, false).await
+}
+
+/// Create a test app state with Sharepoint integration enabled.
+pub async fn test_app_state_with_sharepoint(
+    mut app_config: AppConfig,
+    pool: Pool<Postgres>,
+) -> AppState {
+    // Enable Sharepoint integration
+    app_config.integrations.experimental_sharepoint.enabled = true;
+    app_config
+        .integrations
+        .experimental_sharepoint
+        .file_upload_enabled = true;
+    app_config
+        .integrations
+        .experimental_sharepoint
+        .auth_via_access_token = true;
+
+    test_app_state_internal(app_config, pool, true).await
+}
+
+async fn test_app_state_internal(
+    app_config: AppConfig,
+    pool: Pool<Postgres>,
+    sharepoint_enabled: bool,
+) -> AppState {
     let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
     let mut file_storage_providers = HashMap::new();
 
@@ -67,6 +94,14 @@ pub async fn test_app_state(app_config: AppConfig, pool: Pool<Postgres>) -> AppS
     )
     .expect("Unable to instantiate FileStorage");
     file_storage_providers.insert("minio".to_owned(), provider);
+
+    // Register Sharepoint file storage if enabled
+    if sharepoint_enabled {
+        file_storage_providers.insert(
+            SHAREPOINT_PROVIDER_ID.to_string(),
+            FileStorage::sharepoint(),
+        );
+    }
 
     let actor_manager =
         erato::actors::manager::ActorManager::new(db.clone(), app_config.clone()).await;

@@ -43,6 +43,9 @@ genai = { version = "0.4.0-WIP", git = "https://github.com/EratoLab/rust-genai.g
 reqwest = { version = "0.12.12", features = ["multipart"] }
 opendal = { version = "0.52.0", features = ["services-s3", "services-azblob"] }
 
+# MS Graph API client for Sharepoint/OneDrive integration
+graph-rs-sdk = "3.0"
+
 parser-core = "0.1.3"
 tiktoken-rs = "0.6.0"
 rmcp = { version = "0.8", features = ["client", "reqwest", "transport-sse-client-reqwest", "transport-streamable-http-client-reqwest"] }

@@ -478,7 +478,7 @@ async fn stream_get_or_create_chat<
             policy,
             &me_user.to_subject(),
             Some(existing_chat_id),
-            &me_user.0.id,
+            &me_user.id,
             None, // No assistant_id when using existing chat
         )
         .await;
@@ -503,7 +503,7 @@ async fn stream_get_or_create_chat<
             policy,
             &me_user.to_subject(),
             previous_message_id,
-            &me_user.0.id,
+            &me_user.id,
             assistant_id,
         )
         .await;
@@ -550,7 +550,7 @@ async fn stream_save_user_message<
         "content": vec![json!({
             "content_type": "text",
             "text": user_message.to_owned()})],
-        "name": me_user.0.id
+        "name": me_user.id
     });
 
     let saved_user_message = match submit_message(
@@ -598,6 +598,7 @@ async fn stream_save_user_message<
     Ok(saved_user_message)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn prepare_chat_request(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -606,6 +607,7 @@ async fn prepare_chat_request(
     mut new_input_files: Vec<FileContentsForGeneration>,
     user_groups: &[String],
     requested_chat_provider_id: Option<&str>,
+    access_token: Option<&str>,
 ) -> Result<(ChatRequest, ChatOptions, GenerationInputMessages), Report> {
     // Create subject from chat owner
     let subject = crate::policy::types::Subject::User(chat.owner_user_id.clone());
@@ -640,7 +642,7 @@ async fn prepare_chat_request(
             assistant.files.len()
         );
         let assistant_files =
-            get_assistant_files_for_generation(app_state, &assistant.files).await?;
+            get_assistant_files_for_generation(app_state, &assistant.files, access_token).await?;
         new_input_files.extend(assistant_files);
     }
 
@@ -1196,7 +1198,7 @@ pub async fn generate_chat_summary(
     tracing::info!(
         "[SUMMARY] Starting generation for chat_id={}, user_id={}, has_assistant={}",
         chat.id,
-        me_user.0.id,
+        me_user.id,
         chat.assistant_configuration.is_some()
     );
 
@@ -1320,6 +1322,16 @@ async fn process_input_files(
     me_user: &MeProfile,
     input_files_ids: &[Uuid],
 ) -> Result<Vec<FileContentsForGeneration>, ()> {
+    use crate::services::file_storage::SharepointContext;
+
+    // Build the context for Sharepoint (will be ignored by other providers)
+    let sharepoint_ctx = me_user
+        .access_token
+        .as_deref()
+        .map(|token| SharepointContext {
+            access_token: token,
+        });
+
     let mut converted_files = vec![];
     for file_id in input_files_ids {
         // Get the file upload record
@@ -1360,9 +1372,12 @@ async fn process_input_files(
             }
         };
 
-        // Read the file content
+        // Read the file content using the unified interface
         let file_bytes = match file_storage
-            .read_file_to_bytes(&file_upload.file_storage_path)
+            .read_file_to_bytes_with_context(
+                &file_upload.file_storage_path,
+                sharepoint_ctx.as_ref(),
+            )
             .await
         {
             Ok(bytes) => bytes,
@@ -1411,11 +1426,21 @@ async fn process_input_files(
 ///
 /// This function downloads and extracts text from files associated with an assistant.
 /// Unlike process_input_files, this doesn't require a sender for streaming events.
+///
+/// For SharePoint files, an access token must be provided to fetch the file contents.
 async fn get_assistant_files_for_generation(
     app_state: &AppState,
     assistant_files: &[crate::models::assistant::FileInfo],
+    access_token: Option<&str>,
 ) -> Result<Vec<FileContentsForGeneration>, Report> {
+    use crate::services::file_storage::SharepointContext;
+
     let mut converted_files = vec![];
+
+    // Build the context for Sharepoint (will be ignored by other providers)
+    let sharepoint_ctx = access_token.map(|token| SharepointContext {
+        access_token: token,
+    });
 
     for file_info in assistant_files {
         // Get the file storage provider
@@ -1424,9 +1449,9 @@ async fn get_assistant_files_for_generation(
             .get(&file_info.file_storage_provider_id)
             .ok_or_eyre("File storage provider not found")?;
 
-        // Read the file content
+        // Read the file content using the context-aware method
         let file_bytes = file_storage
-            .read_file_to_bytes(&file_info.file_storage_path)
+            .read_file_to_bytes_with_context(&file_info.file_storage_path, sharepoint_ctx.as_ref())
             .await
             .wrap_err(format!(
                 "Failed to read assistant file from storage: {}",
@@ -1785,8 +1810,9 @@ pub async fn message_submit_sse(
                 &chat,
                 &saved_user_message.id,
                 files_for_generation.clone(),
-                &me_user.0.groups,
+                &me_user.groups,
                 request.chat_provider_id.as_deref(),
+                me_user.access_token.as_deref(),
             )
             .await;
             if let Err(err) = prepare_chat_request_res {
@@ -1805,7 +1831,7 @@ pub async fn message_submit_sse(
             // Determine the chat provider ID that will be used for generation
             // Use the user's allowlist to filter available providers
             let chat_provider_allowlist =
-                app_state.determine_chat_provider_allowlist_for_user(&me_user.0.groups);
+                app_state.determine_chat_provider_allowlist_for_user(&me_user.groups);
             let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
                 .as_ref()
                 .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -1864,10 +1890,10 @@ pub async fn message_submit_sse(
                     chat_request,
                     chat_options,
                     initial_assistant_message.id, // Pass assistant_message_id
-                    me_user.0.id.clone(),         // Pass user_id
+                    me_user.id.clone(),           // Pass user_id
                     chat.id,                      // Pass chat_id
                     Some(chat_provider_id.as_str()), // Pass chat_provider_id
-                    &me_user.0.groups,            // Pass user_groups
+                    &me_user.groups,              // Pass user_groups
                 )
                 .await?;
 
@@ -1984,8 +2010,9 @@ pub async fn regenerate_message_sse(
             &chat,
             &previous_message.id,
             files_for_generation.clone(),
-            &me_user.0.groups,
+            &me_user.groups,
             request.chat_provider_id.as_deref(),
+            me_user.access_token.as_deref(),
         )
         .await;
         if let Err(err) = prepare_chat_request_res {
@@ -2001,7 +2028,7 @@ pub async fn regenerate_message_sse(
         // Determine the chat provider ID that will be used for generation
         // Use the user's allowlist to filter available providers
         let chat_provider_allowlist =
-            app_state.determine_chat_provider_allowlist_for_user(&me_user.0.groups);
+            app_state.determine_chat_provider_allowlist_for_user(&me_user.groups);
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
             .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -2063,10 +2090,10 @@ pub async fn regenerate_message_sse(
                 chat_request,
                 chat_options,
                 initial_assistant_message.id, // Pass assistant_message_id
-                me_user.0.id.clone(),         // Pass user_id
+                me_user.id.clone(),           // Pass user_id
                 chat.id,                      // Pass chat_id
                 Some(chat_provider_id.as_str()), // Pass chat_provider_id
-                &me_user.0.groups,            // Pass user_groups
+                &me_user.groups,              // Pass user_groups
             )
             .await?;
 
@@ -2167,7 +2194,7 @@ pub async fn edit_message_sse(
                 "content_type": "text",
                 "text": replace_user_message
             })],
-            "name": me_user.0.id
+            "name": me_user.id
         });
 
         let saved_user_message = match submit_message(
@@ -2232,8 +2259,9 @@ pub async fn edit_message_sse(
             &chat,
             &saved_user_message.id,
             files_for_generation.clone(),
-            &me_user.0.groups,
+            &me_user.groups,
             request.chat_provider_id.as_deref(),
+            me_user.access_token.as_deref(),
         )
         .await;
         if let Err(err) = prepare_chat_request_res {
@@ -2249,7 +2277,7 @@ pub async fn edit_message_sse(
         // Determine the chat provider ID that will be used for generation
         // Use the user's allowlist to filter available providers
         let chat_provider_allowlist =
-            app_state.determine_chat_provider_allowlist_for_user(&me_user.0.groups);
+            app_state.determine_chat_provider_allowlist_for_user(&me_user.groups);
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
             .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -2309,10 +2337,10 @@ pub async fn edit_message_sse(
                 chat_request,
                 chat_options,
                 initial_assistant_message.id, // Pass assistant_message_id
-                me_user.0.id.clone(),         // Pass user_id
+                me_user.id.clone(),           // Pass user_id
                 chat.id,                      // Pass chat_id
                 Some(chat_provider_id.as_str()), // Pass chat_provider_id
-                &me_user.0.groups,            // Pass user_groups
+                &me_user.groups,              // Pass user_groups
             )
             .await?;
 

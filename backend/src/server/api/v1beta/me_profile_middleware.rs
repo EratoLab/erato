@@ -67,12 +67,32 @@ impl UserProfile {
     }
 }
 
+/// Header name for the forwarded access token (typically set by oauth2-proxy).
+/// This token can be used for delegated access to external APIs like MS Graph.
+pub const X_FORWARDED_ACCESS_TOKEN: &str = "X-Forwarded-Access-Token";
+
 #[derive(Debug, Clone)]
-pub struct MeProfile(pub UserProfile);
+pub struct MeProfile {
+    /// The user profile extracted from the JWT token.
+    pub profile: UserProfile,
+    /// The raw access token for external APIs like MS Graph.
+    /// This is extracted from the X-Forwarded-Access-Token header,
+    /// which is typically set by oauth2-proxy when configured to forward
+    /// the original IdP access token.
+    pub access_token: Option<String>,
+}
+
+// Implement Deref for backwards compatibility with code that uses MeProfile.0
+impl std::ops::Deref for MeProfile {
+    type Target = UserProfile;
+    fn deref(&self) -> &Self::Target {
+        &self.profile
+    }
+}
 
 impl MeProfile {
     pub fn to_subject(&self) -> Subject {
-        Subject::User(self.0.id.clone())
+        Subject::User(self.profile.id.clone())
     }
 }
 
@@ -121,6 +141,9 @@ pub async fn user_profile_from_token(
 /// This middleware decodes the JWT token from the Authorization header,
 /// normalizes the profile data, creates or retrieves the user from the database,
 /// and adds the user profile to the request extensions for use by downstream handlers.
+///
+/// If the `X-Forwarded-Access-Token` header is present (typically set by oauth2-proxy),
+/// it will be stored in the `MeProfile` for use with external APIs like MS Graph.
 pub(crate) async fn user_profile_middleware(
     State(app_state): State<AppState>,
     mut req: Request,
@@ -132,8 +155,18 @@ pub(crate) async fn user_profile_middleware(
         .and_then(Bearer::decode)
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
+    // Extract the forwarded access token if present (for external API access like MS Graph)
+    let forwarded_access_token = req
+        .headers()
+        .get(X_FORWARDED_ACCESS_TOKEN)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
     if let Ok(current_user) = user_profile_from_token(&app_state, auth_header.token()).await {
-        req.extensions_mut().insert(MeProfile(current_user));
+        req.extensions_mut().insert(MeProfile {
+            profile: current_user,
+            access_token: forwarded_access_token,
+        });
         Ok(next.run(req).await)
     } else {
         Err(StatusCode::UNAUTHORIZED)

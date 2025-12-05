@@ -437,6 +437,198 @@
         ]
       }
     },
+    "/api/v1beta/integrations/sharepoint/all-drives": {
+      "get": {
+        "tags": [
+          "sharepoint"
+        ],
+        "summary": "Get all drives accessible to the user.",
+        "description": "This includes:\n- The user's personal OneDrive\n- Drives shared with the user\n- Recent items (as a pseudo-drive)",
+        "operationId": "all_drives",
+        "responses": {
+          "200": {
+            "description": "List of accessible drives",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllDrivesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No access token available"
+          },
+          "404": {
+            "description": "Sharepoint integration is not enabled"
+          },
+          "500": {
+            "description": "Failed to retrieve drives"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/integrations/sharepoint/drives/{drive_id}": {
+      "get": {
+        "tags": [
+          "sharepoint"
+        ],
+        "summary": "Get the root items of a specific drive.",
+        "operationId": "get_drive_root",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "description": "The ID of the drive",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of items in the drive root",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveItemsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No access token available"
+          },
+          "404": {
+            "description": "Drive not found or Sharepoint integration is not enabled"
+          },
+          "500": {
+            "description": "Failed to retrieve drive items"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/integrations/sharepoint/drives/{drive_id}/items/{item_id}": {
+      "get": {
+        "tags": [
+          "sharepoint"
+        ],
+        "summary": "Get details of a specific drive item.",
+        "operationId": "get_drive_item",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "description": "The ID of the drive",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "description": "The ID of the item",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Drive item details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveItemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No access token available"
+          },
+          "404": {
+            "description": "Item not found or Sharepoint integration is not enabled"
+          },
+          "500": {
+            "description": "Failed to retrieve item"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/integrations/sharepoint/drives/{drive_id}/items/{item_id}/children": {
+      "get": {
+        "tags": [
+          "sharepoint"
+        ],
+        "summary": "Get the children of a folder in a drive.",
+        "operationId": "get_drive_item_children",
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "description": "The ID of the drive",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "description": "The ID of the folder",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of items in the folder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveItemsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No access token available"
+          },
+          "404": {
+            "description": "Folder not found or Sharepoint integration is not enabled"
+          },
+          "500": {
+            "description": "Failed to retrieve folder children"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/budget": {
       "get": {
         "tags": [
@@ -555,6 +747,50 @@
           },
           "400": {
             "description": "Invalid file upload"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
+    },
+    "/api/v1beta/me/files/link": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Link an external file (SharePoint, Google Drive, etc.) and return a file upload record",
+        "description": "This endpoint creates a file upload record that references an external file,\nallowing it to be used in chat messages or attached to assistants.\nIf chat_id is provided, the file is associated with that chat. If not provided,\nthe file is created as a standalone upload.",
+        "operationId": "link_file",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkFileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or unsupported source"
+          },
+          "401": {
+            "description": "No access token available for external provider"
+          },
+          "404": {
+            "description": "File not found or integration not enabled"
           },
           "500": {
             "description": "Server error"
@@ -958,6 +1194,22 @@
   },
   "components": {
     "schemas": {
+      "AllDrivesResponse": {
+        "type": "object",
+        "description": "Response for the all-drives endpoint",
+        "required": [
+          "drives"
+        ],
+        "properties": {
+          "drives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Drive"
+            },
+            "description": "List of drives accessible to the user"
+          }
+        }
+      },
       "ArchiveAssistantRequest": {
         "type": "object",
         "description": "Request to archive an assistant"
@@ -1442,6 +1694,111 @@
           }
         }
       },
+      "Drive": {
+        "type": "object",
+        "description": "A drive accessible to the user (OneDrive, Sharepoint, etc.)",
+        "required": [
+          "id",
+          "name",
+          "drive_type"
+        ],
+        "properties": {
+          "drive_type": {
+            "type": "string",
+            "description": "The type of drive (e.g., \"personal\", \"documentLibrary\")"
+          },
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the drive"
+          },
+          "name": {
+            "type": "string",
+            "description": "The display name of the drive"
+          },
+          "owner_name": {
+            "type": "string",
+            "description": "The owner of the drive, if available"
+          }
+        }
+      },
+      "DriveItem": {
+        "type": "object",
+        "description": "A drive item (file or folder)",
+        "required": [
+          "id",
+          "name",
+          "is_folder"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the item"
+          },
+          "is_folder": {
+            "type": "boolean",
+            "description": "Whether this item is a folder"
+          },
+          "last_modified": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the item was last modified"
+          },
+          "mime_type": {
+            "type": "string",
+            "description": "The MIME type (for files)"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the item"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The size in bytes (for files)"
+          },
+          "web_url": {
+            "type": "string",
+            "description": "The web URL to access this item"
+          }
+        }
+      },
+      "DriveItemResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DriveItem",
+            "description": "The drive item details"
+          },
+          {
+            "type": "object",
+            "required": [
+              "drive_id"
+            ],
+            "properties": {
+              "drive_id": {
+                "type": "string",
+                "description": "The drive ID this item belongs to"
+              }
+            }
+          }
+        ],
+        "description": "Response for a single drive item"
+      },
+      "DriveItemsResponse": {
+        "type": "object",
+        "description": "Response for drive items endpoints",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriveItem"
+            },
+            "description": "List of items in the drive or folder"
+          }
+        }
+      },
       "EditMessageRequest": {
         "type": "object",
         "required": [
@@ -1695,6 +2052,30 @@
               "$ref": "#/components/schemas/FrequentAssistantItem"
             },
             "description": "The list of frequently used assistants"
+          }
+        }
+      },
+      "LinkFileRequest": {
+        "type": "object",
+        "description": "Request to link an external file (SharePoint, Google Drive, etc.)",
+        "required": [
+          "source",
+          "provider_metadata"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional chat ID to associate the file with. If not provided, creates standalone files."
+          },
+          "provider_metadata": {
+            "description": "Provider-specific metadata (e.g., drive_id, item_id for SharePoint)"
+          },
+          "source": {
+            "type": "string",
+            "description": "The source/provider type: \"sharepoint\" (future: \"google_drive\", etc.)"
           }
         }
       },
@@ -2368,6 +2749,24 @@
             "description": "Sent to update the status of a tool call execution by the backend."
           }
         ]
+      },
+      "SharepointProviderMetadata": {
+        "type": "object",
+        "description": "SharePoint-specific metadata for linking files",
+        "required": [
+          "drive_id",
+          "item_id"
+        ],
+        "properties": {
+          "drive_id": {
+            "type": "string",
+            "description": "The ID of the drive containing the file"
+          },
+          "item_id": {
+            "type": "string",
+            "description": "The ID of the file item"
+          }
+        }
       },
       "TokenUsageRequest": {
         "type": "object",

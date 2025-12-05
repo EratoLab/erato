@@ -40,6 +40,14 @@ chat_provider_ids = ["test-token-limit"]
 # protocol = "http" # "http" or "grpc"
 # service_name = "erato-backend"
 
+# Experimental Sharepoint/OneDrive integration configuration
+# Allows users to attach files from their Microsoft OneDrive/Sharepoint to chats.
+# Requires the user's access token to have MS Graph API permissions.
+# [integrations.experimental_sharepoint]
+# enabled = true
+# file_upload_enabled = true  # Whether file upload from Sharepoint is enabled (default: true)
+# auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)
+
 # Frontend configuration options for embedded scenarios
 # [frontend]
 # # Whether to disable file upload functionality in the UI (default: false)

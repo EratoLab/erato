@@ -93,7 +93,7 @@ pub async fn budget_status(
     // Calculate current spending for the user in this period
     let current_spending = match calculate_user_spending(
         &app_state.db,
-        &me_user.0.id,
+        &me_user.id,
         current_period_start,
         current_period_end,
         &app_state,

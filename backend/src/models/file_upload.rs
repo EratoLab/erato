@@ -1,11 +1,12 @@
 use crate::db::entity::prelude::*;
 use crate::db::entity::{chat_file_uploads, file_uploads};
 use crate::policy::prelude::*;
-use crate::services::file_storage::FileStorage;
+use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID, SharepointContext};
 use eyre::{ContextCompat, OptionExt, Report};
 use sea_orm::prelude::*;
 use sea_orm::{ActiveValue, DatabaseConnection, JoinType, QuerySelect};
 use sqlx::types::Uuid;
+use std::collections::HashMap;
 use tracing::instrument;
 
 /// Create a new file upload record in the database and associate it with a chat
@@ -51,6 +52,64 @@ pub async fn create_file_upload(
     chat_file_uploads::Entity::insert(new_chat_file_upload)
         .exec(conn)
         .await?;
+
+    Ok(created_file_upload)
+}
+
+/// Create a new file upload record for a Sharepoint/OneDrive file.
+///
+/// The file is referenced by its drive ID and item ID, which are stored as the file path
+/// in the format `{driveId} | {itemId}`.
+///
+/// If `chat_id` is provided, the file is associated with that chat. Otherwise, it's created
+/// as a standalone upload that can be linked to assistants later.
+pub async fn create_sharepoint_file_upload(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: Option<&Uuid>,
+    filename: String,
+    drive_id: String,
+    item_id: String,
+) -> Result<file_uploads::Model, Report> {
+    // If chat_id provided, authorize that the subject can access the chat
+    if let Some(chat_id) = chat_id {
+        authorize!(
+            policy,
+            subject,
+            &Resource::Chat(chat_id.to_string()),
+            Action::Update
+        )?;
+    }
+
+    let file_upload_id = Uuid::new_v4();
+    let file_storage_path = format!("{} | {}", drive_id, item_id);
+
+    // Create the file upload record with Sharepoint provider
+    let new_file_upload = file_uploads::ActiveModel {
+        id: ActiveValue::Set(file_upload_id),
+        filename: ActiveValue::Set(filename),
+        file_storage_provider_id: ActiveValue::Set(SHAREPOINT_PROVIDER_ID.to_string()),
+        file_storage_path: ActiveValue::Set(file_storage_path),
+        ..Default::default()
+    };
+
+    let created_file_upload = file_uploads::Entity::insert(new_file_upload)
+        .exec_with_returning(conn)
+        .await?;
+
+    // If chat_id provided, create the relation in the join table
+    if let Some(chat_id) = chat_id {
+        let new_chat_file_upload = chat_file_uploads::ActiveModel {
+            chat_id: ActiveValue::Set(*chat_id),
+            file_upload_id: ActiveValue::Set(file_upload_id),
+            ..Default::default()
+        };
+
+        chat_file_uploads::Entity::insert(new_chat_file_upload)
+            .exec(conn)
+            .await?;
+    }
 
     Ok(created_file_upload)
 }
@@ -133,16 +192,46 @@ pub struct FileUploadWithUrl {
     pub download_url: String,
 }
 
-/// Get a specific file upload by ID, including a pre-signed download URL
+/// Get a specific file upload by ID, including a pre-signed download URL.
+///
+/// For Sharepoint files, an access token must be provided to generate the download URL.
+/// If no access token is provided for a Sharepoint file, a placeholder URL is returned.
 pub async fn get_file_upload_with_url(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
     subject: &Subject,
     file_upload_id: &Uuid,
-    file_storage_providers: &std::collections::HashMap<String, FileStorage>,
+    file_storage_providers: &HashMap<String, FileStorage>,
+) -> Result<FileUploadWithUrl, Report> {
+    get_file_upload_with_url_and_token(
+        conn,
+        policy,
+        subject,
+        file_upload_id,
+        file_storage_providers,
+        None,
+    )
+    .await
+}
+
+/// Get a specific file upload by ID, including a pre-signed download URL.
+///
+/// For Sharepoint files, the access token is used to generate the download URL.
+pub async fn get_file_upload_with_url_and_token(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    file_upload_id: &Uuid,
+    file_storage_providers: &HashMap<String, FileStorage>,
+    access_token: Option<&str>,
 ) -> Result<FileUploadWithUrl, Report> {
     // Find the file upload
     let file_upload = get_file_upload_by_id(conn, policy, subject, file_upload_id).await?;
+
+    // Build the context for Sharepoint (will be ignored by other providers)
+    let sharepoint_ctx = access_token.map(|token| SharepointContext {
+        access_token: token,
+    });
 
     // Get the file storage provider
     let file_storage = file_storage_providers
@@ -152,10 +241,27 @@ pub async fn get_file_upload_with_url(
             file_upload.file_storage_provider_id
         ))?;
 
-    // Generate a pre-signed download URL
-    let download_url = file_storage
-        .generate_presigned_download_url(&file_upload.file_storage_path, None)
-        .await?;
+    // Generate a pre-signed download URL using the unified interface
+    let download_url = match file_storage
+        .generate_presigned_download_url_with_context(
+            &file_upload.file_storage_path,
+            None,
+            sharepoint_ctx.as_ref(),
+        )
+        .await
+    {
+        Ok(url) => url,
+        Err(err) => {
+            // If URL generation fails (e.g., Sharepoint without token), return placeholder
+            tracing::warn!(
+                file_id = %file_upload.id,
+                provider = %file_upload.file_storage_provider_id,
+                error = %err,
+                "Failed to generate download URL, returning placeholder"
+            );
+            format!("/api/v1beta/files/{}", file_upload.id)
+        }
+    };
 
     Ok(FileUploadWithUrl {
         id: file_upload.id,
@@ -166,17 +272,47 @@ pub async fn get_file_upload_with_url(
     })
 }
 
-/// Get all file uploads for a chat, with pre-signed download URLs
+/// Get all file uploads for a chat, with pre-signed download URLs.
+///
+/// For Sharepoint files, a placeholder URL is returned since no access token is provided.
 #[instrument(skip_all)]
 pub async fn get_chat_file_uploads_with_urls(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
     subject: &Subject,
     chat_id: &Uuid,
-    file_storage_providers: &std::collections::HashMap<String, FileStorage>,
+    file_storage_providers: &HashMap<String, FileStorage>,
+) -> Result<Vec<FileUploadWithUrl>, Report> {
+    get_chat_file_uploads_with_urls_and_token(
+        conn,
+        policy,
+        subject,
+        chat_id,
+        file_storage_providers,
+        None,
+    )
+    .await
+}
+
+/// Get all file uploads for a chat, with pre-signed download URLs.
+///
+/// For Sharepoint files, the access token is used to generate the download URL.
+#[instrument(skip_all)]
+pub async fn get_chat_file_uploads_with_urls_and_token(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    chat_id: &Uuid,
+    file_storage_providers: &HashMap<String, FileStorage>,
+    access_token: Option<&str>,
 ) -> Result<Vec<FileUploadWithUrl>, Report> {
     // Get all file uploads for the chat
     let file_uploads = get_chat_file_uploads(conn, policy, subject, chat_id).await?;
+
+    // Build the context for Sharepoint (will be ignored by other providers)
+    let sharepoint_ctx = access_token.map(|token| SharepointContext {
+        access_token: token,
+    });
 
     // For each file upload, generate a pre-signed download URL
     let mut result = Vec::with_capacity(file_uploads.len());
@@ -190,10 +326,27 @@ pub async fn get_chat_file_uploads_with_urls(
                 upload.file_storage_provider_id
             ))?;
 
-        // Generate a pre-signed download URL
-        let download_url = file_storage
-            .generate_presigned_download_url(&upload.file_storage_path, None)
-            .await?;
+        // Generate a pre-signed download URL using the unified interface
+        let download_url = match file_storage
+            .generate_presigned_download_url_with_context(
+                &upload.file_storage_path,
+                None,
+                sharepoint_ctx.as_ref(),
+            )
+            .await
+        {
+            Ok(url) => url,
+            Err(err) => {
+                // If URL generation fails (e.g., Sharepoint without token), return placeholder
+                tracing::warn!(
+                    file_id = %upload.id,
+                    provider = %upload.file_storage_provider_id,
+                    error = %err,
+                    "Failed to generate download URL, returning placeholder"
+                );
+                format!("/api/v1beta/files/{}", upload.id)
+            }
+        };
 
         result.push(FileUploadWithUrl {
             id: upload.id,
