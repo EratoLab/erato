@@ -1,0 +1,50 @@
+{{- if and .Values.oauth2Proxy.enabled .Values.oauth2Proxy.redis.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-oauth2-proxy-redis
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: oauth2-proxy-redis
+spec:
+  replicas: 1
+  serviceName: {{ .Release.Name }}-oauth2-proxy-redis
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
+      app.kubernetes.io/component: oauth2-proxy-redis
+  template:
+    metadata:
+      labels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
+        app.kubernetes.io/component: oauth2-proxy-redis
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.oauth2Proxy.redis.image.repository }}:{{ .Values.oauth2Proxy.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.oauth2Proxy.redis.image.pullPolicy }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          resources:
+            {{- toYaml .Values.oauth2Proxy.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      {{- if not .Values.oauth2Proxy.redis.persistence.enabled }}
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.oauth2Proxy.redis.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: {{- toYaml .Values.oauth2Proxy.redis.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.oauth2Proxy.redis.persistence.size | quote }}
+        {{- if .Values.oauth2Proxy.redis.persistence.storageClass }}
+        storageClassName: {{ .Values.oauth2Proxy.redis.persistence.storageClass }}
+        {{- end }}
+  {{- end }}
+{{- end }}
+

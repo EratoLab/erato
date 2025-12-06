@@ -337,7 +337,9 @@ export const waitForEditModeToEnd = async (page: Page) => {
 async function waitForEratoPageReady(page: Page): Promise<void> {
   // Wait until either API_ROOT_URL is set or [data-testid="message-list"] exists
   await Promise.race([
-    page.waitForFunction(() => (window as any).API_ROOT_URL !== undefined, { timeout: 10000 }),
+    page.waitForFunction(() => (window as any).API_ROOT_URL !== undefined, {
+      timeout: 10000,
+    }),
     page.getByTestId("message-list").waitFor({ timeout: 10000 }),
   ]);
 }
