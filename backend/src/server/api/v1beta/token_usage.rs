@@ -171,41 +171,70 @@ pub async fn token_usage_estimate(
         });
 
     // Calculate token counts using tiktoken
-    let bpe = match o200k_base() {
-        Ok(bpe) => bpe,
-        Err(err) => {
+    // Offload CPU-intensive tokenization to a blocking thread pool
+    let user_message_for_tokenization = request.user_message.clone();
+    let files_for_tokenization = files_for_generation.clone();
+    let messages_for_tokenization = messages_with_user_message.clone();
+
+    let tokenization_result = tokio::task::spawn_blocking(move || {
+        let bpe = o200k_base().map_err(|err| format!("Failed to initialize tokenizer: {}", err))?;
+
+        // Count tokens for the user message
+        let user_message_tokens = bpe
+            .encode_with_special_tokens(&user_message_for_tokenization)
+            .len();
+
+        // Count tokens for files
+        let mut file_details = Vec::new();
+        let mut total_file_tokens = 0;
+        for file in &files_for_tokenization {
+            let token_count = bpe.encode_with_special_tokens(&file.contents_as_text).len();
+            total_file_tokens += token_count;
+            file_details.push(TokenUsageResponseFileItem {
+                id: file.id.to_string(),
+                filename: file.filename.clone(),
+                token_count,
+            });
+        }
+
+        // Count tokens for previous messages (history)
+        let history_tokens: usize = messages_for_tokenization
+            .messages
+            .iter()
+            .map(|msg| bpe.encode_with_special_tokens(&msg.full_text()).len())
+            .sum();
+
+        // Calculate the history tokens without the user message
+        let history_tokens_without_user = history_tokens.saturating_sub(user_message_tokens);
+
+        Ok::<_, String>((
+            user_message_tokens,
+            file_details,
+            total_file_tokens,
+            history_tokens,
+            history_tokens_without_user,
+        ))
+    })
+    .await;
+
+    let (
+        user_message_tokens,
+        file_details,
+        total_file_tokens,
+        history_tokens,
+        history_tokens_without_user,
+    ) = match tokenization_result {
+        Ok(Ok(result)) => result,
+        Ok(Err(err)) => {
+            return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, err));
+        }
+        Err(join_err) => {
             return Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to initialize tokenizer: {}", err),
+                format!("Tokenization task panicked: {}", join_err),
             ));
         }
     };
-
-    // Count tokens for the user message
-    let user_message_tokens = bpe.encode_with_special_tokens(&request.user_message).len();
-
-    // Count tokens for files
-    let mut file_details = Vec::new();
-    let mut total_file_tokens = 0;
-    for file in &files_for_generation {
-        let token_count = bpe.encode_with_special_tokens(&file.contents_as_text).len();
-        total_file_tokens += token_count;
-        file_details.push(TokenUsageResponseFileItem {
-            id: file.id.to_string(),
-            filename: file.filename.clone(),
-            token_count,
-        });
-    }
-
-    // Count tokens for previous messages (history)
-    let history_tokens: usize = messages_with_user_message
-        .messages
-        .iter()
-        .map(|msg| bpe.encode_with_special_tokens(&msg.full_text()).len())
-        .sum();
-
-    // Calculate the history tokens without the user message
-    let history_tokens_without_user = history_tokens.saturating_sub(user_message_tokens);
 
     // Get the chat provider configuration to determine max context tokens
     let chat_provider_config = match app_state
@@ -324,20 +353,33 @@ async fn process_input_files_for_token_count(
             ))?;
 
         // Use parser_core to extract text from the file
-        match parser_core::parse(&file_bytes) {
-            Ok(text) => {
+        // Offload CPU-intensive parsing to a blocking thread pool to avoid blocking the async runtime
+        let file_bytes_for_parsing = file_bytes.clone();
+        let parse_result =
+            tokio::task::spawn_blocking(move || parser_core::parse(&file_bytes_for_parsing)).await;
+
+        match parse_result {
+            Ok(Ok(text)) => {
                 converted_files.push(FileContentsForGeneration {
                     id: *file_id,
                     filename: file_upload.filename,
                     contents_as_text: text,
                 });
             }
-            Err(err) => {
+            Ok(Err(err)) => {
                 tracing::warn!(
                     "Failed to parse file {}: {} - Error: {}",
                     file_upload.filename,
                     file_id,
                     err
+                );
+            }
+            Err(join_err) => {
+                tracing::error!(
+                    "Blocking task panicked while parsing file {}: {} - Error: {}",
+                    file_upload.filename,
+                    file_id,
+                    join_err
                 );
             }
         }
