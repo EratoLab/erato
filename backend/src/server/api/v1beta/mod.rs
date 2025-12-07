@@ -25,9 +25,9 @@ use crate::server::api::v1beta::assistants::{
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
     __path_edit_message_sse, __path_message_submit_sse, __path_regenerate_message_sse,
-    EditMessageRequest, EditMessageStreamingResponseMessage, MessageSubmitRequest,
-    MessageSubmitStreamingResponseMessage, edit_message_sse, message_submit_sse,
-    regenerate_message_sse,
+    __path_resume_message_sse, EditMessageRequest, EditMessageStreamingResponseMessage,
+    MessageSubmitRequest, MessageSubmitStreamingResponseMessage, ResumeStreamRequest,
+    edit_message_sse, message_submit_sse, regenerate_message_sse, resume_message_sse,
 };
 use crate::services::file_storage::FileStorage;
 use crate::services::sentry::log_internal_server_error;
@@ -67,6 +67,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/messages/regeneratestream", post(regenerate_message_sse))
         .route("/messages/editstream", post(edit_message_sse))
+        .route("/messages/resumestream", post(resume_message_sse))
         .route("/recent_chats", get(recent_chats))
         .route("/frequent_assistants", get(frequent_assistants))
         .route("/chats", post(create_chat))
@@ -155,6 +156,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         message_submit_sse,
         regenerate_message_sse,
         edit_message_sse,
+        resume_message_sse,
         create_chat,
         get_file,
         archive_chat_endpoint,
@@ -189,6 +191,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         MessageSubmitRequest,
         EditMessageRequest,
         EditMessageStreamingResponseMessage,
+        ResumeStreamRequest,
         CreateChatRequest,
         CreateChatResponse,
         ArchiveChatRequest,
@@ -308,7 +311,7 @@ pub struct RecentChat {
 }
 
 /// A message in a chat
-#[derive(Debug, ToSchema, Serialize)]
+#[derive(Debug, Clone, ToSchema, Serialize, Deserialize)]
 pub struct ChatMessage {
     /// The unique ID of the message
     id: String,

@@ -932,6 +932,48 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/resumestream": {
+      "post": {
+        "tags": [],
+        "operationId": "resume_message_sse",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeStreamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "No active generation task found for this chat"
+          },
+          "500": {
+            "description": "When an internal server error occurs"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/submitstream": {
       "post": {
         "tags": [],
@@ -2749,6 +2791,20 @@
             "description": "Sent to update the status of a tool call execution by the backend."
           }
         ]
+      },
+      "ResumeStreamRequest": {
+        "type": "object",
+        "required": [
+          "chat_id"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The ID of the chat to resume streaming for.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          }
+        }
       },
       "SharepointProviderMetadata": {
         "type": "object",

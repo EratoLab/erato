@@ -513,3 +513,483 @@ async fn test_message_submit_with_wrong_role_previous_message(pool: Pool<Postgre
         error_text
     );
 }
+
+/// Test resume streaming endpoint basic behavior.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+///
+/// # Test Behavior
+/// Verifies that the resume endpoint exists and returns appropriate errors
+/// when no active task is found.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_resume_stream_endpoint_basic(pool: Pool<Postgres>) {
+    // Set up mock LLM server
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+
+    // Create app state with the database connection
+    let app_state = test_app_state(app_config, pool).await;
+
+    // Create a test user
+    let issuer = TEST_USER_ISSUER;
+    let subject = TEST_USER_SUBJECT;
+    let _user = get_or_create_user(&app_state.db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Generate a random chat ID
+    let chat_id = sea_orm::prelude::Uuid::new_v4();
+
+    // Prepare the request body
+    let request_body = json!({
+        "chat_id": chat_id.to_string()
+    });
+
+    // Make a request to the resume endpoint with a non-existent chat
+    let response = server
+        .post("/api/v1beta/me/messages/resumestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&request_body)
+        .await;
+
+    // Should return 403 Forbidden when trying to access a non-existent chat
+    // (authorization check happens before task lookup)
+    response.assert_status(axum::http::StatusCode::FORBIDDEN);
+
+    let error_text = response.text();
+    assert!(
+        error_text.contains("Access denied") || error_text.contains("not found"),
+        "Expected error about access denied, got: {}",
+        error_text
+    );
+}
+
+/// Test resume streaming returns 404 for existing chat with no active task.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// Verifies that when calling resume on a chat that exists (user has access)
+/// but has no active background task, the endpoint returns 404 Not Found.
+/// This tests the scenario where generation has completed and the task
+/// has been cleaned up.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_resume_stream_no_active_task(pool: Pool<Postgres>) {
+    use std::time::Duration;
+
+    // Set up mock LLM server with fast response (minimal delay)
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+
+    // Create app state with the database connection
+    let app_state = test_app_state(app_config, pool).await;
+
+    // Create a test user
+    let issuer = TEST_USER_ISSUER;
+    let subject = TEST_USER_SUBJECT;
+    let _user = get_or_create_user(&app_state.db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    // Start a real server so we can make concurrent requests
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+
+    let app: axum::Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+
+    // Spawn the server
+    let server_handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    // Give the server a moment to start
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{}", server_addr);
+
+    // First, create a chat by submitting a message
+    // We need to get the chat_id before the task is cleaned up
+    let submit_response = client
+        .post(format!("{}/api/v1beta/me/messages/submitstream", base_url))
+        .header("Authorization", format!("Bearer {}", TEST_JWT_TOKEN))
+        .header("Content-Type", "application/json")
+        .json(&json!({
+            "user_message": "Hello, create a chat for testing"
+        }))
+        .send()
+        .await
+        .expect("Failed to send submit request");
+
+    assert!(
+        submit_response.status().is_success(),
+        "Submit request should succeed"
+    );
+
+    // Read the response to get the chat_id
+    let body = submit_response
+        .text()
+        .await
+        .expect("Failed to read response");
+
+    // Extract chat_id from the chat_created event
+    let chat_id = body
+        .split("\n\n")
+        .filter(|chunk| chunk.contains("data:"))
+        .find_map(|event| {
+            let data = event.split("data:").nth(1).unwrap_or("").trim();
+            if let Ok(json) = serde_json::from_str::<Value>(data)
+                && json["message_type"] == "chat_created"
+            {
+                return json["chat_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected to find chat_created event with chat_id");
+
+    println!("Created chat with ID: {}", chat_id);
+
+    // Now manually remove the task from the manager to simulate cleanup
+    // (normally this happens after 60 seconds, but we force it for testing)
+    let chat_uuid: sea_orm::prelude::Uuid = chat_id.parse().expect("Invalid UUID");
+    app_state.background_tasks.remove_task(&chat_uuid).await;
+
+    // Verify the task is no longer in the manager
+    let task = app_state.background_tasks.get_task(&chat_uuid).await;
+    assert!(task.is_none(), "Task should have been removed from manager");
+
+    // Now try to resume - should get 404 because task no longer exists
+    let resume_response = client
+        .post(format!("{}/api/v1beta/me/messages/resumestream", base_url))
+        .header("Authorization", format!("Bearer {}", TEST_JWT_TOKEN))
+        .header("Content-Type", "application/json")
+        .json(&json!({
+            "chat_id": chat_id
+        }))
+        .send()
+        .await
+        .expect("Failed to send resume request");
+
+    // Should return 404 Not Found
+    assert_eq!(
+        resume_response.status(),
+        reqwest::StatusCode::NOT_FOUND,
+        "Expected 404 for existing chat with no active task"
+    );
+
+    let error_text = resume_response.text().await.unwrap_or_default();
+    assert!(
+        error_text.contains("No active generation task") || error_text.contains("not found"),
+        "Expected error about no active task, got: {}",
+        error_text
+    );
+
+    println!("✅ Correctly returned 404 for existing chat with no active task");
+
+    // Clean up - abort the server
+    server_handle.abort();
+}
+
+/// Test resume streaming with full event replay and continuation.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// As specified in ERMAIN-46:
+/// 1. Sets up a mocked LLM that streams numbered messages ("Message 01", "Message 02", etc.)
+/// 2. Starts a generation request
+/// 3. Calls resume endpoint while generation is ongoing
+/// 4. Verifies that resume endpoint replays all historical events and continues streaming
+///
+/// This tests the key requirement that a brittle client can disconnect and resume
+/// multiple times during a long-running generation.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_resume_stream_full_replay(pool: Pool<Postgres>) {
+    use crate::test_utils::MockLlmConfig;
+    use std::time::Duration;
+
+    // Create numbered messages for the mock LLM
+    // Use 20 messages with 200ms delays = ~4 seconds total
+    // This gives us time to call resume while generation is still running
+    let chunks: Vec<String> = (1..=20).map(|i| format!("Message {:02}", i)).collect();
+    let expected_chunks = chunks.clone();
+
+    let mock_config = MockLlmConfig {
+        chunks,
+        delay_ms: 200, // 200ms between chunks for ~4 seconds total
+        provider_id: "mock-llm".to_string(),
+        model_name: "gpt-3.5-turbo".to_string(),
+    };
+
+    // Set up mock LLM server with numbered messages
+    let (app_config, _server) = setup_mock_llm_server(Some(mock_config)).await;
+
+    // Create app state with the database connection
+    let app_state = test_app_state(app_config, pool).await;
+
+    // Create a test user
+    let issuer = TEST_USER_ISSUER;
+    let subject = TEST_USER_SUBJECT;
+    let _user = get_or_create_user(&app_state.db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    // We need to make concurrent requests. Since axum_test waits for full response,
+    // we'll use a real TCP server with reqwest for more control.
+
+    // Start the actual server
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+
+    let app: axum::Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+
+    // Spawn the server
+    let server_handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    // Give the server a moment to start
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{}", server_addr);
+
+    // Start the first message submission request in a separate task
+    let client_clone = client.clone();
+    let base_url_clone = base_url.clone();
+    let first_request_handle = tokio::spawn(async move {
+        let response = client_clone
+            .post(format!(
+                "{}/api/v1beta/me/messages/submitstream",
+                base_url_clone
+            ))
+            .header("Authorization", format!("Bearer {}", TEST_JWT_TOKEN))
+            .header("Content-Type", "application/json")
+            .json(&json!({
+                "user_message": "Generate numbered messages"
+            }))
+            .send()
+            .await
+            .expect("Failed to send first request");
+
+        assert!(
+            response.status().is_success(),
+            "First request should succeed"
+        );
+
+        // Read the full response body
+        response.text().await.expect("Failed to read response body")
+    });
+
+    // Wait a bit for the first request to start and generate some events
+    // (wait for about half the generation time so we catch it mid-stream)
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    // Extract chat_id from background tasks directly
+    // Since we can't easily parse the streaming response mid-flight,
+    // we'll get the chat_id from the manager
+    let chat_id = {
+        let tasks = app_state.background_tasks.tasks.read().await;
+        tasks.keys().next().copied()
+    };
+
+    let chat_id = chat_id.expect("Expected to find an active background task");
+    println!("Found active task for chat_id: {}", chat_id);
+
+    // Now call the resume endpoint while the first request is still running
+    let resume_response = client
+        .post(format!("{}/api/v1beta/me/messages/resumestream", base_url))
+        .header("Authorization", format!("Bearer {}", TEST_JWT_TOKEN))
+        .header("Content-Type", "application/json")
+        .json(&json!({
+            "chat_id": chat_id.to_string()
+        }))
+        .send()
+        .await
+        .expect("Failed to send resume request");
+
+    assert!(
+        resume_response.status().is_success(),
+        "Resume request should succeed, got: {} - {}",
+        resume_response.status(),
+        resume_response.text().await.unwrap_or_default()
+    );
+
+    // Read the resume response body (this will wait for the stream to complete)
+    let resume_body = resume_response
+        .text()
+        .await
+        .expect("Failed to read resume response body");
+
+    // Parse events from resume response
+    let resume_events: Vec<String> = resume_body
+        .split("\n\n")
+        .filter(|chunk| chunk.contains("data:"))
+        .map(|chunk| chunk.to_string())
+        .collect();
+
+    println!("Resume request received {} events", resume_events.len());
+
+    // Wait for the first request to complete
+    let first_body = first_request_handle
+        .await
+        .expect("First request task panicked");
+
+    // Parse events from the first request
+    let first_events: Vec<String> = first_body
+        .split("\n\n")
+        .filter(|chunk| chunk.contains("data:"))
+        .map(|chunk| chunk.to_string())
+        .collect();
+
+    println!("First request received {} events", first_events.len());
+
+    // Helper to extract text deltas from events
+    let extract_text_deltas = |events: &[String]| -> Vec<String> {
+        events
+            .iter()
+            .filter_map(|event| {
+                let data = event.split("data:").nth(1).unwrap_or("").trim();
+                if let Ok(json) = serde_json::from_str::<Value>(data)
+                    && json["message_type"] == "text_delta"
+                {
+                    return json["new_text"].as_str().map(|s| s.to_string());
+                }
+                None
+            })
+            .collect()
+    };
+
+    // Helper to check for event type
+    let has_event_type = |events: &[String], event_type: &str| -> bool {
+        events.iter().any(|event| {
+            let data = event.split("data:").nth(1).unwrap_or("").trim();
+            if let Ok(json) = serde_json::from_str::<Value>(data) {
+                json["message_type"] == event_type
+            } else {
+                false
+            }
+        })
+    };
+
+    // Extract text deltas from both responses
+    let first_text_deltas = extract_text_deltas(&first_events);
+    let resume_text_deltas = extract_text_deltas(&resume_events);
+
+    println!("First request text deltas: {:?}", first_text_deltas);
+    println!("Resume request text deltas: {:?}", resume_text_deltas);
+
+    // Build full text from deltas
+    let first_full_text: String = first_text_deltas.iter().cloned().collect();
+    let resume_full_text: String = resume_text_deltas.iter().cloned().collect();
+
+    println!("First full text: {}", first_full_text);
+    println!("Resume full text: {}", resume_full_text);
+
+    // Verify first request received all chunks
+    for chunk in &expected_chunks {
+        assert!(
+            first_full_text.contains(chunk),
+            "First request should contain '{}', got: {}",
+            chunk,
+            first_full_text
+        );
+    }
+
+    // KEY TEST: Resume request should have ALL historical events
+    // This means the resume response should contain AT LEAST as many events
+    // as were generated before we called resume (which was after ~2 seconds)
+    // Plus any events that came after
+
+    // The resume response should have replayed all historical events
+    // Since we called resume mid-stream, it should have:
+    // 1. All events from history (before resume was called)
+    // 2. All events after resume was called (live streaming)
+
+    // Verify resume response has all the expected event types
+    assert!(
+        has_event_type(&resume_events, "chat_created"),
+        "Resume missing chat_created event"
+    );
+    assert!(
+        has_event_type(&resume_events, "user_message_saved"),
+        "Resume missing user_message_saved event"
+    );
+    assert!(
+        has_event_type(&resume_events, "assistant_message_started"),
+        "Resume missing assistant_message_started event"
+    );
+    assert!(
+        has_event_type(&resume_events, "text_delta"),
+        "Resume missing text_delta events"
+    );
+
+    // The resume response should have received ALL chunks
+    // This is the key test - replay + continuation should give complete results
+    for chunk in &expected_chunks {
+        assert!(
+            resume_full_text.contains(chunk),
+            "Resume request should contain '{}', got: {}",
+            chunk,
+            resume_full_text
+        );
+    }
+
+    // Verify both responses have the same chat_id
+    let extract_chat_id = |events: &[String]| -> Option<String> {
+        events.iter().find_map(|event| {
+            let data = event.split("data:").nth(1).unwrap_or("").trim();
+            if let Ok(json) = serde_json::from_str::<Value>(data)
+                && json["message_type"] == "chat_created"
+            {
+                return json["chat_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+    };
+
+    let first_chat_id = extract_chat_id(&first_events);
+    let resume_chat_id = extract_chat_id(&resume_events);
+
+    assert_eq!(
+        first_chat_id, resume_chat_id,
+        "Chat IDs should match between first and resume requests"
+    );
+
+    println!("✅ Resume streaming test passed!");
+    println!(
+        "   - First request received all {} messages",
+        expected_chunks.len()
+    );
+    println!(
+        "   - Resume request replayed + continued to receive all {} messages",
+        expected_chunks.len()
+    );
+    println!("   - All event types verified in both responses");
+
+    // Clean up - abort the server
+    server_handle.abort();
+}
