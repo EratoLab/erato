@@ -1,3 +1,2 @@
 # Generated test files
-big-file-100mb.pdf
-long-file-100k-words.pdf
+*.pdf

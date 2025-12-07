@@ -58,6 +58,26 @@ oauth2Proxy:
       cpu: 500m
       memory: 256Mi
 
+  redis:
+    enabled: true
+    image:
+      repository: redis
+      tag: 7.0-alpine
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    persistence:
+      enabled: true
+      size: 1Gi
+      # storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+
 # Backend configuration
 backend:
   image:

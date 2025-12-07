@@ -74,7 +74,13 @@ erato:
       pass_access_token = true
       pass_user_headers = true
 
+      cookie_refresh = "30m"
+
       insecure_oidc_skip_issuer_verification = true
+    
+    redis:
+      persistence:
+        enabled: false
 
   postgresql:
     enabled: false

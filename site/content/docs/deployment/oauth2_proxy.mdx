@@ -1,0 +1,85 @@
+# OAuth2 Proxy Configuration
+
+Erato uses [OAuth2 Proxy](https://oauth2-proxy.github.io/oauth2-proxy/) to handle authentication.
+It sits in front of the application and handles OIDC authentication flows with your identity provider.
+
+## Configuration
+
+The configuration for OAuth2 Proxy is provided via the `oauth2Proxy.config` value in the Helm chart.
+This value corresponds to the content of the `oauth2-proxy.cfg` file.
+
+### Recommended Configuration
+
+Below is a commented version of a recommended configuration file.
+
+```ini
+# Listening address
+http_address = "0.0.0.0:4180"
+
+# The upstream application to proxy to (Erato backend)
+# In the default Helm chart setup, this matches the backend service
+# Adjust the service name if necessary (e.g. <release-name>-erato-backend)
+upstreams = ["http://erato-backend:8080"]
+
+# Email domains to allow authentication for
+# Use "*" to allow any email domain (access control is handled by the application)
+email_domains = ["*"]
+
+# The provider type (e.g., oidc, google, github, etc.)
+provider = "oidc"
+
+# Client ID and Secret from your OIDC provider
+client_id = "your-client-id"
+client_secret = "your-client-secret"
+
+# OIDC Provider URLs
+# These depend on your provider (e.g., Keycloak, Dex, Auth0)
+oidc_issuer_url = "https://your-idp.example.com"
+# Optional if discovery is working
+# login_url = "https://your-idp.example.com/auth"
+# redeem_url = "https://your-idp.example.com/token"
+# oidc_jwks_url = "https://your-idp.example.com/keys"
+
+# Redirect URL (callback URL)
+# Must match what is configured in your OIDC provider
+redirect_url = "https://erato.example.com/oauth2/callback"
+
+# Cookie configuration
+# Generate a strong random secret for cookie_secret:
+# python -c 'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'
+cookie_secret = "your-cookie-secret"
+cookie_secure = true
+cookie_expire = "168h" # 7 days
+cookie_refresh = "30m" # Refresh the cookie every 30 minutes (recommended)
+
+# Session Storage
+# By default, the Helm chart configures Redis for session storage if enabled.
+# You can override this if needed, but Redis is recommended for production.
+#
+# session_store_type = "redis"
+# redis_connection_url = "redis://erato-oauth2-proxy-redis:6379"
+
+# Pass tokens to the backend
+pass_authorization_header = true
+pass_access_token = true
+pass_user_headers = true
+
+# Skip authentication for health checks and metrics
+skip_auth_regex = ["^/health", "^/metrics"]
+```
+
+## Redis Session Storage
+
+The Erato Helm chart includes an optional Redis deployment for OAuth2 Proxy session storage.
+This is enabled by default and recommended for production deployments to ensure sessions persist across pod restarts and to allow for scaling the proxy.
+
+You can configure the Redis settings in the `values.yaml` file under `oauth2Proxy.redis`:
+
+```yaml
+oauth2Proxy:
+  redis:
+    enabled: true
+    persistence:
+      enabled: true
+      size: 1Gi
+```

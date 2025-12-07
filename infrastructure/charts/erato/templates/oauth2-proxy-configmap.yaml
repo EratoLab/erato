@@ -7,4 +7,8 @@ metadata:
 data:
   oauth2-proxy.cfg: |-
 {{ .Values.oauth2Proxy.config | indent 4 }}
+{{- if .Values.oauth2Proxy.redis.enabled }}
+    session_store_type = "redis"
+    redis_connection_url = "redis://{{ .Release.Name }}-oauth2-proxy-redis:6379"
+{{- end }}
 {{- end }} 
