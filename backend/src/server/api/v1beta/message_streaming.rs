@@ -1497,9 +1497,17 @@ async fn process_input_files(
         };
 
         // Use parser_core to extract text from the file
-        match parser_core::parse(&file_bytes) {
-            Ok(text_with_possible_escapes) => {
-                let text = remove_null_characters(&text_with_possible_escapes);
+        // Offload CPU-intensive parsing to a blocking thread pool to avoid blocking the async runtime
+        let file_bytes_for_parsing = file_bytes.clone();
+        let parse_result = tokio::task::spawn_blocking(move || {
+            parser_core::parse(&file_bytes_for_parsing).map(|text_with_possible_escapes| {
+                remove_null_characters(&text_with_possible_escapes)
+            })
+        })
+        .await;
+
+        match parse_result {
+            Ok(Ok(text)) => {
                 tracing::debug!(
                     "Successfully parsed file {}: {} (text length: {})",
                     file_upload.filename,
@@ -1513,12 +1521,20 @@ async fn process_input_files(
                     contents_as_text: text,
                 });
             }
-            Err(err) => {
+            Ok(Err(err)) => {
                 tracing::warn!(
                     "Failed to parse file {}: {} - Error: {}",
                     file_upload.filename,
                     file_id,
                     err
+                );
+            }
+            Err(join_err) => {
+                tracing::error!(
+                    "Blocking task panicked while parsing file {}: {} - Error: {}",
+                    file_upload.filename,
+                    file_id,
+                    join_err
                 );
             }
         }
@@ -1563,9 +1579,17 @@ async fn get_assistant_files_for_generation(
             ))?;
 
         // Use parser_core to extract text from the file
-        match parser_core::parse(&file_bytes) {
-            Ok(text_with_possible_escapes) => {
-                let text = remove_null_characters(&text_with_possible_escapes);
+        // Offload CPU-intensive parsing to a blocking thread pool to avoid blocking the async runtime
+        let file_bytes_for_parsing = file_bytes.clone();
+        let parse_result = tokio::task::spawn_blocking(move || {
+            parser_core::parse(&file_bytes_for_parsing).map(|text_with_possible_escapes| {
+                remove_null_characters(&text_with_possible_escapes)
+            })
+        })
+        .await;
+
+        match parse_result {
+            Ok(Ok(text)) => {
                 tracing::debug!(
                     "Successfully parsed assistant file {}: {} (text length: {})",
                     file_info.filename,
@@ -1578,12 +1602,21 @@ async fn get_assistant_files_for_generation(
                     contents_as_text: text,
                 });
             }
-            Err(err) => {
+            Ok(Err(err)) => {
                 tracing::warn!(
                     "Failed to parse assistant file {}: {} - Error: {}. Skipping this file.",
                     file_info.filename,
                     file_info.id,
                     err
+                );
+                // Don't fail the entire request if one file fails to parse
+            }
+            Err(join_err) => {
+                tracing::error!(
+                    "Blocking task panicked while parsing assistant file {}: {} - Error: {}",
+                    file_info.filename,
+                    file_info.id,
+                    join_err
                 );
                 // Don't fail the entire request if one file fails to parse
             }
