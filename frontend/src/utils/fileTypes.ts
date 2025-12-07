@@ -367,4 +367,44 @@ export class FileTypeUtil {
 
     return acceptObject;
   }
+
+  /**
+   * Get file type from mime type string
+   * @param mimeType - The mime type string
+   * @returns The identified file type or null
+   */
+  static getTypeFromMimeType(mimeType: string): FileType | null {
+    const normalizedMime = mimeType.toLowerCase();
+
+    for (const [type, config] of Object.entries(FILE_TYPES)) {
+      if (!config.enabled) continue;
+
+      for (const pattern of config.mimeTypes) {
+        if (this.matchesMimeType(normalizedMime, pattern)) {
+          return type as FileType;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Get file type from file extension
+   * @param extension - The file extension without dot
+   * @returns The identified file type or null
+   */
+  static getTypeFromExtension(extension: string): FileType | null {
+    const normalizedExt = extension.toLowerCase();
+
+    for (const [type, config] of Object.entries(FILE_TYPES)) {
+      if (!config.enabled) continue;
+
+      if (config.extensions.includes(normalizedExt)) {
+        return type as FileType;
+      }
+    }
+
+    return null;
+  }
 }
