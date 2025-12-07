@@ -1,6 +1,7 @@
 use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig};
 use crate::policy::engine::PolicyEngine;
+use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
@@ -91,6 +92,7 @@ pub struct AppState {
     pub actor_manager: ActorManager,
     pub langfuse_client: LangfuseClient,
     pub global_policy_engine: GlobalPolicyEngine,
+    pub background_tasks: BackgroundTaskManager,
 }
 
 impl AppState {
@@ -112,6 +114,9 @@ impl AppState {
         // Initialize the global policy engine
         let global_policy_engine = GlobalPolicyEngine::new();
 
+        // Initialize the background task manager
+        let background_tasks = BackgroundTaskManager::new();
+
         Ok(Self {
             db,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
@@ -121,6 +126,7 @@ impl AppState {
             actor_manager,
             langfuse_client,
             global_policy_engine,
+            background_tasks,
         })
     }
 

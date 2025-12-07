@@ -7,6 +7,7 @@
 
 use ctor::ctor;
 use erato::config::{AppConfig, LangfuseConfig};
+use erato::services::background_tasks::BackgroundTaskManager;
 use erato::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use erato::services::langfuse::LangfuseClient;
 use erato::state::{AppState, GlobalPolicyEngine};
@@ -124,6 +125,7 @@ async fn test_app_state_internal(
         actor_manager,
         langfuse_client,
         global_policy_engine,
+        background_tasks: BackgroundTaskManager::new(),
     };
 
     // For tests: Initialize policy engine and work around the middleware rebuild issue

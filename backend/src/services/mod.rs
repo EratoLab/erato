@@ -1,3 +1,4 @@
+pub mod background_tasks;
 pub mod file_storage;
 pub mod genai;
 pub mod genai_langfuse;
