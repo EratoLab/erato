@@ -40,6 +40,9 @@ not_logged_in := "__not_logged_in__"
 # Resource kinds
 resource_kind_chat := "chat"
 resource_kind_chat_singleton := "chat_singleton"
+resource_kind_assistant := "assistant"
+resource_kind_assistant_singleton := "assistant_singleton"
+resource_kind_share_grant := "share_grant"
 # Placeholder; to be removed in the future once we have some implementation variance
 resource_kind_other := "other"
 
@@ -51,6 +54,8 @@ action_create := "create"
 # If allowed on a chat, allows a message to be submitted.
 action_submit_message := "submit_message"
 action_update := "update"
+action_delete := "delete"
+action_share := "share"
 
 # Default deny all access
 default allow = false
@@ -92,4 +97,88 @@ allow if {
 	# Check for chat create action on singleton resource
 	input.resource_kind == resource_kind_chat_singleton
 	input.action == action_create
+}
+
+# A user can read/update/share assistants they own.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for assistant read/update/share action
+	input.resource_kind == resource_kind_assistant
+	input.action in [action_read, action_update, action_share]
+
+	# Check ownership
+	data.resource_attributes[resource_kind_assistant][input.resource_id].owner_id == input.subject_id
+}
+
+# A viewer (via share_grant) can read an assistant.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for assistant read action
+	input.resource_kind == resource_kind_assistant
+	input.action == action_read
+
+	# Check if there's a share grant for this user and resource
+	some grant in data.share_grants
+	grant.resource_type == "assistant"
+	grant.resource_id == input.resource_id
+	grant.subject_type == "user"
+	grant.subject_id == input.subject_id
+	grant.role == "viewer"
+}
+
+# A logged-in user can create an assistant.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for assistant create action on singleton resource
+	input.resource_kind == resource_kind_assistant_singleton
+	input.action == action_create
+}
+
+# A user can create a share grant if they own the resource.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for share grant create action
+	input.resource_kind == resource_kind_share_grant
+	input.action == action_create
+
+	# The authorization logic for checking resource ownership is handled in the model layer
+	# This just allows the action if the user is logged in
+}
+
+# A user can read share grants for resources they own.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for share grant read action
+	input.resource_kind == resource_kind_share_grant
+	input.action == action_read
+
+	# The authorization logic for checking resource ownership is handled in the model layer
+}
+
+# A user can delete share grants for resources they own.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for share grant delete action
+	input.resource_kind == resource_kind_share_grant
+	input.action == action_delete
+
+	# The authorization logic for checking resource ownership is handled in the model layer
 }

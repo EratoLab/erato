@@ -1,5 +1,6 @@
 use crate::db::entity::prelude::*;
 use crate::db::entity::{assistant_file_uploads, assistants, file_uploads};
+use crate::models::share_grant;
 use crate::policy::prelude::*;
 use crate::services::file_storage::FileStorage;
 use chrono::Utc;
@@ -7,7 +8,7 @@ use eyre::{ContextCompat, Report, WrapErr};
 use sea_orm::prelude::*;
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, IntoActiveModel, JoinType,
-    QueryFilter, QueryOrder, QuerySelect, Set,
+    QueryFilter, QuerySelect, Set,
 };
 use serde::Serialize;
 use sqlx::types::Uuid;
@@ -93,7 +94,7 @@ pub async fn create_assistant(
     Ok(created_assistant)
 }
 
-/// Get all assistants available to the user (owner's assistants)
+/// Get all assistants available to the user (owner's assistants + shared assistants)
 pub async fn get_user_assistants(
     conn: &DatabaseConnection,
     _policy: &PolicyEngine,
@@ -107,18 +108,53 @@ pub async fn get_user_assistants(
         .await?
         .wrap_err("User not found")?;
 
-    // Query all non-archived assistants for the user, sorted by updated_at desc
-    let user_assistants = Assistants::find()
+    // Query all non-archived assistants owned by the user
+    let owned_assistants = Assistants::find()
         .filter(
             Condition::all()
                 .add(assistants::Column::OwnerUserId.eq(user.id))
                 .add(assistants::Column::ArchivedAt.is_null()),
         )
-        .order_by_desc(assistants::Column::UpdatedAt)
         .all(conn)
         .await?;
 
-    Ok(user_assistants)
+    // Get assistants shared with the user via share_grants
+    let share_grants =
+        share_grant::get_resources_shared_with_subject(conn, user_id_str, "assistant").await?;
+
+    // Collect the assistant IDs from share grants
+    let shared_assistant_ids: Vec<Uuid> = share_grants
+        .iter()
+        .filter_map(|grant| Uuid::parse_str(&grant.resource_id).ok())
+        .collect();
+
+    // Query all non-archived shared assistants
+    let shared_assistants = if !shared_assistant_ids.is_empty() {
+        Assistants::find()
+            .filter(
+                Condition::all()
+                    .add(assistants::Column::Id.is_in(shared_assistant_ids))
+                    .add(assistants::Column::ArchivedAt.is_null()),
+            )
+            .all(conn)
+            .await?
+    } else {
+        vec![]
+    };
+
+    // Combine owned and shared assistants, removing duplicates
+    let mut all_assistants = owned_assistants;
+    for shared_assistant in shared_assistants {
+        // Only add if not already in the list (in case user owns an assistant that was also shared with them)
+        if !all_assistants.iter().any(|a| a.id == shared_assistant.id) {
+            all_assistants.push(shared_assistant);
+        }
+    }
+
+    // Sort by updated_at desc
+    all_assistants.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+
+    Ok(all_assistants)
 }
 
 /// Internal function to get an assistant by ID with optional archived filter
@@ -154,16 +190,28 @@ async fn get_assistant_by_id_internal(
         .wrap_err("User not found")?;
 
     // Check if the user is the owner of the assistant
-    if assistant.owner_user_id != user.id {
-        return Err(eyre::eyre!(
-            "Access denied: User is not the owner of this assistant"
-        ));
+    if assistant.owner_user_id == user.id {
+        return Ok(assistant);
     }
 
-    Ok(assistant)
+    // If not the owner, check if the assistant is shared with the user
+    let share_grants =
+        share_grant::get_resources_shared_with_subject(conn, user_id_str, "assistant").await?;
+
+    let has_viewer_access = share_grants
+        .iter()
+        .any(|grant| grant.resource_id == assistant_id.to_string() && grant.role == "viewer");
+
+    if has_viewer_access {
+        return Ok(assistant);
+    }
+
+    Err(eyre::eyre!(
+        "Access denied: User is not the owner of this assistant and it has not been shared with them"
+    ))
 }
 
-/// Get an assistant by ID (user must be the owner)
+/// Get an assistant by ID (user must be the owner or have viewer access)
 ///
 /// This function excludes archived assistants. For user-facing API endpoints only.
 /// For internal operations that need to access archived assistants (e.g., continuing
@@ -175,6 +223,47 @@ pub async fn get_assistant_by_id(
     assistant_id: Uuid,
 ) -> Result<assistants::Model, Report> {
     get_assistant_by_id_internal(conn, subject, assistant_id, false).await
+}
+
+/// Get an assistant by ID for update/delete operations (user must be the owner)
+///
+/// This is stricter than get_assistant_by_id - it requires ownership, not just viewer access.
+async fn get_assistant_by_id_for_modification(
+    conn: &DatabaseConnection,
+    subject: &Subject,
+    assistant_id: Uuid,
+    allow_archived: bool,
+) -> Result<assistants::Model, Report> {
+    // Build query
+    let mut query = Assistants::find_by_id(assistant_id);
+
+    // Only filter out archived assistants if not allowed
+    if !allow_archived {
+        query = query.filter(assistants::Column::ArchivedAt.is_null());
+    }
+
+    let assistant = query.one(conn).await?.wrap_err(if allow_archived {
+        "Assistant not found"
+    } else {
+        "Assistant not found or archived"
+    })?;
+
+    // Get the user ID from subject (subject contains the user UUID)
+    let crate::policy::types::Subject::User(user_id_str) = &subject;
+    let user_uuid = Uuid::parse_str(user_id_str).wrap_err("Invalid user ID format")?;
+    let user = Users::find_by_id(user_uuid)
+        .one(conn)
+        .await?
+        .wrap_err("User not found")?;
+
+    // Check if the user is the owner of the assistant (no viewer access for modifications)
+    if assistant.owner_user_id != user.id {
+        return Err(eyre::eyre!(
+            "Access denied: Only the owner can modify this assistant"
+        ));
+    }
+
+    Ok(assistant)
 }
 
 /// Get an assistant with its associated files
@@ -231,8 +320,10 @@ pub async fn update_assistant(
     mcp_server_ids: Option<Option<Vec<String>>>,
     default_chat_provider: Option<Option<String>>,
 ) -> Result<assistants::Model, Report> {
-    // Get the assistant (includes ownership check)
-    let assistant = get_assistant_by_id(conn, policy, subject, assistant_id).await?;
+    let _ = policy; // Unused but kept for API consistency
+    // Get the assistant (includes ownership check - viewers cannot update)
+    let assistant =
+        get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
 
     // Update the assistant record
     let mut active_assistant = assistant.into_active_model();
@@ -271,8 +362,10 @@ pub async fn archive_assistant(
     subject: &Subject,
     assistant_id: Uuid,
 ) -> Result<assistants::Model, Report> {
-    // Get the assistant (includes ownership check)
-    let assistant = get_assistant_by_id(conn, policy, subject, assistant_id).await?;
+    let _ = policy; // Unused but kept for API consistency
+    // Get the assistant (includes ownership check - viewers cannot archive)
+    let assistant =
+        get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
 
     // Archive the assistant
     let mut active_assistant = assistant.into_active_model();
@@ -292,8 +385,10 @@ pub async fn add_file_to_assistant(
     assistant_id: Uuid,
     file_upload_id: Uuid,
 ) -> Result<(), Report> {
-    // Get the assistant (includes ownership check)
-    let _assistant = get_assistant_by_id(conn, policy, subject, assistant_id).await?;
+    let _ = policy; // Unused but kept for API consistency
+    // Get the assistant (includes ownership check - viewers cannot add files)
+    let _assistant =
+        get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
 
     // Verify the file upload exists
     let _file_upload = FileUploads::find_by_id(file_upload_id)
@@ -324,8 +419,10 @@ pub async fn remove_file_from_assistant(
     assistant_id: Uuid,
     file_upload_id: Uuid,
 ) -> Result<(), Report> {
-    // Get the assistant (includes ownership check)
-    let _assistant = get_assistant_by_id(conn, policy, subject, assistant_id).await?;
+    let _ = policy; // Unused but kept for API consistency
+    // Get the assistant (includes ownership check - viewers cannot remove files)
+    let _assistant =
+        get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
 
     // Remove the association from the join table
     assistant_file_uploads::Entity::delete_many()
@@ -378,8 +475,9 @@ pub async fn upload_file_to_assistant(
     file_storage_path: String,
     _file_storage_providers: &std::collections::HashMap<String, FileStorage>,
 ) -> Result<file_uploads::Model, Report> {
-    // Get the assistant (includes ownership check)
-    let _assistant = get_assistant_by_id(conn, policy, subject, assistant_id).await?;
+    // Get the assistant (includes ownership check - viewers cannot upload files)
+    let _assistant =
+        get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
 
     // Create the file upload record (independent of chat)
     let file_upload = create_standalone_file_upload(

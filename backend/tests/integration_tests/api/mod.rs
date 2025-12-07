@@ -7,3 +7,4 @@ pub mod edit;
 pub mod files;
 pub mod messages;
 pub mod sharepoint;
+pub mod sharing;

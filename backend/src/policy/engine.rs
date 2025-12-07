@@ -1,3 +1,5 @@
+use crate::db::entity::prelude::*;
+use crate::db::entity::{assistants, share_grants};
 use crate::db::entity_ext::chats;
 use crate::policy::types::{
     Action, Resource, ResourceId, ResourceKind, Subject, SubjectId, SubjectKind,
@@ -45,6 +47,61 @@ async fn fetch_chat_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Re
     }
 
     Ok(json!(chat_attributes))
+}
+
+/// Minimal assistant attributes required for policy evaluation.
+#[derive(Debug, FromQueryResult)]
+struct AssistantPolicyAttributes {
+    id: Uuid,
+    owner_user_id: Uuid,
+}
+
+/// Fetch minimal assistant data required for policy evaluation.
+/// Only queries the `id` and `owner_user_id` fields.
+async fn fetch_assistant_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
+    let assistants_list: Vec<AssistantPolicyAttributes> = Assistants::find()
+        .select_only()
+        .column(assistants::Column::Id)
+        .column(assistants::Column::OwnerUserId)
+        .into_model::<AssistantPolicyAttributes>()
+        .all(db)
+        .await?;
+
+    let mut assistant_attributes = serde_json::Map::new();
+    for assistant in assistants_list {
+        let id_str = assistant.id.to_string();
+        assistant_attributes.insert(
+            id_str.clone(),
+            json!({
+                "id": id_str,
+                "owner_id": assistant.owner_user_id.to_string(),
+            }),
+        );
+    }
+
+    Ok(json!(assistant_attributes))
+}
+
+/// Fetch share grants data for policy evaluation.
+async fn fetch_share_grants_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
+    let grants: Vec<share_grants::Model> = ShareGrants::find().all(db).await?;
+
+    let grants_array: Vec<JsonValue> = grants
+        .into_iter()
+        .map(|grant| {
+            json!({
+                "id": grant.id.to_string(),
+                "resource_type": grant.resource_type,
+                "resource_id": grant.resource_id,
+                "subject_type": grant.subject_type,
+                "subject_id_type": grant.subject_id_type,
+                "subject_id": grant.subject_id,
+                "role": grant.role,
+            })
+        })
+        .collect();
+
+    Ok(json!(grants_array))
 }
 
 // Define a macro that routes to the appropriate authorize implementation based on argument count
@@ -129,37 +186,21 @@ impl PolicyEngine {
     pub async fn rebuild_data(&self, db: &DatabaseConnection) -> Result<(), Report> {
         // Fetch policy data for each resource type
         let chat_data = fetch_chat_policy_data(db).await?;
+        let assistant_data = fetch_assistant_policy_data(db).await?;
+        let share_grants_data = fetch_share_grants_policy_data(db).await?;
 
         // Combine all resource attributes
         let resource_attributes = json!({
-            "chat": chat_data
+            "chat": chat_data,
+            "assistant": assistant_data
         });
-        let policy_data = json!({ "resource_attributes": resource_attributes });
+        let policy_data = json!({
+            "resource_attributes": resource_attributes,
+            "share_grants": share_grants_data
+        });
 
         self.set_data(policy_data).await?;
         // info!("Finished policy data rebuild");
-        Ok(())
-    }
-
-    /// Add a single chat's attributes to the policy data.
-    /// This is used to incrementally update the policy data after creating a new chat
-    /// without requiring a full rebuild from the database.
-    pub async fn add_chat_attributes(&self, chat_id: &str, owner_id: &str) -> Result<(), Report> {
-        let chat_data = json!({
-            "resource_attributes": {
-                "chat": {
-                    chat_id: {
-                        "id": chat_id,
-                        "owner_id": owner_id
-                    }
-                }
-            }
-        });
-
-        let mut guard = self.engine.write().await;
-        guard
-            .add_data_json(&chat_data.to_string())
-            .map_err(|e| eyre!(e))?;
         Ok(())
     }
 
@@ -285,6 +326,13 @@ pub const fn is_valid_resource_action(resource: ResourceKind, action: Action) ->
         (ResourceKind::Chat, Action::Update) => true,
         (ResourceKind::Chat, Action::SubmitMessage) => true,
         (ResourceKind::ChatSingleton, Action::Create) => true,
+        (ResourceKind::Assistant, Action::Read) => true,
+        (ResourceKind::Assistant, Action::Update) => true,
+        (ResourceKind::Assistant, Action::Share) => true,
+        (ResourceKind::AssistantSingleton, Action::Create) => true,
+        (ResourceKind::ShareGrant, Action::Create) => true,
+        (ResourceKind::ShareGrant, Action::Read) => true,
+        (ResourceKind::ShareGrant, Action::Delete) => true,
         _ => false,
     }
 }

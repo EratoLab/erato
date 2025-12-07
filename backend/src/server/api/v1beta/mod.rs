@@ -4,6 +4,7 @@ pub mod budget;
 pub mod me_profile_middleware;
 pub mod message_streaming;
 pub mod policy_engine_middleware;
+pub mod share_grants;
 pub mod sharepoint;
 pub mod token_usage;
 
@@ -28,6 +29,10 @@ use crate::server::api::v1beta::message_streaming::{
     __path_resume_message_sse, EditMessageRequest, EditMessageStreamingResponseMessage,
     MessageSubmitRequest, MessageSubmitStreamingResponseMessage, ResumeStreamRequest,
     edit_message_sse, message_submit_sse, regenerate_message_sse, resume_message_sse,
+};
+use crate::server::api::v1beta::share_grants::{
+    CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
+    create_share_grant, delete_share_grant, list_share_grants,
 };
 use crate::services::file_storage::FileStorage;
 use crate::services::sentry::log_internal_server_error;
@@ -107,6 +112,13 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/assistants/{assistant_id}/archive",
             post(archive_assistant),
         )
+        // Share grants routes
+        .route("/share-grants", post(create_share_grant))
+        .route("/share-grants", get(list_share_grants))
+        .route(
+            "/share-grants/{grant_id}",
+            axum::routing::delete(delete_share_grant),
+        )
         // Sharepoint/OneDrive integration routes
         .route(
             "/integrations/sharepoint/all-drives",
@@ -168,6 +180,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         assistants::get_assistant,
         assistants::update_assistant,
         assistants::archive_assistant,
+        share_grants::create_share_grant,
+        share_grants::list_share_grants,
+        share_grants::delete_share_grant,
         sharepoint::all_drives,
         sharepoint::get_drive_root,
         sharepoint::get_drive_item,
@@ -205,6 +220,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         UpdateAssistantRequest,
         UpdateAssistantResponse,
         ArchiveAssistantResponse,
+        ShareGrant,
+        CreateShareGrantRequest,
+        CreateShareGrantResponse,
+        ListShareGrantsResponse,
         token_usage::TokenUsageRequest,
         token_usage::TokenUsageStats,
         token_usage::TokenUsageResponseFileItem,
