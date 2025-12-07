@@ -1,6 +1,7 @@
 #![allow(deprecated)]
 pub mod assistants;
 pub mod budget;
+pub mod entra_id;
 pub mod me_profile_middleware;
 pub mod message_streaming;
 pub mod policy_engine_middleware;
@@ -80,6 +81,14 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/files/link", post(link_file))
         .route("/models", get(available_models))
         .route("/budget", get(budget::budget_status))
+        .route(
+            "/organization/users",
+            get(entra_id::list_organization_users),
+        )
+        .route(
+            "/organization/groups",
+            get(entra_id::list_organization_groups),
+        )
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             policy_engine_middleware::policy_engine_middleware,
@@ -186,7 +195,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         sharepoint::all_drives,
         sharepoint::get_drive_root,
         sharepoint::get_drive_item,
-        sharepoint::get_drive_item_children
+        sharepoint::get_drive_item_children,
+        entra_id::list_organization_users,
+        entra_id::list_organization_groups
     ),
     components(schemas(
         Message,
@@ -234,7 +245,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         sharepoint::DriveItem,
         sharepoint::AllDrivesResponse,
         sharepoint::DriveItemsResponse,
-        sharepoint::DriveItemResponse
+        sharepoint::DriveItemResponse,
+        entra_id::OrganizationUser,
+        entra_id::OrganizationUsersResponse,
+        entra_id::OrganizationGroup,
+        entra_id::OrganizationGroupsResponse
     ))
 )]
 pub struct ApiV1ApiDoc;

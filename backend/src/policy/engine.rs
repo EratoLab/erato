@@ -235,6 +235,29 @@ impl AuthorizeFull for PolicyEngine {
         resource_id: &ResourceId,
         action: Action,
     ) -> Result<(), Report> {
+        self.authorize_with_context(
+            subject_kind,
+            subject_id,
+            resource_kind,
+            resource_id,
+            action,
+            &[],
+        )
+        .await
+    }
+}
+
+impl PolicyEngine {
+    /// Authorize with additional context (e.g., organization_group_ids).
+    pub async fn authorize_with_context(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &SubjectId,
+        resource_kind: ResourceKind,
+        resource_id: &ResourceId,
+        action: Action,
+        organization_group_ids: &[String],
+    ) -> Result<(), Report> {
         // info!("Authorizing");
         if *self.data_needs_rebuild.read().await {
             return Err(eyre!(
@@ -253,6 +276,7 @@ impl AuthorizeFull for PolicyEngine {
             "resource_kind": resource_kind,
             "resource_id": resource_id,
             "action": action,
+            "organization_group_ids": organization_group_ids,
         });
 
         engine
@@ -306,13 +330,14 @@ impl AuthorizeShort for PolicyEngine {
         let resource: Resource = resource.into();
         let (subject_kind, subject_id) = subject.clone().into_parts();
         let (resource_kind, resource_id) = resource.clone().into_parts();
-        AuthorizeFull::authorize(
-            self,
+        let organization_group_ids = subject.organization_group_ids();
+        self.authorize_with_context(
             subject_kind,
             &subject_id,
             resource_kind,
             &resource_id,
             action,
+            organization_group_ids,
         )
         .await
     }
@@ -431,5 +456,83 @@ mod tests {
         // This should work using the short form
         let result = authorize!(engine, &subject, &resource, action);
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_with_organization_group_share_grant() {
+        let subject = Subject::UserWithGroups {
+            id: "user_3".to_string(),
+            organization_group_ids: vec!["org-group-1".to_string(), "org-group-2".to_string()],
+        };
+        let resource = Resource::Assistant("assistant_2".to_string());
+        let action = Action::Read;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "assistant": {
+                        "assistant_2": {
+                            "id": "assistant_2",
+                            "owner_id": "user_2"
+                        }
+                    }
+                },
+                "share_grants": [
+                    {
+                        "id": "grant-2",
+                        "resource_type": "assistant",
+                        "resource_id": "assistant_2",
+                        "subject_type": "organization_group",
+                        "subject_id_type": "organization_group_id",
+                        "subject_id": "org-group-1",
+                        "role": "viewer"
+                    }
+                ]
+            }))
+            .await
+            .unwrap();
+        // User should be able to read the assistant because they're in org-group-1
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_without_organization_group_share_grant() {
+        let subject = Subject::UserWithGroups {
+            id: "user_3".to_string(),
+            organization_group_ids: vec!["org-group-2".to_string()], // Not in org-group-1
+        };
+        let resource = Resource::Assistant("assistant_2".to_string());
+        let action = Action::Read;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "assistant": {
+                        "assistant_2": {
+                            "id": "assistant_2",
+                            "owner_id": "user_2"
+                        }
+                    }
+                },
+                "share_grants": [
+                    {
+                        "id": "grant-2",
+                        "resource_type": "assistant",
+                        "resource_id": "assistant_2",
+                        "subject_type": "organization_group",
+                        "subject_id_type": "organization_group_id",
+                        "subject_id": "org-group-1",
+                        "role": "viewer"
+                    }
+                ]
+            }))
+            .await
+            .unwrap();
+        // User should NOT be able to read the assistant because they're not in org-group-1
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_err());
     }
 }

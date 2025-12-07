@@ -66,7 +66,7 @@ pub async fn create_assistant(
     default_chat_provider: Option<String>,
 ) -> Result<assistants::Model, Report> {
     // Get the user ID from subject (subject contains the user UUID)
-    let crate::policy::types::Subject::User(user_id_str) = &subject;
+    let user_id_str = subject.user_id();
     let user_uuid = Uuid::parse_str(user_id_str).wrap_err("Invalid user ID format")?;
     let user = Users::find_by_id(user_uuid)
         .one(conn)
@@ -101,7 +101,7 @@ pub async fn get_user_assistants(
     subject: &Subject,
 ) -> Result<Vec<assistants::Model>, Report> {
     // Get the user ID from subject (subject contains the user UUID)
-    let crate::policy::types::Subject::User(user_id_str) = &subject;
+    let user_id_str = subject.user_id();
     let user_uuid = Uuid::parse_str(user_id_str).wrap_err("Invalid user ID format")?;
     let user = Users::find_by_id(user_uuid)
         .one(conn)
@@ -118,9 +118,14 @@ pub async fn get_user_assistants(
         .all(conn)
         .await?;
 
-    // Get assistants shared with the user via share_grants
-    let share_grants =
-        share_grant::get_resources_shared_with_subject(conn, user_id_str, "assistant").await?;
+    // Get assistants shared with the user via share_grants (including organization group grants)
+    let share_grants = share_grant::get_resources_shared_with_subject_and_groups(
+        conn,
+        user_id_str,
+        "assistant",
+        subject.organization_group_ids(),
+    )
+    .await?;
 
     // Collect the assistant IDs from share grants
     let shared_assistant_ids: Vec<Uuid> = share_grants
@@ -182,7 +187,7 @@ async fn get_assistant_by_id_internal(
     })?;
 
     // Get the user ID from subject (subject contains the user UUID)
-    let crate::policy::types::Subject::User(user_id_str) = &subject;
+    let user_id_str = subject.user_id();
     let user_uuid = Uuid::parse_str(user_id_str).wrap_err("Invalid user ID format")?;
     let user = Users::find_by_id(user_uuid)
         .one(conn)
@@ -194,9 +199,14 @@ async fn get_assistant_by_id_internal(
         return Ok(assistant);
     }
 
-    // If not the owner, check if the assistant is shared with the user
-    let share_grants =
-        share_grant::get_resources_shared_with_subject(conn, user_id_str, "assistant").await?;
+    // If not the owner, check if the assistant is shared with the user (including organization group grants)
+    let share_grants = share_grant::get_resources_shared_with_subject_and_groups(
+        conn,
+        user_id_str,
+        "assistant",
+        subject.organization_group_ids(),
+    )
+    .await?;
 
     let has_viewer_access = share_grants
         .iter()
@@ -249,7 +259,7 @@ async fn get_assistant_by_id_for_modification(
     })?;
 
     // Get the user ID from subject (subject contains the user UUID)
-    let crate::policy::types::Subject::User(user_id_str) = &subject;
+    let user_id_str = subject.user_id();
     let user_uuid = Uuid::parse_str(user_id_str).wrap_err("Invalid user ID format")?;
     let user = Users::find_by_id(user_uuid)
         .one(conn)

@@ -57,7 +57,7 @@ pub async fn create_share_grant(
     policy.rebuild_data_if_needed(conn).await?;
 
     // Get the user ID from subject
-    let crate::policy::types::Subject::User(user_id_str) = &subject;
+    let user_id_str = subject.user_id();
     let user_uuid = Uuid::parse_str(user_id_str).wrap_err("Invalid user ID format")?;
 
     // Verify the user owns the resource they're trying to share
@@ -101,17 +101,20 @@ pub async fn create_share_grant(
     }
 
     // Validate subject_type
-    if subject_type != "user" {
+    if subject_type != "user" && subject_type != "organization_group" {
         return Err(eyre!(
-            "Invalid subject_type: {}. Only 'user' is currently supported",
+            "Invalid subject_type: {}. Only 'user' and 'organization_group' are currently supported",
             subject_type
         ));
     }
 
     // Validate subject_id_type
-    if subject_id_type != "id" && subject_id_type != "oidc_issuer_and_subject" {
+    if subject_id_type != "id"
+        && subject_id_type != "organization_user_id"
+        && subject_id_type != "organization_group_id"
+    {
         return Err(eyre!(
-            "Invalid subject_id_type: {}. Must be 'id' or 'oidc_issuer_and_subject'",
+            "Invalid subject_id_type: {}. Only 'id', 'organization_user_id', and 'organization_group_id' are currently supported",
             subject_id_type
         ));
     }
@@ -150,7 +153,7 @@ pub async fn list_share_grants_for_resource(
     resource_id: String,
 ) -> Result<Vec<share_grants::Model>, Report> {
     // Get the user ID from subject
-    let crate::policy::types::Subject::User(user_id_str) = &subject;
+    let user_id_str = subject.user_id();
     let user_uuid = Uuid::parse_str(user_id_str).wrap_err("Invalid user ID format")?;
 
     // Verify the user owns the resource
@@ -199,7 +202,7 @@ pub async fn delete_share_grant(
     policy.rebuild_data_if_needed(conn).await?;
 
     // Get the user ID from subject
-    let crate::policy::types::Subject::User(user_id_str) = &subject;
+    let user_id_str = subject.user_id();
     let user_uuid = Uuid::parse_str(user_id_str).wrap_err("Invalid user ID format")?;
 
     // Find the share grant
@@ -249,19 +252,54 @@ pub async fn delete_share_grant(
 ///
 /// This is used to populate the list of assistants available to a user
 /// (both owned and shared).
+///
+/// This function checks for:
+/// - Direct user shares (subject_type = "user" and subject_id = user_id)
+/// - Organization group shares (subject_type = "organization_group" and subject_id in organization_group_ids)
 pub async fn get_resources_shared_with_subject(
     conn: &DatabaseConnection,
     subject_id: &str,
     resource_type: &str,
 ) -> Result<Vec<share_grants::Model>, Report> {
-    let grants = ShareGrants::find()
-        .filter(
+    get_resources_shared_with_subject_and_groups(conn, subject_id, resource_type, &[]).await
+}
+
+/// Get all resources shared with a specific subject, including organization group grants
+pub async fn get_resources_shared_with_subject_and_groups(
+    conn: &DatabaseConnection,
+    subject_id: &str,
+    resource_type: &str,
+    organization_group_ids: &[String],
+) -> Result<Vec<share_grants::Model>, Report> {
+    // Build condition for user grants (with subject_id_type = "id" or "organization_user_id")
+    let mut condition = Condition::any()
+        .add(
             Condition::all()
+                .add(share_grants::Column::SubjectType.eq("user"))
+                .add(share_grants::Column::SubjectIdType.eq("id"))
                 .add(share_grants::Column::SubjectId.eq(subject_id))
                 .add(share_grants::Column::ResourceType.eq(resource_type)),
         )
-        .all(conn)
-        .await?;
+        .add(
+            Condition::all()
+                .add(share_grants::Column::SubjectType.eq("user"))
+                .add(share_grants::Column::SubjectIdType.eq("organization_user_id"))
+                .add(share_grants::Column::SubjectId.eq(subject_id))
+                .add(share_grants::Column::ResourceType.eq(resource_type)),
+        );
+
+    // Add condition for organization group grants if any group IDs are provided
+    if !organization_group_ids.is_empty() {
+        condition = condition.add(
+            Condition::all()
+                .add(share_grants::Column::SubjectType.eq("organization_group"))
+                .add(share_grants::Column::SubjectIdType.eq("organization_group_id"))
+                .add(share_grants::Column::SubjectId.is_in(organization_group_ids.to_vec()))
+                .add(share_grants::Column::ResourceType.eq(resource_type)),
+        );
+    }
+
+    let grants = ShareGrants::find().filter(condition).all(conn).await?;
 
     Ok(grants)
 }

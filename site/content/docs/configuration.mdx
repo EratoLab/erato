@@ -993,6 +993,51 @@ auth_via_access_token = true
 
 See the [SharePoint/OneDrive Integration](./integrations/sharepoint) documentation for detailed setup instructions.
 
+#### `integrations.experimental_entra_id`
+
+Configuration for the experimental Entra ID integration. This allows exposing organization users and groups to the frontend for sharing features.
+
+**Note:** This is an experimental feature. The configuration key will be renamed to `integrations.entra_id` once the feature has stabilized.
+
+##### `integrations.experimental_entra_id.enabled`
+
+Whether the Entra ID integration is enabled. When enabled, the `/me/organization/users` and `/me/organization/groups` endpoints will query the Microsoft Graph API to list organization users and groups. When disabled, these endpoints will return empty lists.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+##### `integrations.experimental_entra_id.auth_via_access_token`
+
+Whether to use the user's forwarded access token for Microsoft Graph API authentication. Currently, this is the only supported authentication method.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[integrations.experimental_entra_id]
+enabled = true
+auth_via_access_token = true
+```
+
+**Prerequisites:**
+
+- Your OIDC provider (e.g., Microsoft Entra ID) must issue access tokens with Microsoft Graph API permissions (`User.Read.All` and `Group.Read.All`)
+- Your authentication proxy (e.g., oauth2-proxy) must forward the access token via the `X-Forwarded-Access-Token` header
+- The ID token must include the `oid` claim for organization user IDs and the `groups` claim for organization group memberships
+
+**Related Features:**
+
+When the Entra ID integration is enabled, the user profile will include additional fields:
+
+- `organization_user_id` - Extracted from the `oid` claim (Entra ID specific)
+- `organization_group_ids` - Extracted from the `groups` claim
+
+These fields enable sharing assistants with organization groups via share grants with `subject_type = "organization_group"` and `subject_id_type = "organization_group_id"`.
+
 ### `mcp_servers`
 
 Configuration for Model Context Protocol (MCP) servers that extend Erato's capabilities through custom tools and integrations.

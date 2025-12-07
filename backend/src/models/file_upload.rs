@@ -186,11 +186,16 @@ pub async fn get_file_upload_by_id(
 
     if !assistant_relations.is_empty() {
         // Get the user ID from subject
-        let crate::policy::types::Subject::User(user_id_str) = &subject;
+        let user_id_str = subject.user_id();
 
-        // Get all assistants shared with this user
-        let share_grants =
-            share_grant::get_resources_shared_with_subject(conn, user_id_str, "assistant").await?;
+        // Get all assistants shared with this user (including organization group grants)
+        let share_grants = share_grant::get_resources_shared_with_subject_and_groups(
+            conn,
+            user_id_str,
+            "assistant",
+            subject.organization_group_ids(),
+        )
+        .await?;
 
         // Check if any of the assistants associated with this file are shared with the user
         for assistant_relation in &assistant_relations {

@@ -132,6 +132,28 @@ allow if {
 	grant.role == "viewer"
 }
 
+# A user who belongs to an organization_group (via share_grant) can read an assistant.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for assistant read action
+	input.resource_kind == resource_kind_assistant
+	input.action == action_read
+
+	# Check if there's a share grant for an organization group
+	some grant in data.share_grants
+	grant.resource_type == "assistant"
+	grant.resource_id == input.resource_id
+	grant.subject_type == "organization_group"
+	grant.role == "viewer"
+
+	# Check if the user belongs to this organization group
+	some group_id in input.organization_group_ids
+	group_id == grant.subject_id
+}
+
 # A logged-in user can create an assistant.
 allow if {
 	# Ensure subject is a user and is logged in.

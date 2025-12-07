@@ -23,6 +23,10 @@ pub struct IdTokenProfile {
     pub preferred_language: Option<String>,
     // Groups - list of group names/identifiers the user belongs to
     pub groups: Vec<String>,
+    // Organization user ID - from the `oid` claim (Entra ID specific)
+    pub organization_user_id: Option<String>,
+    // Organization group IDs - same as groups, for sharing purposes
+    pub organization_group_ids: Vec<String>,
 }
 
 // Normalize profile from the ID token claims of different OIDC providers.
@@ -72,6 +76,12 @@ pub fn normalize_profile(claims: Value) -> Result<IdTokenProfile, Report> {
         }
     };
 
+    // Parse oid claim (Entra ID specific) - this is the organization user ID
+    let organization_user_id = claims.get("oid").and_then(|v| v.as_str().map(String::from));
+
+    // Organization group IDs are the same as groups
+    let organization_group_ids = groups.clone();
+
     let profile = IdTokenProfile {
         iss: iss.as_str().map(String::from).unwrap(),
         sub: sub.as_str().map(String::from).unwrap(),
@@ -80,6 +90,8 @@ pub fn normalize_profile(claims: Value) -> Result<IdTokenProfile, Report> {
         picture,
         preferred_language,
         groups,
+        organization_user_id,
+        organization_group_ids,
     };
 
     Ok(profile)
@@ -114,6 +126,8 @@ mod tests {
         assert_eq!(profile.preferred_language, None);
         assert_eq!(profile.picture, None);
         assert_eq!(profile.groups, Vec::<String>::new());
+        assert_eq!(profile.organization_user_id, None);
+        assert_eq!(profile.organization_group_ids, Vec::<String>::new());
     }
 
     #[test]
@@ -163,6 +177,11 @@ mod tests {
         assert_eq!(profile.preferred_language, Some("en".to_string()));
         assert_eq!(profile.picture, None);
         assert_eq!(profile.groups, Vec::<String>::new());
+        assert_eq!(
+            profile.organization_user_id,
+            Some("33333333-3333-3333-3333-333333333333".to_string())
+        );
+        assert_eq!(profile.organization_group_ids, Vec::<String>::new());
     }
 
     #[test]
@@ -200,6 +219,11 @@ mod tests {
         assert_eq!(profile.picture, None);
         assert_eq!(
             profile.groups,
+            vec!["administrators".to_string(), "managers".to_string()]
+        );
+        assert_eq!(profile.organization_user_id, None);
+        assert_eq!(
+            profile.organization_group_ids,
             vec!["administrators".to_string(), "managers".to_string()]
         );
     }
@@ -247,5 +271,6 @@ mod tests {
         });
         let profile = normalize_profile(claims_invalid).unwrap();
         assert_eq!(profile.groups, Vec::<String>::new());
+        assert_eq!(profile.organization_group_ids, Vec::<String>::new());
     }
 }

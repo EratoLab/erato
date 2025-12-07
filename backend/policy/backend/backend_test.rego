@@ -42,6 +42,23 @@ share_grants := [
 	},
 ]
 
+# Organization group IDs for testing
+org_group_1_id := "org-group-1"
+org_group_2_id := "org-group-2"
+
+# Share grants data with organization_group - assistant_2 is shared with org-group-1
+share_grants_with_org_group := [
+	{
+		"id": "grant-2",
+		"resource_type": "assistant",
+		"resource_id": assistant_2_id,
+		"subject_type": "organization_group",
+		"subject_id_type": "organization_group_id",
+		"subject_id": org_group_1_id,
+		"role": "viewer",
+	},
+]
+
 # A user can read their own chat.
 test_user_can_read_own_chat if {
 	backend.allow with input as {
@@ -296,4 +313,58 @@ test_logged_in_user_can_delete_share_grant if {
 		"resource_id": "grant-123",
 		"action": "delete",
 	}
+}
+
+# --- Organization Group Sharing Tests ---
+
+# A user in an organization_group can read an assistant shared with that group.
+test_user_in_org_group_can_read_shared_assistant if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_3_id,
+		"resource_kind": "assistant",
+		"resource_id": assistant_2_id,
+		"action": "read",
+		"organization_group_ids": [org_group_1_id, org_group_2_id],
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants_with_org_group
+}
+
+# A user NOT in the organization_group cannot read the assistant shared with that group.
+test_user_not_in_org_group_cannot_read_shared_assistant if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_3_id,
+		"resource_kind": "assistant",
+		"resource_id": assistant_2_id,
+		"action": "read",
+		"organization_group_ids": [org_group_2_id],
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants_with_org_group
+}
+
+# A user with no organization_group_ids cannot read the assistant shared with a group.
+test_user_with_no_org_groups_cannot_read_shared_assistant if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_3_id,
+		"resource_kind": "assistant",
+		"resource_id": assistant_2_id,
+		"action": "read",
+		"organization_group_ids": [],
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants_with_org_group
+}
+
+# A user in an organization_group cannot update an assistant shared with that group (read-only).
+test_user_in_org_group_cannot_update_shared_assistant if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_3_id,
+		"resource_kind": "assistant",
+		"resource_id": assistant_2_id,
+		"action": "update",
+		"organization_group_ids": [org_group_1_id],
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants_with_org_group
 }

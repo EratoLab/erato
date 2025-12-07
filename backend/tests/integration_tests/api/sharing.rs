@@ -75,7 +75,7 @@ async fn test_full_assistant_sharing_flow(pool: Pool<Postgres>) {
         &PolicyEngine::new(),
         &erato::policy::types::Subject::User(user_a.id.to_string()),
         "test_file.txt".to_string(),
-        "local".to_string(),
+        "minio".to_string(),
         "test_path.txt".to_string(),
     )
     .await
