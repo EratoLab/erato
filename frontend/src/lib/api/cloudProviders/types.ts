@@ -1,9 +1,14 @@
 /**
  * Provider-agnostic types for cloud storage file pickers
  *
- * These types provide a common interface for different cloud storage providers
- * (Sharepoint/OneDrive, Google Drive, etc.)
+ * These types extend the generated API types with provider information
+ * Most data types come from the generated schema (@/lib/generated/v1betaApi)
  */
+
+import type {
+  Drive,
+  DriveItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
  * Supported cloud storage providers
@@ -11,51 +16,19 @@
 export type CloudProvider = "sharepoint" | "googledrive";
 
 /**
- * A cloud storage drive (OneDrive, Google Drive, Sharepoint Document Library, etc.)
+ * A cloud storage drive with provider information
+ * Extends the generated Drive type with provider field
  */
-export interface CloudDrive {
-  id: string;
-  name: string;
-  drive_type: string; // "personal", "documentLibrary", "shared", etc.
-  owner_name?: string;
+export type CloudDrive = Drive & { provider: CloudProvider };
+
+/**
+ * A cloud drive item with provider and drive information
+ * Extends the generated DriveItem type with provider and drive_id fields
+ */
+export type CloudItem = DriveItem & {
   provider: CloudProvider;
-}
-
-/**
- * An item in a cloud drive (file or folder)
- */
-export interface CloudItem {
-  id: string;
-  name: string;
-  is_folder: boolean;
-  size?: number; // bytes, for files only
-  mime_type?: string; // for files only
-  last_modified?: string; // ISO date-time
-  web_url?: string;
-  provider: CloudProvider;
-  drive_id: string; // The drive this item belongs to
-}
-
-/**
- * Response from all-drives endpoint
- */
-export interface CloudDrivesResponse {
-  drives: CloudDrive[];
-}
-
-/**
- * Response from drive items endpoints
- */
-export interface CloudItemsResponse {
-  items: CloudItem[];
-}
-
-/**
- * Response for a single drive item
- */
-export interface CloudItemResponse extends CloudItem {
   drive_id: string;
-}
+};
 
 /**
  * Selected file metadata for file linking
@@ -70,58 +43,10 @@ export interface SelectedCloudFile {
 }
 
 /**
- * Request to link a cloud file
- */
-export interface LinkCloudFileRequest {
-  source: CloudProvider;
-  chat_id?: string;
-  provider_metadata: {
-    drive_id: string;
-    item_id: string;
-  };
-}
-
-/**
  * Navigation breadcrumb segment
  */
 export interface BreadcrumbSegment {
   id: string;
   name: string;
   type: "drive" | "folder";
-}
-
-/**
- * Cloud provider API interface
- */
-export interface CloudProviderAPI {
-  /**
-   * Get all drives accessible to the user
-   */
-  getAllDrives(): Promise<CloudDrivesResponse>;
-
-  /**
-   * Get root items of a specific drive
-   */
-  getDriveRoot(driveId: string): Promise<CloudItemsResponse>;
-
-  /**
-   * Get details of a specific drive item
-   */
-  getDriveItem(driveId: string, itemId: string): Promise<CloudItemResponse>;
-
-  /**
-   * Get children of a folder
-   */
-  getDriveItemChildren(
-    driveId: string,
-    itemId: string,
-  ): Promise<CloudItemsResponse>;
-
-  /**
-   * Link selected files to create file upload records
-   */
-  linkFiles(
-    files: SelectedCloudFile[],
-    chatId?: string,
-  ): Promise<{ id: string; filename: string; download_url: string }[]>;
 }

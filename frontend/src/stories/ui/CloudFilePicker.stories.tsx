@@ -8,8 +8,6 @@ import { useState } from "react";
 
 import { CloudFilePicker } from "@/components/ui/CloudFilePicker/CloudFilePicker";
 
-import { MockSharepointAPI } from "./cloud/MockSharepointAPI";
-
 import type { SelectedCloudFile } from "@/lib/api/cloudProviders/types";
 import type { Meta, StoryObj } from "@storybook/react";
 
@@ -46,12 +44,8 @@ The picker consists of several sub-components:
 
 \`\`\`tsx
 import { CloudFilePicker } from '@/components/ui/CloudFilePicker/CloudFilePicker';
-import { SharepointAPI } from '@/lib/api/cloudProviders/sharepoint';
-
-const api = new SharepointAPI();
 
 <CloudFilePicker
-  api={api}
   provider="sharepoint"
   isOpen={isOpen}
   onClose={() => setIsOpen(false)}
@@ -61,6 +55,9 @@ const api = new SharepointAPI();
   acceptedFileTypes={['pdf', 'document']}
 />
 \`\`\`
+
+Note: The component uses auto-generated React Query hooks internally. For Storybook,
+MSW handlers mock the API endpoints (see \`frontend/src/lib/mocks/handlers.ts\`).
         `,
       },
     },
@@ -91,18 +88,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // Wrapper component to show the modal directly open
-function PickerStory({
-  scenario = "default",
-  ...props
-}: Omit<React.ComponentProps<typeof CloudFilePicker>, "api"> & {
-  scenario?: "default" | "empty" | "loading" | "error" | "unsupported-types";
-}) {
+function PickerStory(props: React.ComponentProps<typeof CloudFilePicker>) {
   const [selectedFiles, setSelectedFiles] = useState<SelectedCloudFile[]>([]);
-
-  const api = new MockSharepointAPI(
-    scenario,
-    scenario === "loading" ? 2000 : 500,
-  );
 
   return (
     <div className="min-h-screen bg-gray-100 p-4">
@@ -123,7 +110,6 @@ function PickerStory({
 
       <CloudFilePicker
         {...props}
-        api={api}
         onFilesSelected={(files) => {
           setSelectedFiles(files);
           console.log(
@@ -145,6 +131,7 @@ export const Default: Story = {
     provider: "sharepoint",
     isOpen: true,
     onClose: () => console.log("Closed"),
+    onFilesSelected: () => {},
     multiple: true,
     maxFiles: 5,
     acceptedFileTypes: [],
@@ -160,6 +147,7 @@ export const SingleSelection: Story = {
     provider: "sharepoint",
     isOpen: true,
     onClose: () => console.log("Closed"),
+    onFilesSelected: () => {},
     multiple: false,
     maxFiles: 1,
     acceptedFileTypes: [],
@@ -175,6 +163,7 @@ export const MultiSelection: Story = {
     provider: "sharepoint",
     isOpen: true,
     onClose: () => console.log("Closed"),
+    onFilesSelected: () => {},
     multiple: true,
     maxFiles: 5,
     acceptedFileTypes: [],
@@ -190,6 +179,7 @@ export const WithFileTypeFilter: Story = {
     provider: "sharepoint",
     isOpen: true,
     onClose: () => console.log("Closed"),
+    onFilesSelected: () => {},
     multiple: true,
     maxFiles: 5,
     acceptedFileTypes: ["pdf", "document"],
@@ -200,11 +190,12 @@ export const WithFileTypeFilter: Story = {
  * Loading state with skeleton loaders
  */
 export const LoadingState: Story = {
-  render: (args) => <PickerStory {...args} scenario="loading" />,
+  render: (args) => <PickerStory {...args} />,
   args: {
     provider: "sharepoint",
     isOpen: true,
     onClose: () => console.log("Closed"),
+    onFilesSelected: () => {},
     multiple: true,
     maxFiles: 5,
     acceptedFileTypes: [],
@@ -215,11 +206,12 @@ export const LoadingState: Story = {
  * Empty drive with no files or folders
  */
 export const EmptyDrive: Story = {
-  render: (args) => <PickerStory {...args} scenario="empty" />,
+  render: (args) => <PickerStory {...args} />,
   args: {
     provider: "sharepoint",
     isOpen: true,
     onClose: () => console.log("Closed"),
+    onFilesSelected: () => {},
     multiple: true,
     maxFiles: 5,
     acceptedFileTypes: [],
@@ -230,11 +222,12 @@ export const EmptyDrive: Story = {
  * Error state when API fails
  */
 export const ErrorState: Story = {
-  render: (args) => <PickerStory {...args} scenario="error" />,
+  render: (args) => <PickerStory {...args} />,
   args: {
     provider: "sharepoint",
     isOpen: true,
     onClose: () => console.log("Closed"),
+    onFilesSelected: () => {},
     multiple: true,
     maxFiles: 5,
     acceptedFileTypes: [],
@@ -245,11 +238,12 @@ export const ErrorState: Story = {
  * Unsupported file types shown as disabled
  */
 export const UnsupportedFileTypes: Story = {
-  render: (args) => <PickerStory {...args} scenario="unsupported-types" />,
+  render: (args) => <PickerStory {...args} />,
   args: {
     provider: "sharepoint",
     isOpen: true,
     onClose: () => console.log("Closed"),
+    onFilesSelected: () => {},
     multiple: true,
     maxFiles: 5,
     acceptedFileTypes: ["pdf", "document"],
@@ -265,6 +259,7 @@ export const MaxFilesLimit: Story = {
     provider: "sharepoint",
     isOpen: true,
     onClose: () => console.log("Closed"),
+    onFilesSelected: () => {},
     multiple: true,
     maxFiles: 3,
     acceptedFileTypes: [],
@@ -280,6 +275,7 @@ export const StrictFileTypeFilter: Story = {
     provider: "sharepoint",
     isOpen: true,
     onClose: () => console.log("Closed"),
+    onFilesSelected: () => {},
     multiple: true,
     maxFiles: 5,
     acceptedFileTypes: ["application/pdf"],

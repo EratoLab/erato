@@ -2,15 +2,33 @@
  * FileUploadWithTokenCheck Component
  *
  * Extends the standard FileUpload component with token usage checking
+ * Supports both local disk uploads and cloud file linking (OneDrive/Sharepoint)
  */
 import { t } from "@lingui/core/macro";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useDropzone } from "react-dropzone";
 
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
+import {
+  fetchLinkFile,
+  useCreateChat,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useCloudProvidersFeature } from "@/providers/FeatureConfigProvider";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
+import { CloudFilePickerModal } from "./CloudFilePickerModal";
+import { FileSourceSelector } from "./FileSourceSelector";
 import { FileUploadButton } from "./FileUploadButton";
 
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  CloudProvider,
+  SelectedCloudFile,
+} from "@/lib/api/cloudProviders/types";
+import type {
+  FileUploadItem,
+  LinkFileRequest,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 import type React from "react";
 
@@ -64,6 +82,22 @@ export const FileUploadWithTokenCheck: React.FC<
   disabled = false,
   onProcessingChange,
 }) => {
+  // Get cloud providers configuration
+  const { availableProviders } = useCloudProvidersFeature();
+  const hasCloudProviders = availableProviders.length > 0;
+
+  // Cloud picker state
+  const [cloudPickerOpen, setCloudPickerOpen] = useState(false);
+  const [selectedCloudProvider, setSelectedCloudProvider] =
+    useState<CloudProvider | null>(null);
+  const [isLinkingFiles, setIsLinkingFiles] = useState(false);
+
+  // File upload store for silent chat creation
+  const { setSilentChatId } = useFileUploadStore();
+
+  // Create chat mutation for silent chat creation
+  const createChatMutation = useCreateChat();
+
   // Use the combined hook
   const {
     uploadFiles,
@@ -83,8 +117,120 @@ export const FileUploadWithTokenCheck: React.FC<
     disabled,
   });
 
+  // Setup react-dropzone for disk file selection when cloud providers are available
+  const { open: openDiskFilePicker } = useDropzone({
+    onDrop: (acceptedFiles) => {
+      if (acceptedFiles.length > 0) {
+        void uploadFiles(acceptedFiles);
+      }
+    },
+    accept:
+      acceptedFileTypes.length > 0
+        ? FileTypeUtil.getAcceptObject(acceptedFileTypes)
+        : undefined,
+    multiple,
+    disabled: disabled || isUploading,
+    noClick: true, // We'll manually open via the selector
+    noKeyboard: true,
+  });
+
   // Calculate combined processing state
-  const isProcessing = isUploading || isEstimating;
+  const isProcessing = isUploading || isEstimating || isLinkingFiles;
+
+  // Handle disk file selection
+  const handleSelectDisk = useCallback(() => {
+    // Trigger the file picker dialog
+    openDiskFilePicker();
+  }, [openDiskFilePicker]);
+
+  // Handle cloud provider selection
+  const handleSelectCloud = useCallback((provider: CloudProvider) => {
+    setSelectedCloudProvider(provider);
+    setCloudPickerOpen(true);
+  }, []);
+
+  // Handle cloud file selection
+  const handleCloudFilesSelected = useCallback(
+    (files: SelectedCloudFile[]) => {
+      void (async () => {
+        if (files.length === 0 || !selectedCloudProvider) {
+          setCloudPickerOpen(false);
+          setSelectedCloudProvider(null);
+          return;
+        }
+
+        try {
+          setIsLinkingFiles(true);
+          setCloudPickerOpen(false);
+
+          // Determine which chat ID to use for linking (same pattern as disk upload)
+          let linkChatId = chatId;
+
+          // If no chatId exists, create one silently first
+          if (!linkChatId) {
+            const createChatResult = await createChatMutation.mutateAsync({
+              body: {},
+            });
+            linkChatId = createChatResult.chat_id;
+            // Set the silentChatId in the store
+            setSilentChatId(linkChatId);
+          }
+
+          // Link files using the generated API client
+          const allLinkedFiles: FileUploadItem[] = [];
+
+          for (const file of files) {
+            // Type assertion needed due to codegen bug with chat_id type
+            // OpenAPI schema allows string|null, but codegen generates null|undefined
+            const response = await fetchLinkFile({
+              body: {
+                source: selectedCloudProvider,
+                chat_id: linkChatId,
+                provider_metadata: {
+                  drive_id: file.drive_id,
+                  item_id: file.item_id,
+                },
+              } as unknown as LinkFileRequest,
+            });
+
+            // Transform response to FileUploadItem format
+            allLinkedFiles.push(
+              ...response.files.map((f) => ({
+                id: f.id,
+                filename: f.filename,
+                download_url: f.download_url,
+              })),
+            );
+          }
+
+          // Trigger token estimation for the linked files
+          if (allLinkedFiles.length > 0 && onFilesUploaded) {
+            onFilesUploaded(allLinkedFiles);
+          }
+
+          setSelectedCloudProvider(null);
+        } catch (error) {
+          console.error("Error linking cloud files:", error);
+          // TODO: Show error toast/notification to user
+        } finally {
+          setIsLinkingFiles(false);
+        }
+      })();
+    },
+    [
+      selectedCloudProvider,
+      onFilesUploaded,
+      chatId,
+      createChatMutation,
+      setSilentChatId,
+    ],
+  );
+
+  // Handle cloud picker close
+  const handleCloudPickerClose = useCallback(() => {
+    setCloudPickerOpen(false);
+    setSelectedCloudProvider(null);
+  }, []);
 
   // Effect to notify parent about processing state changes
   useEffect(() => {
@@ -103,19 +249,43 @@ export const FileUploadWithTokenCheck: React.FC<
   }, [tokenUsageEstimation, exceedsTokenLimit, onTokenLimitExceeded]);
 
   return (
-    <div>
-      {/* File upload button */}
-      <FileUploadButton
-        acceptedFileTypes={acceptedFileTypes}
-        multiple={multiple}
-        label={label}
-        iconOnly={iconOnly}
-        className={className}
-        disabled={disabled || isProcessing}
-        performFileUpload={uploadFiles}
-        isUploading={isProcessing}
-        uploadError={uploadError instanceof Error ? uploadError : null}
-      />
+    <div className="relative">
+      {/* File upload button - show selector if cloud providers available */}
+      {hasCloudProviders ? (
+        <FileSourceSelector
+          availableProviders={availableProviders}
+          onSelectDisk={handleSelectDisk}
+          onSelectCloud={handleSelectCloud}
+          disabled={disabled || isProcessing}
+          className={className}
+        />
+      ) : (
+        <FileUploadButton
+          acceptedFileTypes={acceptedFileTypes}
+          multiple={multiple}
+          label={label}
+          iconOnly={iconOnly}
+          className={className}
+          disabled={disabled || isProcessing}
+          performFileUpload={uploadFiles}
+          isUploading={isProcessing}
+          uploadError={uploadError instanceof Error ? uploadError : null}
+        />
+      )}
+
+      {/* Cloud file picker modal */}
+      {selectedCloudProvider && (
+        <CloudFilePickerModal
+          isOpen={cloudPickerOpen}
+          onClose={handleCloudPickerClose}
+          provider={selectedCloudProvider}
+          acceptedFileTypes={acceptedFileTypes}
+          multiple={multiple}
+          maxFiles={maxFiles}
+          onFilesSelected={handleCloudFilesSelected}
+          chatId={chatId ?? undefined}
+        />
+      )}
     </div>
   );
 };

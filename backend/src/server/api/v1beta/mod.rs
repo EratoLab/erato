@@ -443,6 +443,7 @@ pub struct LinkFileRequest {
     /// Optional chat ID to associate the file with. If not provided, creates standalone files.
     pub chat_id: Option<String>,
     /// Provider-specific metadata (e.g., drive_id, item_id for SharePoint)
+    #[schema(value_type = SharepointProviderMetadata)]
     pub provider_metadata: serde_json::Value,
 }
 
@@ -727,6 +728,8 @@ async fn link_sharepoint_file_impl(
         filename,
         file_upload.id
     );
+
+    app_state.global_policy_engine.invalidate_data().await;
 
     Ok(Json(FileUploadResponse {
         files: vec![FileUploadItem {

@@ -39,6 +39,19 @@ interface AssistantsFeatureConfig {
 }
 
 /**
+ * Cloud provider type
+ */
+export type CloudProvider = "sharepoint" | "googledrive";
+
+/**
+ * Configuration for cloud file providers
+ */
+interface CloudProvidersFeatureConfig {
+  /** List of available cloud file providers */
+  availableProviders: CloudProvider[];
+}
+
+/**
  * Complete feature configuration interface
  */
 interface FeatureConfig {
@@ -50,6 +63,8 @@ interface FeatureConfig {
   auth: AuthFeatureConfig;
   /** Assistants feature flags */
   assistants: AssistantsFeatureConfig;
+  /** Cloud providers feature flags */
+  cloudProviders: CloudProvidersFeatureConfig;
 }
 
 const FeatureConfigContext = createContext<FeatureConfig | null>(null);
@@ -79,6 +94,16 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
   const config = useMemo<FeatureConfig>(() => {
     const environment = env();
 
+    // Build list of available cloud providers based on feature flags
+    const availableProviders: CloudProvider[] = [];
+    if (environment.sharepointEnabled) {
+      availableProviders.push("sharepoint");
+    }
+    // Future: Add Google Drive when available
+    // if (environment.googleDriveEnabled) {
+    //   availableProviders.push("googledrive");
+    // }
+
     return {
       upload: {
         enabled: !environment.disableUpload,
@@ -91,6 +116,9 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
       },
       assistants: {
         enabled: environment.assistantsEnabled,
+      },
+      cloudProviders: {
+        availableProviders,
       },
     };
   }, []); // Empty deps - only compute once
@@ -191,4 +219,21 @@ export function useAuthFeature(): AuthFeatureConfig {
 export function useAssistantsFeature(): AssistantsFeatureConfig {
   const config = useFeatureConfig();
   return config.assistants;
+}
+
+/**
+ * Convenience hook for accessing cloud providers feature configuration.
+ *
+ * @returns Cloud providers feature configuration
+ * @throws {Error} If used outside of FeatureConfigProvider
+ *
+ * @example
+ * ```tsx
+ * const { availableProviders } = useCloudProvidersFeature();
+ * const hasCloudProviders = availableProviders.length > 0;
+ * ```
+ */
+export function useCloudProvidersFeature(): CloudProvidersFeatureConfig {
+  const config = useFeatureConfig();
+  return config.cloudProviders;
 }

@@ -1,23 +1,26 @@
 /**
  * useCloudData hook
  *
- * Fetches drives and items from cloud provider API
- * For Storybook, uses mocked data
+ * Fetches drives and items using generated React Query hooks
+ * Supports only Sharepoint for now (future: Google Drive)
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useMemo } from "react";
 
+import {
+  useAllDrives,
+  useGetDriveRoot,
+  useGetDriveItemChildren,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
+
+import type { CloudProvider } from "@/lib/api/cloudProviders/types";
 import type {
-  CloudProvider,
-  CloudProviderAPI,
-  CloudDrive,
-  CloudItem,
-} from "@/lib/api/cloudProviders/types";
+  Drive,
+  DriveItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface UseCloudDataOptions {
-  /** Cloud provider API instance */
-  api: CloudProviderAPI;
-  /** Provider type */
+  /** Provider type (currently only "sharepoint" supported) */
   provider: CloudProvider;
   /** Current drive ID */
   driveId: string | null;
@@ -27,9 +30,9 @@ interface UseCloudDataOptions {
 
 interface UseCloudDataResult {
   /** Available drives */
-  drives: CloudDrive[];
+  drives: (Drive & { provider: CloudProvider })[];
   /** Items in current location */
-  items: CloudItem[];
+  items: (DriveItem & { provider: CloudProvider; drive_id: string })[];
   /** Loading state */
   isLoading: boolean;
   /** Error state */
@@ -41,76 +44,93 @@ interface UseCloudDataResult {
 }
 
 export function useCloudData({
-  api,
   provider,
   driveId,
   itemId,
 }: UseCloudDataOptions): UseCloudDataResult {
-  const [drives, setDrives] = useState<CloudDrive[]>([]);
-  const [items, setItems] = useState<CloudItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  // Only Sharepoint is supported for now
+  if (provider !== "sharepoint") {
+    throw new Error(`Unsupported cloud provider: ${provider}`);
+  }
 
-  // Fetch drives
-  const fetchDrives = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await api.getAllDrives();
-      setDrives(response.drives);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err : new Error("Failed to fetch drives"),
-      );
-    } finally {
-      setIsLoading(false);
+  // Fetch all drives using generated hook
+  const {
+    data: drivesData,
+    isLoading: isDrivesLoading,
+    error: drivesError,
+    refetch: refetchDrives,
+  } = useAllDrives({});
+
+  // Fetch items from current location
+  // Use getDriveRoot if no itemId, otherwise getDriveItemChildren
+  const shouldFetchRoot = !!driveId && !itemId;
+  const shouldFetchChildren = !!driveId && !!itemId;
+
+  const {
+    data: rootData,
+    isLoading: isRootLoading,
+    error: rootError,
+    refetch: refetchRoot,
+  } = useGetDriveRoot(
+    { pathParams: { driveId: driveId ?? "" } },
+    { enabled: shouldFetchRoot },
+  );
+
+  const {
+    data: childrenData,
+    isLoading: isChildrenLoading,
+    error: childrenError,
+    refetch: refetchChildren,
+  } = useGetDriveItemChildren(
+    { pathParams: { driveId: driveId ?? "", itemId: itemId ?? "" } },
+    { enabled: shouldFetchChildren },
+  );
+
+  // Combine drives data with provider field
+  const drives = useMemo(() => {
+    if (!drivesData) return [];
+    return drivesData.drives.map((drive) => ({
+      ...drive,
+      provider,
+    }));
+  }, [drivesData, provider]);
+
+  // Combine items data with provider and drive_id fields
+  const items = useMemo(() => {
+    const itemsData = rootData?.items ?? childrenData?.items ?? [];
+    return itemsData.map((item) => ({
+      ...item,
+      provider,
+      drive_id: driveId ?? "",
+    }));
+  }, [rootData, childrenData, provider, driveId]);
+
+  // Combine loading states
+  const isLoading = isDrivesLoading || isRootLoading || isChildrenLoading;
+
+  // Combine errors (prioritize drives error since it's always needed)
+  // Convert React Query error types to standard Error
+  const error =
+    (drivesError ? new Error(String(drivesError)) : null) ??
+    (rootError ? new Error(String(rootError)) : null) ??
+    (childrenError ? new Error(String(childrenError)) : null) ??
+    null;
+
+  // Refetch items based on current state
+  const refetchItems = () => {
+    if (shouldFetchRoot) {
+      void refetchRoot();
+    } else if (shouldFetchChildren) {
+      void refetchChildren();
     }
-  }, [api]);
-
-  // Fetch items
-  const fetchItems = useCallback(async () => {
-    if (!driveId) {
-      setItems([]);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      let response;
-      if (itemId) {
-        // Fetch folder children
-        response = await api.getDriveItemChildren(driveId, itemId);
-      } else {
-        // Fetch drive root
-        response = await api.getDriveRoot(driveId);
-      }
-
-      setItems(response.items);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error("Failed to fetch items"));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [api, driveId, itemId]);
-
-  // Fetch drives on mount
-  useEffect(() => {
-    void fetchDrives();
-  }, [fetchDrives]);
-
-  // Fetch items when navigation changes
-  useEffect(() => {
-    void fetchItems();
-  }, [fetchItems]);
+  };
 
   return {
     drives,
     items,
     isLoading,
     error,
-    refetchDrives: () => void fetchDrives(),
-    refetchItems: () => void fetchItems(),
+    refetchDrives: () => void refetchDrives(),
+    refetchItems,
   };
 }

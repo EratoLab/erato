@@ -20,14 +20,11 @@ import { CloseIcon, ArrowLeftIcon } from "../icons";
 
 import type {
   CloudProvider,
-  CloudProviderAPI,
   SelectedCloudFile,
 } from "@/lib/api/cloudProviders/types";
 
 export interface CloudFilePickerProps {
-  /** Cloud provider API instance */
-  api: CloudProviderAPI;
-  /** Provider type */
+  /** Provider type (currently only "sharepoint" supported) */
   provider: CloudProvider;
   /** Whether the picker is open */
   isOpen: boolean;
@@ -47,7 +44,6 @@ export interface CloudFilePickerProps {
 
 export const CloudFilePicker = memo<CloudFilePickerProps>(
   ({
-    api,
     provider,
     isOpen,
     onClose,
@@ -83,9 +79,8 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
       isMaxReached,
     } = useCloudSelection({ multiple, maxFiles, acceptedFileTypes });
 
-    // Data fetching
+    // Data fetching using generated hooks
     const { drives, items, isLoading } = useCloudData({
-      api,
       provider,
       driveId,
       itemId,
