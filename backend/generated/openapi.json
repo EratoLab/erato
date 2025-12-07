@@ -2113,6 +2113,7 @@
             "description": "Optional chat ID to associate the file with. If not provided, creates standalone files."
           },
           "provider_metadata": {
+            "$ref": "#/components/schemas/SharepointProviderMetadata",
             "description": "Provider-specific metadata (e.g., drive_id, item_id for SharePoint)"
           },
           "source": {

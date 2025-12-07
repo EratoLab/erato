@@ -60,9 +60,159 @@ msgid "branding.welcomeScreen.title"
 msgstr "Welcome to AI Assistant"
 
 #. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.driveType.personal"
+msgstr "Personal"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.driveType.shared"
+msgstr "Shared"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.empty.noDrives"
+msgstr "No drives available"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.openDrive"
+msgstr "Open drive"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.owner"
+msgstr "Owner:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.actions.cancel"
+msgstr "Cancel"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.actions.select"
+msgstr "Select"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.actions.selecting"
+msgstr "Selecting..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.close"
+msgstr "Close"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.error.selectFiles"
+msgstr "Failed to select files. Please try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.navigation.goBack"
+msgstr "Go back"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selection.filesSelected"
+msgstr "files selected"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selection.maxReached"
+msgstr "(Maximum reached)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selection.none"
+msgstr "No files selected"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selection.of"
+msgstr "of"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selection.oneFile"
+msgstr "1 file selected"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.title"
+msgstr "Select files from cloud storage"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.column.modified"
+msgstr "Modified"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.column.name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.column.size"
+msgstr "Size"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.empty.noFiles"
+msgstr "No files in this folder"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.openFolder"
+msgstr "Open folder"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.select"
+msgstr "Select"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudNavigationBreadcrumb.tsx
+msgid "cloudNavigationBreadcrumb.ariaLabel"
+msgstr "Breadcrumb navigation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudNavigationBreadcrumb.tsx
+msgid "cloudNavigationBreadcrumb.navigateToParent"
+msgstr "Navigate to parent"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudNavigationBreadcrumb.tsx
+msgid "cloudNavigationBreadcrumb.selectDrive"
+msgstr "Select a drive to browse files"
+
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "error.404.title"
 msgstr "404 - Page Not Found"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/FileSourceSelector.tsx
+msgid "fileSourceSelector.uploadFromComputer"
+msgstr "Upload from Computer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/FileSourceSelector.tsx
+msgid "fileSourceSelector.uploadFromOneDrive"
+msgstr "Upload from OneDrive"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
+msgid "fileUpload.disk.ariaLabel"
+msgstr "Upload files from disk"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
+msgid "fileUpload.uploadFiles"
+msgstr "Upload Files"
 
 #. js-lingui-explicit-id
 #: src/pages/HomePage.tsx
@@ -841,7 +991,6 @@ msgid "Updated"
 msgstr "Updated"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-#: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
 msgid "Upload Files"
 msgstr "Upload Files"
 

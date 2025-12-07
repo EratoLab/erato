@@ -18,6 +18,7 @@ import {
   Xmark,
   WarningTriangle,
   ArrowUp,
+  ArrowLeft,
   WarningCircle,
   CheckCircle,
   Code,
@@ -33,6 +34,8 @@ import {
   MediaVideo,
   MultiplePages,
   Search,
+  NavArrowRight,
+  Folder,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -191,6 +194,38 @@ export const MultiplePagesIcon = ({ className, ...props }: IconProps) => (
 
 export const SearchIcon = ({ className, ...props }: IconProps) => (
   <Search className={className} {...props} />
+);
+
+export const ArrowLeftIcon = ({ className, ...props }: IconProps) => (
+  <ArrowLeft className={className} {...props} />
+);
+
+export const ChevronRightIcon = ({ className, ...props }: IconProps) => (
+  <NavArrowRight className={className} {...props} />
+);
+
+export const FolderIcon = ({ className, ...props }: IconProps) => (
+  <Folder className={className} {...props} />
+);
+
+export const DocumentIcon = ({ className, ...props }: IconProps) => (
+  <Page className={className} {...props} />
+);
+
+export const SpreadsheetIcon = ({ className, ...props }: IconProps) => (
+  <Page className={className} {...props} />
+);
+
+export const PresentationIcon = ({ className, ...props }: IconProps) => (
+  <MultiplePages className={className} {...props} />
+);
+
+export const ImageIcon = ({ className, ...props }: IconProps) => (
+  <MediaImage className={className} {...props} />
+);
+
+export const FileTextIcon = ({ className, ...props }: IconProps) => (
+  <Page className={className} {...props} />
 );
 
 // Direct re-exports for convenience (maintaining Iconoir naming)

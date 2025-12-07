@@ -1,5 +1,11 @@
 import { http, HttpResponse } from "msw";
 
+import {
+  mockDrives,
+  getMockItemsByDriveId,
+  getMockItemsByFolderId,
+} from "@/stories/ui/cloud/mockCloudData";
+
 import type * as Schemas from "../generated/v1betaApi/v1betaApiSchemas"; // Import schema types if needed
 
 // Define handlers here
@@ -147,6 +153,55 @@ export const handlers = [
       console.error("Error processing form data:", error);
       return new HttpResponse("Failed to process form data", { status: 500 });
     }
+  }),
+
+  // Mock GET /api/v1beta/integrations/sharepoint/all-drives
+  http.get("/api/v1beta/integrations/sharepoint/all-drives", () => {
+    const response: Schemas.AllDrivesResponse = {
+      drives: mockDrives,
+    };
+    return HttpResponse.json(response);
+  }),
+
+  // Mock GET /api/v1beta/integrations/sharepoint/drives/:driveId
+  http.get(
+    "/api/v1beta/integrations/sharepoint/drives/:driveId",
+    ({ params }) => {
+      const { driveId } = params;
+      const items = getMockItemsByDriveId(driveId as string);
+      const response: Schemas.DriveItemsResponse = {
+        items,
+      };
+      return HttpResponse.json(response);
+    },
+  ),
+
+  // Mock GET /api/v1beta/integrations/sharepoint/drives/:driveId/items/:itemId/children
+  http.get(
+    "/api/v1beta/integrations/sharepoint/drives/:driveId/items/:itemId/children",
+    ({ params }) => {
+      const { itemId } = params;
+      const items = getMockItemsByFolderId(itemId as string);
+      const response: Schemas.DriveItemsResponse = {
+        items,
+      };
+      return HttpResponse.json(response);
+    },
+  ),
+
+  // Mock POST /api/v1beta/me/files/link (Link cloud files)
+  http.post("/api/v1beta/me/files/link", async () => {
+    // Simulate successful file linking
+    const response: Schemas.FileUploadResponse = {
+      files: [
+        {
+          id: `linked-file-${Date.now()}`,
+          filename: "Linked Document.pdf",
+          download_url: `http://localhost/download/linked-file-${Date.now()}`,
+        },
+      ],
+    };
+    return HttpResponse.json(response);
   }),
 
   // Add handlers for other endpoints your tests will cover

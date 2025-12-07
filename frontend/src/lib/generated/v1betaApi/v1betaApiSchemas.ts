@@ -4,6 +4,16 @@
  * @version
  */
 /**
+ * Response for the all-drives endpoint
+ */
+export type AllDrivesResponse = {
+  /**
+   * List of drives accessible to the user
+   */
+  drives: Drive[];
+};
+
+/**
  * Request to archive an assistant
  */
 export type ArchiveAssistantRequest = Record<string, any>;
@@ -343,6 +353,86 @@ export type CreateChatResponse = {
   chat_id: string;
 };
 
+/**
+ * A drive accessible to the user (OneDrive, Sharepoint, etc.)
+ */
+export type Drive = {
+  /**
+   * The type of drive (e.g., "personal", "documentLibrary")
+   */
+  drive_type: string;
+  /**
+   * The unique ID of the drive
+   */
+  id: string;
+  /**
+   * The display name of the drive
+   */
+  name: string;
+  /**
+   * The owner of the drive, if available
+   */
+  owner_name?: string;
+};
+
+/**
+ * A drive item (file or folder)
+ */
+export type DriveItem = {
+  /**
+   * The unique ID of the item
+   */
+  id: string;
+  /**
+   * Whether this item is a folder
+   */
+  is_folder: boolean;
+  /**
+   * When the item was last modified
+   *
+   * @format date-time
+   */
+  last_modified?: string;
+  /**
+   * The MIME type (for files)
+   */
+  mime_type?: string;
+  /**
+   * The name of the item
+   */
+  name: string;
+  /**
+   * The size in bytes (for files)
+   *
+   * @format int64
+   */
+  size?: number;
+  /**
+   * The web URL to access this item
+   */
+  web_url?: string;
+};
+
+/**
+ * A drive item (file or folder)
+ */
+export type DriveItemResponse = DriveItem & {
+  /**
+   * The drive ID this item belongs to
+   */
+  drive_id: string;
+};
+
+/**
+ * Response for drive items endpoints
+ */
+export type DriveItemsResponse = {
+  /**
+   * List of items in the drive or folder
+   */
+  items: DriveItem[];
+};
+
 export type EditMessageRequest = {
   /**
    * The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
@@ -439,6 +529,24 @@ export type FrequentAssistantsResponse = {
    * The list of frequently used assistants
    */
   assistants: FrequentAssistantItem[];
+};
+
+/**
+ * Request to link an external file (SharePoint, Google Drive, etc.)
+ */
+export type LinkFileRequest = {
+  /**
+   * Optional chat ID to associate the file with. If not provided, creates standalone files.
+   */
+  chat_id?: null | undefined;
+  /**
+   * Provider-specific metadata (e.g., drive_id, item_id for SharePoint)
+   */
+  provider_metadata: SharepointProviderMetadata;
+  /**
+   * The source/provider type: "sharepoint" (future: "google_drive", etc.)
+   */
+  source: string;
 };
 
 export type Message = {
@@ -717,6 +825,20 @@ export type RegenerateMessageStreamingResponseMessage =
   | (MessageSubmitStreamingResponseToolCallUpdate & {
       message_type: "tool_call_update";
     });
+
+/**
+ * SharePoint-specific metadata for linking files
+ */
+export type SharepointProviderMetadata = {
+  /**
+   * The ID of the drive containing the file
+   */
+  drive_id: string;
+  /**
+   * The ID of the file item
+   */
+  item_id: string;
+};
 
 export type TokenUsageRequest = {
   /**

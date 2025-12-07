@@ -749,6 +749,474 @@ export const useGetFile = <TData = Schemas.FileUploadItem,>(
   });
 };
 
+export type AllDrivesError = Fetcher.ErrorWrapper<undefined>;
+
+export type AllDrivesVariables = V1betaApiContext["fetcherOptions"];
+
+/**
+ * This includes:
+ * - The user's personal OneDrive
+ * - Drives shared with the user
+ * - Recent items (as a pseudo-drive)
+ */
+export const fetchAllDrives = (
+  variables: AllDrivesVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AllDrivesResponse,
+    AllDrivesError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/integrations/sharepoint/all-drives",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+/**
+ * This includes:
+ * - The user's personal OneDrive
+ * - Drives shared with the user
+ * - Recent items (as a pseudo-drive)
+ */
+export function allDrivesQuery(variables: AllDrivesVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.AllDrivesResponse>;
+};
+
+export function allDrivesQuery(
+  variables: AllDrivesVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.AllDrivesResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function allDrivesQuery(
+  variables: AllDrivesVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/integrations/sharepoint/all-drives",
+      operationId: "allDrives",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchAllDrives(variables, signal),
+  };
+}
+
+/**
+ * This includes:
+ * - The user's personal OneDrive
+ * - Drives shared with the user
+ * - Recent items (as a pseudo-drive)
+ */
+export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse,>(
+  variables: AllDrivesVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.AllDrivesResponse,
+      AllDrivesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.AllDrivesResponse,
+    AllDrivesError,
+    TData
+  >({
+    ...allDrivesQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+/**
+ * This includes:
+ * - The user's personal OneDrive
+ * - Drives shared with the user
+ * - Recent items (as a pseudo-drive)
+ */
+export const useAllDrives = <TData = Schemas.AllDrivesResponse,>(
+  variables: AllDrivesVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.AllDrivesResponse,
+      AllDrivesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<Schemas.AllDrivesResponse, AllDrivesError, TData>({
+    ...allDrivesQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type GetDriveRootPathParams = {
+  /**
+   * The ID of the drive
+   */
+  driveId: string;
+};
+
+export type GetDriveRootError = Fetcher.ErrorWrapper<undefined>;
+
+export type GetDriveRootVariables = {
+  pathParams: GetDriveRootPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchGetDriveRoot = (
+  variables: GetDriveRootVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.DriveItemsResponse,
+    GetDriveRootError,
+    undefined,
+    {},
+    {},
+    GetDriveRootPathParams
+  >({
+    url: "/api/v1beta/integrations/sharepoint/drives/{driveId}",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function getDriveRootQuery(variables: GetDriveRootVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.DriveItemsResponse>;
+};
+
+export function getDriveRootQuery(
+  variables: GetDriveRootVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.DriveItemsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function getDriveRootQuery(
+  variables: GetDriveRootVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/integrations/sharepoint/drives/{driveId}",
+      operationId: "getDriveRoot",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchGetDriveRoot(variables, signal),
+  };
+}
+
+export const useSuspenseGetDriveRoot = <TData = Schemas.DriveItemsResponse,>(
+  variables: GetDriveRootVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DriveItemsResponse,
+      GetDriveRootError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.DriveItemsResponse,
+    GetDriveRootError,
+    TData
+  >({
+    ...getDriveRootQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGetDriveRoot = <TData = Schemas.DriveItemsResponse,>(
+  variables: GetDriveRootVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DriveItemsResponse,
+      GetDriveRootError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.DriveItemsResponse,
+    GetDriveRootError,
+    TData
+  >({
+    ...getDriveRootQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type GetDriveItemPathParams = {
+  /**
+   * The ID of the drive
+   */
+  driveId: string;
+  /**
+   * The ID of the item
+   */
+  itemId: string;
+};
+
+export type GetDriveItemError = Fetcher.ErrorWrapper<undefined>;
+
+export type GetDriveItemVariables = {
+  pathParams: GetDriveItemPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchGetDriveItem = (
+  variables: GetDriveItemVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.DriveItemResponse,
+    GetDriveItemError,
+    undefined,
+    {},
+    {},
+    GetDriveItemPathParams
+  >({
+    url: "/api/v1beta/integrations/sharepoint/drives/{driveId}/items/{itemId}",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function getDriveItemQuery(variables: GetDriveItemVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.DriveItemResponse>;
+};
+
+export function getDriveItemQuery(
+  variables: GetDriveItemVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.DriveItemResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function getDriveItemQuery(
+  variables: GetDriveItemVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/integrations/sharepoint/drives/{driveId}/items/{itemId}",
+      operationId: "getDriveItem",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchGetDriveItem(variables, signal),
+  };
+}
+
+export const useSuspenseGetDriveItem = <TData = Schemas.DriveItemResponse,>(
+  variables: GetDriveItemVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DriveItemResponse,
+      GetDriveItemError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.DriveItemResponse,
+    GetDriveItemError,
+    TData
+  >({
+    ...getDriveItemQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGetDriveItem = <TData = Schemas.DriveItemResponse,>(
+  variables: GetDriveItemVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DriveItemResponse,
+      GetDriveItemError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.DriveItemResponse,
+    GetDriveItemError,
+    TData
+  >({
+    ...getDriveItemQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type GetDriveItemChildrenPathParams = {
+  /**
+   * The ID of the drive
+   */
+  driveId: string;
+  /**
+   * The ID of the folder
+   */
+  itemId: string;
+};
+
+export type GetDriveItemChildrenError = Fetcher.ErrorWrapper<undefined>;
+
+export type GetDriveItemChildrenVariables = {
+  pathParams: GetDriveItemChildrenPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchGetDriveItemChildren = (
+  variables: GetDriveItemChildrenVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.DriveItemsResponse,
+    GetDriveItemChildrenError,
+    undefined,
+    {},
+    {},
+    GetDriveItemChildrenPathParams
+  >({
+    url: "/api/v1beta/integrations/sharepoint/drives/{driveId}/items/{itemId}/children",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function getDriveItemChildrenQuery(
+  variables: GetDriveItemChildrenVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.DriveItemsResponse>;
+};
+
+export function getDriveItemChildrenQuery(
+  variables: GetDriveItemChildrenVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.DriveItemsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function getDriveItemChildrenQuery(
+  variables: GetDriveItemChildrenVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/integrations/sharepoint/drives/{driveId}/items/{itemId}/children",
+      operationId: "getDriveItemChildren",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchGetDriveItemChildren(variables, signal),
+  };
+}
+
+export const useSuspenseGetDriveItemChildren = <
+  TData = Schemas.DriveItemsResponse,
+>(
+  variables: GetDriveItemChildrenVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DriveItemsResponse,
+      GetDriveItemChildrenError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.DriveItemsResponse,
+    GetDriveItemChildrenError,
+    TData
+  >({
+    ...getDriveItemChildrenQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGetDriveItemChildren = <TData = Schemas.DriveItemsResponse,>(
+  variables: GetDriveItemChildrenVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DriveItemsResponse,
+      GetDriveItemChildrenError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.DriveItemsResponse,
+    GetDriveItemChildrenError,
+    TData
+  >({
+    ...getDriveItemChildrenQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type BudgetStatusError = Fetcher.ErrorWrapper<undefined>;
 
 export type BudgetStatusVariables = V1betaApiContext["fetcherOptions"];
@@ -972,6 +1440,59 @@ export const useUploadFile = (
   >({
     mutationFn: (variables: UploadFileVariables) =>
       fetchUploadFile(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type LinkFileError = Fetcher.ErrorWrapper<undefined>;
+
+export type LinkFileVariables = {
+  body: Schemas.LinkFileRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * This endpoint creates a file upload record that references an external file,
+ * allowing it to be used in chat messages or attached to assistants.
+ * If chat_id is provided, the file is associated with that chat. If not provided,
+ * the file is created as a standalone upload.
+ */
+export const fetchLinkFile = (
+  variables: LinkFileVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.FileUploadResponse,
+    LinkFileError,
+    Schemas.LinkFileRequest,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/me/files/link", method: "post", ...variables, signal });
+
+/**
+ * This endpoint creates a file upload record that references an external file,
+ * allowing it to be used in chat messages or attached to assistants.
+ * If chat_id is provided, the file is associated with that chat. If not provided,
+ * the file is created as a standalone upload.
+ */
+export const useLinkFile = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.FileUploadResponse,
+      LinkFileError,
+      LinkFileVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.FileUploadResponse,
+    LinkFileError,
+    LinkFileVariables
+  >({
+    mutationFn: (variables: LinkFileVariables) =>
+      fetchLinkFile(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
@@ -1790,6 +2311,26 @@ export type QueryOperation =
       path: "/api/v1beta/files/{fileId}";
       operationId: "getFile";
       variables: GetFileVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/integrations/sharepoint/all-drives";
+      operationId: "allDrives";
+      variables: AllDrivesVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/integrations/sharepoint/drives/{driveId}";
+      operationId: "getDriveRoot";
+      variables: GetDriveRootVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/integrations/sharepoint/drives/{driveId}/items/{itemId}";
+      operationId: "getDriveItem";
+      variables: GetDriveItemVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/integrations/sharepoint/drives/{driveId}/items/{itemId}/children";
+      operationId: "getDriveItemChildren";
+      variables: GetDriveItemChildrenVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/budget";
