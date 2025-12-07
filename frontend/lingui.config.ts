@@ -80,6 +80,8 @@ function deduplicateOrigins(catalog: CatalogType): CatalogType {
           deduplicatedOrigins.push([filename]);
         }
       }
+      // Sort origins alphabetically to ensure deterministic output across environments
+      deduplicatedOrigins.sort((a, b) => a[0].localeCompare(b[0]));
       result[msgId] = { ...message, origin: deduplicatedOrigins };
     } else {
       result[msgId] = message;

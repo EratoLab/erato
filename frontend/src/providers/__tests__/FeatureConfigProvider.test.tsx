@@ -41,10 +41,12 @@ describe("FeatureConfigProvider", () => {
       themeConfigPath: null,
       themeLogoPath: null,
       themeLogoDarkPath: null,
+      themeAssistantAvatarPath: null,
       disableUpload: false,
       disableChatInputAutofocus: false,
       disableLogout: false,
       assistantsEnabled: false,
+      sharepointEnabled: false,
     });
   });
 
@@ -86,6 +88,9 @@ describe("FeatureConfigProvider", () => {
         assistants: {
           enabled: false,
         },
+        cloudProviders: {
+          availableProviders: [],
+        },
       });
     });
 
@@ -97,10 +102,12 @@ describe("FeatureConfigProvider", () => {
         themeConfigPath: null,
         themeLogoPath: null,
         themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
         disableUpload: true, // Disabled
         disableChatInputAutofocus: false,
         disableLogout: false,
         assistantsEnabled: false,
+        sharepointEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -120,10 +127,12 @@ describe("FeatureConfigProvider", () => {
         themeConfigPath: null,
         themeLogoPath: null,
         themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
         disableUpload: false,
         disableChatInputAutofocus: true, // Disabled
         disableLogout: false,
         assistantsEnabled: false,
+        sharepointEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -143,10 +152,12 @@ describe("FeatureConfigProvider", () => {
         themeConfigPath: null,
         themeLogoPath: null,
         themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
         disableUpload: false,
         disableChatInputAutofocus: false,
         disableLogout: true, // Disabled
         assistantsEnabled: false,
+        sharepointEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -166,10 +177,12 @@ describe("FeatureConfigProvider", () => {
         themeConfigPath: null,
         themeLogoPath: null,
         themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
         disableUpload: true,
         disableChatInputAutofocus: true,
         disableLogout: true,
         assistantsEnabled: false,
+        sharepointEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -215,10 +228,12 @@ describe("FeatureConfigProvider", () => {
         themeConfigPath: null,
         themeLogoPath: null,
         themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
         disableUpload: true,
         disableChatInputAutofocus: false,
         disableLogout: false,
         assistantsEnabled: false,
+        sharepointEnabled: false,
       });
 
       const { result } = renderHook(() => useUploadFeature(), {
