@@ -118,7 +118,11 @@ export const FileUploadWithTokenCheck: React.FC<
   });
 
   // Setup react-dropzone for disk file selection when cloud providers are available
-  const { open: openDiskFilePicker } = useDropzone({
+  const {
+    open: openDiskFilePicker,
+    getRootProps,
+    getInputProps,
+  } = useDropzone({
     onDrop: (acceptedFiles) => {
       if (acceptedFiles.length > 0) {
         void uploadFiles(acceptedFiles);
@@ -252,13 +256,23 @@ export const FileUploadWithTokenCheck: React.FC<
     <div className="relative">
       {/* File upload button - show selector if cloud providers available */}
       {hasCloudProviders ? (
-        <FileSourceSelector
-          availableProviders={availableProviders}
-          onSelectDisk={handleSelectDisk}
-          onSelectCloud={handleSelectCloud}
-          disabled={disabled || isProcessing}
-          className={className}
-        />
+        <>
+          {/* Hidden dropzone input for disk uploads */}
+          <div {...getRootProps({ className: "contents" })}>
+            <input
+              {...getInputProps()}
+              aria-label={t`Upload files from disk`}
+            />
+          </div>
+
+          <FileSourceSelector
+            availableProviders={availableProviders}
+            onSelectDisk={handleSelectDisk}
+            onSelectCloud={handleSelectCloud}
+            disabled={disabled || isProcessing}
+            className={className}
+          />
+        </>
       ) : (
         <FileUploadButton
           acceptedFileTypes={acceptedFileTypes}

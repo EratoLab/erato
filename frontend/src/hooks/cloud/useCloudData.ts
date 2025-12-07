@@ -97,13 +97,28 @@ export function useCloudData({
 
   // Combine items data with provider and drive_id fields
   const items = useMemo(() => {
-    const itemsData = rootData?.items ?? childrenData?.items ?? [];
+    // Use the appropriate data based on which query is enabled
+    let itemsData: DriveItem[] = [];
+
+    if (shouldFetchChildren && childrenData) {
+      itemsData = childrenData.items;
+    } else if (shouldFetchRoot && rootData) {
+      itemsData = rootData.items;
+    }
+
     return itemsData.map((item) => ({
       ...item,
       provider,
       drive_id: driveId ?? "",
     }));
-  }, [rootData, childrenData, provider, driveId]);
+  }, [
+    shouldFetchChildren,
+    childrenData,
+    shouldFetchRoot,
+    rootData,
+    provider,
+    driveId,
+  ]);
 
   // Combine loading states
   const isLoading = isDrivesLoading || isRootLoading || isChildrenLoading;
