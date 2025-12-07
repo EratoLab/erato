@@ -75,7 +75,7 @@ export const FileUploadWithTokenCheck: React.FC<
   onTokenLimitExceeded,
   acceptedFileTypes = [],
   multiple = false,
-  label = t`Upload Files`,
+  label = t({ id: "fileUpload.uploadFiles", message: "Upload Files" }),
   iconOnly = false,
   maxFiles = 5,
   className = "",
@@ -261,7 +261,10 @@ export const FileUploadWithTokenCheck: React.FC<
           <div {...getRootProps({ className: "contents" })}>
             <input
               {...getInputProps()}
-              aria-label={t`Upload files from disk`}
+              aria-label={t({
+                id: "fileUpload.disk.ariaLabel",
+                message: "Upload files from disk",
+              })}
             />
           </div>
 

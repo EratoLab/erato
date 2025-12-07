@@ -141,7 +141,10 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
         setError(
           err instanceof Error
             ? err.message
-            : t`Failed to select files. Please try again.`,
+            : t({
+                id: "cloudFilePicker.error.selectFiles",
+                message: "Failed to select files. Please try again.",
+              }),
         );
       } finally {
         setIsSubmitting(false);
@@ -194,7 +197,10 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
                   type="button"
                   onClick={handleGoBack}
                   className="theme-transition shrink-0 rounded p-1 hover:bg-theme-bg-hover"
-                  aria-label={t`Go back`}
+                  aria-label={t({
+                    id: "cloudFilePicker.navigation.goBack",
+                    message: "Go back",
+                  })}
                 >
                   <ArrowLeftIcon className="size-5" />
                 </button>
@@ -203,14 +209,20 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
                 id="cloud-picker-title"
                 className="truncate text-base font-semibold text-theme-fg-primary sm:text-lg"
               >
-                {t`Select files from cloud storage`}
+                {t({
+                  id: "cloudFilePicker.title",
+                  message: "Select files from cloud storage",
+                })}
               </h2>
             </div>
             <button
               type="button"
               onClick={handleCancel}
               className="theme-transition shrink-0 rounded p-1 hover:bg-theme-bg-hover"
-              aria-label={t`Close`}
+              aria-label={t({
+                id: "cloudFilePicker.close",
+                message: "Close",
+              })}
             >
               <CloseIcon className="size-5" />
             </button>
@@ -262,17 +274,33 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
               {selectedFiles.length > 0 ? (
                 multiple ? (
                   <>
-                    {selectedFiles.length} {t`of`} {maxFiles}{" "}
-                    {t`files selected`}
+                    {selectedFiles.length}{" "}
+                    {t({ id: "cloudFilePicker.selection.of", message: "of" })}{" "}
+                    {maxFiles}{" "}
+                    {t({
+                      id: "cloudFilePicker.selection.filesSelected",
+                      message: "files selected",
+                    })}
                   </>
                 ) : (
-                  t`1 file selected`
+                  t({
+                    id: "cloudFilePicker.selection.oneFile",
+                    message: "1 file selected",
+                  })
                 )
               ) : (
-                t`No files selected`
+                t({
+                  id: "cloudFilePicker.selection.none",
+                  message: "No files selected",
+                })
               )}
               {isMaxReached && (
-                <span className="ml-2 text-theme-warning-fg">{t`(Maximum reached)`}</span>
+                <span className="ml-2 text-theme-warning-fg">
+                  {t({
+                    id: "cloudFilePicker.selection.maxReached",
+                    message: "(Maximum reached)",
+                  })}
+                </span>
               )}
             </div>
             <div className="flex justify-center gap-2 sm:justify-end">
@@ -281,7 +309,7 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
                 onClick={handleCancel}
                 disabled={isSubmitting}
               >
-                {t`Cancel`}
+                {t({ id: "cloudFilePicker.actions.cancel", message: "Cancel" })}
               </Button>
               <Button
                 variant="primary"
@@ -289,10 +317,16 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
                 disabled={selectedFiles.length === 0 || isSubmitting}
               >
                 {isSubmitting
-                  ? t`Selecting...`
+                  ? t({
+                      id: "cloudFilePicker.actions.selecting",
+                      message: "Selecting...",
+                    })
                   : selectedFiles.length > 0
-                    ? `${t`Select`} (${selectedFiles.length})`
-                    : t`Select`}
+                    ? `${t({ id: "cloudFilePicker.actions.select", message: "Select" })} (${selectedFiles.length})`
+                    : t({
+                        id: "cloudFilePicker.actions.select",
+                        message: "Select",
+                      })}
               </Button>
             </div>
           </div>

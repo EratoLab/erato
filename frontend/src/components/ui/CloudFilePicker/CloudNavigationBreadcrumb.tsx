@@ -24,7 +24,10 @@ export const CloudNavigationBreadcrumb = memo<CloudNavigationBreadcrumbProps>(
         <div
           className={`flex items-center text-sm text-theme-fg-muted ${className}`}
         >
-          {t`Select a drive to browse files`}
+          {t({
+            id: "cloudNavigationBreadcrumb.selectDrive",
+            message: "Select a drive to browse files",
+          })}
         </div>
       );
     }
@@ -32,7 +35,10 @@ export const CloudNavigationBreadcrumb = memo<CloudNavigationBreadcrumbProps>(
     return (
       <nav
         className={`flex items-center gap-1 text-sm ${className}`}
-        aria-label={t`Breadcrumb navigation`}
+        aria-label={t({
+          id: "cloudNavigationBreadcrumb.ariaLabel",
+          message: "Breadcrumb navigation",
+        })}
       >
         {breadcrumbs.map((segment, index) => {
           const isLast = index === breadcrumbs.length - 1;
@@ -54,7 +60,10 @@ export const CloudNavigationBreadcrumb = memo<CloudNavigationBreadcrumbProps>(
                   type="button"
                   onClick={() => onNavigate(segment.id)}
                   className="theme-transition text-theme-fg-muted hover:text-theme-fg-primary hover:underline"
-                  aria-label={t`Navigate to parent`}
+                  aria-label={t({
+                    id: "cloudNavigationBreadcrumb.navigateToParent",
+                    message: "Navigate to parent",
+                  })}
                 >
                   {segment.name}
                 </button>

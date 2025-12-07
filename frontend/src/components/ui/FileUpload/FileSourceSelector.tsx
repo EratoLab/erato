@@ -44,7 +44,10 @@ export const FileSourceSelector = memo<FileSourceSelectorProps>(
     const menuItems: DropdownMenuItem[] = [
       // Always show "Upload from Computer" option
       {
-        label: t`Upload from Computer`,
+        label: t({
+          id: "fileSourceSelector.uploadFromComputer",
+          message: "Upload from Computer",
+        }),
         icon: <Computer className="size-4" />,
         onClick: onSelectDisk,
         disabled,
@@ -54,7 +57,10 @@ export const FileSourceSelector = memo<FileSourceSelectorProps>(
     // Add cloud provider options
     if (availableProviders.includes("sharepoint")) {
       menuItems.push({
-        label: t`Upload from OneDrive`,
+        label: t({
+          id: "fileSourceSelector.uploadFromOneDrive",
+          message: "Upload from OneDrive",
+        }),
         icon: <Cloud className="size-4" />,
         onClick: () => onSelectCloud("sharepoint"),
         disabled,
@@ -64,7 +70,10 @@ export const FileSourceSelector = memo<FileSourceSelectorProps>(
     // Future: Add Google Drive
     // if (availableProviders.includes("googledrive")) {
     //   menuItems.push({
-    //     label: t`Upload from Google Drive`,
+    //     label: t({
+    //       id: "fileSourceSelector.uploadFromGoogleDrive",
+    //       message: "Upload from Google Drive",
+    //     }),
     //     icon: <Cloud className="size-4" />,
     //     onClick: () => onSelectCloud("googledrive"),
     //     disabled,

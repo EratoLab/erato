@@ -23,19 +23,19 @@ msgid "about.title"
 msgstr "O nas"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatMessage.tsx
 #: src/pages/AssistantChatSpacePage.tsx
+#: src/components/ui/Chat/ChatMessage.tsx
 msgid "branding.assistant_name"
 msgstr "Asystent"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/pages/AssistantChatSpacePage.tsx
-#: src/pages/AssistantCreatePage.tsx
-#: src/pages/AssistantEditPage.tsx
-#: src/pages/AssistantsListPage.tsx
-#: src/pages/HomePage.tsx
 #: src/pages/NewChatPage.tsx
+#: src/pages/HomePage.tsx
+#: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantCreatePage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "branding.page_title_suffix"
 msgstr ""
 
@@ -60,9 +60,159 @@ msgid "branding.welcomeScreen.title"
 msgstr "Witamy w Asystencie AI"
 
 #. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.driveType.personal"
+msgstr "Osobisty"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.driveType.shared"
+msgstr "Udostępniony"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.empty.noDrives"
+msgstr "Brak dostępnych dysków"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.openDrive"
+msgstr "Otwórz dysk"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.owner"
+msgstr "Właściciel:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.actions.cancel"
+msgstr "Anuluj"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.actions.select"
+msgstr "Wybierz"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.actions.selecting"
+msgstr "Wybieranie..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.close"
+msgstr "Zamknij"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.error.selectFiles"
+msgstr "Nie udało się wybrać plików. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.navigation.goBack"
+msgstr "Wstecz"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selection.filesSelected"
+msgstr "plików wybranych"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selection.maxReached"
+msgstr "(Maksimum osiągnięte)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selection.none"
+msgstr "Nie wybrano plików"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selection.of"
+msgstr "z"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selection.oneFile"
+msgstr "1 plik wybrany"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.title"
+msgstr "Wybierz pliki z chmury"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.column.modified"
+msgstr "Zmodyfikowano"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.column.name"
+msgstr "Nazwa"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.column.size"
+msgstr "Rozmiar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.empty.noFiles"
+msgstr "Brak plików w tym folderze"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.openFolder"
+msgstr "Otwórz folder"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudItemBrowser.tsx
+msgid "cloudItemBrowser.select"
+msgstr "Wybierz"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudNavigationBreadcrumb.tsx
+msgid "cloudNavigationBreadcrumb.ariaLabel"
+msgstr "Nawigacja okruszków"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudNavigationBreadcrumb.tsx
+msgid "cloudNavigationBreadcrumb.navigateToParent"
+msgstr "Przejdź do folderu nadrzędnego"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudNavigationBreadcrumb.tsx
+msgid "cloudNavigationBreadcrumb.selectDrive"
+msgstr "Wybierz dysk, aby przeglądać pliki"
+
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "error.404.title"
 msgstr "404 - Strona nie znaleziona"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/FileSourceSelector.tsx
+msgid "fileSourceSelector.uploadFromComputer"
+msgstr "Prześlij z komputera"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/FileSourceSelector.tsx
+msgid "fileSourceSelector.uploadFromOneDrive"
+msgstr "Prześlij z OneDrive"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
+msgid "fileUpload.disk.ariaLabel"
+msgstr "Prześlij pliki z komputera"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
+msgid "fileUpload.uploadFiles"
+msgstr "Prześlij pliki"
 
 #. js-lingui-explicit-id
 #: src/pages/HomePage.tsx
@@ -162,8 +312,8 @@ msgstr ""
 msgid "Are you sure you want to archive this assistant?"
 msgstr ""
 
-#: src/components/ui/Controls/Button.tsx
 #: src/components/ui/Controls/DropdownMenu.tsx
+#: src/components/ui/Controls/Button.tsx
 msgid "Are you sure you want to proceed?"
 msgstr "Czy na pewno chcesz kontynuować?"
 
@@ -183,8 +333,8 @@ msgstr ""
 msgid "Assistant updated successfully!"
 msgstr ""
 
-#: src/components/ui/Chat/FrequentAssistantsList.tsx
 #: src/pages/AssistantsListPage.tsx
+#: src/components/ui/Chat/FrequentAssistantsList.tsx
 msgid "Assistants"
 msgstr ""
 
@@ -208,9 +358,9 @@ msgstr "Język przeglądarki:"
 msgid "Budget Limit Reached"
 msgstr "Osiągnięto limit budżetowy"
 
-#: src/components/ui/Assistant/AssistantForm.tsx
-#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Modal/ConfirmationDialog.tsx
+#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Cancel"
 msgstr "Anuluj"
 
@@ -274,8 +424,8 @@ msgstr "Potwierdź"
 msgid "Confirm action"
 msgstr "Potwierdź akcję"
 
-#: src/components/ui/Controls/Button.tsx
 #: src/components/ui/Controls/DropdownMenu.tsx
+#: src/components/ui/Controls/Button.tsx
 msgid "Confirm Action"
 msgstr "Potwierdź akcję"
 
@@ -295,9 +445,9 @@ msgstr "Kopiuj wiadomość"
 msgid "Create and manage custom assistants with specific instructions and capabilities"
 msgstr ""
 
-#: src/components/ui/Assistant/AssistantForm.tsx
-#: src/pages/AssistantCreatePage.tsx
 #: src/pages/AssistantsListPage.tsx
+#: src/pages/AssistantCreatePage.tsx
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Create Assistant"
 msgstr ""
 
@@ -313,8 +463,8 @@ msgstr ""
 msgid "Dark mode"
 msgstr "Tryb ciemny"
 
-#: src/components/ui/Assistant/AssistantForm.tsx
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Default Files"
 msgstr ""
 
@@ -426,8 +576,8 @@ msgstr "nie udało się"
 msgid "Failed to create assistant. Please try again."
 msgstr ""
 
-#: src/pages/AssistantChatSpacePage.tsx
 #: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
 msgid "Failed to load assistant. Please try again."
 msgstr ""
 
@@ -487,8 +637,8 @@ msgstr "Załaduj starsze wiadomości"
 msgid "Loading"
 msgstr "Ładowanie"
 
-#: src/pages/AssistantChatSpacePage.tsx
 #: src/pages/AssistantEditPage.tsx
+#: src/pages/AssistantChatSpacePage.tsx
 msgid "Loading assistant..."
 msgstr ""
 
@@ -500,9 +650,9 @@ msgstr ""
 msgid "Loading file..."
 msgstr "Ładowanie pliku..."
 
-#: src/components/ui/Chat/ModelSelector.tsx
-#: src/components/ui/Feedback/SpinnerIcon.tsx
 #: src/components/ui/Message/LoadMoreButton.tsx
+#: src/components/ui/Feedback/SpinnerIcon.tsx
+#: src/components/ui/Chat/ModelSelector.tsx
 msgid "Loading..."
 msgstr "Ładowanie..."
 
@@ -550,13 +700,13 @@ msgstr ""
 msgid "Name must be less than 100 characters"
 msgstr ""
 
-#: src/components/ui/Assistant/AssistantsPageStructure.tsx
-#: src/components/ui/Chat/Chat.tsx
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/components/ui/Chat/ChatHistorySidebar.tsx
-#: src/components/ui/Search/SearchPageStructure.tsx
-#: src/pages/AssistantsListPage.tsx
 #: src/pages/SearchPage.tsx
+#: src/pages/AssistantsListPage.tsx
+#: src/components/ui/Search/SearchPageStructure.tsx
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
+#: src/components/ui/Chat/Chat.tsx
+#: src/components/ui/Assistant/AssistantsPageStructure.tsx
 msgid "New Chat"
 msgstr "Nowy czat"
 
@@ -624,9 +774,9 @@ msgstr "Podgląd:"
 msgid "Recent Chats"
 msgstr "Ostatnie czaty"
 
-#: src/components/ui/Chat/ChatHistoryList.tsx
-#: src/components/ui/FileUpload/FilePreviewBase.tsx
 #: src/components/ui/FileUpload/FilePreviewButton.tsx
+#: src/components/ui/FileUpload/FilePreviewBase.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "Remove"
 msgstr "Usuń"
 
@@ -742,8 +892,8 @@ msgstr "udane"
 msgid "Supported Locales:"
 msgstr "Obsługiwane języki:"
 
-#: src/components/ui/Assistant/AssistantForm.tsx
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "System Prompt"
 msgstr ""
 
@@ -827,8 +977,8 @@ msgstr "Spróbuj innych słów kluczowych lub sprawdź pisownię"
 msgid "Type a message..."
 msgstr "Napisz wiadomość..."
 
-#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/pages/AssistantChatSpacePage.tsx
+#: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Untitled Chat"
 msgstr ""
 
@@ -841,7 +991,6 @@ msgid "Updated"
 msgstr ""
 
 #: src/components/ui/FileUpload/FileUpload.tsx
-#: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
 msgid "Upload Files"
 msgstr "Prześlij pliki"
 

@@ -103,7 +103,10 @@ const ItemRow = memo<ItemRowProps>(
             onChange={handleCheckboxChange}
             disabled={isDisabled}
             className="size-4 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
-            aria-label={t`Select`}
+            aria-label={t({
+              id: "cloudItemBrowser.select",
+              message: "Select",
+            })}
           />
         )}
 
@@ -115,7 +118,10 @@ const ItemRow = memo<ItemRowProps>(
             onChange={handleCheckboxChange}
             disabled={isDisabled}
             className="size-4 border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
-            aria-label={t`Select`}
+            aria-label={t({
+              id: "cloudItemBrowser.select",
+              message: "Select",
+            })}
           />
         )}
 
@@ -140,7 +146,11 @@ const ItemRow = memo<ItemRowProps>(
               ? "font-medium text-theme-fg-primary hover:underline"
               : "text-theme-fg-primary"
           } ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"} focus:underline focus:outline-none`}
-          aria-label={item.is_folder ? t`Open folder` : item.name}
+          aria-label={
+            item.is_folder
+              ? t({ id: "cloudItemBrowser.openFolder", message: "Open folder" })
+              : item.name
+          }
         >
           {item.name}
         </button>
@@ -204,7 +214,10 @@ export const CloudItemBrowser = memo<CloudItemBrowserProps>(
         >
           <FolderIcon className="mb-3 size-12 text-theme-fg-muted" />
           <p className="text-sm text-theme-fg-muted">
-            {t`No files in this folder`}
+            {t({
+              id: "cloudItemBrowser.empty.noFiles",
+              message: "No files in this folder",
+            })}
           </p>
         </div>
       );
@@ -231,9 +244,15 @@ export const CloudItemBrowser = memo<CloudItemBrowserProps>(
           {multiple && <div className="size-4" />}
           {!multiple && <div className="size-4" />}
           <div className="size-5" />
-          <div className="flex-1">{t`Name`}</div>
-          <div className="hidden w-20 text-right sm:block">{t`Size`}</div>
-          <div className="hidden w-24 text-right md:block">{t`Modified`}</div>
+          <div className="flex-1">
+            {t({ id: "cloudItemBrowser.column.name", message: "Name" })}
+          </div>
+          <div className="hidden w-20 text-right sm:block">
+            {t({ id: "cloudItemBrowser.column.size", message: "Size" })}
+          </div>
+          <div className="hidden w-24 text-right md:block">
+            {t({ id: "cloudItemBrowser.column.modified", message: "Modified" })}
+          </div>
         </div>
 
         {/* Items */}

@@ -27,11 +27,14 @@ function getDriveBadgeColor(_driveType: string): string {
 function getDriveTypeLabel(driveType: string): string {
   switch (driveType) {
     case "personal":
-      return t`Personal`;
+      return t({
+        id: "cloudDriveList.driveType.personal",
+        message: "Personal",
+      });
     case "documentLibrary":
-      return t`Shared`;
+      return t({ id: "cloudDriveList.driveType.shared", message: "Shared" });
     case "shared":
-      return t`Shared`;
+      return t({ id: "cloudDriveList.driveType.shared", message: "Shared" });
     default:
       return driveType;
   }
@@ -71,7 +74,10 @@ export const CloudDriveList = memo<CloudDriveListProps>(
         >
           <FolderIcon className="mb-3 size-12 text-theme-fg-muted" />
           <p className="text-sm text-theme-fg-muted">
-            {t`No drives available`}
+            {t({
+              id: "cloudDriveList.empty.noDrives",
+              message: "No drives available",
+            })}
           </p>
         </div>
       );
@@ -91,7 +97,10 @@ export const CloudDriveList = memo<CloudDriveListProps>(
               }
             }}
             className="theme-transition focus-ring rounded-lg border border-theme-border p-4 text-left hover:bg-theme-bg-hover"
-            aria-label={t`Open drive`}
+            aria-label={t({
+              id: "cloudDriveList.openDrive",
+              message: "Open drive",
+            })}
           >
             <div className="flex items-start gap-3">
               <div className="flex size-10 shrink-0 items-center justify-center rounded bg-theme-bg-secondary">
@@ -110,7 +119,8 @@ export const CloudDriveList = memo<CloudDriveListProps>(
                 </div>
                 {drive.owner_name && (
                   <p className="truncate text-sm text-theme-fg-muted">
-                    {t`Owner:`} {drive.owner_name}
+                    {t({ id: "cloudDriveList.owner", message: "Owner:" })}{" "}
+                    {drive.owner_name}
                   </p>
                 )}
               </div>
