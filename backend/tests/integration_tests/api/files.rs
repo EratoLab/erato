@@ -421,3 +421,120 @@ async fn test_create_chat_file_upload_message_flow(pool: Pool<Postgres>) {
         "Should have user and assistant messages"
     );
 }
+
+/// Test file upload with SharePoint integration enabled.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-file-storage`
+/// - `sharepoint-integration`
+///
+/// # Test Behavior
+/// Verifies that file uploads work correctly when SharePoint integration is enabled.
+/// This tests that the default file storage provider can still be determined correctly
+/// even when the SharePoint file storage provider is registered in the background.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_file_upload_with_sharepoint_enabled(pool: Pool<Postgres>) {
+    // Set up the test environment with SharePoint integration enabled
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = crate::test_app_state_with_sharepoint(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // First, create a chat by sending a message
+    let message_request = json!({
+        "previous_message_id": null,
+        "user_message": "Test message to create a chat for file upload"
+    });
+
+    // Send the message to create a chat
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+
+    // Verify the response status is OK
+    response.assert_status_ok();
+
+    // Parse the response to get the chat ID
+    let response_text = response.text();
+    let lines: Vec<&str> = response_text.lines().collect();
+
+    // Find the chat_created event and extract the chat ID
+    let mut chat_id = String::new();
+    for i in 0..lines.len() - 1 {
+        if lines[i] == "event: chat_created" {
+            // The data is on the next line, prefixed with "data: "
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse chat_created data");
+
+                chat_id = data_json["chat_id"]
+                    .as_str()
+                    .expect("Expected chat_id to be a string")
+                    .to_string();
+
+                break;
+            }
+        }
+    }
+
+    assert!(
+        !chat_id.is_empty(),
+        "Failed to extract chat_id from response"
+    );
+
+    // Create a test file for upload
+    let file_content = json!({
+        "name": "test_with_sharepoint",
+        "value": 789
+    })
+    .to_string();
+
+    let file_bytes = file_content.into_bytes();
+
+    // Create a multipart form with the file
+    let multipart_form = MultipartForm::new().add_part(
+        "file",
+        Part::bytes(file_bytes)
+            .file_name("test_sharepoint.json")
+            .mime_type("application/json"),
+    );
+
+    // Make the request with the chat_id as a query parameter
+    let response = server
+        .post(&format!("/api/v1beta/me/files?chat_id={}", chat_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(multipart_form)
+        .await;
+
+    // Verify the response - this should succeed even with SharePoint integration enabled
+    response.assert_status_ok();
+    let response_json: Value = response.json();
+
+    // Check that we got a response with one file
+    let files = response_json["files"].as_array().unwrap();
+    assert_eq!(files.len(), 1);
+
+    // Check that the file has an id and filename
+    let file = &files[0];
+    assert!(file["id"].as_str().is_some());
+    assert_eq!(file["filename"].as_str().unwrap(), "test_sharepoint.json");
+
+    // Check that the file has a download URL
+    let download_url = file["download_url"].as_str().unwrap();
+    assert!(!download_url.is_empty(), "Download URL should not be empty");
+    assert!(
+        download_url.starts_with("http"),
+        "Download URL should be a valid URL"
+    );
+}

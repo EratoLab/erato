@@ -261,22 +261,42 @@ impl AppState {
     pub fn default_file_storage_provider(&self) -> &FileStorage {
         if let Some(provider_id) = &self.default_file_storage_provider {
             self.file_storage_providers.get(provider_id).unwrap()
-        } else if self.file_storage_providers.len() == 1 {
-            self.file_storage_providers.values().next().unwrap()
         } else {
-            // Should already be verified during construction/config validation
-            unreachable!("No default file storage provider configured");
+            // Filter out the SharePoint provider as it's an integration-based provider
+            // that shouldn't be considered for default file storage
+            let non_integration_providers: Vec<_> = self
+                .file_storage_providers
+                .iter()
+                .filter(|(id, _)| id.as_str() != SHAREPOINT_PROVIDER_ID)
+                .collect();
+
+            if non_integration_providers.len() == 1 {
+                non_integration_providers[0].1
+            } else {
+                // Should already be verified during construction/config validation
+                unreachable!("No default file storage provider configured");
+            }
         }
     }
 
     pub fn default_file_storage_provider_id(&self) -> String {
         if let Some(provider_id) = &self.default_file_storage_provider {
             provider_id.clone()
-        } else if self.file_storage_providers.len() == 1 {
-            self.file_storage_providers.keys().next().unwrap().clone()
         } else {
-            // Should already be verified during construction/config validation
-            unreachable!("No default file storage provider configured");
+            // Filter out the SharePoint provider as it's an integration-based provider
+            // that shouldn't be considered for default file storage
+            let non_integration_providers: Vec<_> = self
+                .file_storage_providers
+                .keys()
+                .filter(|id| id.as_str() != SHAREPOINT_PROVIDER_ID)
+                .collect();
+
+            if non_integration_providers.len() == 1 {
+                non_integration_providers[0].clone()
+            } else {
+                // Should already be verified during construction/config validation
+                unreachable!("No default file storage provider configured");
+            }
         }
     }
 
