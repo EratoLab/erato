@@ -6,12 +6,11 @@ import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import {
   FileAttachmentsPreview,
-  FileUploadButton,
+  AssistantFileUploadSelector,
 } from "@/components/ui/FileUpload";
 import { FormField } from "@/components/ui/Input/FormField";
 import { Input } from "@/components/ui/Input/Input";
 import { Textarea } from "@/components/ui/Input/Textarea";
-import { useStandaloneFileUpload } from "@/hooks/files";
 
 import type {
   ChatModel,
@@ -114,14 +113,6 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const [touched, setTouched] = useState<
     Partial<Record<keyof AssistantFormData, boolean>>
   >({});
-
-  // File upload hook for standalone file uploads (without chat association)
-  const {
-    uploadFiles,
-    isUploading: isUploadingFiles,
-    error: uploadError,
-    clearError: clearUploadError,
-  } = useStandaloneFileUpload();
 
   // Validation
   const validateField = useCallback(
@@ -348,18 +339,13 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
         {/* File uploads */}
         <FormField
           label={t`Default Files`}
-          helpText={t`Optional: Upload files that will be available to this assistant in every chat`}
+          helpText={t`Optional: Upload files from your computer or OneDrive that will be available to this assistant in every chat`}
           htmlFor="assistant-files"
         >
           <div className="space-y-3">
-            {uploadError && (
-              <Alert type="error" dismissible onDismiss={clearUploadError}>
-                {uploadError.message}
-              </Alert>
-            )}
-            <FileUploadButton
+            <AssistantFileUploadSelector
               onFilesUploaded={handleFilesUploaded}
-              disabled={isSubmitting || isUploadingFiles}
+              disabled={isSubmitting}
               acceptedFileTypes={[
                 "pdf",
                 "document",
@@ -367,9 +353,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
                 "spreadsheet",
                 "image",
               ]}
-              performFileUpload={uploadFiles}
-              isUploading={isUploadingFiles}
-              uploadError={uploadError}
+              maxFiles={5}
             />
             {formData.files.length > 0 && (
               <FileAttachmentsPreview
