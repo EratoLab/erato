@@ -1,3 +1,4 @@
+use crate::db::entity::prelude::*;
 use crate::db::entity_ext::{chats, messages};
 use crate::models::chat::{
     ChatCreationStatus, get_chat_by_message_id, get_or_create_chat,
@@ -35,6 +36,7 @@ use genai::chat::{
     ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatRole, ChatStreamEvent,
     MessageContent, ReasoningEffort, StreamChunk, StreamEnd,
 };
+use sea_orm::EntityTrait;
 use sea_orm::JsonValue;
 use sea_orm::prelude::Uuid;
 use serde::Serialize;
@@ -628,6 +630,173 @@ async fn bg_stream_save_user_message(
     Ok(saved_user_message)
 }
 
+/// Resolve TextFilePointer content parts in generation input messages by extracting file contents JIT.
+/// This prevents storing duplicate file contents in the database.
+async fn resolve_file_pointers_in_generation_input(
+    app_state: &AppState,
+    generation_input_messages: GenerationInputMessages,
+    access_token: Option<&str>,
+) -> Result<GenerationInputMessages, Report> {
+    use crate::services::file_storage::SharepointContext;
+
+    // Build the context for Sharepoint (will be ignored by other providers)
+    let sharepoint_ctx = access_token.map(|token| SharepointContext {
+        access_token: token,
+    });
+
+    let mut resolved_messages = Vec::new();
+
+    for input_message in generation_input_messages.messages {
+        let resolved_content = match input_message.content {
+            ContentPart::TextFilePointer(ref file_pointer) => {
+                // Extract text from the file pointer JIT
+                let file_upload_id = file_pointer.file_upload_id;
+
+                // Get the file upload record - use entity directly since we're reading from generation_input_messages
+                // which already went through authorization when it was created
+                let file_upload_result = FileUploads::find_by_id(file_upload_id)
+                    .one(&app_state.db)
+                    .await;
+
+                match file_upload_result {
+                    Ok(Some(file)) => {
+                        // Get the file storage provider
+                        let file_storage = app_state
+                            .file_storage_providers
+                            .get(&file.file_storage_provider_id);
+
+                        if let Some(file_storage) = file_storage {
+                            // Read the file content using the unified interface
+                            let file_bytes_result = file_storage
+                                .read_file_to_bytes_with_context(
+                                    &file.file_storage_path,
+                                    sharepoint_ctx.as_ref(),
+                                )
+                                .await;
+
+                            match file_bytes_result {
+                                Ok(file_bytes) => {
+                                    // Use parser_core to extract text from the file
+                                    let file_bytes_for_parsing = file_bytes.clone();
+                                    let parse_result = tokio::task::spawn_blocking(move || {
+                                        parser_core::parse(&file_bytes_for_parsing).map(
+                                            |text_with_possible_escapes| {
+                                                remove_null_characters(&text_with_possible_escapes)
+                                            },
+                                        )
+                                    })
+                                    .await;
+
+                                    match parse_result {
+                                        Ok(Ok(text)) => {
+                                            tracing::debug!(
+                                                "Successfully extracted text from file pointer {}: {} (text length: {})",
+                                                file.filename,
+                                                file_upload_id,
+                                                text.len()
+                                            );
+
+                                            // Format the text similar to how it was done before
+                                            let mut content = String::new();
+                                            content.push_str(&format!("File: {}\n", file.filename));
+                                            content.push_str("File contents\n");
+                                            content.push_str("---\n");
+                                            content.push_str(&text);
+                                            content.push_str("\n---");
+
+                                            ContentPart::Text(ContentPartText { text: content })
+                                        }
+                                        Ok(Err(err)) => {
+                                            tracing::warn!(
+                                                "Failed to parse file {}: {} - Error: {}, using placeholder text",
+                                                file.filename,
+                                                file_upload_id,
+                                                err
+                                            );
+                                            ContentPart::Text(ContentPartText {
+                                                text: format!(
+                                                    "[Failed to parse file: {}]",
+                                                    file_upload_id
+                                                ),
+                                            })
+                                        }
+                                        Err(join_err) => {
+                                            tracing::error!(
+                                                "Blocking task panicked while parsing file {}: {} - Error: {}, using placeholder text",
+                                                file.filename,
+                                                file_upload_id,
+                                                join_err
+                                            );
+                                            ContentPart::Text(ContentPartText {
+                                                text: format!(
+                                                    "[Error parsing file: {}]",
+                                                    file_upload_id
+                                                ),
+                                            })
+                                        }
+                                    }
+                                }
+                                Err(err) => {
+                                    tracing::warn!(
+                                        "Failed to read file {} from storage: {}, using placeholder text",
+                                        file_upload_id,
+                                        err
+                                    );
+                                    ContentPart::Text(ContentPartText {
+                                        text: format!("[Failed to read file: {}]", file_upload_id),
+                                    })
+                                }
+                            }
+                        } else {
+                            tracing::warn!(
+                                "File storage provider {} not found for file {}, using placeholder text",
+                                file.file_storage_provider_id,
+                                file_upload_id
+                            );
+                            ContentPart::Text(ContentPartText {
+                                text: format!(
+                                    "[File storage provider not found for file: {}]",
+                                    file_upload_id
+                                ),
+                            })
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::warn!(
+                            "File upload {} referenced in TextFilePointer not found, using placeholder text",
+                            file_upload_id
+                        );
+                        ContentPart::Text(ContentPartText {
+                            text: format!("[File not found: {}]", file_upload_id),
+                        })
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            "Database error fetching file upload {}: {}, using placeholder text",
+                            file_upload_id,
+                            err
+                        );
+                        ContentPart::Text(ContentPartText {
+                            text: format!("[Error fetching file: {}]", file_upload_id),
+                        })
+                    }
+                }
+            }
+            // Pass through other content parts unchanged
+            other => other,
+        };
+
+        resolved_messages.push(crate::models::message::InputMessage {
+            role: input_message.role,
+            content: resolved_content,
+        });
+    }
+
+    Ok(GenerationInputMessages {
+        messages: resolved_messages,
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn prepare_chat_request(
     app_state: &AppState,
@@ -698,7 +867,18 @@ async fn prepare_chat_request(
         new_input_files,
     )
     .await?;
-    let mut chat_request = generation_input_messages.clone().into_chat_request();
+
+    // Resolve TextFilePointer to Text by extracting file contents JIT
+    let resolved_generation_input_messages = resolve_file_pointers_in_generation_input(
+        app_state,
+        generation_input_messages.clone(),
+        access_token,
+    )
+    .await?;
+
+    let mut chat_request = resolved_generation_input_messages
+        .clone()
+        .into_chat_request();
     let chat_options = ChatOptions::default()
         .with_capture_content(true)
         .with_capture_tool_calls(true)
@@ -716,6 +896,8 @@ async fn prepare_chat_request(
         tracing::trace!("Not adding empty list of tools, as that may lead to hallucinated tools");
     }
 
+    // Return the unresolved version for saving to DB (to avoid duplicating file contents)
+    // The resolved version is already used in chat_request
     Ok((chat_request, chat_options, generation_input_messages))
 }
 

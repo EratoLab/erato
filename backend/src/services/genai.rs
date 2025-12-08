@@ -17,6 +17,14 @@ impl From<ContentPart> for GenAiMessageContent {
                         .expect("Failed to serialize tool output"),
                 }])
             }
+            ContentPart::TextFilePointer(_) => {
+                // This should never happen after resolve_file_pointers_in_generation_input
+                // Log error and return empty text
+                tracing::error!(
+                    "TextFilePointer found during LLM conversion - should have been resolved"
+                );
+                GenAiMessageContent::Text(String::new())
+            }
         }
     }
 }
