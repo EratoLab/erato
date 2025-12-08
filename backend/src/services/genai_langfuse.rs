@@ -125,6 +125,12 @@ fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<JsonVa
                     "progress_message": tool_use.progress_message
                 }));
             }
+            ContentPart::TextFilePointer(file_pointer) => {
+                output_parts.push(json!({
+                    "type": "text_file_pointer",
+                    "file_upload_id": file_pointer.file_upload_id.to_string()
+                }));
+            }
         }
     }
 

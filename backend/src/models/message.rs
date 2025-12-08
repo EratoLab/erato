@@ -83,6 +83,7 @@ pub struct ToolUse {
 pub enum ContentPart {
     Text(ContentPartText),
     ToolUse(ToolUse),
+    TextFilePointer(ContentPartTextFilePointer),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -100,6 +101,11 @@ impl From<String> for ContentPartText {
     fn from(text: String) -> Self {
         ContentPartText { text }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartTextFilePointer {
+    pub file_upload_id: Uuid,
 }
 
 /// Statistics for a list of messages
@@ -158,6 +164,7 @@ impl MessageSchema {
             .filter_map(|part| match part {
                 ContentPart::Text(text) => Some(text.text.as_str()),
                 ContentPart::ToolUse(_) => None,
+                ContentPart::TextFilePointer(_) => None,
             })
             .collect::<Vec<&str>>()
             .join(" ")
@@ -521,6 +528,7 @@ impl InputMessage {
         match &self.content {
             ContentPart::Text(content) => content.text.to_string(),
             ContentPart::ToolUse(_) => String::new(),
+            ContentPart::TextFilePointer(_) => String::new(),
         }
     }
 }
@@ -622,18 +630,14 @@ pub async fn get_generation_input_messages_by_previous_message_id(
         }
     }
 
-    // Now add the new generation files to the input messages
+    // Now add the new generation files to the input messages as file pointers
+    // The actual text extraction will happen JIT when preparing for LLM generation
     for file in new_generation_files {
-        let mut content = String::new();
-        content.push_str(&format!("File: {}\n", file.filename));
-        content.push_str("File contents\n");
-        content.push_str("---\n");
-        content.push_str(&file.contents_as_text);
-        content.push_str("\n---");
-
         input_messages.push(InputMessage {
             role: MessageRole::User,
-            content: ContentPart::Text(ContentPartText { text: content }),
+            content: ContentPart::TextFilePointer(ContentPartTextFilePointer {
+                file_upload_id: file.id,
+            }),
         });
     }
 

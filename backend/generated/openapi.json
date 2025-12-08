@@ -1850,6 +1850,27 @@
                 }
               }
             ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContentPartTextFilePointer"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "text_file_pointer"
+                    ]
+                  }
+                }
+              }
+            ]
           }
         ]
       },
@@ -1861,6 +1882,18 @@
         "properties": {
           "text": {
             "type": "string"
+          }
+        }
+      },
+      "ContentPartTextFilePointer": {
+        "type": "object",
+        "required": [
+          "file_upload_id"
+        ],
+        "properties": {
+          "file_upload_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
