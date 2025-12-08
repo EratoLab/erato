@@ -214,12 +214,26 @@ export function ChatProvider({
               msg.id.includes("temp-"))); // Streaming completed but placeholder
 
         if (isStreamingMessage) {
+          // Determine loading state based on streaming status
+          // "thinking" - optimistic placeholder before backend confirms (isStreaming=false, status="sending", temp ID)
+          // "typing" - backend confirmed and actively streaming (isStreaming=true)
+          // "done" - streaming completed, waiting for refetch
+          const isOptimisticPlaceholder =
+            !isStreaming &&
+            msg.status === "sending" &&
+            msg.id.startsWith("temp-assistant-");
+          const loadingState = isOptimisticPlaceholder
+            ? "thinking"
+            : isStreaming
+              ? "typing"
+              : "done";
+
           acc[id] = {
             ...msg,
             sender: msg.role,
             authorId: "assistant_id",
             loading: {
-              state: isStreaming ? "typing" : "done", // Keep loading state for auto-scroll
+              state: loadingState,
             },
           };
         } else {

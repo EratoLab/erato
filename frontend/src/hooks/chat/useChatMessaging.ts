@@ -305,10 +305,10 @@ export function useChatMessaging(
       // Only set isFinalizing to false if this was called from message completion
       if (logContext.includes("completed")) {
         logger.log(
-          `[DEBUG_STREAMING] ${logContext}: Setting isFinalizing to false - frontend fully ready`,
+          `[DEBUG_STREAMING] ${logContext}: Setting isFinalizing to false and resetting streaming state - frontend fully ready`,
         );
-        const { setStreaming } = useMessagingStore.getState();
-        setStreaming({ isFinalizing: false });
+        const { resetStreaming } = useMessagingStore.getState();
+        resetStreaming(); // Reset all streaming state including currentMessageId and createdAt
 
         // Invalidate budget query to refresh usage/consumption data
         // TanStack Query will handle deduplication and caching automatically
@@ -539,7 +539,7 @@ export function useChatMessaging(
       id: streaming.currentMessageId,
       content: streaming.content || "", // Ensure content is at least an empty string
       role: "assistant",
-      createdAt: new Date().toISOString(), // This will change, but it's for a temp display
+      createdAt: streaming.createdAt ?? new Date().toISOString(), // Use stored timestamp for consistent ordering
       status: streaming.isStreaming ? "sending" : "complete", // Update status when streaming completes
     };
     return finalMessagesRecord;
@@ -625,6 +625,12 @@ export function useChatMessaging(
             void handleRefetchAndClear({
               invalidate: true,
               logContext: "Assistant message completed",
+            }).then(() => {
+              // Reset submission flag after refetch completes
+              isSubmittingRef.current = false;
+              logger.log(
+                "[DEBUG_STREAMING] assistant_message_completed: isSubmittingRef.current set to false after refetch.",
+              );
             });
             break;
 
