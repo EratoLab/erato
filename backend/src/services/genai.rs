@@ -5,6 +5,7 @@ use genai::chat::ChatRole as GenAiChatRole;
 use genai::chat::MessageContent as GenAiMessageContent;
 use genai::chat::{ChatMessage, ToolResponse};
 use serde_json::{Value as JsonValue, json};
+use std::sync::Arc;
 
 impl From<ContentPart> for GenAiMessageContent {
     fn from(content: ContentPart) -> Self {
@@ -24,6 +25,22 @@ impl From<ContentPart> for GenAiMessageContent {
                     "TextFilePointer found during LLM conversion - should have been resolved"
                 );
                 GenAiMessageContent::Text(String::new())
+            }
+            ContentPart::ImageFilePointer(_) => {
+                // This should never happen after resolve_file_pointers_in_generation_input
+                // Log error and return empty text
+                tracing::error!(
+                    "ImageFilePointer found during LLM conversion - should have been resolved"
+                );
+                GenAiMessageContent::Text(String::new())
+            }
+            ContentPart::Image(image) => {
+                // Convert our Image content part to genai's multi-part content
+                let image_part = genai::chat::ContentPart::from_image_base64(
+                    image.content_type,
+                    Arc::from(image.base64_data.as_str()),
+                );
+                GenAiMessageContent::Parts(vec![image_part])
             }
         }
     }

@@ -131,6 +131,20 @@ fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<JsonVa
                     "file_upload_id": file_pointer.file_upload_id.to_string()
                 }));
             }
+            ContentPart::ImageFilePointer(file_pointer) => {
+                output_parts.push(json!({
+                    "type": "image_file_pointer",
+                    "file_upload_id": file_pointer.file_upload_id.to_string()
+                }));
+            }
+            ContentPart::Image(image) => {
+                output_parts.push(json!({
+                    "type": "image",
+                    "content_type": image.content_type,
+                    // Truncate base64 data for logging to avoid huge log entries
+                    "base64_data_length": image.base64_data.len()
+                }));
+            }
         }
     }
 

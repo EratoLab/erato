@@ -6,7 +6,7 @@ use crate::models::chat::{
 };
 use crate::models::file_upload::get_file_upload_by_id;
 use crate::models::message::{
-    ContentPart, ContentPartText, GenerationInputMessages, GenerationMetadata,
+    ContentPart, ContentPartImage, ContentPartText, GenerationInputMessages, GenerationMetadata,
     GenerationParameters, MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus,
     ToolUse, get_generation_input_messages_by_previous_message_id, get_message_by_id,
     submit_message, update_message_generation_metadata,
@@ -630,7 +630,26 @@ async fn bg_stream_save_user_message(
     Ok(saved_user_message)
 }
 
-/// Resolve TextFilePointer content parts in generation input messages by extracting file contents JIT.
+/// Helper function to get MIME type from file extension
+fn get_mime_type_from_extension(filename: &str) -> String {
+    if let Some(extension) = filename.rsplit('.').next() {
+        match extension.to_lowercase().as_str() {
+            "jpg" | "jpeg" => "image/jpeg".to_string(),
+            "png" => "image/png".to_string(),
+            "gif" => "image/gif".to_string(),
+            "webp" => "image/webp".to_string(),
+            "bmp" => "image/bmp".to_string(),
+            "svg" => "image/svg+xml".to_string(),
+            "tiff" | "tif" => "image/tiff".to_string(),
+            "ico" => "image/x-icon".to_string(),
+            _ => "application/octet-stream".to_string(),
+        }
+    } else {
+        "application/octet-stream".to_string()
+    }
+}
+
+/// Resolve TextFilePointer and ImageFilePointer content parts in generation input messages by extracting file contents JIT.
 /// This prevents storing duplicate file contents in the database.
 async fn resolve_file_pointers_in_generation_input(
     app_state: &AppState,
@@ -778,6 +797,102 @@ async fn resolve_file_pointers_in_generation_input(
                         );
                         ContentPart::Text(ContentPartText {
                             text: format!("[Error fetching file: {}]", file_upload_id),
+                        })
+                    }
+                }
+            }
+            ContentPart::ImageFilePointer(ref file_pointer) => {
+                // Extract image from the file pointer JIT and encode to base64
+                let file_upload_id = file_pointer.file_upload_id;
+
+                // Get the file upload record
+                let file_upload_result = FileUploads::find_by_id(file_upload_id)
+                    .one(&app_state.db)
+                    .await;
+
+                match file_upload_result {
+                    Ok(Some(file)) => {
+                        // Get the file storage provider
+                        let file_storage = app_state
+                            .file_storage_providers
+                            .get(&file.file_storage_provider_id);
+
+                        if let Some(file_storage) = file_storage {
+                            // Read the file content using the unified interface
+                            let file_bytes_result = file_storage
+                                .read_file_to_bytes_with_context(
+                                    &file.file_storage_path,
+                                    sharepoint_ctx.as_ref(),
+                                )
+                                .await;
+
+                            match file_bytes_result {
+                                Ok(file_bytes) => {
+                                    // Encode to base64
+                                    use base64::{Engine as _, engine::general_purpose};
+                                    let base64_data = general_purpose::STANDARD.encode(&file_bytes);
+
+                                    // Determine MIME type from extension
+                                    let content_type = get_mime_type_from_extension(&file.filename);
+
+                                    tracing::debug!(
+                                        "Successfully encoded image from file pointer {}: {} (size: {} bytes, content_type: {})",
+                                        file.filename,
+                                        file_upload_id,
+                                        file_bytes.len(),
+                                        content_type
+                                    );
+
+                                    ContentPart::Image(ContentPartImage {
+                                        content_type,
+                                        base64_data,
+                                    })
+                                }
+                                Err(err) => {
+                                    tracing::warn!(
+                                        "Failed to read image file {} from storage: {}, using placeholder text",
+                                        file_upload_id,
+                                        err
+                                    );
+                                    ContentPart::Text(ContentPartText {
+                                        text: format!(
+                                            "[Failed to read image file: {}]",
+                                            file_upload_id
+                                        ),
+                                    })
+                                }
+                            }
+                        } else {
+                            tracing::warn!(
+                                "File storage provider {} not found for image file {}, using placeholder text",
+                                file.file_storage_provider_id,
+                                file_upload_id
+                            );
+                            ContentPart::Text(ContentPartText {
+                                text: format!(
+                                    "[File storage provider not found for image file: {}]",
+                                    file_upload_id
+                                ),
+                            })
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::warn!(
+                            "File upload {} referenced in ImageFilePointer not found, using placeholder text",
+                            file_upload_id
+                        );
+                        ContentPart::Text(ContentPartText {
+                            text: format!("[Image file not found: {}]", file_upload_id),
+                        })
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            "Database error fetching image file upload {}: {}, using placeholder text",
+                            file_upload_id,
+                            err
+                        );
+                        ContentPart::Text(ContentPartText {
+                            text: format!("[Error fetching image file: {}]", file_upload_id),
                         })
                     }
                 }

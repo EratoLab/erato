@@ -44,15 +44,20 @@ export const createAuthenticatedContext = async (
 
 export const chatIsReadyToChat = async (
   page: Page,
-  args?: { expectAssistantResponse?: boolean },
+  args?: { expectAssistantResponse?: boolean; loadingTimeoutMs?: number },
 ) => {
-  const textbox = page.getByRole("textbox", { name: "Type a message..." });
-  await expect(textbox).toBeVisible();
-  await expect(textbox).toBeEnabled();
-  if (args?.expectAssistantResponse) {
-    await expect(page.getByTestId("message-assistant")).toBeVisible();
-  }
-  await expect(page.getByText("Loading")).toHaveCount(0);
+  await test.step(`Wait for chat to be ready to Chat (either initial or to wait for finish message streaming)`, async () => {
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+    await expect(textbox).toBeEnabled();
+    if (args?.expectAssistantResponse) {
+      await expect(page.getByTestId("message-assistant")).toBeVisible();
+    }
+    const loadingOpts = args?.loadingTimeoutMs
+      ? { timeout: args?.loadingTimeoutMs }
+      : {};
+    await expect(page.getByText("Loading")).toHaveCount(0, loadingOpts);
+  });
 };
 
 /**

@@ -1587,6 +1587,7 @@ dependencies = [
  "axum-extra",
  "axum-test",
  "axum-tracing-opentelemetry",
+ "base64 0.22.1",
  "chrono",
  "color-eyre",
  "config",

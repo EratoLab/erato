@@ -84,6 +84,8 @@ pub enum ContentPart {
     Text(ContentPartText),
     ToolUse(ToolUse),
     TextFilePointer(ContentPartTextFilePointer),
+    ImageFilePointer(ContentPartImageFilePointer),
+    Image(ContentPartImage),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -106,6 +108,17 @@ impl From<String> for ContentPartText {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ContentPartTextFilePointer {
     pub file_upload_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartImageFilePointer {
+    pub file_upload_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartImage {
+    pub content_type: String,
+    pub base64_data: String,
 }
 
 /// Statistics for a list of messages
@@ -165,6 +178,8 @@ impl MessageSchema {
                 ContentPart::Text(text) => Some(text.text.as_str()),
                 ContentPart::ToolUse(_) => None,
                 ContentPart::TextFilePointer(_) => None,
+                ContentPart::ImageFilePointer(_) => None,
+                ContentPart::Image(_) => None,
             })
             .collect::<Vec<&str>>()
             .join(" ")
@@ -529,6 +544,8 @@ impl InputMessage {
             ContentPart::Text(content) => content.text.to_string(),
             ContentPart::ToolUse(_) => String::new(),
             ContentPart::TextFilePointer(_) => String::new(),
+            ContentPart::ImageFilePointer(_) => String::new(),
+            ContentPart::Image(_) => String::new(),
         }
     }
 }
@@ -542,6 +559,18 @@ impl GenerationInputMessages {
     pub fn validate(json: &JsonValue) -> Result<Self, Report> {
         serde_json::from_value(json.clone())
             .map_err(|e| eyre!("Invalid input message format: {}", e))
+    }
+}
+
+/// Helper function to determine if a file is an image based on its extension
+fn is_image_file(filename: &str) -> bool {
+    if let Some(extension) = filename.rsplit('.').next() {
+        matches!(
+            extension.to_lowercase().as_str(),
+            "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "svg" | "tiff" | "tif" | "ico"
+        )
+    } else {
+        false
     }
 }
 
@@ -631,13 +660,21 @@ pub async fn get_generation_input_messages_by_previous_message_id(
     }
 
     // Now add the new generation files to the input messages as file pointers
-    // The actual text extraction will happen JIT when preparing for LLM generation
+    // The actual content extraction/encoding will happen JIT when preparing for LLM generation
     for file in new_generation_files {
+        let content = if is_image_file(&file.filename) {
+            ContentPart::ImageFilePointer(ContentPartImageFilePointer {
+                file_upload_id: file.id,
+            })
+        } else {
+            ContentPart::TextFilePointer(ContentPartTextFilePointer {
+                file_upload_id: file.id,
+            })
+        };
+
         input_messages.push(InputMessage {
             role: MessageRole::User,
-            content: ContentPart::TextFilePointer(ContentPartTextFilePointer {
-                file_upload_id: file.id,
-            }),
+            content,
         });
     }
 
