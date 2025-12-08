@@ -26,6 +26,7 @@ export interface StreamingState {
   isFinalizing: boolean; // True during post-streaming refetch/cleanup phase
   currentMessageId: string | null;
   content: string;
+  createdAt: string | null; // Timestamp for message ordering
   // Add tool call tracking
   toolCalls: Record<string, ToolCall>; // keyed by tool_call_id
 }
@@ -56,6 +57,7 @@ export const initialStreamingState: StreamingState = {
   isFinalizing: false,
   currentMessageId: null,
   content: "",
+  createdAt: null,
   toolCalls: {},
 };
 

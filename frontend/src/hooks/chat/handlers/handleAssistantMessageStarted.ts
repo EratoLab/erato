@@ -20,24 +20,41 @@ export const handleAssistantMessageStarted = (
 
   const { setStreaming, setAwaitingFirstStreamChunkForNewChat } =
     useMessagingStore.getState();
-  if (process.env.NODE_ENV === "development") {
-    console.log(
-      `[DEBUG_STREAMING] handleAssistantMessageStarted: Setting streaming store. Message ID: ${message_id}, isStreaming: true, content: ""`,
-    );
+
+  const currentStreaming = useMessagingStore.getState().streaming;
+
+  // Check if we have an optimistic placeholder
+  const hasOptimistic =
+    currentStreaming.currentMessageId?.startsWith("temp-assistant-");
+
+  if (hasOptimistic) {
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[DEBUG_STREAMING] handleAssistantMessageStarted: Replacing optimistic ID ${currentStreaming.currentMessageId} with real ID ${message_id}, preserving timestamp ${currentStreaming.createdAt}`,
+      );
+    }
+    // Replace temp ID with real ID, preserve createdAt for ordering
+    setStreaming({
+      isStreaming: true,
+      currentMessageId: message_id, // Real UUID from backend
+      content: "", // Reset content for new stream
+      createdAt: currentStreaming.createdAt, // Preserve timestamp
+    });
+  } else {
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[DEBUG_STREAMING] handleAssistantMessageStarted: No optimistic placeholder found (backend was faster). Creating new with ID: ${message_id}`,
+      );
+    }
+    // No optimistic (edge case: backend was faster than optimistic creation)
+    setStreaming({
+      isStreaming: true,
+      currentMessageId: message_id,
+      content: "",
+      createdAt: new Date().toISOString(), // Use current time as fallback
+    });
   }
-  setStreaming({
-    isStreaming: true,
-    currentMessageId: message_id,
-    content: "", // Ensure content starts fresh for the new message
-  });
 
   // Reset the awaiting flag in the store as the stream has started
   setAwaitingFirstStreamChunkForNewChat(false);
-
-  if (process.env.NODE_ENV === "development") {
-    // Optional: Additional logging if needed
-    // console.log(
-    //   `[CHAT_FLOW] Assistant message started (handler). ID: ${message_id}`,
-    // );
-  }
 };

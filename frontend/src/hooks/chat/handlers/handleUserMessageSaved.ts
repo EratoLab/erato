@@ -102,7 +102,30 @@ export function handleUserMessageSaved(
           `User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${finalUserMessage.content.substring(0, 50)}..."`,
         );
       }
-      return { ...prevState, userMessages: newUserMessages };
+
+      // NEW: Create optimistic streaming state for assistant message
+      const now = new Date().toISOString();
+      const optimisticAssistantId = `temp-assistant-${Date.now()}`;
+
+      if (process.env.NODE_ENV === "development") {
+        logger.log(
+          `[OPTIMISTIC] Creating optimistic assistant placeholder with ID: ${optimisticAssistantId}`,
+        );
+      }
+
+      return {
+        ...prevState,
+        userMessages: newUserMessages,
+        streaming: {
+          ...prevState.streaming,
+          currentMessageId: optimisticAssistantId,
+          content: "",
+          createdAt: now, // Store timestamp for consistent ordering
+          isStreaming: false, // Not streaming yet, just a placeholder
+          isFinalizing: false,
+          toolCalls: {},
+        },
+      };
     } else {
       // If no matching temp message found, log a warning.
       // This could happen if the message was cleared or if there's a mismatch.
