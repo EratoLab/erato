@@ -205,11 +205,13 @@ msgid "fileSourceSelector.uploadFromOneDrive"
 msgstr "Télécharger depuis OneDrive"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx
 #: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
 msgid "fileUpload.disk.ariaLabel"
 msgstr "Télécharger des fichiers depuis l'ordinateur"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx
 #: src/components/ui/FileUpload/FileUploadWithTokenCheck.tsx
 msgid "fileUpload.uploadFiles"
 msgstr "Télécharger des fichiers"
@@ -743,7 +745,7 @@ msgid "Optional: Describe what this assistant does"
 msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
-msgid "Optional: Upload files that will be available to this assistant in every chat"
+msgid "Optional: Upload files from your computer or OneDrive that will be available to this assistant in every chat"
 msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallOutput.tsx

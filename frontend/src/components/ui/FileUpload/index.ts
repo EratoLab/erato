@@ -6,6 +6,7 @@ export { FileUploadProgress } from "./FileUploadProgress";
 export { FileAttachmentsPreview } from "./FileAttachmentsPreview";
 export { FileSourceSelector } from "./FileSourceSelector";
 export { CloudFilePickerModal } from "./CloudFilePickerModal";
+export { AssistantFileUploadSelector } from "./AssistantFileUploadSelector";
 
 // Re-export types for external usage
 export type { FileUploadProps } from "./FileUpload";
