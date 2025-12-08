@@ -1,15 +1,12 @@
 use crate::db::entity::messages;
 use crate::db::entity_ext::chats;
-use crate::db::entity_ext::chats_latest_message;
 use crate::db::entity_ext::prelude::*;
 use crate::models::message::GenerationParameters;
 use crate::models::pagination;
 use crate::policy::prelude::*;
 use eyre::{Report, eyre};
 use sea_orm::prelude::*;
-use sea_orm::{
-    ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QueryOrder, QuerySelect,
-};
+use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QueryOrder};
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::Utc;
 use tracing::instrument;
@@ -189,6 +186,19 @@ pub struct FrequentAssistant {
     pub usage_count: i64,
 }
 
+/// Helper struct for the LATERAL join query result
+#[derive(Debug, FromQueryResult)]
+struct ChatWithLatestMessage {
+    // Chat fields
+    id: Uuid,
+    owner_user_id: String,
+    title_by_summary: Option<String>,
+    archived_at: Option<DateTimeWithTimeZone>,
+    assistant_id: Option<Uuid>,
+    // Latest message fields
+    latest_message_at: DateTimeWithTimeZone,
+}
+
 /// Get the most recent chats for a user.
 ///
 /// Returns a tuple of (chats, stats) where:
@@ -208,64 +218,119 @@ pub async fn get_recent_chats(
     use crate::db::entity::prelude::Assistants;
     use std::collections::HashMap;
 
-    // Query the most recent chats for the user.
-    // Query the chats belonging to a user, and join with the chats_latest_message view.
-    let mut query = Chats::find()
-        .filter(chats::Column::OwnerUserId.eq(owner_user_id))
-        .find_also_related(chats_latest_message::Entity)
-        .filter(chats_latest_message::Column::LatestMessageId.is_not_null());
+    // Build the WHERE clause conditions
+    let archived_condition = if !include_archived {
+        "AND \"chats\".\"archived_at\" IS NULL"
+    } else {
+        ""
+    };
 
-    // Filter out archived chats if include_archived is false
-    if !include_archived {
-        query = query.filter(chats::Column::ArchivedAt.is_null());
-    }
+    // Query using INNER JOIN LATERAL for better performance
+    // This ensures the database does all filtering, sorting, and pagination
+    let sql = format!(
+        r#"
+        SELECT
+            "chats"."id",
+            "chats"."owner_user_id",
+            "chats"."title_by_summary",
+            "chats"."archived_at",
+            "chats"."assistant_id",
+            "latest_msg"."created_at" AS "latest_message_at"
+        FROM "chats"
+        INNER JOIN LATERAL (
+            SELECT m.chat_id, m.id, m.created_at
+            FROM messages m
+            WHERE m.chat_id = chats.id
+            ORDER BY m.created_at DESC
+            LIMIT 1
+        ) latest_msg ON true
+        WHERE "chats"."owner_user_id" = $1
+            {}
+        ORDER BY latest_msg.created_at DESC
+        LIMIT $2
+        OFFSET $3
+        "#,
+        archived_condition
+    );
 
-    let chats: Vec<(chats::Model, Option<chats_latest_message::Model>)> = query
-        .order_by_desc(chats_latest_message::Column::LatestMessageAt)
-        .limit(limit)
-        .offset(offset)
+    let chats_with_messages: Vec<ChatWithLatestMessage> =
+        ChatWithLatestMessage::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            sql,
+            vec![
+                owner_user_id.into(),
+                sea_orm::Value::BigInt(Some(limit as i64)),
+                sea_orm::Value::BigInt(Some(offset as i64)),
+            ],
+        ))
         .all(conn)
         .await?;
 
     // Use our pagination utility to efficiently calculate the total count
     let (total_count, has_more) =
-        pagination::calculate_total_count(offset, limit, chats.len(), || async {
-            let mut count_query = Chats::find()
-                .filter(chats::Column::OwnerUserId.eq(owner_user_id))
-                .find_also_related(chats_latest_message::Entity)
-                .filter(chats_latest_message::Column::LatestMessageId.is_not_null());
+        pagination::calculate_total_count(offset, limit, chats_with_messages.len(), || async {
+            let count_sql = format!(
+                r#"
+                SELECT COUNT(*) AS num_items
+                FROM (
+                    SELECT "chats"."id"
+                    FROM "chats"
+                    INNER JOIN LATERAL (
+                        SELECT m.chat_id, m.id, m.created_at
+                        FROM messages m
+                        WHERE m.chat_id = chats.id
+                        ORDER BY m.created_at DESC
+                        LIMIT 1
+                    ) latest_msg ON true
+                    WHERE "chats"."owner_user_id" = $1
+                        {}
+                ) AS sub_query
+                "#,
+                archived_condition
+            );
 
-            // Apply same archived filter to count query
-            if !include_archived {
-                count_query = count_query.filter(chats::Column::ArchivedAt.is_null());
+            #[derive(Debug, FromQueryResult)]
+            struct CountResult {
+                num_items: i64,
             }
 
-            count_query.count(conn).await
+            let count_result: CountResult =
+                CountResult::find_by_statement(sea_orm::Statement::from_sql_and_values(
+                    sea_orm::DatabaseBackend::Postgres,
+                    count_sql,
+                    vec![owner_user_id.into()],
+                ))
+                .one(conn)
+                .await
+                .map_err(|e| eyre::eyre!("Failed to execute count query: {}", e))?
+                .ok_or_else(|| eyre!("Count query returned no results"))?;
+
+            Ok::<u64, Report>(count_result.num_items as u64)
         })
         .await?;
 
     // Should already be filtered to the correct user, but make sure to authorize.
     let mut authorized_chats = Vec::new();
-    for (chat, latest_message) in chats.iter() {
+    for chat_with_msg in chats_with_messages.iter() {
         if authorize!(
             policy,
             subject,
-            &Resource::Chat(chat.id.to_string()),
+            &Resource::Chat(chat_with_msg.id.to_string()),
             Action::Read
         )
         .is_ok()
         {
-            authorized_chats.push((chat, latest_message));
+            authorized_chats.push(chat_with_msg);
         }
     }
 
     // Collect all chat IDs for batch queries
-    let chat_ids: Vec<Uuid> = authorized_chats.iter().map(|(chat, _)| chat.id).collect();
+    let authorized_chat_ids: Vec<Uuid> = authorized_chats.iter().map(|c| c.id).collect();
 
     // Collect all assistant IDs that need to be fetched
     let assistant_ids: Vec<Uuid> = authorized_chats
         .iter()
-        .filter_map(|(chat, _)| chat.assistant_id)
+        .filter_map(|c| c.assistant_id)
         .collect();
 
     // Batch query: Get all assistants in a single query
@@ -283,9 +348,9 @@ pub async fn get_recent_chats(
 
     // Batch query: Get the most recent message with generation_parameters for each chat
     // We query all messages that could be the "last" one, then pick the latest per chat in memory
-    let last_provider_ids_map: HashMap<Uuid, Option<String>> = if !chat_ids.is_empty() {
+    let last_provider_ids_map: HashMap<Uuid, Option<String>> = if !authorized_chat_ids.is_empty() {
         let messages_with_params: Vec<messages::Model> = Messages::find()
-            .filter(messages::Column::ChatId.is_in(chat_ids.clone()))
+            .filter(messages::Column::ChatId.is_in(authorized_chat_ids.clone()))
             .filter(messages::Column::IsMessageInActiveThread.eq(true))
             .filter(messages::Column::GenerationParameters.is_not_null())
             .order_by_desc(messages::Column::CreatedAt)
@@ -313,28 +378,27 @@ pub async fn get_recent_chats(
     // Assemble the final results using the pre-fetched data
     let recent_chats: Vec<RecentChat> = authorized_chats
         .iter()
-        .map(|(chat, latest_message)| {
-            let latest_message = latest_message
-                .as_ref()
-                .expect("Latest message should never be None");
+        .map(|chat_with_msg| {
+            let last_chat_provider_id = last_provider_ids_map
+                .get(&chat_with_msg.id)
+                .cloned()
+                .flatten();
 
-            let last_chat_provider_id = last_provider_ids_map.get(&chat.id).cloned().flatten();
-
-            let assistant_name = chat
+            let assistant_name = chat_with_msg
                 .assistant_id
                 .and_then(|aid| assistants_map.get(&aid).cloned());
 
             RecentChat {
-                id: chat.id.to_string(),
-                title_by_summary: chat
+                id: chat_with_msg.id.to_string(),
+                title_by_summary: chat_with_msg
                     .title_by_summary
                     .clone()
                     .unwrap_or_else(|| "Untitled Chat".to_string()),
-                last_message_at: latest_message.latest_message_at,
-                archived_at: chat.archived_at,
-                owner_user_id: chat.owner_user_id.clone(),
+                last_message_at: chat_with_msg.latest_message_at,
+                archived_at: chat_with_msg.archived_at,
+                owner_user_id: chat_with_msg.owner_user_id.clone(),
                 last_chat_provider_id,
-                assistant_id: chat.assistant_id,
+                assistant_id: chat_with_msg.assistant_id,
                 assistant_name,
             }
         })
