@@ -1,4 +1,4 @@
-use crate::models::assistant;
+use crate::models::{assistant, share_grant};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::sentry::log_internal_server_error;
@@ -63,6 +63,19 @@ pub struct AssistantFile {
     pub download_url: String,
 }
 
+/// A share grant to create with the assistant
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ShareGrantInput {
+    /// The type of subject to grant access to (e.g., "user")
+    pub subject_type: String,
+    /// The type of subject ID (e.g., "id" or "oidc_issuer_and_subject")
+    pub subject_id_type: String,
+    /// The ID of the subject to grant access to
+    pub subject_id: String,
+    /// The role to grant (e.g., "viewer")
+    pub role: String,
+}
+
 /// Request to create a new assistant
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateAssistantRequest {
@@ -78,6 +91,8 @@ pub struct CreateAssistantRequest {
     pub default_chat_provider: Option<String>,
     /// Optional list of file upload IDs to associate with this assistant
     pub file_ids: Option<Vec<String>>,
+    /// Optional list of share grants to create with the assistant
+    pub share_grants: Option<Vec<ShareGrantInput>>,
 }
 
 /// Response when creating an assistant
@@ -185,6 +200,32 @@ pub async fn create_assistant(
                 tracing::error!(
                     "Failed to associate file {} with assistant {}: {}",
                     file_id,
+                    created_assistant.id,
+                    e
+                );
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        }
+    }
+
+    // Process share grants if provided
+    if let Some(share_grants_input) = request.share_grants {
+        for grant_input in share_grants_input {
+            share_grant::create_share_grant(
+                &app_state.db,
+                &policy,
+                &me_user.to_subject(),
+                "assistant".to_string(),
+                created_assistant.id.to_string(),
+                grant_input.subject_type,
+                grant_input.subject_id_type,
+                grant_input.subject_id,
+                grant_input.role,
+            )
+            .await
+            .map_err(|e| {
+                tracing::error!(
+                    "Failed to create share grant for assistant {}: {}",
                     created_assistant.id,
                     e
                 );

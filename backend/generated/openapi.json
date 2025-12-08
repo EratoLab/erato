@@ -1050,6 +1050,72 @@
         ]
       }
     },
+    "/api/v1beta/me/organization/groups": {
+      "get": {
+        "tags": [
+          "entra_id"
+        ],
+        "summary": "List all groups in the organization.",
+        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches all groups from the MS Graph API with full pagination.",
+        "operationId": "list_organization_groups",
+        "responses": {
+          "200": {
+            "description": "List of organization groups",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationGroupsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No access token available"
+          },
+          "500": {
+            "description": "Failed to retrieve groups"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/organization/users": {
+      "get": {
+        "tags": [
+          "entra_id"
+        ],
+        "summary": "List all users in the organization.",
+        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches all users from the MS Graph API with full pagination.",
+        "operationId": "list_organization_users",
+        "responses": {
+          "200": {
+            "description": "List of organization users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationUsersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No access token available"
+          },
+          "500": {
+            "description": "Failed to retrieve users"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/profile": {
       "get": {
         "tags": [],
@@ -1154,6 +1220,155 @@
             }
           }
         }
+      }
+    },
+    "/api/v1beta/share-grants": {
+      "get": {
+        "tags": [
+          "share_grants"
+        ],
+        "summary": "List share grants for a resource",
+        "operationId": "list_share_grants",
+        "parameters": [
+          {
+            "name": "resource_type",
+            "in": "query",
+            "description": "The type of resource (e.g., 'assistant')",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resource_id",
+            "in": "query",
+            "description": "The ID of the resource",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved share grants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListShareGrantsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "User does not own the resource"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "share_grants"
+        ],
+        "summary": "Create a new share grant",
+        "operationId": "create_share_grant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShareGrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successfully created the share grant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateShareGrantResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "User does not own the resource"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/share-grants/{grant_id}": {
+      "delete": {
+        "tags": [
+          "share_grants"
+        ],
+        "summary": "Delete a share grant",
+        "operationId": "delete_share_grant",
+        "parameters": [
+          {
+            "name": "grant_id",
+            "in": "path",
+            "description": "The ID of the share grant to delete",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successfully deleted the share grant"
+          },
+          "400": {
+            "description": "Invalid grant ID format"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "User does not own the resource"
+          },
+          "404": {
+            "description": "Share grant not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/api/v1beta/token_usage/estimate": {
@@ -1698,6 +1913,16 @@
           "prompt": {
             "type": "string",
             "description": "The system prompt for the assistant"
+          },
+          "share_grants": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ShareGrantInput"
+            },
+            "description": "Optional list of share grants to create with the assistant"
           }
         }
       },
@@ -1735,6 +1960,53 @@
             "description": "The ID of the newly created chat"
           }
         }
+      },
+      "CreateShareGrantRequest": {
+        "type": "object",
+        "description": "Request to create a new share grant",
+        "required": [
+          "resource_type",
+          "resource_id",
+          "subject_type",
+          "subject_id_type",
+          "subject_id",
+          "role"
+        ],
+        "properties": {
+          "resource_id": {
+            "type": "string",
+            "description": "The ID of the resource to share"
+          },
+          "resource_type": {
+            "type": "string",
+            "description": "The type of resource to share (e.g., \"assistant\")"
+          },
+          "role": {
+            "type": "string",
+            "description": "The role to grant (e.g., \"viewer\")"
+          },
+          "subject_id": {
+            "type": "string",
+            "description": "The ID of the subject to grant access to"
+          },
+          "subject_id_type": {
+            "type": "string",
+            "description": "The type of subject ID (e.g., \"id\" or \"oidc_issuer_and_subject\")"
+          },
+          "subject_type": {
+            "type": "string",
+            "description": "The type of subject to grant access to (e.g., \"user\")"
+          }
+        }
+      },
+      "CreateShareGrantResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ShareGrant",
+            "description": "The created share grant"
+          }
+        ],
+        "description": "Response when creating a share grant"
       },
       "Drive": {
         "type": "object",
@@ -2119,6 +2391,22 @@
           "source": {
             "type": "string",
             "description": "The source/provider type: \"sharepoint\" (future: \"google_drive\", etc.)"
+          }
+        }
+      },
+      "ListShareGrantsResponse": {
+        "type": "object",
+        "description": "Response when listing share grants",
+        "required": [
+          "grants"
+        ],
+        "properties": {
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShareGrant"
+            },
+            "description": "The list of share grants"
           }
         }
       },
@@ -2543,6 +2831,84 @@
           }
         }
       },
+      "OrganizationGroup": {
+        "type": "object",
+        "description": "An organization group",
+        "required": [
+          "id",
+          "display_name",
+          "subject_type_id"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "The display name of the group"
+          },
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the group"
+          },
+          "subject_type_id": {
+            "type": "string",
+            "description": "The subject type ID to use when creating a share grant (always \"organization_group_id\")"
+          }
+        }
+      },
+      "OrganizationGroupsResponse": {
+        "type": "object",
+        "description": "Response for the organization groups endpoint",
+        "required": [
+          "groups"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationGroup"
+            },
+            "description": "List of groups in the organization"
+          }
+        }
+      },
+      "OrganizationUser": {
+        "type": "object",
+        "description": "An organization user",
+        "required": [
+          "id",
+          "display_name",
+          "subject_type_id"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "The display name of the user"
+          },
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the user"
+          },
+          "subject_type_id": {
+            "type": "string",
+            "description": "The subject type ID to use when creating a share grant (always \"organization_user_id\")"
+          }
+        }
+      },
+      "OrganizationUsersResponse": {
+        "type": "object",
+        "description": "Response for the organization users endpoint",
+        "required": [
+          "users"
+        ],
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationUser"
+            },
+            "description": "List of users in the organization"
+          }
+        }
+      },
       "RecentChat": {
         "type": "object",
         "required": [
@@ -2804,6 +3170,89 @@
             "format": "uuid",
             "description": "The ID of the chat to resume streaming for.",
             "example": "00000000-0000-0000-0000-000000000000"
+          }
+        }
+      },
+      "ShareGrant": {
+        "type": "object",
+        "description": "A share grant model",
+        "required": [
+          "id",
+          "resource_type",
+          "resource_id",
+          "subject_type",
+          "subject_id_type",
+          "subject_id",
+          "role",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this share grant was created"
+          },
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the share grant"
+          },
+          "resource_id": {
+            "type": "string",
+            "description": "The ID of the resource being shared"
+          },
+          "resource_type": {
+            "type": "string",
+            "description": "The type of resource being shared (e.g., \"assistant\")"
+          },
+          "role": {
+            "type": "string",
+            "description": "The role being granted (e.g., \"viewer\")"
+          },
+          "subject_id": {
+            "type": "string",
+            "description": "The ID of the subject being granted access"
+          },
+          "subject_id_type": {
+            "type": "string",
+            "description": "The type of subject ID (e.g., \"id\" or \"oidc_issuer_and_subject\")"
+          },
+          "subject_type": {
+            "type": "string",
+            "description": "The type of subject being granted access (e.g., \"user\")"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this share grant was last updated"
+          }
+        }
+      },
+      "ShareGrantInput": {
+        "type": "object",
+        "description": "A share grant to create with the assistant",
+        "required": [
+          "subject_type",
+          "subject_id_type",
+          "subject_id",
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "The role to grant (e.g., \"viewer\")"
+          },
+          "subject_id": {
+            "type": "string",
+            "description": "The ID of the subject to grant access to"
+          },
+          "subject_id_type": {
+            "type": "string",
+            "description": "The type of subject ID (e.g., \"id\" or \"oidc_issuer_and_subject\")"
+          },
+          "subject_type": {
+            "type": "string",
+            "description": "The type of subject to grant access to (e.g., \"user\")"
           }
         }
       },
@@ -3090,7 +3539,8 @@
         "required": [
           "id",
           "preferred_language",
-          "groups"
+          "groups",
+          "organization_group_ids"
         ],
         "properties": {
           "email": {
@@ -3110,6 +3560,17 @@
           "name": {
             "type": "string",
             "description": "The user's display name."
+          },
+          "organization_group_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Organization group IDs from the `groups` claim.\n\nThese can be used as subject_id when creating share grants\nwith subject_id_type \"organization_group_id\"."
+          },
+          "organization_user_id": {
+            "type": "string",
+            "description": "Organization user ID from the `oid` claim (Entra ID specific).\n\nThis can be used as the subject_id when creating share grants\nwith subject_id_type \"organization_user_id\"."
           },
           "picture": {
             "type": "string",

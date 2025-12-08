@@ -195,6 +195,11 @@ impl AppConfig {
             panic!("Invalid Sharepoint configuration: {}", e);
         }
 
+        // Validate Entra ID configuration
+        if let Err(e) = config.integrations.experimental_entra_id.validate() {
+            panic!("Invalid Entra ID configuration: {}", e);
+        }
+
         // Migrate single chat_provider to new chat_providers structure and handle Azure OpenAI migration
         config = config.migrate_chat_providers();
 
@@ -882,6 +887,43 @@ impl ExperimentalSharepointConfig {
     }
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct ExperimentalEntraIdConfig {
+    // Whether the experimental Entra ID integration is enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    // Whether to use the user's existing access token for MS Graph API calls.
+    // Currently this must be `true` when the integration is enabled.
+    // In the future, there may be alternative authentication methods.
+    // Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub auth_via_access_token: bool,
+}
+
+impl Default for ExperimentalEntraIdConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            auth_via_access_token: true,
+        }
+    }
+}
+
+impl ExperimentalEntraIdConfig {
+    /// Validates the Entra ID configuration.
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.enabled && !self.auth_via_access_token {
+            return Err(eyre!(
+                "Entra ID integration is enabled but auth_via_access_token is false. \
+                 Currently, auth_via_access_token must be true when Entra ID is enabled."
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
 pub struct IntegrationsConfig {
     #[serde(default)]
@@ -892,6 +934,8 @@ pub struct IntegrationsConfig {
     pub otel: OtelConfig,
     #[serde(default)]
     pub experimental_sharepoint: ExperimentalSharepointConfig,
+    #[serde(default)]
+    pub experimental_entra_id: ExperimentalEntraIdConfig,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]

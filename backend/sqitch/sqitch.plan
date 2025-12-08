@@ -14,3 +14,4 @@
 0011_adjust_view_user_daily_token_usage 2025-09-28T20:08:26Z System Administrator <root@Maxs-Laptop.local> # Adjust view user_daily_token_usage
 0012_migrate_file_uploads_relation_to_own_table 2025-11-12T22:26:39Z System Administrator <root@Maxs-Laptop.local> # Migrate file_uploads relation to own table
 0013_add_assistants_table 2025-11-12T23:15:53Z System Administrator <root@Maxs-Laptop.local> # Add assistants table
+0014_add_share_grants_table 2025-12-07T20:29:00Z System Administrator <root@Maxs-Laptop.lan> # add_share_grants_table

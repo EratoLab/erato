@@ -45,6 +45,18 @@ pub struct UserProfile {
     /// This is derived from the `groups` claim in the ID token.
     /// If the claim is not present, this will be an empty list.
     pub groups: Vec<String>,
+    /// Organization user ID from the `oid` claim (Entra ID specific).
+    ///
+    /// This can be used as the subject_id when creating share grants
+    /// with subject_id_type "organization_user_id".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub organization_user_id: Option<String>,
+    /// Organization group IDs from the `groups` claim.
+    ///
+    /// These can be used as subject_id when creating share grants
+    /// with subject_id_type "organization_group_id".
+    pub organization_group_ids: Vec<String>,
 }
 
 impl UserProfile {
@@ -57,6 +69,8 @@ impl UserProfile {
             picture: profile.picture,
             preferred_language,
             groups: profile.groups,
+            organization_user_id: profile.organization_user_id,
+            organization_group_ids: profile.organization_group_ids,
         }
     }
 
@@ -92,7 +106,14 @@ impl std::ops::Deref for MeProfile {
 
 impl MeProfile {
     pub fn to_subject(&self) -> Subject {
-        Subject::User(self.profile.id.clone())
+        if self.profile.organization_group_ids.is_empty() {
+            Subject::User(self.profile.id.clone())
+        } else {
+            Subject::UserWithGroups {
+                id: self.profile.id.clone(),
+                organization_group_ids: self.profile.organization_group_ids.clone(),
+            }
+        }
     }
 }
 

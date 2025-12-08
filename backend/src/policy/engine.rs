@@ -1,3 +1,5 @@
+use crate::db::entity::prelude::*;
+use crate::db::entity::{assistants, share_grants};
 use crate::db::entity_ext::chats;
 use crate::policy::types::{
     Action, Resource, ResourceId, ResourceKind, Subject, SubjectId, SubjectKind,
@@ -45,6 +47,61 @@ async fn fetch_chat_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Re
     }
 
     Ok(json!(chat_attributes))
+}
+
+/// Minimal assistant attributes required for policy evaluation.
+#[derive(Debug, FromQueryResult)]
+struct AssistantPolicyAttributes {
+    id: Uuid,
+    owner_user_id: Uuid,
+}
+
+/// Fetch minimal assistant data required for policy evaluation.
+/// Only queries the `id` and `owner_user_id` fields.
+async fn fetch_assistant_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
+    let assistants_list: Vec<AssistantPolicyAttributes> = Assistants::find()
+        .select_only()
+        .column(assistants::Column::Id)
+        .column(assistants::Column::OwnerUserId)
+        .into_model::<AssistantPolicyAttributes>()
+        .all(db)
+        .await?;
+
+    let mut assistant_attributes = serde_json::Map::new();
+    for assistant in assistants_list {
+        let id_str = assistant.id.to_string();
+        assistant_attributes.insert(
+            id_str.clone(),
+            json!({
+                "id": id_str,
+                "owner_id": assistant.owner_user_id.to_string(),
+            }),
+        );
+    }
+
+    Ok(json!(assistant_attributes))
+}
+
+/// Fetch share grants data for policy evaluation.
+async fn fetch_share_grants_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
+    let grants: Vec<share_grants::Model> = ShareGrants::find().all(db).await?;
+
+    let grants_array: Vec<JsonValue> = grants
+        .into_iter()
+        .map(|grant| {
+            json!({
+                "id": grant.id.to_string(),
+                "resource_type": grant.resource_type,
+                "resource_id": grant.resource_id,
+                "subject_type": grant.subject_type,
+                "subject_id_type": grant.subject_id_type,
+                "subject_id": grant.subject_id,
+                "role": grant.role,
+            })
+        })
+        .collect();
+
+    Ok(json!(grants_array))
 }
 
 // Define a macro that routes to the appropriate authorize implementation based on argument count
@@ -129,37 +186,21 @@ impl PolicyEngine {
     pub async fn rebuild_data(&self, db: &DatabaseConnection) -> Result<(), Report> {
         // Fetch policy data for each resource type
         let chat_data = fetch_chat_policy_data(db).await?;
+        let assistant_data = fetch_assistant_policy_data(db).await?;
+        let share_grants_data = fetch_share_grants_policy_data(db).await?;
 
         // Combine all resource attributes
         let resource_attributes = json!({
-            "chat": chat_data
+            "chat": chat_data,
+            "assistant": assistant_data
         });
-        let policy_data = json!({ "resource_attributes": resource_attributes });
+        let policy_data = json!({
+            "resource_attributes": resource_attributes,
+            "share_grants": share_grants_data
+        });
 
         self.set_data(policy_data).await?;
         // info!("Finished policy data rebuild");
-        Ok(())
-    }
-
-    /// Add a single chat's attributes to the policy data.
-    /// This is used to incrementally update the policy data after creating a new chat
-    /// without requiring a full rebuild from the database.
-    pub async fn add_chat_attributes(&self, chat_id: &str, owner_id: &str) -> Result<(), Report> {
-        let chat_data = json!({
-            "resource_attributes": {
-                "chat": {
-                    chat_id: {
-                        "id": chat_id,
-                        "owner_id": owner_id
-                    }
-                }
-            }
-        });
-
-        let mut guard = self.engine.write().await;
-        guard
-            .add_data_json(&chat_data.to_string())
-            .map_err(|e| eyre!(e))?;
         Ok(())
     }
 
@@ -194,6 +235,29 @@ impl AuthorizeFull for PolicyEngine {
         resource_id: &ResourceId,
         action: Action,
     ) -> Result<(), Report> {
+        self.authorize_with_context(
+            subject_kind,
+            subject_id,
+            resource_kind,
+            resource_id,
+            action,
+            &[],
+        )
+        .await
+    }
+}
+
+impl PolicyEngine {
+    /// Authorize with additional context (e.g., organization_group_ids).
+    pub async fn authorize_with_context(
+        &self,
+        subject_kind: SubjectKind,
+        subject_id: &SubjectId,
+        resource_kind: ResourceKind,
+        resource_id: &ResourceId,
+        action: Action,
+        organization_group_ids: &[String],
+    ) -> Result<(), Report> {
         // info!("Authorizing");
         if *self.data_needs_rebuild.read().await {
             return Err(eyre!(
@@ -212,6 +276,7 @@ impl AuthorizeFull for PolicyEngine {
             "resource_kind": resource_kind,
             "resource_id": resource_id,
             "action": action,
+            "organization_group_ids": organization_group_ids,
         });
 
         engine
@@ -265,13 +330,14 @@ impl AuthorizeShort for PolicyEngine {
         let resource: Resource = resource.into();
         let (subject_kind, subject_id) = subject.clone().into_parts();
         let (resource_kind, resource_id) = resource.clone().into_parts();
-        AuthorizeFull::authorize(
-            self,
+        let organization_group_ids = subject.organization_group_ids();
+        self.authorize_with_context(
             subject_kind,
             &subject_id,
             resource_kind,
             &resource_id,
             action,
+            organization_group_ids,
         )
         .await
     }
@@ -285,6 +351,13 @@ pub const fn is_valid_resource_action(resource: ResourceKind, action: Action) ->
         (ResourceKind::Chat, Action::Update) => true,
         (ResourceKind::Chat, Action::SubmitMessage) => true,
         (ResourceKind::ChatSingleton, Action::Create) => true,
+        (ResourceKind::Assistant, Action::Read) => true,
+        (ResourceKind::Assistant, Action::Update) => true,
+        (ResourceKind::Assistant, Action::Share) => true,
+        (ResourceKind::AssistantSingleton, Action::Create) => true,
+        (ResourceKind::ShareGrant, Action::Create) => true,
+        (ResourceKind::ShareGrant, Action::Read) => true,
+        (ResourceKind::ShareGrant, Action::Delete) => true,
         _ => false,
     }
 }
@@ -383,5 +456,83 @@ mod tests {
         // This should work using the short form
         let result = authorize!(engine, &subject, &resource, action);
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_with_organization_group_share_grant() {
+        let subject = Subject::UserWithGroups {
+            id: "user_3".to_string(),
+            organization_group_ids: vec!["org-group-1".to_string(), "org-group-2".to_string()],
+        };
+        let resource = Resource::Assistant("assistant_2".to_string());
+        let action = Action::Read;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "assistant": {
+                        "assistant_2": {
+                            "id": "assistant_2",
+                            "owner_id": "user_2"
+                        }
+                    }
+                },
+                "share_grants": [
+                    {
+                        "id": "grant-2",
+                        "resource_type": "assistant",
+                        "resource_id": "assistant_2",
+                        "subject_type": "organization_group",
+                        "subject_id_type": "organization_group_id",
+                        "subject_id": "org-group-1",
+                        "role": "viewer"
+                    }
+                ]
+            }))
+            .await
+            .unwrap();
+        // User should be able to read the assistant because they're in org-group-1
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_without_organization_group_share_grant() {
+        let subject = Subject::UserWithGroups {
+            id: "user_3".to_string(),
+            organization_group_ids: vec!["org-group-2".to_string()], // Not in org-group-1
+        };
+        let resource = Resource::Assistant("assistant_2".to_string());
+        let action = Action::Read;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "assistant": {
+                        "assistant_2": {
+                            "id": "assistant_2",
+                            "owner_id": "user_2"
+                        }
+                    }
+                },
+                "share_grants": [
+                    {
+                        "id": "grant-2",
+                        "resource_type": "assistant",
+                        "resource_id": "assistant_2",
+                        "subject_type": "organization_group",
+                        "subject_id_type": "organization_group_id",
+                        "subject_id": "org-group-1",
+                        "role": "viewer"
+                    }
+                ]
+            }))
+            .await
+            .unwrap();
+        // User should NOT be able to read the assistant because they're not in org-group-1
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_err());
     }
 }
