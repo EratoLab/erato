@@ -2,7 +2,7 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@9.15.5",
+  "packageManager": "pnpm@10.25.0",
   "scripts": {
     "dev": "pnpm i18n:compile && vite",
     "build": "pnpm i18n:compile && tsc && vite build",
@@ -39,6 +39,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "eslint-plugin-tailwindcss": "^3.18.0",
+    "fuse.js": "^7.1.0",
     "iconoir-react": "^7.11.0",
     "immer": "^10.1.1",
     "lodash": "^4.17.21",
