@@ -1317,6 +1317,11 @@ async fn stream_generate_chat_completion<
                     .with_start_time(turn_start)
                     .with_end_time(turn_end_time);
 
+                // Add environment if available
+                if let Some(env) = app_state.langfuse_client.environment() {
+                    builder = builder.with_environment(env.to_string());
+                }
+
                 if let Some(ref name) = langfuse_generation_name {
                     builder = builder.with_name(format!("{} (turn {})", name, current_turn));
                 } else {
@@ -1335,6 +1340,10 @@ async fn stream_generate_chat_completion<
                                 &current_turn_chat_request,
                                 Some(user_id.clone()),
                                 Some(chat_id.to_string()),
+                                app_state
+                                    .langfuse_client
+                                    .environment()
+                                    .map(|s| s.to_string()),
                             )
                         } else {
                             // For subsequent turns, we don't need to create a new trace
@@ -1343,6 +1352,8 @@ async fn stream_generate_chat_completion<
                                 name: None,
                                 user_id: None,
                                 session_id: None,
+                                release: None,
+                                environment: None,
                                 input: None,
                                 output: None,
                                 metadata: None,

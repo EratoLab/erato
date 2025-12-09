@@ -115,7 +115,10 @@ impl AppState {
         mcp_servers.check_connectivity().await;
 
         let actor_manager = ActorManager::new(db.clone(), config.clone()).await;
-        let langfuse_client = LangfuseClient::from_config(&config.integrations.langfuse)?;
+        let langfuse_client = LangfuseClient::from_config(
+            &config.integrations.langfuse,
+            Some(config.environment.clone()),
+        )?;
 
         // Initialize the global policy engine
         let global_policy_engine = GlobalPolicyEngine::new();
