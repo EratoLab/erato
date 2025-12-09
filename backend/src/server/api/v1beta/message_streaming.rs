@@ -5,10 +5,11 @@ use crate::models::chat::{
     get_or_create_chat_by_previous_message_id,
 };
 use crate::models::message::{
-    ContentPart, ContentPartImage, ContentPartText, GenerationInputMessages, GenerationMetadata,
-    GenerationParameters, MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus,
-    ToolUse, get_generation_input_messages_by_previous_message_id, get_message_by_id,
-    submit_message, update_message_generation_metadata,
+    ContentPart, ContentPartImage, ContentPartImageFilePointer, ContentPartText,
+    GenerationInputMessages, GenerationMetadata, GenerationParameters, MessageRole, MessageSchema,
+    ToolCallStatus as MessageToolCallStatus, ToolUse,
+    get_generation_input_messages_by_previous_message_id, get_message_by_id, submit_message,
+    update_message_generation_metadata,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::ChatMessage;
@@ -645,6 +646,97 @@ fn get_mime_type_from_extension(filename: &str) -> String {
     } else {
         "application/octet-stream".to_string()
     }
+}
+
+/// Download and store a generated image from URL or base64 data
+async fn download_and_store_generated_image(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    subject: &crate::policy::types::Subject,
+    chat_id: &Uuid,
+    image_source: genai::chat::ImageSource,
+) -> Result<(Uuid, String), Report> {
+    use crate::models::file_upload::create_file_upload;
+
+    // Download or decode the image
+    let image_bytes = match image_source {
+        genai::chat::ImageSource::Url(url) => {
+            // Download from URL
+            let response = reqwest::get(&url)
+                .await
+                .wrap_err("Failed to download generated image")?;
+
+            response
+                .bytes()
+                .await
+                .wrap_err("Failed to read image bytes")?
+                .to_vec()
+        }
+        genai::chat::ImageSource::Base64(base64_data) => {
+            // Decode base64
+            use base64::{Engine as _, engine::general_purpose};
+            general_purpose::STANDARD
+                .decode(base64_data.as_ref())
+                .wrap_err("Failed to decode base64 image data")?
+        }
+    };
+
+    // Generate a unique filename with timestamp
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let filename = format!("generated_image_{}.png", timestamp);
+
+    // Get the default file storage provider
+    let file_storage_provider_id = app_state
+        .file_storage_providers
+        .keys()
+        .next()
+        .ok_or_eyre("No file storage provider configured")?
+        .clone();
+
+    let file_storage = app_state
+        .file_storage_providers
+        .get(&file_storage_provider_id)
+        .ok_or_eyre("File storage provider not found")?;
+
+    // Store the image
+    let file_storage_path = format!("generated_images/{}", filename);
+    let mut writer = file_storage
+        .upload_file_writer(&file_storage_path, Some("image/png"))
+        .await
+        .wrap_err("Failed to create writer for generated image")?;
+
+    writer
+        .write(image_bytes)
+        .await
+        .wrap_err("Failed to write generated image bytes")?;
+
+    writer
+        .close()
+        .await
+        .wrap_err("Failed to close generated image writer")?;
+
+    // Create file_upload record
+    let file_upload = create_file_upload(
+        &app_state.db,
+        policy,
+        subject,
+        chat_id,
+        filename.clone(),
+        file_storage_provider_id.clone(),
+        file_storage_path.clone(),
+    )
+    .await?;
+
+    // Generate presigned download URL
+    let download_url = file_storage
+        .generate_presigned_download_url(&file_storage_path, None)
+        .await
+        .wrap_err("Failed to generate download URL for generated image")?;
+
+    Ok((file_upload.id, download_url))
 }
 
 /// Resolve TextFilePointer and ImageFilePointer content parts in generation input messages by extracting file contents JIT.
@@ -2350,6 +2442,131 @@ async fn run_message_submit_task(
         .unwrap_or("unknown")
         .to_string();
 
+    // Get the chat provider configuration to check if image generation is enabled
+    let chat_provider_config = app_state
+        .chat_provider_for_chatcompletion(Some(&chat_provider_id), &me_user.groups)
+        .map_err(|e| format!("Failed to get chat provider config: {}", e))?;
+
+    // Check if image generation is enabled for this model
+    if chat_provider_config.model_settings.generate_images {
+        tracing::info!("Image generation mode enabled, generating image instead of text");
+
+        // Extract the user's prompt from the last user message
+        let user_prompt = generation_input_messages
+            .messages
+            .iter()
+            .rev()
+            .find(|msg| msg.role == MessageRole::User)
+            .and_then(|msg| match &msg.content {
+                ContentPart::Text(text) => Some(text.text.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| {
+                "No text content found in user message for image generation".to_string()
+            })?;
+
+        tracing::debug!("Generating image with prompt: {}", user_prompt);
+
+        // Save initial empty assistant message
+        let empty_assistant_message_json = json!({
+            "role": "assistant",
+            "content": [],
+        });
+
+        let generation_parameters = GenerationParameters {
+            generation_chat_provider_id: Some(chat_provider_id.clone()),
+        };
+
+        let initial_assistant_message = submit_message(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &chat.id,
+            empty_assistant_message_json,
+            Some(&saved_user_message.id),
+            None,
+            Some(generation_input_messages.clone()),
+            &[],
+            Some(generation_parameters),
+            None,
+        )
+        .await
+        .map_err(|e| format!("Failed to submit initial assistant message: {}", e))?;
+
+        // Emit AssistantMessageStarted event
+        task.send_event(StreamingEvent::AssistantMessageStarted {
+            message_id: initial_assistant_message.id,
+        })
+        .await?;
+
+        // Generate the image using rust-genai
+        let image_request = genai::chat::ImageRequest::from_prompt(&user_prompt)
+            .with_size("1024x1024")
+            .with_quality("standard");
+
+        let genai_client = app_state
+            .genai_for_chatcompletion(Some(&chat_provider_id), &me_user.groups)
+            .map_err(|e| format!("Failed to get genai client: {}", e))?;
+
+        let image_response = genai_client
+            .exec_image_generation(&chat_provider_config.model_name, image_request, None)
+            .await
+            .map_err(|e| format!("Failed to generate image: {}", e))?;
+
+        // Get the first generated image
+        let generated_image = image_response
+            .images
+            .first()
+            .ok_or_else(|| "No images were generated".to_string())?;
+
+        // Extract the image source
+        let image_source = match generated_image {
+            genai::chat::ContentPart::Image {
+                content_type: _,
+                source,
+            } => source.clone(),
+            _ => return Err("Unexpected content part type from image generation".to_string()),
+        };
+
+        // Download and store the image
+        let (file_upload_id, download_url) = download_and_store_generated_image(
+            app_state,
+            policy,
+            &me_user.to_subject(),
+            &chat.id,
+            image_source,
+        )
+        .await
+        .map_err(|e| format!("Failed to download and store generated image: {}", e))?;
+
+        tracing::info!(
+            "Successfully generated and stored image: file_upload_id={}, download_url={}",
+            file_upload_id,
+            download_url
+        );
+
+        // Create content with the image pointer
+        let end_content = vec![ContentPart::ImageFilePointer(ContentPartImageFilePointer {
+            file_upload_id,
+            download_url,
+        })];
+
+        // Update assistant message with the image
+        bg_stream_update_assistant_message_completion(
+            task,
+            app_state,
+            policy,
+            end_content,
+            me_user,
+            initial_assistant_message.id,
+        )
+        .await?;
+
+        tracing::info!("run_message_submit_task completed successfully for image generation");
+        return Ok(());
+    }
+
+    // Normal text generation flow
     // Save initial empty assistant message
     let empty_assistant_message_json = json!({
         "role": "assistant",

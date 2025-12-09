@@ -19,6 +19,10 @@ context_size_tokens = 1000  # Very low limit for easy testing
 cost_input_tokens_per_1m = 0.0
 cost_output_tokens_per_1m = 0.0
 
+# Example model settings configuration
+# [chat_providers.providers.test-token-limit.model_settings]
+# generate_images = false  # Set to true to generate images instead of text (default: false)
+
 # Model permissions - allow test model for all users (low token limit makes it test-only anyway)
 [model_permissions.rules.allow-test-model-for-all]
 rule_type = "allow-all"
