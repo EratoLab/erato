@@ -122,6 +122,7 @@ pub async fn get_user_assistants(
     let share_grants = share_grant::get_resources_shared_with_subject_and_groups(
         conn,
         user_id_str,
+        subject.organization_user_id(),
         "assistant",
         subject.organization_group_ids(),
     )
@@ -203,6 +204,7 @@ async fn get_assistant_by_id_internal(
     let share_grants = share_grant::get_resources_shared_with_subject_and_groups(
         conn,
         user_id_str,
+        subject.organization_user_id(),
         "assistant",
         subject.organization_group_ids(),
     )

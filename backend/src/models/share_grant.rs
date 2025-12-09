@@ -261,32 +261,42 @@ pub async fn get_resources_shared_with_subject(
     subject_id: &str,
     resource_type: &str,
 ) -> Result<Vec<share_grants::Model>, Report> {
-    get_resources_shared_with_subject_and_groups(conn, subject_id, resource_type, &[]).await
+    get_resources_shared_with_subject_and_groups(conn, subject_id, None, resource_type, &[]).await
 }
 
 /// Get all resources shared with a specific subject, including organization group grants
+///
+/// This function properly handles both internal user IDs and organization user IDs:
+/// - `subject_id`: The internal user UUID from the database
+/// - `organization_user_id`: Optional organization-specific user ID (e.g., Azure AD's "oid" claim)
+/// - Share grants with `subject_id_type = "id"` are matched against `subject_id`
+/// - Share grants with `subject_id_type = "organization_user_id"` are matched against `organization_user_id`
 pub async fn get_resources_shared_with_subject_and_groups(
     conn: &DatabaseConnection,
     subject_id: &str,
+    organization_user_id: Option<&str>,
     resource_type: &str,
     organization_group_ids: &[String],
 ) -> Result<Vec<share_grants::Model>, Report> {
-    // Build condition for user grants (with subject_id_type = "id" or "organization_user_id")
-    let mut condition = Condition::any()
-        .add(
-            Condition::all()
-                .add(share_grants::Column::SubjectType.eq("user"))
-                .add(share_grants::Column::SubjectIdType.eq("id"))
-                .add(share_grants::Column::SubjectId.eq(subject_id))
-                .add(share_grants::Column::ResourceType.eq(resource_type)),
-        )
-        .add(
+    // Build condition for user grants with subject_id_type = "id"
+    let mut condition = Condition::any().add(
+        Condition::all()
+            .add(share_grants::Column::SubjectType.eq("user"))
+            .add(share_grants::Column::SubjectIdType.eq("id"))
+            .add(share_grants::Column::SubjectId.eq(subject_id))
+            .add(share_grants::Column::ResourceType.eq(resource_type)),
+    );
+
+    // If organization_user_id is provided, also check for grants using it
+    if let Some(org_user_id) = organization_user_id {
+        condition = condition.add(
             Condition::all()
                 .add(share_grants::Column::SubjectType.eq("user"))
                 .add(share_grants::Column::SubjectIdType.eq("organization_user_id"))
-                .add(share_grants::Column::SubjectId.eq(subject_id))
+                .add(share_grants::Column::SubjectId.eq(org_user_id))
                 .add(share_grants::Column::ResourceType.eq(resource_type)),
         );
+    }
 
     // Add condition for organization group grants if any group IDs are provided
     if !organization_group_ids.is_empty() {

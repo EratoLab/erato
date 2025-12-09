@@ -193,6 +193,7 @@ pub async fn get_file_upload_by_id(
         let share_grants = share_grant::get_resources_shared_with_subject_and_groups(
             conn,
             user_id_str,
+            subject.organization_user_id(),
             "assistant",
             subject.organization_group_ids(),
         )

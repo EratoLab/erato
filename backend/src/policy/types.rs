@@ -15,6 +15,7 @@ pub enum Subject {
     User(String),
     UserWithGroups {
         id: String,
+        organization_user_id: Option<String>,
         organization_group_ids: Vec<String>,
     },
 }
@@ -37,6 +38,16 @@ impl Subject {
         match self {
             Subject::User(id) => id,
             Subject::UserWithGroups { id, .. } => id,
+        }
+    }
+
+    pub fn organization_user_id(&self) -> Option<&str> {
+        match self {
+            Subject::User(_) => None,
+            Subject::UserWithGroups {
+                organization_user_id,
+                ..
+            } => organization_user_id.as_deref(),
         }
     }
 

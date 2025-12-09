@@ -443,3 +443,157 @@ async fn test_delete_share_grant(pool: Pool<Postgres>) {
         .expect("Should have grants array");
     assert_eq!(grants_array.len(), 0, "Grant should be deleted");
 }
+
+/// Test sharing an assistant with a different user using organization_user_id
+///
+/// This test verifies that when an assistant is shared with a user using their
+/// organization_user_id (like Azure AD's "oid" claim) instead of their internal
+/// user UUID, the sharing mechanism works correctly.
+///
+/// This is important for enterprise scenarios where admins may want to share
+/// resources using organization identifiers rather than internal database IDs.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+
+    // Create User A (owner)
+    let user_a_subject = "user-a-org-share-test";
+    let user_a = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        user_a_subject,
+        None,
+    )
+    .await
+    .expect("Failed to create user A");
+
+    // Create User B (who will receive the share)
+    // In reality, this user would have an organization_user_id from their JWT token,
+    // but that's not stored in the database - it's only available in the request context
+    let user_b_subject = "user-b-org-share-test";
+    let user_b = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        user_b_subject,
+        None,
+    )
+    .await
+    .expect("Failed to create user B");
+
+    // Simulate User B having an organization_user_id (like Azure AD's "oid" claim)
+    // In production, this would come from the JWT token's "oid" claim
+    let user_b_org_id = "org-user-id-12345";
+
+    // User A creates an assistant
+    let assistant = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user_a.id.to_string()),
+        "Shared with Org User ID".to_string(),
+        Some("Testing organization_user_id sharing".to_string()),
+        "Test prompt".to_string(),
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to create assistant");
+
+    // User A shares the assistant with User B using organization_user_id
+    let _share_grant = erato::models::share_grant::create_share_grant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user_a.id.to_string()),
+        "assistant".to_string(),
+        assistant.id.to_string(),
+        "user".to_string(),
+        "organization_user_id".to_string(), // Using org ID type instead of "id"
+        user_b_org_id.to_string(),          // Using org user ID, not user_b.id
+        "viewer".to_string(),
+    )
+    .await
+    .expect("Failed to create share grant");
+
+    // Test 1: Without organization_user_id, the share grant should NOT be found
+    let shared_resources_without_org_id =
+        erato::models::share_grant::get_resources_shared_with_subject_and_groups(
+            &app_state.db,
+            &user_b.id.to_string(), // User's UUID
+            None,                   // No organization_user_id provided
+            "assistant",
+            &[], // No organization groups
+        )
+        .await
+        .expect("Failed to get shared resources");
+
+    assert_eq!(
+        shared_resources_without_org_id.len(),
+        0,
+        "Without organization_user_id, User B should NOT see the shared assistant"
+    );
+
+    // Test 2: With organization_user_id, the share grant SHOULD be found
+    let shared_resources_with_org_id =
+        erato::models::share_grant::get_resources_shared_with_subject_and_groups(
+            &app_state.db,
+            &user_b.id.to_string(), // User's UUID
+            Some(user_b_org_id),    // Organization user ID provided
+            "assistant",
+            &[], // No organization groups
+        )
+        .await
+        .expect("Failed to get shared resources with org ID");
+
+    assert_eq!(
+        shared_resources_with_org_id.len(),
+        1,
+        "With organization_user_id, User B should see the shared assistant"
+    );
+    assert_eq!(
+        shared_resources_with_org_id[0].resource_id,
+        assistant.id.to_string(),
+        "The shared resource should be the assistant"
+    );
+
+    // Test 3: Using Subject without organization_user_id should fail to access the assistant
+    let result_without_org_id = erato::models::assistant::get_assistant_by_id(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user_b.id.to_string()),
+        assistant.id,
+    )
+    .await;
+
+    assert!(
+        result_without_org_id.is_err(),
+        "Without organization_user_id in Subject, User B should NOT be able to access the assistant"
+    );
+
+    // Test 4: Using Subject WITH organization_user_id should successfully access the assistant
+    let result_with_org_id = erato::models::assistant::get_assistant_by_id(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::UserWithGroups {
+            id: user_b.id.to_string(),
+            organization_user_id: Some(user_b_org_id.to_string()),
+            organization_group_ids: vec![],
+        },
+        assistant.id,
+    )
+    .await;
+
+    assert!(
+        result_with_org_id.is_ok(),
+        "With organization_user_id in Subject, User B should be able to access the assistant: {:?}",
+        result_with_org_id.err()
+    );
+
+    let accessed_assistant = result_with_org_id.unwrap();
+    assert_eq!(
+        accessed_assistant.id, assistant.id,
+        "The accessed assistant should match the shared one"
+    );
+}
