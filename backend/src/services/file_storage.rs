@@ -6,6 +6,7 @@ use eyre::{Report, WrapErr};
 use graph_rs_sdk::GraphClient;
 use opendal::{Operator, Reader, Writer};
 use std::time::Duration;
+use tracing::instrument;
 
 /// File storage backend supporting multiple providers.
 ///
@@ -87,6 +88,7 @@ impl FileStorage {
     /// Read a complete file from storage and return its contents as a byte array.
     ///
     /// For Sharepoint storage, use `read_file_to_bytes_with_context` instead.
+    #[instrument(skip_all)]
     pub async fn read_file_to_bytes(&self, path: &str) -> Result<Vec<u8>, Report> {
         match self {
             Self::OpenDal(storage) => storage.read_file_to_bytes(path).await,
@@ -100,6 +102,7 @@ impl FileStorage {
     /// Read a file from storage with authentication context.
     ///
     /// For Sharepoint storage, the path should be in the format `{driveId} | {itemId}`.
+    #[instrument(skip_all)]
     pub async fn read_file_to_bytes_with_context(
         &self,
         path: &str,

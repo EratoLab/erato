@@ -4,9 +4,8 @@ use crate::models::chat::{
     ChatCreationStatus, get_chat_by_message_id, get_or_create_chat,
     get_or_create_chat_by_previous_message_id,
 };
-use crate::models::file_upload::get_file_upload_by_id;
 use crate::models::message::{
-    ContentPart, ContentPartText, GenerationInputMessages, GenerationMetadata,
+    ContentPart, ContentPartImage, ContentPartText, GenerationInputMessages, GenerationMetadata,
     GenerationParameters, MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus,
     ToolUse, get_generation_input_messages_by_previous_message_id, get_message_by_id,
     submit_message, update_message_generation_metadata,
@@ -17,7 +16,6 @@ use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::background_tasks::{
     StreamingEvent, StreamingTask, ToolCallStatus as BgToolCallStatus,
 };
-use crate::services::file_storage::FileStorage;
 use crate::services::genai_langfuse::{
     LangfuseGenerationBuilder, create_trace_request_from_chat, generate_langfuse_ids,
     generate_name_from_chat_request,
@@ -630,7 +628,26 @@ async fn bg_stream_save_user_message(
     Ok(saved_user_message)
 }
 
-/// Resolve TextFilePointer content parts in generation input messages by extracting file contents JIT.
+/// Helper function to get MIME type from file extension
+fn get_mime_type_from_extension(filename: &str) -> String {
+    if let Some(extension) = filename.rsplit('.').next() {
+        match extension.to_lowercase().as_str() {
+            "jpg" | "jpeg" => "image/jpeg".to_string(),
+            "png" => "image/png".to_string(),
+            "gif" => "image/gif".to_string(),
+            "webp" => "image/webp".to_string(),
+            "bmp" => "image/bmp".to_string(),
+            "svg" => "image/svg+xml".to_string(),
+            "tiff" | "tif" => "image/tiff".to_string(),
+            "ico" => "image/x-icon".to_string(),
+            _ => "application/octet-stream".to_string(),
+        }
+    } else {
+        "application/octet-stream".to_string()
+    }
+}
+
+/// Resolve TextFilePointer and ImageFilePointer content parts in generation input messages by extracting file contents JIT.
 /// This prevents storing duplicate file contents in the database.
 async fn resolve_file_pointers_in_generation_input(
     app_state: &AppState,
@@ -778,6 +795,102 @@ async fn resolve_file_pointers_in_generation_input(
                         );
                         ContentPart::Text(ContentPartText {
                             text: format!("[Error fetching file: {}]", file_upload_id),
+                        })
+                    }
+                }
+            }
+            ContentPart::ImageFilePointer(ref file_pointer) => {
+                // Extract image from the file pointer JIT and encode to base64
+                let file_upload_id = file_pointer.file_upload_id;
+
+                // Get the file upload record
+                let file_upload_result = FileUploads::find_by_id(file_upload_id)
+                    .one(&app_state.db)
+                    .await;
+
+                match file_upload_result {
+                    Ok(Some(file)) => {
+                        // Get the file storage provider
+                        let file_storage = app_state
+                            .file_storage_providers
+                            .get(&file.file_storage_provider_id);
+
+                        if let Some(file_storage) = file_storage {
+                            // Read the file content using the unified interface
+                            let file_bytes_result = file_storage
+                                .read_file_to_bytes_with_context(
+                                    &file.file_storage_path,
+                                    sharepoint_ctx.as_ref(),
+                                )
+                                .await;
+
+                            match file_bytes_result {
+                                Ok(file_bytes) => {
+                                    // Encode to base64
+                                    use base64::{Engine as _, engine::general_purpose};
+                                    let base64_data = general_purpose::STANDARD.encode(&file_bytes);
+
+                                    // Determine MIME type from extension
+                                    let content_type = get_mime_type_from_extension(&file.filename);
+
+                                    tracing::debug!(
+                                        "Successfully encoded image from file pointer {}: {} (size: {} bytes, content_type: {})",
+                                        file.filename,
+                                        file_upload_id,
+                                        file_bytes.len(),
+                                        content_type
+                                    );
+
+                                    ContentPart::Image(ContentPartImage {
+                                        content_type,
+                                        base64_data,
+                                    })
+                                }
+                                Err(err) => {
+                                    tracing::warn!(
+                                        "Failed to read image file {} from storage: {}, using placeholder text",
+                                        file_upload_id,
+                                        err
+                                    );
+                                    ContentPart::Text(ContentPartText {
+                                        text: format!(
+                                            "[Failed to read image file: {}]",
+                                            file_upload_id
+                                        ),
+                                    })
+                                }
+                            }
+                        } else {
+                            tracing::warn!(
+                                "File storage provider {} not found for image file {}, using placeholder text",
+                                file.file_storage_provider_id,
+                                file_upload_id
+                            );
+                            ContentPart::Text(ContentPartText {
+                                text: format!(
+                                    "[File storage provider not found for image file: {}]",
+                                    file_upload_id
+                                ),
+                            })
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::warn!(
+                            "File upload {} referenced in ImageFilePointer not found, using placeholder text",
+                            file_upload_id
+                        );
+                        ContentPart::Text(ContentPartText {
+                            text: format!("[Image file not found: {}]", file_upload_id),
+                        })
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            "Database error fetching image file upload {}: {}, using placeholder text",
+                            file_upload_id,
+                            err
+                        );
+                        ContentPart::Text(ContentPartText {
+                            text: format!("[Error fetching image file: {}]", file_upload_id),
                         })
                     }
                 }
@@ -1608,6 +1721,7 @@ async fn process_input_files(
     me_user: &MeProfile,
     input_files_ids: &[Uuid],
 ) -> Result<Vec<FileContentsForGeneration>, ()> {
+    use crate::services::file_processing_cached;
     use crate::services::file_storage::SharepointContext;
 
     // Build the context for Sharepoint (will be ignored by other providers)
@@ -1618,110 +1732,24 @@ async fn process_input_files(
             access_token: token,
         });
 
-    let mut converted_files = vec![];
-    for file_id in input_files_ids {
-        // Get the file upload record
-        let file_upload = match get_file_upload_by_id(
-            &app_state.db,
-            policy,
-            &me_user.to_subject(),
-            file_id,
-        )
-        .await
-        {
-            Ok(file) => file,
-            Err(err) => {
-                let _ = tx
-                    .send(
-                        Err(err).wrap_err(format!("Failed to get file upload with ID {}", file_id)),
-                    )
-                    .await;
-                return Err(());
-            }
-        };
-
-        // Get the file storage provider
-        let file_storage: &FileStorage = match app_state
-            .file_storage_providers
-            .get(&file_upload.file_storage_provider_id)
-            .ok_or_eyre("File storage provider not found")
-        {
-            Ok(provider) => provider,
-            Err(err) => {
-                let _ = tx
-                    .send(Err(err).wrap_err(format!(
-                        "Failed to get file storage provider: {}",
-                        file_upload.file_storage_provider_id
-                    )))
-                    .await;
-                return Err(());
-            }
-        };
-
-        // Read the file content using the unified interface
-        let file_bytes = match file_storage
-            .read_file_to_bytes_with_context(
-                &file_upload.file_storage_path,
-                sharepoint_ctx.as_ref(),
-            )
-            .await
-        {
-            Ok(bytes) => bytes,
-            Err(err) => {
-                let _ = tx
-                    .send(Err(err).wrap_err(format!(
-                        "Failed to read file from storage: {}",
-                        file_upload.file_storage_path
-                    )))
-                    .await;
-                return Err(());
-            }
-        };
-
-        // Use parser_core to extract text from the file
-        // Offload CPU-intensive parsing to a blocking thread pool to avoid blocking the async runtime
-        let file_bytes_for_parsing = file_bytes.clone();
-        let parse_result = tokio::task::spawn_blocking(move || {
-            parser_core::parse(&file_bytes_for_parsing).map(|text_with_possible_escapes| {
-                remove_null_characters(&text_with_possible_escapes)
-            })
-        })
-        .await;
-
-        match parse_result {
-            Ok(Ok(text)) => {
-                tracing::debug!(
-                    "Successfully parsed file {}: {} (text length: {})",
-                    file_upload.filename,
-                    file_id,
-                    text.len()
-                );
-                tracing::debug!("Extracted text content: {}", text);
-                converted_files.push(FileContentsForGeneration {
-                    id: *file_id,
-                    filename: file_upload.filename,
-                    contents_as_text: text,
-                });
-            }
-            Ok(Err(err)) => {
-                tracing::warn!(
-                    "Failed to parse file {}: {} - Error: {}",
-                    file_upload.filename,
-                    file_id,
-                    err
-                );
-            }
-            Err(join_err) => {
-                tracing::error!(
-                    "Blocking task panicked while parsing file {}: {} - Error: {}",
-                    file_upload.filename,
-                    file_id,
-                    join_err
-                );
-            }
+    // Use the cached parallel processing function
+    match file_processing_cached::process_files_parallel_cached(
+        app_state,
+        policy,
+        me_user,
+        input_files_ids,
+        sharepoint_ctx,
+    )
+    .await
+    {
+        Ok(files) => Ok(files),
+        Err(err) => {
+            let _ = tx
+                .send(Err(err).wrap_err("Failed to process input files"))
+                .await;
+            Err(())
         }
     }
-    Ok(converted_files)
 }
 
 /// Get assistant files and convert them to FileContentsForGeneration format
@@ -1735,70 +1763,65 @@ async fn get_assistant_files_for_generation(
     assistant_files: &[crate::models::assistant::FileInfo],
     access_token: Option<&str>,
 ) -> Result<Vec<FileContentsForGeneration>, Report> {
+    use crate::services::file_processing_cached;
     use crate::services::file_storage::SharepointContext;
-
-    let mut converted_files = vec![];
 
     // Build the context for Sharepoint (will be ignored by other providers)
     let sharepoint_ctx = access_token.map(|token| SharepointContext {
         access_token: token,
     });
 
-    for file_info in assistant_files {
-        // Get the file storage provider
-        let file_storage: &FileStorage = app_state
-            .file_storage_providers
-            .get(&file_info.file_storage_provider_id)
-            .ok_or_eyre("File storage provider not found")?;
+    // Process all files in parallel
+    let futures = assistant_files.iter().map(|file_info| {
+        let file_id = file_info.id;
+        let filename = file_info.filename.clone();
+        let file_storage_path = file_info.file_storage_path.clone();
+        let file_storage_provider_id = file_info.file_storage_provider_id.clone();
+        let sharepoint_ctx_ref = sharepoint_ctx.as_ref();
 
-        // Read the file content using the context-aware method
-        let file_bytes = file_storage
-            .read_file_to_bytes_with_context(&file_info.file_storage_path, sharepoint_ctx.as_ref())
-            .await
-            .wrap_err(format!(
-                "Failed to read assistant file from storage: {}",
-                file_info.file_storage_path
-            ))?;
+        async move {
+            // Get the file storage provider
+            let file_storage = app_state
+                .file_storage_providers
+                .get(&file_storage_provider_id)
+                .ok_or_eyre("File storage provider not found")?;
 
-        // Use parser_core to extract text from the file
-        // Offload CPU-intensive parsing to a blocking thread pool to avoid blocking the async runtime
-        let file_bytes_for_parsing = file_bytes.clone();
-        let parse_result = tokio::task::spawn_blocking(move || {
-            parser_core::parse(&file_bytes_for_parsing).map(|text_with_possible_escapes| {
-                remove_null_characters(&text_with_possible_escapes)
+            // Get file contents using cache
+            let text = file_processing_cached::get_file_contents_cached(
+                app_state,
+                &file_id,
+                file_storage,
+                &file_storage_path,
+                sharepoint_ctx_ref,
+            )
+            .await?;
+
+            tracing::debug!(
+                "Successfully processed assistant file {}: {} (text length: {})",
+                filename,
+                file_id,
+                text.len()
+            );
+
+            Ok::<_, Report>(FileContentsForGeneration {
+                id: file_id,
+                filename,
+                contents_as_text: text,
             })
-        })
-        .await;
+        }
+    });
 
-        match parse_result {
-            Ok(Ok(text)) => {
-                tracing::debug!(
-                    "Successfully parsed assistant file {}: {} (text length: {})",
-                    file_info.filename,
-                    file_info.id,
-                    text.len()
-                );
-                converted_files.push(FileContentsForGeneration {
-                    id: file_info.id,
-                    filename: file_info.filename.clone(),
-                    contents_as_text: text,
-                });
-            }
-            Ok(Err(err)) => {
+    let results = futures::future::join_all(futures).await;
+
+    // Collect successful results
+    let mut converted_files = vec![];
+    for result in results {
+        match result {
+            Ok(file_contents) => converted_files.push(file_contents),
+            Err(err) => {
                 tracing::warn!(
-                    "Failed to parse assistant file {}: {} - Error: {}. Skipping this file.",
-                    file_info.filename,
-                    file_info.id,
+                    "Failed to process assistant file - Error: {}. Skipping this file.",
                     err
-                );
-                // Don't fail the entire request if one file fails to parse
-            }
-            Err(join_err) => {
-                tracing::error!(
-                    "Blocking task panicked while parsing assistant file {}: {} - Error: {}",
-                    file_info.filename,
-                    file_info.id,
-                    join_err
                 );
                 // Don't fail the entire request if one file fails to parse
             }

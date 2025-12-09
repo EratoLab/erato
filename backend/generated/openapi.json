@@ -1871,8 +1871,77 @@
                 }
               }
             ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContentPartImageFilePointer"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "image_file_pointer"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContentPartImage"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "image"
+                    ]
+                  }
+                }
+              }
+            ]
           }
         ]
+      },
+      "ContentPartImage": {
+        "type": "object",
+        "required": [
+          "content_type",
+          "base64_data"
+        ],
+        "properties": {
+          "base64_data": {
+            "type": "string"
+          },
+          "content_type": {
+            "type": "string"
+          }
+        }
+      },
+      "ContentPartImageFilePointer": {
+        "type": "object",
+        "required": [
+          "file_upload_id"
+        ],
+        "properties": {
+          "file_upload_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
       },
       "ContentPartText": {
         "type": "object",

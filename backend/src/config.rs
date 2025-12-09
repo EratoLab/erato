@@ -52,6 +52,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub experimental_assistants: ExperimentalAssistantsConfig,
 
+    // Caches configuration for file contents and token counts.
+    #[serde(default)]
+    pub caches: CachesConfig,
+
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
     pub cleanup_enabled: bool,
@@ -847,6 +851,36 @@ pub struct ExperimentalAssistantsConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct CachesConfig {
+    // Maximum size in MB for file contents cache
+    // Defaults to 100MB
+    #[serde(default = "default_file_contents_cache_mb")]
+    pub file_contents_cache_mb: u64,
+
+    // Maximum size in MB for token count cache
+    // Defaults to 100MB
+    #[serde(default = "default_token_count_cache_mb")]
+    pub token_count_cache_mb: u64,
+}
+
+fn default_file_contents_cache_mb() -> u64 {
+    100
+}
+
+fn default_token_count_cache_mb() -> u64 {
+    100
+}
+
+impl Default for CachesConfig {
+    fn default() -> Self {
+        Self {
+            file_contents_cache_mb: default_file_contents_cache_mb(),
+            token_count_cache_mb: default_token_count_cache_mb(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]

@@ -1,4 +1,6 @@
 pub mod background_tasks;
+pub mod file_parsing;
+pub mod file_processing_cached;
 pub mod file_storage;
 pub mod genai;
 pub mod genai_langfuse;

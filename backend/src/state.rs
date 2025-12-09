@@ -9,8 +9,10 @@ use eyre::Report;
 use genai::adapter::AdapterKind;
 use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
 use genai::{Client as GenaiClient, ModelIden, ServiceTarget};
+use moka::future::Cache;
 use reqwest;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use sea_orm::prelude::Uuid;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -93,6 +95,10 @@ pub struct AppState {
     pub langfuse_client: LangfuseClient,
     pub global_policy_engine: GlobalPolicyEngine,
     pub background_tasks: BackgroundTaskManager,
+    /// Cache mapping file_id -> parsed file contents
+    pub file_contents_cache: Cache<Uuid, String>,
+    /// Cache mapping file_contents -> token count
+    pub token_count_cache: Cache<String, usize>,
 }
 
 impl AppState {
@@ -117,6 +123,24 @@ impl AppState {
         // Initialize the background task manager
         let background_tasks = BackgroundTaskManager::new();
 
+        // Initialize file contents cache with MB-based weigher
+        let file_contents_cache = Cache::builder()
+            .weigher(|_key: &Uuid, value: &String| -> u32 {
+                // Weight by string byte length
+                value.len().try_into().unwrap_or(u32::MAX)
+            })
+            .max_capacity(config.caches.file_contents_cache_mb * 1024 * 1024)
+            .build();
+
+        // Initialize token count cache with MB-based weigher
+        let token_count_cache = Cache::builder()
+            .weigher(|key: &String, _value: &usize| -> u32 {
+                // Weight by key (content) size since that's the bulk of the data
+                key.len().try_into().unwrap_or(u32::MAX)
+            })
+            .max_capacity(config.caches.token_count_cache_mb * 1024 * 1024)
+            .build();
+
         Ok(Self {
             db,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
@@ -127,6 +151,8 @@ impl AppState {
             langfuse_client,
             global_policy_engine,
             background_tasks,
+            file_contents_cache,
+            token_count_cache,
         })
     }
 

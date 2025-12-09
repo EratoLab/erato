@@ -1230,3 +1230,61 @@ cost_output_tokens_per_1m = 15.0
 ```
 
 **Note:** Budget tracking requires that you configure accurate pricing information in your chat provider's `model_capabilities` section. The budget calculations are based on actual token usage multiplied by the configured token prices.
+
+### `caches`
+
+Configuration for in-memory caches that improve performance by reducing redundant file processing and token counting operations. Caches use memory-based size limits (in megabytes) rather than entry counts.
+
+**Type:** `object`
+
+**Default behavior:** Both caches default to 100MB each.
+
+**Example:**
+
+```toml
+[caches]
+file_contents_cache_mb = 100
+token_count_cache_mb = 100
+```
+
+#### `caches.file_contents_cache_mb`
+
+Maximum memory size in megabytes for the file contents cache. This cache stores parsed file contents indexed by file ID to avoid repeatedly reading and parsing the same files.
+
+When the cache reaches this size limit, the least recently used entries will be automatically evicted to make room for new entries.
+
+**Type:** `number`
+
+**Default value:** `100`
+
+**Example:** `200` (for 200MB cache), `50` (for 50MB cache)
+
+#### `caches.token_count_cache_mb`
+
+Maximum memory size in megabytes for the token count cache. This cache stores token counts indexed by file content to avoid repeatedly tokenizing the same content.
+
+When the cache reaches this size limit, the least recently used entries will be automatically evicted to make room for new entries.
+
+**Type:** `number`
+
+**Default value:** `100`
+
+**Example:** `200` (for 200MB cache), `50` (for 50MB cache)
+
+#### Complete Cache Configuration Example
+
+```toml
+# Configure caches for optimal performance
+[caches]
+# Allocate 200MB for file contents caching
+file_contents_cache_mb = 200
+# Allocate 100MB for token count caching
+token_count_cache_mb = 100
+```
+
+**Performance Considerations:**
+
+- Increase cache sizes if you have many users frequently accessing the same files
+- Decrease cache sizes in memory-constrained environments
+- The file contents cache is typically more beneficial than the token count cache
+- Cache efficiency depends on file reuse patterns in your workflow
