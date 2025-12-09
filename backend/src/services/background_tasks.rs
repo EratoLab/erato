@@ -119,6 +119,7 @@ impl StreamingTask {
 
     /// Send an event to all subscribers and store it in history
     pub async fn send_event(&self, event: StreamingEvent) -> Result<(), String> {
+        tracing::debug!("sending event to StreamingTask");
         // First, add to history
         let mut history = self.event_history.write().await;
 

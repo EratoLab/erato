@@ -2114,15 +2114,10 @@ pub async fn message_submit_sse(
                 }
             }
 
-            // Mark task as completed
-            task_clone.mark_completed();
-
             // Send final stream_end event
             let _ = task_clone.send_event(StreamingEvent::StreamEnd).await;
-
-            // Remove from manager to allow cleanup after a delay
-            // (keep it around briefly so clients can still resume)
-            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            // Mark task as completed
+            task_clone.mark_completed();
             app_state_bg.background_tasks.remove_task(&chat_id).await;
         }
         .in_current_span(),
