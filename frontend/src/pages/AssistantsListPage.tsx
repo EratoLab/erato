@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "@/components/ui/Container/PageHeader";
@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
-import { EditIcon, PlusIcon, LogOutIcon } from "@/components/ui/icons";
+import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
+import {
+  EditIcon,
+  PlusIcon,
+  LogOutIcon,
+  ShareIcon,
+} from "@/components/ui/icons";
 import {
   useListAssistants,
   useArchiveAssistant,
@@ -21,6 +27,12 @@ export default function AssistantsListPage() {
 
   // Archive assistant mutation
   const archiveAssistantMutation = useArchiveAssistant();
+
+  // State for sharing dialog
+  const [sharingAssistant, setSharingAssistant] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   useEffect(() => {
     document.title = `${t`Assistants`} - ${t({ id: "branding.page_title_suffix" })}`;
@@ -133,6 +145,7 @@ export default function AssistantsListPage() {
                     name: string;
                     description?: string | null;
                     updated_at: string;
+                    can_edit: boolean;
                   }) => (
                     <div
                       key={assistant.id}
@@ -169,33 +182,48 @@ export default function AssistantsListPage() {
                           >
                             {t`New Chat`}
                           </Button>
-                          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
-                          <div
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                            }}
-                          >
-                            <DropdownMenu
-                              items={[
-                                {
-                                  label: t`Edit`,
-                                  icon: <EditIcon className="size-4" />,
-                                  onClick: () => handleEdit(assistant.id),
-                                },
-                                {
-                                  label: t`Archive`,
-                                  icon: <LogOutIcon className="size-4" />,
-                                  onClick: () => {
-                                    void handleArchive(assistant.id);
+                          {/* Only show dropdown menu if user owns the assistant */}
+                          {assistant.can_edit && (
+                            /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */
+                            <div
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                            >
+                              <DropdownMenu
+                                items={[
+                                  {
+                                    label: t({
+                                      id: "sharing.action.share",
+                                      message: "Share",
+                                    }),
+                                    icon: <ShareIcon className="size-4" />,
+                                    onClick: () =>
+                                      setSharingAssistant({
+                                        id: assistant.id,
+                                        name: assistant.name,
+                                      }),
                                   },
-                                  confirmAction: true,
-                                  confirmTitle: t`Confirm Archive`,
-                                  confirmMessage: t`Are you sure you want to archive this assistant?`,
-                                },
-                              ]}
-                            />
-                          </div>
+                                  {
+                                    label: t`Edit`,
+                                    icon: <EditIcon className="size-4" />,
+                                    onClick: () => handleEdit(assistant.id),
+                                  },
+                                  {
+                                    label: t`Archive`,
+                                    icon: <LogOutIcon className="size-4" />,
+                                    onClick: () => {
+                                      void handleArchive(assistant.id);
+                                    },
+                                    confirmAction: true,
+                                    confirmTitle: t`Confirm Archive`,
+                                    confirmMessage: t`Are you sure you want to archive this assistant?`,
+                                  },
+                                ]}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -206,6 +234,19 @@ export default function AssistantsListPage() {
           )}
         </div>
       </div>
+
+      {/* Sharing dialog */}
+      {sharingAssistant && (
+        <SharingErrorBoundary onReset={() => setSharingAssistant(null)}>
+          <SharingDialog
+            isOpen={true}
+            onClose={() => setSharingAssistant(null)}
+            resourceType="assistant"
+            resourceId={sharingAssistant.id}
+            resourceName={sharingAssistant.name}
+          />
+        </SharingErrorBoundary>
+      )}
     </div>
   );
 }

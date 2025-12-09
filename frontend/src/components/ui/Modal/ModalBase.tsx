@@ -79,7 +79,9 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       <div
         ref={modalRef}
         className={clsx(
-          "theme-transition relative max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-lg bg-theme-bg-primary shadow-xl",
+          "theme-transition relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-theme-bg-primary shadow-xl",
+          // Responsive padding - add margin on mobile
+          "mx-4",
           // Add default focus outline for accessibility
           "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
           contentClassName,
@@ -91,7 +93,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       >
         {/* Optional Header */}
         {title && (
-          <div className="border-b border-theme-border p-4">
+          <div className="shrink-0 border-b border-theme-border p-4">
             <h2
               id="modal-title"
               className="text-lg font-semibold text-theme-fg-primary"
@@ -109,8 +111,8 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
           </div>
         )}
 
-        {/* Content */}
-        <div className="overflow-y-auto p-4">{children}</div>
+        {/* Content - scrollable */}
+        <div className="flex-1 overflow-y-auto p-4">{children}</div>
       </div>
     </div>
   );

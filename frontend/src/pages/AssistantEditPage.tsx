@@ -6,7 +6,10 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
+import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
+import { ShareIcon } from "@/components/ui/icons";
 import {
   useAvailableModels,
   useGetAssistant,
@@ -23,6 +26,7 @@ export default function AssistantEditPage() {
   const { id } = useParams<{ id: string }>();
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isSharingDialogOpen, setIsSharingDialogOpen] = useState(false);
 
   // Fetch assistant data
   const {
@@ -131,6 +135,27 @@ export default function AssistantEditPage() {
     );
   }
 
+  // Check if user has permission to edit
+  if (!assistant.can_edit) {
+    return (
+      <div className="flex h-full flex-col bg-theme-bg-secondary">
+        <PageHeader title={t`Edit Assistant`} />
+        <div className="flex-1 overflow-auto">
+          <div className="mx-auto max-w-4xl p-6">
+            <Alert type="error">
+              {t`You don't have permission to edit this assistant. Only the owner can modify assistant settings.`}
+            </Alert>
+            <div className="mt-4">
+              <Button variant="secondary" onClick={handleCancel}>
+                {t`Back to Assistants`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Find the selected model from available models
   const defaultChatProvider = assistant.default_chat_provider;
   const selectedModel =
@@ -162,6 +187,18 @@ export default function AssistantEditPage() {
       {/* Content */}
       <div className="flex-1 overflow-auto">
         <div className="mx-auto max-w-4xl p-6">
+          {/* Share button - always shown since we only reach this code if can_edit is true */}
+          <div className="mb-4 flex justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<ShareIcon className="size-4" />}
+              onClick={() => setIsSharingDialogOpen(true)}
+            >
+              {t({ id: "sharing.button.share", message: "Share" })}
+            </Button>
+          </div>
+
           <div className="rounded-lg border border-theme-border bg-theme-bg-primary p-8">
             <AssistantForm
               mode="edit"
@@ -176,6 +213,19 @@ export default function AssistantEditPage() {
           </div>
         </div>
       </div>
+
+      {/* Sharing dialog */}
+      {id && (
+        <SharingErrorBoundary onReset={() => setIsSharingDialogOpen(false)}>
+          <SharingDialog
+            isOpen={isSharingDialogOpen}
+            onClose={() => setIsSharingDialogOpen(false)}
+            resourceType="assistant"
+            resourceId={id}
+            resourceName={assistant.name}
+          />
+        </SharingErrorBoundary>
+      )}
     </div>
   );
 }

@@ -66,6 +66,13 @@ export type Assistant = {
    */
   archived_at?: string;
   /**
+   * Whether the current user can edit this assistant
+   *
+   * NOTE: Currently this is true only for the assistant owner. In the future,
+   * this may include collaborators/roles/policy-based permissions.
+   */
+  can_edit: boolean;
+  /**
    * When this assistant was created
    *
    * @format date-time
@@ -292,10 +299,20 @@ export type ContentPart =
     })
   | (ToolUse & {
       content_type: "tool_use";
+    })
+  | (ContentPartTextFilePointer & {
+      content_type: "text_file_pointer";
     });
 
 export type ContentPartText = {
   text: string;
+};
+
+export type ContentPartTextFilePointer = {
+  /**
+   * @format uuid
+   */
+  file_upload_id: string;
 };
 
 /**
@@ -326,6 +343,10 @@ export type CreateAssistantRequest = {
    * The system prompt for the assistant
    */
   prompt: string;
+  /**
+   * Optional list of share grants to create with the assistant
+   */
+  share_grants?: null | undefined;
 };
 
 /**
@@ -352,6 +373,41 @@ export type CreateChatResponse = {
    */
   chat_id: string;
 };
+
+/**
+ * Request to create a new share grant
+ */
+export type CreateShareGrantRequest = {
+  /**
+   * The ID of the resource to share
+   */
+  resource_id: string;
+  /**
+   * The type of resource to share (e.g., "assistant")
+   */
+  resource_type: string;
+  /**
+   * The role to grant (e.g., "viewer")
+   */
+  role: string;
+  /**
+   * The ID of the subject to grant access to
+   */
+  subject_id: string;
+  /**
+   * The type of subject ID (e.g., "id" or "oidc_issuer_and_subject")
+   */
+  subject_id_type: string;
+  /**
+   * The type of subject to grant access to (e.g., "user")
+   */
+  subject_type: string;
+};
+
+/**
+ * A share grant model
+ */
+export type CreateShareGrantResponse = ShareGrant;
 
 /**
  * A drive accessible to the user (OneDrive, Sharepoint, etc.)
@@ -549,6 +605,16 @@ export type LinkFileRequest = {
   source: string;
 };
 
+/**
+ * Response when listing share grants
+ */
+export type ListShareGrantsResponse = {
+  /**
+   * The list of share grants
+   */
+  grants: ShareGrant[];
+};
+
 export type Message = {
   id: string;
 };
@@ -703,6 +769,62 @@ export type MultipartFormFile = {
   name: string;
 };
 
+/**
+ * An organization group
+ */
+export type OrganizationGroup = {
+  /**
+   * The display name of the group
+   */
+  display_name: string;
+  /**
+   * The unique ID of the group
+   */
+  id: string;
+  /**
+   * The subject type ID to use when creating a share grant (always "organization_group_id")
+   */
+  subject_type_id: string;
+};
+
+/**
+ * Response for the organization groups endpoint
+ */
+export type OrganizationGroupsResponse = {
+  /**
+   * List of groups in the organization
+   */
+  groups: OrganizationGroup[];
+};
+
+/**
+ * An organization user
+ */
+export type OrganizationUser = {
+  /**
+   * The display name of the user
+   */
+  display_name: string;
+  /**
+   * The unique ID of the user
+   */
+  id: string;
+  /**
+   * The subject type ID to use when creating a share grant (always "organization_user_id")
+   */
+  subject_type_id: string;
+};
+
+/**
+ * Response for the organization users endpoint
+ */
+export type OrganizationUsersResponse = {
+  /**
+   * List of users in the organization
+   */
+  users: OrganizationUser[];
+};
+
 export type RecentChat = {
   /**
    * When this chat was archived by the user.
@@ -825,6 +947,84 @@ export type RegenerateMessageStreamingResponseMessage =
   | (MessageSubmitStreamingResponseToolCallUpdate & {
       message_type: "tool_call_update";
     });
+
+export type ResumeStreamRequest = {
+  /**
+   * The ID of the chat to resume streaming for.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  chat_id: string;
+};
+
+/**
+ * A share grant model
+ */
+export type ShareGrant = {
+  /**
+   * When this share grant was created
+   *
+   * @format date-time
+   */
+  created_at: string;
+  /**
+   * The unique ID of the share grant
+   */
+  id: string;
+  /**
+   * The ID of the resource being shared
+   */
+  resource_id: string;
+  /**
+   * The type of resource being shared (e.g., "assistant")
+   */
+  resource_type: string;
+  /**
+   * The role being granted (e.g., "viewer")
+   */
+  role: string;
+  /**
+   * The ID of the subject being granted access
+   */
+  subject_id: string;
+  /**
+   * The type of subject ID (e.g., "id" or "oidc_issuer_and_subject")
+   */
+  subject_id_type: string;
+  /**
+   * The type of subject being granted access (e.g., "user")
+   */
+  subject_type: string;
+  /**
+   * When this share grant was last updated
+   *
+   * @format date-time
+   */
+  updated_at: string;
+};
+
+/**
+ * A share grant to create with the assistant
+ */
+export type ShareGrantInput = {
+  /**
+   * The role to grant (e.g., "viewer")
+   */
+  role: string;
+  /**
+   * The ID of the subject to grant access to
+   */
+  subject_id: string;
+  /**
+   * The type of subject ID (e.g., "id" or "oidc_issuer_and_subject")
+   */
+  subject_id_type: string;
+  /**
+   * The type of subject to grant access to (e.g., "user")
+   */
+  subject_type: string;
+};
 
 /**
  * SharePoint-specific metadata for linking files
@@ -1020,6 +1220,20 @@ export type UserProfile = {
    * The user's display name.
    */
   name?: string;
+  /**
+   * Organization group IDs from the `groups` claim.
+   *
+   * These can be used as subject_id when creating share grants
+   * with subject_id_type "organization_group_id".
+   */
+  organization_group_ids: string[];
+  /**
+   * Organization user ID from the `oid` claim (Entra ID specific).
+   *
+   * This can be used as the subject_id when creating share grants
+   * with subject_id_type "organization_user_id".
+   */
+  organization_user_id?: string;
   /**
    * The user's profile picture URL.
    */

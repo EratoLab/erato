@@ -74,6 +74,7 @@ export const handlers = [
       id: "user123",
       preferred_language: "en",
       groups: [],
+      organization_group_ids: [],
       // email, name, picture are nullable/optional
     };
     return HttpResponse.json(response);

@@ -110,16 +110,18 @@ export function AssistantWelcomeScreen({
           </div>
         )}
 
-        {/* Edit Assistant Button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          icon={<EditIcon />}
-          onClick={handleEditAssistant}
-          className="mt-2"
-        >
-          {t`Edit Assistant Settings`}
-        </Button>
+        {/* Edit Assistant Button - only show if user can edit */}
+        {assistant.can_edit && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<EditIcon />}
+            onClick={handleEditAssistant}
+            className="mt-2"
+          >
+            {t`Edit Assistant Settings`}
+          </Button>
+        )}
       </div>
 
       {/* Past Conversations Section */}

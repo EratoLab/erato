@@ -23,6 +23,71 @@ msgid "about.title"
 msgstr "À propos"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.button.save"
+msgstr "Enregistrer les modifications"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.description.helpText"
+msgstr "Optionnel : Décrivez ce que fait cet assistant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.description.placeholder"
+msgstr "Cet assistant aide à..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.files.helpText"
+msgstr "Optionnel : Téléchargez des fichiers depuis votre ordinateur ou OneDrive qui seront disponibles pour cet assistant dans chaque chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.model.helpText"
+msgstr "Optionnel : Choisissez quel modèle cet assistant doit utiliser par défaut"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.prompt.placeholder"
+msgstr "Vous êtes un assistant utile qui..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.validation.description.tooLong"
+msgstr "La description doit contenir moins de 500 caractères"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.validation.name.required"
+msgstr "Le nom est obligatoire"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.validation.name.tooLong"
+msgstr "Le nom doit contenir moins de 100 caractères"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.validation.name.tooShort"
+msgstr "Le nom doit contenir au moins 2 caractères"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.validation.prompt.required"
+msgstr "Le prompt système est obligatoire"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.validation.prompt.tooLong"
+msgstr "Le prompt système doit contenir moins de 5000 caractères"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.validation.prompt.tooShort"
+msgstr "Le prompt système doit contenir au moins 10 caractères"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 #: src/pages/AssistantChatSpacePage.tsx
 msgid "branding.assistant_name"
@@ -232,6 +297,164 @@ msgid "navigation.page.new_chat"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "sharing.action.share"
+msgstr "Partager"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.addPeople.button"
+msgstr "Ajouter"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.addPeople.error"
+msgstr "Échec de l'octroi de l'accès"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.addPeople.success"
+msgstr "Accès accordé avec succès"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.addPeople.title"
+msgstr "Ajouter des personnes"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantEditPage.tsx
+msgid "sharing.button.share"
+msgstr "Partager"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+msgid "sharing.currentAccess.created"
+msgstr "Ajouté"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+msgid "sharing.currentAccess.empty"
+msgstr "Personne n'a encore accès"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.currentAccess.title"
+msgstr "Accès actuel"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.dialog.title"
+msgstr "Partager {resourceName}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.allGranted"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.noMembers"
+msgstr "Aucun utilisateur ou groupe disponible"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.noResults"
+msgstr "Aucune correspondance trouvée"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.error.loadGrants"
+msgstr "Échec du chargement de l'accès actuel"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.error.loadMembers"
+msgstr "Échec du chargement des utilisateurs et groupes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingErrorBoundary.tsx
+msgid "sharing.error.retry"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingErrorBoundary.tsx
+msgid "sharing.error.tryAgain"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingErrorBoundary.tsx
+msgid "sharing.error.unexpected"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.loading"
+msgstr "Chargement..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+msgid "sharing.remove.button"
+msgstr "Supprimer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+msgid "sharing.remove.confirm.message"
+msgstr "Êtes-vous sûr de vouloir supprimer l'accès pour cet utilisateur/groupe ?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+msgid "sharing.remove.confirm.title"
+msgstr "Supprimer l'accès"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.remove.error"
+msgstr "Échec de la suppression de l'accès"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.remove.success"
+msgstr "Accès supprimé avec succès"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+msgid "sharing.role.viewer"
+msgstr "Lecteur"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.searchPlaceholder"
+msgstr "Rechercher des utilisateurs et groupes..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.section.groups"
+msgstr "Groupes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.section.users"
+msgstr "Utilisateurs"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.select.ariaLabel"
+msgstr "Sélectionner {name}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.type.group"
+msgstr "Groupe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/ShareGrantsList.tsx
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.type.user"
+msgstr "Utilisateur"
+
+#. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
 msgstr ""
@@ -347,6 +570,10 @@ msgstr "Joindre un fichier"
 #: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 msgid "Attachments"
 msgstr "Pièces jointes"
+
+#: src/pages/AssistantEditPage.tsx
+msgid "Back to Assistants"
+msgstr ""
 
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "Beginning of conversation"
@@ -484,10 +711,6 @@ msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Description"
-msgstr ""
-
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "Description must be less than 500 characters"
 msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
@@ -690,18 +913,6 @@ msgstr ""
 msgid "Name"
 msgstr ""
 
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "Name is required"
-msgstr ""
-
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "Name must be at least 2 characters"
-msgstr ""
-
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "Name must be less than 100 characters"
-msgstr ""
-
 #: src/components/ui/Assistant/AssistantsPageStructure.tsx
 #: src/components/ui/Chat/Chat.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
@@ -735,18 +946,6 @@ msgstr "sur"
 #: src/components/ui/Controls/DropdownMenu.tsx
 msgid "Open menu"
 msgstr "Ouvrir le menu"
-
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "Optional: Choose which model this assistant should use by default"
-msgstr ""
-
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "Optional: Describe what this assistant does"
-msgstr ""
-
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "Optional: Upload files from your computer or OneDrive that will be available to this assistant in every chat"
-msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallOutput.tsx
 msgid "Output"
@@ -796,10 +995,6 @@ msgstr "Supprimer tous les fichiers"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Reset to Browser Detection"
-msgstr ""
-
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "Save Changes"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
@@ -899,18 +1094,6 @@ msgstr ""
 msgid "System Prompt"
 msgstr ""
 
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "System prompt is required"
-msgstr ""
-
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "System prompt must be at least 10 characters"
-msgstr ""
-
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "System prompt must be less than 5000 characters"
-msgstr ""
-
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "System theme"
 msgstr "Thème système"
@@ -922,10 +1105,6 @@ msgstr ""
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Thinking"
 msgstr "Réflexion"
-
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "This assistant helps with..."
-msgstr ""
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
@@ -1016,12 +1195,12 @@ msgstr "Utilisation d'outils"
 msgid "View all assistants"
 msgstr ""
 
-#: src/components/ui/Assistant/AssistantForm.tsx
-msgid "You are a helpful assistant that..."
-msgstr ""
-
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You are using {percentUsed}% of your budget ({formattedSpending} of {formattedLimit})."
+msgstr ""
+
+#: src/pages/AssistantEditPage.tsx
+msgid "You don't have permission to edit this assistant. Only the owner can modify assistant settings."
 msgstr ""
 
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx

@@ -156,6 +156,10 @@ const ThemeBackground: React.FC<{
           defaultTheme.colors.foreground.primary;
       }
     }
+
+    // Fix scrolling in Storybook by overriding the global overflow: hidden
+    document.documentElement.style.overflow = "auto";
+    document.body.style.overflow = "auto";
   }, [selectedTheme]);
 
   return <>{children}</>;

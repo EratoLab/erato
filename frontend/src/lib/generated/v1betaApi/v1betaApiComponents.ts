@@ -1719,6 +1719,52 @@ export const useRegenerateMessageSse = (
   });
 };
 
+export type ResumeMessageSseError = Fetcher.ErrorWrapper<undefined>;
+
+export type ResumeMessageSseVariables = {
+  body: Schemas.ResumeStreamRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchResumeMessageSse = (
+  variables: ResumeMessageSseVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    ResumeMessageSseError,
+    Schemas.ResumeStreamRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/messages/resumestream",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useResumeMessageSse = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      ResumeMessageSseError,
+      ResumeMessageSseVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    ResumeMessageSseError,
+    ResumeMessageSseVariables
+  >({
+    mutationFn: (variables: ResumeMessageSseVariables) =>
+      fetchResumeMessageSse(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type MessageSubmitSseError = Fetcher.ErrorWrapper<undefined>;
 
 export type MessageSubmitSseVariables = {
@@ -1872,6 +1918,261 @@ export const useAvailableModels = <TData = AvailableModelsResponse,>(
     TData
   >({
     ...availableModelsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type ListOrganizationGroupsError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListOrganizationGroupsVariables =
+  V1betaApiContext["fetcherOptions"];
+
+/**
+ * If the Entra ID integration is not enabled, returns an empty list.
+ * If enabled, fetches all groups from the MS Graph API with full pagination.
+ */
+export const fetchListOrganizationGroups = (
+  variables: ListOrganizationGroupsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.OrganizationGroupsResponse,
+    ListOrganizationGroupsError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/organization/groups",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+/**
+ * If the Entra ID integration is not enabled, returns an empty list.
+ * If enabled, fetches all groups from the MS Graph API with full pagination.
+ */
+export function listOrganizationGroupsQuery(
+  variables: ListOrganizationGroupsVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.OrganizationGroupsResponse>;
+};
+
+export function listOrganizationGroupsQuery(
+  variables: ListOrganizationGroupsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.OrganizationGroupsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listOrganizationGroupsQuery(
+  variables: ListOrganizationGroupsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/organization/groups",
+      operationId: "listOrganizationGroups",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListOrganizationGroups(variables, signal),
+  };
+}
+
+/**
+ * If the Entra ID integration is not enabled, returns an empty list.
+ * If enabled, fetches all groups from the MS Graph API with full pagination.
+ */
+export const useSuspenseListOrganizationGroups = <
+  TData = Schemas.OrganizationGroupsResponse,
+>(
+  variables: ListOrganizationGroupsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.OrganizationGroupsResponse,
+      ListOrganizationGroupsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.OrganizationGroupsResponse,
+    ListOrganizationGroupsError,
+    TData
+  >({
+    ...listOrganizationGroupsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+/**
+ * If the Entra ID integration is not enabled, returns an empty list.
+ * If enabled, fetches all groups from the MS Graph API with full pagination.
+ */
+export const useListOrganizationGroups = <
+  TData = Schemas.OrganizationGroupsResponse,
+>(
+  variables: ListOrganizationGroupsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.OrganizationGroupsResponse,
+      ListOrganizationGroupsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.OrganizationGroupsResponse,
+    ListOrganizationGroupsError,
+    TData
+  >({
+    ...listOrganizationGroupsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type ListOrganizationUsersError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListOrganizationUsersVariables = V1betaApiContext["fetcherOptions"];
+
+/**
+ * If the Entra ID integration is not enabled, returns an empty list.
+ * If enabled, fetches all users from the MS Graph API with full pagination.
+ */
+export const fetchListOrganizationUsers = (
+  variables: ListOrganizationUsersVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.OrganizationUsersResponse,
+    ListOrganizationUsersError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/organization/users",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+/**
+ * If the Entra ID integration is not enabled, returns an empty list.
+ * If enabled, fetches all users from the MS Graph API with full pagination.
+ */
+export function listOrganizationUsersQuery(
+  variables: ListOrganizationUsersVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.OrganizationUsersResponse>;
+};
+
+export function listOrganizationUsersQuery(
+  variables: ListOrganizationUsersVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.OrganizationUsersResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listOrganizationUsersQuery(
+  variables: ListOrganizationUsersVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/organization/users",
+      operationId: "listOrganizationUsers",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListOrganizationUsers(variables, signal),
+  };
+}
+
+/**
+ * If the Entra ID integration is not enabled, returns an empty list.
+ * If enabled, fetches all users from the MS Graph API with full pagination.
+ */
+export const useSuspenseListOrganizationUsers = <
+  TData = Schemas.OrganizationUsersResponse,
+>(
+  variables: ListOrganizationUsersVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.OrganizationUsersResponse,
+      ListOrganizationUsersError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.OrganizationUsersResponse,
+    ListOrganizationUsersError,
+    TData
+  >({
+    ...listOrganizationUsersQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+/**
+ * If the Entra ID integration is not enabled, returns an empty list.
+ * If enabled, fetches all users from the MS Graph API with full pagination.
+ */
+export const useListOrganizationUsers = <
+  TData = Schemas.OrganizationUsersResponse,
+>(
+  variables: ListOrganizationUsersVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.OrganizationUsersResponse,
+      ListOrganizationUsersError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.OrganizationUsersResponse,
+    ListOrganizationUsersError,
+    TData
+  >({
+    ...listOrganizationUsersQuery(
       variables === reactQuery.skipToken
         ? variables
         : deepMerge(fetcherOptions, variables),
@@ -2166,6 +2467,215 @@ export const useMessages = <TData = MessagesResponse,>(
   });
 };
 
+export type ListShareGrantsQueryParams = {
+  /**
+   * The type of resource (e.g., 'assistant')
+   */
+  resource_type: string;
+  /**
+   * The ID of the resource
+   */
+  resource_id: string;
+};
+
+export type ListShareGrantsError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListShareGrantsVariables = {
+  queryParams: ListShareGrantsQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchListShareGrants = (
+  variables: ListShareGrantsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ListShareGrantsResponse,
+    ListShareGrantsError,
+    undefined,
+    {},
+    ListShareGrantsQueryParams,
+    {}
+  >({ url: "/api/v1beta/share-grants", method: "get", ...variables, signal });
+
+export function listShareGrantsQuery(variables: ListShareGrantsVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.ListShareGrantsResponse>;
+};
+
+export function listShareGrantsQuery(
+  variables: ListShareGrantsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ListShareGrantsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listShareGrantsQuery(
+  variables: ListShareGrantsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/share-grants",
+      operationId: "listShareGrants",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListShareGrants(variables, signal),
+  };
+}
+
+export const useSuspenseListShareGrants = <
+  TData = Schemas.ListShareGrantsResponse,
+>(
+  variables: ListShareGrantsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ListShareGrantsResponse,
+      ListShareGrantsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ListShareGrantsResponse,
+    ListShareGrantsError,
+    TData
+  >({
+    ...listShareGrantsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useListShareGrants = <TData = Schemas.ListShareGrantsResponse,>(
+  variables: ListShareGrantsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ListShareGrantsResponse,
+      ListShareGrantsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ListShareGrantsResponse,
+    ListShareGrantsError,
+    TData
+  >({
+    ...listShareGrantsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type CreateShareGrantError = Fetcher.ErrorWrapper<undefined>;
+
+export type CreateShareGrantVariables = {
+  body: Schemas.CreateShareGrantRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchCreateShareGrant = (
+  variables: CreateShareGrantVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.CreateShareGrantResponse,
+    CreateShareGrantError,
+    Schemas.CreateShareGrantRequest,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/share-grants", method: "post", ...variables, signal });
+
+export const useCreateShareGrant = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.CreateShareGrantResponse,
+      CreateShareGrantError,
+      CreateShareGrantVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.CreateShareGrantResponse,
+    CreateShareGrantError,
+    CreateShareGrantVariables
+  >({
+    mutationFn: (variables: CreateShareGrantVariables) =>
+      fetchCreateShareGrant(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type DeleteShareGrantPathParams = {
+  /**
+   * The ID of the share grant to delete
+   */
+  grantId: string;
+};
+
+export type DeleteShareGrantError = Fetcher.ErrorWrapper<undefined>;
+
+export type DeleteShareGrantVariables = {
+  pathParams: DeleteShareGrantPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchDeleteShareGrant = (
+  variables: DeleteShareGrantVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    DeleteShareGrantError,
+    undefined,
+    {},
+    {},
+    DeleteShareGrantPathParams
+  >({
+    url: "/api/v1beta/share-grants/{grantId}",
+    method: "delete",
+    ...variables,
+    signal,
+  });
+
+export const useDeleteShareGrant = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      DeleteShareGrantError,
+      DeleteShareGrantVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    DeleteShareGrantError,
+    DeleteShareGrantVariables
+  >({
+    mutationFn: (variables: DeleteShareGrantVariables) =>
+      fetchDeleteShareGrant(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type TokenUsageEstimateError = Fetcher.ErrorWrapper<undefined>;
 
 export type TokenUsageEstimateVariables = {
@@ -2348,6 +2858,16 @@ export type QueryOperation =
       variables: AvailableModelsVariables | reactQuery.SkipToken;
     }
   | {
+      path: "/api/v1beta/me/organization/groups";
+      operationId: "listOrganizationGroups";
+      variables: ListOrganizationGroupsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/organization/users";
+      operationId: "listOrganizationUsers";
+      variables: ListOrganizationUsersVariables | reactQuery.SkipToken;
+    }
+  | {
       path: "/api/v1beta/me/profile";
       operationId: "profile";
       variables: ProfileVariables | reactQuery.SkipToken;
@@ -2361,6 +2881,11 @@ export type QueryOperation =
       path: "/api/v1beta/messages";
       operationId: "messages";
       variables: MessagesVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/share-grants";
+      operationId: "listShareGrants";
+      variables: ListShareGrantsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/health";

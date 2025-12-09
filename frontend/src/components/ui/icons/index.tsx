@@ -36,6 +36,7 @@ import {
   Search,
   NavArrowRight,
   Folder,
+  ShareAndroid,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -226,6 +227,10 @@ export const ImageIcon = ({ className, ...props }: IconProps) => (
 
 export const FileTextIcon = ({ className, ...props }: IconProps) => (
   <Page className={className} {...props} />
+);
+
+export const ShareIcon = ({ className, ...props }: IconProps) => (
+  <ShareAndroid className={className} {...props} />
 );
 
 // Direct re-exports for convenience (maintaining Iconoir naming)
