@@ -591,6 +591,9 @@ pub struct ChatProviderConfig {
     // Model capabilities configuration for this chat provider.
     #[serde(default)]
     pub model_capabilities: ModelCapabilities,
+    // Model settings configuration for this chat provider.
+    #[serde(default)]
+    pub model_settings: ModelSettings,
 }
 
 impl ChatProviderConfig {
@@ -633,9 +636,10 @@ impl ChatProviderConfig {
             // Validate that the URL ends with the expected Azure OpenAI domains
             if !trimmed_url.contains(".api.cognitive.microsoft.com")
                 && !trimmed_url.contains(".openai.azure.com")
+                && !trimmed_url.contains(".cognitiveservices.azure.com")
             {
                 return Err(eyre!(
-                    "Azure OpenAI base_url must end with either '.api.cognitive.microsoft.com' or '.openai.azure.com', got: {}",
+                    "Azure OpenAI base_url must end with either '.api.cognitive.microsoft.com' or '.openai.azure.com', or '.cognitiveservices.azure.com' got: {}",
                     url
                 ));
             }
@@ -679,6 +683,7 @@ impl ChatProviderConfig {
             system_prompt: self.system_prompt,
             system_prompt_langfuse: self.system_prompt_langfuse,
             model_capabilities: self.model_capabilities,
+            model_settings: self.model_settings,
         })
     }
 
@@ -1073,6 +1078,13 @@ impl Default for ModelCapabilities {
             cost_output_tokens_per_1m: 0.0,
         }
     }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct ModelSettings {
+    // Whether the model should generate images instead of text
+    #[serde(default)]
+    pub generate_images: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]

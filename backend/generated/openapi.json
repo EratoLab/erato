@@ -1934,9 +1934,13 @@
       "ContentPartImageFilePointer": {
         "type": "object",
         "required": [
-          "file_upload_id"
+          "file_upload_id",
+          "download_url"
         ],
         "properties": {
+          "download_url": {
+            "type": "string"
+          },
           "file_upload_id": {
             "type": "string",
             "format": "uuid"

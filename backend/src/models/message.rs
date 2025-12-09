@@ -113,6 +113,7 @@ pub struct ContentPartTextFilePointer {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ContentPartImageFilePointer {
     pub file_upload_id: Uuid,
+    pub download_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -665,6 +666,8 @@ pub async fn get_generation_input_messages_by_previous_message_id(
         let content = if is_image_file(&file.filename) {
             ContentPart::ImageFilePointer(ContentPartImageFilePointer {
                 file_upload_id: file.id,
+                // Placeholder URL - will be resolved to base64 when sending to LLM
+                download_url: String::new(),
             })
         } else {
             ContentPart::TextFilePointer(ContentPartTextFilePointer {
