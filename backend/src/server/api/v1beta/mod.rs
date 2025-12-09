@@ -1111,6 +1111,7 @@ pub async fn frequent_assistants(
     .map_err(log_internal_server_error)?;
 
     // Convert from model FrequentAssistant to API FrequentAssistantItem
+    let current_user_id = &user_id;
     let api_assistants: Vec<FrequentAssistantItem> = frequent
         .into_iter()
         .map(|fa| {
@@ -1138,6 +1139,10 @@ pub async fn frequent_assistants(
                     created_at: fa.assistant.created_at,
                     updated_at: fa.assistant.updated_at,
                     archived_at: fa.assistant.archived_at,
+                    can_edit: permissions::can_user_edit_assistant(
+                        current_user_id,
+                        &fa.assistant.owner_user_id.to_string(),
+                    ),
                 },
                 files: api_files,
             };

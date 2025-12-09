@@ -1,4 +1,4 @@
-use crate::models::{assistant, share_grant};
+use crate::models::{assistant, permissions, share_grant};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::sentry::log_internal_server_error;
@@ -40,6 +40,11 @@ pub struct Assistant {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub archived_at: Option<DateTime<FixedOffset>>,
+    /// Whether the current user can edit this assistant
+    ///
+    /// NOTE: Currently this is true only for the assistant owner. In the future,
+    /// this may include collaborators/roles/policy-based permissions.
+    pub can_edit: bool,
 }
 
 /// An assistant with its associated files
@@ -277,6 +282,10 @@ pub async fn create_assistant(
                     created_at: assistant_with_files.created_at,
                     updated_at: assistant_with_files.updated_at,
                     archived_at: assistant_with_files.archived_at,
+                    can_edit: permissions::can_user_edit_assistant(
+                        &me_user.id,
+                        &assistant_with_files.owner_user_id.to_string(),
+                    ),
                 },
                 files: api_files,
             },
@@ -309,6 +318,7 @@ pub async fn list_assistants(
         .map_err(log_internal_server_error)?;
 
     // Convert to API format
+    let current_user_id = &me_user.id;
     let api_assistants = assistants
         .into_iter()
         .map(|assistant| Assistant {
@@ -321,6 +331,10 @@ pub async fn list_assistants(
             created_at: assistant.created_at,
             updated_at: assistant.updated_at,
             archived_at: assistant.archived_at,
+            can_edit: permissions::can_user_edit_assistant(
+                current_user_id,
+                &assistant.owner_user_id.to_string(),
+            ),
         })
         .collect();
 
@@ -395,6 +409,10 @@ pub async fn get_assistant(
             created_at: assistant_with_files.created_at,
             updated_at: assistant_with_files.updated_at,
             archived_at: assistant_with_files.archived_at,
+            can_edit: permissions::can_user_edit_assistant(
+                &me_user.id,
+                &assistant_with_files.owner_user_id.to_string(),
+            ),
         },
         files: api_files,
     }))
@@ -571,6 +589,10 @@ pub async fn update_assistant(
                 created_at: assistant_with_files.created_at,
                 updated_at: assistant_with_files.updated_at,
                 archived_at: assistant_with_files.archived_at,
+                can_edit: permissions::can_user_edit_assistant(
+                    &me_user.id,
+                    &assistant_with_files.owner_user_id.to_string(),
+                ),
             },
             files: api_files,
         },

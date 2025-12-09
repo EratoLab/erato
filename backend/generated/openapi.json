@@ -1521,13 +1521,18 @@
           "name",
           "prompt",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "can_edit"
         ],
         "properties": {
           "archived_at": {
             "type": "string",
             "format": "date-time",
             "description": "When this assistant was archived"
+          },
+          "can_edit": {
+            "type": "boolean",
+            "description": "Whether the current user can edit this assistant\n\nNOTE: Currently this is true only for the assistant owner. In the future,\nthis may include collaborators/roles/policy-based permissions."
           },
           "created_at": {
             "type": "string",

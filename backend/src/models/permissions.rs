@@ -15,6 +15,16 @@ pub fn can_user_edit_chat(current_user_id: &str, owner_user_id: &str) -> bool {
     current_user_id == owner_user_id
 }
 
+/// Returns whether the current user can edit a given assistant.
+///
+/// Current logic: only the assistant owner can edit.
+///
+/// Future: Extend to collaborators/roles/policies as needed. Keep the
+/// signature stable so API layers stay unchanged.
+pub fn can_user_edit_assistant(current_user_id: &str, owner_user_id: &str) -> bool {
+    current_user_id == owner_user_id
+}
+
 /// Placeholder for future, message-level permission checks.
 ///
 /// NOTE: Do not use yet in handlers. We'll extend the message endpoints to
