@@ -5,5 +5,6 @@
  */
 
 export * from "./SharingDialog";
+export * from "./SharingErrorBoundary";
 export * from "./ShareGrantsList";
 export * from "./SubjectSelector";

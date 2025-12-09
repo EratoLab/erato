@@ -1,11 +1,26 @@
-import { t } from "@lingui/core/macro";
-import { useMemo, useState, memo, useCallback } from "react";
+import { t, msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react";
+import { useMemo, useState, memo, useDeferredValue } from "react";
 
 import { Input } from "@/components/ui/Input/Input";
-import { useFuzzySearch } from "@/utils/search/useFuzzySearch";
+import { useFuzzySearch } from "@/hooks/search/useFuzzySearch";
 
 import type { ShareGrant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { OrganizationMember } from "@/types/sharing";
+
+// Module-level constants - stable references, no need for useMemo/useCallback
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const SEARCH_KEYS = ["display_name"];
+
+// Pure sorting function - prioritize users over groups, then alphabetically
+const sortByTypeAndName = (a: OrganizationMember, b: OrganizationMember) => {
+  // Users come before groups
+  if (a.type !== b.type) {
+    return a.type === "user" ? -1 : 1;
+  }
+  // Within same type, sort alphabetically
+  return a.display_name.localeCompare(b.display_name);
+};
 
 interface SubjectSelectorProps {
   availableSubjects: OrganizationMember[];
@@ -34,6 +49,10 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
   }) => {
     const [searchQuery, setSearchQuery] = useState("");
 
+    // Defer search query to keep input responsive during expensive search operations
+    // React 18 concurrent feature - search runs with lower priority than typing
+    const deferredSearchQuery = useDeferredValue(searchQuery);
+
     // Create a set of subject IDs that already have grants
     const grantedSubjectIds = useMemo(() => {
       return new Set(existingGrants.map((grant) => grant.subject_id));
@@ -46,29 +65,13 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
       );
     }, [availableSubjects, grantedSubjectIds]);
 
-    // Sort function: prioritize users over groups, then alphabetically
-    // Memoized with empty deps since it's a pure function with no external dependencies
-    const sortByTypeAndName = useCallback(
-      (a: OrganizationMember, b: OrganizationMember) => {
-        // Users come before groups
-        if (a.type !== b.type) {
-          return a.type === "user" ? -1 : 1;
-        }
-        // Within same type, sort alphabetically
-        return a.display_name.localeCompare(b.display_name);
-      },
-      [], // Empty deps: pure function, no external dependencies
-    );
-
-    // Memoize search keys array to prevent Fuse instance recreation
-    // eslint-disable-next-line lingui/no-unlocalized-strings
-    const searchKeys = useMemo(() => ["display_name"], []);
-
     // Fuzzy search with user prioritization (using unGranted subjects)
+    // Using module-level constants for keys and sortFn - stable references
+    // Search uses deferred query to prevent blocking the input field
     const filteredSubjects = useFuzzySearch({
       items: unGrantedSubjects,
-      keys: searchKeys,
-      query: searchQuery,
+      keys: SEARCH_KEYS,
+      query: deferredSearchQuery,
       threshold: 0.3,
       sortFn: sortByTypeAndName,
     });
@@ -79,6 +82,9 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
       const groupsList = filteredSubjects.filter((s) => s.type === "group");
       return { users: usersList, groups: groupsList };
     }, [filteredSubjects]);
+
+    // Check if search is still pending (input is ahead of deferred value)
+    const isSearchPending = searchQuery !== deferredSearchQuery;
 
     // Loading state
     if (isLoading) {
@@ -124,16 +130,24 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
       <div className={className}>
         {/* Search input */}
         <div className="mb-3">
-          <Input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t({
-              id: "sharing.searchPlaceholder",
-              message: "Search users and groups...",
-            })}
-            disabled={disabled}
-          />
+          <div className="relative">
+            <Input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t({
+                id: "sharing.searchPlaceholder",
+                message: "Search users and groups...",
+              })}
+              disabled={disabled}
+            />
+            {/* Show subtle loading indicator when search is pending */}
+            {isSearchPending && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="size-4 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Results list */}
@@ -208,6 +222,9 @@ interface SubjectRowProps {
 
 const SubjectRow = memo<SubjectRowProps>(
   ({ subject, isSelected, onToggle, disabled }) => {
+    const { _ } = useLingui();
+    const displayName = subject.display_name;
+
     return (
       <div className="theme-transition flex items-center gap-3 px-4 py-3 hover:bg-theme-bg-hover">
         {/* Checkbox */}
@@ -217,11 +234,12 @@ const SubjectRow = memo<SubjectRowProps>(
           onChange={() => onToggle(subject)}
           disabled={disabled}
           className="size-4 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
-          aria-label={t({
-            id: "sharing.select.ariaLabel",
-            message: "Select {name}",
-            values: { name: subject.display_name },
-          })}
+          aria-label={_(
+            msg({
+              id: "sharing.select.ariaLabel",
+              message: `Select ${displayName}`,
+            }),
+          )}
         />
 
         {/* Subject info */}

@@ -372,6 +372,21 @@ msgid "sharing.error.loadMembers"
 msgstr "Benutzer und Gruppen konnten nicht geladen werden"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingErrorBoundary.tsx
+msgid "sharing.error.retry"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingErrorBoundary.tsx
+msgid "sharing.error.tryAgain"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingErrorBoundary.tsx
+msgid "sharing.error.unexpected"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Sharing/ShareGrantsList.tsx
 #: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.loading"
@@ -423,7 +438,6 @@ msgid "sharing.section.users"
 msgstr "Benutzer"
 
 #. js-lingui-explicit-id
-#. placeholder {0}: subject.display_name
 #: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.select.ariaLabel"
 msgstr "{name} auswählen"

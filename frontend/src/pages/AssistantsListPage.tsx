@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
-import { SharingDialog } from "@/components/ui/Sharing";
+import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
 import {
   EditIcon,
   PlusIcon,
@@ -237,13 +237,15 @@ export default function AssistantsListPage() {
 
       {/* Sharing dialog */}
       {sharingAssistant && (
-        <SharingDialog
-          isOpen={true}
-          onClose={() => setSharingAssistant(null)}
-          resourceType="assistant"
-          resourceId={sharingAssistant.id}
-          resourceName={sharingAssistant.name}
-        />
+        <SharingErrorBoundary onReset={() => setSharingAssistant(null)}>
+          <SharingDialog
+            isOpen={true}
+            onClose={() => setSharingAssistant(null)}
+            resourceType="assistant"
+            resourceId={sharingAssistant.id}
+            resourceName={sharingAssistant.name}
+          />
+        </SharingErrorBoundary>
       )}
     </div>
   );

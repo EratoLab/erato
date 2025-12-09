@@ -41,6 +41,7 @@ export class MockDataGenerator {
       picture: undefined,
       preferred_language: overrides?.preferred_language ?? "en",
       groups: [],
+      organization_group_ids: [],
       ...overrides,
     };
   }
@@ -56,6 +57,7 @@ export class MockDataGenerator {
       picture: undefined,
       preferred_language: overrides?.preferred_language ?? "en",
       groups: [],
+      organization_group_ids: [],
       ...overrides,
     };
   }

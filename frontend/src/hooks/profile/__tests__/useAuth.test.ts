@@ -62,6 +62,7 @@ describe("useAuth", () => {
       email: undefined,
       picture: undefined,
       groups: [],
+      organization_group_ids: [],
     };
 
     mockUseProfileApi.mockReturnValue({
@@ -130,6 +131,7 @@ describe("useAuth", () => {
       email: undefined,
       picture: undefined,
       groups: [],
+      organization_group_ids: [],
     };
 
     mockUseProfileApi.mockReturnValue({

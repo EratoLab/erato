@@ -8,7 +8,7 @@ import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
-import { SharingDialog } from "@/components/ui/Sharing";
+import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
 import { ShareIcon } from "@/components/ui/icons";
 import {
   useAvailableModels,
@@ -216,13 +216,15 @@ export default function AssistantEditPage() {
 
       {/* Sharing dialog */}
       {id && (
-        <SharingDialog
-          isOpen={isSharingDialogOpen}
-          onClose={() => setIsSharingDialogOpen(false)}
-          resourceType="assistant"
-          resourceId={id}
-          resourceName={assistant.name}
-        />
+        <SharingErrorBoundary onReset={() => setIsSharingDialogOpen(false)}>
+          <SharingDialog
+            isOpen={isSharingDialogOpen}
+            onClose={() => setIsSharingDialogOpen(false)}
+            resourceType="assistant"
+            resourceId={id}
+            resourceName={assistant.name}
+          />
+        </SharingErrorBoundary>
       )}
     </div>
   );

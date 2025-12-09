@@ -114,7 +114,7 @@ function MockSharingDialog({
       resource_type: "assistant",
       resource_id: "assistant-123",
       subject_type: subject.type === "user" ? "user" : "organization_group",
-      subject_id_type: subject.subjectTypeId,
+      subject_id_type: subject.subject_type_id,
       subject_id: subject.id,
       role: "viewer",
       created_at: new Date().toISOString(),
@@ -186,6 +186,7 @@ function MockSharingDialog({
             }}
             canManage={true}
             isLoading={showLoadingGrants}
+            availableSubjects={initialMembers}
           />
         </div>
       </div>

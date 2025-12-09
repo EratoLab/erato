@@ -1,5 +1,6 @@
-import { t } from "@lingui/core/macro";
-import { useState, useCallback, useMemo } from "react";
+import { t, msg } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
@@ -31,6 +32,8 @@ export function SharingDialog({
   resourceId,
   resourceName,
 }: SharingDialogProps) {
+  const { _ } = useLingui();
+
   // State for selected subjects
   const [selectedSubjects, setSelectedSubjects] = useState<
     OrganizationMember[]
@@ -63,8 +66,17 @@ export function SharingDialog({
     [selectedSubjects],
   );
 
+  // Auto-clear success messages after 3 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(""), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
   // Toggle subject selection
-  // Empty deps: uses setState callback form, doesn't depend on external state
+  // Memoized with empty deps: uses setState callback form, stable reference prevents
+  // SubjectSelector and all SubjectRow items from re-rendering
   const handleToggleSubject = useCallback((subject: OrganizationMember) => {
     setSelectedSubjects((prev) => {
       const isSelected = prev.some((s) => s.id === subject.id);
@@ -76,7 +88,8 @@ export function SharingDialog({
   }, []); // Empty deps: uses setState callback form
 
   // Handle adding selected subjects
-  const handleAdd = useCallback(async () => {
+  // Not memoized: only called via button onClick, not passed to memoized children
+  const handleAdd = async () => {
     if (selectedSubjects.length === 0) return;
 
     setSuccessMessage("");
@@ -92,7 +105,6 @@ export function SharingDialog({
               subject.type === "user" ? "user" : "organization_group",
             subject_id_type: subject.subject_type_id,
             subject_id: subject.id,
-
             role: "viewer",
           }),
         ),
@@ -105,11 +117,6 @@ export function SharingDialog({
         }),
       );
       setSelectedSubjects([]);
-
-      // Clear success message after a delay
-      setTimeout(() => {
-        setSuccessMessage("");
-      }, 3000);
     } catch (error) {
       console.error("Failed to create share grants:", error);
       setErrorMessage(
@@ -119,9 +126,11 @@ export function SharingDialog({
         }),
       );
     }
-  }, [selectedSubjects, createGrant]);
+  };
 
   // Handle removing a grant
+  // Memoized: passed to ShareGrantsList (memo) which passes to GrantRow (memo) items
+  // Prevents re-rendering the entire grants list on parent re-renders
   const handleRemove = useCallback(
     async (grantId: string) => {
       setSuccessMessage("");
@@ -135,11 +144,6 @@ export function SharingDialog({
             message: "Access removed successfully",
           }),
         );
-
-        // Clear success message after a delay
-        setTimeout(() => {
-          setSuccessMessage("");
-        }, 3000);
       } catch (error) {
         console.error("Failed to delete share grant:", error);
         setErrorMessage(
@@ -154,43 +158,45 @@ export function SharingDialog({
   );
 
   // Handle dialog close
-  const handleClose = useCallback(() => {
+  // Not memoized: ModalBase is not memoized, and onClose likely changes on parent re-renders
+  const handleClose = () => {
     setSelectedSubjects([]);
     setSuccessMessage("");
     setErrorMessage("");
     onClose();
-  }, [onClose]);
+  };
 
   return (
     <ModalBase
       isOpen={isOpen}
       onClose={handleClose}
-      title={t({
-        id: "sharing.dialog.title",
-        message: "Share {resourceName}",
-        values: { resourceName },
-      })}
+      title={_(
+        msg({
+          id: "sharing.dialog.title",
+          message: `Share ${resourceName}`,
+        }),
+      )}
     >
       <div className="space-y-5">
         {/* Success/Error alerts */}
-        {successMessage && <Alert type="success">{successMessage}</Alert>}
-        {errorMessage && <Alert type="error">{errorMessage}</Alert>}
-        {membersError && (
+        {successMessage ? <Alert type="success">{successMessage}</Alert> : null}
+        {errorMessage ? <Alert type="error">{errorMessage}</Alert> : null}
+        {membersError ? (
           <Alert type="error">
             {t({
               id: "sharing.error.loadMembers",
               message: "Failed to load users and groups",
             })}
           </Alert>
-        )}
-        {grantsError && (
+        ) : null}
+        {grantsError ? (
           <Alert type="error">
             {t({
               id: "sharing.error.loadGrants",
               message: "Failed to load current access",
             })}
           </Alert>
-        )}
+        ) : null}
 
         {/* Add people section */}
         <div>
