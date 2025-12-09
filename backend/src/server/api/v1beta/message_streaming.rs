@@ -918,11 +918,21 @@ async fn prepare_chat_request(
     previous_message_id: &Uuid,
     mut new_input_files: Vec<FileContentsForGeneration>,
     user_groups: &[String],
+    organization_user_id: Option<&str>,
+    organization_group_ids: &[String],
     requested_chat_provider_id: Option<&str>,
     access_token: Option<&str>,
 ) -> Result<(ChatRequest, ChatOptions, GenerationInputMessages), Report> {
-    // Create subject from chat owner
-    let subject = crate::policy::types::Subject::User(chat.owner_user_id.clone());
+    // Create subject from chat owner with organization info if available
+    let subject = if organization_user_id.is_some() || !organization_group_ids.is_empty() {
+        crate::policy::types::Subject::UserWithGroups {
+            id: chat.owner_user_id.clone(),
+            organization_user_id: organization_user_id.map(String::from),
+            organization_group_ids: organization_group_ids.to_vec(),
+        }
+    } else {
+        crate::policy::types::Subject::User(chat.owner_user_id.clone())
+    };
 
     // Get assistant configuration if this chat is based on an assistant
     let assistant_config = crate::models::chat::get_chat_assistant_configuration(
@@ -2316,6 +2326,8 @@ async fn run_message_submit_task(
         &saved_user_message.id,
         files_for_generation,
         &me_user.groups,
+        me_user.organization_user_id.as_deref(),
+        &me_user.organization_group_ids,
         request.chat_provider_id.as_deref(),
         me_user.access_token.as_deref(),
     )
@@ -2497,6 +2509,8 @@ pub async fn regenerate_message_sse(
             &previous_message.id,
             files_for_generation.clone(),
             &me_user.groups,
+            me_user.organization_user_id.as_deref(),
+            &me_user.organization_group_ids,
             request.chat_provider_id.as_deref(),
             me_user.access_token.as_deref(),
         )
@@ -2747,6 +2761,8 @@ pub async fn edit_message_sse(
             &saved_user_message.id,
             files_for_generation.clone(),
             &me_user.groups,
+            me_user.organization_user_id.as_deref(),
+            &me_user.organization_group_ids,
             request.chat_provider_id.as_deref(),
             me_user.access_token.as_deref(),
         )
