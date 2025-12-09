@@ -110,6 +110,7 @@ impl Drop for TelemetryGuard {
 /// 1.  **Environment Filter**: Reads `RUST_LOG` and expands any custom tracing groups.
 /// 2.  **Stdout Layer**: Configures standard logging to stdout with formatting.
 /// 3.  **OpenTelemetry Layer**: Configures OTLP export (if enabled in config) to send traces to a collector.
+/// 4.  **Tokio Console Layer**: Adds tokio-console support (if the feature is enabled).
 ///
 /// Returns a `TelemetryGuard` that must be kept alive for the duration of the application
 /// to ensure proper shutdown of the tracer provider.
@@ -117,6 +118,11 @@ pub fn init_telemetry(config: &AppConfig) -> Result<TelemetryGuard> {
     // 1. Setup Environment Filter
     let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     let expanded_filter = expand_env_filter(rust_log);
+
+    // When tokio-console is enabled, we need to enable tokio and runtime tracing
+    #[cfg(feature = "tokio-console")]
+    let expanded_filter = format!("{},tokio=trace,runtime=trace", expanded_filter);
+
     let env_filter = EnvFilter::new(expanded_filter.clone());
 
     // 2. Setup Stdout Layer
@@ -171,8 +177,21 @@ pub fn init_telemetry(config: &AppConfig) -> Result<TelemetryGuard> {
     // 4. Setup Langfuse OTEL Layer (Experimental)
     // Disabled for now
 
-    // 5. Init Registry
-    Registry::default().with(fmt_layer).with(otel_layer).init();
+    // 5. Init Registry with optional Tokio Console Layer
+    #[cfg(feature = "tokio-console")]
+    {
+        let console_layer = console_subscriber::spawn();
+        Registry::default()
+            .with(fmt_layer)
+            .with(otel_layer)
+            .with(console_layer)
+            .init();
+    }
+
+    #[cfg(not(feature = "tokio-console"))]
+    {
+        Registry::default().with(fmt_layer).with(otel_layer).init();
+    }
 
     Ok(TelemetryGuard)
 }
