@@ -1,8 +1,9 @@
 use crate::config::LangfuseConfig;
+use chrono::{DateTime, Utc};
 use eyre::{Result, eyre};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 /// Langfuse client for sending tracing data
 #[derive(Debug, Clone)]
@@ -12,17 +13,24 @@ pub struct LangfuseClient {
     public_key: String,
     secret_key: String,
     enabled: bool,
+    environment: Option<String>,
 }
 
 impl LangfuseClient {
+    /// Get the environment identifier for this client
+    pub fn environment(&self) -> Option<&str> {
+        self.environment.as_deref()
+    }
+
     /// Create a new LangfuseClient from configuration
-    pub fn from_config(config: &LangfuseConfig) -> Result<Self> {
+    pub fn from_config(config: &LangfuseConfig, environment: Option<String>) -> Result<Self> {
         tracing::debug!(
             enabled = config.enabled,
             tracing_enabled = config.tracing_enabled,
             base_url = ?config.base_url,
             public_key = ?config.public_key.as_ref().map(|k| format!("{}...", &k[..k.len().min(8)])),
             secret_key_set = config.secret_key.is_some(),
+            environment = ?environment,
             "Creating LangfuseClient from configuration"
         );
 
@@ -34,6 +42,7 @@ impl LangfuseClient {
                 public_key: String::new(),
                 secret_key: String::new(),
                 enabled: false,
+                environment: None,
             });
         }
 
@@ -59,6 +68,7 @@ impl LangfuseClient {
         tracing::debug!(
             base_url = %base_url,
             public_key = %format!("{}...", &public_key[..public_key.len().min(8)]),
+            environment = ?environment,
             "Successfully created active LangfuseClient"
         );
 
@@ -68,6 +78,7 @@ impl LangfuseClient {
             public_key,
             secret_key,
             enabled: true,
+            environment,
         })
     }
 
@@ -95,6 +106,8 @@ impl LangfuseClient {
                 name: request.name,
                 user_id: request.user_id,
                 session_id: request.session_id,
+                release: request.release,
+                environment: request.environment,
                 input: request.input,
                 output: request.output,
                 metadata: request.metadata,
@@ -155,6 +168,7 @@ impl LangfuseClient {
                 status_message: request.status_message,
                 parent_observation_id: request.parent_observation_id,
                 version: request.version,
+                environment: request.environment,
             })),
         };
 
@@ -199,6 +213,8 @@ impl LangfuseClient {
                 name: trace_request.name,
                 user_id: trace_request.user_id,
                 session_id: trace_request.session_id,
+                release: trace_request.release,
+                environment: trace_request.environment,
                 input: trace_request.input,
                 output: trace_request.output,
                 metadata: trace_request.metadata,
@@ -232,6 +248,7 @@ impl LangfuseClient {
                 status_message: generation_request.status_message,
                 parent_observation_id: generation_request.parent_observation_id,
                 version: generation_request.version,
+                environment: generation_request.environment,
             })),
         };
 
@@ -456,44 +473,8 @@ impl LangfuseClient {
 
 /// Convert SystemTime to ISO 8601 string format expected by Langfuse
 fn system_time_to_iso_string(time: SystemTime) -> String {
-    let duration_since_epoch = time
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_else(|_| std::time::Duration::from_secs(0));
-
-    // Convert to milliseconds since epoch
-    let millis = duration_since_epoch.as_millis() as u64;
-
-    // Create a simple ISO 8601 timestamp
-    let secs = millis / 1000;
-    let remaining_millis = millis % 1000;
-
-    // This is a basic implementation - for production you might want to use chrono
-    format!(
-        "{}T{}Z",
-        format_timestamp_date(secs),
-        format_timestamp_time(secs, remaining_millis)
-    )
-}
-
-fn format_timestamp_date(secs: u64) -> String {
-    // Basic date formatting - this is simplified
-    // In production, use chrono for proper date/time handling
-    let days_since_epoch = secs / 86400;
-    let year = 1970 + (days_since_epoch / 365); // Simplified year calculation
-    let day_of_year = days_since_epoch % 365;
-    let month = (day_of_year / 30) + 1; // Simplified month calculation
-    let day = (day_of_year % 30) + 1;
-
-    format!("{:04}-{:02}-{:02}", year, month, day)
-}
-
-fn format_timestamp_time(secs: u64, millis: u64) -> String {
-    let seconds_in_day = secs % 86400;
-    let hours = seconds_in_day / 3600;
-    let minutes = (seconds_in_day % 3600) / 60;
-    let seconds = seconds_in_day % 60;
-
-    format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, millis)
+    let datetime: DateTime<Utc> = time.into();
+    datetime.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
 /// Request for creating a trace
@@ -503,6 +484,8 @@ pub struct CreateTraceRequest {
     pub name: Option<String>,
     pub user_id: Option<String>,
     pub session_id: Option<String>,
+    pub release: Option<String>,
+    pub environment: Option<String>,
     pub input: Option<serde_json::Value>,
     pub output: Option<serde_json::Value>,
     pub metadata: Option<serde_json::Value>,
@@ -529,6 +512,7 @@ pub struct FinishGenerationRequest {
     pub status_message: Option<String>,
     pub parent_observation_id: Option<String>,
     pub version: Option<String>,
+    pub environment: Option<String>,
 }
 
 /// Ingestion batch structure
@@ -563,6 +547,8 @@ struct CreateTraceEvent {
     pub name: Option<String>,
     pub user_id: Option<String>,
     pub session_id: Option<String>,
+    pub release: Option<String>,
+    pub environment: Option<String>,
     pub input: Option<serde_json::Value>,
     pub output: Option<serde_json::Value>,
     pub metadata: Option<serde_json::Value>,
@@ -591,6 +577,7 @@ struct CreateObservationEvent {
     pub status_message: Option<String>,
     pub parent_observation_id: Option<String>,
     pub version: Option<String>,
+    pub environment: Option<String>,
 }
 
 /// Usage information for token counting and cost tracking
@@ -655,7 +642,7 @@ mod tests {
             ..Default::default()
         };
 
-        let client = LangfuseClient::from_config(&config).unwrap();
+        let client = LangfuseClient::from_config(&config, None).unwrap();
         assert!(!client.enabled);
     }
 
@@ -669,7 +656,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = LangfuseClient::from_config(&config);
+        let result = LangfuseClient::from_config(&config, None);
         assert!(result.is_err());
     }
 
@@ -683,10 +670,11 @@ mod tests {
             ..Default::default()
         };
 
-        let client = LangfuseClient::from_config(&config).unwrap();
+        let client = LangfuseClient::from_config(&config, Some("production".to_string())).unwrap();
         assert!(client.enabled);
         assert_eq!(client.base_url, "https://cloud.langfuse.com");
         assert_eq!(client.public_key, "pk-lf-test");
         assert_eq!(client.secret_key, "sk-lf-test");
+        assert_eq!(client.environment, Some("production".to_string()));
     }
 }

@@ -1,11 +1,12 @@
 use crate::models::message::ContentPart;
 use crate::services::genai::into_openai_request_parts;
 use crate::services::langfuse::{CreateTraceRequest, FinishGenerationRequest, Usage};
+use chrono::{DateTime, Utc};
 use eyre::Result;
 use genai::chat::{ChatRequest, Usage as GenAiUsage};
 use sea_orm::prelude::Uuid;
 use serde_json::{Value as JsonValue, json};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 /// Helper to create Langfuse FinishGenerationRequest from genai components
 pub struct LangfuseGenerationBuilder {
@@ -16,6 +17,7 @@ pub struct LangfuseGenerationBuilder {
     start_time: Option<SystemTime>,
     end_time: Option<SystemTime>,
     completion_start_time: Option<SystemTime>,
+    environment: Option<String>,
 }
 
 impl LangfuseGenerationBuilder {
@@ -28,6 +30,7 @@ impl LangfuseGenerationBuilder {
             start_time: None,
             end_time: None,
             completion_start_time: None,
+            environment: None,
         }
     }
 
@@ -53,6 +56,11 @@ impl LangfuseGenerationBuilder {
 
     pub fn with_completion_start_time(mut self, completion_start_time: SystemTime) -> Self {
         self.completion_start_time = Some(completion_start_time);
+        self
+    }
+
+    pub fn with_environment(mut self, environment: String) -> Self {
+        self.environment = Some(environment);
         self
     }
 
@@ -98,6 +106,7 @@ impl LangfuseGenerationBuilder {
             status_message: None,
             parent_observation_id: None,
             version: None,
+            environment: self.environment,
         })
     }
 }
@@ -168,45 +177,8 @@ fn convert_genai_usage_to_langfuse_usage(genai_usage: &GenAiUsage) -> Usage {
 
 /// Convert SystemTime to ISO 8601 string
 fn system_time_to_iso_string(time: SystemTime) -> String {
-    let duration_since_epoch = time
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_else(|_| std::time::Duration::from_secs(0));
-
-    // Convert to milliseconds since epoch
-    let millis = duration_since_epoch.as_millis() as u64;
-
-    // Create a simple ISO 8601 timestamp
-    // For more precise formatting, you might want to use chrono crate
-    let secs = millis / 1000;
-    let remaining_millis = millis % 1000;
-
-    // This is a basic implementation - for production you might want to use chrono
-    format!(
-        "{}T{}Z",
-        format_timestamp_date(secs),
-        format_timestamp_time(secs, remaining_millis)
-    )
-}
-
-fn format_timestamp_date(secs: u64) -> String {
-    // Basic date formatting - this is simplified
-    // In production, use chrono for proper date/time handling
-    let days_since_epoch = secs / 86400;
-    let year = 1970 + (days_since_epoch / 365); // Simplified year calculation
-    let day_of_year = days_since_epoch % 365;
-    let month = (day_of_year / 30) + 1; // Simplified month calculation
-    let day = (day_of_year % 30) + 1;
-
-    format!("{:04}-{:02}-{:02}", year, month, day)
-}
-
-fn format_timestamp_time(secs: u64, millis: u64) -> String {
-    let seconds_in_day = secs % 86400;
-    let hours = seconds_in_day / 3600;
-    let minutes = (seconds_in_day % 3600) / 60;
-    let seconds = seconds_in_day % 60;
-
-    format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, millis)
+    let datetime: DateTime<Utc> = time.into();
+    datetime.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
 /// Convenience function to generate unique observation and trace IDs
@@ -248,6 +220,7 @@ pub fn create_trace_request_from_chat(
     chat_request: &ChatRequest,
     user_id: Option<String>,
     session_id: Option<String>,
+    environment: Option<String>,
 ) -> Result<CreateTraceRequest> {
     // Generate a name for the trace from the first user message
     let name = generate_name_from_chat_request(chat_request);
@@ -264,6 +237,8 @@ pub fn create_trace_request_from_chat(
         name,
         user_id,
         session_id,
+        release: None,
+        environment,
         input: Some(input_json),
         output: None, // Will be set when the trace is completed
         metadata: None,

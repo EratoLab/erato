@@ -112,7 +112,8 @@ async fn test_app_state_internal(
         enabled: false,
         ..Default::default()
     };
-    let langfuse_client = LangfuseClient::from_config(&langfuse_config).unwrap();
+    let langfuse_client =
+        LangfuseClient::from_config(&langfuse_config, Some("test".to_string())).unwrap();
 
     let global_policy_engine = GlobalPolicyEngine::new();
 
