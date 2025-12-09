@@ -106,13 +106,18 @@ impl std::ops::Deref for MeProfile {
 
 impl MeProfile {
     pub fn to_subject(&self) -> Subject {
-        if self.profile.organization_group_ids.is_empty() {
-            Subject::User(self.profile.id.clone())
-        } else {
+        // Use UserWithGroups if we have organization-specific information
+        // (either organization_user_id or organization_group_ids)
+        if self.profile.organization_user_id.is_some()
+            || !self.profile.organization_group_ids.is_empty()
+        {
             Subject::UserWithGroups {
                 id: self.profile.id.clone(),
+                organization_user_id: self.profile.organization_user_id.clone(),
                 organization_group_ids: self.profile.organization_group_ids.clone(),
             }
+        } else {
+            Subject::User(self.profile.id.clone())
         }
     }
 }

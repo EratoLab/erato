@@ -462,6 +462,7 @@ mod tests {
     async fn test_authorize_with_organization_group_share_grant() {
         let subject = Subject::UserWithGroups {
             id: "user_3".to_string(),
+            organization_user_id: None,
             organization_group_ids: vec!["org-group-1".to_string(), "org-group-2".to_string()],
         };
         let resource = Resource::Assistant("assistant_2".to_string());
@@ -501,6 +502,7 @@ mod tests {
     async fn test_authorize_without_organization_group_share_grant() {
         let subject = Subject::UserWithGroups {
             id: "user_3".to_string(),
+            organization_user_id: None,
             organization_group_ids: vec!["org-group-2".to_string()], // Not in org-group-1
         };
         let resource = Resource::Assistant("assistant_2".to_string());
