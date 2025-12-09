@@ -124,13 +124,22 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
         case "name": {
           const nameValue = value as string;
           if (!nameValue || nameValue.trim().length === 0) {
-            return t`Name is required`;
+            return t({
+              id: "assistant.form.validation.name.required",
+              message: "Name is required",
+            });
           }
           if (nameValue.trim().length < 2) {
-            return t`Name must be at least 2 characters`;
+            return t({
+              id: "assistant.form.validation.name.tooShort",
+              message: "Name must be at least 2 characters",
+            });
           }
           if (nameValue.length > 100) {
-            return t`Name must be less than 100 characters`;
+            return t({
+              id: "assistant.form.validation.name.tooLong",
+              message: "Name must be less than 100 characters",
+            });
           }
           return "";
         }
@@ -138,7 +147,10 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
         case "description": {
           const descValue = value as string;
           if (descValue && descValue.length > 500) {
-            return t`Description must be less than 500 characters`;
+            return t({
+              id: "assistant.form.validation.description.tooLong",
+              message: "Description must be less than 500 characters",
+            });
           }
           return "";
         }
@@ -146,13 +158,22 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
         case "prompt": {
           const promptValue = value as string;
           if (!promptValue || promptValue.trim().length === 0) {
-            return t`System prompt is required`;
+            return t({
+              id: "assistant.form.validation.prompt.required",
+              message: "System prompt is required",
+            });
           }
           if (promptValue.trim().length < 10) {
-            return t`System prompt must be at least 10 characters`;
+            return t({
+              id: "assistant.form.validation.prompt.tooShort",
+              message: "System prompt must be at least 10 characters",
+            });
           }
           if (promptValue.length > 5000) {
-            return t`System prompt must be less than 5000 characters`;
+            return t({
+              id: "assistant.form.validation.prompt.tooLong",
+              message: "System prompt must be less than 5000 characters",
+            });
           }
           return "";
         }
@@ -284,7 +305,10 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
         <FormField
           label={t`Description`}
           error={touched.description ? errors.description : undefined}
-          helpText={t`Optional: Describe what this assistant does`}
+          helpText={t({
+            id: "assistant.form.description.helpText",
+            message: "Optional: Describe what this assistant does",
+          })}
           htmlFor="assistant-description"
         >
           <Textarea
@@ -292,7 +316,10 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
             value={formData.description}
             onChange={(e) => handleFieldChange("description", e.target.value)}
             onBlur={() => handleFieldBlur("description")}
-            placeholder={t`This assistant helps with...`}
+            placeholder={t({
+              id: "assistant.form.description.placeholder",
+              message: "This assistant helps with...",
+            })}
             rows={3}
             error={touched.description ? errors.description : undefined}
             disabled={isSubmitting}
@@ -312,7 +339,10 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
             value={formData.prompt}
             onChange={(e) => handleFieldChange("prompt", e.target.value)}
             onBlur={() => handleFieldBlur("prompt")}
-            placeholder={t`You are a helpful assistant that...`}
+            placeholder={t({
+              id: "assistant.form.prompt.placeholder",
+              message: "You are a helpful assistant that...",
+            })}
             rows={8}
             monospace
             error={touched.prompt ? errors.prompt : undefined}
@@ -324,7 +354,11 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
         {availableModels.length > 0 && (
           <FormField
             label={t`Default Model`}
-            helpText={t`Optional: Choose which model this assistant should use by default`}
+            helpText={t({
+              id: "assistant.form.model.helpText",
+              message:
+                "Optional: Choose which model this assistant should use by default",
+            })}
             htmlFor="assistant-model"
           >
             <ModelSelector
@@ -339,7 +373,11 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
         {/* File uploads */}
         <FormField
           label={t`Default Files`}
-          helpText={t`Optional: Upload files from your computer or OneDrive that will be available to this assistant in every chat`}
+          helpText={t({
+            id: "assistant.form.files.helpText",
+            message:
+              "Optional: Upload files from your computer or OneDrive that will be available to this assistant in every chat",
+          })}
           htmlFor="assistant-files"
         >
           <div className="space-y-3">
@@ -390,7 +428,10 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
               ? t`Saving...`
               : mode === "create"
                 ? t`Create Assistant`
-                : t`Save Changes`}
+                : t({
+                    id: "assistant.form.button.save",
+                    message: "Save Changes",
+                  })}
           </Button>
         </div>
       </div>
