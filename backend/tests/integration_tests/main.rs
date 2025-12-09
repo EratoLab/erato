@@ -116,6 +116,24 @@ async fn test_app_state_internal(
 
     let global_policy_engine = GlobalPolicyEngine::new();
 
+    // Initialize file contents cache with MB-based weigher
+    let file_contents_cache = moka::future::Cache::builder()
+        .weigher(|_key: &sea_orm::prelude::Uuid, value: &String| -> u32 {
+            // Weight by string byte length
+            value.len().try_into().unwrap_or(u32::MAX)
+        })
+        .max_capacity(app_config.caches.file_contents_cache_mb * 1024 * 1024)
+        .build();
+
+    // Initialize token count cache with MB-based weigher
+    let token_count_cache = moka::future::Cache::builder()
+        .weigher(|key: &String, _value: &usize| -> u32 {
+            // Weight by key (content) size since that's the bulk of the data
+            key.len().try_into().unwrap_or(u32::MAX)
+        })
+        .max_capacity(app_config.caches.token_count_cache_mb * 1024 * 1024)
+        .build();
+
     let app_state = AppState {
         db: db.clone(),
         default_file_storage_provider: None,
@@ -126,6 +144,8 @@ async fn test_app_state_internal(
         langfuse_client,
         global_policy_engine,
         background_tasks: BackgroundTaskManager::new(),
+        file_contents_cache,
+        token_count_cache,
     };
 
     // For tests: Initialize policy engine and work around the middleware rebuild issue

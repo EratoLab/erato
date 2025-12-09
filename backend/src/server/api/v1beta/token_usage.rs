@@ -2,13 +2,14 @@ use crate::models::message::{ContentPart, GenerationInputMessages, MessageRole};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
+use crate::services::file_processing_cached;
 use crate::state::AppState;
 use axum::extract::State;
 use axum::{Extension, Json};
-use eyre::{Report, WrapErr, eyre};
+use eyre::Report;
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
-use tiktoken_rs::o200k_base;
+use tracing::instrument;
 use utoipa::ToSchema;
 
 #[derive(Deserialize, ToSchema)]
@@ -90,12 +91,14 @@ pub async fn token_usage_estimate(
     Extension(policy): Extension<PolicyEngine>,
     Json(request): Json<TokenUsageRequest>,
 ) -> Result<Json<TokenUsageResponse>, (axum::http::StatusCode, String)> {
-    // Process files to get their text content
-    let files_for_generation = match process_input_files_for_token_count(
+    // Process files to get their text content using cached version
+    // Note: token_usage endpoint doesn't need SharePoint context as files should already be uploaded
+    let files_for_generation = match file_processing_cached::process_files_parallel_cached(
         &app_state,
-        &me_user,
         &policy,
+        &me_user,
         &request.input_files_ids,
+        None, // No SharePoint context for token usage endpoint
     )
     .await
     {
@@ -170,71 +173,165 @@ pub async fn token_usage_estimate(
             content: ContentPart::Text(request.user_message.clone().into()),
         });
 
-    // Calculate token counts using tiktoken
-    // Offload CPU-intensive tokenization to a blocking thread pool
-    let user_message_for_tokenization = request.user_message.clone();
-    let files_for_tokenization = files_for_generation.clone();
-    let messages_for_tokenization = messages_with_user_message.clone();
+    // Calculate token counts using tiktoken with caching
+    // Count tokens for the user message
+    let user_message_tokens = async {
+        let span = tracing::info_span!(
+            "count_user_message_tokens",
+            message_length = request.user_message.len(),
+            token_count = tracing::field::Empty,
+        );
+        let _enter = span.enter();
 
-    let tokenization_result = tokio::task::spawn_blocking(move || {
-        let bpe = o200k_base().map_err(|err| format!("Failed to initialize tokenizer: {}", err))?;
+        let result =
+            file_processing_cached::get_token_count_cached(&app_state, &request.user_message).await;
 
-        // Count tokens for the user message
-        let user_message_tokens = bpe
-            .encode_with_special_tokens(&user_message_for_tokenization)
-            .len();
-
-        // Count tokens for files
-        let mut file_details = Vec::new();
-        let mut total_file_tokens = 0;
-        for file in &files_for_tokenization {
-            let token_count = bpe.encode_with_special_tokens(&file.contents_as_text).len();
-            total_file_tokens += token_count;
-            file_details.push(TokenUsageResponseFileItem {
-                id: file.id.to_string(),
-                filename: file.filename.clone(),
-                token_count,
-            });
+        match result {
+            Ok(count) => {
+                span.record("token_count", count);
+                tracing::debug!(token_count = count, "User message tokens counted");
+                Ok(count)
+            }
+            Err(err) => Err(err),
         }
-
-        // Count tokens for previous messages (history)
-        let history_tokens: usize = messages_for_tokenization
-            .messages
-            .iter()
-            .map(|msg| bpe.encode_with_special_tokens(&msg.full_text()).len())
-            .sum();
-
-        // Calculate the history tokens without the user message
-        let history_tokens_without_user = history_tokens.saturating_sub(user_message_tokens);
-
-        Ok::<_, String>((
-            user_message_tokens,
-            file_details,
-            total_file_tokens,
-            history_tokens,
-            history_tokens_without_user,
-        ))
-    })
+    }
     .await;
 
-    let (
-        user_message_tokens,
-        file_details,
-        total_file_tokens,
-        history_tokens,
-        history_tokens_without_user,
-    ) = match tokenization_result {
-        Ok(Ok(result)) => result,
-        Ok(Err(err)) => {
-            return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, err));
-        }
-        Err(join_err) => {
+    let user_message_tokens = match user_message_tokens {
+        Ok(count) => count,
+        Err(err) => {
             return Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Tokenization task panicked: {}", join_err),
+                format!("Failed to count tokens for user message: {}", err),
             ));
         }
     };
+
+    // Count tokens for files in parallel using the cache
+    let file_token_result = async {
+        let span = tracing::info_span!(
+            "count_file_tokens_parallel",
+            num_files = files_for_generation.len(),
+            total_tokens = tracing::field::Empty,
+        );
+        let _enter = span.enter();
+
+        tracing::debug!(
+            num_files = files_for_generation.len(),
+            "Starting parallel file token counting"
+        );
+
+        let app_state_ref = &app_state;
+        let file_token_futures = files_for_generation.iter().map(|file| {
+            let file_id = file.id.to_string();
+            let filename = file.filename.clone();
+            let content = file.contents_as_text.clone();
+            async move {
+                let token_count =
+                    file_processing_cached::get_token_count_cached(app_state_ref, &content)
+                        .await
+                        .map_err(|err| {
+                            format!("Failed to count tokens for file {}: {}", filename, err)
+                        })?;
+                Ok::<_, String>(TokenUsageResponseFileItem {
+                    id: file_id,
+                    filename,
+                    token_count,
+                })
+            }
+        });
+
+        let file_details_results = futures::future::join_all(file_token_futures).await;
+
+        // Collect file details and calculate total
+        let mut file_details = Vec::new();
+        let mut total_file_tokens = 0;
+        for result in file_details_results {
+            match result {
+                Ok(item) => {
+                    total_file_tokens += item.token_count;
+                    file_details.push(item);
+                }
+                Err(err) => {
+                    return Err(err);
+                }
+            }
+        }
+
+        span.record("total_tokens", total_file_tokens);
+        tracing::debug!(
+            num_files = file_details.len(),
+            total_tokens = total_file_tokens,
+            "File token counting completed"
+        );
+
+        Ok::<_, String>((file_details, total_file_tokens))
+    }
+    .await;
+
+    let (file_details, total_file_tokens) = match file_token_result {
+        Ok(result) => result,
+        Err(err) => {
+            return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, err));
+        }
+    };
+
+    // Count tokens for previous messages (history) in parallel
+    let history_tokens = async {
+        let span = tracing::info_span!(
+            "count_history_tokens_parallel",
+            num_messages = messages_with_user_message.messages.len(),
+            total_tokens = tracing::field::Empty,
+        );
+        let _enter = span.enter();
+
+        tracing::debug!(
+            num_messages = messages_with_user_message.messages.len(),
+            "Starting parallel message token counting"
+        );
+
+        let app_state_ref = &app_state;
+        let message_token_futures = messages_with_user_message.messages.iter().map(|msg| {
+            let text = msg.full_text();
+            async move {
+                file_processing_cached::get_token_count_cached(app_state_ref, &text)
+                    .await
+                    .map_err(|err| format!("Failed to count tokens for message: {}", err))
+            }
+        });
+
+        let message_token_results = futures::future::join_all(message_token_futures).await;
+
+        let mut history_tokens = 0;
+        for result in message_token_results {
+            match result {
+                Ok(count) => history_tokens += count,
+                Err(err) => {
+                    return Err(err);
+                }
+            }
+        }
+
+        span.record("total_tokens", history_tokens);
+        tracing::debug!(
+            num_messages = messages_with_user_message.messages.len(),
+            total_tokens = history_tokens,
+            "Message token counting completed"
+        );
+
+        Ok::<_, String>(history_tokens)
+    }
+    .await;
+
+    let history_tokens = match history_tokens {
+        Ok(count) => count,
+        Err(err) => {
+            return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, err));
+        }
+    };
+
+    // Calculate the history tokens without the user message
+    let history_tokens_without_user = history_tokens.saturating_sub(user_message_tokens);
 
     // Get the chat provider configuration to determine max context tokens
     let chat_provider_config = match app_state
@@ -291,6 +388,7 @@ pub async fn token_usage_estimate(
     }))
 }
 
+#[instrument(skip_all)]
 async fn prepare_input_messages(
     app_state: &AppState,
     previous_message_id: &Uuid,
@@ -312,77 +410,4 @@ async fn prepare_input_messages(
         files_for_generation,
     )
     .await
-}
-
-async fn process_input_files_for_token_count(
-    app_state: &AppState,
-    me_user: &MeProfile,
-    policy: &PolicyEngine,
-    input_files_ids: &[Uuid],
-) -> Result<Vec<FileContentsForGeneration>, Report> {
-    let mut converted_files = vec![];
-    for file_id in input_files_ids {
-        // Get the file upload record
-        let file_upload = crate::models::file_upload::get_file_upload_by_id(
-            &app_state.db,
-            policy,
-            &me_user.to_subject(),
-            file_id,
-        )
-        .await
-        .wrap_err(format!("Failed to get file upload with ID {}", file_id))?;
-
-        // Get the file storage provider
-        let file_storage = app_state
-            .file_storage_providers
-            .get(&file_upload.file_storage_provider_id)
-            .ok_or_else(|| {
-                eyre!(
-                    "File storage provider not found: {}",
-                    file_upload.file_storage_provider_id
-                )
-            })?;
-
-        // Read the file content
-        let file_bytes = file_storage
-            .read_file_to_bytes(&file_upload.file_storage_path)
-            .await
-            .wrap_err(format!(
-                "Failed to read file from storage: {}",
-                file_upload.file_storage_path
-            ))?;
-
-        // Use parser_core to extract text from the file
-        // Offload CPU-intensive parsing to a blocking thread pool to avoid blocking the async runtime
-        let file_bytes_for_parsing = file_bytes.clone();
-        let parse_result =
-            tokio::task::spawn_blocking(move || parser_core::parse(&file_bytes_for_parsing)).await;
-
-        match parse_result {
-            Ok(Ok(text)) => {
-                converted_files.push(FileContentsForGeneration {
-                    id: *file_id,
-                    filename: file_upload.filename,
-                    contents_as_text: text,
-                });
-            }
-            Ok(Err(err)) => {
-                tracing::warn!(
-                    "Failed to parse file {}: {} - Error: {}",
-                    file_upload.filename,
-                    file_id,
-                    err
-                );
-            }
-            Err(join_err) => {
-                tracing::error!(
-                    "Blocking task panicked while parsing file {}: {} - Error: {}",
-                    file_upload.filename,
-                    file_id,
-                    join_err
-                );
-            }
-        }
-    }
-    Ok(converted_files)
 }

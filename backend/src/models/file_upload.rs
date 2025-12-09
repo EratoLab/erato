@@ -144,6 +144,7 @@ pub async fn get_chat_file_uploads(
 }
 
 /// Get a specific file upload by ID
+#[instrument(skip_all)]
 pub async fn get_file_upload_by_id(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,

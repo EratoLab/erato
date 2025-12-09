@@ -48,6 +48,7 @@ graph-rs-sdk = "3.0"
 
 parser-core = "0.1.3"
 tiktoken-rs = "0.6.0"
+moka = { version = "0.12", features = ["future"] }
 rmcp = { version = "0.8", features = ["client", "reqwest", "transport-sse-client-reqwest", "transport-streamable-http-client-reqwest"] }
 ractor = "0.15.6"
 ractor_actors = { version = "0.4.9", features = ["time"] }
