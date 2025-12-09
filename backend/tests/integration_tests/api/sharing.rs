@@ -11,7 +11,8 @@ use sqlx::postgres::Postgres;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, hermetic_app_config,
+    JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
+    has_event_type, hermetic_app_config, parse_sse_events, setup_mock_llm_server,
 };
 
 /// Test the full sharing flow:
@@ -458,7 +459,9 @@ async fn test_delete_share_grant(pool: Pool<Postgres>) {
 /// - `auth-required`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
-    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+    // Set up mock LLM server for end-to-end chat testing
+    let (app_config, _mock_server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
 
     // Create User A (owner)
     let user_a_subject = "user-a-org-share-test";
@@ -472,9 +475,8 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
     .expect("Failed to create user A");
 
     // Create User B (who will receive the share)
-    // In reality, this user would have an organization_user_id from their JWT token,
-    // but that's not stored in the database - it's only available in the request context
-    let user_b_subject = "user-b-org-share-test";
+    // Use TEST_USER_SUBJECT so we can make API calls with TEST_JWT_TOKEN
+    let user_b_subject = TEST_USER_SUBJECT;
     let user_b = erato::models::user::get_or_create_user(
         &app_state.db,
         TEST_USER_ISSUER,
@@ -487,6 +489,15 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
     // Simulate User B having an organization_user_id (like Azure AD's "oid" claim)
     // In production, this would come from the JWT token's "oid" claim
     let user_b_org_id = "org-user-id-12345";
+
+    // Create a custom JWT token for User B that includes the organization_user_id
+    let user_b_jwt_token = JwtTokenBuilder::new()
+        .issuer(TEST_USER_ISSUER)
+        .subject(user_b_subject)
+        .email("user-b@example.com")
+        .name("User B")
+        .organization_user_id(user_b_org_id)
+        .build();
 
     // User A creates an assistant
     let assistant = erato::models::assistant::create_assistant(
@@ -503,7 +514,7 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
     .expect("Failed to create assistant");
 
     // User A shares the assistant with User B using organization_user_id
-    let _share_grant = erato::models::share_grant::create_share_grant(
+    let _share_grant_org = erato::models::share_grant::create_share_grant(
         &app_state.db,
         &PolicyEngine::new(),
         &erato::policy::types::Subject::User(user_a.id.to_string()),
@@ -515,9 +526,25 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
         "viewer".to_string(),
     )
     .await
-    .expect("Failed to create share grant");
+    .expect("Failed to create share grant with organization_user_id");
 
-    // Test 1: Without organization_user_id, the share grant should NOT be found
+    // Also create a share grant with regular ID for API testing
+    // (since TEST_JWT_TOKEN doesn't include the organization_user_id claim)
+    let _share_grant_regular = erato::models::share_grant::create_share_grant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user_a.id.to_string()),
+        "assistant".to_string(),
+        assistant.id.to_string(),
+        "user".to_string(),
+        "id".to_string(),      // Using regular ID type
+        user_b.id.to_string(), // Using regular user ID
+        "viewer".to_string(),
+    )
+    .await
+    .expect("Failed to create share grant with regular ID");
+
+    // Test 1: Without organization_user_id, only the regular ID share grant should be found
     let shared_resources_without_org_id =
         erato::models::share_grant::get_resources_shared_with_subject_and_groups(
             &app_state.db,
@@ -531,11 +558,11 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
 
     assert_eq!(
         shared_resources_without_org_id.len(),
-        0,
-        "Without organization_user_id, User B should NOT see the shared assistant"
+        1,
+        "Without organization_user_id, User B should see the assistant via the regular ID share grant"
     );
 
-    // Test 2: With organization_user_id, the share grant SHOULD be found
+    // Test 2: With organization_user_id, BOTH share grants SHOULD be found
     let shared_resources_with_org_id =
         erato::models::share_grant::get_resources_shared_with_subject_and_groups(
             &app_state.db,
@@ -549,16 +576,18 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
 
     assert_eq!(
         shared_resources_with_org_id.len(),
-        1,
-        "With organization_user_id, User B should see the shared assistant"
+        2,
+        "With organization_user_id, User B should see the assistant via BOTH share grants"
     );
-    assert_eq!(
-        shared_resources_with_org_id[0].resource_id,
-        assistant.id.to_string(),
-        "The shared resource should be the assistant"
+    // All grants should point to the same assistant
+    assert!(
+        shared_resources_with_org_id
+            .iter()
+            .all(|g| g.resource_id == assistant.id.to_string()),
+        "All shared resources should be the same assistant"
     );
 
-    // Test 3: Using Subject without organization_user_id should fail to access the assistant
+    // Test 3: Using Subject without organization_user_id should still work due to regular ID share grant
     let result_without_org_id = erato::models::assistant::get_assistant_by_id(
         &app_state.db,
         &PolicyEngine::new(),
@@ -568,8 +597,8 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
     .await;
 
     assert!(
-        result_without_org_id.is_err(),
-        "Without organization_user_id in Subject, User B should NOT be able to access the assistant"
+        result_without_org_id.is_ok(),
+        "Without organization_user_id in Subject, User B should still access via regular ID share grant"
     );
 
     // Test 4: Using Subject WITH organization_user_id should successfully access the assistant
@@ -595,5 +624,69 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
     assert_eq!(
         accessed_assistant.id, assistant.id,
         "The accessed assistant should match the shared one"
+    );
+
+    // Test 5: Verify that User B can actually start a chat with the shared assistant
+    // This tests the full end-to-end flow including message streaming
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a chat with the shared assistant using User B's token with org ID
+    let create_chat_request = json!({
+        "assistant_id": assistant.id.to_string()
+    });
+
+    let create_chat_response = server
+        .post("/api/v1beta/me/chats")
+        .json(&create_chat_request)
+        .with_bearer_token(&user_b_jwt_token)
+        .await;
+
+    assert_eq!(
+        create_chat_response.status_code(),
+        http::StatusCode::OK,
+        "User B should be able to create a chat with the shared assistant"
+    );
+
+    let chat_response: Value = create_chat_response.json();
+    let chat_id = chat_response["chat_id"]
+        .as_str()
+        .expect("Should have chat_id");
+
+    println!("Created chat: {}", chat_id);
+
+    // Send a message to the chat using User B's token with org ID
+    let message_request = json!({
+        "existing_chat_id": chat_id,
+        "user_message": "Hello, this is a test message"
+    });
+
+    let message_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(&user_b_jwt_token)
+        .json(&message_request)
+        .await;
+
+    if message_response.status_code() != http::StatusCode::OK {
+        let error_body = message_response.text();
+        eprintln!("Message response error: {}", error_body);
+    }
+
+    assert_eq!(
+        message_response.status_code(),
+        http::StatusCode::OK,
+        "User B should be able to send messages in the chat with the shared assistant"
+    );
+
+    // Parse the SSE events to verify we got a proper response
+    let events = parse_sse_events(&message_response);
+    assert!(
+        has_event_type(&events, "chat_created") || has_event_type(&events, "text_delta"),
+        "Should receive chat events from the LLM"
     );
 }

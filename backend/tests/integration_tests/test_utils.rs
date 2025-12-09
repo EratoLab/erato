@@ -121,6 +121,8 @@ pub fn build_app_config_from_temp_file(
 // Authentication Helpers
 // ============================================================================
 
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+
 /// Standard mock JWT token used across integration tests.
 ///
 /// This token has the following claims:
@@ -135,6 +137,110 @@ pub const TEST_USER_ISSUER: &str = "http://0.0.0.0:5556";
 
 /// Standard test user subject (matches the TEST_JWT_TOKEN).
 pub const TEST_USER_SUBJECT: &str = "CiQwOGE4Njg0Yi1kYjg4LTRiNzMtOTBhOS0zY2QxNjYxZjU0NjYSBWxvY2Fs";
+
+/// Secret used for test JWT tokens. Since the backend relies on oauth2-proxy for JWT validation
+/// and doesn't validate signatures itself, this is just a placeholder.
+const TEST_JWT_SECRET: &[u8] = b"test-secret-key-for-integration-tests";
+
+/// Builder for creating custom JWT tokens in tests
+#[derive(Debug, Clone)]
+pub struct JwtTokenBuilder {
+    issuer: String,
+    subject: String,
+    email: Option<String>,
+    name: Option<String>,
+    organization_user_id: Option<String>,
+    groups: Vec<String>,
+}
+
+impl Default for JwtTokenBuilder {
+    fn default() -> Self {
+        Self {
+            issuer: TEST_USER_ISSUER.to_string(),
+            subject: TEST_USER_SUBJECT.to_string(),
+            email: Some("admin@example.com".to_string()),
+            name: Some("admin".to_string()),
+            organization_user_id: None,
+            groups: Vec::new(),
+        }
+    }
+}
+
+impl JwtTokenBuilder {
+    /// Create a new JWT token builder with default values
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the issuer claim
+    pub fn issuer(mut self, issuer: impl Into<String>) -> Self {
+        self.issuer = issuer.into();
+        self
+    }
+
+    /// Set the subject claim
+    pub fn subject(mut self, subject: impl Into<String>) -> Self {
+        self.subject = subject.into();
+        self
+    }
+
+    /// Set the email claim
+    pub fn email(mut self, email: impl Into<String>) -> Self {
+        self.email = Some(email.into());
+        self
+    }
+
+    /// Set the name claim
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    /// Set the organization user ID claim (Azure AD's "oid")
+    pub fn organization_user_id(mut self, oid: impl Into<String>) -> Self {
+        self.organization_user_id = Some(oid.into());
+        self
+    }
+
+    /// Set the groups claim
+    pub fn groups(mut self, groups: Vec<String>) -> Self {
+        self.groups = groups;
+        self
+    }
+
+    /// Build and encode the JWT token
+    pub fn build(self) -> String {
+        let mut claims = json!({
+            "iss": self.issuer,
+            "sub": self.subject,
+            "aud": "example-app",
+            "exp": 9999999999i64, // Far future expiration
+            "iat": 1640000000i64,
+        });
+
+        // Add optional claims
+        if let Some(email) = self.email {
+            claims["email"] = Value::String(email);
+            claims["email_verified"] = Value::Bool(true);
+        }
+
+        if let Some(name) = self.name {
+            claims["name"] = Value::String(name);
+        }
+
+        if let Some(oid) = self.organization_user_id {
+            claims["oid"] = Value::String(oid);
+        }
+
+        if !self.groups.is_empty() {
+            claims["groups"] = Value::Array(self.groups.into_iter().map(Value::String).collect());
+        }
+
+        let header = Header::new(Algorithm::HS256);
+        encode(&header, &claims, &EncodingKey::from_secret(TEST_JWT_SECRET))
+            .expect("Failed to encode JWT token")
+    }
+}
 
 // ============================================================================
 // Test Server Helpers
