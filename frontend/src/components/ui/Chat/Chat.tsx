@@ -7,6 +7,7 @@ import { useChatActions } from "@/hooks/chat";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
+import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
@@ -18,6 +19,7 @@ import type { ChatMessage } from "../MessageList/MessageList";
 import type {
   FileUploadItem,
   ChatModel,
+  ContentPart,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 import type {
@@ -180,7 +182,7 @@ export const Chat = ({
 
   // Local edit state (simple UX; further polish can come later)
   const [editState, setEditState] = useState<
-    | { mode: "edit"; messageId: string; initialContent: string }
+    | { mode: "edit"; messageId: string; initialContent: ContentPart[] }
     | { mode: "compose" }
   >({ mode: "compose" });
 
@@ -352,7 +354,7 @@ export const Chat = ({
 
                 if (messageToEdit.role === "user") {
                   logger.log(
-                    `Setting editState: messageId=${action.messageId}, content="${messageToEdit.content}"`,
+                    `Setting editState: messageId=${action.messageId}, content="${extractTextFromContent(messageToEdit.content)}"`,
                   );
 
                   // Use React's functional update to ensure we get the latest state

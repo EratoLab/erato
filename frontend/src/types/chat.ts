@@ -3,9 +3,11 @@
  * These are placeholder types for the new implementation
  */
 
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
 export interface Message {
   id: string;
-  content: string;
+  content: ContentPart[];
   role: "user" | "assistant" | "system";
   createdAt: string;
   input_files_ids?: string[];

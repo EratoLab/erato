@@ -387,8 +387,12 @@ describe("useChatMessaging", () => {
     const firstMessageId = result.current.messageOrder[0];
     const secondMessageId = result.current.messageOrder[1];
 
-    expect(result.current.messages[firstMessageId].content).toBe("Hello");
-    expect(result.current.messages[secondMessageId].content).toBe("Hi there");
+    expect(result.current.messages[firstMessageId].content).toEqual([
+      { content_type: "text", text: "Hello" },
+    ]);
+    expect(result.current.messages[secondMessageId].content).toEqual([
+      { content_type: "text", text: "Hi there" },
+    ]);
     expect(result.current.isLoading).toBe(false);
   });
 
@@ -426,7 +430,7 @@ describe("useChatMessaging", () => {
 
     expect(result.current.messages[firstMessageId]).toEqual({
       id: "msg1",
-      content: "Hello",
+      content: [{ content_type: "text", text: "Hello" }],
       role: "user",
       createdAt: "2023-01-01T12:00:00.000Z",
       status: "complete",
@@ -440,7 +444,7 @@ describe("useChatMessaging", () => {
 
     expect(result.current.messages[secondMessageId]).toEqual({
       id: "msg2",
-      content: "Hi there",
+      content: [{ content_type: "text", text: "Hi there" }],
       role: "assistant",
       createdAt: "2023-01-01T12:01:00.000Z",
       status: "complete",
@@ -603,7 +607,9 @@ describe("useChatMessaging", () => {
     // Check the optimistic message content
     const messageId = result.current.messageOrder[0];
     const message = result.current.messages[messageId];
-    expect(message.content).toBe("Hello new chat!");
+    expect(message.content).toEqual([
+      { content_type: "text", text: "Hello new chat!" },
+    ]);
     expect(message.role).toBe("user");
     expect(message.status).toBe("sending");
   });

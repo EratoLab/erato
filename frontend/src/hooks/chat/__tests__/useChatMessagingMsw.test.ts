@@ -137,7 +137,7 @@ describe("useChatMessaging with direct mocking", () => {
 
     // Initial checks
     expect(result.current.isStreaming).toBe(false);
-    expect(result.current.streamingContent).toBe("");
+    expect(result.current.streamingContent).toEqual([]);
 
     // Send message to trigger the SSE connection setup
     await act(async () => {
@@ -196,7 +196,11 @@ describe("useChatMessaging with direct mocking", () => {
 
     // Check final state
     expect(result.current.isStreaming).toBe(false);
-    expect(result.current.streamingContent).toContain("Hello");
+    // streamingContent is now ContentPart[], check that it contains text with "Hello"
+    const hasHello = result.current.streamingContent.some(
+      (part) => part.content_type === "text" && part.text.includes("Hello"),
+    );
+    expect(hasHello).toBe(true);
   });
 
   // Test for diagnosing state accumulation between tests
@@ -217,7 +221,7 @@ describe("useChatMessaging with direct mocking", () => {
     const { result } = hookResult;
 
     // Verify initial state is clean
-    expect(result.current.streamingContent).toBe("");
+    expect(result.current.streamingContent).toEqual([]);
 
     // Start message flow
     await act(async () => {
@@ -237,7 +241,9 @@ describe("useChatMessaging with direct mocking", () => {
 
     // Verify only this content is present (not content from previous test)
     console.log("Current content:", result.current.streamingContent);
-    expect(result.current.streamingContent).toBe("Fresh content");
+    expect(result.current.streamingContent).toEqual([
+      { content_type: "text", text: "Fresh content" },
+    ]);
 
     // Complete the message
     await act(async () => {

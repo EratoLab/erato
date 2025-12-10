@@ -5,6 +5,7 @@ import { createLogger } from "@/utils/debugLogger";
 import type {
   Value,
   ToolCallStatus,
+  ContentPart,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
@@ -25,7 +26,7 @@ export interface StreamingState {
   isStreaming: boolean;
   isFinalizing: boolean; // True during post-streaming refetch/cleanup phase
   currentMessageId: string | null;
-  content: string;
+  content: ContentPart[];
   createdAt: string | null; // Timestamp for message ordering
   // Add tool call tracking
   toolCalls: Record<string, ToolCall>; // keyed by tool_call_id
@@ -56,7 +57,7 @@ export const initialStreamingState: StreamingState = {
   isStreaming: false,
   isFinalizing: false,
   currentMessageId: null,
-  content: "",
+  content: [],
   createdAt: null,
   toolCalls: {},
 };

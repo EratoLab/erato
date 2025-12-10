@@ -1,6 +1,12 @@
 import { MessageContent } from "../../components/ui/Message/MessageContent";
 
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Meta, StoryObj } from "@storybook/react";
+
+// Helper to convert string to ContentPart[]
+const textContent = (text: string): ContentPart[] => [
+  { content_type: "text", text },
+];
 
 const meta = {
   title: "UI/MessageContent",
@@ -52,20 +58,23 @@ type Story = StoryObj<typeof meta>;
 
 export const Basic: Story = {
   args: {
-    content: "This is a simple message without any markdown formatting.",
+    content: textContent(
+      "This is a simple message without any markdown formatting.",
+    ),
   },
 };
 
 export const WithMarkdown: Story = {
   args: {
-    content:
+    content: textContent(
       "This message has **bold** and *italic* text.\n\n- List item 1\n- List item 2",
+    ),
   },
 };
 
 export const RawMarkdownView: Story = {
   args: {
-    content: `# Markdown Example
+    content: textContent(`# Markdown Example
 
 This shows **bold**, *italic*, and \`inline code\`.
 
@@ -81,14 +90,14 @@ function hello() {
 - Lists work great
 - Tables are supported
 - Links: [OpenAI](https://openai.com)
-`,
+`),
     showRaw: true,
   },
 };
 
 export const FormattedMarkdownView: Story = {
   args: {
-    content: `# Markdown Example
+    content: textContent(`# Markdown Example
 
 This shows **bold**, *italic*, and \`inline code\`.
 
@@ -104,28 +113,28 @@ function hello() {
 - Lists work great
 - Tables are supported
 - Links: [OpenAI](https://openai.com)
-`,
+`),
     showRaw: false,
   },
 };
 
 export const StreamingWithCursor: Story = {
   args: {
-    content: "This is a message being streamed in real-time",
+    content: textContent("This is a message being streamed in real-time"),
     isStreaming: true,
   },
 };
 
 export const IncompleteMarkdown: Story = {
   args: {
-    content: "This has an incomplete **bold marker",
+    content: textContent("This has an incomplete **bold marker"),
     isStreaming: true,
   },
 };
 
 export const CodeBlock: Story = {
   args: {
-    content: `Here's a Python example:
+    content: textContent(`Here's a Python example:
 
 \`\`\`python
 def fibonacci(n):
@@ -137,13 +146,13 @@ def fibonacci(n):
 print(fibonacci(10))
 \`\`\`
 
-And some inline \`code\` as well.`,
+And some inline \`code\` as well.`),
   },
 };
 
 export const Table: Story = {
   args: {
-    content: `## Comparison Table
+    content: textContent(`## Comparison Table
 
 | Feature | React | Vue | Angular |
 |---------|-------|-----|---------|
@@ -151,13 +160,13 @@ export const Table: Story = {
 | Performance | Fast | Fast | Fast |
 | Community | Large | Growing | Large |
 | TypeScript | Optional | Optional | Built-in |
-`,
+`),
   },
 };
 
 export const ThemedCodeBlocks: Story = {
   args: {
-    content: `## Code with Theme-Aware Styling
+    content: textContent(`## Code with Theme-Aware Styling
 
 Light mode uses a light syntax theme, dark mode uses a dark theme:
 
@@ -170,7 +179,7 @@ function greet(name) {
 \`\`\`
 
 Inline \`code\` also uses theme colors.
-`,
+`),
   },
   parameters: {
     docs: {
@@ -184,7 +193,7 @@ Inline \`code\` also uses theme colors.
 
 export const ComplexMarkdown: Story = {
   args: {
-    content: `# Complex Markdown Example
+    content: textContent(`# Complex Markdown Example
 
 This demonstrates various **markdown features** working together.
 
@@ -230,13 +239,13 @@ const greetUser = (user: User): string => {
 ---
 
 *Thank you for reading!*
-`,
+`),
   },
 };
 
 export const Footnotes: Story = {
   args: {
-    content: `# Footnotes example
+    content: textContent(`# Footnotes example
 
 First sentence with single footnote.[^1]
 
@@ -254,6 +263,6 @@ Second sentence with text-named footnote.[^footnote]
 [^footnote]: http://example.com/example-footnote
 
 Another sentence without footnotes.
-`,
+`),
   },
 };

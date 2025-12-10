@@ -1,32 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
+import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 
 import { useMessagingStore } from "../store/messagingStore";
 
 import type { useExplicitNavigation } from "../useExplicitNavigation";
-import type {
-  MessageSubmitStreamingResponseMessageComplete,
-  ContentPart,
-  ContentPartText,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { MessageSubmitStreamingResponseMessageComplete } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const logger = createLogger("EVENT", "handleMessageComplete");
-
-/**
- * Extracts text content from ContentPart array
- * @param content Array of ContentPart objects
- * @returns Combined text from all text parts
- */
-function extractTextFromContent(content: ContentPart[]): string {
-  if (!content || !Array.isArray(content)) {
-    return "";
-  }
-
-  return content
-    .filter((part) => part.content_type === "text")
-    .map((part) => (part as ContentPartText).text)
-    .join("");
-}
 
 /**
  * Handles the 'assistant_message_completed' event from the streaming API response.
@@ -64,24 +45,29 @@ export const handleMessageComplete = (
   // It's assumed that if 'assistant_message_completed' is received,
   // a valid message ID will be present in responseData.message.id or responseData.message_id.
   const realMessageId = realMessageData.id || responseData.message_id;
+
+  // Get final content as ContentPart[] - prefer from message, then responseData, then streaming
   const finalContent =
-    extractTextFromContent(realMessageData.content || []) ||
-    extractTextFromContent(responseData.content || []) ||
-    currentStreamingState.content; // Fallback to current streaming content if somehow not in response
+    realMessageData.content ||
+    responseData.content ||
+    currentStreamingState.content;
+
+  // Extract text for logging
+  const finalTextContent = extractTextFromContent(finalContent);
 
   if (process.env.NODE_ENV === "development") {
     // logger.log(
     //   "Assistant message completed. Real ID:",
     //   realMessageId,
     //   "Final content snippet:",
-    //   finalContent.substring(0, 50),
+    //   finalTextContent.substring(0, 50),
     // );
   }
 
   // Update streaming state to indicate completion
   // Set isFinalizing to true while refetch/cleanup happens
   logger.log(
-    `Setting streaming store. Real Message ID: ${realMessageId || null}, isStreaming: false, isFinalizing: true, Final Content: "${finalContent.substring(0, 100)}..."`,
+    `Setting streaming store. Real Message ID: ${realMessageId || null}, isStreaming: false, isFinalizing: true, Final Content: "${finalTextContent.substring(0, 100)}..."`,
   );
   setStreaming({
     isStreaming: false,

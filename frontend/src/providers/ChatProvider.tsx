@@ -19,6 +19,7 @@ import type { ErrorWrapper } from "@/lib/generated/v1betaApi/v1betaApiFetcher";
 import type {
   FileUploadItem,
   ChatModel,
+  ContentPart,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type { FileType } from "@/utils/fileTypes";
@@ -53,7 +54,7 @@ interface ChatContextValue {
   messageOrder: string[];
   isStreaming: boolean;
   isFinalizing: boolean;
-  streamingContent: string | null;
+  streamingContent: ContentPart[];
   isMessagingLoading: boolean;
   messagingError: Error | ChatMessagesError | null;
   sendMessage: (

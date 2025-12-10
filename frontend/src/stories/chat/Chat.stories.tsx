@@ -9,10 +9,7 @@ import { useState } from "react";
 import { Chat } from "../../components/ui/Chat/Chat";
 import { MockDataGenerator } from "../../mocks/mockDataGenerator";
 
-import type {
-  ContentPart,
-  ContentPartText,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 import type { MessageAction } from "@/types/message-controls";
 import type { Meta, StoryObj } from "@storybook/react";
@@ -22,7 +19,7 @@ import type { ReactNode } from "react";
 // Define ChatMessage type locally
 interface ChatMessage {
   id: string;
-  content: string;
+  content: ContentPart[];
   sender: "user" | "assistant" | "system";
   createdAt: string;
   authorId: string;
@@ -109,22 +106,6 @@ const createTestQueryClient = () =>
 // Generate mock data using our reusable generator
 const mockData = MockDataGenerator.createMockDataset(5, 5);
 
-/**
- * Extracts text content from ContentPart array
- * @param content Array of ContentPart objects (optional)
- * @returns Combined text from all text parts
- */
-function extractTextFromContent(content?: ContentPart[] | null): string {
-  if (!content || !Array.isArray(content)) {
-    return "";
-  }
-
-  return content
-    .filter((part) => part.content_type === "text")
-    .map((part) => (part as ContentPartText).text)
-    .join("");
-}
-
 // Transform API messages to the format expected by ChatProvider
 const transformApiMessagesToChat = (
   apiMessages: (typeof mockData.messages)[string],
@@ -137,7 +118,8 @@ const transformApiMessagesToChat = (
 
     chatMessages[apiMsg.id] = {
       id: apiMsg.id,
-      content: extractTextFromContent(apiMsg.content),
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      content: apiMsg.content || [],
       sender: apiMsg.role as "user" | "assistant",
       createdAt: createdAt.toISOString(),
       authorId:

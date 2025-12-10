@@ -8,33 +8,45 @@ import {
 import remarkGfm from "remark-gfm";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
+import { parseContent } from "@/utils/adapters/contentPartAdapter";
 
+import { ImageContentDisplay } from "./ImageContentDisplay";
+
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
 import type { Components } from "react-markdown";
 
 interface MessageContentProps {
-  content: string;
+  content: ContentPart[];
   isStreaming?: boolean;
   showRaw?: boolean;
+  onImageClick?: (image: UiImagePart) => void;
 }
 
 export const MessageContent = memo(function MessageContent({
   content,
   isStreaming = false,
   showRaw = false,
+  onImageClick,
 }: MessageContentProps) {
   const { effectiveTheme } = useTheme();
   const isDarkMode = effectiveTheme === "dark";
 
-  // For streaming content, append a cursor if the content doesn't end with a newline
-  const displayContent =
-    isStreaming && !content.endsWith("\n") ? content + "▊" : content;
+  // Parse content efficiently in a single pass
+  const { text: textContent, images } = parseContent(content);
 
-  // If showing raw markdown, render as preformatted text
+  // For streaming, still show cursor on text
+  const displayText =
+    isStreaming && !textContent.endsWith("\n")
+      ? textContent + "▊"
+      : textContent;
+
+  // If showing raw, just show text
   if (showRaw) {
     return (
       <article className="max-w-none">
         <pre className="whitespace-pre-wrap rounded-md bg-theme-bg-tertiary p-4 font-mono text-sm text-theme-fg-primary">
-          <code>{displayContent}</code>
+          <code>{displayText}</code>
         </pre>
       </article>
     );
@@ -254,15 +266,23 @@ export const MessageContent = memo(function MessageContent({
 
   return (
     <article className="max-w-none">
-      <Markdown
-        remarkPlugins={[remarkGfm]}
-        components={components}
-        // Handle incomplete markdown patterns gracefully
-        skipHtml={false}
-        unwrapDisallowed={false}
-      >
-        {displayContent}
-      </Markdown>
+      {/* Render markdown text */}
+      {textContent && (
+        <Markdown
+          remarkPlugins={[remarkGfm]}
+          components={components}
+          // Handle incomplete markdown patterns gracefully
+          skipHtml={false}
+          unwrapDisallowed={false}
+        >
+          {displayText}
+        </Markdown>
+      )}
+
+      {/* Render images */}
+      {images.length > 0 && (
+        <ImageContentDisplay images={images} onImageClick={onImageClick} />
+      )}
     </article>
   );
 });

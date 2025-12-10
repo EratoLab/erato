@@ -3,11 +3,7 @@ import {
   type UiToolCall,
 } from "./toolCallAdapter";
 
-import type {
-  ChatMessage as ApiChatMessage,
-  ContentPart,
-  ContentPartText,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ChatMessage as ApiChatMessage } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
 /**
@@ -28,22 +24,6 @@ export interface UiChatMessage extends Message {
 }
 
 /**
- * Extracts text content from ContentPart array
- * @param content Array of ContentPart objects (optional)
- * @returns Combined text from all text parts
- */
-function extractTextFromContent(content?: ContentPart[] | null): string {
-  if (!content || !Array.isArray(content)) {
-    return "";
-  }
-
-  return content
-    .filter((part) => part.content_type === "text")
-    .map((part) => (part as ContentPartText).text)
-    .join("");
-}
-
-/**
  * Transforms API message format to UI message format
  * @param apiMessage The message from the API
  * @returns A message formatted for UI consumption
@@ -54,11 +34,14 @@ export function mapApiMessageToUiMessage(
   const toolCalls = extractToolCallsFromContent(apiMessage.content);
 
   return {
-    id: apiMessage.id || `temp-api-${Date.now()}`,
-    content: extractTextFromContent(apiMessage.content),
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    id: apiMessage.id ?? `temp-api-${Date.now()}`,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    content: apiMessage.content ?? [],
     role: apiMessage.role as "user" | "assistant" | "system",
     sender: apiMessage.role,
-    createdAt: apiMessage.created_at || new Date().toISOString(),
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    createdAt: apiMessage.created_at ?? new Date().toISOString(),
     authorId: apiMessage.role === "user" ? "user_id" : "assistant_id",
     // map active thread flag
     is_message_in_active_thread: apiMessage.is_message_in_active_thread,
