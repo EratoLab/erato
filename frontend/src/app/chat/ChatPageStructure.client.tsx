@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import { Chat } from "@/components/ui/Chat/Chat";
 import { WelcomeScreen } from "@/components/ui/WelcomeScreen";
 import { useChatContext } from "@/providers/ChatProvider";
+import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 
 import type { MessageAction } from "@/types/message-controls";
@@ -63,9 +64,10 @@ export default function ChatPageStructure({
           logger.log("Handling message action in ChatPageStructure:", action);
           if (action.type === "copy") {
             const messageToCopy = displayMessages[action.messageId];
-            if (messageToCopy.content) {
+            const textContent = extractTextFromContent(messageToCopy.content);
+            if (textContent) {
               try {
-                await navigator.clipboard.writeText(messageToCopy.content);
+                await navigator.clipboard.writeText(textContent);
                 if (typeof navigator.vibrate === "function") {
                   navigator.vibrate(50);
                 }

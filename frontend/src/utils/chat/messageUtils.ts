@@ -1,3 +1,5 @@
+import { extractTextFromContent } from "../adapters/contentPartAdapter";
+
 import type { Message } from "@/types/chat";
 
 /**
@@ -14,7 +16,7 @@ export function createOptimisticUserMessage(
   const tempUserMessageId = `temp-user-${timestamp}`;
   return {
     id: tempUserMessageId,
-    content,
+    content: [{ content_type: "text", text: content }],
     role: "user",
     createdAt: new Date(timestamp).toISOString(),
     status: "sending",
@@ -34,8 +36,11 @@ export function mergeDisplayMessages(
   localUserMessages: Message[],
 ): Record<string, Message> {
   // Track which user messages content from API to prevent duplicates
+  // Extract text from ContentPart[] for comparison
   const apiUserMessageContents = new Set(
-    apiMessages.filter((msg) => msg.role === "user").map((msg) => msg.content),
+    apiMessages
+      .filter((msg) => msg.role === "user")
+      .map((msg) => extractTextFromContent(msg.content)),
   );
 
   const messageMap = new Map<string, Message>();
@@ -49,7 +54,8 @@ export function mergeDisplayMessages(
   localUserMessages.forEach((msg) => {
     if (
       (!messageMap.has(msg.id) || msg.status === "sending") &&
-      (msg.role !== "user" || !apiUserMessageContents.has(msg.content))
+      (msg.role !== "user" ||
+        !apiUserMessageContents.has(extractTextFromContent(msg.content)))
     ) {
       messageMap.set(msg.id, msg);
     }

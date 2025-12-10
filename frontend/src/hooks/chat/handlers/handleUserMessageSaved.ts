@@ -1,30 +1,11 @@
+import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 
 import { useMessagingStore } from "../store/messagingStore";
 
-import type {
-  MessageSubmitStreamingResponseUserMessageSaved,
-  ContentPart,
-  ContentPartText,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { MessageSubmitStreamingResponseUserMessageSaved } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const logger = createLogger("EVENT", "handleUserMessageSaved");
-
-/**
- * Extracts text content from ContentPart array
- * @param content Array of ContentPart objects (optional)
- * @returns Combined text from all text parts
- */
-function extractTextFromContent(content?: ContentPart[] | null): string {
-  if (!content || !Array.isArray(content)) {
-    return "";
-  }
-
-  return content
-    .filter((part) => part.content_type === "text")
-    .map((part) => (part as ContentPartText).text)
-    .join("");
-}
 
 /**
  * Handles the 'user_message_saved' event from the streaming API response.
@@ -73,11 +54,11 @@ export function handleUserMessageSaved(
   useMessagingStore.setState((prevState) => {
     const newUserMessages = { ...prevState.userMessages };
 
-    // Find the temporary message by its content and 'sending' status
+    // Find the temporary message by content comparison (extract text from ContentPart[])
     const tempMessage = Object.values(newUserMessages).find(
       (msg) =>
         msg.role === "user" &&
-        msg.content === serverConfirmedMessageContent &&
+        extractTextFromContent(msg.content) === serverConfirmedMessageContent &&
         msg.status === "sending",
     );
 
@@ -88,7 +69,8 @@ export function handleUserMessageSaved(
       // Construct the final message object using server data
       const finalUserMessage = {
         id: serverConfirmedMessage.id,
-        content: serverConfirmedMessageContent,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        content: serverConfirmedMessage.content ?? [],
         role: serverConfirmedMessage.role as "user", // Role from server, cast as "user"
         createdAt: serverConfirmedMessage.created_at,
         status: "complete" as const, // Message is saved, so status is complete
@@ -99,7 +81,7 @@ export function handleUserMessageSaved(
 
       if (process.env.NODE_ENV === "development") {
         logger.log(
-          `User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${finalUserMessage.content.substring(0, 50)}..."`,
+          `User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${extractTextFromContent(finalUserMessage.content).substring(0, 50)}..."`,
         );
       }
 
@@ -119,7 +101,7 @@ export function handleUserMessageSaved(
         streaming: {
           ...prevState.streaming,
           currentMessageId: optimisticAssistantId,
-          content: "",
+          content: [],
           createdAt: now, // Store timestamp for consistent ordering
           isStreaming: false, // Not streaming yet, just a placeholder
           isFinalizing: false,

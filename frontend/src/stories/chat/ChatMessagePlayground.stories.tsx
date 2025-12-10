@@ -103,6 +103,7 @@ const StreamingPlayground = ({
   // Adapt the playground message to UiChatMessage format expected by the component
   const adaptedMessage: UiChatMessage = {
     ...message,
+    content: [{ content_type: "text", text: message.content }],
     createdAt: message.createdAt.toISOString(),
     loading: message.loading
       ? {

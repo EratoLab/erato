@@ -11,6 +11,7 @@ import {
   useGetAssistant,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
+import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 
 import type { ChatSession } from "@/types/chat";
@@ -120,9 +121,10 @@ export default function AssistantChatSpacePage() {
 
     if (action.type === "copy") {
       const messageToCopy = contextMessages[action.messageId];
-      if (messageToCopy.content) {
+      const textContent = extractTextFromContent(messageToCopy.content);
+      if (textContent) {
         try {
-          await navigator.clipboard.writeText(messageToCopy.content);
+          await navigator.clipboard.writeText(textContent);
           if (typeof navigator.vibrate === "function") {
             navigator.vibrate(50);
           }

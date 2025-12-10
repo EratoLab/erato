@@ -1,5 +1,7 @@
 import { expect, within, userEvent } from "@storybook/test";
 
+import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
+
 import { ChatMessageFactory } from "./mockData";
 import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
 
@@ -126,7 +128,7 @@ export const ResponsiveTest: Story = {
 
     // Verify text wrapping
     const messageText = canvas.getByText(
-      ChatMessageFactory.samples.longMessage.content,
+      extractTextFromContent(ChatMessageFactory.samples.longMessage.content),
     );
     const textStyles = window.getComputedStyle(messageText);
     await expect(textStyles.whiteSpace).toBe("pre-wrap");

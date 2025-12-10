@@ -33,7 +33,7 @@ export const handleTextDelta = (
       // Check if we are actually appending to the correct message
       if (state.streaming.currentMessageId) {
         console.log(
-          `[DEBUG_STORE] handleTextDelta: Appending to message ID ${state.streaming.currentMessageId}. Prev content length: ${state.streaming.content.length}, New delta: "${responseData.new_text}"`,
+          `[DEBUG_STORE] handleTextDelta: Appending to message ID ${state.streaming.currentMessageId}. Prev content parts: ${state.streaming.content.length}, New delta: "${responseData.new_text}"`,
         );
       } else {
         console.warn(
@@ -41,11 +41,36 @@ export const handleTextDelta = (
         );
       }
     }
+
+    // Get the current content array
+    const currentContent = state.streaming.content;
+    const lastPart =
+      currentContent.length > 0
+        ? currentContent[currentContent.length - 1]
+        : null;
+
+    // If the last part is a text part, append to it; otherwise create a new text part
+    let updatedContent;
+    if (lastPart && lastPart.content_type === "text") {
+      updatedContent = [
+        ...currentContent.slice(0, -1),
+        {
+          content_type: "text" as const,
+          text: lastPart.text + responseData.new_text,
+        },
+      ];
+    } else {
+      updatedContent = [
+        ...currentContent,
+        { content_type: "text" as const, text: responseData.new_text },
+      ];
+    }
+
     return {
       ...state,
       streaming: {
         ...state.streaming,
-        content: state.streaming.content + responseData.new_text,
+        content: updatedContent,
       },
     };
   });

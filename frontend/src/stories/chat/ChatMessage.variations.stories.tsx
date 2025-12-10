@@ -1,7 +1,13 @@
 import { ChatMessageFactory } from "./mockData";
 import { ChatMessage } from "../../components/ui/Chat/ChatMessage";
 
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Meta, StoryObj } from "@storybook/react";
+
+// Helper to convert string to ContentPart[]
+const textContent = (text: string): ContentPart[] => [
+  { content_type: "text", text },
+];
 
 const meta: Meta<typeof ChatMessage> = {
   title: "CHAT/ChatMessage/Variations",
@@ -133,7 +139,7 @@ export const MessageSequence: Story = {
 export const MinimumWidth: Story = {
   args: {
     message: ChatMessageFactory.createBotMessage({
-      content: "Short",
+      content: textContent("Short"),
     }),
     controlsContext: defaultControlsContext,
     onMessageAction: async () => true,
@@ -152,7 +158,7 @@ export const Loading: Story = {
   args: {
     message: {
       id: "1",
-      content: "Initial content",
+      content: textContent("Initial content"),
       role: "assistant",
       createdAt: new Date().toISOString(),
       sender: "assistant",
@@ -171,7 +177,7 @@ export const ToolCalling: Story = {
   args: {
     message: {
       id: "2",
-      content: "Fetching weather data",
+      content: textContent("Fetching weather data"),
       role: "assistant",
       createdAt: new Date().toISOString(),
       sender: "assistant",
@@ -190,7 +196,7 @@ export const Reasoning: Story = {
   args: {
     message: {
       id: "3",
-      content: "Analyzing data",
+      content: textContent("Analyzing data"),
       role: "assistant",
       createdAt: new Date().toISOString(),
       sender: "assistant",

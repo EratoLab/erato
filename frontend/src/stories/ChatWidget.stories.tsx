@@ -11,19 +11,31 @@ const mockMessages: Message[] = [
   {
     id: "1",
     role: "assistant",
-    content: "Hello! How can I help you today?",
+    content: [
+      { content_type: "text", text: "Hello! How can I help you today?" },
+    ],
     createdAt: new Date(2024, 0, 1, 12, 0).toISOString(),
   },
   {
     id: "2",
     role: "user",
-    content: "I have a question about my account",
+    content: [
+      {
+        content_type: "text",
+        text: "I have a question about my account",
+      },
+    ],
     createdAt: new Date(2024, 0, 1, 12, 1).toISOString(),
   },
   {
     id: "3",
     role: "assistant",
-    content: "Sure, I'd be happy to help with any account-related questions.",
+    content: [
+      {
+        content_type: "text",
+        text: "Sure, I'd be happy to help with any account-related questions.",
+      },
+    ],
     createdAt: new Date(2024, 0, 1, 12, 2).toISOString(),
   },
 ];

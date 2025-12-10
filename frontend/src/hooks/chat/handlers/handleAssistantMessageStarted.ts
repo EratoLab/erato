@@ -37,7 +37,7 @@ export const handleAssistantMessageStarted = (
     setStreaming({
       isStreaming: true,
       currentMessageId: message_id, // Real UUID from backend
-      content: "", // Reset content for new stream
+      content: [], // Reset content for new stream
       createdAt: currentStreaming.createdAt, // Preserve timestamp
     });
   } else {
@@ -50,7 +50,7 @@ export const handleAssistantMessageStarted = (
     setStreaming({
       isStreaming: true,
       currentMessageId: message_id,
-      content: "",
+      content: [],
       createdAt: new Date().toISOString(), // Use current time as fallback
     });
   }

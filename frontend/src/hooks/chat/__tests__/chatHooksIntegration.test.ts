@@ -218,7 +218,7 @@ describe("Chat hooks integration", () => {
       messagingResult1.current.messages[
         messagingResult1.current.messageOrder[0]
       ].content,
-    ).toBe("Hello from chat 1");
+    ).toEqual([{ content_type: "text", text: "Hello from chat 1" }]);
 
     // Now, mock that we're getting chat2 messages
     mockUseChatMessages.mockReturnValue({
@@ -263,7 +263,7 @@ describe("Chat hooks integration", () => {
       messagingResult2.current.messages[
         messagingResult2.current.messageOrder[0]
       ].content,
-    ).toBe("Different chat message");
+    ).toEqual([{ content_type: "text", text: "Different chat message" }]);
   });
 
   it("should create a new chat and send a message", async () => {

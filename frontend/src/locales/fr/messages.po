@@ -166,6 +166,7 @@ msgstr "Sélection en cours..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+#: src/components/ui/Message/ImageLightbox.tsx
 msgid "cloudFilePicker.close"
 msgstr "Fermer"
 
@@ -453,6 +454,31 @@ msgstr "Groupe"
 #: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.type.user"
 msgstr "Utilisateur"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ImageLightbox.tsx
+msgid "ui.download"
+msgstr "Télécharger"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ImageContentDisplay.tsx
+msgid "ui.image.loadError"
+msgstr "Échec du chargement de l'image"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ImageContentDisplay.tsx
+msgid "ui.image.messageAttachment"
+msgstr "Pièce jointe du message"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ImageLightbox.tsx
+msgid "ui.imagePreview.altText"
+msgstr "Aperçu en taille réelle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ImageLightbox.tsx
+msgid "ui.imagePreview.title"
+msgstr "Aperçu de l'image"
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts

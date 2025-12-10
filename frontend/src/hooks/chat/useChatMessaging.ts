@@ -537,7 +537,7 @@ export function useChatMessaging(
     // Add or update the streaming assistant message as placeholder
     finalMessagesRecord[streaming.currentMessageId] = {
       id: streaming.currentMessageId,
-      content: streaming.content || "", // Ensure content is at least an empty string
+      content: streaming.content, // Already ContentPart[]
       role: "assistant",
       createdAt: streaming.createdAt ?? new Date().toISOString(), // Use stored timestamp for consistent ordering
       status: streaming.isStreaming ? "sending" : "complete", // Update status when streaming completes

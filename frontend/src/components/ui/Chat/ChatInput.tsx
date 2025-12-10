@@ -12,6 +12,7 @@ import {
   useUploadFeature,
   useChatInputFeature,
 } from "@/providers/FeatureConfigProvider";
+import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ArrowUpIcon } from "../icons";
@@ -24,6 +25,7 @@ import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
 import type {
   FileUploadItem,
   ChatModel,
+  ContentPart,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 
@@ -69,7 +71,7 @@ interface ChatInputProps {
   // Target message id to edit when in edit mode
   editMessageId?: string;
   // Initial content when entering edit mode (used to prefill the textarea)
-  editInitialContent?: string;
+  editInitialContent?: ContentPart[];
   // Initial model to use for selection (typically from chat history)
   initialModel?: ChatModel | null;
 }
@@ -168,7 +170,8 @@ export const ChatInput = ({
   // Prefill message when entering edit mode
   useEffect(() => {
     if (mode === "edit" && editInitialContent !== undefined) {
-      setMessage(editInitialContent);
+      // Extract text from ContentPart[] for editing
+      setMessage(extractTextFromContent(editInitialContent));
     }
     if (mode === "compose") {
       setMessage("");

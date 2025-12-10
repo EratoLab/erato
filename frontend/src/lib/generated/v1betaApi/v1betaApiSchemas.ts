@@ -302,7 +302,27 @@ export type ContentPart =
     })
   | (ContentPartTextFilePointer & {
       content_type: "text_file_pointer";
-    });
+    })
+  | (ContentPartImageFilePointer & {
+      content_type: "image_file_pointer";
+    })
+  | {
+      base64_data: string;
+      content_type: "image";
+    };
+
+export type ContentPartImage = {
+  base64_data: string;
+  content_type: string;
+};
+
+export type ContentPartImageFilePointer = {
+  download_url: string;
+  /**
+   * @format uuid
+   */
+  file_upload_id: string;
+};
 
 export type ContentPartText = {
   text: string;

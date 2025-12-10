@@ -7,11 +7,14 @@ import { InteractiveContainer } from "@/components/ui/Container/InteractiveConta
 import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 import { ToolCallDisplay } from "@/components/ui/ToolCall";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
+import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
 import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { isImageFile } from "@/utils/file/fileTypeUtils";
 
 import { Avatar } from "../Feedback/Avatar";
 import { LoadingIndicator } from "../Feedback/LoadingIndicator";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
+import { ImageLightbox } from "../Message/ImageLightbox";
 import { MessageContent } from "../Message/MessageContent";
 import { messageStyles } from "../styles/chatMessageStyles";
 
@@ -88,8 +91,12 @@ export const ChatMessage = memo(function ChatMessage({
   // Local state for raw markdown toggle
   const [showRawMarkdown, setShowRawMarkdown] = useState(false);
 
+  // Use custom hook for image lightbox state management
+  const lightbox = useImageLightbox();
+
   // Content validation
-  if (!message.content && !message.loading) {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if ((!message.content || message.content.length === 0) && !message.loading) {
     return null;
   }
 
@@ -130,6 +137,7 @@ export const ChatMessage = memo(function ChatMessage({
             content={message.content}
             isStreaming={!!message.loading && message.loading.state !== "done"}
             showRaw={showRawMarkdown}
+            onImageClick={lightbox.openLightbox}
           />
 
           {/* Display attached files if any */}
@@ -201,6 +209,13 @@ export const ChatMessage = memo(function ChatMessage({
           )}
         </div>
       </div>
+
+      {/* Image lightbox - rendered via Portal to document.body */}
+      <ImageLightbox
+        isOpen={lightbox.isOpen}
+        onClose={lightbox.closeLightbox}
+        image={lightbox.selectedImage}
+      />
     </div>
   );
 });
@@ -238,6 +253,50 @@ const AttachedFile = ({
     );
   }
 
+  // Check if it's an image using centralized utility
+  if (isImageFile(fileData.filename) && fileData.download_url) {
+    return (
+      <div
+        className="relative inline-block cursor-pointer"
+        role="button"
+        tabIndex={0}
+        onClick={() => {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          if (onFilePreview && fileData) {
+            onFilePreview(fileData);
+          } else if (fileData.download_url) {
+            window.open(fileData.download_url, "_blank", "noopener,noreferrer");
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            if (onFilePreview && fileData) {
+              onFilePreview(fileData);
+            } else if (fileData.download_url) {
+              window.open(
+                fileData.download_url,
+                "_blank",
+                "noopener,noreferrer",
+              );
+            }
+          }
+        }}
+      >
+        <img
+          src={fileData.download_url}
+          alt={fileData.filename}
+          className="size-24 rounded-lg border border-theme-border-primary object-cover transition-transform hover:scale-105"
+        />
+        <div className="mt-1 max-w-[96px] truncate text-xs text-theme-fg-muted">
+          {fileData.filename}
+        </div>
+      </div>
+    );
+  }
+
+  // For non-images, show the regular file button
   return (
     <InteractiveContainer
       onClick={() => {
