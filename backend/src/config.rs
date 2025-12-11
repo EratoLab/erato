@@ -855,6 +855,13 @@ pub struct FrontendConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub enable_message_feedback: bool,
+
+    // Whether to enable the comment text field in message feedback.
+    // When enabled, users can add optional text comments with their thumbs up/down ratings.
+    // Requires `enable_message_feedback` to be true to have any effect.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enable_message_feedback_comments: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
