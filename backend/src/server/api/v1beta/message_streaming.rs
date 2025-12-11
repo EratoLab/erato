@@ -688,18 +688,9 @@ async fn download_and_store_generated_image(
         .as_millis();
     let filename = format!("generated_image_{}.png", timestamp);
 
-    // Get the default file storage provider
-    let file_storage_provider_id = app_state
-        .file_storage_providers
-        .keys()
-        .next()
-        .ok_or_eyre("No file storage provider configured")?
-        .clone();
-
-    let file_storage = app_state
-        .file_storage_providers
-        .get(&file_storage_provider_id)
-        .ok_or_eyre("File storage provider not found")?;
+    // Get the default file storage provider (filters out integration providers like SharePoint)
+    let file_storage_provider_id = app_state.default_file_storage_provider_id();
+    let file_storage = app_state.default_file_storage_provider();
 
     // Store the image
     let file_storage_path = format!("generated_images/{}", filename);
