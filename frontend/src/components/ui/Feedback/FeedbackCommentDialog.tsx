@@ -5,6 +5,7 @@ import { Trans } from "@lingui/react/macro";
 import { useState, useCallback } from "react";
 
 import { Button } from "../Controls/Button";
+import { Textarea } from "../Input/Textarea";
 import { ModalBase } from "../Modal/ModalBase";
 import { ThumbUpIcon, ThumbDownIcon } from "../icons";
 
@@ -60,7 +61,7 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
     <ModalBase
       isOpen={isOpen}
       onClose={handleSkip}
-      title={t`Add a comment`}
+      title={t({ id: "feedback.comment.title", message: "Add a comment" })}
       contentClassName="max-w-lg"
     >
       <div className="space-y-4">
@@ -68,13 +69,17 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
         <div className="flex items-center gap-2 text-sm text-theme-fg-secondary">
           {sentiment === "positive" ? (
             <>
-              <ThumbUpIcon className="size-4 text-green-500" />
-              <Trans>You found this response helpful</Trans>
+              <ThumbUpIcon className="size-4 text-theme-success-fg" />
+              <Trans id="feedback.comment.positive">
+                You found this response helpful
+              </Trans>
             </>
           ) : (
             <>
-              <ThumbDownIcon className="size-4 text-red-500" />
-              <Trans>You found this response unhelpful</Trans>
+              <ThumbDownIcon className="size-4 text-theme-error-fg" />
+              <Trans id="feedback.comment.negative">
+                You found this response unhelpful
+              </Trans>
             </>
           )}
         </div>
@@ -85,19 +90,28 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
             htmlFor="feedback-comment"
             className="mb-1 block text-sm font-medium text-theme-fg-primary"
           >
-            <Trans>Would you like to add more details? (optional)</Trans>
+            <Trans id="feedback.comment.label">
+              Would you like to add more details? (optional)
+            </Trans>
           </label>
-          <textarea
+          <Textarea
             id="feedback-comment"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={t`What could have been better?`}
-            className="h-24 w-full resize-none rounded-lg border border-theme-border-primary bg-theme-bg-primary p-3 text-sm text-theme-fg-primary placeholder:text-theme-fg-muted focus:border-theme-border-focus focus:outline-none focus:ring-1 focus:ring-theme-border-focus"
+            placeholder={t({
+              id: "feedback.comment.placeholder",
+              message: "What could have been better?",
+            })}
+            rows={4}
             disabled={isSubmitting}
+            aria-label={t({
+              id: "feedback.comment.aria",
+              message: "Feedback comment",
+            })}
           />
           <p className="mt-1 text-xs text-theme-fg-muted">
-            <Trans>Press Ctrl+Enter to submit</Trans>
+            <Trans id="feedback.comment.hint">Press Ctrl+Enter to submit</Trans>
           </p>
         </div>
 
@@ -107,20 +121,26 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
             variant="secondary"
             onClick={handleSkip}
             disabled={isSubmitting}
-            aria-label={t`Skip adding comment`}
+            aria-label={t({
+              id: "feedback.comment.skip.aria",
+              message: "Skip adding comment",
+            })}
           >
-            <Trans>Skip</Trans>
+            <Trans id="feedback.comment.skip">Skip</Trans>
           </Button>
           <Button
             variant="primary"
             onClick={() => void handleSubmit()}
             disabled={isSubmitting}
-            aria-label={t`Submit feedback with comment`}
+            aria-label={t({
+              id: "feedback.comment.submit.aria",
+              message: "Submit feedback with comment",
+            })}
           >
             {isSubmitting ? (
-              <Trans>Submitting...</Trans>
+              <Trans id="feedback.comment.submitting">Submitting...</Trans>
             ) : (
-              <Trans>Submit</Trans>
+              <Trans id="feedback.comment.submit">Submit</Trans>
             )}
           </Button>
         </div>

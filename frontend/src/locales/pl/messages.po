@@ -125,6 +125,36 @@ msgid "branding.welcomeScreen.title"
 msgstr "Witamy w Asystencie AI"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+msgid "chat.conversation.aria"
+msgstr "Rozmowa czatu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.file.error"
+msgstr "Błąd wczytywania pliku"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.file.loading"
+msgstr "Ładowanie pliku..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.file.preview.aria"
+msgstr "Podgląd załączonego pliku:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.aria"
+msgstr "wiadomość"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+msgid "chat.newChat.title"
+msgstr "Nowy Czat"
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.driveType.personal"
 msgstr "Osobisty"
@@ -261,6 +291,86 @@ msgid "error.404.title"
 msgstr "404 - Strona nie znaleziona"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.aria"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.hint"
+msgstr "Naciśnij Ctrl+Enter, aby wysłać"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.label"
+msgstr "Czy chcesz dodać więcej szczegółów? (opcjonalnie)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.negative"
+msgstr "Uznałeś tę odpowiedź za nieprzydatną"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.placeholder"
+msgstr "Co mogłoby być lepsze?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.positive"
+msgstr "Uznałeś tę odpowiedź za przydatną"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.skip"
+msgstr "Pomiń"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.skip.aria"
+msgstr "Pomiń komentarz"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.submit"
+msgstr "Wyślij"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.submit.aria"
+msgstr "Wyślij komentarz"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.submitting"
+msgstr "Wysyłanie..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.title"
+msgstr "Dodaj komentarz"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DefaultMessageControls.tsx
+msgid "feedback.dislike.active"
+msgstr "Uznałeś to za nieprzydatne"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DefaultMessageControls.tsx
+msgid "feedback.dislike.aria"
+msgstr "Nie lubię wiadomości"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DefaultMessageControls.tsx
+msgid "feedback.like.active"
+msgstr "Uznałeś to za przydatne"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DefaultMessageControls.tsx
+msgid "feedback.like.aria"
+msgstr "Lubię wiadomość"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
 msgid "fileSourceSelector.uploadFromComputer"
 msgstr "Prześlij z komputera"
@@ -286,6 +396,26 @@ msgstr "Prześlij pliki"
 #: src/pages/HomePage.tsx
 msgid "home.redirecting"
 msgstr "Przekierowanie do czatu..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DefaultMessageControls.tsx
+msgid "message.copy.aria"
+msgstr "Kopiuj wiadomość"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DefaultMessageControls.tsx
+msgid "message.edit.aria"
+msgstr "Edytuj wiadomość"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DefaultMessageControls.tsx
+msgid "message.showFormatted.aria"
+msgstr "Pokaż sformatowane"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DefaultMessageControls.tsx
+msgid "message.showRawMarkdown.aria"
+msgstr "Pokaż surowy markdown"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -627,10 +757,6 @@ msgstr "Anuluj akcję"
 msgid "Cannot send: Token limit exceeded"
 msgstr "Nie można wysłać: Przekroczony limit tokenów"
 
-#: src/components/ui/Chat/Chat.tsx
-msgid "Chat conversation"
-msgstr "Rozmowa czatu"
-
 #: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Chat Error"
 msgstr "Błąd czatu"
@@ -692,10 +818,6 @@ msgstr ""
 msgid "Confirm Removal"
 msgstr "Potwierdź usunięcie"
 
-#: src/components/ui/Message/DefaultMessageControls.tsx
-msgid "Copy message"
-msgstr "Kopiuj wiadomość"
-
 #: src/pages/AssistantsListPage.tsx
 msgid "Create and manage custom assistants with specific instructions and capabilities"
 msgstr ""
@@ -747,10 +869,6 @@ msgstr "szczegóły dla"
 msgid "Detected Locale:"
 msgstr "Wykryty język:"
 
-#: src/components/ui/Message/DefaultMessageControls.tsx
-msgid "Dislike message"
-msgstr "Nie lubię wiadomości"
-
 #: src/components/ui/Feedback/Alert.tsx
 msgid "Dismiss"
 msgstr "Odrzuć"
@@ -779,10 +897,6 @@ msgstr ""
 msgid "Edit Assistant Settings"
 msgstr ""
 
-#: src/components/ui/Message/DefaultMessageControls.tsx
-msgid "Edit message"
-msgstr "Edytuj wiadomość"
-
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Edit your message..."
 msgstr ""
@@ -794,10 +908,6 @@ msgstr "Koniec rozmowy"
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Error"
 msgstr "Błąd"
-
-#: src/components/ui/Chat/ChatMessage.tsx
-msgid "Error loading file"
-msgstr "Błąd wczytywania pliku"
 
 #: src/components/ui/ThemeApplier.tsx
 msgid "Error loading theme:"
@@ -876,10 +986,6 @@ msgstr "Podano nieprawidłową datę do MessageTimestamp, używam bieżącej dat
 msgid "Light mode"
 msgstr "Tryb jasny"
 
-#: src/components/ui/Message/DefaultMessageControls.tsx
-msgid "Like message"
-msgstr "Lubię wiadomość"
-
 #: src/components/ui/Message/LoadMoreButton.tsx
 msgid "Load older messages"
 msgstr "Załaduj starsze wiadomości"
@@ -897,10 +1003,6 @@ msgstr ""
 msgid "Loading assistants..."
 msgstr ""
 
-#: src/components/ui/Chat/ChatMessage.tsx
-msgid "Loading file..."
-msgstr "Ładowanie pliku..."
-
 #: src/components/ui/Chat/ModelSelector.tsx
 #: src/components/ui/Feedback/SpinnerIcon.tsx
 #: src/components/ui/Message/LoadMoreButton.tsx
@@ -914,10 +1016,6 @@ msgstr "Test wykrywania języka"
 #: src/components/ui/Logo.tsx
 msgid "Logo"
 msgstr "Logo"
-
-#: src/components/ui/Chat/ChatMessage.tsx
-msgid "message"
-msgstr "wiadomość"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Message exceeds token limit. Please reduce length or remove files."
@@ -940,7 +1038,6 @@ msgid "Name"
 msgstr ""
 
 #: src/components/ui/Assistant/AssistantsPageStructure.tsx
-#: src/components/ui/Chat/Chat.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/components/ui/Search/SearchPageStructure.tsx
@@ -976,10 +1073,6 @@ msgstr "Otwórz menu"
 #: src/components/ui/ToolCall/ToolCallOutput.tsx
 msgid "Output"
 msgstr "Wyjście"
-
-#: src/components/ui/Chat/ChatMessage.tsx
-msgid "Preview attached file:"
-msgstr "Podgląd załączonego pliku:"
 
 #: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 msgid "Preview attachment"
@@ -1062,14 +1155,6 @@ msgstr "Pokaż"
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show details"
 msgstr "Pokaż szczegóły"
-
-#: src/components/ui/Message/DefaultMessageControls.tsx
-msgid "Show formatted"
-msgstr "Pokaż sformatowane"
-
-#: src/components/ui/Message/DefaultMessageControls.tsx
-msgid "Show raw markdown"
-msgstr "Pokaż surowy markdown"
 
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Show tool calls"

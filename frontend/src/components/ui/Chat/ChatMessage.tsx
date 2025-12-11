@@ -115,7 +115,7 @@ export const ChatMessage = memo(function ChatMessage({
       )}
       role="log"
       aria-live="polite"
-      aria-label={`${userDisplayName} ${t`message`}`}
+      aria-label={`${userDisplayName} ${t({ id: "chat.message.aria", message: "message" })}`}
       data-testid={`message-${role}`}
       data-message-id={message.id}
     >
@@ -249,14 +249,18 @@ const AttachedFile = ({
 
   if (isLoading) {
     return (
-      <div className="text-xs text-theme-fg-muted">{t`Loading file...`}</div>
+      <div className="text-xs text-theme-fg-muted">
+        {t({ id: "chat.file.loading", message: "Loading file..." })}
+      </div>
     );
   }
 
   if (error || !fileData) {
     console.error(`Failed to load file ${fileId}:`, error);
     return (
-      <div className="text-xs text-theme-error-fg">{t`Error loading file`}</div>
+      <div className="text-xs text-theme-error-fg">
+        {t({ id: "chat.file.error", message: "Error loading file" })}
+      </div>
     );
   }
 
@@ -314,7 +318,7 @@ const AttachedFile = ({
           window.open(fileData.download_url, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
         }
       }}
-      aria-label={`${t`Preview attached file:`} ${fileData.filename}`}
+      aria-label={`${t({ id: "chat.file.preview.aria", message: "Preview attached file:" })} ${fileData.filename}`}
       className="cursor-pointer"
       useDiv={true}
     >

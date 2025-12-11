@@ -4,11 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useChatActions } from "@/hooks/chat";
+import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
-import { useSubmitMessageFeedback } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
-import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -137,7 +136,9 @@ export const Chat = ({
   const sessions: ChatSession[] = Array.isArray(chatHistory)
     ? chatHistory.map((chat) => ({
         id: chat.id,
-        title: chat.title_by_summary || t`New Chat`, // Use title from API
+        title:
+          chat.title_by_summary ||
+          t({ id: "chat.newChat.title", message: "New Chat" }), // Use title from API
         updatedAt: chat.last_message_at || new Date().toISOString(), // Use last message timestamp
         messages: [], // We don't need to populate messages here
         metadata: {
@@ -275,77 +276,15 @@ export const Chat = ({
     closePreviewModal,
   } = useFilePreviewModal();
 
-  // Message feedback feature config and mutation
-  const feedbackConfig = useMessageFeedbackFeature();
-  const submitFeedbackMutation = useSubmitMessageFeedback();
-
-  // State for feedback dialog
-  const [feedbackDialogState, setFeedbackDialogState] = useState<{
-    isOpen: boolean;
-    messageId: string | null;
-    sentiment: "positive" | "negative" | null;
-  }>({
-    isOpen: false,
-    messageId: null,
-    sentiment: null,
-  });
-
-  // Handle feedback submission
-  const handleFeedbackSubmit = useCallback(
-    async (
-      messageId: string,
-      sentiment: "positive" | "negative",
-      comment?: string,
-    ) => {
-      try {
-        // Note: OpenAPI spec has comment as string|null but codegen quirk creates null|undefined
-        // We use type assertion since the backend correctly accepts string|null
-        const trimmedComment = comment?.trim();
-        await submitFeedbackMutation.mutateAsync({
-          pathParams: { messageId },
-          body: {
-            sentiment,
-            comment: (trimmedComment ?? undefined) as null | undefined,
-          },
-        });
-        logger.log(
-          `Feedback submitted successfully for message ${messageId}: ${sentiment}`,
-        );
-        return true;
-      } catch (error) {
-        logger.log(
-          `Failed to submit feedback for message ${messageId}:`,
-          error,
-        );
-        return false;
-      }
-    },
-    [submitFeedbackMutation],
-  );
-
-  // Close feedback dialog
-  const closeFeedbackDialog = useCallback(() => {
-    setFeedbackDialogState({
-      isOpen: false,
-      messageId: null,
-      sentiment: null,
-    });
-  }, []);
-
-  // Handle feedback dialog submission with comment
-  const handleFeedbackDialogSubmit = useCallback(
-    async (comment: string) => {
-      if (feedbackDialogState.messageId && feedbackDialogState.sentiment) {
-        await handleFeedbackSubmit(
-          feedbackDialogState.messageId,
-          feedbackDialogState.sentiment,
-          comment,
-        );
-      }
-      closeFeedbackDialog();
-    },
-    [feedbackDialogState, handleFeedbackSubmit, closeFeedbackDialog],
-  );
+  // Use the message feedback hook for all feedback-related logic
+  const {
+    feedbackDialogState,
+    feedbackConfig,
+    handleFeedbackSubmit,
+    closeFeedbackDialog,
+    handleFeedbackDialogSubmit,
+    openFeedbackDialog,
+  } = useMessageFeedback();
 
   // Restore placeholder definitions for props passed to MessageList
   const hasOlderMessages = false;
@@ -395,7 +334,10 @@ export const Chat = ({
             className,
           )}
           role="region"
-          aria-label={t`Chat conversation`}
+          aria-label={t({
+            id: "chat.conversation.aria",
+            message: "Chat conversation",
+          })}
         >
           {/* Use the MessageList component */}
           <MessageList
@@ -469,11 +411,7 @@ export const Chat = ({
 
                 // If comments are enabled, open the dialog for additional comment
                 if (success && feedbackConfig.commentsEnabled) {
-                  setFeedbackDialogState({
-                    isOpen: true,
-                    messageId: action.messageId,
-                    sentiment,
-                  });
+                  openFeedbackDialog(action.messageId, sentiment);
                 }
 
                 return success;

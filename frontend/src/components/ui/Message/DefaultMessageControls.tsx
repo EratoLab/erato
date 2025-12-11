@@ -53,7 +53,13 @@ export const DefaultMessageControls = ({
   hasToolCalls = false,
 }: ExtendedMessageControlsProps) => {
   const [isCopied, setIsCopied] = useState(false);
-  // Initialize feedback state from existing feedback if present
+
+  // Chat-level edit permission from context; default true if unspecified
+  const canEditChat = context.canEdit !== false; // default to true if unspecified
+  // const isDialogOwner = context.dialogOwnerId === profile.profile?.id;
+
+  // Derive feedback state from initialFeedback prop
+  // This avoids unnecessary re-renders from useEffect + useState combination
   const [feedbackState, setFeedbackState] = useState<
     "liked" | "disliked" | null
   >(() => {
@@ -62,18 +68,6 @@ export const DefaultMessageControls = ({
     }
     return null;
   });
-  // Chat-level edit permission from context; default true if unspecified
-  const canEditChat = context.canEdit !== false; // default to true if unspecified
-  // const isDialogOwner = context.dialogOwnerId === profile.profile?.id;
-
-  // Sync feedback state when initial feedback changes (e.g., message list refresh)
-  useEffect(() => {
-    if (initialFeedback) {
-      setFeedbackState(
-        initialFeedback.sentiment === "positive" ? "liked" : "disliked",
-      );
-    }
-  }, [initialFeedback]);
 
   useEffect(() => {
     if (isCopied) {
@@ -130,9 +124,27 @@ export const DefaultMessageControls = ({
             size="sm"
             showOnHover={showOnHover}
             aria-label={
-              showRawMarkdown ? t`Show formatted` : t`Show raw markdown`
+              showRawMarkdown
+                ? t({
+                    id: "message.showFormatted.aria",
+                    message: "Show formatted",
+                  })
+                : t({
+                    id: "message.showRawMarkdown.aria",
+                    message: "Show raw markdown",
+                  })
             }
-            title={showRawMarkdown ? t`Show formatted` : t`Show raw markdown`}
+            title={
+              showRawMarkdown
+                ? t({
+                    id: "message.showFormatted.aria",
+                    message: "Show formatted",
+                  })
+                : t({
+                    id: "message.showRawMarkdown.aria",
+                    message: "Show raw markdown",
+                  })
+            }
             className={showRawMarkdown ? "text-theme-fg-accent" : ""}
           />
         )}
@@ -142,12 +154,16 @@ export const DefaultMessageControls = ({
           onClick={() => void handleAction("copy")}
           variant="icon-only"
           icon={
-            isCopied ? <CheckIcon className="text-green-500" /> : <CopyIcon />
+            isCopied ? (
+              <CheckIcon className="text-theme-success-fg" />
+            ) : (
+              <CopyIcon />
+            )
           }
           size="sm"
           showOnHover={showOnHover}
-          aria-label={t`Copy message`}
-          title={t`Copy message`}
+          aria-label={t({ id: "message.copy.aria", message: "Copy message" })}
+          title={t({ id: "message.copy.aria", message: "Copy message" })}
         />
 
         {isUser && canEditChat && !context.isSharedDialog && (
@@ -157,8 +173,8 @@ export const DefaultMessageControls = ({
             icon={<EditIcon />}
             size="sm"
             showOnHover={showOnHover}
-            aria-label={t`Edit message`}
-            title={t`Edit message`}
+            aria-label={t({ id: "message.edit.aria", message: "Edit message" })}
+            title={t({ id: "message.edit.aria", message: "Edit message" })}
             disabled={feedbackState !== null}
           />
         )}
@@ -172,18 +188,24 @@ export const DefaultMessageControls = ({
                 <ThumbUpIcon
                   className={
                     feedbackState === "liked"
-                      ? "fill-green-500 text-green-500"
+                      ? "fill-theme-success-fg text-theme-success-fg"
                       : ""
                   }
                 />
               }
               size="sm"
               showOnHover={feedbackState === null ? showOnHover : false}
-              aria-label={t`Like message`}
+              aria-label={t({
+                id: "feedback.like.aria",
+                message: "Like message",
+              })}
               title={
                 feedbackState === "liked"
-                  ? t`You found this helpful`
-                  : t`Like message`
+                  ? t({
+                      id: "feedback.like.active",
+                      message: "You found this helpful",
+                    })
+                  : t({ id: "feedback.like.aria", message: "Like message" })
               }
               disabled={feedbackState !== null}
               className={feedbackState === "liked" ? "opacity-100" : ""}
@@ -195,18 +217,27 @@ export const DefaultMessageControls = ({
                 <ThumbDownIcon
                   className={
                     feedbackState === "disliked"
-                      ? "fill-red-500 text-red-500"
+                      ? "fill-theme-error-fg text-theme-error-fg"
                       : ""
                   }
                 />
               }
               size="sm"
               showOnHover={feedbackState === null ? showOnHover : false}
-              aria-label={t`Dislike message`}
+              aria-label={t({
+                id: "feedback.dislike.aria",
+                message: "Dislike message",
+              })}
               title={
                 feedbackState === "disliked"
-                  ? t`You found this unhelpful`
-                  : t`Dislike message`
+                  ? t({
+                      id: "feedback.dislike.active",
+                      message: "You found this unhelpful",
+                    })
+                  : t({
+                      id: "feedback.dislike.aria",
+                      message: "Dislike message",
+                    })
               }
               disabled={feedbackState !== null}
               className={feedbackState === "disliked" ? "opacity-100" : ""}
