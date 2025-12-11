@@ -50,7 +50,7 @@ parser-core = "0.1.3"
 tiktoken-rs = "0.6.0"
 moka = { version = "0.12", features = ["future"] }
 rmcp = { version = "0.8", features = ["client", "reqwest", "transport-sse-client-reqwest", "transport-streamable-http-client-reqwest"] }
-ractor = "0.15.6"
+ractor = "0.15.9"
 ractor_actors = { version = "0.4.9", features = ["time"] }
 chrono = "0.4"
 cron = "0.12.1"
@@ -64,6 +64,9 @@ opentelemetry-semantic-conventions = "0.29.0"
 tracing-opentelemetry = "0.32.0"
 axum-tracing-opentelemetry = "0.32.2"
 base64 = "0.22.1"
+# Tokio console for async debugging
+console-subscriber = { version = "0.5.0", optional = true }
+
 [dependencies.sentry]
 version = "0.41.0"
 optional = true
@@ -83,6 +86,7 @@ mocktail = { git = "https://github.com/EratoLab/mocktail.git", rev = "4a99543bcf
 [features]
 default = ["sentry"]
 sentry = ["dep:sentry", "dep:sentry-tower"]
+tokio-console = ["dep:console-subscriber"]
 
 [profile.dev]
 split-debuginfo = "packed"

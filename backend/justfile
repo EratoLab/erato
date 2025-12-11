@@ -44,6 +44,10 @@ lint:
 run:
     cargo run --bin erato
 
+# Run with tokio-console enabled for async debugging
+run_tokio_console:
+    RUSTFLAGS="--cfg tokio_unstable" cargo run --features tokio-console --bin erato
+
 # Run the local services required for running app (Postgres and Ollama-smol)
 run_local_services:
     ./run_postgres.sh
