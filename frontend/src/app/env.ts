@@ -12,6 +12,7 @@ export type Env = {
   assistantsEnabled: boolean;
   sharepointEnabled: boolean;
   messageFeedbackEnabled: boolean;
+  messageFeedbackCommentsEnabled: boolean;
 };
 
 declare global {
@@ -30,6 +31,7 @@ declare global {
     ASSISTANTS_ENABLED?: boolean;
     SHAREPOINT_ENABLED?: boolean;
     MESSAGE_FEEDBACK_ENABLED?: boolean;
+    MESSAGE_FEEDBACK_COMMENTS_ENABLED?: boolean;
   }
 }
 
@@ -96,6 +98,10 @@ export const env = (): Env => {
     import.meta.env.VITE_MESSAGE_FEEDBACK_ENABLED === "true"
       ? true
       : (window.MESSAGE_FEEDBACK_ENABLED ?? false);
+  const messageFeedbackCommentsEnabled =
+    import.meta.env.VITE_MESSAGE_FEEDBACK_COMMENTS_ENABLED === "true"
+      ? true
+      : (window.MESSAGE_FEEDBACK_COMMENTS_ENABLED ?? false);
 
   return {
     apiRootUrl,
@@ -111,5 +117,6 @@ export const env = (): Env => {
     assistantsEnabled,
     sharepointEnabled,
     messageFeedbackEnabled,
+    messageFeedbackCommentsEnabled,
   };
 };

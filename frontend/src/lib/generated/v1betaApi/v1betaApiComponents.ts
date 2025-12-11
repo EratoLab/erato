@@ -2467,6 +2467,60 @@ export const useMessages = <TData = MessagesResponse,>(
   });
 };
 
+export type SubmitMessageFeedbackPathParams = {
+  /**
+   * The ID of the message to submit feedback for
+   */
+  messageId: string;
+};
+
+export type SubmitMessageFeedbackError = Fetcher.ErrorWrapper<undefined>;
+
+export type SubmitMessageFeedbackVariables = {
+  body: Schemas.MessageFeedbackRequest;
+  pathParams: SubmitMessageFeedbackPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchSubmitMessageFeedback = (
+  variables: SubmitMessageFeedbackVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.MessageFeedback,
+    SubmitMessageFeedbackError,
+    Schemas.MessageFeedbackRequest,
+    {},
+    {},
+    SubmitMessageFeedbackPathParams
+  >({
+    url: "/api/v1beta/messages/{messageId}/feedback",
+    method: "put",
+    ...variables,
+    signal,
+  });
+
+export const useSubmitMessageFeedback = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.MessageFeedback,
+      SubmitMessageFeedbackError,
+      SubmitMessageFeedbackVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.MessageFeedback,
+    SubmitMessageFeedbackError,
+    SubmitMessageFeedbackVariables
+  >({
+    mutationFn: (variables: SubmitMessageFeedbackVariables) =>
+      fetchSubmitMessageFeedback(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ListShareGrantsQueryParams = {
   /**
    * The type of resource (e.g., 'assistant')

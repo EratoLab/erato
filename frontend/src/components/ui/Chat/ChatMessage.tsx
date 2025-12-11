@@ -9,6 +9,7 @@ import { ToolCallDisplay } from "@/components/ui/ToolCall";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
 import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
 import { isImageFile } from "@/utils/file/fileTypeUtils";
 
 import { Avatar } from "../Feedback/Avatar";
@@ -87,6 +88,9 @@ export const ChatMessage = memo(function ChatMessage({
   // Check if message has completed tool calls
   const hasCompletedToolCalls =
     message.toolCalls && message.toolCalls.length > 0;
+
+  // Get message feedback feature config
+  const messageFeedbackConfig = useMessageFeedbackFeature();
 
   // Local state for raw markdown toggle
   const [showRawMarkdown, setShowRawMarkdown] = useState(false);
@@ -192,6 +196,9 @@ export const ChatMessage = memo(function ChatMessage({
                     setShowRawMarkdown(!showRawMarkdown)
                   }
                   hasToolCalls={hasCompletedToolCalls}
+                  showFeedbackButtons={messageFeedbackConfig.enabled}
+                  showFeedbackComments={messageFeedbackConfig.commentsEnabled}
+                  initialFeedback={message.feedback}
                 />
               ) : (
                 <Controls

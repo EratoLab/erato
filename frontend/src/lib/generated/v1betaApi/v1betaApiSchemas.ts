@@ -205,6 +205,10 @@ export type ChatMessage = {
    */
   created_at: string;
   /**
+   * Optional feedback for this message
+   */
+  feedback?: MessageFeedback;
+  /**
    * The unique ID of the message
    */
   id: string;
@@ -558,6 +562,11 @@ export type EditMessageStreamingResponseMessage =
     });
 
 /**
+ * Sentiment for message feedback
+ */
+export type FeedbackSentiment = "positive" | "negative";
+
+/**
  * Minimal file reference containing only the file ID
  */
 export type FileReference = {
@@ -647,6 +656,50 @@ export type ListShareGrantsResponse = {
 
 export type Message = {
   id: string;
+};
+
+/**
+ * Message feedback response
+ */
+export type MessageFeedback = {
+  /**
+   * Optional comment text
+   */
+  comment?: null | undefined;
+  /**
+   * When the feedback was created
+   *
+   * @format date-time
+   */
+  created_at: string;
+  /**
+   * The unique ID of the feedback
+   */
+  id: string;
+  /**
+   * Sentiment of the feedback
+   */
+  sentiment: FeedbackSentiment;
+  /**
+   * When the feedback was last updated
+   *
+   * @format date-time
+   */
+  updated_at: string;
+};
+
+/**
+ * Request to submit or update message feedback
+ */
+export type MessageFeedbackRequest = {
+  /**
+   * Optional comment text
+   */
+  comment?: null | undefined;
+  /**
+   * Sentiment of the feedback (positive or negative)
+   */
+  sentiment: FeedbackSentiment;
 };
 
 export type MessageSubmitRequest = {

@@ -17,6 +17,7 @@ import {
   CodeIcon,
 } from "../icons";
 
+import type { MessageFeedback } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
   // MessageAction,
   MessageControlsProps,
@@ -26,9 +27,11 @@ const logger = createLogger("UI", "DefaultMessageControls");
 
 interface ExtendedMessageControlsProps extends MessageControlsProps {
   showFeedbackButtons?: boolean;
+  showFeedbackComments?: boolean;
   showRawMarkdown?: boolean;
   onToggleRawMarkdown?: () => void;
-
+  /** Initial feedback state from API (existing feedback for this message) */
+  initialFeedback?: MessageFeedback;
   hasToolCalls?: boolean;
 }
 
@@ -43,18 +46,34 @@ export const DefaultMessageControls = ({
   className,
   isUserMessage,
   showFeedbackButtons = false,
+  showFeedbackComments: _showFeedbackComments = false,
   showRawMarkdown = false,
   onToggleRawMarkdown,
-
+  initialFeedback,
   hasToolCalls = false,
 }: ExtendedMessageControlsProps) => {
   const [isCopied, setIsCopied] = useState(false);
+  // Initialize feedback state from existing feedback if present
   const [feedbackState, setFeedbackState] = useState<
     "liked" | "disliked" | null
-  >(null);
+  >(() => {
+    if (initialFeedback) {
+      return initialFeedback.sentiment === "positive" ? "liked" : "disliked";
+    }
+    return null;
+  });
   // Chat-level edit permission from context; default true if unspecified
   const canEditChat = context.canEdit !== false; // default to true if unspecified
   // const isDialogOwner = context.dialogOwnerId === profile.profile?.id;
+
+  // Sync feedback state when initial feedback changes (e.g., message list refresh)
+  useEffect(() => {
+    if (initialFeedback) {
+      setFeedbackState(
+        initialFeedback.sentiment === "positive" ? "liked" : "disliked",
+      );
+    }
+  }, [initialFeedback]);
 
   useEffect(() => {
     if (isCopied) {
@@ -150,33 +169,47 @@ export const DefaultMessageControls = ({
               onClick={() => void handleAction("like")}
               variant="icon-only"
               icon={
-                feedbackState === "liked" ? (
-                  <CheckIcon className="text-green-500" />
-                ) : (
-                  <ThumbUpIcon />
-                )
+                <ThumbUpIcon
+                  className={
+                    feedbackState === "liked"
+                      ? "fill-green-500 text-green-500"
+                      : ""
+                  }
+                />
               }
               size="sm"
-              showOnHover={showOnHover}
+              showOnHover={feedbackState === null ? showOnHover : false}
               aria-label={t`Like message`}
-              title={t`Like message`}
+              title={
+                feedbackState === "liked"
+                  ? t`You found this helpful`
+                  : t`Like message`
+              }
               disabled={feedbackState !== null}
+              className={feedbackState === "liked" ? "opacity-100" : ""}
             />
             <Button
               onClick={() => void handleAction("dislike")}
               variant="icon-only"
               icon={
-                feedbackState === "disliked" ? (
-                  <CheckIcon className="text-red-500" />
-                ) : (
-                  <ThumbDownIcon />
-                )
+                <ThumbDownIcon
+                  className={
+                    feedbackState === "disliked"
+                      ? "fill-red-500 text-red-500"
+                      : ""
+                  }
+                />
               }
               size="sm"
-              showOnHover={showOnHover}
+              showOnHover={feedbackState === null ? showOnHover : false}
               aria-label={t`Dislike message`}
-              title={t`Dislike message`}
+              title={
+                feedbackState === "disliked"
+                  ? t`You found this unhelpful`
+                  : t`Dislike message`
+              }
               disabled={feedbackState !== null}
+              className={feedbackState === "disliked" ? "opacity-100" : ""}
             />
           </>
         )}
