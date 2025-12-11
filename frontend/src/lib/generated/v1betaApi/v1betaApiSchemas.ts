@@ -558,6 +558,16 @@ export type EditMessageStreamingResponseMessage =
     });
 
 /**
+ * Minimal file reference containing only the file ID
+ */
+export type FileReference = {
+  /**
+   * The unique ID of the file
+   */
+  id: string;
+};
+
+/**
  * Response for file upload
  */
 export type FileUploadItem = {
@@ -870,7 +880,7 @@ export type RecentChat = {
   /**
    * Files uploaded to this chat
    */
-  file_uploads: FileUploadItem[];
+  file_uploads: FileReference[];
   id: string;
   /**
    * The chat provider ID used for the most recent message
