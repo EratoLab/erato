@@ -35,7 +35,6 @@ use crate::server::api::v1beta::share_grants::{
     CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
     create_share_grant, delete_share_grant, list_share_grants,
 };
-use crate::services::file_storage::FileStorage;
 use crate::services::sentry::log_internal_server_error;
 use crate::state::AppState;
 use axum::extract::{DefaultBodyLimit, Path, State};
@@ -316,7 +315,7 @@ pub struct RecentChat {
     /// Time of the last message in the chat.
     last_message_at: DateTime<FixedOffset>,
     /// Files uploaded to this chat
-    file_uploads: Vec<FileUploadItem>,
+    file_uploads: Vec<FileReference>,
     /// When this chat was archived by the user.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -451,6 +450,13 @@ pub struct FileUploadItem {
     filename: String,
     /// Pre-signed URL for downloading the file directly from storage
     download_url: String,
+}
+
+/// Minimal file reference containing only the file ID
+#[derive(Debug, ToSchema, Serialize)]
+pub struct FileReference {
+    /// The unique ID of the file
+    id: String,
 }
 
 /// Response for file upload
@@ -947,7 +953,6 @@ pub async fn recent_chats(
         &policy,
         &me_user.to_subject(),
         &me_user.id,
-        &app_state.file_storage_providers,
         &available_models,
     )
     .await
@@ -971,7 +976,7 @@ pub async fn recent_chats(
 }
 
 /// Extends model RecentChat objects to full API RecentChat objects.
-/// Fetches file uploads for each chat in parallel.
+/// Fetches file upload IDs for each chat in parallel.
 #[instrument(skip_all)]
 async fn extend_recent_chats_to_api_model(
     model_chats: Vec<models::chat::RecentChat>,
@@ -979,12 +984,11 @@ async fn extend_recent_chats_to_api_model(
     policy: &PolicyEngine,
     subject: &Subject,
     current_user_id: &str,
-    file_storage_providers: &std::collections::HashMap<String, FileStorage>,
     available_models: &[(String, String)],
 ) -> Result<Vec<RecentChat>, Report> {
     use futures::future::join_all;
 
-    // Create futures for fetching file uploads for each chat in parallel
+    // Create futures for fetching file upload IDs for each chat in parallel
     let file_upload_futures: Vec<_> = model_chats
         .iter()
         .map(|chat| {
@@ -992,15 +996,12 @@ async fn extend_recent_chats_to_api_model(
             async move {
                 let chat_uuid = Uuid::parse_str(&chat_id)
                     .wrap_err_with(|| format!("Invalid chat UUID: {}", chat_id))?;
-                let uploads = models::file_upload::get_chat_file_uploads_with_urls(
-                    db,
-                    policy,
-                    subject,
-                    &chat_uuid,
-                    file_storage_providers,
-                )
-                .await
-                .wrap_err_with(|| format!("Failed to get file uploads for chat {}", chat_id))?;
+                let uploads =
+                    models::file_upload::get_chat_file_uploads(db, policy, subject, &chat_uuid)
+                        .await
+                        .wrap_err_with(|| {
+                            format!("Failed to get file uploads for chat {}", chat_id)
+                        })?;
                 Ok::<_, Report>(uploads)
             }
         })
@@ -1014,13 +1015,11 @@ async fn extend_recent_chats_to_api_model(
     for (chat, file_uploads_result) in model_chats.into_iter().zip(file_uploads_results) {
         let file_uploads = file_uploads_result?;
 
-        // Convert file uploads to FileUploadItem
-        let file_upload_items: Vec<FileUploadItem> = file_uploads
+        // Convert file uploads to FileReference (just IDs)
+        let file_references: Vec<FileReference> = file_uploads
             .into_iter()
-            .map(|upload| FileUploadItem {
+            .map(|upload| FileReference {
                 id: upload.id.to_string(),
-                filename: upload.filename,
-                download_url: upload.download_url,
             })
             .collect();
 
@@ -1043,7 +1042,7 @@ async fn extend_recent_chats_to_api_model(
             id: chat.id,
             title_by_summary: chat.title_by_summary,
             last_message_at: chat.last_message_at,
-            file_uploads: file_upload_items,
+            file_uploads: file_references,
             archived_at: chat.archived_at,
             last_chat_provider_id: chat.last_chat_provider_id.clone(),
             last_model,

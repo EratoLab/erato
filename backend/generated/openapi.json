@@ -2403,6 +2403,19 @@
           }
         ]
       },
+      "FileReference": {
+        "type": "object",
+        "description": "Minimal file reference containing only the file ID",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the file"
+          }
+        }
+      },
       "FileUploadItem": {
         "type": "object",
         "description": "Response for file upload",
@@ -3050,7 +3063,7 @@
           "file_uploads": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/FileUploadItem"
+              "$ref": "#/components/schemas/FileReference"
             },
             "description": "Files uploaded to this chat"
           },
