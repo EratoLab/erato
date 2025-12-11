@@ -1661,6 +1661,7 @@ dependencies = [
  "graph-rs-sdk",
  "headers",
  "http-body-util",
+ "infer 0.19.0",
  "jsonwebtoken",
  "lol_html",
  "mocktail",
@@ -2844,6 +2845,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "infer"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
+dependencies = [
+ "cfb",
+]
+
+[[package]]
 name = "inherent"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3841,7 +3851,7 @@ checksum = "103c2e8734f43a8857291998cb86631fc68aa2bdb5e481cdd5688405661eab24"
 dependencies = [
  "calamine",
  "docx-rs",
- "infer",
+ "infer 0.16.0",
  "lazy_static",
  "mime",
  "pdf-extract",
