@@ -351,6 +351,7 @@ pub const fn is_valid_resource_action(resource: ResourceKind, action: Action) ->
         (ResourceKind::Chat, Action::Update) => true,
         (ResourceKind::Chat, Action::SubmitMessage) => true,
         (ResourceKind::ChatSingleton, Action::Create) => true,
+        (ResourceKind::MessageFeedback, Action::SubmitFeedback) => true,
         (ResourceKind::Assistant, Action::Read) => true,
         (ResourceKind::Assistant, Action::Update) => true,
         (ResourceKind::Assistant, Action::Share) => true,

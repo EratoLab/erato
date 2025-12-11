@@ -40,6 +40,7 @@ not_logged_in := "__not_logged_in__"
 # Resource kinds
 resource_kind_chat := "chat"
 resource_kind_chat_singleton := "chat_singleton"
+resource_kind_message_feedback := "message_feedback"
 resource_kind_assistant := "assistant"
 resource_kind_assistant_singleton := "assistant_singleton"
 resource_kind_share_grant := "share_grant"
@@ -53,6 +54,8 @@ action_read := "read"
 action_create := "create"
 # If allowed on a chat, allows a message to be submitted.
 action_submit_message := "submit_message"
+# If allowed on a message, allows feedback to be submitted.
+action_submit_feedback := "submit_feedback"
 action_update := "update"
 action_delete := "delete"
 action_share := "share"
@@ -203,4 +206,17 @@ allow if {
 	input.action == action_delete
 
 	# The authorization logic for checking resource ownership is handled in the model layer
+}
+
+# A user can submit/update feedback for a message (ownership check in model layer).
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for message feedback submit action
+	input.resource_kind == resource_kind_message_feedback
+	input.action == action_submit_feedback
+
+	# The authorization logic for checking message/chat ownership is handled in the model layer
 }

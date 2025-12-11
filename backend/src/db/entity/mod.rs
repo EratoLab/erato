@@ -7,6 +7,7 @@ pub mod assistants;
 pub mod chat_file_uploads;
 pub mod chats;
 pub mod file_uploads;
+pub mod message_feedbacks;
 pub mod messages;
 pub mod share_grants;
 pub mod users;

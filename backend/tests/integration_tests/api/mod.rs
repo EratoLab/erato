@@ -7,6 +7,7 @@ pub mod edit;
 pub mod entra_id;
 pub mod files;
 pub mod image_generation;
+pub mod message_feedback;
 pub mod messages;
 pub mod sharepoint;
 pub mod sharing;

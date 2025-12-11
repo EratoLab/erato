@@ -68,6 +68,9 @@ chat_provider_ids = ["test-token-limit"]
 # disable_chat_input_autofocus = true
 # # Whether to hide logout functionality from the UI (default: false)
 # disable_logout = true
+# # Whether to enable message feedback functionality in the UI (default: false)
+# # Allows users to submit thumbs up/down ratings with optional comments for messages
+# enable_message_feedback = false
 
 # Experimental assistants feature configuration
 # [experimental_assistants]

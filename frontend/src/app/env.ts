@@ -11,6 +11,7 @@ export type Env = {
   disableLogout: boolean;
   assistantsEnabled: boolean;
   sharepointEnabled: boolean;
+  messageFeedbackEnabled: boolean;
 };
 
 declare global {
@@ -28,6 +29,7 @@ declare global {
     DISABLE_LOGOUT?: boolean;
     ASSISTANTS_ENABLED?: boolean;
     SHAREPOINT_ENABLED?: boolean;
+    MESSAGE_FEEDBACK_ENABLED?: boolean;
   }
 }
 
@@ -90,6 +92,10 @@ export const env = (): Env => {
     import.meta.env.VITE_SHAREPOINT_ENABLED === "true"
       ? true
       : (window.SHAREPOINT_ENABLED ?? false);
+  const messageFeedbackEnabled =
+    import.meta.env.VITE_MESSAGE_FEEDBACK_ENABLED === "true"
+      ? true
+      : (window.MESSAGE_FEEDBACK_ENABLED ?? false);
 
   return {
     apiRootUrl,
@@ -104,5 +110,6 @@ export const env = (): Env => {
     disableLogout,
     assistantsEnabled,
     sharepointEnabled,
+    messageFeedbackEnabled,
   };
 };

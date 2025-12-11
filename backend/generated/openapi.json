@@ -1222,6 +1222,63 @@
         }
       }
     },
+    "/api/v1beta/messages/{message_id}/feedback": {
+      "put": {
+        "tags": [],
+        "summary": "Submit or update feedback for a message",
+        "operationId": "submit_message_feedback",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The ID of the message to submit feedback for",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Feedback successfully submitted or updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageFeedback"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid message ID or request format"
+          },
+          "403": {
+            "description": "User does not have permission to submit feedback for this message"
+          },
+          "404": {
+            "description": "Message not found"
+          },
+          "500": {
+            "description": "Server error while submitting feedback"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/share-grants": {
       "get": {
         "tags": [
@@ -1706,6 +1763,10 @@
             "type": "string",
             "format": "date-time",
             "description": "When the message was created"
+          },
+          "feedback": {
+            "$ref": "#/components/schemas/MessageFeedback",
+            "description": "Optional feedback for this message"
           },
           "id": {
             "type": "string",
@@ -2403,6 +2464,14 @@
           }
         ]
       },
+      "FeedbackSentiment": {
+        "type": "string",
+        "description": "Sentiment for message feedback",
+        "enum": [
+          "positive",
+          "negative"
+        ]
+      },
       "FileReference": {
         "type": "object",
         "description": "Minimal file reference containing only the file ID",
@@ -2542,6 +2611,63 @@
         "properties": {
           "id": {
             "type": "string"
+          }
+        }
+      },
+      "MessageFeedback": {
+        "type": "object",
+        "description": "Message feedback response",
+        "required": [
+          "id",
+          "sentiment",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional comment text"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the feedback was created"
+          },
+          "id": {
+            "type": "string",
+            "description": "The unique ID of the feedback"
+          },
+          "sentiment": {
+            "$ref": "#/components/schemas/FeedbackSentiment",
+            "description": "Sentiment of the feedback"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the feedback was last updated"
+          }
+        }
+      },
+      "MessageFeedbackRequest": {
+        "type": "object",
+        "description": "Request to submit or update message feedback",
+        "required": [
+          "sentiment"
+        ],
+        "properties": {
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional comment text"
+          },
+          "sentiment": {
+            "$ref": "#/components/schemas/FeedbackSentiment",
+            "description": "Sentiment of the feedback (positive or negative)"
           }
         }
       },

@@ -849,6 +849,12 @@ pub struct FrontendConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub disable_logout: bool,
+
+    // Whether to enable message feedback functionality in the UI.
+    // Allows users to submit thumbs up/down ratings with optional comments for messages.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enable_message_feedback: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]

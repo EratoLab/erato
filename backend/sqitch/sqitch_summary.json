@@ -13,7 +13,8 @@
     "deploy/0011_adjust_view_user_daily_token_usage.sql",
     "deploy/0012_migrate_file_uploads_relation_to_own_table.sql",
     "deploy/0013_add_assistants_table.sql",
-    "deploy/0014_add_share_grants_table.sql"
+    "deploy/0014_add_share_grants_table.sql",
+    "deploy/0015_add_message_feedbacks_table.sql"
   ],
-  "latest_change": "1328c23609f9bda1f1a66b195aa0d388930e01f1"
+  "latest_change": "ca6792531af75a5f46c7bd38c6e1a5b1b7bea94e"
 }

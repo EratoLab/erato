@@ -106,6 +106,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     let authenticated_routes = Router::new()
         .route("/chats/{chat_id}/messages", get(chat_messages))
         .route("/chats/{chat_id}/archive", post(archive_chat_endpoint))
+        .route(
+            "/messages/{message_id}/feedback",
+            put(submit_message_feedback),
+        )
         .route("/files/{file_id}", get(get_file))
         .route(
             "/token_usage/estimate",
@@ -169,6 +173,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         chats,
         profile,
         chat_messages,
+        submit_message_feedback,
         recent_chats,
         frequent_assistants,
         upload_file,
@@ -222,6 +227,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         ArchiveChatRequest,
         ArchiveChatResponse,
         ChatModel,
+        FeedbackSentiment,
+        MessageFeedbackRequest,
+        MessageFeedback,
         Assistant,
         AssistantWithFiles,
         AssistantFile,
@@ -343,6 +351,59 @@ pub struct RecentChat {
     assistant_name: Option<String>,
 }
 
+/// Sentiment for message feedback
+#[derive(Debug, ToSchema, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum FeedbackSentiment {
+    Positive,
+    Negative,
+}
+
+impl From<String> for FeedbackSentiment {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "positive" => FeedbackSentiment::Positive,
+            "negative" => FeedbackSentiment::Negative,
+            _ => FeedbackSentiment::Positive, // Default fallback
+        }
+    }
+}
+
+impl From<FeedbackSentiment> for String {
+    fn from(sentiment: FeedbackSentiment) -> Self {
+        match sentiment {
+            FeedbackSentiment::Positive => "positive".to_string(),
+            FeedbackSentiment::Negative => "negative".to_string(),
+        }
+    }
+}
+
+/// Request to submit or update message feedback
+#[derive(Debug, ToSchema, Deserialize)]
+pub struct MessageFeedbackRequest {
+    /// Sentiment of the feedback (positive or negative)
+    sentiment: FeedbackSentiment,
+    /// Optional comment text
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comment: Option<String>,
+}
+
+/// Message feedback response
+#[derive(Debug, Clone, ToSchema, Serialize, Deserialize)]
+pub struct MessageFeedback {
+    /// The unique ID of the feedback
+    id: String,
+    /// Sentiment of the feedback
+    sentiment: FeedbackSentiment,
+    /// Optional comment text
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comment: Option<String>,
+    /// When the feedback was created
+    created_at: DateTime<FixedOffset>,
+    /// When the feedback was last updated
+    updated_at: DateTime<FixedOffset>,
+}
+
 /// A message in a chat
 #[derive(Debug, Clone, ToSchema, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -370,6 +431,10 @@ pub struct ChatMessage {
     is_message_in_active_thread: bool,
     /// The IDs of the files that were used to generate this message
     input_files_ids: Vec<String>,
+    /// Optional feedback for this message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    feedback: Option<MessageFeedback>,
 }
 
 /// Statistics for a list of chat messages
@@ -782,6 +847,13 @@ async fn link_sharepoint_file_impl(
 
 impl ChatMessage {
     pub fn from_model(msg: messages::Model) -> Result<Self, Report> {
+        Self::from_model_with_feedback(msg, None)
+    }
+
+    pub fn from_model_with_feedback(
+        msg: messages::Model,
+        feedback: Option<crate::db::entity::message_feedbacks::Model>,
+    ) -> Result<Self, Report> {
         let parsed_message = MessageSchema::validate(&msg.raw_message)?;
         Ok(ChatMessage {
             id: msg.id.to_string(),
@@ -799,9 +871,84 @@ impl ChatMessage {
                 .iter()
                 .map(|id| id.to_string())
                 .collect(),
+            feedback: feedback.map(|f| MessageFeedback {
+                id: f.id.to_string(),
+                sentiment: FeedbackSentiment::from(f.sentiment),
+                comment: f.comment,
+                created_at: f.created_at,
+                updated_at: f.updated_at,
+            }),
         })
     }
 }
+
+/// Submit or update feedback for a message
+#[utoipa::path(
+    put,
+    path = "/messages/{message_id}/feedback",
+    params(
+        ("message_id" = String, Path, description = "The ID of the message to submit feedback for")
+    ),
+    request_body = MessageFeedbackRequest,
+    responses(
+        (status = OK, body = MessageFeedback, description = "Feedback successfully submitted or updated"),
+        (status = BAD_REQUEST, description = "Invalid message ID or request format"),
+        (status = NOT_FOUND, description = "Message not found"),
+        (status = FORBIDDEN, description = "User does not have permission to submit feedback for this message"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error while submitting feedback")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn submit_message_feedback(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+    Path(message_id): Path<String>,
+    Json(request): Json<MessageFeedbackRequest>,
+) -> Result<Json<MessageFeedback>, StatusCode> {
+    // Parse the message ID
+    let message_id = Uuid::parse_str(&message_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    policy.rebuild_data_if_needed_req(&app_state.db).await?;
+
+    // Convert sentiment enum to string
+    let sentiment_str: String = request.sentiment.into();
+
+    // Submit or update the feedback
+    let feedback = models::message_feedback::submit_or_update_feedback(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &message_id,
+        sentiment_str,
+        request.comment,
+    )
+    .await
+    .map_err(|e| {
+        let error_msg = e.to_string().to_lowercase();
+        if error_msg.contains("not found") {
+            StatusCode::NOT_FOUND
+        } else if error_msg.contains("not authorized") {
+            StatusCode::FORBIDDEN
+        } else {
+            log_internal_server_error(e)
+        }
+    })?;
+
+    // Convert to response format
+    let response = MessageFeedback {
+        id: feedback.id.to_string(),
+        sentiment: FeedbackSentiment::from(feedback.sentiment),
+        comment: feedback.comment,
+        created_at: feedback.created_at,
+        updated_at: feedback.updated_at,
+    };
+
+    Ok(Json(response))
+}
+
 #[utoipa::path(get, path = "/messages", responses((status = OK, body = Vec<Message>)))]
 pub async fn messages() -> Json<Vec<Message>> {
     vec![].into()
@@ -863,9 +1010,22 @@ pub async fn chat_messages(
     .wrap_err("Failed to get chat messages")
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Convert the messages to the API response format
-    let converted_messages: Result<_, Report> =
-        messages.into_iter().map(ChatMessage::from_model).collect();
+    // Get feedback for all messages
+    let message_ids: Vec<Uuid> = messages.iter().map(|m| m.id).collect();
+    let feedbacks =
+        models::message_feedback::get_feedbacks_for_messages(&app_state.db, &message_ids)
+            .await
+            .wrap_err("Failed to get message feedbacks")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Convert the messages to the API response format with feedback
+    let converted_messages: Result<_, Report> = messages
+        .into_iter()
+        .map(|msg| {
+            let feedback = feedbacks.get(&msg.id).cloned();
+            ChatMessage::from_model_with_feedback(msg, feedback)
+        })
+        .collect();
 
     let response_messages = converted_messages
         .wrap_err("Failed to get chat messages")
