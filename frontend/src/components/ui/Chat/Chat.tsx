@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useChatActions } from "@/hooks/chat";
+import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
@@ -13,6 +14,7 @@ import { createLogger } from "@/utils/debugLogger";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
+import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
 import { MessageList } from "../MessageList/MessageList";
 
 import type { ChatMessage } from "../MessageList/MessageList";
@@ -134,7 +136,9 @@ export const Chat = ({
   const sessions: ChatSession[] = Array.isArray(chatHistory)
     ? chatHistory.map((chat) => ({
         id: chat.id,
-        title: chat.title_by_summary || t`New Chat`, // Use title from API
+        title:
+          chat.title_by_summary ||
+          t({ id: "chat.newChat.title", message: "New Chat" }), // Use title from API
         updatedAt: chat.last_message_at || new Date().toISOString(), // Use last message timestamp
         messages: [], // We don't need to populate messages here
         metadata: {
@@ -272,6 +276,16 @@ export const Chat = ({
     closePreviewModal,
   } = useFilePreviewModal();
 
+  // Use the message feedback hook for all feedback-related logic
+  const {
+    feedbackDialogState,
+    feedbackConfig,
+    handleFeedbackSubmit,
+    closeFeedbackDialog,
+    handleFeedbackDialogSubmit,
+    openFeedbackDialog,
+  } = useMessageFeedback();
+
   // Restore placeholder definitions for props passed to MessageList
   const hasOlderMessages = false;
   const loadOlderMessages = () => {
@@ -320,7 +334,10 @@ export const Chat = ({
             className,
           )}
           role="region"
-          aria-label={t`Chat conversation`}
+          aria-label={t({
+            id: "chat.conversation.aria",
+            message: "Chat conversation",
+          })}
         >
           {/* Use the MessageList component */}
           <MessageList
@@ -381,6 +398,24 @@ export const Chat = ({
                 handleRegenerate(action.messageId);
                 return true;
               }
+              // Handle like/dislike feedback actions
+              if (action.type === "like" || action.type === "dislike") {
+                const sentiment =
+                  action.type === "like" ? "positive" : "negative";
+
+                // Submit feedback immediately
+                const success = await handleFeedbackSubmit(
+                  action.messageId,
+                  sentiment,
+                );
+
+                // If comments are enabled, open the dialog for additional comment
+                if (success && feedbackConfig.commentsEnabled) {
+                  openFeedbackDialog(action.messageId, sentiment);
+                }
+
+                return success;
+              }
               return handleMessageAction(action);
             }}
             className={layout}
@@ -422,6 +457,14 @@ export const Chat = ({
         isOpen={isPreviewModalOpen}
         onClose={closePreviewModal}
         file={fileToPreview}
+      />
+
+      {/* Render the Feedback Comment Dialog */}
+      <FeedbackCommentDialog
+        isOpen={feedbackDialogState.isOpen}
+        onClose={closeFeedbackDialog}
+        onSubmit={handleFeedbackDialogSubmit}
+        sentiment={feedbackDialogState.sentiment}
       />
     </div>
   );

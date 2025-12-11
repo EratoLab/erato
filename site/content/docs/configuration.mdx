@@ -122,6 +122,24 @@ This feature allows collecting user feedback on message quality, which can be us
 enable_message_feedback = true
 ```
 
+#### `frontend.enable_message_feedback_comments`
+
+Whether to enable the comment text field in message feedback. When enabled, users can add optional text comments along with their thumbs up/down ratings.
+
+This setting requires `enable_message_feedback` to be `true` to have any effect.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example**
+
+```toml
+[frontend]
+enable_message_feedback = true
+enable_message_feedback_comments = true
+```
+
 #### `frontend.additional_environment`
 
 Additional values to inject into the frontend environment as global variables.

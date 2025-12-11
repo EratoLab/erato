@@ -15,6 +15,7 @@ import {
   useUploadFeature,
   useChatInputFeature,
   useAuthFeature,
+  useMessageFeedbackFeature,
 } from "../FeatureConfigProvider";
 
 import type { ReactNode } from "react";
@@ -47,6 +48,8 @@ describe("FeatureConfigProvider", () => {
       disableLogout: false,
       assistantsEnabled: false,
       sharepointEnabled: false,
+      messageFeedbackEnabled: false,
+      messageFeedbackCommentsEnabled: false,
     });
   });
 
@@ -91,6 +94,10 @@ describe("FeatureConfigProvider", () => {
         cloudProviders: {
           availableProviders: [],
         },
+        messageFeedback: {
+          enabled: false,
+          commentsEnabled: false,
+        },
       });
     });
 
@@ -108,6 +115,8 @@ describe("FeatureConfigProvider", () => {
         disableLogout: false,
         assistantsEnabled: false,
         sharepointEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -133,6 +142,8 @@ describe("FeatureConfigProvider", () => {
         disableLogout: false,
         assistantsEnabled: false,
         sharepointEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -158,6 +169,8 @@ describe("FeatureConfigProvider", () => {
         disableLogout: true, // Disabled
         assistantsEnabled: false,
         sharepointEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -183,6 +196,8 @@ describe("FeatureConfigProvider", () => {
         disableLogout: true,
         assistantsEnabled: false,
         sharepointEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -234,6 +249,8 @@ describe("FeatureConfigProvider", () => {
         disableLogout: false,
         assistantsEnabled: false,
         sharepointEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
       });
 
       const { result } = renderHook(() => useUploadFeature(), {
@@ -277,10 +294,14 @@ describe("FeatureConfigProvider", () => {
         themeConfigPath: null,
         themeLogoPath: null,
         themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
         disableUpload: false,
         disableChatInputAutofocus: true,
         disableLogout: false,
         assistantsEnabled: false,
+        sharepointEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
       });
 
       const { result } = renderHook(() => useChatInputFeature(), {
@@ -324,10 +345,14 @@ describe("FeatureConfigProvider", () => {
         themeConfigPath: null,
         themeLogoPath: null,
         themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
         disableUpload: false,
         disableChatInputAutofocus: false,
         disableLogout: true,
         assistantsEnabled: false,
+        sharepointEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
       });
 
       const { result } = renderHook(() => useAuthFeature(), {
@@ -335,6 +360,85 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current.showLogout).toBe(false);
+    });
+  });
+
+  describe("useMessageFeedbackFeature", () => {
+    it("should throw error when used outside provider", () => {
+      const consoleErrorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      expect(() => {
+        renderHook(() => useMessageFeedbackFeature());
+      }).toThrow(
+        "useFeatureConfig must be used within a FeatureConfigProvider",
+      );
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it("should return message feedback config with both disabled by default", () => {
+      const { result } = renderHook(() => useMessageFeedbackFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current).toEqual({
+        enabled: false,
+        commentsEnabled: false,
+      });
+    });
+
+    it("should return message feedback config with enabled true when enabled", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        disableLogout: false,
+        assistantsEnabled: false,
+        sharepointEnabled: false,
+        messageFeedbackEnabled: true,
+        messageFeedbackCommentsEnabled: false,
+      });
+
+      const { result } = renderHook(() => useMessageFeedbackFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.enabled).toBe(true);
+      expect(result.current.commentsEnabled).toBe(false);
+    });
+
+    it("should return message feedback config with comments enabled when both are enabled", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        disableLogout: false,
+        assistantsEnabled: false,
+        sharepointEnabled: false,
+        messageFeedbackEnabled: true,
+        messageFeedbackCommentsEnabled: true,
+      });
+
+      const { result } = renderHook(() => useMessageFeedbackFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.enabled).toBe(true);
+      expect(result.current.commentsEnabled).toBe(true);
     });
   });
 

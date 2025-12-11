@@ -3,7 +3,10 @@ import {
   type UiToolCall,
 } from "./toolCallAdapter";
 
-import type { ChatMessage as ApiChatMessage } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ChatMessage as ApiChatMessage,
+  MessageFeedback,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
 /**
@@ -21,6 +24,8 @@ export interface UiChatMessage extends Message {
     context?: string;
   };
   toolCalls?: UiToolCall[];
+  /** Existing feedback for this message, if any */
+  feedback?: MessageFeedback;
 }
 
 /**
@@ -54,6 +59,7 @@ export function mapApiMessageToUiMessage(
         : undefined,
     status: "complete",
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    feedback: apiMessage.feedback ?? undefined,
   };
 }
 

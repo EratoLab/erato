@@ -52,6 +52,16 @@ interface CloudProvidersFeatureConfig {
 }
 
 /**
+ * Configuration for message feedback feature
+ */
+interface MessageFeedbackFeatureConfig {
+  /** Whether message feedback (thumbs up/down) is enabled */
+  enabled: boolean;
+  /** Whether comment text field is enabled in feedback dialog */
+  commentsEnabled: boolean;
+}
+
+/**
  * Complete feature configuration interface
  */
 interface FeatureConfig {
@@ -65,6 +75,8 @@ interface FeatureConfig {
   assistants: AssistantsFeatureConfig;
   /** Cloud providers feature flags */
   cloudProviders: CloudProvidersFeatureConfig;
+  /** Message feedback feature flags */
+  messageFeedback: MessageFeedbackFeatureConfig;
 }
 
 const FeatureConfigContext = createContext<FeatureConfig | null>(null);
@@ -119,6 +131,10 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
       },
       cloudProviders: {
         availableProviders,
+      },
+      messageFeedback: {
+        enabled: environment.messageFeedbackEnabled,
+        commentsEnabled: environment.messageFeedbackCommentsEnabled,
       },
     };
   }, []); // Empty deps - only compute once
@@ -236,4 +252,23 @@ export function useAssistantsFeature(): AssistantsFeatureConfig {
 export function useCloudProvidersFeature(): CloudProvidersFeatureConfig {
   const config = useFeatureConfig();
   return config.cloudProviders;
+}
+
+/**
+ * Convenience hook for accessing message feedback feature configuration.
+ *
+ * @returns Message feedback feature configuration
+ * @throws {Error} If used outside of FeatureConfigProvider
+ *
+ * @example
+ * ```tsx
+ * const { enabled, commentsEnabled } = useMessageFeedbackFeature();
+ * if (enabled) {
+ *   return <FeedbackButtons showComments={commentsEnabled} />;
+ * }
+ * ```
+ */
+export function useMessageFeedbackFeature(): MessageFeedbackFeatureConfig {
+  const config = useFeatureConfig();
+  return config.messageFeedback;
 }

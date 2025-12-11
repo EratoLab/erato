@@ -71,6 +71,9 @@ chat_provider_ids = ["test-token-limit"]
 # # Whether to enable message feedback functionality in the UI (default: false)
 # # Allows users to submit thumbs up/down ratings with optional comments for messages
 # enable_message_feedback = false
+# # Whether to enable the comment text field in message feedback (default: false)
+# # Requires enable_message_feedback to be true to have any effect
+# enable_message_feedback_comments = false
 
 # Experimental assistants feature configuration
 # [experimental_assistants]

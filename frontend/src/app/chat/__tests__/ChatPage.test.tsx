@@ -8,6 +8,7 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 import { useChatMessaging } from "@/hooks/chat/useChatMessaging";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { useChatContext } from "@/providers/ChatProvider";
+import { FeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import ChatPageStructure from "../ChatPageStructure.client";
 
@@ -178,6 +179,26 @@ vi.mock("@/components/ui/Modal/FilePreviewModal", () => ({
   FilePreviewModal: () => null,
 }));
 
+// Mock env for FeatureConfigProvider
+vi.mock("@/app/env", () => ({
+  env: () => ({
+    apiRootUrl: "/api/",
+    themeCustomerName: null,
+    themePath: null,
+    themeConfigPath: null,
+    themeLogoPath: null,
+    themeLogoDarkPath: null,
+    themeAssistantAvatarPath: null,
+    disableUpload: false,
+    disableChatInputAutofocus: false,
+    disableLogout: false,
+    assistantsEnabled: false,
+    sharepointEnabled: false,
+    messageFeedbackEnabled: false,
+    messageFeedbackCommentsEnabled: false,
+  }),
+}));
+
 // Test wrapper with necessary providers
 const TestWrapper = ({ children }: { children: React.ReactNode }) => {
   const queryClient = new QueryClient({
@@ -190,7 +211,9 @@ const TestWrapper = ({ children }: { children: React.ReactNode }) => {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider i18n={i18n}>
-        <MemoryRouter>{children}</MemoryRouter>
+        <FeatureConfigProvider>
+          <MemoryRouter>{children}</MemoryRouter>
+        </FeatureConfigProvider>
       </I18nProvider>
     </QueryClientProvider>
   );

@@ -17,6 +17,7 @@ import {
   CodeIcon,
 } from "../icons";
 
+import type { MessageFeedback } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
   // MessageAction,
   MessageControlsProps,
@@ -26,9 +27,11 @@ const logger = createLogger("UI", "DefaultMessageControls");
 
 interface ExtendedMessageControlsProps extends MessageControlsProps {
   showFeedbackButtons?: boolean;
+  showFeedbackComments?: boolean;
   showRawMarkdown?: boolean;
   onToggleRawMarkdown?: () => void;
-
+  /** Initial feedback state from API (existing feedback for this message) */
+  initialFeedback?: MessageFeedback;
   hasToolCalls?: boolean;
 }
 
@@ -43,18 +46,28 @@ export const DefaultMessageControls = ({
   className,
   isUserMessage,
   showFeedbackButtons = false,
+  showFeedbackComments: _showFeedbackComments = false,
   showRawMarkdown = false,
   onToggleRawMarkdown,
-
+  initialFeedback,
   hasToolCalls = false,
 }: ExtendedMessageControlsProps) => {
   const [isCopied, setIsCopied] = useState(false);
-  const [feedbackState, setFeedbackState] = useState<
-    "liked" | "disliked" | null
-  >(null);
+
   // Chat-level edit permission from context; default true if unspecified
   const canEditChat = context.canEdit !== false; // default to true if unspecified
   // const isDialogOwner = context.dialogOwnerId === profile.profile?.id;
+
+  // Derive feedback state from initialFeedback prop
+  // This avoids unnecessary re-renders from useEffect + useState combination
+  const [feedbackState, setFeedbackState] = useState<
+    "liked" | "disliked" | null
+  >(() => {
+    if (initialFeedback) {
+      return initialFeedback.sentiment === "positive" ? "liked" : "disliked";
+    }
+    return null;
+  });
 
   useEffect(() => {
     if (isCopied) {
@@ -111,9 +124,27 @@ export const DefaultMessageControls = ({
             size="sm"
             showOnHover={showOnHover}
             aria-label={
-              showRawMarkdown ? t`Show formatted` : t`Show raw markdown`
+              showRawMarkdown
+                ? t({
+                    id: "message.showFormatted.aria",
+                    message: "Show formatted",
+                  })
+                : t({
+                    id: "message.showRawMarkdown.aria",
+                    message: "Show raw markdown",
+                  })
             }
-            title={showRawMarkdown ? t`Show formatted` : t`Show raw markdown`}
+            title={
+              showRawMarkdown
+                ? t({
+                    id: "message.showFormatted.aria",
+                    message: "Show formatted",
+                  })
+                : t({
+                    id: "message.showRawMarkdown.aria",
+                    message: "Show raw markdown",
+                  })
+            }
             className={showRawMarkdown ? "text-theme-fg-accent" : ""}
           />
         )}
@@ -123,12 +154,16 @@ export const DefaultMessageControls = ({
           onClick={() => void handleAction("copy")}
           variant="icon-only"
           icon={
-            isCopied ? <CheckIcon className="text-green-500" /> : <CopyIcon />
+            isCopied ? (
+              <CheckIcon className="text-theme-success-fg" />
+            ) : (
+              <CopyIcon />
+            )
           }
           size="sm"
           showOnHover={showOnHover}
-          aria-label={t`Copy message`}
-          title={t`Copy message`}
+          aria-label={t({ id: "message.copy.aria", message: "Copy message" })}
+          title={t({ id: "message.copy.aria", message: "Copy message" })}
         />
 
         {isUser && canEditChat && !context.isSharedDialog && (
@@ -138,8 +173,8 @@ export const DefaultMessageControls = ({
             icon={<EditIcon />}
             size="sm"
             showOnHover={showOnHover}
-            aria-label={t`Edit message`}
-            title={t`Edit message`}
+            aria-label={t({ id: "message.edit.aria", message: "Edit message" })}
+            title={t({ id: "message.edit.aria", message: "Edit message" })}
             disabled={feedbackState !== null}
           />
         )}
@@ -150,33 +185,62 @@ export const DefaultMessageControls = ({
               onClick={() => void handleAction("like")}
               variant="icon-only"
               icon={
-                feedbackState === "liked" ? (
-                  <CheckIcon className="text-green-500" />
-                ) : (
-                  <ThumbUpIcon />
-                )
+                <ThumbUpIcon
+                  className={
+                    feedbackState === "liked"
+                      ? "fill-theme-success-fg text-theme-success-fg"
+                      : ""
+                  }
+                />
               }
               size="sm"
-              showOnHover={showOnHover}
-              aria-label={t`Like message`}
-              title={t`Like message`}
+              showOnHover={feedbackState === null ? showOnHover : false}
+              aria-label={t({
+                id: "feedback.like.aria",
+                message: "Like message",
+              })}
+              title={
+                feedbackState === "liked"
+                  ? t({
+                      id: "feedback.like.active",
+                      message: "You found this helpful",
+                    })
+                  : t({ id: "feedback.like.aria", message: "Like message" })
+              }
               disabled={feedbackState !== null}
+              className={feedbackState === "liked" ? "opacity-100" : ""}
             />
             <Button
               onClick={() => void handleAction("dislike")}
               variant="icon-only"
               icon={
-                feedbackState === "disliked" ? (
-                  <CheckIcon className="text-red-500" />
-                ) : (
-                  <ThumbDownIcon />
-                )
+                <ThumbDownIcon
+                  className={
+                    feedbackState === "disliked"
+                      ? "fill-theme-error-fg text-theme-error-fg"
+                      : ""
+                  }
+                />
               }
               size="sm"
-              showOnHover={showOnHover}
-              aria-label={t`Dislike message`}
-              title={t`Dislike message`}
+              showOnHover={feedbackState === null ? showOnHover : false}
+              aria-label={t({
+                id: "feedback.dislike.aria",
+                message: "Dislike message",
+              })}
+              title={
+                feedbackState === "disliked"
+                  ? t({
+                      id: "feedback.dislike.active",
+                      message: "You found this unhelpful",
+                    })
+                  : t({
+                      id: "feedback.dislike.aria",
+                      message: "Dislike message",
+                    })
+              }
               disabled={feedbackState !== null}
+              className={feedbackState === "disliked" ? "opacity-100" : ""}
             />
           </>
         )}
