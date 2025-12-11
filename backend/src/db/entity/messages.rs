@@ -34,6 +34,8 @@ pub enum Relation {
         on_delete = "NoAction"
     )]
     Chats,
+    #[sea_orm(has_one = "super::message_feedbacks::Entity")]
+    MessageFeedbacks,
     #[sea_orm(
         belongs_to = "Entity",
         from = "Column::PreviousMessageId",
@@ -55,6 +57,12 @@ pub enum Relation {
 impl Related<super::chats::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Chats.def()
+    }
+}
+
+impl Related<super::message_feedbacks::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::MessageFeedbacks.def()
     }
 }
 

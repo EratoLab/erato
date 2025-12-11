@@ -70,6 +70,8 @@ pub enum ResourceKind {
     ChatSingleton,
     #[serde(rename = "message")]
     Message,
+    #[serde(rename = "message_feedback")]
+    MessageFeedback,
     #[serde(rename = "assistant")]
     Assistant,
     #[serde(rename = "assistant_singleton")]
@@ -92,6 +94,7 @@ pub enum Resource {
     Chat(String),
     ChatSingleton,
     Message(String),
+    MessageFeedback(String),
     Assistant(String),
     AssistantSingleton,
     ShareGrant(String),
@@ -109,6 +112,7 @@ impl Resource {
             Resource::Chat(id) => (ResourceKind::Chat, ResourceId(id)),
             Resource::ChatSingleton => (ResourceKind::ChatSingleton, ResourceId::singleton()),
             Resource::Message(id) => (ResourceKind::Message, ResourceId(id)),
+            Resource::MessageFeedback(id) => (ResourceKind::MessageFeedback, ResourceId(id)),
             Resource::Assistant(id) => (ResourceKind::Assistant, ResourceId(id)),
             Resource::AssistantSingleton => {
                 (ResourceKind::AssistantSingleton, ResourceId::singleton())
@@ -128,6 +132,8 @@ pub enum Action {
     Update,
     #[serde(rename = "submit_message")]
     SubmitMessage,
+    #[serde(rename = "submit_feedback")]
+    SubmitFeedback,
     #[serde(rename = "delete")]
     Delete,
     #[serde(rename = "share")]

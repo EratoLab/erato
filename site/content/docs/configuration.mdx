@@ -105,6 +105,23 @@ When enabled, the logout button/option will be hidden from the user interface.
 disable_logout = true
 ```
 
+#### `frontend.enable_message_feedback`
+
+Whether to enable message feedback functionality in the UI. When enabled, users can submit thumbs up/down ratings with optional comments for individual messages.
+
+This feature allows collecting user feedback on message quality, which can be useful for improving model performance and understanding user satisfaction.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example**
+
+```toml
+[frontend]
+enable_message_feedback = true
+```
+
 #### `frontend.additional_environment`
 
 Additional values to inject into the frontend environment as global variables.
