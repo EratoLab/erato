@@ -85,6 +85,10 @@ backend:
     tag: ""
     pullPolicy: IfNotPresent
     pullSecrets: []
+  # Optional deployment version for cache headers on static files (theme, locales).
+  # If not set, falls back to the Docker image tag.
+  # This version is used to generate ETag headers, ensuring cache invalidation on deployments.
+  deploymentVersion: ""
   replicaCount: 1
   extraEnvVars: []
   extraEnvVarsCM: ""

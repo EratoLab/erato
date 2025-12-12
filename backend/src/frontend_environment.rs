@@ -98,6 +98,18 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
 #[derive(Debug, Clone)]
 pub struct FrontendBundlePath(pub String);
 
+#[derive(Debug, Clone)]
+pub struct DeploymentVersion(pub Option<String>);
+
+impl DeploymentVersion {
+    /// Read the deployment version from the ERATO_DEPLOYMENT_VERSION environment variable.
+    /// This bypasses the config.rs mechanism and reads directly from the environment.
+    pub fn from_env() -> Self {
+        let version = std::env::var("ERATO_DEPLOYMENT_VERSION").ok();
+        Self(version)
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     rewrites: Vec<RewriteRule>,
@@ -191,9 +203,11 @@ pub mod axum {
     use tower_http::services::{ServeDir, ServeFile};
 
     /// Static file handler that injects a script tag with environment variables into HTML files.
+    /// Also handles cache headers for static files based on deployment version.
     pub async fn serve_files_with_script(
         Extension(frontend_environment): Extension<FrontedEnvironment>,
         Extension(frontend_bundle_path): Extension<FrontendBundlePath>,
+        Extension(deployment_version): Extension<DeploymentVersion>,
         req: Request<Body>,
     ) -> Result<Response<UnsyncBoxBody<Bytes, BoxError>>, Infallible> {
         let bundle_dir_path = PathBuf::from(frontend_bundle_path.0.clone())
@@ -203,6 +217,9 @@ pub mod axum {
             .join("404.html")
             .canonicalize()
             .expect("Unable to normalize frontend bundle path for 404.html");
+
+        // Check if the client sent an If-None-Match header for ETag validation
+        let client_etag = req.headers().get(http::header::IF_NONE_MATCH).cloned();
 
         // Check if we have any rewrite rules that match
         let path = req.uri().path().to_string();
@@ -235,10 +252,12 @@ pub mod axum {
                 .unwrap()
         };
 
-        // let res = static_files_service.try_call(req).await.unwrap();
-
         let headers = res.headers().clone();
-        if headers.get(http::header::CONTENT_TYPE) == Some(&HeaderValue::from_static("text/html")) {
+        let is_html =
+            headers.get(http::header::CONTENT_TYPE) == Some(&HeaderValue::from_static("text/html"));
+
+        if is_html {
+            // HTML files: inject environment variables and prevent caching (for auth)
             let mut res = res.map(move |body| {
                 let body_bytes = body.map_err(Into::into).boxed_unsync();
                 // Inject variables into HTML files
@@ -271,7 +290,52 @@ pub mod axum {
 
             Ok(res)
         } else {
-            Ok(res.map(|body| body.map_err(Into::into).boxed_unsync()))
+            // Non-HTML files (theme files, locales, etc.): add cache headers based on deployment version
+            let mut res = res.map(|body| body.map_err(Into::into).boxed_unsync());
+
+            if let Some(version) = &deployment_version.0 {
+                // We have a deployment version - use it for cache headers
+                let etag_value = format!("\"{}\"", version);
+
+                // Check if the client's ETag matches our current version
+                if let Some(client_etag) = client_etag
+                    && client_etag.to_str().ok() == Some(&etag_value)
+                {
+                    // ETag matches - return 304 Not Modified
+                    let response = Response::builder()
+                        .status(http::StatusCode::NOT_MODIFIED)
+                        .header(http::header::ETAG, etag_value)
+                        .header(
+                            http::header::CACHE_CONTROL,
+                            "public, max-age=3600, stale-while-revalidate=604800",
+                        )
+                        .body(
+                            http_body_util::Empty::new()
+                                .map_err(|never| match never {})
+                                .boxed_unsync(),
+                        )
+                        .unwrap();
+                    return Ok(response);
+                }
+
+                // Add cache headers with ETag (1 hour fresh, 1 week stale-while-revalidate)
+                res.headers_mut().insert(
+                    http::header::ETAG,
+                    HeaderValue::from_str(&etag_value).unwrap(),
+                );
+                res.headers_mut().insert(
+                    http::header::CACHE_CONTROL,
+                    HeaderValue::from_static("public, max-age=3600, stale-while-revalidate=604800"),
+                );
+            } else {
+                // No deployment version - use no-cache as a safe fallback
+                res.headers_mut().insert(
+                    http::header::CACHE_CONTROL,
+                    HeaderValue::from_static("no-cache"),
+                );
+            }
+
+            Ok(res)
         }
     }
 }

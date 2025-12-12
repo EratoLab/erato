@@ -6,7 +6,7 @@ use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use erato::config::AppConfig;
 use erato::frontend_environment::{
-    FrontendBundlePath, build_frontend_environment, serve_files_with_script,
+    DeploymentVersion, FrontendBundlePath, build_frontend_environment, serve_files_with_script,
 };
 use erato::models;
 use erato::services::sentry::{extend_with_sentry_layers, setup_sentry};
@@ -64,6 +64,7 @@ async fn main() -> Result<(), Report> {
         .layer(Extension(FrontendBundlePath(
             config.frontend_bundle_path.clone(),
         )))
+        .layer(Extension(DeploymentVersion::from_env()))
         .layer(Extension(build_frontend_environment(&config)))
         .layer(CorsLayer::very_permissive())
         // include trace context as header into the response

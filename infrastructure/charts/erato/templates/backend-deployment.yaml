@@ -74,6 +74,8 @@ spec:
               {{- include "erato.postgresValueOrValueFrom" . | nindent 14 }}
             - name: ENVIRONMENT
               value: {{ .Values.global.environment }}
+            - name: ERATO_DEPLOYMENT_VERSION
+              value: {{ include "erato.deploymentVersion" . | quote }}
             {{- if .Values.backend.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.backend.extraEnvVars "context" $) | nindent 12 }}
             {{- end }}
