@@ -264,6 +264,51 @@ impl LangfuseClient {
         self.send_ingestion_batch(batch).await
     }
 
+    /// Create a score (user feedback) in Langfuse
+    pub async fn create_score(&self, request: CreateScoreRequest) -> Result<()> {
+        if !self.enabled {
+            tracing::debug!("Langfuse client is disabled, skipping score creation");
+            return Ok(());
+        }
+
+        tracing::debug!(
+            score_id = %request.id,
+            trace_id = %request.trace_id,
+            name = %request.name,
+            value = %request.value,
+            environment = ?request.environment,
+            "Creating Langfuse score"
+        );
+
+        let timestamp_iso = system_time_to_iso_string(SystemTime::now());
+
+        let ingestion_event = IngestionEvent {
+            id: request.id.clone(),
+            r#type: "score-create".to_string(),
+            timestamp: timestamp_iso,
+            body: IngestionEventBody::ScoreCreate(CreateScoreEvent {
+                id: request.id,
+                trace_id: request.trace_id,
+                name: request.name,
+                value: request.value,
+                comment: request.comment,
+                data_type: request.data_type,
+                environment: request.environment,
+            }),
+        };
+
+        let batch = IngestionBatch {
+            batch: vec![ingestion_event],
+        };
+
+        tracing::debug!(
+            batch_size = batch.batch.len(),
+            "Created Langfuse score ingestion batch"
+        );
+
+        self.send_ingestion_batch(batch).await
+    }
+
     /// Get a prompt from Langfuse by name
     pub async fn get_prompt(&self, prompt_name: &str) -> Result<LangfusePrompt> {
         if !self.enabled {
@@ -515,6 +560,18 @@ pub struct FinishGenerationRequest {
     pub environment: Option<String>,
 }
 
+/// Request for creating a score (user feedback)
+#[derive(Debug, Clone)]
+pub struct CreateScoreRequest {
+    pub id: String,
+    pub trace_id: String,
+    pub name: String,
+    pub value: f64,
+    pub comment: Option<String>,
+    pub data_type: String,
+    pub environment: Option<String>,
+}
+
 /// Ingestion batch structure
 #[derive(Debug, Serialize)]
 struct IngestionBatch {
@@ -534,9 +591,11 @@ struct IngestionEvent {
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
+#[allow(clippy::enum_variant_names)]
 enum IngestionEventBody {
     TraceCreate(CreateTraceEvent),
     ObservationCreate(Box<CreateObservationEvent>),
+    ScoreCreate(CreateScoreEvent),
 }
 
 /// Create trace event according to Langfuse OpenAPI spec
@@ -591,6 +650,19 @@ pub struct Usage {
     pub input_cost: Option<f64>,
     pub output_cost: Option<f64>,
     pub total_cost: Option<f64>,
+}
+
+/// Create score event according to Langfuse OpenAPI spec
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateScoreEvent {
+    pub id: String,
+    pub trace_id: String,
+    pub name: String,
+    pub value: f64,
+    pub comment: Option<String>,
+    pub data_type: String,
+    pub environment: Option<String>,
 }
 
 /// Multi-status response structure from Langfuse

@@ -1047,6 +1047,11 @@ pub struct LangfuseConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub tracing_enabled: bool,
+
+    // Whether user feedback should be forwarded to Langfuse as scores.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enable_feedback: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]

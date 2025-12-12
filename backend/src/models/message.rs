@@ -36,6 +36,9 @@ pub struct GenerationMetadata {
     /// Number of reasoning tokens used during generation (e.g., for o1 models)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub used_reasoning_tokens: Option<u32>,
+    /// Langfuse trace ID for this generation (if Langfuse tracing was enabled)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub langfuse_trace_id: Option<String>,
 }
 
 /// Role of the message author

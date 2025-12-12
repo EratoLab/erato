@@ -1527,6 +1527,7 @@ async fn stream_generate_chat_completion<
                     let generation_metadata = if total_prompt_tokens > 0
                         || total_completion_tokens > 0
                         || total_total_tokens > 0
+                        || langfuse_trace_id.is_some()
                     {
                         Some(GenerationMetadata {
                             used_prompt_tokens: if total_prompt_tokens > 0 {
@@ -1549,6 +1550,7 @@ async fn stream_generate_chat_completion<
                             } else {
                                 None
                             },
+                            langfuse_trace_id: langfuse_trace_id.clone(),
                         })
                     } else {
                         None
@@ -1560,6 +1562,7 @@ async fn stream_generate_chat_completion<
                 let generation_metadata = if total_prompt_tokens > 0
                     || total_completion_tokens > 0
                     || total_total_tokens > 0
+                    || langfuse_trace_id.is_some()
                 {
                     Some(GenerationMetadata {
                         used_prompt_tokens: if total_prompt_tokens > 0 {
@@ -1582,6 +1585,7 @@ async fn stream_generate_chat_completion<
                         } else {
                             None
                         },
+                        langfuse_trace_id: langfuse_trace_id.clone(),
                     })
                 } else {
                     None
