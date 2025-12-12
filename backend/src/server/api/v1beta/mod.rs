@@ -924,6 +924,8 @@ pub async fn submit_message_feedback(
         &message_id,
         sentiment_str,
         request.comment,
+        &app_state.langfuse_client,
+        app_state.config.integrations.langfuse.enable_feedback,
     )
     .await
     .map_err(|e| {

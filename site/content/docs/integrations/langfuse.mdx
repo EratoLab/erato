@@ -19,6 +19,20 @@ Langfuse integration provides comprehensive observability for your LLM interacti
 - **User Context**: Associates traces with user IDs for user-specific analytics
 - **Chat Context**: Links traces to specific chat sessions using chat IDs as session identifiers
 
+### User Feedback
+
+Erato can forward user feedback to Langfuse as scores for quality tracking and observability:
+
+- **Feedback Forwarding**: Automatically sends user thumbs up/down ratings to Langfuse
+- **Comment Capture**: Includes optional user comments with feedback submissions
+- **Trace Association**: Links feedback to the corresponding message trace using the message ID
+- **Score Tracking**: Feedback is stored as numeric scores (1.0 for positive, 0.0 for negative) in Langfuse
+
+To enable feedback forwarding:
+
+1. Enable message feedback in the frontend: `frontend.enable_message_feedback = true`
+2. Enable Langfuse feedback forwarding: `integrations.langfuse.enable_feedback = true`
+
 ### Prompt Management
 
 Erato supports Langfuse's prompt management feature, allowing you to:
@@ -41,6 +55,7 @@ base_url = "https://cloud.langfuse.com"  # or your self-hosted instance
 public_key = "pk-lf-..."
 secret_key = "sk-lf-..."
 tracing_enabled = true  # optional, defaults to false
+enable_feedback = true  # optional, defaults to false
 ```
 
 ### Configuration Options
@@ -105,7 +120,8 @@ Chat-format prompts with multiple messages. Erato will extract the system messag
 3. **Get API Keys**: Copy your project's public and secret keys from the project settings
 4. **Configure Erato**: Add the Langfuse configuration to your `erato.toml`
 5. **Enable Tracing** (optional): Set `tracing_enabled = true` to start logging LLM interactions
-6. **Set Up Prompt Management** (optional): Create prompts in Langfuse and reference them in your chat provider configuration
+6. **Enable Feedback Forwarding** (optional): Set `enable_feedback = true` to forward user feedback to Langfuse
+7. **Set Up Prompt Management** (optional): Create prompts in Langfuse and reference them in your chat provider configuration
 
 ## Security Considerations
 

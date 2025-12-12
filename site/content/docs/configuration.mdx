@@ -967,6 +967,16 @@ Whether to enable detailed tracing of LLM interactions. When enabled, all chat c
 
 **Type:** `boolean`
 
+##### `integrations.langfuse.enable_feedback`
+
+Whether to forward user feedback (thumbs up/down with optional comments) to Langfuse as scores. When enabled, feedback submitted by users will be sent to Langfuse and associated with the corresponding message trace for observability and quality tracking.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Note:** This requires `frontend.enable_message_feedback` to be enabled for users to submit feedback through the UI.
+
 See the [Langfuse Integration](./integrations/langfuse) documentation for detailed usage instructions and feature descriptions.
 
 #### `integrations.sentry`
