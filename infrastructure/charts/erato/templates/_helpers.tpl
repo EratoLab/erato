@@ -157,3 +157,15 @@ Render an extra config file volume
         path: {{ $configFile.name }}.auto.erato.toml
 {{- end -}}
 {{- end -}}
+
+{{/*
+Return the deployment version for cache headers
+Falls back to the backend image tag if deploymentVersion is not explicitly set
+*/}}
+{{- define "erato.deploymentVersion" -}}
+{{- if .Values.backend.deploymentVersion -}}
+{{- .Values.backend.deploymentVersion -}}
+{{- else -}}
+{{- .Values.backend.image.tag -}}
+{{- end -}}
+{{- end -}}
