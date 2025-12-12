@@ -67,13 +67,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         className,
       )}
       onClick={handleOverlayClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          onClose();
-        }
-      }}
-      tabIndex={0}
-      role="button"
+      role="presentation"
       aria-label={t`Close modal overlay`}
     >
       <div
