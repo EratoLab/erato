@@ -2,8 +2,8 @@
  * Hook to integrate token usage estimation with file uploads
  */
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect } from "react";
-import { useDebouncedCallback } from "use-debounce";
+import { useCallback } from "react";
+import { useDebounce } from "use-debounce";
 
 import {
   useTokenUsageEstimation,
@@ -63,19 +63,19 @@ export function useTokenUsageWithFiles({
     isLoading: estimationLoading,
   } = useTokenUsageEstimation();
 
+  // Debounce the message to prevent spamming the estimate endpoint
+  const [debouncedMessage] = useDebounce(message, debounceDelay);
+
   // Extract file IDs for query
   const fileIds = attachedFiles.map((file) => file.id);
   const shouldEstimate =
-    !disabled && (message.length >= estimateThreshold || fileIds.length > 0);
+    !disabled &&
+    (debouncedMessage.length >= estimateThreshold || fileIds.length > 0);
 
   // Use React Query to handle estimation with proper caching
-  const {
-    data: queryEstimation,
-    isLoading: queryLoading,
-    refetch,
-  } = useQuery({
+  const { data: queryEstimation, isLoading: queryLoading } = useQuery({
     queryKey: getTokenEstimationQueryKey(
-      message,
+      debouncedMessage,
       fileIds.length > 0 ? fileIds : undefined,
       chatId,
       previousMessageId,
@@ -86,7 +86,7 @@ export function useTokenUsageWithFiles({
       }
 
       return estimateTokenUsage(
-        message,
+        debouncedMessage,
         chatId,
         previousMessageId,
         fileIds.length > 0 ? fileIds : undefined,
@@ -100,13 +100,6 @@ export function useTokenUsageWithFiles({
   // Combined loading state
   const isEstimating = estimationLoading || queryLoading;
 
-  // Debounced function to trigger refetch (rather than direct API call)
-  const debouncedCheckTokens = useDebouncedCallback(() => {
-    if (shouldEstimate) {
-      void refetch();
-    }
-  }, debounceDelay);
-
   // Function to manually trigger a token usage check
   const checkTokenUsage = useCallback(async () => {
     if (disabled) {
@@ -114,7 +107,7 @@ export function useTokenUsageWithFiles({
     }
 
     return estimateTokenUsage(
-      message,
+      debouncedMessage,
       chatId,
       previousMessageId,
       fileIds.length > 0 ? fileIds : undefined,
@@ -123,7 +116,7 @@ export function useTokenUsageWithFiles({
     disabled,
     fileIds,
     estimateTokenUsage,
-    message,
+    debouncedMessage,
     chatId,
     previousMessageId,
   ]);
@@ -132,24 +125,6 @@ export function useTokenUsageWithFiles({
   const clearEstimation = useCallback(() => {
     clearLastEstimation();
   }, [clearLastEstimation]);
-
-  // Effect to trigger estimation when message or files change
-  useEffect(() => {
-    if (!shouldEstimate) {
-      return;
-    }
-    debouncedCheckTokens();
-
-    // Cancel debounced function on cleanup
-    return () => {
-      debouncedCheckTokens.cancel();
-    };
-  }, [
-    message,
-    fileIds.length, // Only depend on length, not the full array
-    shouldEstimate,
-    debouncedCheckTokens,
-  ]);
 
   return {
     isEstimating,
