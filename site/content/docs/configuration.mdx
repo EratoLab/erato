@@ -198,6 +198,23 @@ The display name for the model shown to users. If not provided, falls back to `m
 
 **Example:** `"GPT-4 Omni (Production)"`
 
+#### `chat_provider.model_name_langfuse`
+
+The model name to report to Langfuse for observability and tracing. If not provided, falls back to `model_name`.
+
+This is useful when the provider's model name differs from the standardized name used in Langfuse. For example, Azure OpenAI uses deployment names that may differ from the underlying model name, or you may want to use a consistent naming convention across different providers for better analytics in Langfuse.
+
+**Type:** `string | None`
+
+**Example:**
+
+```toml
+[chat_providers.providers.azure-gpt4]
+provider_kind = "azure_openai"
+model_name = "gpt-4-deployment-prod-v1"  # Azure deployment name
+model_name_langfuse = "gpt-4"            # Standardized name for Langfuse
+```
+
 #### `chat_provider.base_url`
 
 The base URL for the chat provider API. If not provided, will use the default for the provider.
@@ -319,6 +336,7 @@ Each provider in `chat_providers.providers` supports the following fields:
 - **`provider_kind`** - The type of chat provider (`"openai"`, `"azure_openai"`, `"ollama"`)
 - **`model_name`** - The model identifier for the provider
 - **`model_display_name`** - Optional display name for the model (falls back to `model_name`)
+- **`model_name_langfuse`** - Optional model name for Langfuse reporting (falls back to `model_name`)
 - **`api_key`** - Optional API key for authentication
 - **`base_url`** - Optional custom base URL for the provider API
 - **`system_prompt`** - Optional static system prompt

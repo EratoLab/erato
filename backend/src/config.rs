@@ -563,6 +563,11 @@ pub struct ChatProviderConfig {
     // The display name for the model shown to users.
     // Falls back to model_name if not provided.
     pub model_display_name: Option<String>,
+    // The model name to report to Langfuse for observability and tracing.
+    // Falls back to model_name if not provided.
+    // This is useful when the provider's model name differs from the standardized name
+    // used in Langfuse (e.g., Azure deployment names vs. OpenAI model names).
+    pub model_name_langfuse: Option<String>,
     // The base URL for OpenAI compatible API endpoints.
     // If not provided, will use the default for the provider.
     //
@@ -668,6 +673,7 @@ impl ChatProviderConfig {
             provider_kind: "openai".to_string(),
             model_name: self.model_name,
             model_display_name: self.model_display_name,
+            model_name_langfuse: self.model_name_langfuse,
             base_url,
             api_key: None,     // Moved to headers
             api_version: None, // Moved to parameters
@@ -706,6 +712,13 @@ impl ChatProviderConfig {
     /// Returns the display name for the model, falling back to model_name if not set.
     pub fn model_display_name(&self) -> &str {
         self.model_display_name.as_ref().unwrap_or(&self.model_name)
+    }
+
+    /// Returns the model name to report to Langfuse, falling back to model_name if not set.
+    pub fn model_name_langfuse(&self) -> &str {
+        self.model_name_langfuse
+            .as_ref()
+            .unwrap_or(&self.model_name)
     }
 }
 
