@@ -4,6 +4,7 @@ priority_order = ["main"]
 [chat_providers.providers.main]
 provider_kind = "openai"
 model_name = "gpt-4o-mini"
+# model_name_langfuse = "gpt-4o-mini"  # Optional: Custom model name for Langfuse reporting (defaults to model_name)
 api_key = "<API_KEY>"
 
 # File storage providers are configured in erato.file-storage.auto.erato.toml

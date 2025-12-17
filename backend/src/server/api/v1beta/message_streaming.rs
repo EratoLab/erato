@@ -1389,13 +1389,23 @@ async fn stream_generate_chat_completion<
                 )
             {
                 let turn_end_time = SystemTime::now();
-                let model_name = match app_state.config.determine_chat_provider(None, None) {
-                    Ok(provider_id) => app_state
+                // Get the model name for Langfuse reporting using the actual chat provider used
+                let model_name = if let Some(provider_id) = chat_provider_id {
+                    app_state
                         .config
                         .get_chat_provider(provider_id)
-                        .model_name
-                        .clone(),
-                    Err(_) => "unknown".to_string(),
+                        .model_name_langfuse()
+                        .to_string()
+                } else {
+                    // Fallback to determining provider if not specified
+                    match app_state.config.determine_chat_provider(None, None) {
+                        Ok(provider_id) => app_state
+                            .config
+                            .get_chat_provider(provider_id)
+                            .model_name_langfuse()
+                            .to_string(),
+                        Err(_) => "unknown".to_string(),
+                    }
                 };
 
                 // Generate a unique observation ID for this turn

@@ -12,6 +12,7 @@ priority_order = ["test-token-limit"]
 provider_kind = "ollama"
 model_name = "smollm2:135m"
 model_display_name = "Test Model (Low Token Limit)"
+# model_name_langfuse = "smollm2-135m"  # Optional: Custom model name for Langfuse reporting (defaults to model_name)
 base_url = "http://localhost:12434/v1/"
 
 [chat_providers.providers.test-token-limit.model_capabilities]
