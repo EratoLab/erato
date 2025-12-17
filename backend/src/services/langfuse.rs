@@ -128,6 +128,56 @@ impl LangfuseClient {
         self.send_ingestion_batch(batch).await
     }
 
+    /// Update a trace with output in Langfuse
+    /// Note: This sends a trace-create event with the same id to update the trace
+    pub async fn update_trace_output(
+        &self,
+        trace_id: String,
+        output: serde_json::Value,
+    ) -> Result<()> {
+        if !self.enabled {
+            tracing::debug!("Langfuse client is disabled, skipping trace update");
+            return Ok(());
+        }
+
+        tracing::debug!(
+            trace_id = %trace_id,
+            "Updating Langfuse trace with output"
+        );
+
+        let timestamp_iso = system_time_to_iso_string(SystemTime::now());
+
+        let ingestion_event = IngestionEvent {
+            id: format!("{}_output_update", trace_id),
+            r#type: "trace-create".to_string(),
+            timestamp: timestamp_iso,
+            body: IngestionEventBody::TraceCreate(CreateTraceEvent {
+                id: trace_id,
+                name: None,
+                user_id: None,
+                session_id: None,
+                release: None,
+                environment: None,
+                input: None,
+                output: Some(output),
+                metadata: None,
+                tags: None,
+                public: None,
+            }),
+        };
+
+        let batch = IngestionBatch {
+            batch: vec![ingestion_event],
+        };
+
+        tracing::debug!(
+            batch_size = batch.batch.len(),
+            "Created Langfuse trace update ingestion batch"
+        );
+
+        self.send_ingestion_batch(batch).await
+    }
+
     /// Finish a generation and send it to Langfuse
     pub async fn finish_generation(&self, request: FinishGenerationRequest) -> Result<()> {
         if !self.enabled {
@@ -599,19 +649,30 @@ enum IngestionEventBody {
 }
 
 /// Create trace event according to Langfuse OpenAPI spec
+/// Note: This is also used for updates by sending with the same id
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateTraceEvent {
     pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub release: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub input: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub public: Option<bool>,
 }
 
