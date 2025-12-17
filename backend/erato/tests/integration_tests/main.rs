@@ -38,7 +38,7 @@ fn set_test_db_url() {
 
 // TODO: More proper way would be via SqitchMigration but we can't build them in a static way yet.
 // pub static MIGRATOR: sqlx::migrate::Migrator = Migrator::new(SqitchMigrationSource::new(PathBuf::from("./sqitch/sqitch_summary.json")));
-pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./sqitch/deploy");
+pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../sqitch/deploy");
 
 // pub fn test_app_config() -> AppConfig {
 //     let mut builder = AppConfig::config_schema_builder(None, true).unwrap();

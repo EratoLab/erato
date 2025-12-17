@@ -63,7 +63,7 @@ use eyre::{Result, eyre};
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 
 /// The latest migration change hash from the sqitch deployment
-const LATEST_MIGRATION_HASH: &str = include_str!("../../sqitch/latest_change.txt");
+const LATEST_MIGRATION_HASH: &str = include_str!("../../../sqitch/latest_change.txt");
 
 /// Verifies that the database has been migrated to the latest change.
 ///
