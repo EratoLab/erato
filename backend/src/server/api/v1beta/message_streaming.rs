@@ -1533,6 +1533,34 @@ async fn stream_generate_chat_completion<
                             .map(ToOwned::to_owned),
                     );
                 } else {
+                    // Update Langfuse trace with final output if enabled
+                    if let Some(ref trace_id) = langfuse_trace_id
+                        && let Ok(output_json) =
+                            crate::services::genai_langfuse::convert_content_parts_to_json(
+                                &current_message_content,
+                            )
+                    {
+                        let langfuse_client = app_state.langfuse_client.clone();
+                        let trace_id = trace_id.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = langfuse_client
+                                .update_trace_output(trace_id.clone(), output_json)
+                                .await
+                            {
+                                tracing::warn!(
+                                    trace_id = %trace_id,
+                                    error = %e,
+                                    "Failed to update Langfuse trace with output"
+                                );
+                            } else {
+                                tracing::debug!(
+                                    trace_id = %trace_id,
+                                    "Successfully updated Langfuse trace with output"
+                                );
+                            }
+                        });
+                    }
+
                     // Create generation metadata from accumulated usage
                     let generation_metadata = if total_prompt_tokens > 0
                         || total_completion_tokens > 0
@@ -1568,6 +1596,34 @@ async fn stream_generate_chat_completion<
                     break 'loop_call_turns Ok((current_message_content, generation_metadata));
                 }
             } else {
+                // Update Langfuse trace with final output if enabled
+                if let Some(ref trace_id) = langfuse_trace_id
+                    && let Ok(output_json) =
+                        crate::services::genai_langfuse::convert_content_parts_to_json(
+                            &current_message_content,
+                        )
+                {
+                    let langfuse_client = app_state.langfuse_client.clone();
+                    let trace_id = trace_id.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = langfuse_client
+                            .update_trace_output(trace_id.clone(), output_json)
+                            .await
+                        {
+                            tracing::warn!(
+                                trace_id = %trace_id,
+                                error = %e,
+                                "Failed to update Langfuse trace with output"
+                            );
+                        } else {
+                            tracing::debug!(
+                                trace_id = %trace_id,
+                                "Successfully updated Langfuse trace with output"
+                            );
+                        }
+                    });
+                }
+
                 // Create generation metadata from accumulated usage
                 let generation_metadata = if total_prompt_tokens > 0
                     || total_completion_tokens > 0

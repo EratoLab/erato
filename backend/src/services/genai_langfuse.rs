@@ -112,7 +112,7 @@ impl LangfuseGenerationBuilder {
 }
 
 /// Convert our ContentPart array to JSON representation for Langfuse output
-fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<JsonValue> {
+pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<JsonValue> {
     let mut output_parts = Vec::new();
 
     for part in content_parts {
