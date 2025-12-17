@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::instrument;
 
-const BACKEND_POLICY: &str = include_str!("../../policy/backend/backend.rego");
+const BACKEND_POLICY: &str = include_str!("../../../policy/backend/backend.rego");
 
 /// Minimal chat attributes required for policy evaluation.
 #[derive(Debug, FromQueryResult)]
