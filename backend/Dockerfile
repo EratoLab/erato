@@ -1,7 +1,8 @@
 # cargo-chef version = 0.1.73
 # Rust version = 1.91.1 - Should be kept up-to-date with rust-toolchain.toml
 # Bookworm = Debian 12 -> LTS support until 2028
-FROM lukemathwalker/cargo-chef:0.1.73-rust-1.91.1-bookworm AS chef
+# Pinned for security & build performance reasons
+FROM lukemathwalker/cargo-chef:0.1.73-rust-1.91.1-bookworm@sha256:ac22e8377f914b774d0d3a27cb60ab93b9115d39ef3f72e01f2dfbb55433b3eb AS chef
 WORKDIR /app
 
 FROM chef AS planner
@@ -22,7 +23,8 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release
 
-FROM debian:bookworm-slim
+# Pinned for security & build performance reasons
+FROM debian:bookworm-slim@sha256:e899040a73d36e2b36fa33216943539d9957cba8172b858097c2cabcdb20a3e2
 
 WORKDIR /app
 
