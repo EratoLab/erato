@@ -188,6 +188,7 @@ def add_helm_repos():
         ("bitnami", "https://charts.bitnami.com/bitnami"),
         ("cnpg", "https://cloudnative-pg.github.io/charts"),
         ("datawire", "https://app.getambassador.io"),
+        ("seaweedfs", "https://seaweedfs.github.io/seaweedfs/helm"),
     ]
     for name, url in repos:
         run_command(["helm", "repo", "add", name, url], check=False, capture_output=True)
@@ -197,9 +198,12 @@ def update_chart_dependencies(config: ScriptConfig, cluster_config: ClusterConfi
     """Update Helm chart dependencies if requested."""
     if config.chart_dep_update:
         print("Updating chart dependencies...")
-        run_command(["helm", "repo", "update"])
+        # Update dependencies for both charts.
+        # We don't run 'helm repo update' separately as 'helm dependency update'
+        # already does this. We use --skip-refresh for the second chart to avoid
+        # redundant repository updates.
         run_command(["helm", "dependency", "update", str(cluster_config.erato_chart_path)])
-        run_command(["helm", "dependency", "update", str(cluster_config.chart_path)])
+        run_command(["helm", "dependency", "update", "--skip-refresh", str(cluster_config.chart_path)])
 
 
 def configure_helm_args(config: ScriptConfig) -> list[str]:
