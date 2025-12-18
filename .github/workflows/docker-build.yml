@@ -317,10 +317,9 @@ jobs:
         run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 
       - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          uv --version
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Spin up k3d cluster for tests
         working-directory: ./infrastructure
@@ -346,9 +345,31 @@ jobs:
         working-directory: ./e2e-tests
         run: |
           echo "BASE_URL=https://app.erato.internal" > .env
-          pnpm install
-          pnpm exec playwright install --with-deps
-          ./scripts/generate_test_files.sh
+          pnpm install --frozen-lockfile
+
+      - name: Get Playwright version
+        id: playwright-version
+        working-directory: ./e2e-tests
+        run: |
+          PLAYWRIGHT_VERSION=$(pnpm list @playwright/test --depth 0 | grep @playwright/test | awk '{print $2}')
+          echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers and deps
+        working-directory: ./e2e-tests
+        run: pnpm exec playwright install chromium firefox --with-deps
+
+      - name: Generate test files
+        working-directory: ./e2e-tests
+        run: ./scripts/generate_test_files.sh
 
       - name: Run e2e tests
         working-directory: ./e2e-tests
