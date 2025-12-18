@@ -169,7 +169,7 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
 
     return (
       <div {...getRootProps({ className: "contents" })}>
-        <input {...getInputProps()} aria-label={label} />
+        <input {...getInputProps()} />
         <button
           type="button"
           className={buttonStyles}
