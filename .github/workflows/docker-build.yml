@@ -227,15 +227,18 @@ jobs:
         with:
           cache-all-crates: "true"
           workspaces: "./backend -> target"
+      - name: "Cache APT packages"
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+        with:
+          packages: libtesseract-dev libleptonica-dev libclang-dev
+          add-repository: ppa:alex-p/tesseract-ocr5
+          version: 1.0
       - name: "Setup test environment"
         working-directory: backend
         run: |
           curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
           chmod +x mc
           sudo mv mc /usr/local/bin/
-          
-          sudo add-apt-repository ppa:alex-p/tesseract-ocr5
-          sudo apt-get update && sudo apt-get install -y libtesseract-dev libleptonica-dev libclang-dev
           
           ./run_postgres.sh
           ./run_minio.sh
