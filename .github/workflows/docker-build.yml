@@ -42,7 +42,7 @@ jobs:
   lint:
     timeout-minutes: 10
     name: "lint"
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-8vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v4
       # Setup section
@@ -168,7 +168,7 @@ jobs:
         run: helm unittest --with-subchart=false .
 
   cargo-clippy:
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-8vcpu-ubuntu-2204
     name: "cargo clippy"
     steps:
       - uses: actions/checkout@v4
@@ -192,7 +192,7 @@ jobs:
           cargo clippy --all-targets --no-default-features --features=sentry --locked
 
   cargo-deny:
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-8vcpu-ubuntu-2204
     name: "cargo deny"
     steps:
       - uses: actions/checkout@v4
@@ -202,7 +202,7 @@ jobs:
           command: check licenses
 
   test-backend:
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-8vcpu-ubuntu-2204
     name: "test backend"
     steps:
       - uses: actions/checkout@v4
@@ -254,7 +254,7 @@ jobs:
   test-frontend:
     timeout-minutes: 10
     name: "test frontend"
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-8vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v4
       # Setup section
@@ -291,7 +291,7 @@ jobs:
   test-e2e:
     name: "test e2e"
     needs: [build-and-push-amd64]
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-8vcpu-ubuntu-2204
     timeout-minutes: 30
     permissions:
       contents: read
@@ -361,7 +361,7 @@ jobs:
           retention-days: 30 
 
   build-and-push-helm-chart-dev:
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     if: github.ref_type != 'tag'
     permissions:
       contents: read
@@ -379,7 +379,7 @@ jobs:
         run: ./infrastructure/scripts/release_erato_chart_dev.sh --git-sha=${{ env.SHA_TAG }}
 
   build-and-push-helm-chart-release:
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     if: github.ref_type == 'tag'
     permissions:
       contents: read
@@ -397,7 +397,7 @@ jobs:
         run: ./infrastructure/scripts/release_erato_chart_dev.sh --release
 
   build-and-push-amd64:
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-8vcpu-ubuntu-2204
     permissions:
       contents: read
 
@@ -412,11 +412,11 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Build and push Backend image
-        uses: docker/build-push-action@v6.15.0
+        uses: useblacksmith/build-push-action@v2
         with:
           context: ./backend
           push: true
@@ -425,11 +425,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64-buildcache
 
       - name: Build and push Frontend image
-        uses: docker/build-push-action@v6.15.0
+        uses: useblacksmith/build-push-action@v2
         with:
           context: ./frontend
           push: true
@@ -438,11 +436,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
 
       - name: Build and push Combined image
-        uses: docker/build-push-action@v6.15.0
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           file: ./Dockerfile.combined
@@ -458,7 +454,7 @@ jobs:
             FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-amd64', env.RELEASE_VERSION) || format('{0}-amd64', env.SHA_TAG) }}
 
   build-and-push-arm64:
-    runs-on: ubuntu-22.04-arm64-custom-large
+    runs-on: blacksmith-8vcpu-ubuntu-2204-arm
     permissions:
       contents: read
 
@@ -473,11 +469,11 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Build and push Backend image
-        uses: docker/build-push-action@v6.15.0
+        uses: useblacksmith/build-push-action@v2
         with:
           context: ./backend
           push: true
@@ -486,11 +482,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64-buildcache
 
       - name: Build and push Frontend image
-        uses: docker/build-push-action@v6.15.0
+        uses: useblacksmith/build-push-action@v2
         with:
           context: ./frontend
           push: true
@@ -499,11 +493,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
-          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
-          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
 
       - name: Build and push Combined image
-        uses: docker/build-push-action@v6.15.0
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           file: ./Dockerfile.combined
@@ -520,7 +512,7 @@ jobs:
 
   create-manifests:
     needs: [build-and-push-amd64, build-and-push-arm64]
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     steps:
       - name: Log in to Harbor registry
         uses: docker/login-action@v1
@@ -529,8 +521,8 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Create and push manifests
         run: |
@@ -575,7 +567,7 @@ jobs:
 
   create-github-release:
     needs: [create-manifests]
-    runs-on: ubuntu-22.04
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     if: github.ref_type == 'tag'
     permissions:
       contents: write
