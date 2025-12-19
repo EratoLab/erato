@@ -114,6 +114,7 @@ exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
     # list
     { allow = ["AGPL-3.0-or-later"], crate = "erato" },
+    { allow = ["AGPL-3.0-or-later"], crate = "mock-llm-server" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,

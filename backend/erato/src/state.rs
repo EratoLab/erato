@@ -361,6 +361,7 @@ impl AppState {
                 let mut endpoint = default_endpoint(adapter_kind);
 
                 if let Some(base_url) = base_url.clone() {
+                    tracing::debug!("Building genai client endpoint from base_url: {}", base_url);
                     let mut url_str = base_url;
                     // Add additional request parameters if specified
                     if !request_params.is_empty() {
@@ -381,7 +382,10 @@ impl AppState {
                             url_str.push_str(&format!("{}={}", key, value));
                         }
                     }
+                    tracing::debug!("Constructed endpoint URL string: {}", url_str);
                     endpoint = Endpoint::from_owned(url_str);
+                } else {
+                    tracing::debug!("Using default endpoint for adapter_kind: {:?}", adapter_kind);
                 }
 
                 // TODO: Allow specifying auth in config
