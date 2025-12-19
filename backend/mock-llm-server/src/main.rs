@@ -4,6 +4,7 @@
 mod endpoints;
 mod log;
 mod matcher;
+mod mocks;
 mod request_id;
 mod responses;
 
@@ -15,11 +16,12 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use colored::Colorize;
 use request_id::RequestId;
 use serde_json::json;
 use std::sync::Arc;
 
-use matcher::{MatchRule, Matcher, ResponseConfig};
+use matcher::Matcher;
 
 /// Health check endpoint
 async fn health() -> Json<serde_json::Value> {
@@ -56,89 +58,10 @@ async fn main() {
         )
         .init();
 
-    // Configure match rules with example patterns
-    let rules = vec![
-        MatchRule {
-            pattern: "hello".to_string(),
-            response: ResponseConfig {
-                chunks: vec![
-                    "Hello".to_string(),
-                    "!".to_string(),
-                    " How".to_string(),
-                    " can".to_string(),
-                    " I".to_string(),
-                    " help".to_string(),
-                    " you".to_string(),
-                    " today".to_string(),
-                    "?".to_string(),
-                ],
-                delay_ms: 50,
-            },
-        },
-        MatchRule {
-            pattern: "weather".to_string(),
-            response: ResponseConfig {
-                chunks: vec![
-                    "The".to_string(),
-                    " weather".to_string(),
-                    " is".to_string(),
-                    " sunny".to_string(),
-                    " and".to_string(),
-                    " warm".to_string(),
-                    " today".to_string(),
-                    ".".to_string(),
-                ],
-                delay_ms: 75,
-            },
-        },
-        MatchRule {
-            pattern: "test".to_string(),
-            response: ResponseConfig {
-                chunks: vec![
-                    "This".to_string(),
-                    " is".to_string(),
-                    " a".to_string(),
-                    " test".to_string(),
-                    " response".to_string(),
-                    " from".to_string(),
-                    " the".to_string(),
-                    " mock".to_string(),
-                    " server".to_string(),
-                    ".".to_string(),
-                ],
-                delay_ms: 100,
-            },
-        },
-        MatchRule {
-            pattern: "slow".to_string(),
-            response: ResponseConfig {
-                chunks: vec![
-                    "This".to_string(),
-                    " response".to_string(),
-                    " will".to_string(),
-                    " be".to_string(),
-                    " delivered".to_string(),
-                    " very".to_string(),
-                    " slowly".to_string(),
-                    "...".to_string(),
-                ],
-                delay_ms: 500,
-            },
-        },
-        MatchRule {
-            pattern: "fast".to_string(),
-            response: ResponseConfig {
-                chunks: vec![
-                    "Quick".to_string(),
-                    " response".to_string(),
-                    "!".to_string(),
-                ],
-                delay_ms: 10,
-            },
-        },
-    ];
+    // Load configured mocks
+    let mocks = mocks::get_default_mocks();
 
-    let matcher = Arc::new(Matcher::new(rules));
+    let matcher = Arc::new(Matcher::new(mocks.clone()));
 
     // Build the router with all endpoints nested under /base-openai
     let app = Router::new()
@@ -166,6 +89,26 @@ async fn main() {
     let addr = format!("{}:{}", host, port);
 
     log::log_startup(&addr);
+
+    // Print example erato.toml configuration
+    println!("{}", "Example erato.toml configuration:".bright_white());
+    println!("```");
+    println!("[chat_providers.providers.mock-llm-openai]");
+    println!("provider_kind = \"openai\"");
+    println!("model_name = \"placeholder\"");
+    println!("model_display_name = \"Mock-LLM\"");
+    println!("base_url = \"http://localhost:44320/base-openai/v1/placeholder\"");
+    println!("```");
+    println!();
+
+    // Print mock summary at startup
+    println!(
+        "{}",
+        format!("{} configured mocks available:", mocks.len()).bright_white()
+    );
+    for mock in &mocks {
+        mock.print_summary();
+    }
 
     // Start the server
     let listener = tokio::net::TcpListener::bind(&addr)

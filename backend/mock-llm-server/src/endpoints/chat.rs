@@ -45,18 +45,26 @@ pub async fn chat_completions(
     // Match the request to get the response config
     let response_config = matcher.match_request(&chat_request, request_id.as_str());
 
+    // Extract chunks and delay from the response config
+    let (chunks, delay_ms, initial_delay_ms) = match &response_config {
+        crate::matcher::ResponseConfig::Static(static_config) => (
+            &static_config.chunks,
+            static_config.delay_ms,
+            static_config.initial_delay_ms,
+        ),
+    };
+
     log::log_with_id(
         request_id.as_str(),
         &format!(
             "Matched response with {} chunks, {}ms delay",
-            response_config.chunks.len(),
-            response_config.delay_ms
+            chunks.len(),
+            delay_ms
         ),
     );
 
     // Build the streaming response
-    let actions =
-        build_delayed_streaming_response(response_config.chunks, response_config.delay_ms);
+    let actions = build_delayed_streaming_response(chunks.clone(), delay_ms, initial_delay_ms);
 
     // Log that we're starting the stream
     log::log_response_start(request_id.as_str(), "chat completion");

@@ -3,7 +3,7 @@ use futures::StreamExt;
 use serde_json::json;
 use std::time::Duration;
 
-use crate::matcher::ResponseConfig;
+use crate::matcher::{ResponseConfig, StaticResponseConfig};
 
 /// Build an OpenAI-compatible SSE streaming chunk
 /// Based on backend/erato/tests/integration_tests/test_utils.rs:437-463
@@ -46,7 +46,11 @@ pub enum StreamAction {
 
 /// Build a sequence of stream actions for a delayed streaming response
 /// Based on backend/erato/tests/integration_tests/test_utils.rs:466-494
-pub fn build_delayed_streaming_response(chunks: Vec<String>, delay_ms: u64) -> Vec<StreamAction> {
+pub fn build_delayed_streaming_response(
+    chunks: Vec<String>,
+    delay_ms: u64,
+    initial_delay_ms: Option<u64>,
+) -> Vec<StreamAction> {
     let mut actions = Vec::new();
 
     // First chunk is typically an empty role message
@@ -56,6 +60,9 @@ pub fn build_delayed_streaming_response(chunks: Vec<String>, delay_ms: u64) -> V
     for (i, chunk) in chunks.iter().enumerate() {
         if i > 0 {
             actions.push(StreamAction::Delay(Duration::from_millis(delay_ms)));
+        } else if let Some(initial_delay) = initial_delay_ms {
+            // Use initial delay before the first chunk
+            actions.push(StreamAction::Delay(Duration::from_millis(initial_delay)));
         }
         actions.push(StreamAction::Bytes(build_openai_chat_chunk(chunk, None)));
     }
@@ -79,7 +86,15 @@ pub fn build_delayed_streaming_response(chunks: Vec<String>, delay_ms: u64) -> V
 pub async fn stream_response(
     config: ResponseConfig,
 ) -> impl futures::Stream<Item = Result<Event, std::convert::Infallible>> {
-    let actions = build_delayed_streaming_response(config.chunks, config.delay_ms);
+    let (chunks, delay_ms, initial_delay_ms) = match config {
+        ResponseConfig::Static(static_config) => (
+            static_config.chunks,
+            static_config.delay_ms,
+            static_config.initial_delay_ms,
+        ),
+    };
+
+    let actions = build_delayed_streaming_response(chunks, delay_ms, initial_delay_ms);
 
     futures::stream::iter(actions).then(|action| async move {
         match action {
@@ -176,7 +191,7 @@ mod tests {
     #[test]
     fn test_build_delayed_streaming_response() {
         let chunks = vec!["Hello".to_string(), " world".to_string()];
-        let actions = build_delayed_streaming_response(chunks, 50);
+        let actions = build_delayed_streaming_response(chunks, 50, None);
 
         // Should have: initial empty, 2 content chunks, delay before final, final chunk, [DONE]
         assert!(actions.len() >= 5);
