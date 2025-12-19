@@ -27,13 +27,34 @@ pub struct ToolCallResponseConfig {
     pub delay_ms: u64,
 }
 
+/// Single tool call definition for multiple tool calls
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallDef {
+    /// The tool name to call
+    pub tool_name: String,
+    /// The arguments as a JSON string
+    pub arguments: String,
+}
+
+/// Multiple tool calls response configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallsResponseConfig {
+    /// The tool calls to make
+    pub tool_calls: Vec<ToolCallDef>,
+    /// Delay before sending the tool calls (in milliseconds)
+    #[serde(default)]
+    pub delay_ms: u64,
+}
+
 /// Configuration for a response to return when a pattern matches
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResponseConfig {
     /// Static response with predefined chunks
     Static(StaticResponseConfig),
-    /// Tool call response
+    /// Tool call response (single tool call)
     ToolCall(ToolCallResponseConfig),
+    /// Multiple tool calls response (parallel tool calls)
+    ToolCalls(ToolCallsResponseConfig),
 }
 
 /// Match rule that checks user message pattern using substring matching
@@ -146,6 +167,17 @@ impl Mock {
                     config.tool_name,
                     config.delay_ms
                 );
+            }
+            ResponseConfig::ToolCalls(config) => {
+                println!(
+                    "    {}: {} parallel tool calls with {}ms delay",
+                    "Response".bold(),
+                    config.tool_calls.len(),
+                    config.delay_ms
+                );
+                for tool_call in &config.tool_calls {
+                    println!("      - {}", tool_call.tool_name);
+                }
             }
         }
         println!();

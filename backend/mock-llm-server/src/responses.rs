@@ -4,7 +4,10 @@ use rand::Rng;
 use serde_json::json;
 use std::time::Duration;
 
-use crate::matcher::{ResponseConfig, StaticResponseConfig, ToolCallResponseConfig};
+use crate::matcher::{
+    ResponseConfig, StaticResponseConfig, ToolCallDef, ToolCallResponseConfig,
+    ToolCallsResponseConfig,
+};
 
 /// Build an OpenAI-compatible SSE streaming chunk
 /// Based on backend/erato/tests/integration_tests/test_utils.rs:437-463
@@ -89,6 +92,88 @@ pub fn build_openai_tool_call_chunk(
         })
         .to_string(),
     );
+
+    // Final chunk with finish_reason
+    chunks.push(
+        json!({
+            "id": "chatcmpl-mock-123",
+            "object": "chat.completion.chunk",
+            "created": 1234567890,
+            "model": "gpt-3.5-turbo",
+            "choices": [{
+                "index": 0,
+                "delta": {},
+                "finish_reason": "tool_calls"
+            }]
+        })
+        .to_string(),
+    );
+
+    chunks
+}
+
+/// Build an OpenAI-compatible multiple tool calls streaming chunk
+/// Multiple tool calls are sent with different indices
+pub fn build_openai_multiple_tool_calls_chunk(tool_calls: &[ToolCallDef]) -> Vec<String> {
+    let mut chunks = Vec::new();
+
+    // First chunk with role
+    chunks.push(
+        json!({
+            "id": "chatcmpl-mock-123",
+            "object": "chat.completion.chunk",
+            "created": 1234567890,
+            "model": "gpt-3.5-turbo",
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "content": null,
+                },
+                "finish_reason": null
+            }]
+        })
+        .to_string(),
+    );
+
+    // Generate a unique call ID for each tool call
+    let mut rng = rand::thread_rng();
+
+    // Add a chunk for each tool call with its own index and ID
+    for (index, tool_def) in tool_calls.iter().enumerate() {
+        let random_suffix: String = (0..24)
+            .map(|_| {
+                let chars = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+                chars[rng.gen_range(0..chars.len())] as char
+            })
+            .collect();
+        let call_id = format!("call_{}", random_suffix);
+
+        chunks.push(
+            json!({
+                "id": "chatcmpl-mock-123",
+                "object": "chat.completion.chunk",
+                "created": 1234567890,
+                "model": "gpt-3.5-turbo",
+                "choices": [{
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [{
+                            "index": index,
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_def.tool_name,
+                                "arguments": tool_def.arguments
+                            }
+                        }]
+                    },
+                    "finish_reason": null
+                }]
+            })
+            .to_string(),
+        );
+    }
 
     // Final chunk with finish_reason
     chunks.push(
@@ -196,6 +281,35 @@ pub fn build_tool_call_streaming_response(
     actions
 }
 
+/// Build a sequence of stream actions for multiple tool calls streaming response
+pub fn build_multiple_tool_calls_streaming_response(
+    tool_calls: Vec<ToolCallDef>,
+    delay_ms: u64,
+) -> Vec<StreamAction> {
+    let mut actions = Vec::new();
+
+    // Add optional initial delay
+    if delay_ms > 0 {
+        actions.push(StreamAction::Delay(Duration::from_millis(delay_ms)));
+    }
+
+    // Get the tool call chunks
+    let chunks = build_openai_multiple_tool_calls_chunk(&tool_calls);
+
+    // Add each chunk with small delays between them
+    for (i, chunk) in chunks.iter().enumerate() {
+        if i > 0 {
+            actions.push(StreamAction::Delay(Duration::from_millis(50)));
+        }
+        actions.push(StreamAction::Bytes(chunk.clone()));
+    }
+
+    // OpenAI sends a final [DONE] message
+    actions.push(StreamAction::Bytes("[DONE]".to_string()));
+
+    actions
+}
+
 /// Convert a ResponseConfig into a stream of SSE events
 pub async fn stream_response(
     config: ResponseConfig,
@@ -211,6 +325,12 @@ pub async fn stream_response(
             tool_config.arguments,
             tool_config.delay_ms,
         ),
+        ResponseConfig::ToolCalls(tool_calls_config) => {
+            build_multiple_tool_calls_streaming_response(
+                tool_calls_config.tool_calls,
+                tool_calls_config.delay_ms,
+            )
+        }
     };
 
     futures::stream::iter(actions).then(|action| async move {

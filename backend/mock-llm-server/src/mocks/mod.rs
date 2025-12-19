@@ -1,6 +1,7 @@
 use crate::matcher::{
     MatchRule, MatchRuleLastMessageIsUserWithPattern, MatchRuleUserMessagePattern, Mock,
-    ResponseConfig, StaticResponseConfig, ToolCallResponseConfig,
+    ResponseConfig, StaticResponseConfig, ToolCallDef, ToolCallResponseConfig,
+    ToolCallsResponseConfig,
 };
 
 /// Generate chunks for a long running response with second-by-second progress
@@ -219,6 +220,32 @@ pub fn get_default_mocks() -> Vec<Mock> {
                 ..Default::default()
             }),
         },
+        Mock {
+            name: "ReadMultipleSecretsToolCalls".to_string(),
+            description:
+                "Returns multiple parallel tool calls to read secret.txt and secret2.txt"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "read multiple secrets".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCalls(ToolCallsResponseConfig {
+                tool_calls: vec![
+                    ToolCallDef {
+                        tool_name: "read_text_file".to_string(),
+                        arguments: r#"{"path":"/Users/hobofan/hobofan/erato/erato/backend/erato/tests/mcp-files/secret.txt"}"#
+                            .to_string(),
+                    },
+                    ToolCallDef {
+                        tool_name: "read_text_file".to_string(),
+                        arguments: r#"{"path":"/Users/hobofan/hobofan/erato/erato/backend/erato/tests/mcp-files/secret2.txt"}"#
+                            .to_string(),
+                    },
+                ],
+                delay_ms: 100,
+            }),
+        },
     ]
 }
 
@@ -231,7 +258,7 @@ mod tests {
         let mocks = get_default_mocks();
 
         // Verify we have the expected number of mocks
-        assert_eq!(mocks.len(), 9);
+        assert_eq!(mocks.len(), 10);
 
         // Verify all mocks have names
         for mock in &mocks {

@@ -12,7 +12,8 @@ use crate::{
     matcher::{ChatCompletionRequest, Matcher},
     request_id::RequestId,
     responses::{
-        build_delayed_streaming_response, build_tool_call_streaming_response, StreamAction,
+        build_delayed_streaming_response, build_multiple_tool_calls_streaming_response,
+        build_tool_call_streaming_response, StreamAction,
     },
 };
 
@@ -76,6 +77,20 @@ pub async fn chat_completions(
                 tool_config.tool_name,
                 tool_config.arguments,
                 tool_config.delay_ms,
+            )
+        }
+        crate::matcher::ResponseConfig::ToolCalls(tool_calls_config) => {
+            log::log_with_id(
+                request_id.as_str(),
+                &format!(
+                    "Matched multiple tool calls response: {} tool calls with {}ms delay",
+                    tool_calls_config.tool_calls.len(),
+                    tool_calls_config.delay_ms
+                ),
+            );
+            build_multiple_tool_calls_streaming_response(
+                tool_calls_config.tool_calls,
+                tool_calls_config.delay_ms,
             )
         }
     };
