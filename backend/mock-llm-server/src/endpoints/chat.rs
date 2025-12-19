@@ -1,0 +1,96 @@
+use axum::{
+    extract::{Extension, Request, State},
+    response::{sse::Event, Sse},
+    Json,
+};
+use futures::StreamExt;
+use serde_json::Value;
+use std::sync::Arc;
+
+use crate::{
+    log,
+    matcher::{ChatCompletionRequest, Matcher},
+    request_id::RequestId,
+    responses::{build_delayed_streaming_response, StreamAction},
+};
+
+/// Handler for chat completions endpoint
+pub async fn chat_completions(
+    State(matcher): State<Arc<Matcher>>,
+    Extension(request_id): Extension<RequestId>,
+    request: Request,
+) -> Result<Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>>, Json<Value>>
+{
+    let uri = request.uri().path().to_string();
+
+    // Extract the JSON body
+    let bytes = axum::body::to_bytes(request.into_body(), usize::MAX)
+        .await
+        .map_err(|_| Json(serde_json::json!({"error": "Failed to read request body"})))?;
+
+    let chat_request: ChatCompletionRequest = serde_json::from_slice(&bytes)
+        .map_err(|_| Json(serde_json::json!({"error": "Invalid JSON"})))?;
+
+    log::log_request(
+        request_id.as_str(),
+        "POST",
+        &uri,
+        &format!(
+            "Received chat completion request with {} messages, stream={}",
+            chat_request.messages.len(),
+            chat_request.stream
+        ),
+    );
+
+    // Match the request to get the response config
+    let response_config = matcher.match_request(&chat_request, request_id.as_str());
+
+    log::log_with_id(
+        request_id.as_str(),
+        &format!(
+            "Matched response with {} chunks, {}ms delay",
+            response_config.chunks.len(),
+            response_config.delay_ms
+        ),
+    );
+
+    // Build the streaming response
+    let actions =
+        build_delayed_streaming_response(response_config.chunks, response_config.delay_ms);
+
+    // Log that we're starting the stream
+    log::log_response_start(request_id.as_str(), "chat completion");
+
+    // Clone request_id for the stream closure
+    let request_id_for_stream = request_id.clone();
+    let total_actions = actions.len();
+
+    // Create the stream - convert actions to events
+    let stream =
+        futures::stream::iter(actions.into_iter().enumerate()).filter_map(move |(idx, action)| {
+            let request_id = request_id_for_stream.clone();
+            async move {
+                let is_last = idx >= total_actions - 1;
+
+                match action {
+                    StreamAction::Bytes(data) => {
+                        // Only return non-empty data events
+                        if !data.is_empty() {
+                            if is_last {
+                                log::log_response_complete(request_id.as_str());
+                            }
+                            Some(Ok(Event::default().data(data)))
+                        } else {
+                            None
+                        }
+                    }
+                    StreamAction::Delay(duration) => {
+                        tokio::time::sleep(duration).await;
+                        None
+                    }
+                }
+            }
+        });
+
+    Ok(Sse::new(stream))
+}

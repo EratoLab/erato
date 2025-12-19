@@ -44,6 +44,9 @@ lint:
 run:
     cargo run --bin erato
 
+run_mock_llm:
+    cargo run --bin mock-llm-server
+
 # Run with tokio-console enabled for async debugging
 run_tokio_console:
     RUSTFLAGS="--cfg tokio_unstable" cargo run --features tokio-console --bin erato
