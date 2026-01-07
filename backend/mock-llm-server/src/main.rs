@@ -2,6 +2,7 @@
 #![allow(unused)]
 
 mod endpoints;
+mod image_data;
 mod log;
 mod matcher;
 mod mocks;
@@ -104,10 +105,28 @@ async fn main() {
     // Print mock summary at startup
     println!(
         "{}",
-        format!("{} configured mocks available:", mocks.len()).bright_white()
+        format!("{} configured chat mocks available:", mocks.len()).bright_white()
     );
     for mock in &mocks {
         mock.print_summary();
+    }
+
+    // Print image mock summary
+    let image_mocks = mocks::get_default_image_mocks();
+    println!(
+        "{}",
+        format!("{} configured image mocks available:", image_mocks.len()).bright_white()
+    );
+    for mock in &image_mocks {
+        println!("  [{}]", mock.name);
+        println!("    {}: {}", "Description".bold(), mock.description);
+        println!("    {}: contains \"{}\"", "Match rule".bold(), mock.pattern);
+        println!(
+            "    {}: Base64 image ({} bytes)",
+            "Response".bold(),
+            mock.image_base64.len()
+        );
+        println!();
     }
 
     // Start the server
