@@ -1021,7 +1021,7 @@ pub async fn chat_messages(
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Convert the messages to the API response format with feedback
-    let converted_messages: Result<_, Report> = messages
+    let converted_messages: Result<Vec<ChatMessage>, Report> = messages
         .into_iter()
         .map(|msg| {
             let feedback = feedbacks.get(&msg.id).cloned();
@@ -1029,9 +1029,25 @@ pub async fn chat_messages(
         })
         .collect();
 
-    let response_messages = converted_messages
+    let mut response_messages = converted_messages
         .wrap_err("Failed to get chat messages")
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Regenerate presigned URLs for ImageFilePointer content parts
+    // This ensures that old messages with expired URLs get fresh presigned URLs
+    for message in &mut response_messages {
+        message.content = models::message::regenerate_image_urls_in_content(
+            &app_state.db,
+            message.content.clone(),
+            &app_state.file_storage_providers,
+        )
+        .await
+        .wrap_err("Failed to regenerate image URLs")
+        .map_err(|e| {
+            tracing::error!("Error regenerating image URLs: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    }
 
     // Create the response with messages and stats
     let response = ChatMessagesResponse {
