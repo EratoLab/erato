@@ -77,11 +77,19 @@ export default defineConfig({
       },
       dependencies: ["setup"],
     },
+    {
+      name: "setup-assistants",
+      testMatch: /assistants\.setup\.ts/,
+      use: {
+        storageState: "playwright/.auth/user.json",
+      },
+      dependencies: ["setup"],
+    },
 
     // Chromium - Basic scenario tests
     {
       name: "chromium-basic",
-      testIgnore: /.*\.tight-budget\.spec\.ts$/,
+      testIgnore: [/.*\.tight-budget\.spec\.ts$/, /.*\.assistants\.spec\.ts$/],
       use: {
         ...devices["Desktop Chrome"],
         storageState: "playwright/.auth/user.json",
@@ -100,10 +108,21 @@ export default defineConfig({
       dependencies: ["setup-tight-budget"],
     },
 
+    // Chromium - Assistants scenario tests
+    {
+      name: "chromium-assistants",
+      testMatch: /.*\.assistants\.spec\.ts$/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "playwright/.auth/user.json",
+      },
+      dependencies: ["setup-assistants"],
+    },
+
     // Firefox - Basic scenario tests
     {
       name: "firefox-basic",
-      testIgnore: /.*\.tight-budget\.spec\.ts$/,
+      testIgnore: [/.*\.tight-budget\.spec\.ts$/, /.*\.assistants\.spec\.ts$/],
       use: {
         ...devices["Desktop Firefox"],
         storageState: "playwright/.auth/user.json",
@@ -120,6 +139,17 @@ export default defineConfig({
         storageState: "playwright/.auth/user.json",
       },
       dependencies: ["setup-tight-budget"],
+    },
+
+    // Firefox - Assistants scenario tests
+    {
+      name: "firefox-assistants",
+      testMatch: /.*\.assistants\.spec\.ts$/,
+      use: {
+        ...devices["Desktop Firefox"],
+        storageState: "playwright/.auth/user.json",
+      },
+      dependencies: ["setup-assistants"],
     },
 
     // TODO: Currently deactivated, because there are issues with using `0.0.0.0` as host during auth flow

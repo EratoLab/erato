@@ -304,6 +304,8 @@ jobs:
             projects: "--project chromium-basic --project firefox-basic"
           - scenario: tight-budget
             projects: "--project chromium-tight-budget --project firefox-tight-budget"
+          - scenario: assistants
+            projects: "--project chromium-assistants --project firefox-assistants"
     permissions:
       contents: read
     steps:

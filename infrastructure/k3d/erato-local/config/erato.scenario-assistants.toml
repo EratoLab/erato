@@ -1,0 +1,8 @@
+# Assistants test scenario - enables assistant functionality
+# This scenario is used to test the experimental assistants feature
+
+[experimental_assistants]
+enabled = true
+
+[frontend.additional_environment]
+K3D_TEST_SCENARIO = "assistants"
