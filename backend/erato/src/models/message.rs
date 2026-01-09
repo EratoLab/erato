@@ -688,3 +688,84 @@ pub async fn get_generation_input_messages_by_previous_message_id(
         messages: input_messages,
     })
 }
+
+/// Regenerate presigned download URLs for ImageFilePointer content parts.
+///
+/// This function takes message content and regenerates fresh presigned URLs for any
+/// ImageFilePointer content parts, replacing the expired URLs that were stored in the database.
+pub async fn regenerate_image_urls_in_content(
+    conn: &DatabaseConnection,
+    content: Vec<ContentPart>,
+    file_storage_providers: &std::collections::HashMap<
+        String,
+        crate::services::file_storage::FileStorage,
+    >,
+) -> Result<Vec<ContentPart>, Report> {
+    use crate::db::entity::file_uploads;
+
+    let mut updated_content = Vec::with_capacity(content.len());
+
+    for part in content {
+        let updated_part = match part {
+            ContentPart::ImageFilePointer(ref pointer) => {
+                // Fetch the file upload record to get storage path and provider
+                let file_upload = file_uploads::Entity::find_by_id(pointer.file_upload_id)
+                    .one(conn)
+                    .await?;
+
+                if let Some(file) = file_upload {
+                    // Get the file storage provider
+                    let file_storage = file_storage_providers.get(&file.file_storage_provider_id);
+
+                    if let Some(storage) = file_storage {
+                        // Generate a fresh presigned download URL
+                        let download_url = match storage
+                            .generate_presigned_download_url_with_context(
+                                &file.file_storage_path,
+                                None,
+                                None, // No Sharepoint context for now (image generation uses default provider)
+                            )
+                            .await
+                        {
+                            Ok(url) => url,
+                            Err(err) => {
+                                tracing::warn!(
+                                    file_id = %file.id,
+                                    provider = %file.file_storage_provider_id,
+                                    error = %err,
+                                    "Failed to regenerate download URL, using placeholder"
+                                );
+                                // Return placeholder URL that the frontend can use to fetch via API
+                                format!("/api/v1beta/files/{}", file.id)
+                            }
+                        };
+
+                        ContentPart::ImageFilePointer(ContentPartImageFilePointer {
+                            file_upload_id: pointer.file_upload_id,
+                            download_url,
+                        })
+                    } else {
+                        tracing::warn!(
+                            file_id = %file.id,
+                            provider = %file.file_storage_provider_id,
+                            "File storage provider not found, keeping original URL"
+                        );
+                        part
+                    }
+                } else {
+                    tracing::warn!(
+                        file_upload_id = %pointer.file_upload_id,
+                        "File upload not found for ImageFilePointer, keeping original URL"
+                    );
+                    part
+                }
+            }
+            // Pass through all other content types unchanged
+            other => other,
+        };
+
+        updated_content.push(updated_part);
+    }
+
+    Ok(updated_content)
+}
