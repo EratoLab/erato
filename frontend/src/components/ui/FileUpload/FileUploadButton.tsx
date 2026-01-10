@@ -5,72 +5,18 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { FileTypeUtil } from "@/utils/fileTypes";
 
-import { PlusIcon, LoadingIcon, ErrorIcon } from "../icons";
+import { PlusIcon } from "../icons";
+import { FileUploadLoading, FileUploadError } from "./FileUploadStates";
 import { BUTTON_STYLES } from "./fileUploadStyles";
-import { Button } from "../Controls";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 
-/**
- * Props for the loading state component
- */
-export interface FileUploadButtonLoadingProps {
-  /** Additional class name */
-  className?: string;
-  /** Custom label for accessibility */
-  label?: string;
-}
-
-/**
- * Loading state for file upload button
- */
-export const FileUploadButtonLoading = memo<FileUploadButtonLoadingProps>(
-  ({ className = "", label = t`Uploading file` }) => (
-    <Button
-      disabled
-      className={className}
-      aria-label={label}
-      variant="secondary"
-    >
-      <LoadingIcon className="size-5 animate-spin text-[var(--theme-fg-muted)]" />
-    </Button>
-  ),
-);
-
-// eslint-disable-next-line lingui/no-unlocalized-strings
-FileUploadButtonLoading.displayName = "FileUploadButtonLoading";
-
-/**
- * Props for the error state component
- */
-export interface FileUploadButtonErrorProps {
-  /** Error object to display */
-  error: Error;
-  /** Additional class name */
-  className?: string;
-}
-
-/**
- * Error state for file upload button
- */
-export const FileUploadButtonError = memo<FileUploadButtonErrorProps>(
-  ({ error, className = "" }) => (
-    <Button
-      disabled
-      variant="danger"
-      className={className}
-      title={error.message}
-      aria-label={`${t`Error:`} ${error.message}`}
-    >
-      {error.message}
-      <ErrorIcon className="size-5 text-[var(--theme-error-fg)]" />
-    </Button>
-  ),
-);
-
-// eslint-disable-next-line lingui/no-unlocalized-strings
-FileUploadButtonError.displayName = "FileUploadButtonError";
+// Re-export shared state components for backwards compatibility
+export { FileUploadLoading as FileUploadButtonLoading } from "./FileUploadStates";
+export { FileUploadError as FileUploadButtonError } from "./FileUploadStates";
+export type { FileUploadLoadingProps as FileUploadButtonLoadingProps } from "./FileUploadStates";
+export type { FileUploadErrorProps as FileUploadButtonErrorProps } from "./FileUploadStates";
 
 /**
  * Props for the file upload button
@@ -149,12 +95,12 @@ const FileUploadButtonInner = memo<FileUploadButtonProps>(
 
     // Show loading state if uploading
     if (isUploading) {
-      return <FileUploadButtonLoading />;
+      return <FileUploadLoading className={className} />;
     }
 
     // Show error state if there was an error
     if (uploadError) {
-      return <FileUploadButtonError error={uploadError} />;
+      return <FileUploadError error={uploadError} className={className} />;
     }
 
     // Compute button styles based on props and state
@@ -200,13 +146,15 @@ FileUploadButtonInner.displayName = "FileUploadButtonInner";
 export const FileUploadButton = memo<FileUploadButtonProps>((props) => {
   return (
     <ErrorBoundary
-      FallbackComponent={({ error }) => <FileUploadButtonError error={error} />}
+      FallbackComponent={({ error }) => (
+        <FileUploadError error={error} className={props.className} />
+      )}
       onReset={() => {
         // Reset the error state when the error boundary is reset
         // This is triggered when the user clicks a "try again" button in the fallback
       }}
     >
-      <Suspense fallback={<FileUploadButtonLoading />}>
+      <Suspense fallback={<FileUploadLoading className={props.className} />}>
         <FileUploadButtonInner {...props} />
       </Suspense>
     </ErrorBoundary>

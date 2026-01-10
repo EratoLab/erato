@@ -4,6 +4,7 @@ import { memo } from "react";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { PlusIcon } from "../icons";
+import { FileUploadLoading } from "./FileUploadStates";
 
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
 import type { CloudProvider } from "@/providers/FeatureConfigProvider";
@@ -17,6 +18,8 @@ export interface FileSourceSelectorProps {
   onSelectCloud: (provider: CloudProvider) => void;
   /** Whether the selector is disabled */
   disabled?: boolean;
+  /** Whether files are currently being processed (uploading or linking) */
+  isProcessing?: boolean;
   /** Custom CSS class */
   className?: string;
 }
@@ -38,8 +41,13 @@ export const FileSourceSelector = memo<FileSourceSelectorProps>(
     onSelectDisk,
     onSelectCloud,
     disabled = false,
+    isProcessing = false,
     className = "",
   }) => {
+    if (isProcessing) {
+      return <FileUploadLoading className={className} />;
+    }
+
     // Build menu items based on available providers
     const menuItems: DropdownMenuItem[] = [
       // Always show "Upload from Computer" option

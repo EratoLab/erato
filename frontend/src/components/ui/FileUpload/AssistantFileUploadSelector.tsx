@@ -81,7 +81,11 @@ export const AssistantFileUploadSelector: React.FC<
   const [isLinkingFiles, setIsLinkingFiles] = useState(false);
 
   // Use standalone file upload hook
-  const { uploadFiles } = useStandaloneFileUpload();
+  const {
+    uploadFiles,
+    isUploading: isUploadingFiles,
+    error: uploadHookError,
+  } = useStandaloneFileUpload();
 
   // Setup react-dropzone for disk file selection when cloud providers are available
   const {
@@ -109,8 +113,8 @@ export const AssistantFileUploadSelector: React.FC<
     noKeyboard: true,
   });
 
-  // Calculate combined processing state
-  const isProcessing = externalIsUploading || isLinkingFiles;
+  const isProcessing =
+    externalIsUploading || isLinkingFiles || isUploadingFiles;
 
   // Handle disk file selection
   const handleSelectDisk = useCallback(() => {
@@ -208,6 +212,7 @@ export const AssistantFileUploadSelector: React.FC<
             onSelectDisk={handleSelectDisk}
             onSelectCloud={handleSelectCloud}
             disabled={disabled || isProcessing}
+            isProcessing={isProcessing}
             className={className}
           />
         </>
@@ -221,7 +226,7 @@ export const AssistantFileUploadSelector: React.FC<
           disabled={disabled || isProcessing}
           performFileUpload={uploadFiles}
           isUploading={isProcessing}
-          uploadError={externalUploadError}
+          uploadError={externalUploadError ?? uploadHookError}
           onFilesUploaded={onFilesUploaded}
         />
       )}
