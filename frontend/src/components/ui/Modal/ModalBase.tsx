@@ -27,6 +27,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   contentClassName,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
+  const mouseDownTargetRef = useRef<EventTarget | null>(null);
 
   // Close modal on Escape key press
   useEffect(() => {
@@ -49,11 +50,18 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
     };
   }, [isOpen, onClose]);
 
-  // Close modal on overlay click
+  const handleOverlayMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    mouseDownTargetRef.current = event.target;
+  };
+
   const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
+    if (
+      event.target === event.currentTarget &&
+      mouseDownTargetRef.current === event.currentTarget
+    ) {
       onClose();
     }
+    mouseDownTargetRef.current = null;
   };
 
   if (!isOpen) {
@@ -66,6 +74,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm",
         className,
       )}
+      onMouseDown={handleOverlayMouseDown}
       onClick={handleOverlayClick}
       role="presentation"
       aria-label={t`Close modal overlay`}
