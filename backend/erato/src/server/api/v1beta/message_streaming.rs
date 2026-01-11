@@ -1171,6 +1171,9 @@ async fn stream_generate_chat_completion<
     let mut total_total_tokens = 0u32;
     let mut total_reasoning_tokens = 0u32;
 
+    // Track all tool calls across all turns for Langfuse metadata
+    let mut all_tool_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     'loop_call_turns: loop {
         current_turn += 1;
         tracing::debug!("Starting chat completion turn {}", current_turn);
@@ -1429,6 +1432,12 @@ async fn stream_generate_chat_completion<
                     Some(format!("chat_completion_turn_{}", current_turn))
                 };
 
+                // Extract tool names from this turn's captured tool calls
+                let turn_tool_names: Vec<String> = stream_end
+                    .captured_tool_calls()
+                    .map(|calls| calls.iter().map(|call| call.fn_name.clone()).collect())
+                    .unwrap_or_default();
+
                 // Clone client and data for async task
                 let client = client.clone();
                 let request = current_turn_chat_request.clone();
@@ -1452,6 +1461,7 @@ async fn stream_generate_chat_completion<
                             Some(turn_end_time),
                             None, // completion_start_time
                             assistant_id_for_langfuse,
+                            &turn_tool_names,
                         )
                         .await
                     } else {
@@ -1463,7 +1473,14 @@ async fn stream_generate_chat_completion<
                             .with_name(generation_name.unwrap_or_else(|| {
                                 format!("chat_completion_turn_{}", current_turn)
                             }))
-                            .build_and_send(&client, &request, &content, usage.as_ref(), assistant_id_for_langfuse)
+                            .build_and_send(
+                                &client,
+                                &request,
+                                &content,
+                                usage.as_ref(),
+                                assistant_id_for_langfuse,
+                                &turn_tool_names,
+                            )
                             .await
                     };
 
@@ -1484,6 +1501,11 @@ async fn stream_generate_chat_completion<
 
             if let Some(captured_tool_calls) = stream_end.captured_tool_calls() {
                 if !captured_tool_calls.is_empty() {
+                    // Track tool names for Langfuse metadata
+                    for tool_call in captured_tool_calls.iter() {
+                        all_tool_names.insert(tool_call.fn_name.clone());
+                    }
+
                     current_turn_chat_request.messages.push(GenAiChatMessage {
                         role: ChatRole::Assistant,
                         content: MessageContent::ToolCalls(
@@ -1498,7 +1520,7 @@ async fn stream_generate_chat_completion<
                             .map(ToOwned::to_owned),
                     );
                 } else {
-                    // Update Langfuse trace with final output if enabled
+                    // Update Langfuse trace with final output and metadata if enabled
                     if let Some(ref client) = tracing_client
                         && let Ok(output_json) =
                             crate::services::genai_langfuse::convert_content_parts_to_json(
@@ -1507,7 +1529,11 @@ async fn stream_generate_chat_completion<
                     {
                         let client = client.clone();
                         let trace_id = client.trace_id().to_string();
+                        let accumulated_tool_names: Vec<String> =
+                            all_tool_names.iter().cloned().collect();
+                        let assistant_id_for_trace = assistant_id;
                         tokio::spawn(async move {
+                            // Update trace output
                             if let Err(e) = client.update_trace_output(output_json).await {
                                 tracing::warn!(
                                     trace_id = %trace_id,
@@ -1519,6 +1545,25 @@ async fn stream_generate_chat_completion<
                                     trace_id = %trace_id,
                                     "Successfully updated Langfuse trace with output"
                                 );
+                            }
+
+                            // Update trace metadata with assistant_id and tool calls
+                            if let Some(metadata) = crate::services::genai_langfuse::create_metadata_with_assistant_and_tools(
+                                assistant_id_for_trace,
+                                &accumulated_tool_names,
+                            ) {
+                                if let Err(e) = client.update_trace_metadata(metadata).await {
+                                    tracing::warn!(
+                                        trace_id = %trace_id,
+                                        error = %e,
+                                        "Failed to update Langfuse trace with metadata"
+                                    );
+                                } else {
+                                    tracing::debug!(
+                                        trace_id = %trace_id,
+                                        "Successfully updated Langfuse trace with metadata"
+                                    );
+                                }
                             }
                         });
                     }
