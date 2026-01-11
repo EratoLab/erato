@@ -387,10 +387,6 @@ test.describe.serial("Pirate Assistant Lifecycle", () => {
       // Verify we're in the assistant's chat context (URL should contain assistant ID)
       expect(page.url()).toContain("/a/");
 
-      // Store the chat URL and ID for later tests
-      chatUrl = page.url();
-      chatId = chatUrl.split("/").pop()!;
-
       // Send a message to the assistant
       const textbox = page.getByRole("textbox", { name: /type a message/i });
       await textbox.fill("Hello!");
@@ -401,6 +397,10 @@ test.describe.serial("Pirate Assistant Lifecycle", () => {
 
       // Verify that a response was received
       await expect(page.getByTestId("message-assistant")).toBeVisible();
+
+      // Store the chat URL and ID for later tests
+      chatUrl = page.url();
+      chatId = chatUrl.split("/").pop()!;
     },
   );
 
@@ -448,12 +448,12 @@ test.describe.serial("Pirate Assistant Lifecycle", () => {
     },
   );
 
-  test.skip(
+  test(
     "should still access the chat after archiving the assistant",
     { tag: TAG_CI },
     async ({ page }) => {
-      // TODO: This test is currently skipped because the chat becomes inaccessible
-      // after archiving the assistant. This may be a known issue that needs to be fixed.
+      // This test verifies that chats remain accessible even after their
+      // associated assistant has been archived.
 
       // Access the chat directly via the stored URL from test 2
       await page.goto(chatUrl);
