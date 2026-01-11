@@ -18,9 +18,11 @@ use crate::services::background_tasks::{
     StreamingEvent, StreamingTask, ToolCallStatus as BgToolCallStatus,
 };
 use crate::services::genai_langfuse::{
-    LangfuseGenerationBuilder, create_trace_request_from_chat, generate_langfuse_ids,
-    generate_name_from_chat_request,
+    LangfuseGenerationBuilder, TracedGenerationBuilder, create_trace_from_chat,
+    create_trace_request_from_chat, create_trace_with_generation_from_chat,
+    generate_langfuse_ids, generate_name_from_chat_request,
 };
+use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::convert_mcp_tools_to_genai_tools;
 use crate::services::sentry::capture_report;
 use crate::state::AppState;
@@ -1130,21 +1132,30 @@ async fn stream_generate_chat_completion<
     let langfuse_enabled = app_state.config.integrations.langfuse.enabled
         && app_state.config.integrations.langfuse.tracing_enabled;
 
-    let (langfuse_observation_id, langfuse_trace_id, langfuse_generation_name) = if langfuse_enabled
-    {
-        let (obs_id, trace_id) = generate_langfuse_ids();
+    let tracing_client = if langfuse_enabled {
+        let (_, trace_id) = generate_langfuse_ids();
         let generation_name = generate_name_from_chat_request(&chat_request);
 
         tracing::debug!(
-            "Starting Langfuse tracing for generation: obs_id={}, trace_id={}, name={:?}",
-            obs_id,
+            "Starting Langfuse tracing for generation: trace_id={}, name={:?}",
             trace_id,
             generation_name
         );
 
-        (Some(obs_id), Some(trace_id), generation_name)
+        Some(TracingLangfuseClient::new(
+            app_state.langfuse_client.clone(),
+            trace_id,
+            Some(user_id.clone()),
+            Some(chat_id.to_string()),
+        ))
     } else {
-        (None, None, None)
+        None
+    };
+
+    let langfuse_generation_name = if langfuse_enabled {
+        generate_name_from_chat_request(&chat_request)
+    } else {
+        None
     };
     let max_tool_call_iterations = 15;
     let mut unfinished_tool_calls: Vec<genai::chat::ToolCall> = vec![];
@@ -1381,13 +1392,7 @@ async fn stream_generate_chat_completion<
             }
 
             // Send Langfuse tracing for this turn if enabled
-            if langfuse_enabled
-                && let (Some(obs_id), Some(trace_id), Some(turn_start)) = (
-                    langfuse_observation_id.as_ref(),
-                    langfuse_trace_id.as_ref(),
-                    turn_start_time,
-                )
-            {
+            if let (Some(ref client), Some(turn_start)) = (&tracing_client, turn_start_time) {
                 let turn_end_time = SystemTime::now();
                 // Get the model name for Langfuse reporting using the actual chat provider used
                 let model_name = if let Some(provider_id) = chat_provider_id {
@@ -1409,115 +1414,70 @@ async fn stream_generate_chat_completion<
                 };
 
                 // Generate a unique observation ID for this turn
-                let turn_obs_id = format!("{}_turn_{}", obs_id, current_turn);
+                let (turn_obs_id, _) = generate_langfuse_ids();
 
                 // Get the content generated in this turn
                 let turn_content = &current_message_content[turn_content_start_index..];
 
-                // Build the Langfuse generation request for this turn
-                let mut builder = LangfuseGenerationBuilder::new(turn_obs_id, trace_id.clone())
-                    .with_model(model_name)
-                    .with_start_time(turn_start)
-                    .with_end_time(turn_end_time);
-
-                // Add environment if available
-                if let Some(env) = app_state.langfuse_client.environment() {
-                    builder = builder.with_environment(env.to_string());
-                }
-
-                if let Some(ref name) = langfuse_generation_name {
-                    builder = builder.with_name(format!("{} (turn {})", name, current_turn));
-                } else {
-                    builder = builder.with_name(format!("chat_completion_turn_{}", current_turn));
-                }
-
                 // Use the usage information from this turn's stream_end
                 let turn_usage = stream_end.captured_usage.as_ref();
 
-                match builder.build(&current_turn_chat_request, turn_content, turn_usage) {
-                    Ok(langfuse_generation_request) => {
-                        // Create trace request for the first turn, or use existing trace for subsequent turns
-                        let trace_request_result = if current_turn == 1 {
-                            create_trace_request_from_chat(
-                                langfuse_trace_id.clone().unwrap(),
-                                &current_turn_chat_request,
-                                Some(user_id.clone()),
-                                Some(chat_id.to_string()),
-                                app_state
-                                    .langfuse_client
-                                    .environment()
-                                    .map(|s| s.to_string()),
-                            )
-                        } else {
-                            // For subsequent turns, we don't need to create a new trace
-                            Ok(crate::services::langfuse::CreateTraceRequest {
-                                id: langfuse_trace_id.clone().unwrap(),
-                                name: None,
-                                user_id: None,
-                                session_id: None,
-                                release: None,
-                                environment: app_state
-                                    .langfuse_client
-                                    .environment()
-                                    .map(|s| s.to_string()),
-                                input: None,
-                                output: None,
-                                metadata: None,
-                                tags: None,
-                                public: None,
-                            })
-                        };
+                // Determine generation name
+                let generation_name = if let Some(ref name) = langfuse_generation_name {
+                    Some(format!("{} (turn {})", name, current_turn))
+                } else {
+                    Some(format!("chat_completion_turn_{}", current_turn))
+                };
 
-                        match trace_request_result {
-                            Ok(trace_request) => {
-                                let langfuse_client = app_state.langfuse_client.clone();
-                                tokio::spawn(async move {
-                                    // For first turn, create trace and generation together
-                                    // For subsequent turns, just create the generation
-                                    let result = if current_turn == 1 {
-                                        langfuse_client
-                                            .create_trace_with_generation(
-                                                trace_request,
-                                                langfuse_generation_request,
-                                            )
-                                            .await
-                                    } else {
-                                        langfuse_client
-                                            .finish_generation(langfuse_generation_request)
-                                            .await
-                                    };
+                // Clone client and data for async task
+                let client = client.clone();
+                let request = current_turn_chat_request.clone();
+                let content = turn_content.to_vec();
+                let usage = turn_usage.cloned();
 
-                                    if let Err(err) = result {
-                                        tracing::warn!(
-                                            "Failed to send Langfuse trace for turn {}: {}",
-                                            current_turn,
-                                            err
-                                        );
-                                    } else {
-                                        tracing::debug!(
-                                            "Successfully sent Langfuse trace for turn {}",
-                                            current_turn
-                                        );
-                                    }
-                                });
-                            }
-                            Err(err) => {
-                                tracing::warn!(
-                                    "Failed to create Langfuse trace request for turn {}: {}",
-                                    current_turn,
-                                    err
-                                );
-                            }
-                        }
-                    }
-                    Err(err) => {
+                // Send trace/observation asynchronously
+                tokio::spawn(async move {
+                    let result = if current_turn == 1 {
+                        // For first turn, create both trace and generation in a single batch
+                        create_trace_with_generation_from_chat(
+                            &client,
+                            turn_obs_id,
+                            &request,
+                            &content,
+                            usage.as_ref(),
+                            Some(model_name),
+                            generation_name,
+                            Some(turn_start),
+                            Some(turn_end_time),
+                            None, // completion_start_time
+                        )
+                        .await
+                    } else {
+                        // For subsequent turns, only create the generation observation
+                        TracedGenerationBuilder::new(turn_obs_id)
+                            .with_model(model_name)
+                            .with_start_time(turn_start)
+                            .with_end_time(turn_end_time)
+                            .with_name(generation_name.unwrap_or_else(|| {
+                                format!("chat_completion_turn_{}", current_turn)
+                            }))
+                            .build_and_send(&client, &request, &content, usage.as_ref())
+                            .await
+                    };
+
+                    if let Err(err) = result {
                         tracing::warn!(
-                            "Failed to build Langfuse generation request for turn {}: {}",
+                            "Failed to send Langfuse trace for turn {}: {}",
                             current_turn,
                             err
                         );
+                    } else {
+                        tracing::debug!(
+                            "Successfully sent Langfuse trace for turn {}",
+                            current_turn
+                        );
                     }
-                }
+                });
             }
 
             if let Some(captured_tool_calls) = stream_end.captured_tool_calls() {
@@ -1537,19 +1497,16 @@ async fn stream_generate_chat_completion<
                     );
                 } else {
                     // Update Langfuse trace with final output if enabled
-                    if let Some(ref trace_id) = langfuse_trace_id
+                    if let Some(ref client) = tracing_client
                         && let Ok(output_json) =
                             crate::services::genai_langfuse::convert_content_parts_to_json(
                                 &current_message_content,
                             )
                     {
-                        let langfuse_client = app_state.langfuse_client.clone();
-                        let trace_id = trace_id.clone();
+                        let client = client.clone();
+                        let trace_id = client.trace_id().to_string();
                         tokio::spawn(async move {
-                            if let Err(e) = langfuse_client
-                                .update_trace_output(trace_id.clone(), output_json)
-                                .await
-                            {
+                            if let Err(e) = client.update_trace_output(output_json).await {
                                 tracing::warn!(
                                     trace_id = %trace_id,
                                     error = %e,
@@ -1568,7 +1525,7 @@ async fn stream_generate_chat_completion<
                     let generation_metadata = if total_prompt_tokens > 0
                         || total_completion_tokens > 0
                         || total_total_tokens > 0
-                        || langfuse_trace_id.is_some()
+                        || tracing_client.is_some()
                     {
                         Some(GenerationMetadata {
                             used_prompt_tokens: if total_prompt_tokens > 0 {
@@ -1591,7 +1548,9 @@ async fn stream_generate_chat_completion<
                             } else {
                                 None
                             },
-                            langfuse_trace_id: langfuse_trace_id.clone(),
+                            langfuse_trace_id: tracing_client
+                                .as_ref()
+                                .map(|c| c.trace_id().to_string()),
                         })
                     } else {
                         None
@@ -1600,19 +1559,16 @@ async fn stream_generate_chat_completion<
                 }
             } else {
                 // Update Langfuse trace with final output if enabled
-                if let Some(ref trace_id) = langfuse_trace_id
+                if let Some(ref client) = tracing_client
                     && let Ok(output_json) =
                         crate::services::genai_langfuse::convert_content_parts_to_json(
                             &current_message_content,
                         )
                 {
-                    let langfuse_client = app_state.langfuse_client.clone();
-                    let trace_id = trace_id.clone();
+                    let client = client.clone();
+                    let trace_id = client.trace_id().to_string();
                     tokio::spawn(async move {
-                        if let Err(e) = langfuse_client
-                            .update_trace_output(trace_id.clone(), output_json)
-                            .await
-                        {
+                        if let Err(e) = client.update_trace_output(output_json).await {
                             tracing::warn!(
                                 trace_id = %trace_id,
                                 error = %e,
@@ -1631,7 +1587,7 @@ async fn stream_generate_chat_completion<
                 let generation_metadata = if total_prompt_tokens > 0
                     || total_completion_tokens > 0
                     || total_total_tokens > 0
-                    || langfuse_trace_id.is_some()
+                    || tracing_client.is_some()
                 {
                     Some(GenerationMetadata {
                         used_prompt_tokens: if total_prompt_tokens > 0 {
@@ -1654,7 +1610,9 @@ async fn stream_generate_chat_completion<
                         } else {
                             None
                         },
-                        langfuse_trace_id: langfuse_trace_id.clone(),
+                        langfuse_trace_id: tracing_client
+                            .as_ref()
+                            .map(|c| c.trace_id().to_string()),
                     })
                 } else {
                     None

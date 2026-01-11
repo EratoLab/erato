@@ -1,6 +1,6 @@
 use crate::models::message::ContentPart;
 use crate::services::genai::into_openai_request_parts;
-use crate::services::langfuse::{CreateTraceRequest, FinishGenerationRequest, Usage};
+use crate::services::langfuse::{CreateTraceRequest, FinishGenerationRequest, TracingLangfuseClient, Usage};
 use chrono::{DateTime, Utc};
 use eyre::Result;
 use genai::chat::{ChatRequest, Usage as GenAiUsage};
@@ -245,6 +245,187 @@ pub fn create_trace_request_from_chat(
         tags: None,
         public: None,
     })
+}
+
+/// Builder for creating generations using TracingLangfuseClient
+///
+/// This builder simplifies creating generations by using metadata stored in TracingLangfuseClient.
+pub struct TracedGenerationBuilder {
+    observation_id: String,
+    name: Option<String>,
+    model: Option<String>,
+    start_time: Option<SystemTime>,
+    end_time: Option<SystemTime>,
+    completion_start_time: Option<SystemTime>,
+}
+
+impl TracedGenerationBuilder {
+    pub fn new(observation_id: String) -> Self {
+        Self {
+            observation_id,
+            name: None,
+            model: None,
+            start_time: None,
+            end_time: None,
+            completion_start_time: None,
+        }
+    }
+
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    pub fn with_model(mut self, model: String) -> Self {
+        self.model = Some(model);
+        self
+    }
+
+    pub fn with_start_time(mut self, start_time: SystemTime) -> Self {
+        self.start_time = Some(start_time);
+        self
+    }
+
+    pub fn with_end_time(mut self, end_time: SystemTime) -> Self {
+        self.end_time = Some(end_time);
+        self
+    }
+
+    pub fn with_completion_start_time(mut self, completion_start_time: SystemTime) -> Self {
+        self.completion_start_time = Some(completion_start_time);
+        self
+    }
+
+    /// Build and send the generation to Langfuse using the TracingLangfuseClient
+    pub async fn build_and_send(
+        self,
+        tracing_client: &TracingLangfuseClient,
+        chat_request: &ChatRequest,
+        output_content: &[ContentPart],
+        usage: Option<&GenAiUsage>,
+    ) -> Result<()> {
+        // Convert input to normalized OpenAI format
+        let input_parts = into_openai_request_parts(chat_request)?;
+        let input_json = json!({
+            "messages": input_parts.messages,
+            "tools": input_parts.tools
+        });
+
+        // Convert output ContentPart to JSON
+        let output_json = convert_content_parts_to_json(output_content)?;
+
+        // Convert usage information
+        let langfuse_usage = usage.map(convert_genai_usage_to_langfuse_usage);
+
+        // Convert timestamps to ISO 8601 strings
+        let start_time_str = self.start_time.map(system_time_to_iso_string);
+        let end_time_str = self.end_time.map(system_time_to_iso_string);
+        let completion_start_time_str = self.completion_start_time.map(system_time_to_iso_string);
+
+        tracing_client
+            .create_generation(
+                self.observation_id,
+                self.name,
+                start_time_str,
+                end_time_str,
+                completion_start_time_str,
+                self.model,
+                None, // model_parameters
+                Some(input_json),
+                Some(output_json),
+                langfuse_usage,
+                None, // metadata
+                None, // level
+                None, // status_message
+                None, // parent_observation_id
+                None, // version
+            )
+            .await
+    }
+}
+
+/// Create a trace in Langfuse using TracingLangfuseClient with a chat request
+pub async fn create_trace_from_chat(
+    tracing_client: &TracingLangfuseClient,
+    chat_request: &ChatRequest,
+) -> Result<()> {
+    // Generate a name for the trace from the first user message
+    let name = generate_name_from_chat_request(chat_request);
+
+    // Convert input to normalized OpenAI format for the trace
+    let input_parts = into_openai_request_parts(chat_request)?;
+    let input_json = json!({
+        "messages": input_parts.messages,
+        "tools": input_parts.tools
+    });
+
+    tracing_client
+        .create_trace(
+            name,
+            Some(input_json),
+            None, // metadata
+            None, // tags
+        )
+        .await
+}
+
+/// Create both trace and generation in a single batch using TracingLangfuseClient
+pub async fn create_trace_with_generation_from_chat(
+    tracing_client: &TracingLangfuseClient,
+    observation_id: String,
+    chat_request: &ChatRequest,
+    output_content: &[ContentPart],
+    usage: Option<&GenAiUsage>,
+    model: Option<String>,
+    generation_name: Option<String>,
+    start_time: Option<SystemTime>,
+    end_time: Option<SystemTime>,
+    completion_start_time: Option<SystemTime>,
+) -> Result<()> {
+    // Generate a name for the trace from the first user message
+    let trace_name = generate_name_from_chat_request(chat_request);
+
+    // Convert input to normalized OpenAI format
+    let input_parts = into_openai_request_parts(chat_request)?;
+    let input_json = json!({
+        "messages": input_parts.messages,
+        "tools": input_parts.tools
+    });
+
+    // Convert output ContentPart to JSON
+    let output_json = convert_content_parts_to_json(output_content)?;
+
+    // Convert usage information
+    let langfuse_usage = usage.map(convert_genai_usage_to_langfuse_usage);
+
+    // Convert timestamps to ISO 8601 strings
+    let start_time_str = start_time.map(system_time_to_iso_string);
+    let end_time_str = end_time.map(system_time_to_iso_string);
+    let completion_start_time_str = completion_start_time.map(system_time_to_iso_string);
+
+    tracing_client
+        .create_trace_with_generation(
+            trace_name,
+            Some(input_json.clone()),
+            None, // trace_metadata
+            None, // trace_tags
+            observation_id,
+            generation_name,
+            start_time_str,
+            end_time_str,
+            completion_start_time_str,
+            model,
+            None, // model_parameters
+            Some(input_json),
+            Some(output_json),
+            langfuse_usage,
+            None, // generation_metadata
+            None, // level
+            None, // status_message
+            None, // parent_observation_id
+            None, // version
+        )
+        .await
 }
 
 #[cfg(test)]

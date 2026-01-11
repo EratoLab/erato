@@ -763,6 +763,221 @@ fn prompt_type_from_prompt(prompt: &LangfusePrompt) -> &str {
     &prompt.prompt_type
 }
 
+/// Request-scoped tracing client that centralizes metadata for the lifecycle of a request.
+///
+/// This wrapper around LangfuseClient stores common metadata (trace_id, user_id, session_id, environment)
+/// that applies to all tracing operations within a single request. This eliminates the need to pass
+/// these values repeatedly when creating traces, observations, and scores.
+#[derive(Debug, Clone)]
+pub struct TracingLangfuseClient {
+    client: LangfuseClient,
+    trace_id: String,
+    user_id: Option<String>,
+    session_id: Option<String>,
+    environment: Option<String>,
+}
+
+impl TracingLangfuseClient {
+    /// Create a new TracingLangfuseClient with request-scoped metadata
+    pub fn new(
+        client: LangfuseClient,
+        trace_id: String,
+        user_id: Option<String>,
+        session_id: Option<String>,
+    ) -> Self {
+        let environment = client.environment().map(|s| s.to_string());
+
+        tracing::debug!(
+            trace_id = %trace_id,
+            user_id = ?user_id,
+            session_id = ?session_id,
+            environment = ?environment,
+            "Creating TracingLangfuseClient with request-scoped metadata"
+        );
+
+        Self {
+            client,
+            trace_id,
+            user_id,
+            session_id,
+            environment,
+        }
+    }
+
+    /// Get the trace ID for this tracing context
+    pub fn trace_id(&self) -> &str {
+        &self.trace_id
+    }
+
+    /// Get the environment for this tracing context
+    pub fn environment(&self) -> Option<&str> {
+        self.environment.as_deref()
+    }
+
+    /// Create a trace using the stored metadata
+    pub async fn create_trace(
+        &self,
+        name: Option<String>,
+        input: Option<serde_json::Value>,
+        metadata: Option<serde_json::Value>,
+        tags: Option<Vec<String>>,
+    ) -> Result<()> {
+        let request = CreateTraceRequest {
+            id: self.trace_id.clone(),
+            name,
+            user_id: self.user_id.clone(),
+            session_id: self.session_id.clone(),
+            release: None,
+            environment: self.environment.clone(),
+            input,
+            output: None,
+            metadata,
+            tags,
+            public: None,
+        };
+
+        self.client.create_trace(request).await
+    }
+
+    /// Update the trace output
+    pub async fn update_trace_output(&self, output: serde_json::Value) -> Result<()> {
+        self.client
+            .update_trace_output(self.trace_id.clone(), output)
+            .await
+    }
+
+    /// Create a generation observation using the stored trace_id and environment
+    pub async fn create_generation(
+        &self,
+        observation_id: String,
+        name: Option<String>,
+        start_time: Option<String>,
+        end_time: Option<String>,
+        completion_start_time: Option<String>,
+        model: Option<String>,
+        model_parameters: Option<serde_json::Value>,
+        input: Option<serde_json::Value>,
+        output: Option<serde_json::Value>,
+        usage: Option<Usage>,
+        metadata: Option<serde_json::Value>,
+        level: Option<String>,
+        status_message: Option<String>,
+        parent_observation_id: Option<String>,
+        version: Option<String>,
+    ) -> Result<()> {
+        let request = FinishGenerationRequest {
+            observation_id,
+            trace_id: self.trace_id.clone(),
+            name,
+            start_time,
+            end_time,
+            completion_start_time,
+            model,
+            model_parameters,
+            input,
+            output,
+            usage,
+            metadata,
+            level,
+            status_message,
+            parent_observation_id,
+            version,
+            environment: self.environment.clone(),
+        };
+
+        self.client.finish_generation(request).await
+    }
+
+    /// Create both trace and generation in a single batch
+    pub async fn create_trace_with_generation(
+        &self,
+        trace_name: Option<String>,
+        trace_input: Option<serde_json::Value>,
+        trace_metadata: Option<serde_json::Value>,
+        trace_tags: Option<Vec<String>>,
+        observation_id: String,
+        generation_name: Option<String>,
+        start_time: Option<String>,
+        end_time: Option<String>,
+        completion_start_time: Option<String>,
+        model: Option<String>,
+        model_parameters: Option<serde_json::Value>,
+        generation_input: Option<serde_json::Value>,
+        generation_output: Option<serde_json::Value>,
+        usage: Option<Usage>,
+        generation_metadata: Option<serde_json::Value>,
+        level: Option<String>,
+        status_message: Option<String>,
+        parent_observation_id: Option<String>,
+        version: Option<String>,
+    ) -> Result<()> {
+        let trace_request = CreateTraceRequest {
+            id: self.trace_id.clone(),
+            name: trace_name,
+            user_id: self.user_id.clone(),
+            session_id: self.session_id.clone(),
+            release: None,
+            environment: self.environment.clone(),
+            input: trace_input,
+            output: None,
+            metadata: trace_metadata,
+            tags: trace_tags,
+            public: None,
+        };
+
+        let generation_request = FinishGenerationRequest {
+            observation_id,
+            trace_id: self.trace_id.clone(),
+            name: generation_name,
+            start_time,
+            end_time,
+            completion_start_time,
+            model,
+            model_parameters,
+            input: generation_input,
+            output: generation_output,
+            usage,
+            metadata: generation_metadata,
+            level,
+            status_message,
+            parent_observation_id,
+            version,
+            environment: self.environment.clone(),
+        };
+
+        self.client
+            .create_trace_with_generation(trace_request, generation_request)
+            .await
+    }
+
+    /// Create a score (user feedback) using the stored trace_id and environment
+    pub async fn create_score(
+        &self,
+        score_id: String,
+        name: String,
+        value: f64,
+        comment: Option<String>,
+        data_type: String,
+    ) -> Result<()> {
+        let request = CreateScoreRequest {
+            id: score_id,
+            trace_id: self.trace_id.clone(),
+            name,
+            value,
+            comment,
+            data_type,
+            environment: self.environment.clone(),
+        };
+
+        self.client.create_score(request).await
+    }
+
+    /// Get access to the underlying LangfuseClient for operations that don't fit the scoped pattern
+    pub fn client(&self) -> &LangfuseClient {
+        &self.client
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
