@@ -1,6 +1,8 @@
 use crate::models::message::ContentPart;
 use crate::services::genai::into_openai_request_parts;
-use crate::services::langfuse::{CreateTraceRequest, FinishGenerationRequest, TracingLangfuseClient, Usage};
+use crate::services::langfuse::{
+    CreateTraceRequest, FinishGenerationRequest, TracingLangfuseClient, Usage,
+};
 use chrono::{DateTime, Utc};
 use eyre::Result;
 use genai::chat::{ChatRequest, Usage as GenAiUsage};
@@ -370,6 +372,7 @@ pub async fn create_trace_from_chat(
 }
 
 /// Create both trace and generation in a single batch using TracingLangfuseClient
+#[allow(clippy::too_many_arguments)]
 pub async fn create_trace_with_generation_from_chat(
     tracing_client: &TracingLangfuseClient,
     observation_id: String,

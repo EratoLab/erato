@@ -134,6 +134,7 @@ impl LangfuseClient {
         &self,
         trace_id: String,
         output: serde_json::Value,
+        environment: Option<String>,
     ) -> Result<()> {
         if !self.enabled {
             tracing::debug!("Langfuse client is disabled, skipping trace update");
@@ -157,7 +158,7 @@ impl LangfuseClient {
                 user_id: None,
                 session_id: None,
                 release: None,
-                environment: None,
+                environment,
                 input: None,
                 output: Some(output),
                 metadata: None,
@@ -198,7 +199,7 @@ impl LangfuseClient {
 
         let ingestion_event = IngestionEvent {
             id: request.observation_id.clone(),
-            r#type: "observation-create".to_string(),
+            r#type: "generation-create".to_string(),
             timestamp: timestamp_iso,
             body: IngestionEventBody::ObservationCreate(Box::new(CreateObservationEvent {
                 id: request.observation_id,
@@ -276,7 +277,7 @@ impl LangfuseClient {
         // Create observation event
         let observation_event = IngestionEvent {
             id: generation_request.observation_id.clone(),
-            r#type: "observation-create".to_string(),
+            r#type: "generation-create".to_string(),
             timestamp: timestamp_iso,
             body: IngestionEventBody::ObservationCreate(Box::new(CreateObservationEvent {
                 id: generation_request.observation_id,
@@ -842,11 +843,12 @@ impl TracingLangfuseClient {
     /// Update the trace output
     pub async fn update_trace_output(&self, output: serde_json::Value) -> Result<()> {
         self.client
-            .update_trace_output(self.trace_id.clone(), output)
+            .update_trace_output(self.trace_id.clone(), output, self.environment.clone())
             .await
     }
 
     /// Create a generation observation using the stored trace_id and environment
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_generation(
         &self,
         observation_id: String,
@@ -889,6 +891,7 @@ impl TracingLangfuseClient {
     }
 
     /// Create both trace and generation in a single batch
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_trace_with_generation(
         &self,
         trace_name: Option<String>,

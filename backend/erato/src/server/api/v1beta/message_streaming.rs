@@ -18,9 +18,8 @@ use crate::services::background_tasks::{
     StreamingEvent, StreamingTask, ToolCallStatus as BgToolCallStatus,
 };
 use crate::services::genai_langfuse::{
-    LangfuseGenerationBuilder, TracedGenerationBuilder, create_trace_from_chat,
-    create_trace_request_from_chat, create_trace_with_generation_from_chat,
-    generate_langfuse_ids, generate_name_from_chat_request,
+    TracedGenerationBuilder, create_trace_with_generation_from_chat, generate_langfuse_ids,
+    generate_name_from_chat_request,
 };
 use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::convert_mcp_tools_to_genai_tools;
@@ -1392,7 +1391,7 @@ async fn stream_generate_chat_completion<
             }
 
             // Send Langfuse tracing for this turn if enabled
-            if let (Some(ref client), Some(turn_start)) = (&tracing_client, turn_start_time) {
+            if let (Some(client), Some(turn_start)) = (&tracing_client, turn_start_time) {
                 let turn_end_time = SystemTime::now();
                 // Get the model name for Langfuse reporting using the actual chat provider used
                 let model_name = if let Some(provider_id) = chat_provider_id {
