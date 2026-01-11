@@ -223,6 +223,7 @@ pub fn create_trace_request_from_chat(
     user_id: Option<String>,
     session_id: Option<String>,
     environment: Option<String>,
+    assistant_id: Option<Uuid>,
 ) -> Result<CreateTraceRequest> {
     // Generate a name for the trace from the first user message
     let name = generate_name_from_chat_request(chat_request);
@@ -234,6 +235,9 @@ pub fn create_trace_request_from_chat(
         "tools": input_parts.tools
     });
 
+    // Create metadata with assistant_id if present
+    let metadata = assistant_id.map(|id| json!({ "erato_assistant_id": id.to_string() }));
+
     Ok(CreateTraceRequest {
         id: trace_id,
         name,
@@ -243,7 +247,7 @@ pub fn create_trace_request_from_chat(
         environment,
         input: Some(input_json),
         output: None, // Will be set when the trace is completed
-        metadata: None,
+        metadata,
         tags: None,
         public: None,
     })
@@ -305,6 +309,7 @@ impl TracedGenerationBuilder {
         chat_request: &ChatRequest,
         output_content: &[ContentPart],
         usage: Option<&GenAiUsage>,
+        assistant_id: Option<Uuid>,
     ) -> Result<()> {
         // Convert input to normalized OpenAI format
         let input_parts = into_openai_request_parts(chat_request)?;
@@ -324,6 +329,9 @@ impl TracedGenerationBuilder {
         let end_time_str = self.end_time.map(system_time_to_iso_string);
         let completion_start_time_str = self.completion_start_time.map(system_time_to_iso_string);
 
+        // Create metadata with assistant_id if present
+        let metadata = assistant_id.map(|id| json!({ "erato_assistant_id": id.to_string() }));
+
         tracing_client
             .create_generation(
                 self.observation_id,
@@ -336,7 +344,7 @@ impl TracedGenerationBuilder {
                 Some(input_json),
                 Some(output_json),
                 langfuse_usage,
-                None, // metadata
+                metadata,
                 None, // level
                 None, // status_message
                 None, // parent_observation_id
@@ -350,6 +358,7 @@ impl TracedGenerationBuilder {
 pub async fn create_trace_from_chat(
     tracing_client: &TracingLangfuseClient,
     chat_request: &ChatRequest,
+    assistant_id: Option<Uuid>,
 ) -> Result<()> {
     // Generate a name for the trace from the first user message
     let name = generate_name_from_chat_request(chat_request);
@@ -361,11 +370,14 @@ pub async fn create_trace_from_chat(
         "tools": input_parts.tools
     });
 
+    // Create metadata with assistant_id if present
+    let metadata = assistant_id.map(|id| json!({ "erato_assistant_id": id.to_string() }));
+
     tracing_client
         .create_trace(
             name,
             Some(input_json),
-            None, // metadata
+            metadata,
             None, // tags
         )
         .await
@@ -384,6 +396,7 @@ pub async fn create_trace_with_generation_from_chat(
     start_time: Option<SystemTime>,
     end_time: Option<SystemTime>,
     completion_start_time: Option<SystemTime>,
+    assistant_id: Option<Uuid>,
 ) -> Result<()> {
     // Generate a name for the trace from the first user message
     let trace_name = generate_name_from_chat_request(chat_request);
@@ -406,11 +419,14 @@ pub async fn create_trace_with_generation_from_chat(
     let end_time_str = end_time.map(system_time_to_iso_string);
     let completion_start_time_str = completion_start_time.map(system_time_to_iso_string);
 
+    // Create metadata with assistant_id if present
+    let metadata = assistant_id.map(|id| json!({ "erato_assistant_id": id.to_string() }));
+
     tracing_client
         .create_trace_with_generation(
             trace_name,
             Some(input_json.clone()),
-            None, // trace_metadata
+            metadata.clone(), // trace_metadata
             None, // trace_tags
             observation_id,
             generation_name,
@@ -422,7 +438,7 @@ pub async fn create_trace_with_generation_from_chat(
             Some(input_json),
             Some(output_json),
             langfuse_usage,
-            None, // generation_metadata
+            metadata, // generation_metadata
             None, // level
             None, // status_message
             None, // parent_observation_id

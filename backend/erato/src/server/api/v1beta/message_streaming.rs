@@ -1126,6 +1126,7 @@ async fn stream_generate_chat_completion<
     chat_provider_id: Option<&str>,
     user_groups: &[String],
     streaming_task: Option<&Arc<StreamingTask>>,
+    assistant_id: Option<Uuid>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
     // Initialize Langfuse tracing if enabled
     let langfuse_enabled = app_state.config.integrations.langfuse.enabled
@@ -1435,6 +1436,7 @@ async fn stream_generate_chat_completion<
                 let usage = turn_usage.cloned();
 
                 // Send trace/observation asynchronously
+                let assistant_id_for_langfuse = assistant_id;
                 tokio::spawn(async move {
                     let result = if current_turn == 1 {
                         // For first turn, create both trace and generation in a single batch
@@ -1449,6 +1451,7 @@ async fn stream_generate_chat_completion<
                             Some(turn_start),
                             Some(turn_end_time),
                             None, // completion_start_time
+                            assistant_id_for_langfuse,
                         )
                         .await
                     } else {
@@ -1460,7 +1463,7 @@ async fn stream_generate_chat_completion<
                             .with_name(generation_name.unwrap_or_else(|| {
                                 format!("chat_completion_turn_{}", current_turn)
                             }))
-                            .build_and_send(&client, &request, &content, usage.as_ref())
+                            .build_and_send(&client, &request, &content, usage.as_ref(), assistant_id_for_langfuse)
                             .await
                     };
 
@@ -2642,6 +2645,7 @@ async fn run_message_submit_task(
         Some(chat_provider_id.as_str()),
         &me_user.groups,
         Some(task),
+        chat.assistant_id,
     );
 
     let (end_content, generation_metadata) = generation_task
@@ -2833,6 +2837,7 @@ pub async fn regenerate_message_sse(
                 Some(chat_provider_id.as_str()), // Pass chat_provider_id
                 &me_user.groups,              // Pass user_groups
                 None,                         // No background task for regenerate
+                chat.assistant_id,            // Pass assistant_id for Langfuse tracking
             )
             .await?;
 
@@ -3083,6 +3088,7 @@ pub async fn edit_message_sse(
                 Some(chat_provider_id.as_str()), // Pass chat_provider_id
                 &me_user.groups,              // Pass user_groups
                 None,                         // No background task for edit
+                chat.assistant_id,            // Pass assistant_id for Langfuse tracking
             )
             .await?;
 
