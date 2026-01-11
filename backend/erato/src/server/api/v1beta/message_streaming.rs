@@ -1456,7 +1456,10 @@ async fn stream_generate_chat_completion<
                                 user_id: None,
                                 session_id: None,
                                 release: None,
-                                environment: None,
+                                environment: app_state
+                                    .langfuse_client
+                                    .environment()
+                                    .map(|s| s.to_string()),
                                 input: None,
                                 output: None,
                                 metadata: None,
