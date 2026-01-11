@@ -370,13 +370,13 @@ pub async fn get_assistant(
     let assistant_id = Uuid::parse_str(&assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Get the assistant with files
-    // User-facing endpoint: exclude archived assistants
+    // Allow archived assistants to support viewing chats for archived assistants
     let assistant_with_files = assistant::get_assistant_with_files(
         &app_state.db,
         &policy,
         &me_user.to_subject(),
         assistant_id,
-        false, // Exclude archived assistants
+        true, // Allow archived assistants
     )
     .await
     .map_err(|e| {
