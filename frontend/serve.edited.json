@@ -7,6 +7,26 @@
     {
       "source": "/chat/:id",
       "destination": "index.html"
+    },
+    {
+      "source": "/assistants",
+      "destination": "index.html"
+    },
+    {
+      "source": "/assistants/new",
+      "destination": "index.html"
+    },
+    {
+      "source": "/assistants/:id/edit",
+      "destination": "index.html"
+    },
+    {
+      "source": "/a/:assistantId",
+      "destination": "index.html"
+    },
+    {
+      "source": "/a/:assistantId/:chatId",
+      "destination": "index.html"
     }
   ]
 }
