@@ -2,6 +2,12 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock the dependencies
+vi.mock("@lingui/react", () => ({
+  useLingui: () => ({
+    _: (descriptor: { message: string }) => descriptor.message,
+  }),
+}));
+
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useSubmitMessageFeedback: vi.fn(),
 }));
@@ -25,6 +31,7 @@ describe("useMessageFeedback", () => {
   const mockFeedbackConfig = {
     enabled: true,
     commentsEnabled: true,
+    editTimeLimitSeconds: null,
   };
 
   beforeEach(() => {
@@ -61,6 +68,9 @@ describe("useMessageFeedback", () => {
       isOpen: false,
       messageId: null,
       sentiment: null,
+      mode: "create",
+      initialComment: "",
+      error: null,
     });
   });
 
@@ -81,7 +91,7 @@ describe("useMessageFeedback", () => {
 
     const { result } = renderHook(() => useMessageFeedback());
 
-    let submitResult: boolean | undefined;
+    let submitResult: { success: boolean; errorType?: string } | undefined;
     await act(async () => {
       submitResult = await result.current.handleFeedbackSubmit(
         "message-123",
@@ -89,7 +99,7 @@ describe("useMessageFeedback", () => {
       );
     });
 
-    expect(submitResult).toBe(true);
+    expect(submitResult?.success).toBe(true);
     expect(mockMutateAsync).toHaveBeenCalledWith({
       pathParams: { messageId: "message-123" },
       body: {
@@ -110,7 +120,7 @@ describe("useMessageFeedback", () => {
 
     const { result } = renderHook(() => useMessageFeedback());
 
-    let submitResult: boolean | undefined;
+    let submitResult: { success: boolean; errorType?: string } | undefined;
     await act(async () => {
       submitResult = await result.current.handleFeedbackSubmit(
         "message-123",
@@ -119,7 +129,7 @@ describe("useMessageFeedback", () => {
       );
     });
 
-    expect(submitResult).toBe(true);
+    expect(submitResult?.success).toBe(true);
     expect(mockMutateAsync).toHaveBeenCalledWith({
       pathParams: { messageId: "message-123" },
       body: {
@@ -134,7 +144,7 @@ describe("useMessageFeedback", () => {
 
     const { result } = renderHook(() => useMessageFeedback());
 
-    let submitResult: boolean | undefined;
+    let submitResult: { success: boolean; errorType?: string } | undefined;
     await act(async () => {
       submitResult = await result.current.handleFeedbackSubmit(
         "message-123",
@@ -142,7 +152,7 @@ describe("useMessageFeedback", () => {
       );
     });
 
-    expect(submitResult).toBe(false);
+    expect(submitResult?.success).toBe(false);
   });
 
   it("should open feedback dialog", () => {
@@ -156,6 +166,9 @@ describe("useMessageFeedback", () => {
       isOpen: true,
       messageId: "message-123",
       sentiment: "positive",
+      mode: "create",
+      initialComment: "",
+      error: null,
     });
   });
 
@@ -178,6 +191,9 @@ describe("useMessageFeedback", () => {
       isOpen: false,
       messageId: null,
       sentiment: null,
+      mode: "create",
+      initialComment: "",
+      error: null,
     });
   });
 

@@ -98,6 +98,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedback: {
           enabled: false,
           commentsEnabled: false,
+          editTimeLimitSeconds: null,
         },
       });
     });

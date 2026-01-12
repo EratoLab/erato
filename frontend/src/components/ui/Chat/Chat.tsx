@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -7,6 +8,7 @@ import { useChatActions } from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
+import { chatMessagesQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
@@ -292,6 +294,9 @@ export const Chat = ({
     canEditFeedback,
   } = useMessageFeedback();
 
+  // Query client for cache invalidation after feedback submission
+  const queryClient = useQueryClient();
+
   // Restore placeholder definitions for props passed to MessageList
   const hasOlderMessages = false;
   const loadOlderMessages = () => {
@@ -410,18 +415,27 @@ export const Chat = ({
                   action.type === "like" ? "positive" : "negative";
 
                 // Submit feedback immediately
-                const success = await handleFeedbackSubmit(
+                const result = await handleFeedbackSubmit(
                   action.messageId,
                   sentiment,
                 );
 
+                // Invalidate chat messages cache to update feedback state
+                if (result.success && currentChatId) {
+                  void queryClient.invalidateQueries({
+                    queryKey: chatMessagesQuery({
+                      pathParams: { chatId: currentChatId },
+                    }).queryKey,
+                  });
+                }
+
                 // If comments are enabled, open the dialog for additional comment
-                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- commentsEnabled is a runtime config flag
-                if (success && feedbackConfig.commentsEnabled) {
+                 
+                if (result.success && feedbackConfig.commentsEnabled) {
                   openFeedbackDialog(action.messageId, sentiment);
                 }
 
-                return success;
+                return result.success;
               }
               return handleMessageAction(action);
             }}
