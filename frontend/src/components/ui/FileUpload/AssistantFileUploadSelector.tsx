@@ -9,6 +9,7 @@ import { t } from "@lingui/core/macro";
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
+import { CloudLinkError } from "@/hooks/files/errors";
 import { useStandaloneFileUpload } from "@/hooks/files/useStandaloneFileUpload";
 import { fetchLinkFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useCloudProvidersFeature } from "@/providers/FeatureConfigProvider";
@@ -17,6 +18,7 @@ import { FileTypeUtil } from "@/utils/fileTypes";
 import { CloudFilePickerModal } from "./CloudFilePickerModal";
 import { FileSourceSelector } from "./FileSourceSelector";
 import { FileUploadButton } from "./FileUploadButton";
+import { Alert } from "../Feedback/Alert";
 
 import type {
   CloudProvider,
@@ -79,13 +81,23 @@ export const AssistantFileUploadSelector: React.FC<
   const [selectedCloudProvider, setSelectedCloudProvider] =
     useState<CloudProvider | null>(null);
   const [isLinkingFiles, setIsLinkingFiles] = useState(false);
+  const [cloudLinkError, setCloudLinkError] = useState<Error | null>(null);
 
   // Use standalone file upload hook
   const {
     uploadFiles,
     isUploading: isUploadingFiles,
     error: uploadHookError,
+    clearError: clearUploadError,
   } = useStandaloneFileUpload();
+
+  const combinedError =
+    externalUploadError ?? cloudLinkError ?? uploadHookError;
+
+  const clearErrors = useCallback(() => {
+    setCloudLinkError(null);
+    clearUploadError();
+  }, [clearUploadError]);
 
   // Setup react-dropzone for disk file selection when cloud providers are available
   const {
@@ -95,6 +107,7 @@ export const AssistantFileUploadSelector: React.FC<
   } = useDropzone({
     onDrop: (acceptedFiles) => {
       if (acceptedFiles.length > 0) {
+        clearErrors();
         void (async () => {
           const uploadedFiles = await uploadFiles(acceptedFiles);
           if (uploadedFiles && onFilesUploaded) {
@@ -118,15 +131,19 @@ export const AssistantFileUploadSelector: React.FC<
 
   // Handle disk file selection
   const handleSelectDisk = useCallback(() => {
-    // Trigger the file picker dialog
+    clearErrors();
     openDiskFilePicker();
-  }, [openDiskFilePicker]);
+  }, [openDiskFilePicker, clearErrors]);
 
   // Handle cloud provider selection
-  const handleSelectCloud = useCallback((provider: CloudProvider) => {
-    setSelectedCloudProvider(provider);
-    setCloudPickerOpen(true);
-  }, []);
+  const handleSelectCloud = useCallback(
+    (provider: CloudProvider) => {
+      clearErrors();
+      setSelectedCloudProvider(provider);
+      setCloudPickerOpen(true);
+    },
+    [clearErrors],
+  );
 
   // Handle cloud file selection
   const handleCloudFilesSelected = useCallback(
@@ -176,7 +193,7 @@ export const AssistantFileUploadSelector: React.FC<
           setSelectedCloudProvider(null);
         } catch (error) {
           console.error("Error linking cloud files for assistant:", error);
-          // TODO: Show error toast/notification to user
+          setCloudLinkError(new CloudLinkError());
         } finally {
           setIsLinkingFiles(false);
         }
@@ -193,6 +210,17 @@ export const AssistantFileUploadSelector: React.FC<
 
   return (
     <div className="relative">
+      {combinedError && (
+        <Alert
+          type="error"
+          dismissible
+          onDismiss={clearErrors}
+          className="mb-2"
+        >
+          {combinedError.message}
+        </Alert>
+      )}
+
       {/* File upload button - show selector if cloud providers available */}
       {hasCloudProviders ? (
         <>
@@ -226,7 +254,7 @@ export const AssistantFileUploadSelector: React.FC<
           disabled={disabled || isProcessing}
           performFileUpload={uploadFiles}
           isUploading={isProcessing}
-          uploadError={externalUploadError ?? uploadHookError}
+          uploadError={null}
           onFilesUploaded={onFilesUploaded}
         />
       )}
