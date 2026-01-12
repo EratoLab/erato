@@ -27,6 +27,7 @@ import type {
 import type {
   UserProfile,
   FileUploadItem,
+  MessageFeedback,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 
@@ -56,6 +57,7 @@ export interface ChatMessageProps {
   onMessageAction: (action: MessageAction) => Promise<boolean>;
   userProfile?: UserProfile;
   onFilePreview?: (file: FileUploadItem) => void;
+  onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
 }
 
 export const ChatMessage = memo(function ChatMessage({
@@ -69,6 +71,7 @@ export const ChatMessage = memo(function ChatMessage({
   controlsContext,
   onMessageAction,
   onFilePreview,
+  onViewFeedback,
 }: ChatMessageProps) {
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
@@ -199,6 +202,7 @@ export const ChatMessage = memo(function ChatMessage({
                   showFeedbackButtons={messageFeedbackConfig.enabled}
                   showFeedbackComments={messageFeedbackConfig.commentsEnabled}
                   initialFeedback={message.feedback}
+                  onViewFeedback={onViewFeedback}
                 />
               ) : (
                 <Controls

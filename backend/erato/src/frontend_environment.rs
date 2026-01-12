@@ -23,6 +23,8 @@ const FRONTEND_ENV_KEY_SHAREPOINT_ENABLED: &str = "SHAREPOINT_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_ENABLED: &str = "MESSAGE_FEEDBACK_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_COMMENTS_ENABLED: &str =
     "MESSAGE_FEEDBACK_COMMENTS_ENABLED";
+const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS: &str =
+    "MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -85,6 +87,12 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
         FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_COMMENTS_ENABLED.to_string(),
         Value::Bool(config.frontend.enable_message_feedback_comments),
     );
+    if let Some(limit) = config.frontend.message_feedback_edit_time_limit_seconds {
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS.to_string(),
+            Value::Number(limit.into()),
+        );
+    }
 
     // Inject pairs from frontend.additional_environment
     for (key, value) in &config.additional_frontend_environment() {

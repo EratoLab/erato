@@ -50,6 +50,7 @@ describe("FeatureConfigProvider", () => {
       sharepointEnabled: false,
       messageFeedbackEnabled: false,
       messageFeedbackCommentsEnabled: false,
+      messageFeedbackEditTimeLimitSeconds: null,
     });
   });
 
@@ -97,6 +98,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedback: {
           enabled: false,
           commentsEnabled: false,
+          editTimeLimitSeconds: null,
         },
       });
     });
@@ -386,6 +388,7 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         enabled: false,
         commentsEnabled: false,
+        editTimeLimitSeconds: null,
       });
     });
 
@@ -405,6 +408,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: true,
         messageFeedbackCommentsEnabled: false,
+        messageFeedbackEditTimeLimitSeconds: null,
       });
 
       const { result } = renderHook(() => useMessageFeedbackFeature(), {
@@ -413,6 +417,7 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current.enabled).toBe(true);
       expect(result.current.commentsEnabled).toBe(false);
+      expect(result.current.editTimeLimitSeconds).toBe(null);
     });
 
     it("should return message feedback config with comments enabled when both are enabled", () => {
@@ -431,6 +436,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: true,
         messageFeedbackCommentsEnabled: true,
+        messageFeedbackEditTimeLimitSeconds: null,
       });
 
       const { result } = renderHook(() => useMessageFeedbackFeature(), {
@@ -439,6 +445,7 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current.enabled).toBe(true);
       expect(result.current.commentsEnabled).toBe(true);
+      expect(result.current.editTimeLimitSeconds).toBe(null);
     });
   });
 

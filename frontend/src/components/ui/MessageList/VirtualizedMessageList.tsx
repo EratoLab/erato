@@ -5,6 +5,7 @@ import { MessageItem } from "./MessageItem";
 import type {
   UserProfile,
   FileUploadItem,
+  MessageFeedback,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type {
@@ -28,6 +29,7 @@ interface VirtualizedMessageListProps {
   controlsContext: MessageControlsContext;
   onMessageAction: (action: MessageAction) => Promise<boolean>;
   onFilePreview?: (file: FileUploadItem) => void;
+  onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
 }
 
 export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
@@ -43,6 +45,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   controlsContext,
   onMessageAction,
   onFilePreview,
+  onViewFeedback,
 }) => {
   // Message renderer
   const renderMessages = useCallback(() => {
@@ -64,6 +67,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
           controlsContext={controlsContext}
           onMessageAction={onMessageAction}
           onFilePreview={onFilePreview}
+          onViewFeedback={onViewFeedback}
           className={getMessageClassName(isNew)}
         />
       );
@@ -81,6 +85,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
     controlsContext,
     onMessageAction,
     onFilePreview,
+    onViewFeedback,
   ]);
 
   return (

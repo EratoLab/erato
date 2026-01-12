@@ -2,7 +2,7 @@
 
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 import { Button } from "../Controls/Button";
 import { Textarea } from "../Input/Textarea";
@@ -16,6 +16,9 @@ interface FeedbackCommentDialogProps {
   onClose: () => void;
   onSubmit: (comment: string) => void | Promise<void>;
   sentiment: "positive" | "negative" | null;
+  mode?: "create" | "edit";
+  initialComment?: string;
+  error?: string | null;
 }
 
 export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
@@ -23,24 +26,38 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
   onClose,
   onSubmit,
   sentiment,
+  mode = "create",
+  initialComment = "",
+  error = null,
 }) => {
-  const [comment, setComment] = useState("");
+  const [comment, setComment] = useState(initialComment);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sync comment state when dialog opens or initialComment changes (e.g., switching to edit mode)
+  useEffect(() => {
+    if (isOpen) {
+      setComment(initialComment);
+    }
+  }, [isOpen, initialComment]);
 
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
     try {
       await onSubmit(comment);
-      setComment(""); // Clear comment after successful submission
+      if (mode === "create") {
+        setComment(""); // Clear comment after successful submission in create mode
+      }
     } finally {
       setIsSubmitting(false);
     }
-  }, [comment, onSubmit]);
+  }, [comment, onSubmit, mode]);
 
   const handleSkip = useCallback(() => {
-    setComment(""); // Clear any entered comment
+    if (mode === "create") {
+      setComment(""); // Clear any entered comment in create mode
+    }
     onClose();
-  }, [onClose]);
+  }, [onClose, mode]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -65,6 +82,13 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
       contentClassName="max-w-lg"
     >
       <div className="space-y-4">
+        {/* Error message */}
+        {error && (
+          <div className="rounded-md bg-theme-error-bg p-3 text-sm text-theme-error-fg">
+            {error}
+          </div>
+        )}
+
         {/* Sentiment indicator */}
         <div className="flex items-center gap-2 text-sm text-theme-fg-secondary">
           {sentiment === "positive" ? (
@@ -121,12 +145,20 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
             variant="secondary"
             onClick={handleSkip}
             disabled={isSubmitting}
-            aria-label={t({
-              id: "feedback.comment.skip.aria",
-              message: "Skip adding comment",
-            })}
+            aria-label={
+              mode === "create"
+                ? t({
+                    id: "feedback.comment.skip.aria",
+                    message: "Skip adding comment",
+                  })
+                : t({ id: "Cancel", message: "Cancel" })
+            }
           >
-            <Trans id="feedback.comment.skip">Skip</Trans>
+            {mode === "create" ? (
+              <Trans id="feedback.comment.skip">Skip</Trans>
+            ) : (
+              <Trans id="Cancel">Cancel</Trans>
+            )}
           </Button>
           <Button
             variant="primary"
@@ -139,6 +171,8 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
           >
             {isSubmitting ? (
               <Trans id="feedback.comment.submitting">Submitting...</Trans>
+            ) : mode === "edit" ? (
+              <Trans id="feedback.edit.update">Update</Trans>
             ) : (
               <Trans id="feedback.comment.submit">Submit</Trans>
             )}

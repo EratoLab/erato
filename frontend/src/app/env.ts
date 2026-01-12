@@ -13,6 +13,7 @@ export type Env = {
   sharepointEnabled: boolean;
   messageFeedbackEnabled: boolean;
   messageFeedbackCommentsEnabled: boolean;
+  messageFeedbackEditTimeLimitSeconds: number | null;
 };
 
 declare global {
@@ -32,6 +33,7 @@ declare global {
     SHAREPOINT_ENABLED?: boolean;
     MESSAGE_FEEDBACK_ENABLED?: boolean;
     MESSAGE_FEEDBACK_COMMENTS_ENABLED?: boolean;
+    MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS?: number;
   }
 }
 
@@ -102,6 +104,10 @@ export const env = (): Env => {
     import.meta.env.VITE_MESSAGE_FEEDBACK_COMMENTS_ENABLED === "true"
       ? true
       : (window.MESSAGE_FEEDBACK_COMMENTS_ENABLED ?? false);
+  const messageFeedbackEditTimeLimitSeconds = import.meta.env
+    .VITE_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS
+    ? Number(import.meta.env.VITE_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS)
+    : (window.MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS ?? null);
 
   return {
     apiRootUrl,
@@ -118,5 +124,6 @@ export const env = (): Env => {
     sharepointEnabled,
     messageFeedbackEnabled,
     messageFeedbackCommentsEnabled,
+    messageFeedbackEditTimeLimitSeconds,
   };
 };

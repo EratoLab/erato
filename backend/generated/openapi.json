@@ -1263,7 +1263,7 @@
             "description": "Invalid message ID or request format"
           },
           "403": {
-            "description": "User does not have permission to submit feedback for this message"
+            "description": "User does not have permission to submit feedback for this message, or the editing time limit has been exceeded"
           },
           "404": {
             "description": "Message not found"

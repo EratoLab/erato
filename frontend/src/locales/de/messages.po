@@ -196,6 +196,7 @@ msgstr "Wird ausgewählt..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "cloudFilePicker.close"
 msgstr "Schließen"
@@ -293,7 +294,7 @@ msgstr "404 - Seite nicht gefunden"
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackCommentDialog.tsx
 msgid "feedback.comment.aria"
-msgstr ""
+msgstr "Feedback-Kommentar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackCommentDialog.tsx
@@ -302,6 +303,7 @@ msgstr "Drücken Sie Strg+Enter zum Senden"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
 msgid "feedback.comment.label"
 msgstr "Möchten Sie weitere Details hinzufügen? (optional)"
 
@@ -351,6 +353,7 @@ msgid "feedback.comment.title"
 msgstr "Kommentar hinzufügen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "feedback.dislike.active"
 msgstr "Sie fanden dies nicht hilfreich"
@@ -361,6 +364,17 @@ msgid "feedback.dislike.aria"
 msgstr "Nachricht ablehnen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.edit.update"
+msgstr "Aktualisieren"
+
+#. js-lingui-explicit-id
+#: src/hooks/chat/useMessageFeedback.ts
+msgid "feedback.error.time_limit_exceeded"
+msgstr "Das Bearbeitungsfenster ist abgelaufen. Das Feedback kann nicht mehr geändert werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "feedback.like.active"
 msgstr "Sie fanden dies hilfreich"
@@ -369,6 +383,11 @@ msgstr "Sie fanden dies hilfreich"
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "feedback.like.aria"
 msgstr "Nachricht gefällt mir"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
+msgid "feedback.view.title"
+msgstr "Ihr Feedback"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
@@ -754,6 +773,11 @@ msgstr "Budgetlimit erreicht"
 msgid "Cancel"
 msgstr "Abbrechen"
 
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "Cancel"
+msgstr "Abbrechen"
+
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Cancel action"
 msgstr "Aktion abbrechen"
@@ -891,6 +915,11 @@ msgid "Drop files to upload..."
 msgstr "Dateien zum Hochladen loslassen..."
 
 #: src/pages/AssistantsListPage.tsx
+msgid "Edit"
+msgstr "Bearbeiten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
 msgid "Edit"
 msgstr "Bearbeiten"
 

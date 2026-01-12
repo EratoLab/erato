@@ -75,6 +75,10 @@ chat_provider_ids = ["test-token-limit"]
 # # Whether to enable the comment text field in message feedback (default: false)
 # # Requires enable_message_feedback to be true to have any effect
 # enable_message_feedback_comments = false
+# # Time limit in seconds for editing message feedback after creation (default: unlimited)
+# # When set, feedback can only be edited within this time window after creation
+# # Example: message_feedback_edit_time_limit_seconds = 300  # 5 minutes
+# message_feedback_edit_time_limit_seconds = 300
 
 # Experimental assistants feature configuration
 # [experimental_assistants]

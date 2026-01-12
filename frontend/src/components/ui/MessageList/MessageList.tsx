@@ -19,6 +19,7 @@ import type {
   ChatMessagesResponse,
   UserProfile,
   FileUploadItem,
+  MessageFeedback,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type {
@@ -144,6 +145,11 @@ export interface MessageListProps {
   onFilePreview?: (file: FileUploadItem) => void;
 
   /**
+   * Callback to view existing feedback
+   */
+  onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
+
+  /**
    * Whether the chat is currently transitioning between sessions
    */
   isTransitioning?: boolean;
@@ -265,6 +271,7 @@ export const MessageList = memo<MessageListProps>(
     virtualizationThreshold = 30,
     onScrollToBottomRef,
     onFilePreview,
+    onViewFeedback,
     isTransitioning,
     emptyStateComponent,
   }) => {
@@ -479,6 +486,7 @@ export const MessageList = memo<MessageListProps>(
               controlsContext={controlsContext}
               onMessageAction={onMessageAction}
               onFilePreview={onFilePreview}
+              onViewFeedback={onViewFeedback}
             />
           ) : (
             <StandardMessageList
@@ -494,6 +502,7 @@ export const MessageList = memo<MessageListProps>(
               controlsContext={controlsContext}
               onMessageAction={onMessageAction}
               onFilePreview={onFilePreview}
+              onViewFeedback={onViewFeedback}
             />
           )}
         </div>

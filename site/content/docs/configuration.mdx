@@ -140,6 +140,24 @@ enable_message_feedback = true
 enable_message_feedback_comments = true
 ```
 
+#### `frontend.message_feedback_edit_time_limit_seconds`
+
+Time limit in seconds for editing message feedback after creation. When set, feedback can only be edited within this time window after being submitted. When not set (default), feedback can be edited at any time.
+
+This setting only affects editing existing feedback - initial feedback submission is always allowed regardless of this setting. Attempts to edit feedback after the time limit will return a 403 Forbidden error.
+
+**Default value:** `None` (unlimited editing)
+
+**Type:** `integer` (seconds)
+
+**Example**
+
+```toml
+[frontend]
+enable_message_feedback = true
+message_feedback_edit_time_limit_seconds = 300  # 5 minutes
+```
+
 #### `frontend.additional_environment`
 
 Additional values to inject into the frontend environment as global variables.

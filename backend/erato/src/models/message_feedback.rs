@@ -23,6 +23,7 @@ pub async fn submit_or_update_feedback(
     comment: Option<String>,
     langfuse_client: &LangfuseClient,
     enable_feedback: bool,
+    edit_time_limit_seconds: Option<u64>,
 ) -> Result<message_feedbacks::Model, Report> {
     // First, get the message to find which chat it belongs to
     let message = Messages::find_by_id(*message_id)
@@ -61,6 +62,17 @@ pub async fn submit_or_update_feedback(
         .await?;
 
     let feedback = if let Some(existing) = existing_feedback {
+        // Check if editing time limit has been exceeded
+        if let Some(time_limit_seconds) = edit_time_limit_seconds {
+            let elapsed = chrono::Utc::now().signed_duration_since(existing.created_at);
+            if elapsed.num_seconds() > time_limit_seconds as i64 {
+                return Err(eyre!(
+                    "Feedback editing time limit exceeded. Feedback can only be edited within {} seconds of creation.",
+                    time_limit_seconds
+                ));
+            }
+        }
+
         // Update existing feedback
         let mut active_feedback: message_feedbacks::ActiveModel = existing.into();
         active_feedback.sentiment = Set(sentiment.clone());

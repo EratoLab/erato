@@ -7,6 +7,7 @@ import { ChatMessage } from "../Chat/ChatMessage";
 import type {
   UserProfile,
   FileUploadItem,
+  MessageFeedback,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type {
@@ -29,6 +30,7 @@ export interface MessageItemProps {
   onMessageAction: (action: MessageAction) => Promise<boolean>;
   className?: string;
   onFilePreview?: (file: FileUploadItem) => void;
+  onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
 }
 
 // Memoized message item component with custom comparison
@@ -47,6 +49,7 @@ export const MessageItem = memo<MessageItemProps>(
     onMessageAction,
     className,
     onFilePreview,
+    onViewFeedback,
   }) => {
     // Debug message loading state
     // useEffect(() => {
@@ -90,6 +93,7 @@ export const MessageItem = memo<MessageItemProps>(
           controlsContext={controlsContext}
           onMessageAction={onMessageAction}
           onFilePreview={onFilePreview}
+          onViewFeedback={onViewFeedback}
         />
       </div>
     );

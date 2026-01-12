@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -7,6 +8,7 @@ import { useChatActions } from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
+import { chatMessagesQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
@@ -15,6 +17,7 @@ import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
+import { FeedbackViewDialog } from "../Feedback/FeedbackViewDialog";
 import { MessageList } from "../MessageList/MessageList";
 
 import type { ChatMessage } from "../MessageList/MessageList";
@@ -276,15 +279,36 @@ export const Chat = ({
     closePreviewModal,
   } = useFilePreviewModal();
 
+  // Query client for cache invalidation after feedback submission
+  const queryClient = useQueryClient();
+
+  // Callback to invalidate chat messages cache after feedback submission
+  const handleFeedbackSuccess = useCallback(() => {
+    if (currentChatId) {
+      void queryClient.invalidateQueries({
+        queryKey: chatMessagesQuery({
+          pathParams: { chatId: currentChatId },
+        }).queryKey,
+      });
+    }
+  }, [queryClient, currentChatId]);
+
   // Use the message feedback hook for all feedback-related logic
   const {
     feedbackDialogState,
+    feedbackViewDialogState,
     feedbackConfig,
     handleFeedbackSubmit,
     closeFeedbackDialog,
+    closeFeedbackViewDialog,
     handleFeedbackDialogSubmit,
     openFeedbackDialog,
-  } = useMessageFeedback();
+    openFeedbackViewDialog,
+    switchToEditMode,
+    canEditFeedback,
+  } = useMessageFeedback({
+    onFeedbackSuccess: handleFeedbackSuccess,
+  });
 
   // Restore placeholder definitions for props passed to MessageList
   const hasOlderMessages = false;
@@ -403,18 +427,18 @@ export const Chat = ({
                 const sentiment =
                   action.type === "like" ? "positive" : "negative";
 
-                // Submit feedback immediately
-                const success = await handleFeedbackSubmit(
+                // Submit feedback immediately (cache invalidation handled by onFeedbackSuccess callback)
+                const result = await handleFeedbackSubmit(
                   action.messageId,
                   sentiment,
                 );
 
                 // If comments are enabled, open the dialog for additional comment
-                if (success && feedbackConfig.commentsEnabled) {
+                if (result.success && feedbackConfig.commentsEnabled) {
                   openFeedbackDialog(action.messageId, sentiment);
                 }
 
-                return success;
+                return result.success;
               }
               return handleMessageAction(action);
             }}
@@ -423,6 +447,7 @@ export const Chat = ({
             virtualizationThreshold={30}
             onScrollToBottomRef={handleMessageListRef}
             onFilePreview={openPreviewModal}
+            onViewFeedback={openFeedbackViewDialog}
             emptyStateComponent={emptyStateComponent}
           />
 
@@ -459,12 +484,28 @@ export const Chat = ({
         file={fileToPreview}
       />
 
+      {/* Render the Feedback View Dialog */}
+      <FeedbackViewDialog
+        isOpen={feedbackViewDialogState.isOpen}
+        onClose={closeFeedbackViewDialog}
+        onEdit={switchToEditMode}
+        feedback={feedbackViewDialogState.feedback}
+        canEdit={
+          feedbackViewDialogState.feedback
+            ? canEditFeedback(feedbackViewDialogState.feedback)
+            : false
+        }
+      />
+
       {/* Render the Feedback Comment Dialog */}
       <FeedbackCommentDialog
         isOpen={feedbackDialogState.isOpen}
         onClose={closeFeedbackDialog}
         onSubmit={handleFeedbackDialogSubmit}
         sentiment={feedbackDialogState.sentiment}
+        mode={feedbackDialogState.mode}
+        initialComment={feedbackDialogState.initialComment}
+        error={feedbackDialogState.error}
       />
     </div>
   );

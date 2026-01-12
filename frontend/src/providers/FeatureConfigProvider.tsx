@@ -59,6 +59,8 @@ interface MessageFeedbackFeatureConfig {
   enabled: boolean;
   /** Whether comment text field is enabled in feedback dialog */
   commentsEnabled: boolean;
+  /** Time limit in seconds for editing feedback after creation (null = unlimited) */
+  editTimeLimitSeconds: number | null;
 }
 
 /**
@@ -135,6 +137,7 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
       messageFeedback: {
         enabled: environment.messageFeedbackEnabled,
         commentsEnabled: environment.messageFeedbackCommentsEnabled,
+        editTimeLimitSeconds: environment.messageFeedbackEditTimeLimitSeconds,
       },
     };
   }, []); // Empty deps - only compute once
