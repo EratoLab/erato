@@ -13,6 +13,7 @@ use crate::test_utils::{
     JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
     setup_mock_llm_server,
 };
+use std::time::Duration;
 
 /// Helper function to create a chat with a message and return the chat_id and assistant message_id.
 async fn create_chat_with_message(server: &TestServer) -> (String, String) {
@@ -434,4 +435,252 @@ async fn test_invalid_sentiment_rejected(pool: Pool<Postgres>) {
 
     // Should be unprocessable entity (422) due to deserialization failure
     response.assert_status(axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+/// Test updating feedback within the configured time limit.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// Verifies that feedback can be updated when within the configured edit time limit.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_update_feedback_within_time_limit(pool: Pool<Postgres>) {
+    // Set up mock LLM server
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+
+    // Add time limit configuration
+    app_config.frontend.message_feedback_edit_time_limit_seconds = Some(60);
+
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let (_chat_id, message_id) = create_chat_with_message(&server).await;
+
+    // Submit initial feedback
+    let feedback_body = json!({
+        "sentiment": "positive",
+        "comment": "Initial feedback"
+    });
+
+    let response = server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&feedback_body)
+        .await;
+
+    response.assert_status_ok();
+
+    // Wait a short time (well within the 60-second limit)
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Update the feedback - should succeed
+    let updated_feedback_body = json!({
+        "sentiment": "negative",
+        "comment": "Changed my mind quickly"
+    });
+
+    let response = server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&updated_feedback_body)
+        .await;
+
+    response.assert_status_ok();
+    let updated_feedback: serde_json::Value = response.json();
+    assert_eq!(updated_feedback["sentiment"], "negative");
+    assert_eq!(updated_feedback["comment"], "Changed my mind quickly");
+}
+
+/// Test updating feedback after the configured time limit has expired.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// Verifies that feedback cannot be updated after the configured edit time limit,
+/// returning 403 FORBIDDEN.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_update_feedback_after_time_limit(pool: Pool<Postgres>) {
+    // Set up mock LLM server
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+
+    // Add very short time limit for testing (2 seconds)
+    app_config.frontend.message_feedback_edit_time_limit_seconds = Some(2);
+
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let (_chat_id, message_id) = create_chat_with_message(&server).await;
+
+    // Submit initial feedback
+    let feedback_body = json!({
+        "sentiment": "positive",
+        "comment": "Initial feedback"
+    });
+
+    let response = server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&feedback_body)
+        .await;
+
+    response.assert_status_ok();
+
+    // Wait longer than the time limit (2 seconds + buffer)
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    // Try to update the feedback - should fail with 403 FORBIDDEN
+    let updated_feedback_body = json!({
+        "sentiment": "negative",
+        "comment": "Trying to change after time limit"
+    });
+
+    let response = server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&updated_feedback_body)
+        .await;
+
+    response.assert_status(axum::http::StatusCode::FORBIDDEN);
+}
+
+/// Test updating feedback when no time limit is configured (default behavior).
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// Verifies that when no time limit is configured, feedback can always be updated
+/// regardless of how much time has passed (backward compatibility).
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_update_feedback_no_time_limit(pool: Pool<Postgres>) {
+    // Set up mock LLM server without time limit (default behavior)
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    // Note: message_feedback_edit_time_limit_seconds is None by default
+
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let (_chat_id, message_id) = create_chat_with_message(&server).await;
+
+    // Submit initial feedback
+    let feedback_body = json!({
+        "sentiment": "positive",
+        "comment": "Initial feedback"
+    });
+
+    let response = server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&feedback_body)
+        .await;
+
+    response.assert_status_ok();
+
+    // Wait a reasonable amount of time
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    // Update the feedback - should still succeed since no limit is configured
+    let updated_feedback_body = json!({
+        "sentiment": "negative",
+        "comment": "Changed my mind after waiting"
+    });
+
+    let response = server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&updated_feedback_body)
+        .await;
+
+    response.assert_status_ok();
+    let updated_feedback: serde_json::Value = response.json();
+    assert_eq!(updated_feedback["sentiment"], "negative");
+    assert_eq!(updated_feedback["comment"], "Changed my mind after waiting");
+}
+
+/// Test that creating new feedback is not affected by the time limit.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+///
+/// # Test Behavior
+/// Verifies that the time limit only affects updates, not initial feedback creation.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_create_feedback_ignores_time_limit(pool: Pool<Postgres>) {
+    // Set up mock LLM server
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+
+    // Add time limit configuration
+    app_config.frontend.message_feedback_edit_time_limit_seconds = Some(5);
+
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let (_chat_id, message_id) = create_chat_with_message(&server).await;
+
+    // Create feedback - should always work regardless of time limit setting
+    let feedback_body = json!({
+        "sentiment": "positive",
+        "comment": "New feedback creation"
+    });
+
+    let response = server
+        .put(&format!("/api/v1beta/messages/{}/feedback", message_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&feedback_body)
+        .await;
+
+    response.assert_status_ok();
+    let feedback: serde_json::Value = response.json();
+    assert_eq!(feedback["sentiment"], "positive");
+    assert_eq!(feedback["comment"], "New feedback creation");
 }

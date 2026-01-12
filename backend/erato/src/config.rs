@@ -875,6 +875,12 @@ pub struct FrontendConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub enable_message_feedback_comments: bool,
+
+    // Time limit in seconds for editing message feedback after creation.
+    // When set, feedback can only be edited within this time window.
+    // When not set (default), feedback can be edited at any time.
+    #[serde(default)]
+    pub message_feedback_edit_time_limit_seconds: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]

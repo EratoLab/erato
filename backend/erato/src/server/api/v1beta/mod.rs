@@ -894,7 +894,7 @@ impl ChatMessage {
         (status = OK, body = MessageFeedback, description = "Feedback successfully submitted or updated"),
         (status = BAD_REQUEST, description = "Invalid message ID or request format"),
         (status = NOT_FOUND, description = "Message not found"),
-        (status = FORBIDDEN, description = "User does not have permission to submit feedback for this message"),
+        (status = FORBIDDEN, description = "User does not have permission to submit feedback for this message, or the editing time limit has been exceeded"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error while submitting feedback")
     ),
     security(
@@ -926,13 +926,18 @@ pub async fn submit_message_feedback(
         request.comment,
         &app_state.langfuse_client,
         app_state.config.integrations.langfuse.enable_feedback,
+        app_state
+            .config
+            .frontend
+            .message_feedback_edit_time_limit_seconds,
     )
     .await
     .map_err(|e| {
         let error_msg = e.to_string().to_lowercase();
         if error_msg.contains("not found") {
             StatusCode::NOT_FOUND
-        } else if error_msg.contains("not authorized") {
+        } else if error_msg.contains("not authorized") || error_msg.contains("time limit exceeded")
+        {
             StatusCode::FORBIDDEN
         } else {
             log_internal_server_error(e)
