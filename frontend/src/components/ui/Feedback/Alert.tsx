@@ -30,6 +30,8 @@ interface AlertProps {
   className?: string;
   /** Icon to display (if not provided, uses default for type) */
   icon?: ReactNode;
+  /** Test ID for e2e testing */
+  "data-testid"?: string;
 }
 
 /**
@@ -43,6 +45,7 @@ export const Alert: React.FC<AlertProps> = ({
   onDismiss,
   className = "",
   icon,
+  "data-testid": dataTestId,
 }) => {
   // Define styles for different alert types
   const styles = {
@@ -78,6 +81,7 @@ export const Alert: React.FC<AlertProps> = ({
         className,
       )}
       role="alert"
+      data-testid={dataTestId}
     >
       <div className="mt-0.5 shrink-0">{alertIcon}</div>
 

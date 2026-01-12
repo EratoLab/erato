@@ -612,6 +612,11 @@ msgstr "Image Preview"
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
+msgid "upload.error.cloudLink"
+msgstr "Failed to link cloud file. Please try again."
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
 msgstr "File is too large. Please reload the page and try a smaller file."
 
@@ -917,7 +922,7 @@ msgstr "Error loading theme:"
 msgid "Error Output"
 msgstr "Error Output"
 
-#: src/components/ui/FileUpload/FileUploadButton.tsx
+#: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Error:"
 msgstr "Error:"
 
@@ -1290,7 +1295,7 @@ msgstr "Upload Files"
 msgid "Uploaded Files"
 msgstr "Uploaded Files"
 
-#: src/components/ui/FileUpload/FileUploadButton.tsx
+#: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Uploading file"
 msgstr "Uploading file"
 

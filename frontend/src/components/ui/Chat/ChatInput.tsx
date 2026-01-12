@@ -139,19 +139,16 @@ export const ChatInput = ({
   } = useTokenManagement();
 
   // Use our modernized file upload hook
-  const {
-    uploadedFiles: _uploadedFiles,
-    // Not using the error directly
-    error: _uploadError,
-  } = useFileDropzone({
-    acceptedFileTypes,
-    multiple: maxFiles > 1,
-    maxFiles,
-    disabled,
-    onFilesUploaded: handleFileAttachments,
-    // Pass chatId to the hook
-    chatId: chatId,
-  });
+  const { uploadedFiles: _uploadedFiles, error: uploadError } = useFileDropzone(
+    {
+      acceptedFileTypes,
+      multiple: maxFiles > 1,
+      maxFiles,
+      disabled,
+      onFilesUploaded: handleFileAttachments,
+      chatId: chatId,
+    },
+  );
 
   // Use the custom hook for chat input handling
   const {
@@ -163,6 +160,14 @@ export const ChatInput = ({
     handleRemoveAllFiles,
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
+
+  useEffect(() => {
+    if (uploadError) {
+      setFileError(uploadError.message);
+    } else {
+      setFileError(null);
+    }
+  }, [uploadError, setFileError]);
 
   // Log attachedFiles received from the hook
   logger.log("Received attachedFiles from hook:", attachedFiles);
@@ -318,6 +323,7 @@ export const ChatInput = ({
           dismissible
           onDismiss={() => setFileError(null)}
           className="mb-2"
+          data-testid="file-upload-error"
         >
           {fileError}
         </Alert>

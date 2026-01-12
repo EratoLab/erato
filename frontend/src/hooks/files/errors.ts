@@ -29,6 +29,19 @@ export class UploadUnknownError extends Error {
   }
 }
 
+export class CloudLinkError extends Error {
+  constructor() {
+    super(
+      t({
+        id: "upload.error.cloudLink",
+        message: "Failed to link cloud file. Please try again.",
+      }),
+    );
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    this.name = "CloudLinkError";
+  }
+}
+
 /**
  * Checks if an error indicates a file upload was too large.
  *
@@ -76,4 +89,7 @@ export function isUploadTooLarge(error: unknown): error is ApiUploadFileError {
   return false;
 }
 
-export type UploadError = UploadTooLargeError | UploadUnknownError;
+export type UploadError =
+  | UploadTooLargeError
+  | UploadUnknownError
+  | CloudLinkError;

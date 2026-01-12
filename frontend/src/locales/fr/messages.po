@@ -612,6 +612,11 @@ msgstr "Aperçu de l'image"
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
+msgid "upload.error.cloudLink"
+msgstr "Échec de la liaison du fichier cloud. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
 msgstr ""
 
@@ -917,7 +922,7 @@ msgstr "Erreur lors du chargement du thème :"
 msgid "Error Output"
 msgstr "Sortie d'erreur"
 
-#: src/components/ui/FileUpload/FileUploadButton.tsx
+#: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Error:"
 msgstr "Erreur :"
 
@@ -1290,7 +1295,7 @@ msgstr "Télécharger des fichiers"
 msgid "Uploaded Files"
 msgstr "Fichiers téléchargés"
 
-#: src/components/ui/FileUpload/FileUploadButton.tsx
+#: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Uploading file"
 msgstr "Téléchargement du fichier"
 

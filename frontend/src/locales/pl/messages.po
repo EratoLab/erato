@@ -612,6 +612,11 @@ msgstr "Podgląd obrazu"
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
+msgid "upload.error.cloudLink"
+msgstr "Nie udało się połączyć pliku z chmury. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
 msgstr ""
 
@@ -917,7 +922,7 @@ msgstr "Błąd wczytywania motywu:"
 msgid "Error Output"
 msgstr "Wyjście błędu"
 
-#: src/components/ui/FileUpload/FileUploadButton.tsx
+#: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Error:"
 msgstr "Błąd:"
 
@@ -1290,7 +1295,7 @@ msgstr "Prześlij pliki"
 msgid "Uploaded Files"
 msgstr "Przesłane pliki"
 
-#: src/components/ui/FileUpload/FileUploadButton.tsx
+#: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Uploading file"
 msgstr "Przesyłanie pliku"
 
