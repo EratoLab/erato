@@ -50,10 +50,24 @@ interface FeedbackViewDialogState {
  *   handleFeedbackSubmit,
  *   closeFeedbackDialog,
  *   handleFeedbackDialogSubmit
- * } = useMessageFeedback();
+ * } = useMessageFeedback({
+ *   onFeedbackSuccess: (messageId) => {
+ *     // Invalidate cache, refresh data, etc.
+ *   }
+ * });
  * ```
  */
-export function useMessageFeedback() {
+
+interface UseMessageFeedbackOptions {
+  /**
+   * Callback invoked after any successful feedback submission (initial or dialog).
+   * Useful for cache invalidation or other side effects.
+   */
+  onFeedbackSuccess?: (messageId: string) => void;
+}
+
+export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
+  const { onFeedbackSuccess } = options;
   const { _ } = useLingui();
 
   // Get feature configuration
@@ -110,6 +124,8 @@ export function useMessageFeedback() {
         logger.log(
           `Feedback submitted successfully for message ${messageId}: ${sentiment}`,
         );
+        // Notify caller of successful submission for cache invalidation
+        onFeedbackSuccess?.(messageId);
         return { success: true };
       } catch (error) {
         logger.log(
@@ -130,7 +146,7 @@ export function useMessageFeedback() {
         return { success: false, errorType: "unknown" };
       }
     },
-    [submitFeedbackMutation],
+    [submitFeedbackMutation, onFeedbackSuccess],
   );
 
   /**

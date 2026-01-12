@@ -279,6 +279,20 @@ export const Chat = ({
     closePreviewModal,
   } = useFilePreviewModal();
 
+  // Query client for cache invalidation after feedback submission
+  const queryClient = useQueryClient();
+
+  // Callback to invalidate chat messages cache after feedback submission
+  const handleFeedbackSuccess = useCallback(() => {
+    if (currentChatId) {
+      void queryClient.invalidateQueries({
+        queryKey: chatMessagesQuery({
+          pathParams: { chatId: currentChatId },
+        }).queryKey,
+      });
+    }
+  }, [queryClient, currentChatId]);
+
   // Use the message feedback hook for all feedback-related logic
   const {
     feedbackDialogState,
@@ -292,10 +306,9 @@ export const Chat = ({
     openFeedbackViewDialog,
     switchToEditMode,
     canEditFeedback,
-  } = useMessageFeedback();
-
-  // Query client for cache invalidation after feedback submission
-  const queryClient = useQueryClient();
+  } = useMessageFeedback({
+    onFeedbackSuccess: handleFeedbackSuccess,
+  });
 
   // Restore placeholder definitions for props passed to MessageList
   const hasOlderMessages = false;
@@ -414,23 +427,13 @@ export const Chat = ({
                 const sentiment =
                   action.type === "like" ? "positive" : "negative";
 
-                // Submit feedback immediately
+                // Submit feedback immediately (cache invalidation handled by onFeedbackSuccess callback)
                 const result = await handleFeedbackSubmit(
                   action.messageId,
                   sentiment,
                 );
 
-                // Invalidate chat messages cache to update feedback state
-                if (result.success && currentChatId) {
-                  void queryClient.invalidateQueries({
-                    queryKey: chatMessagesQuery({
-                      pathParams: { chatId: currentChatId },
-                    }).queryKey,
-                  });
-                }
-
                 // If comments are enabled, open the dialog for additional comment
-                 
                 if (result.success && feedbackConfig.commentsEnabled) {
                   openFeedbackDialog(action.messageId, sentiment);
                 }

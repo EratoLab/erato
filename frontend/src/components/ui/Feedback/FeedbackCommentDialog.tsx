@@ -2,7 +2,7 @@
 
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 import { Button } from "../Controls/Button";
 import { Textarea } from "../Input/Textarea";
@@ -32,6 +32,13 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
 }) => {
   const [comment, setComment] = useState(initialComment);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sync comment state when dialog opens or initialComment changes (e.g., switching to edit mode)
+  useEffect(() => {
+    if (isOpen) {
+      setComment(initialComment);
+    }
+  }, [isOpen, initialComment]);
 
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
