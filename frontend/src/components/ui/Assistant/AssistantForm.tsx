@@ -11,6 +11,8 @@ import {
 import { FormField } from "@/components/ui/Input/FormField";
 import { Input } from "@/components/ui/Input/Input";
 import { Textarea } from "@/components/ui/Input/Textarea";
+import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
+import { useFilePreviewModal } from "@/hooks/ui";
 
 import type {
   ChatModel,
@@ -113,6 +115,13 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const [touched, setTouched] = useState<
     Partial<Record<keyof AssistantFormData, boolean>>
   >({});
+
+  const {
+    isPreviewModalOpen,
+    fileToPreview,
+    openPreviewModal,
+    closePreviewModal,
+  } = useFilePreviewModal();
 
   // Validation
   const validateField = useCallback(
@@ -401,6 +410,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
                 onRemoveAllFiles={() =>
                   setFormData((prev) => ({ ...prev, files: [] }))
                 }
+                onFilePreview={openPreviewModal}
                 showFileTypes
               />
             )}
@@ -435,6 +445,12 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
           </Button>
         </div>
       </div>
+
+      <FilePreviewModal
+        isOpen={isPreviewModalOpen}
+        onClose={closePreviewModal}
+        file={fileToPreview}
+      />
     </form>
   );
 };
