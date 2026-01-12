@@ -33,6 +33,8 @@ interface ExtendedMessageControlsProps extends MessageControlsProps {
   /** Initial feedback state from API (existing feedback for this message) */
   initialFeedback?: MessageFeedback;
   hasToolCalls?: boolean;
+  /** Callback when user clicks on filled feedback button to view/edit existing feedback */
+  onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
 }
 
 export const DefaultMessageControls = ({
@@ -51,6 +53,7 @@ export const DefaultMessageControls = ({
   onToggleRawMarkdown,
   initialFeedback,
   hasToolCalls = false,
+  onViewFeedback,
 }: ExtendedMessageControlsProps) => {
   const [isCopied, setIsCopied] = useState(false);
 
@@ -80,6 +83,17 @@ export const DefaultMessageControls = ({
 
   const handleAction = useCallback(
     async (actionType: "copy" | "edit" | "like" | "dislike") => {
+      // If feedback already exists and user clicks the filled button, show view dialog
+      if (
+        (actionType === "like" || actionType === "dislike") &&
+        feedbackState !== null &&
+        initialFeedback &&
+        onViewFeedback
+      ) {
+        onViewFeedback(messageId, initialFeedback);
+        return;
+      }
+
       const success = await onAction({
         type: actionType,
         messageId,
@@ -98,7 +112,7 @@ export const DefaultMessageControls = ({
         logger.log(`Action '${actionType}' failed for message ${messageId}`);
       }
     },
-    [onAction, messageId],
+    [onAction, messageId, feedbackState, initialFeedback, onViewFeedback],
   );
 
   // Ensure safeCreatedAt is always a Date object
@@ -207,7 +221,7 @@ export const DefaultMessageControls = ({
                     })
                   : t({ id: "feedback.like.aria", message: "Like message" })
               }
-              disabled={feedbackState !== null}
+              disabled={false}
               className={feedbackState === "liked" ? "opacity-100" : ""}
             />
             <Button
@@ -239,7 +253,7 @@ export const DefaultMessageControls = ({
                       message: "Dislike message",
                     })
               }
-              disabled={feedbackState !== null}
+              disabled={false}
               className={feedbackState === "disliked" ? "opacity-100" : ""}
             />
           </>

@@ -104,8 +104,10 @@ export const env = (): Env => {
     import.meta.env.VITE_MESSAGE_FEEDBACK_COMMENTS_ENABLED === "true"
       ? true
       : (window.MESSAGE_FEEDBACK_COMMENTS_ENABLED ?? false);
-  const messageFeedbackEditTimeLimitSeconds =
-    window.MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS ?? null;
+  const messageFeedbackEditTimeLimitSeconds = import.meta.env
+    .VITE_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS
+    ? Number(import.meta.env.VITE_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS)
+    : (window.MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS ?? null);
 
   return {
     apiRootUrl,

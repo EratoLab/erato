@@ -15,6 +15,7 @@ import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
+import { FeedbackViewDialog } from "../Feedback/FeedbackViewDialog";
 import { MessageList } from "../MessageList/MessageList";
 
 import type { ChatMessage } from "../MessageList/MessageList";
@@ -279,11 +280,16 @@ export const Chat = ({
   // Use the message feedback hook for all feedback-related logic
   const {
     feedbackDialogState,
+    feedbackViewDialogState,
     feedbackConfig,
     handleFeedbackSubmit,
     closeFeedbackDialog,
+    closeFeedbackViewDialog,
     handleFeedbackDialogSubmit,
     openFeedbackDialog,
+    openFeedbackViewDialog,
+    switchToEditMode,
+    canEditFeedback,
   } = useMessageFeedback();
 
   // Restore placeholder definitions for props passed to MessageList
@@ -410,6 +416,7 @@ export const Chat = ({
                 );
 
                 // If comments are enabled, open the dialog for additional comment
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- commentsEnabled is a runtime config flag
                 if (success && feedbackConfig.commentsEnabled) {
                   openFeedbackDialog(action.messageId, sentiment);
                 }
@@ -423,6 +430,7 @@ export const Chat = ({
             virtualizationThreshold={30}
             onScrollToBottomRef={handleMessageListRef}
             onFilePreview={openPreviewModal}
+            onViewFeedback={openFeedbackViewDialog}
             emptyStateComponent={emptyStateComponent}
           />
 
@@ -459,12 +467,28 @@ export const Chat = ({
         file={fileToPreview}
       />
 
+      {/* Render the Feedback View Dialog */}
+      <FeedbackViewDialog
+        isOpen={feedbackViewDialogState.isOpen}
+        onClose={closeFeedbackViewDialog}
+        onEdit={switchToEditMode}
+        feedback={feedbackViewDialogState.feedback}
+        canEdit={
+          feedbackViewDialogState.feedback
+            ? canEditFeedback(feedbackViewDialogState.feedback)
+            : false
+        }
+      />
+
       {/* Render the Feedback Comment Dialog */}
       <FeedbackCommentDialog
         isOpen={feedbackDialogState.isOpen}
         onClose={closeFeedbackDialog}
         onSubmit={handleFeedbackDialogSubmit}
         sentiment={feedbackDialogState.sentiment}
+        mode={feedbackDialogState.mode}
+        initialComment={feedbackDialogState.initialComment}
+        error={feedbackDialogState.error}
       />
     </div>
   );

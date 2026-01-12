@@ -3,6 +3,7 @@ import { MessageItem } from "./MessageItem";
 import type {
   UserProfile,
   FileUploadItem,
+  MessageFeedback,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type {
@@ -25,6 +26,7 @@ interface StandardMessageListProps {
   controlsContext: MessageControlsContext;
   onMessageAction: (action: MessageAction) => Promise<boolean>;
   onFilePreview?: (file: FileUploadItem) => void;
+  onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
 }
 
 export const StandardMessageList: React.FC<StandardMessageListProps> = ({
@@ -40,6 +42,7 @@ export const StandardMessageList: React.FC<StandardMessageListProps> = ({
   controlsContext,
   onMessageAction,
   onFilePreview,
+  onViewFeedback,
 }) => {
   return (
     <>
@@ -61,6 +64,7 @@ export const StandardMessageList: React.FC<StandardMessageListProps> = ({
             controlsContext={controlsContext}
             onMessageAction={onMessageAction}
             onFilePreview={onFilePreview}
+            onViewFeedback={onViewFeedback}
             className={getMessageClassName(isNew)}
           />
         );

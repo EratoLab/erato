@@ -196,6 +196,7 @@ msgstr "Selecting..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "cloudFilePicker.close"
 msgstr "Close"
@@ -302,6 +303,7 @@ msgstr "Press Ctrl+Enter to submit"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
 msgid "feedback.comment.label"
 msgstr "Would you like to add more details? (optional)"
 
@@ -351,6 +353,7 @@ msgid "feedback.comment.title"
 msgstr "Add a comment"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "feedback.dislike.active"
 msgstr "You found this unhelpful"
@@ -361,6 +364,17 @@ msgid "feedback.dislike.aria"
 msgstr "Dislike message"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.edit.update"
+msgstr "Update"
+
+#. js-lingui-explicit-id
+#: src/hooks/chat/useMessageFeedback.ts
+msgid "feedback.error.time_limit_exceeded"
+msgstr "The editing window has expired. Feedback can no longer be modified."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "feedback.like.active"
 msgstr "You found this helpful"
@@ -369,6 +383,11 @@ msgstr "You found this helpful"
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "feedback.like.aria"
 msgstr "Like message"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
+msgid "feedback.view.title"
+msgstr "Your Feedback"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
@@ -749,6 +768,11 @@ msgstr "Budget Limit Reached"
 msgid "Cancel"
 msgstr "Cancel"
 
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "Cancel"
+msgstr "Cancel"
+
 #: src/components/ui/Modal/ConfirmationDialog.tsx
 msgid "Cancel action"
 msgstr "Cancel action"
@@ -886,6 +910,11 @@ msgid "Drop files to upload..."
 msgstr "Drop files to upload..."
 
 #: src/pages/AssistantsListPage.tsx
+msgid "Edit"
+msgstr "Edit"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
 msgid "Edit"
 msgstr "Edit"
 
