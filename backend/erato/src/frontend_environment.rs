@@ -11,6 +11,9 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+// Default maximum body limit in bytes (20MB) - must match DEFAULT_MAX_BODY_LIMIT_BYTES in server/api/v1beta/mod.rs
+const DEFAULT_MAX_BODY_LIMIT_BYTES: u64 = 20 * 1024 * 1024;
+
 // The following keys are aligned with the `env.ts` of the frontend.
 // If you change the keys, you must also update them in the frontend.
 const FRONTEND_ENV_KEY_API_ROOT_URL: &str = "API_ROOT_URL";
@@ -25,6 +28,7 @@ const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_COMMENTS_ENABLED: &str =
     "MESSAGE_FEEDBACK_COMMENTS_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS: &str =
     "MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS";
+const FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES: &str = "MAX_UPLOAD_SIZE_BYTES";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -93,6 +97,14 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
             Value::Number(limit.into()),
         );
     }
+    // Always inject max upload size (use configured value or default)
+    let max_upload_size = config
+        .max_upload_size_bytes()
+        .unwrap_or(DEFAULT_MAX_BODY_LIMIT_BYTES);
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES.to_string(),
+        Value::Number(max_upload_size.into()),
+    );
 
     // Inject pairs from frontend.additional_environment
     for (key, value) in &config.additional_frontend_environment() {

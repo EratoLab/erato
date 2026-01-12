@@ -674,7 +674,7 @@ msgstr "Nie udało się połączyć pliku z chmury. Spróbuj ponownie."
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
-msgstr ""
+msgstr "Plik jest za duży. Maksymalny rozmiar: {maxSize}."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts

@@ -8,13 +8,17 @@ import { t } from "@lingui/core/macro";
 import { useEffect, useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
+import { UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import {
   fetchLinkFile,
   useCreateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { useCloudProvidersFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useCloudProvidersFeature,
+  useUploadFeature,
+} from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { CloudFilePickerModal } from "./CloudFilePickerModal";
@@ -86,6 +90,9 @@ export const FileUploadWithTokenCheck: React.FC<
   const { availableProviders } = useCloudProvidersFeature();
   const hasCloudProviders = availableProviders.length > 0;
 
+  // Get upload size limit for client-side validation
+  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+
   // Cloud picker state
   const [cloudPickerOpen, setCloudPickerOpen] = useState(false);
   const [selectedCloudProvider, setSelectedCloudProvider] =
@@ -117,13 +124,29 @@ export const FileUploadWithTokenCheck: React.FC<
     disabled,
   });
 
+  // Get error setter from upload store for dropzone validation errors
+  const { setError } = useFileUploadStore();
+
   // Setup react-dropzone for disk file selection when cloud providers are available
   const {
     open: openDiskFilePicker,
     getRootProps,
     getInputProps,
   } = useDropzone({
-    onDrop: (acceptedFiles) => {
+    onDrop: (acceptedFiles, rejectedFiles) => {
+      // Handle file size rejections
+      if (rejectedFiles.length > 0) {
+        const hasSizeError = rejectedFiles.some((rejection) =>
+          rejection.errors.some((e) => e.code === "file-too-large"),
+        );
+
+        if (hasSizeError) {
+          setError(new UploadTooLargeError(maxSizeFormatted));
+          return;
+        }
+      }
+
+      // Upload accepted files
       if (acceptedFiles.length > 0) {
         void uploadFiles(acceptedFiles);
       }
@@ -134,6 +157,7 @@ export const FileUploadWithTokenCheck: React.FC<
         : undefined,
     multiple,
     disabled: disabled || isUploading,
+    maxSize: maxSizeBytes, // Add client-side size validation
     noClick: true, // We'll manually open via the selector
     noKeyboard: true,
   });

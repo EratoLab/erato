@@ -674,7 +674,7 @@ msgstr "Fehler beim Verknüpfen der Cloud-Datei. Bitte versuchen Sie es erneut."
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
-msgstr "Datei ist zu groß"
+msgstr "Datei ist zu groß. Maximale Größe: {maxSize}."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts

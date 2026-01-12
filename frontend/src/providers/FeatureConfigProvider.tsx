@@ -12,6 +12,10 @@ import type { ReactNode } from "react";
 interface UploadFeatureConfig {
   /** Whether file upload functionality is enabled */
   enabled: boolean;
+  /** Maximum upload size in bytes */
+  maxSizeBytes: number;
+  /** Human-readable max upload size (e.g., "10 MB", "2 GB") */
+  maxSizeFormatted: string;
 }
 
 /**
@@ -84,6 +88,21 @@ interface FeatureConfig {
 const FeatureConfigContext = createContext<FeatureConfig | null>(null);
 
 /**
+ * Formats bytes into a human-readable string (MB or GB)
+ * @param bytes - The number of bytes to format
+ * @returns Formatted string like "10 MB" or "2.5 GB"
+ */
+function formatBytes(bytes: number): string {
+  const GB = 1024 * 1024 * 1024;
+  const MB = 1024 * 1024;
+
+  if (bytes >= GB) {
+    return `${(bytes / GB).toFixed(1)} GB`;
+  }
+  return `${Math.round(bytes / MB)} MB`;
+}
+
+/**
  * Provider component that makes feature configuration available throughout the app.
  *
  * This provider reads environment configuration once during initialization and provides
@@ -121,6 +140,8 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
     return {
       upload: {
         enabled: !environment.disableUpload,
+        maxSizeBytes: environment.maxUploadSizeBytes,
+        maxSizeFormatted: formatBytes(environment.maxUploadSizeBytes),
       },
       chatInput: {
         autofocus: !environment.disableChatInputAutofocus,

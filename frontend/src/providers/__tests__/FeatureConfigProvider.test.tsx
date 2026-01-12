@@ -51,6 +51,7 @@ describe("FeatureConfigProvider", () => {
       messageFeedbackEnabled: false,
       messageFeedbackCommentsEnabled: false,
       messageFeedbackEditTimeLimitSeconds: null,
+      maxUploadSizeBytes: 20971520, // 20 MB - matches backend default
     });
   });
 
@@ -82,6 +83,8 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         upload: {
           enabled: true,
+          maxSizeBytes: 20971520,
+          maxSizeFormatted: "20 MB",
         },
         chatInput: {
           autofocus: true,
@@ -119,6 +122,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        maxUploadSizeBytes: 20971520,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -146,6 +150,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        maxUploadSizeBytes: 20971520,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -173,6 +178,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        maxUploadSizeBytes: 20971520,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -200,6 +206,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        maxUploadSizeBytes: 20971520,
       });
 
       const { result } = renderHook(() => useFeatureConfig(), {
@@ -234,6 +241,8 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current).toEqual({
         enabled: true,
+        maxSizeBytes: 20971520,
+        maxSizeFormatted: "20 MB",
       });
     });
 
@@ -253,6 +262,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        maxUploadSizeBytes: 20971520,
       });
 
       const { result } = renderHook(() => useUploadFeature(), {
@@ -304,6 +314,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        maxUploadSizeBytes: 20971520,
       });
 
       const { result } = renderHook(() => useChatInputFeature(), {
@@ -355,6 +366,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        maxUploadSizeBytes: 20971520,
       });
 
       const { result } = renderHook(() => useAuthFeature(), {
@@ -409,6 +421,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: true,
         messageFeedbackCommentsEnabled: false,
         messageFeedbackEditTimeLimitSeconds: null,
+        maxUploadSizeBytes: 20971520,
       });
 
       const { result } = renderHook(() => useMessageFeedbackFeature(), {
@@ -437,6 +450,7 @@ describe("FeatureConfigProvider", () => {
         messageFeedbackEnabled: true,
         messageFeedbackCommentsEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
+        maxUploadSizeBytes: 20971520,
       });
 
       const { result } = renderHook(() => useMessageFeedbackFeature(), {
