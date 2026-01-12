@@ -674,7 +674,7 @@ msgstr "Failed to link cloud file. Please try again."
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
-msgstr "File is too large. Please reload the page and try a smaller file."
+msgstr "File is too large. Maximum size: {maxSize}."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts

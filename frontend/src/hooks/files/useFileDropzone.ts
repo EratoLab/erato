@@ -82,7 +82,11 @@ export function useFileDropzone({
   // onSilentChatCreated,
 }: UseFileDropzoneProps): UseFileDropzoneResult {
   // Check if upload feature is enabled
-  const { enabled: uploadEnabled } = useUploadFeature();
+  const {
+    enabled: uploadEnabled,
+    maxSizeBytes,
+    maxSizeFormatted,
+  } = useUploadFeature();
 
   // Use the Zustand store for state management
   const {
@@ -108,24 +112,27 @@ export function useFileDropzone({
     },
   });
 
-  // Calculate max file size based on accepted file types
+  // Calculate max file size based on backend limit and accepted file types
   const getMaxFileSize = useCallback((): number => {
-    if (!acceptedFileTypes.length) {
-      return Infinity; // No size limit if all file types are allowed
+    // Start with the backend-configured max upload size
+    let maxSize = maxSizeBytes;
+
+    // If specific file types are accepted, check their limits too
+    if (acceptedFileTypes.length > 0) {
+      const typeMaxSize = acceptedFileTypes.reduce((max, type) => {
+        const typeConfig = FILE_TYPES[type];
+        if (!typeConfig.enabled || !typeConfig.maxSize) return max;
+        return Math.max(max, typeConfig.maxSize);
+      }, 0);
+
+      // Use the smaller of backend limit and file type limit
+      if (typeMaxSize > 0) {
+        maxSize = Math.min(maxSize, typeMaxSize);
+      }
     }
 
-    // Find the largest max size among the accepted file types
-    return acceptedFileTypes.reduce((maxSize, type) => {
-      const typeConfig = FILE_TYPES[type];
-      if (!typeConfig.enabled) return maxSize;
-
-      // If no max size specified for this type, don't limit
-      if (!typeConfig.maxSize) return Infinity;
-
-      // Return the larger of current max or this type's max
-      return Math.max(maxSize, typeConfig.maxSize);
-    }, 0);
-  }, [acceptedFileTypes]);
+    return maxSize;
+  }, [acceptedFileTypes, maxSizeBytes]);
 
   // Function to upload files
   const uploadFiles = useCallback(
@@ -186,7 +193,7 @@ export function useFileDropzone({
 
           // Check for fetch-like error with status
           if (isUploadTooLarge(uploadError)) {
-            throw new UploadTooLargeError();
+            throw new UploadTooLargeError(maxSizeFormatted);
           }
 
           // Fallback to unknown error
@@ -236,11 +243,21 @@ export function useFileDropzone({
 
       // Handle rejections first
       if (rejectedFiles.length > 0) {
+        // Check if any rejection is due to file size
+        const hasSizeError = rejectedFiles.some((rejection) =>
+          rejection.errors.some((e) => e.code === "file-too-large"),
+        );
+
+        if (hasSizeError) {
+          setError(new UploadTooLargeError(maxSizeFormatted));
+          return;
+        }
+
+        // Other rejection reasons
         const errorMessages = rejectedFiles.map((rejection) => {
           const { file, errors } = rejection;
           return `${file.name}: ${errors.map((e) => e.message).join(", ")}`;
         });
-
         setError(new UploadUnknownError(errorMessages.join("; ")));
         return;
       }
@@ -250,7 +267,7 @@ export function useFileDropzone({
         void uploadFiles(acceptedFiles);
       }
     },
-    [disabled, isUploading, uploadFiles, setError],
+    [disabled, isUploading, uploadFiles, setError, maxSizeFormatted],
   );
 
   // Create the dropzone hook instance

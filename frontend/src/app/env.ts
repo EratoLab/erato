@@ -14,6 +14,7 @@ export type Env = {
   messageFeedbackEnabled: boolean;
   messageFeedbackCommentsEnabled: boolean;
   messageFeedbackEditTimeLimitSeconds: number | null;
+  maxUploadSizeBytes: number;
 };
 
 declare global {
@@ -34,8 +35,12 @@ declare global {
     MESSAGE_FEEDBACK_ENABLED?: boolean;
     MESSAGE_FEEDBACK_COMMENTS_ENABLED?: boolean;
     MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS?: number;
+    MAX_UPLOAD_SIZE_BYTES?: number;
   }
 }
+
+// Default maximum body limit in bytes (20MB) - must match backend default
+const DEFAULT_MAX_BODY_LIMIT_BYTES = 20 * 1024 * 1024;
 
 export const env = (): Env => {
   const apiRootUrl = import.meta.env.VITE_API_ROOT_URL ?? window.API_ROOT_URL;
@@ -108,6 +113,9 @@ export const env = (): Env => {
     .VITE_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS
     ? Number(import.meta.env.VITE_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS)
     : (window.MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS ?? null);
+  const maxUploadSizeBytes = import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES
+    ? Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES)
+    : (window.MAX_UPLOAD_SIZE_BYTES ?? DEFAULT_MAX_BODY_LIMIT_BYTES);
 
   return {
     apiRootUrl,
@@ -125,5 +133,6 @@ export const env = (): Env => {
     messageFeedbackEnabled,
     messageFeedbackCommentsEnabled,
     messageFeedbackEditTimeLimitSeconds,
+    maxUploadSizeBytes,
   };
 };

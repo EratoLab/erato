@@ -674,7 +674,7 @@ msgstr "Échec de la liaison du fichier cloud. Veuillez réessayer."
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
-msgstr ""
+msgstr "Le fichier est trop volumineux. Taille maximale : {maxSize}."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts

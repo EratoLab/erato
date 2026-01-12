@@ -1,16 +1,17 @@
-import { t } from "@lingui/core/macro";
+import { i18n } from "@lingui/core";
 
 import type { UploadFileError as ApiUploadFileError } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 export class UploadTooLargeError extends Error {
-  constructor() {
-    super(
-      t({
-        id: "upload.error.tooLarge",
-        message:
-          "File is too large. Please reload the page and try a smaller file.",
-      }),
-    );
+  constructor(maxSizeFormatted?: string) {
+    // Use the runtime API with string ID for i18n
+    // The message catalog is populated by lingui extract from other source files
+    // When maxSizeFormatted is not provided, use a fallback indicator
+    const message = i18n._("upload.error.tooLarge", {
+      maxSize: maxSizeFormatted ?? "—",
+    });
+
+    super(message);
     // eslint-disable-next-line lingui/no-unlocalized-strings
     this.name = "UploadTooLargeError";
   }
@@ -18,11 +19,7 @@ export class UploadTooLargeError extends Error {
 
 export class UploadUnknownError extends Error {
   constructor(message?: string) {
-    const baseMessage = t({
-      id: "upload.error.unknown",
-      message:
-        "An unknown error occurred during upload. Please reload the page and try again.",
-    });
+    const baseMessage = i18n._("upload.error.unknown");
     super(message ? `${baseMessage}: ${message}` : baseMessage);
     // eslint-disable-next-line lingui/no-unlocalized-strings
     this.name = "UploadUnknownError";
@@ -31,12 +28,7 @@ export class UploadUnknownError extends Error {
 
 export class CloudLinkError extends Error {
   constructor() {
-    super(
-      t({
-        id: "upload.error.cloudLink",
-        message: "Failed to link cloud file. Please try again.",
-      }),
-    );
+    super(i18n._("upload.error.cloudLink"));
     // eslint-disable-next-line lingui/no-unlocalized-strings
     this.name = "CloudLinkError";
   }
