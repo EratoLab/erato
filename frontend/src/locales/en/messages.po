@@ -636,11 +636,6 @@ msgstr "Failed to link cloud file. Please try again."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
-msgid "upload.error.tooLarge"
-msgstr "File is too large. Please reload the page and try a smaller file."
-
-#. js-lingui-explicit-id
-#: src/hooks/files/errors.ts
 msgid "upload.error.unknown"
 msgstr "An unknown error occurred during upload. Please reload the page and try again."
 
@@ -987,6 +982,10 @@ msgstr "Failed to update assistant. Please try again."
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
 msgstr "File"
+
+#: src/hooks/files/errors.ts
+msgid "File is too large (maximum: {maxSize}). Please reload the page and try a smaller file."
+msgstr "File is too large (maximum: {maxSize}). Please reload the page and try a smaller file."
 
 #: src/pages/SearchPage.tsx
 msgid "Found {resultsCount} results"

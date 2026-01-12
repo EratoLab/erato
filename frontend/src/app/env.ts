@@ -14,6 +14,7 @@ export type Env = {
   messageFeedbackEnabled: boolean;
   messageFeedbackCommentsEnabled: boolean;
   messageFeedbackEditTimeLimitSeconds: number | null;
+  maxUploadSizeBytes: number | null;
 };
 
 declare global {
@@ -34,6 +35,7 @@ declare global {
     MESSAGE_FEEDBACK_ENABLED?: boolean;
     MESSAGE_FEEDBACK_COMMENTS_ENABLED?: boolean;
     MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS?: number;
+    MAX_UPLOAD_SIZE_BYTES?: number;
   }
 }
 
@@ -108,6 +110,9 @@ export const env = (): Env => {
     .VITE_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS
     ? Number(import.meta.env.VITE_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS)
     : (window.MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS ?? null);
+  const maxUploadSizeBytes = import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES
+    ? Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES)
+    : (window.MAX_UPLOAD_SIZE_BYTES ?? null);
 
   return {
     apiRootUrl,
@@ -125,5 +130,6 @@ export const env = (): Env => {
     messageFeedbackEnabled,
     messageFeedbackCommentsEnabled,
     messageFeedbackEditTimeLimitSeconds,
+    maxUploadSizeBytes,
   };
 };

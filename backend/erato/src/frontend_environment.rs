@@ -25,6 +25,7 @@ const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_COMMENTS_ENABLED: &str =
     "MESSAGE_FEEDBACK_COMMENTS_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS: &str =
     "MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS";
+const FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES: &str = "MAX_UPLOAD_SIZE_BYTES";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -91,6 +92,12 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
         env.additional_environment.insert(
             FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS.to_string(),
             Value::Number(limit.into()),
+        );
+    }
+    if let Some(max_size) = config.max_upload_size_bytes() {
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES.to_string(),
+            Value::Number(max_size.into()),
         );
     }
 

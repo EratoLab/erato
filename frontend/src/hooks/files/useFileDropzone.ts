@@ -81,8 +81,8 @@ export function useFileDropzone({
   chatId = null,
   // onSilentChatCreated,
 }: UseFileDropzoneProps): UseFileDropzoneResult {
-  // Check if upload feature is enabled
-  const { enabled: uploadEnabled } = useUploadFeature();
+  // Check if upload feature is enabled and get max file size
+  const { enabled: uploadEnabled, maxSizeFormatted } = useUploadFeature();
 
   // Use the Zustand store for state management
   const {
@@ -186,7 +186,7 @@ export function useFileDropzone({
 
           // Check for fetch-like error with status
           if (isUploadTooLarge(uploadError)) {
-            throw new UploadTooLargeError();
+            throw new UploadTooLargeError(maxSizeFormatted ?? undefined);
           }
 
           // Fallback to unknown error

@@ -4,6 +4,7 @@ import {
   fetchUploadFile,
   type UploadFileVariables,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useUploadFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 import {
@@ -49,6 +50,7 @@ interface UseStandaloneFileUploadResult {
 export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<UploadError | null>(null);
+  const { maxSizeFormatted } = useUploadFeature();
 
   const clearError = useCallback(() => {
     setError(null);
@@ -92,7 +94,7 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
 
           // Check for file too large error
           if (isUploadTooLarge(uploadError)) {
-            throw new UploadTooLargeError();
+            throw new UploadTooLargeError(maxSizeFormatted ?? undefined);
           }
 
           // Fallback to unknown error

@@ -636,11 +636,6 @@ msgstr "Error al vincular el archivo en la nube. Por favor, inténtelo de nuevo.
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
-msgid "upload.error.tooLarge"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/hooks/files/errors.ts
 msgid "upload.error.unknown"
 msgstr ""
 
@@ -987,6 +982,10 @@ msgstr ""
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
 msgstr "Archivo"
+
+#: src/hooks/files/errors.ts
+msgid "File is too large (maximum: {maxSize}). Please reload the page and try a smaller file."
+msgstr ""
 
 #: src/pages/SearchPage.tsx
 msgid "Found {resultsCount} results"

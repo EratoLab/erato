@@ -12,6 +12,10 @@ import type { ReactNode } from "react";
 interface UploadFeatureConfig {
   /** Whether file upload functionality is enabled */
   enabled: boolean;
+  /** Maximum upload size in bytes (null if not configured) */
+  maxSizeBytes: number | null;
+  /** Human-readable maximum upload size (e.g., "10 MB", "2 GB") */
+  maxSizeFormatted: string | null;
 }
 
 /**
@@ -118,9 +122,24 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
     //   availableProviders.push("googledrive");
     // }
 
+    // Format max upload size for display
+    const formatUploadSize = (bytes: number | null): string | null => {
+      if (bytes === null) return null;
+      
+      const mb = bytes / (1024 * 1024);
+      const gb = bytes / (1024 * 1024 * 1024);
+      
+      if (gb >= 1) {
+        return `${gb.toFixed(gb >= 10 ? 0 : 1)} GB`;
+      }
+      return `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`;
+    };
+
     return {
       upload: {
         enabled: !environment.disableUpload,
+        maxSizeBytes: environment.maxUploadSizeBytes,
+        maxSizeFormatted: formatUploadSize(environment.maxUploadSizeBytes),
       },
       chatInput: {
         autofocus: !environment.disableChatInputAutofocus,

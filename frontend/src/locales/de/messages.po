@@ -636,11 +636,6 @@ msgstr "Fehler beim Verknüpfen der Cloud-Datei. Bitte versuchen Sie es erneut."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
-msgid "upload.error.tooLarge"
-msgstr "Datei ist zu groß"
-
-#. js-lingui-explicit-id
-#: src/hooks/files/errors.ts
 msgid "upload.error.unknown"
 msgstr "Unbekannter Fehler beim Hochladen"
 
@@ -987,6 +982,10 @@ msgstr "Fehler beim Aktualisieren des Assistenten. Bitte versuchen Sie es erneut
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
 msgstr "Datei"
+
+#: src/hooks/files/errors.ts
+msgid "File is too large (maximum: {maxSize}). Please reload the page and try a smaller file."
+msgstr ""
 
 #: src/pages/SearchPage.tsx
 msgid "Found {resultsCount} results"

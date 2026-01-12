@@ -3,13 +3,10 @@ import { t } from "@lingui/core/macro";
 import type { UploadFileError as ApiUploadFileError } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 export class UploadTooLargeError extends Error {
-  constructor() {
+  constructor(maxFileSize?: string) {
+    const maxSize = maxFileSize ?? "unknown";
     super(
-      t({
-        id: "upload.error.tooLarge",
-        message:
-          "File is too large. Please reload the page and try a smaller file.",
-      }),
+      t`File is too large (maximum: ${maxSize}). Please reload the page and try a smaller file.`,
     );
     // eslint-disable-next-line lingui/no-unlocalized-strings
     this.name = "UploadTooLargeError";
