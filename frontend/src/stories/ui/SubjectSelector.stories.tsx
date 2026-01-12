@@ -242,3 +242,35 @@ export const AllGranted: Story = {
     })),
   },
 };
+
+/**
+ * Filtered to show only users (with subjectTypeFilter prop)
+ * Uses the new filter prop to show only users from the full list
+ */
+export const FilteredUsersOnly: Story = {
+  render: (args) => <SubjectSelectorStory {...args} />,
+  args: {
+    availableSubjects: mockOrganizationMembers,
+    selectedIds: [],
+    onToggleSubject: (subject) => console.log("Toggled:", subject),
+    isLoading: false,
+    disabled: false,
+    subjectTypeFilter: "user",
+  },
+};
+
+/**
+ * Filtered to show only groups (with subjectTypeFilter prop)
+ * Uses the new filter prop to show only groups from the full list
+ */
+export const FilteredGroupsOnly: Story = {
+  render: (args) => <SubjectSelectorStory {...args} />,
+  args: {
+    availableSubjects: mockOrganizationMembers,
+    selectedIds: [],
+    onToggleSubject: (subject) => console.log("Toggled:", subject),
+    isLoading: false,
+    disabled: false,
+    subjectTypeFilter: "group",
+  },
+};

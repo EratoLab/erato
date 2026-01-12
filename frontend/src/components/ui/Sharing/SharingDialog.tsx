@@ -3,6 +3,7 @@ import { useLingui } from "@lingui/react";
 import { useState, useCallback, useMemo, useEffect } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { useShareGrants, useOrganizationMembers } from "@/hooks/sharing";
@@ -10,6 +11,7 @@ import { useShareGrants, useOrganizationMembers } from "@/hooks/sharing";
 import { ShareGrantsList } from "./ShareGrantsList";
 import { SubjectSelector } from "./SubjectSelector";
 
+import type { SubjectTypeFilter } from "./SubjectSelector";
 import type { OrganizationMember } from "@/types/sharing";
 
 interface SharingDialogProps {
@@ -40,6 +42,9 @@ export function SharingDialog({
   >([]);
   const [successMessage, setSuccessMessage] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
+  // State for subject type toggle (users vs groups)
+  const [subjectTypeFilter, setSubjectTypeFilter] =
+    useState<SubjectTypeFilter>("user");
 
   // Fetch organization members (users and groups)
   const {
@@ -73,6 +78,12 @@ export function SharingDialog({
       return () => clearTimeout(timer);
     }
   }, [successMessage]);
+
+  // Clear selections when filter changes to avoid confusion
+  // (user wouldn't see what's selected if it's from the other type)
+  useEffect(() => {
+    setSelectedSubjects([]);
+  }, [subjectTypeFilter]);
 
   // Toggle subject selection
   // Memoized with empty deps: uses setState callback form, stable reference prevents
@@ -163,6 +174,7 @@ export function SharingDialog({
     setSelectedSubjects([]);
     setSuccessMessage("");
     setErrorMessage("");
+    setSubjectTypeFilter("user"); // Reset to default
     onClose();
   };
 
@@ -203,12 +215,38 @@ export function SharingDialog({
           <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
             {t({ id: "sharing.addPeople.title", message: "Add people" })}
           </h3>
+
+          {/* Toggle between users and groups */}
+          <div className="mb-3">
+            <SegmentedControl
+              options={[
+                {
+                  value: "user" as const,
+                  // Reuse existing translation key
+                  label: t({ id: "sharing.section.users", message: "Users" }),
+                },
+                {
+                  value: "group" as const,
+                  // Reuse existing translation key
+                  label: t({ id: "sharing.section.groups", message: "Groups" }),
+                },
+              ]}
+              value={subjectTypeFilter}
+              onChange={setSubjectTypeFilter}
+              aria-label={t({
+                id: "sharing.filter.ariaLabel",
+                message: "Filter by users or groups",
+              })}
+            />
+          </div>
+
           <SubjectSelector
             availableSubjects={availableSubjects}
             selectedIds={selectedIds}
             onToggleSubject={handleToggleSubject}
             isLoading={isLoadingMembers}
             existingGrants={grants ?? []}
+            subjectTypeFilter={subjectTypeFilter}
           />
           <Button
             variant="primary"
