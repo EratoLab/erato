@@ -503,6 +503,21 @@ msgstr "All users and groups already have access"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.allGroupsGranted"
+msgstr "All groups already have access"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.allUsersGranted"
+msgstr "All users already have access"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.noGroups"
+msgstr "No groups available"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.empty.noMembers"
 msgstr "No users or groups available"
 
@@ -510,6 +525,11 @@ msgstr "No users or groups available"
 #: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.empty.noResults"
 msgstr "No matches found"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.noUsers"
+msgstr "No users available"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SharingDialog.tsx
@@ -535,6 +555,11 @@ msgstr "Please try again or contact support if the problem persists."
 #: src/components/ui/Sharing/SharingErrorBoundary.tsx
 msgid "sharing.error.unexpected"
 msgstr "Failed to load sharing dialog"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.filter.ariaLabel"
+msgstr "Filter by users or groups"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/ShareGrantsList.tsx
@@ -579,10 +604,22 @@ msgstr "Search users and groups..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.searchPlaceholder.groups"
+msgstr "Search groups..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.searchPlaceholder.users"
+msgstr "Search users..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.section.groups"
 msgstr "Groups"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
 #: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.section.users"
 msgstr "Users"

@@ -22,6 +22,14 @@ const sortByTypeAndName = (a: OrganizationMember, b: OrganizationMember) => {
   return a.display_name.localeCompare(b.display_name);
 };
 
+// Sort alphabetically only (for single-type views)
+const sortByName = (a: OrganizationMember, b: OrganizationMember) => {
+  return a.display_name.localeCompare(b.display_name);
+};
+
+/** Filter type for subject selector */
+export type SubjectTypeFilter = "all" | "user" | "group";
+
 interface SubjectSelectorProps {
   availableSubjects: OrganizationMember[];
   selectedIds: string[];
@@ -30,6 +38,8 @@ interface SubjectSelectorProps {
   disabled?: boolean;
   className?: string;
   existingGrants?: ShareGrant[];
+  /** Filter to show only users, only groups, or all (default: "all") */
+  subjectTypeFilter?: SubjectTypeFilter;
 }
 
 /**
@@ -46,6 +56,7 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
     disabled = false,
     className = "",
     existingGrants = [],
+    subjectTypeFilter = "all",
   }) => {
     const [searchQuery, setSearchQuery] = useState("");
 
@@ -58,12 +69,23 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
       return new Set(existingGrants.map((grant) => grant.subject_id));
     }, [existingGrants]);
 
-    // Filter out subjects that already have grants
+    // Filter out subjects that already have grants and apply type filter
     const unGrantedSubjects = useMemo(() => {
-      return availableSubjects.filter(
-        (subject) => !grantedSubjectIds.has(subject.id),
-      );
-    }, [availableSubjects, grantedSubjectIds]);
+      return availableSubjects.filter((subject) => {
+        // Filter out already granted subjects
+        if (grantedSubjectIds.has(subject.id)) {
+          return false;
+        }
+        // Apply type filter
+        if (subjectTypeFilter !== "all" && subject.type !== subjectTypeFilter) {
+          return false;
+        }
+        return true;
+      });
+    }, [availableSubjects, grantedSubjectIds, subjectTypeFilter]);
+
+    // Determine sort function based on filter - no need for type grouping when showing single type
+    const sortFn = subjectTypeFilter === "all" ? sortByTypeAndName : sortByName;
 
     // Fuzzy search with user prioritization (using unGranted subjects)
     // Using module-level constants for keys and sortFn - stable references
@@ -73,18 +95,85 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
       keys: SEARCH_KEYS,
       query: deferredSearchQuery,
       threshold: 0.3,
-      sortFn: sortByTypeAndName,
+      sortFn,
     });
 
-    // Group filtered subjects by type
+    // Group filtered subjects by type (only needed for "all" view)
     const { users, groups } = useMemo(() => {
+      if (subjectTypeFilter !== "all") {
+        // When filtered, all subjects are the same type
+        return subjectTypeFilter === "user"
+          ? { users: filteredSubjects, groups: [] }
+          : { users: [], groups: filteredSubjects };
+      }
       const usersList = filteredSubjects.filter((s) => s.type === "user");
       const groupsList = filteredSubjects.filter((s) => s.type === "group");
       return { users: usersList, groups: groupsList };
-    }, [filteredSubjects]);
+    }, [filteredSubjects, subjectTypeFilter]);
 
     // Check if search is still pending (input is ahead of deferred value)
     const isSearchPending = searchQuery !== deferredSearchQuery;
+
+    // Get filter-specific labels
+    const getEmptyLabel = () => {
+      switch (subjectTypeFilter) {
+        case "user":
+          return t({
+            id: "sharing.empty.noUsers",
+            message: "No users available",
+          });
+        case "group":
+          return t({
+            id: "sharing.empty.noGroups",
+            message: "No groups available",
+          });
+        default:
+          return t({
+            id: "sharing.empty.noMembers",
+            message: "No users or groups available",
+          });
+      }
+    };
+
+    const getAllGrantedLabel = () => {
+      switch (subjectTypeFilter) {
+        case "user":
+          return t({
+            id: "sharing.empty.allUsersGranted",
+            message: "All users already have access",
+          });
+        case "group":
+          return t({
+            id: "sharing.empty.allGroupsGranted",
+            message: "All groups already have access",
+          });
+        default:
+          return t({
+            id: "sharing.empty.allGranted",
+            message: "All users and groups already have access",
+          });
+      }
+    };
+
+    const getSearchPlaceholder = () => {
+      switch (subjectTypeFilter) {
+        case "user":
+          return t({
+            id: "sharing.searchPlaceholder.users",
+            message: "Search users...",
+          });
+        case "group":
+          return t({
+            id: "sharing.searchPlaceholder.groups",
+            message: "Search groups...",
+          });
+        default:
+          return t({
+            id: "sharing.searchPlaceholder",
+            message: "Search users and groups...",
+          });
+      }
+    };
 
     // Loading state
     if (isLoading) {
@@ -98,16 +187,11 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
       );
     }
 
-    // Empty state (no subjects available)
-    if (availableSubjects.length === 0) {
+    // Empty state (no subjects available for this filter)
+    if (unGrantedSubjects.length === 0 && availableSubjects.length === 0) {
       return (
         <div className={`py-8 text-center ${className}`}>
-          <p className="text-sm text-theme-fg-muted">
-            {t({
-              id: "sharing.empty.noMembers",
-              message: "No users or groups available",
-            })}
-          </p>
+          <p className="text-sm text-theme-fg-muted">{getEmptyLabel()}</p>
         </div>
       );
     }
@@ -116,12 +200,7 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
     if (unGrantedSubjects.length === 0) {
       return (
         <div className={`py-8 text-center ${className}`}>
-          <p className="text-sm text-theme-fg-muted">
-            {t({
-              id: "sharing.empty.allGranted",
-              message: "All users and groups already have access",
-            })}
-          </p>
+          <p className="text-sm text-theme-fg-muted">{getAllGrantedLabel()}</p>
         </div>
       );
     }
@@ -135,10 +214,7 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t({
-                id: "sharing.searchPlaceholder",
-                message: "Search users and groups...",
-              })}
+              placeholder={getSearchPlaceholder()}
               disabled={disabled}
             />
             {/* Show subtle loading indicator when search is pending */}
@@ -164,12 +240,14 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
             </div>
           )}
 
-          {/* Users section */}
+          {/* Users section - show header only in "all" view */}
           {users.length > 0 && (
             <>
-              <div className="bg-theme-bg-secondary px-4 py-2 text-xs font-medium uppercase tracking-wider text-theme-fg-muted">
-                {t({ id: "sharing.section.users", message: "Users" })}
-              </div>
+              {subjectTypeFilter === "all" && (
+                <div className="bg-theme-bg-secondary px-4 py-2 text-xs font-medium uppercase tracking-wider text-theme-fg-muted">
+                  {t({ id: "sharing.section.users", message: "Users" })}
+                </div>
+              )}
               <div className="divide-y divide-theme-border">
                 {users.map((user) => (
                   <SubjectRow
@@ -184,12 +262,14 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
             </>
           )}
 
-          {/* Groups section */}
+          {/* Groups section - show header only in "all" view */}
           {groups.length > 0 && (
             <>
-              <div className="bg-theme-bg-secondary px-4 py-2 text-xs font-medium uppercase tracking-wider text-theme-fg-muted">
-                {t({ id: "sharing.section.groups", message: "Groups" })}
-              </div>
+              {subjectTypeFilter === "all" && (
+                <div className="bg-theme-bg-secondary px-4 py-2 text-xs font-medium uppercase tracking-wider text-theme-fg-muted">
+                  {t({ id: "sharing.section.groups", message: "Groups" })}
+                </div>
+              )}
               <div className="divide-y divide-theme-border">
                 {groups.map((group) => (
                   <SubjectRow

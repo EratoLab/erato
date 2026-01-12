@@ -503,6 +503,21 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.allGroupsGranted"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.allUsersGranted"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.noGroups"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.empty.noMembers"
 msgstr "Aucun utilisateur ou groupe disponible"
 
@@ -510,6 +525,11 @@ msgstr "Aucun utilisateur ou groupe disponible"
 #: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.empty.noResults"
 msgstr "Aucune correspondance trouvée"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.empty.noUsers"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SharingDialog.tsx
@@ -534,6 +554,11 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SharingErrorBoundary.tsx
 msgid "sharing.error.unexpected"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+msgid "sharing.filter.ariaLabel"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -579,10 +604,22 @@ msgstr "Rechercher des utilisateurs et groupes..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.searchPlaceholder.groups"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.searchPlaceholder.users"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
+#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.section.groups"
 msgstr "Groupes"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Sharing/SharingDialog.tsx
 #: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.section.users"
 msgstr "Utilisateurs"
