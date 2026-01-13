@@ -39,8 +39,8 @@ lol_html = "2.2.0"
 ordered-multimap = { version = "0.7.3",  features = ["serde"]}
 futures = "0.3"
 tokio-stream = { version = "0.1.17", features = ["sync"] }
-genai = { version = "0.4.0-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "1ac0f8504342d0a72641195a48f8e785fa17d4be" }
-reqwest = { version = "0.12.12", features = ["multipart"] }
+genai = { version = "0.5.1-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "d85950e5791dd8f863e751fc33cbbbbd4e768e49" }
+reqwest = { version = "0.13.1", features = ["multipart"] }
 opendal = { version = "0.52.0", features = ["services-s3", "services-azblob"] }
 
 # MS Graph API client for Sharepoint/OneDrive integration
