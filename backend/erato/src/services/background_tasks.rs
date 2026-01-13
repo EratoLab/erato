@@ -220,6 +220,15 @@ pub enum StreamingEvent {
         content: Vec<ContentPart>,
         message: ChatMessage,
     },
+    /// An error occurred during generation
+    #[serde(rename = "generation_error")]
+    GenerationError {
+        message_id: Uuid,
+        error_type: String,
+        error_message: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        retry_after: Option<u64>, // For rate limit errors, seconds to wait
+    },
     /// Stream has ended
     #[serde(rename = "stream_end")]
     StreamEnd,

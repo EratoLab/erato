@@ -39,7 +39,7 @@ import { useMessagingStore } from "./store/messagingStore";
 import { useExplicitNavigation } from "./useExplicitNavigation";
 
 import type { MessageSubmitStreamingResponseMessage } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { Message } from "@/types/chat";
+import type { Message, GenerationErrorEvent } from "@/types/chat";
 
 const logger = createLogger("HOOK", "useChatMessaging");
 
@@ -570,9 +570,9 @@ export function useChatMessaging(
           return;
         }
 
-        const responseData = JSON.parse(
-          event.data,
-        ) as MessageSubmitStreamingResponseMessage;
+        const responseData = JSON.parse(event.data) as
+          | MessageSubmitStreamingResponseMessage
+          | GenerationErrorEvent;
 
         logger.log(
           "[DEBUG_STREAMING] processStreamEvent: Received SSE event type:",
@@ -650,6 +650,29 @@ export function useChatMessaging(
             handleToolCallUpdate(responseData);
             break;
 
+          case "generation_error":
+            logger.error(
+              "[DEBUG_STREAMING] processStreamEvent: generation_error event received. Full payload:",
+              responseData,
+            );
+            {
+              const errorData = responseData as unknown as GenerationErrorEvent;
+              // Show error to user via store
+              const errorMessage = new Error(errorData.error_message);
+              errorMessage.name = errorData.error_type;
+              setError(errorMessage);
+
+              // Reset submission flag so user can retry
+              isSubmittingRef.current = false;
+              logger.log(
+                "[DEBUG_STREAMING] generation_error: isSubmittingRef.current set to false to allow retry.",
+              );
+
+              // Stop streaming state
+              resetStreaming();
+            }
+            break;
+
           default:
             logger.log(
               "[DEBUG_STREAMING] processStreamEvent: Received unhandled SSE message. Full payload:",
@@ -672,6 +695,8 @@ export function useChatMessaging(
       // External handlers (handleChatCreated, handleUserMessageSaved, etc.) are stable imports
       handleRefetchAndClear, // Added dependency
       explicitNav, // Added explicit navigation dependency
+      resetStreaming, // for generation_error handling
+      setError, // for generation_error handling
     ],
   );
 

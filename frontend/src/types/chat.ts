@@ -36,3 +36,14 @@ export interface ChatSession {
   metadata?: ChatSessionMetadata;
   assistantId?: string | null;
 }
+
+/**
+ * Event types for generation errors during message streaming
+ */
+export interface GenerationErrorEvent {
+  message_type: "generation_error";
+  message_id: string;
+  error_type: "rate_limit_exceeded" | "quota_exceeded" | "generation_failed";
+  error_message: string;
+  retry_after?: number;
+}

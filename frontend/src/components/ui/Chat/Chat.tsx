@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useChatActions } from "@/hooks/chat";
+import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
@@ -15,6 +16,7 @@ import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
+import { Alert } from "../Feedback/Alert";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
 import { FeedbackViewDialog } from "../Feedback/FeedbackViewDialog";
@@ -131,6 +133,7 @@ export const Chat = ({
     historyError: chatHistoryError,
     refetchHistory: refreshChats,
     currentChatLastModel,
+    messagingError,
   } = useChatContext();
 
   const { profile } = useProfile();
@@ -450,6 +453,23 @@ export const Chat = ({
             onViewFeedback={openFeedbackViewDialog}
             emptyStateComponent={emptyStateComponent}
           />
+
+          {/* Generation error display */}
+          {messagingError && (
+            <Alert
+              type="error"
+              dismissible
+              onDismiss={() => {
+                useMessagingStore.getState().setError(null);
+              }}
+              className="mx-2 mb-2 sm:mx-4 sm:mb-4"
+              data-testid="generation-error-alert"
+            >
+              {messagingError instanceof Error
+                ? messagingError.message
+                : String(messagingError)}
+            </Alert>
+          )}
 
           <ChatInput
             onSendMessage={handleSendMessage}

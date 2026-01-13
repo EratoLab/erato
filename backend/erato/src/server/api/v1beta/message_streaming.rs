@@ -380,6 +380,26 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             }))?;
             ("assistant_message_completed", data)
         }
+        StreamingEvent::GenerationError {
+            message_id,
+            error_type,
+            error_message,
+            retry_after,
+        } => {
+            let mut json_data = serde_json::json!({
+                "message_type": "generation_error",
+                "message_id": message_id.to_string(),
+                "error_type": error_type,
+                "error_message": error_message,
+            });
+
+            if let Some(retry) = retry_after {
+                json_data["retry_after"] = serde_json::json!(retry);
+            }
+
+            let data = serde_json::to_string(&json_data)?;
+            ("generation_error", data)
+        }
         StreamingEvent::StreamEnd => {
             let data = serde_json::to_string(&serde_json::json!({
                 "message_type": "stream_end"
@@ -1355,6 +1375,23 @@ async fn stream_generate_chat_completion<
                 Err(err) => {
                     if let genai::Error::JsonValueExt(_) = err {
                     } else {
+                        // Classify error and send event to frontend
+                        let error_str = err.to_string();
+                        let (error_type, error_message, retry_after) =
+                            classify_generation_error(&error_str);
+
+                        // Send error event to streaming task if available
+                        if let Some(task) = streaming_task {
+                            let _ = task
+                                .send_event(StreamingEvent::GenerationError {
+                                    message_id: assistant_message_id,
+                                    error_type,
+                                    error_message,
+                                    retry_after,
+                                })
+                                .await;
+                        }
+
                         let _ = tx.send(Err(err).wrap_err("Error from chat stream")).await;
                         return Err(());
                     }
@@ -2361,6 +2398,34 @@ pub async fn message_submit_sse(
     ))
 }
 
+/// Classify generation errors for frontend display
+fn classify_generation_error(error_msg: &str) -> (String, String, Option<u64>) {
+    // Check for rate limit (429)
+    if error_msg.contains("429") || error_msg.contains("Too Many Requests") {
+        return (
+            "rate_limit_exceeded".to_string(),
+            "API rate limit exceeded. Please wait a moment and try again.".to_string(),
+            Some(60), // Suggest 60 second retry
+        );
+    }
+
+    // Check for quota exceeded
+    if error_msg.contains("quota") || error_msg.contains("insufficient_quota") {
+        return (
+            "quota_exceeded".to_string(),
+            "API quota exceeded. Please contact your administrator.".to_string(),
+            None,
+        );
+    }
+
+    // Generic error
+    (
+        "generation_failed".to_string(),
+        "Message generation failed. Please try again.".to_string(),
+        None,
+    )
+}
+
 /// Run the message submission task in the background
 async fn run_message_submit_task(
     task: &Arc<StreamingTask>,
@@ -2693,9 +2758,10 @@ async fn run_message_submit_task(
         chat.assistant_id,
     );
 
-    let (end_content, generation_metadata) = generation_task
-        .await
-        .map_err(|_| "Failed during chat completion generation".to_string())?;
+    let (end_content, generation_metadata) = generation_task.await.map_err(|_| {
+        // Error event already sent from stream_generate_chat_completion
+        "Failed during chat completion generation".to_string()
+    })?;
 
     // Update generation metadata
     if let Some(metadata) = generation_metadata
