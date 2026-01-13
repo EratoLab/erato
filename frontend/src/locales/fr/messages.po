@@ -1025,6 +1025,10 @@ msgstr ""
 msgid "File"
 msgstr "Fichier"
 
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Footnotes"
+msgstr "Notes de bas de page"
+
 #: src/pages/SearchPage.tsx
 msgid "Found {resultsCount} results"
 msgstr ""
