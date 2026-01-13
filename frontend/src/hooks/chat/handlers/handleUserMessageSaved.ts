@@ -85,13 +85,41 @@ export function handleUserMessageSaved(
         );
       }
 
-      // NEW: Create optimistic streaming state for assistant message
+      // ERMAIN-88 FIX: Only create optimistic assistant if one doesn't already exist
+      // The optimistic assistant is now created immediately in sendMessage()
+      const hasOptimisticAssistant =
+        prevState.streaming.currentMessageId?.startsWith("temp-assistant-");
+
+      if (hasOptimisticAssistant) {
+        // Already have an optimistic assistant placeholder from sendMessage()
+        // Update its timestamp to be after the server-confirmed user message
+        // to maintain correct ordering (server timestamp may be much later than client timestamp)
+        const adjustedAssistantTimestamp = new Date(
+          new Date(serverConfirmedMessage.created_at).getTime() + 1,
+        ).toISOString();
+
+        if (process.env.NODE_ENV === "development") {
+          logger.log(
+            `[OPTIMISTIC] Updating optimistic assistant placeholder timestamp: ${prevState.streaming.createdAt} → ${adjustedAssistantTimestamp} (after user message: ${serverConfirmedMessage.created_at})`,
+          );
+        }
+        return {
+          ...prevState,
+          userMessages: newUserMessages,
+          streaming: {
+            ...prevState.streaming,
+            createdAt: adjustedAssistantTimestamp, // Update timestamp to ensure correct ordering
+          },
+        };
+      }
+
+      // Fallback: Create optimistic assistant if backend was faster than expected
       const now = new Date().toISOString();
       const optimisticAssistantId = `temp-assistant-${Date.now()}`;
 
       if (process.env.NODE_ENV === "development") {
         logger.log(
-          `[OPTIMISTIC] Creating optimistic assistant placeholder with ID: ${optimisticAssistantId}`,
+          `[OPTIMISTIC] Backend was faster - creating optimistic assistant placeholder with ID: ${optimisticAssistantId}`,
         );
       }
 

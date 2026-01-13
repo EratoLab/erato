@@ -777,6 +777,23 @@ export function useChatMessaging(
         );
         resetStreaming();
 
+        // ERMAIN-88 FIX: Create optimistic assistant placeholder immediately
+        // This provides instant UI feedback while the POST request is being processed
+        const optimisticAssistantId = `temp-assistant-${Date.now()}`;
+        const now = new Date().toISOString();
+        logger.log(
+          `[DEBUG_STREAMING] sendMessage: Creating optimistic assistant placeholder immediately with ID: ${optimisticAssistantId}`,
+        );
+        const { setStreaming } = useMessagingStore.getState();
+        setStreaming({
+          isStreaming: false, // Not streaming yet - just a "thinking" placeholder
+          currentMessageId: optimisticAssistantId,
+          content: [],
+          createdAt: now,
+          isFinalizing: false,
+          toolCalls: {},
+        });
+
         // Clean up any existing SSE connection
         if (sseCleanupRef.current) {
           logger.log(
