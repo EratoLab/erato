@@ -1,5 +1,8 @@
 name: Deploy Site to GitHub Pages
 
+# Note: We may switch between GitHub-hosted and Blacksmith-hosted runners in the future
+# depending on cost and performance considerations.
+
 on:
   push:
     branches: [ main ]
@@ -18,7 +21,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: blacksmith-8vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04 # blacksmith-8vcpu-ubuntu-2204
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -57,7 +60,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: blacksmith-8vcpu-ubuntu-2204
+    runs-on: ubuntu-22.04 # blacksmith-8vcpu-ubuntu-2204
     needs: build
     steps:
       - name: Deploy to GitHub Pages
