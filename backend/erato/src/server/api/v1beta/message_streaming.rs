@@ -655,13 +655,13 @@ async fn download_and_store_generated_image(
     policy: &PolicyEngine,
     subject: &crate::policy::types::Subject,
     chat_id: &Uuid,
-    image_source: genai::chat::ImageSource,
+    binary: genai::chat::Binary,
 ) -> Result<(Uuid, String), Report> {
     use crate::models::file_upload::create_file_upload;
 
     // Download or decode the image
-    let image_bytes = match image_source {
-        genai::chat::ImageSource::Url(url) => {
+    let image_bytes = match binary.source {
+        genai::chat::BinarySource::Url(url) => {
             // Download from URL
             let response = reqwest::get(&url)
                 .await
@@ -673,7 +673,7 @@ async fn download_and_store_generated_image(
                 .wrap_err("Failed to read image bytes")?
                 .to_vec()
         }
-        genai::chat::ImageSource::Base64(base64_data) => {
+        genai::chat::BinarySource::Base64(base64_data) => {
             // Decode base64
             use base64::{Engine as _, engine::general_purpose};
             general_purpose::STANDARD
@@ -1297,7 +1297,13 @@ async fn stream_generate_chat_completion<
         if !current_turn_tool_responses.is_empty() {
             current_turn_chat_request.messages.push(GenAiChatMessage {
                 role: ChatRole::Tool,
-                content: MessageContent::ToolResponses(current_turn_tool_responses.clone()),
+                content: MessageContent::from_parts(
+                    current_turn_tool_responses
+                        .clone()
+                        .into_iter()
+                        .map(genai::chat::ContentPart::ToolResponse)
+                        .collect::<Vec<_>>(),
+                ),
                 options: None,
             });
         }
@@ -1508,7 +1514,7 @@ async fn stream_generate_chat_completion<
 
                     current_turn_chat_request.messages.push(GenAiChatMessage {
                         role: ChatRole::Assistant,
-                        content: MessageContent::ToolCalls(
+                        content: MessageContent::from_tool_calls(
                             captured_tool_calls.clone().into_iter().cloned().collect(),
                         ),
                         options: None,
@@ -2588,12 +2594,9 @@ async fn run_message_submit_task(
             .first()
             .ok_or_else(|| "No images were generated".to_string())?;
 
-        // Extract the image source
-        let image_source = match generated_image {
-            genai::chat::ContentPart::Image {
-                content_type: _,
-                source,
-            } => source.clone(),
+        // Extract the binary
+        let binary = match generated_image {
+            genai::chat::ContentPart::Binary(binary) => binary.clone(),
             _ => return Err("Unexpected content part type from image generation".to_string()),
         };
 
@@ -2603,7 +2606,7 @@ async fn run_message_submit_task(
             policy,
             &me_user.to_subject(),
             &chat.id,
-            image_source,
+            binary,
         )
         .await
         .map_err(|e| format!("Failed to download and store generated image: {}", e))?;

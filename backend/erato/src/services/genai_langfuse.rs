@@ -223,7 +223,7 @@ pub fn generate_name_from_chat_request(chat_request: &ChatRequest) -> Option<Str
     // Look for the first user message and extract a short name from it
     for message in &chat_request.messages {
         if matches!(message.role, genai::chat::ChatRole::User)
-            && let genai::chat::MessageContent::Text(text) = &message.content
+            && let Some(text) = message.content.first_text()
         {
             // Take first 50 characters and clean up for a name
             let name = text

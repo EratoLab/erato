@@ -10,13 +10,15 @@ use std::sync::Arc;
 impl From<ContentPart> for GenAiMessageContent {
     fn from(content: ContentPart) -> Self {
         match content {
-            ContentPart::Text(text) => GenAiMessageContent::Text(text.into()),
+            ContentPart::Text(text) => GenAiMessageContent::from_text(text),
             ContentPart::ToolUse(tool_use) => {
-                GenAiMessageContent::ToolResponses(vec![ToolResponse {
-                    call_id: tool_use.tool_call_id,
-                    content: serde_json::to_string(&tool_use.output)
-                        .expect("Failed to serialize tool output"),
-                }])
+                GenAiMessageContent::from_parts(vec![genai::chat::ContentPart::ToolResponse(
+                    ToolResponse {
+                        call_id: tool_use.tool_call_id,
+                        content: serde_json::to_string(&tool_use.output)
+                            .expect("Failed to serialize tool output"),
+                    },
+                )])
             }
             ContentPart::TextFilePointer(_) => {
                 // This should never happen after resolve_file_pointers_in_generation_input
@@ -24,7 +26,7 @@ impl From<ContentPart> for GenAiMessageContent {
                 tracing::error!(
                     "TextFilePointer found during LLM conversion - should have been resolved"
                 );
-                GenAiMessageContent::Text(String::new())
+                GenAiMessageContent::from_text(String::new())
             }
             ContentPart::ImageFilePointer(_) => {
                 // This should never happen after resolve_file_pointers_in_generation_input
@@ -32,15 +34,16 @@ impl From<ContentPart> for GenAiMessageContent {
                 tracing::error!(
                     "ImageFilePointer found during LLM conversion - should have been resolved"
                 );
-                GenAiMessageContent::Text(String::new())
+                GenAiMessageContent::from_text(String::new())
             }
             ContentPart::Image(image) => {
-                // Convert our Image content part to genai's multi-part content
-                let image_part = genai::chat::ContentPart::from_image_base64(
+                // Convert our Image content part to genai's binary content
+                let binary_part = genai::chat::ContentPart::from_binary_base64(
                     image.content_type,
                     Arc::from(image.base64_data.as_str()),
+                    None,
                 );
-                GenAiMessageContent::Parts(vec![image_part])
+                GenAiMessageContent::from_parts(vec![binary_part])
             }
         }
     }
@@ -96,38 +99,43 @@ pub fn into_openai_request_parts(chat_req: &ChatRequest) -> Result<OpenAIRequest
     for msg in &chat_req.messages {
         match msg.role {
             GenAiChatRole::System => {
-                if let GenAiMessageContent::Text(content) = &msg.content {
-                    messages.push(json!({"role": "system", "content": content}));
+                if let Some(text) = msg.content.first_text() {
+                    messages.push(json!({"role": "system", "content": text}));
                 }
             }
             GenAiChatRole::User => {
-                let content = match &msg.content {
-                    GenAiMessageContent::Text(content) => json!(content),
-                    GenAiMessageContent::Parts(parts) => {
-                        json!(
-                            parts
-                                .iter()
-                                .filter_map(|part| match part {
-                                    genai::chat::ContentPart::Text(text) => {
-                                        Some(json!({"type": "text", "text": text.clone()}))
-                                    }
-                                    // For now, skip other content types as they're not in our current model
-                                    _ => None,
-                                })
-                                .collect::<Vec<JsonValue>>()
-                        )
-                    }
-                    // Skip tool calls and responses in user messages for normalization
-                    GenAiMessageContent::ToolCalls(_) => continue,
-                    GenAiMessageContent::ToolResponses(_) => continue,
+                // Skip tool calls and responses in user messages for normalization
+                if msg.content.contains_tool_call() || msg.content.contains_tool_response() {
+                    continue;
+                }
+
+                let content = if msg.content.is_text_only() {
+                    // Simple text content
+                    msg.content
+                        .first_text()
+                        .map(|text| json!(text))
+                        .unwrap_or(json!(""))
+                } else {
+                    // Multi-part content
+                    json!(
+                        msg.content
+                            .parts()
+                            .iter()
+                            .filter_map(|part| match part {
+                                genai::chat::ContentPart::Text(text) => {
+                                    Some(json!({"type": "text", "text": text.clone()}))
+                                }
+                                // For now, skip other content types as they're not in our current model
+                                _ => None,
+                            })
+                            .collect::<Vec<JsonValue>>()
+                    )
                 };
                 messages.push(json!({"role": "user", "content": content}));
             }
-            GenAiChatRole::Assistant => match &msg.content {
-                GenAiMessageContent::Text(content) => {
-                    messages.push(json!({"role": "assistant", "content": content}));
-                }
-                GenAiMessageContent::ToolCalls(tool_calls) => {
+            GenAiChatRole::Assistant => {
+                let tool_calls = msg.content.tool_calls();
+                if !tool_calls.is_empty() {
                     let tool_calls_json = tool_calls
                         .iter()
                         .map(|tool_call| {
@@ -146,20 +154,19 @@ pub fn into_openai_request_parts(chat_req: &ChatRequest) -> Result<OpenAIRequest
                         "tool_calls": tool_calls_json,
                         "content": ""
                     }));
+                } else if let Some(text) = msg.content.first_text() {
+                    messages.push(json!({"role": "assistant", "content": text}));
                 }
                 // Skip other content types for normalization
-                GenAiMessageContent::Parts(_) => {}
-                GenAiMessageContent::ToolResponses(_) => {}
-            },
+            }
             GenAiChatRole::Tool => {
-                if let GenAiMessageContent::ToolResponses(tool_responses) = &msg.content {
-                    for tool_response in tool_responses {
-                        messages.push(json!({
-                            "role": "tool",
-                            "content": tool_response.content,
-                            "tool_call_id": tool_response.call_id,
-                        }));
-                    }
+                let tool_responses = msg.content.tool_responses();
+                for tool_response in tool_responses {
+                    messages.push(json!({
+                        "role": "tool",
+                        "content": tool_response.content,
+                        "tool_call_id": tool_response.call_id,
+                    }));
                 }
             }
         }
