@@ -11,7 +11,10 @@ use crate::{
     log,
     matcher::{ChatCompletionRequest, Matcher},
     request_id::RequestId,
-    responses::{build_delayed_streaming_response, StreamAction},
+    responses::{
+        build_delayed_streaming_response, build_multiple_tool_calls_streaming_response,
+        build_tool_call_streaming_response, StreamAction,
+    },
 };
 
 /// Handler for chat completions endpoint
@@ -45,26 +48,52 @@ pub async fn chat_completions(
     // Match the request to get the response config
     let response_config = matcher.match_request(&chat_request, request_id.as_str());
 
-    // Extract chunks and delay from the response config
-    let (chunks, delay_ms, initial_delay_ms) = match &response_config {
-        crate::matcher::ResponseConfig::Static(static_config) => (
-            &static_config.chunks,
-            static_config.delay_ms,
-            static_config.initial_delay_ms,
-        ),
+    // Build the streaming response based on config type
+    let actions = match response_config {
+        crate::matcher::ResponseConfig::Static(static_config) => {
+            log::log_with_id(
+                request_id.as_str(),
+                &format!(
+                    "Matched static response with {} chunks, {}ms delay",
+                    static_config.chunks.len(),
+                    static_config.delay_ms
+                ),
+            );
+            build_delayed_streaming_response(
+                static_config.chunks,
+                static_config.delay_ms,
+                static_config.initial_delay_ms,
+            )
+        }
+        crate::matcher::ResponseConfig::ToolCall(tool_config) => {
+            log::log_with_id(
+                request_id.as_str(),
+                &format!(
+                    "Matched tool call response: {} with {}ms delay",
+                    tool_config.tool_name, tool_config.delay_ms
+                ),
+            );
+            build_tool_call_streaming_response(
+                tool_config.tool_name,
+                tool_config.arguments,
+                tool_config.delay_ms,
+            )
+        }
+        crate::matcher::ResponseConfig::ToolCalls(tool_calls_config) => {
+            log::log_with_id(
+                request_id.as_str(),
+                &format!(
+                    "Matched multiple tool calls response: {} tool calls with {}ms delay",
+                    tool_calls_config.tool_calls.len(),
+                    tool_calls_config.delay_ms
+                ),
+            );
+            build_multiple_tool_calls_streaming_response(
+                tool_calls_config.tool_calls,
+                tool_calls_config.delay_ms,
+            )
+        }
     };
-
-    log::log_with_id(
-        request_id.as_str(),
-        &format!(
-            "Matched response with {} chunks, {}ms delay",
-            chunks.len(),
-            delay_ms
-        ),
-    );
-
-    // Build the streaming response
-    let actions = build_delayed_streaming_response(chunks.clone(), delay_ms, initial_delay_ms);
 
     // Log that we're starting the stream
     log::log_response_start(request_id.as_str(), "chat completion");

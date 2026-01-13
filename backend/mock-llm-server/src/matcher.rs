@@ -15,11 +15,46 @@ pub struct StaticResponseConfig {
     pub initial_delay_ms: Option<u64>,
 }
 
+/// Tool call response configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallResponseConfig {
+    /// The tool name to call
+    pub tool_name: String,
+    /// The arguments as a JSON string
+    pub arguments: String,
+    /// Delay before sending the tool call (in milliseconds)
+    #[serde(default)]
+    pub delay_ms: u64,
+}
+
+/// Single tool call definition for multiple tool calls
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallDef {
+    /// The tool name to call
+    pub tool_name: String,
+    /// The arguments as a JSON string
+    pub arguments: String,
+}
+
+/// Multiple tool calls response configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallsResponseConfig {
+    /// The tool calls to make
+    pub tool_calls: Vec<ToolCallDef>,
+    /// Delay before sending the tool calls (in milliseconds)
+    #[serde(default)]
+    pub delay_ms: u64,
+}
+
 /// Configuration for a response to return when a pattern matches
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResponseConfig {
     /// Static response with predefined chunks
     Static(StaticResponseConfig),
+    /// Tool call response (single tool call)
+    ToolCall(ToolCallResponseConfig),
+    /// Multiple tool calls response (parallel tool calls)
+    ToolCalls(ToolCallsResponseConfig),
 }
 
 /// Match rule that checks user message pattern using substring matching
@@ -29,11 +64,22 @@ pub struct MatchRuleUserMessagePattern {
     pub pattern: String,
 }
 
+/// Match rule that checks if the last message is a user message with a pattern
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchRuleLastMessageIsUserWithPattern {
+    /// Pattern to match (substring matching)
+    pub pattern: String,
+}
+
 /// A rule that matches incoming messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MatchRule {
-    /// Match based on user message pattern
+    /// Match based on user message pattern (looks at last user message anywhere in conversation)
     UserMessagePattern(MatchRuleUserMessagePattern),
+    /// Match when the last message in the conversation is a tool result
+    LastMessageIsToolResult,
+    /// Match when the last message is a user message with a specific pattern
+    LastMessageIsUserWithPattern(MatchRuleLastMessageIsUserWithPattern),
 }
 
 /// A mock with metadata, match rules, and response
@@ -63,6 +109,15 @@ impl Mock {
                     MatchRule::UserMessagePattern(pattern_rule) => {
                         println!("contains text \"{}\"", pattern_rule.pattern);
                     }
+                    MatchRule::LastMessageIsToolResult => {
+                        println!("last message is a tool result");
+                    }
+                    MatchRule::LastMessageIsUserWithPattern(pattern_rule) => {
+                        println!(
+                            "last message is user with text \"{}\"",
+                            pattern_rule.pattern
+                        );
+                    }
                 }
             }
         } else {
@@ -71,6 +126,15 @@ impl Mock {
                 match rule {
                     MatchRule::UserMessagePattern(pattern_rule) => {
                         println!("      - contains text \"{}\"", pattern_rule.pattern);
+                    }
+                    MatchRule::LastMessageIsToolResult => {
+                        println!("      - last message is a tool result");
+                    }
+                    MatchRule::LastMessageIsUserWithPattern(pattern_rule) => {
+                        println!(
+                            "      - last message is user with text \"{}\"",
+                            pattern_rule.pattern
+                        );
                     }
                 }
             }
@@ -94,6 +158,25 @@ impl Mock {
                         config.chunks.len(),
                         config.delay_ms
                     );
+                }
+            }
+            ResponseConfig::ToolCall(config) => {
+                println!(
+                    "    {}: Tool call to '{}' with {}ms delay",
+                    "Response".bold(),
+                    config.tool_name,
+                    config.delay_ms
+                );
+            }
+            ResponseConfig::ToolCalls(config) => {
+                println!(
+                    "    {}: {} parallel tool calls with {}ms delay",
+                    "Response".bold(),
+                    config.tool_calls.len(),
+                    config.delay_ms
+                );
+                for tool_call in &config.tool_calls {
+                    println!("      - {}", tool_call.tool_name);
                 }
             }
         }
@@ -138,19 +221,11 @@ impl Matcher {
         request: &ChatCompletionRequest,
         request_id: &str,
     ) -> ResponseConfig {
-        // Extract the last user message
-        if let Some(last_user_message) = self.extract_last_user_message(request) {
-            crate::log::log_with_id(
-                request_id,
-                &format!("Matching against message: {}", last_user_message),
-            );
-
-            // Try to find a matching mock
-            for mock in &self.mocks {
-                if self.matches_any_rule(&mock.match_rules, &last_user_message) {
-                    crate::log::log_with_id(request_id, &format!("Matched mock: {}", mock.name));
-                    return mock.response.clone();
-                }
+        // Try to find a matching mock
+        for mock in &self.mocks {
+            if self.matches_any_rule(&mock.match_rules, request) {
+                crate::log::log_with_id(request_id, &format!("Matched mock: {}", mock.name));
+                return mock.response.clone();
             }
         }
 
@@ -158,19 +233,56 @@ impl Matcher {
         self.default_response.clone()
     }
 
-    /// Check if any of the match rules match the message
-    fn matches_any_rule(&self, rules: &[MatchRule], message: &str) -> bool {
+    /// Check if any of the match rules match the request
+    fn matches_any_rule(&self, rules: &[MatchRule], request: &ChatCompletionRequest) -> bool {
         for rule in rules {
             match rule {
                 MatchRule::UserMessagePattern(pattern_rule) => {
-                    if message
-                        .to_lowercase()
-                        .contains(&pattern_rule.pattern.to_lowercase())
-                    {
+                    if let Some(last_user_message) = self.extract_last_user_message(request) {
+                        if last_user_message
+                            .to_lowercase()
+                            .contains(&pattern_rule.pattern.to_lowercase())
+                        {
+                            return true;
+                        }
+                    }
+                }
+                MatchRule::LastMessageIsToolResult => {
+                    if self.is_last_message_tool_result(request) {
+                        return true;
+                    }
+                }
+                MatchRule::LastMessageIsUserWithPattern(pattern_rule) => {
+                    if self.is_last_message_user_with_pattern(request, &pattern_rule.pattern) {
                         return true;
                     }
                 }
             }
+        }
+        false
+    }
+
+    /// Check if the last message is a user message with a specific pattern
+    fn is_last_message_user_with_pattern(
+        &self,
+        request: &ChatCompletionRequest,
+        pattern: &str,
+    ) -> bool {
+        if let Some(last_message) = request.messages.last() {
+            if last_message.role == "user" {
+                if let Some(content) = &last_message.content {
+                    let text = self.extract_content_text(content);
+                    return text.to_lowercase().contains(&pattern.to_lowercase());
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if the last message in the request is a tool result
+    fn is_last_message_tool_result(&self, request: &ChatCompletionRequest) -> bool {
+        if let Some(last_message) = request.messages.last() {
+            return last_message.role == "tool";
         }
         false
     }
@@ -180,7 +292,9 @@ impl Matcher {
         // Iterate through messages in reverse to find the last user message
         for message in request.messages.iter().rev() {
             if message.role == "user" {
-                return Some(self.extract_content_text(&message.content));
+                if let Some(content) = &message.content {
+                    return Some(self.extract_content_text(content));
+                }
             }
         }
         None
@@ -225,7 +339,8 @@ pub struct ChatCompletionRequest {
 #[derive(Debug, Deserialize)]
 pub struct Message {
     pub role: String,
-    pub content: Value,
+    #[serde(default)]
+    pub content: Option<Value>,
 }
 
 #[cfg(test)]
@@ -263,6 +378,7 @@ mod tests {
             ResponseConfig::Static(config) => {
                 assert_eq!(config.chunks, vec!["Hi", " there"]);
             }
+            _ => panic!("Expected Static response"),
         }
     }
 
@@ -295,6 +411,7 @@ mod tests {
             ResponseConfig::Static(config) => {
                 assert_eq!(config.chunks, vec!["Hi"]);
             }
+            _ => panic!("Expected Static response"),
         }
     }
 
@@ -328,6 +445,7 @@ mod tests {
                 assert!(!config.chunks.is_empty());
                 assert_eq!(config.delay_ms, 50);
             }
+            _ => panic!("Expected Static response"),
         }
     }
 
@@ -384,6 +502,7 @@ mod tests {
             ResponseConfig::Static(config) => {
                 assert_eq!(config.chunks, vec!["Greetings!"]);
             }
+            _ => panic!("Expected Static response"),
         }
 
         // Test second pattern
@@ -396,6 +515,7 @@ mod tests {
             ResponseConfig::Static(config) => {
                 assert_eq!(config.chunks, vec!["Greetings!"]);
             }
+            _ => panic!("Expected Static response"),
         }
 
         // Test third pattern
@@ -408,6 +528,7 @@ mod tests {
             ResponseConfig::Static(config) => {
                 assert_eq!(config.chunks, vec!["Greetings!"]);
             }
+            _ => panic!("Expected Static response"),
         }
     }
 
@@ -444,6 +565,7 @@ mod tests {
                 assert_eq!(static_config.chunks, vec!["Test"]);
                 assert_eq!(static_config.delay_ms, 50);
             }
+            _ => panic!("Expected Static response"),
         }
     }
 
@@ -457,6 +579,7 @@ mod tests {
             MatchRule::UserMessagePattern(pattern_rule) => {
                 assert_eq!(pattern_rule.pattern, "test");
             }
+            _ => panic!("Expected UserMessagePattern"),
         }
     }
 

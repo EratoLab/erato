@@ -25,7 +25,7 @@ trap cleanup SIGINT EXIT
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 # Change to the target working directory
-TARGET_DIR="$SCRIPT_DIR/tests/mcp-files"
+TARGET_DIR="$SCRIPT_DIR/erato/tests/mcp-files"
 echo "Changing working directory to: $TARGET_DIR"
 cd "$TARGET_DIR" || { echo "Failed to change directory to $TARGET_DIR"; exit 1; }
 
