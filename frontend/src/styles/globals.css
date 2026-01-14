@@ -286,6 +286,12 @@ section[data-footnotes="true"] li::before {
   left: -1.5rem;
 }
 
+/* Hide the auto-generated footnotes heading (we render our own translated one) */
+section[data-footnotes="true"] > h2#footnote-label,
+section[data-footnotes="true"] > .sr-only {
+  display: none;
+}
+
 .data-footnote-backref {
   display: none;
 }

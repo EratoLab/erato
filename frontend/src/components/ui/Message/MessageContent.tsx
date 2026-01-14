@@ -1,4 +1,5 @@
-import { memo } from "react";
+import { t } from "@lingui/core/macro";
+import React, { memo } from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {
@@ -232,6 +233,43 @@ export const MessageContent = memo(function MessageContent({
           {children}
         </span>
       );
+    },
+    // Custom footnotes section with translated heading
+    section({ children, node, ...props }) {
+      // Check if this is the footnotes section
+      // react-markdown may pass data-footnotes in different ways
+      const sectionProps = props as Record<string, unknown>;
+      const isFootnotes =
+        sectionProps["data-footnotes"] === "true" ||
+        sectionProps["data-footnotes"] === true ||
+        sectionProps["dataFootnotes"] === "true" ||
+        sectionProps["dataFootnotes"] === true ||
+        // Also check the node properties from the AST
+        (node?.properties as Record<string, unknown> | undefined)?.[
+          "dataFootnotes"
+        ] === true;
+
+      if (isFootnotes) {
+        return (
+          <section
+            className="mt-6 border-t border-theme-border pt-4"
+            data-footnotes="true"
+          >
+            <h2 className="mb-3 text-lg font-semibold text-theme-fg-primary">
+              {t`Footnotes`}
+            </h2>
+            {/* Filter out the auto-generated h2 from children */}
+            {React.Children.toArray(children).filter(
+              (child) =>
+                !React.isValidElement(child) ||
+                (child.type !== "h2" &&
+                  (child.props as { id?: string }).id !== "footnote-label"),
+            )}
+          </section>
+        );
+      }
+
+      return <section {...props}>{children}</section>;
     },
   };
 

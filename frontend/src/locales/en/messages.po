@@ -1025,6 +1025,10 @@ msgstr "Failed to update assistant. Please try again."
 msgid "File"
 msgstr "File"
 
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Footnotes"
+msgstr "Footnotes"
+
 #: src/pages/SearchPage.tsx
 msgid "Found {resultsCount} results"
 msgstr "Found {resultsCount} results"
