@@ -14,6 +14,13 @@ testScenarioConfig:
   # If not specified, defaults to "config/erato.scenario-basic.toml"
   sourceFile: ""
 
+# E2E secrets configuration
+# Generated scenario-specific secret files are mounted as erato.scenario.auto.erato.toml
+# These are created by running: ../../scripts/setup-e2e-secrets apply
+scenarioSecretsConfig:
+  enabled: false  # Enabled automatically by setup-dev when .auto.toml files exist
+  scenario: "basic"  # Which scenario secret to mount (basic, tight-budget, assistants)
+
 erato:
   commonAnnotations:
     reloader.stakater.com/auto: "true"
@@ -35,9 +42,6 @@ erato:
     configFile:
       secretName: erato-local-erato-toml-secret
       secretKey: erato.toml
-      # `useAlt` is not part of the `erato` chart
-      # If it is provided, `config/erato.alt.toml` will be used instead of `config/erato.toml`
-      useAlt: false
     extraConfigFiles:
       - name: file-storage
         configMapName: erato-local-erato-file-storage-config
@@ -49,7 +53,7 @@ erato:
         inlineContent: |
           [frontend.additional_environment]
           FOO_BAR = "true"
-  
+
   oauth2Proxy:
     enabled: true
     config: |
