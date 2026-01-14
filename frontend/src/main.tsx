@@ -1,6 +1,3 @@
-// Performance debugging tools - must be imported before React
-import "./wdyr";
-
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
