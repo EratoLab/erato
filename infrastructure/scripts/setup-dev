@@ -3,6 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #   "pydantic>=2.0.0",
+#   "pyyaml>=6.0",
 # ]
 # ///
 
@@ -578,8 +579,26 @@ def main():
         import json
         helm_args.extend(["--set", "scenarioSecretsConfig.enabled=true"])
         helm_args.extend(["--set", f"scenarioSecretsConfig.scenario={config.test_scenario}"])
+        # Add E2E scenario data server ingress path for test credential access
+        extra_ingress_paths = [
+            {
+                "path": "/e2e-scenario-data",
+                "pathType": "Prefix",
+                "backend": {
+                    "service": {
+                        "name": "{{ .Release.Name }}-e2e-scenario-data-server",
+                        "port": {
+                            "name": "http"
+                        }
+                    }
+                }
+            }
+        ]
+        helm_args.extend(["--set-json", f"erato.ingress.extraPaths={json.dumps(extra_ingress_paths)}"])
         # Build the complete extraConfigFiles array with the scenario secrets entry
-        secret_name = f"erato-local-erato-scenario-{config.test_scenario}-secrets"
+        # Replace underscores with hyphens for K8s RFC 1123 compliance
+        scenario_k8s_name = config.test_scenario.replace("_", "-")
+        secret_name = f"erato-local-erato-scenario-{scenario_k8s_name}-secrets"
         extra_config_files = [
             {
                 "name": "file-storage",
@@ -603,6 +622,74 @@ def main():
         ]
         helm_args.extend(["--set-json", f"erato.backend.extraConfigFiles={json.dumps(extra_config_files)}"])
 
+    # Handle OAuth2-Proxy configuration for entra_id scenario
+    oauth2_values_file = None
+    if secrets_exist and config.test_scenario == "entra_id":
+        secrets_file = cluster_config.chart_path / "config" / "e2e-secrets.toml"
+
+        if secrets_file.exists():
+            try:
+                import tomllib
+                import yaml
+                import tempfile
+
+                # Load secrets
+                with open(secrets_file, "rb") as f:
+                    secrets = tomllib.load(f)
+
+                # Read base oauth2-proxy config from values.yaml
+                values_file = cluster_config.chart_path / "values.yaml"
+                with open(values_file, "r") as f:
+                    values_data = yaml.safe_load(f)
+                base_config = values_data.get("erato", {}).get("oauth2Proxy", {}).get("config", "")
+
+                # Parse base config into a dictionary
+                config_dict = {}
+                for line in base_config.split('\n'):
+                    line = line.strip()
+                    if '=' in line and not line.startswith('#'):
+                        key, value = line.split('=', 1)
+                        config_dict[key.strip()] = value.strip()
+
+                # Apply Entra ID overrides
+                config_dict['provider'] = '"entra-id"'
+                config_dict['oidc_issuer_url'] = f'"https://login.microsoftonline.com/{secrets["entra_id_tenant_id"]}/v2.0"'
+                config_dict['client_id'] = f'"{secrets["entra_id_client_id"]}"'
+                config_dict['client_secret'] = f'"{secrets["entra_id_client_secret"]}"'
+                config_dict['skip_oidc_discovery'] = 'false'
+
+                # Remove Dex-specific fields that Entra ID doesn't need
+                config_dict.pop('login_url', None)
+                config_dict.pop('redeem_url', None)
+                config_dict.pop('oidc_jwks_url', None)
+                config_dict.pop('insecure_oidc_skip_issuer_verification', None)
+
+                # Reconstruct config
+                merged_lines = [f"{k} = {v}" for k, v in config_dict.items()]
+                merged_config = '\n'.join(merged_lines)
+
+                # Write to a temporary values file
+                # Using a values file preserves multiline strings properly
+                oauth2_values = {
+                    "erato": {
+                        "oauth2Proxy": {
+                            "config": merged_config
+                        }
+                    }
+                }
+
+                # Create temp file that won't be auto-deleted
+                fd, oauth2_values_file = tempfile.mkstemp(suffix='.yaml', text=True)
+                with os.fdopen(fd, 'w') as f:
+                    yaml.dump(oauth2_values, f)
+
+                helm_args.extend(["-f", oauth2_values_file])
+
+                print(f"✓ Configured oauth2-proxy for Entra ID authentication")
+
+            except Exception as e:
+                print(f"Warning: Could not merge oauth2-proxy config: {e}", file=sys.stderr)
+
     # Handle file storage config
     file_storage_args = handle_file_storage_config(config)
     helm_args.extend(file_storage_args)
@@ -623,7 +710,14 @@ def main():
     
     # Install Erato chart
     install_erato_chart(config, cluster_config, helm_args)
-    
+
+    # Clean up temporary values file if it was created
+    if oauth2_values_file and os.path.exists(oauth2_values_file):
+        try:
+            os.unlink(oauth2_values_file)
+        except Exception:
+            pass  # Ignore cleanup errors
+
     # Ensure DNS entries
     ensure_hosts_entries(cluster_config)
     

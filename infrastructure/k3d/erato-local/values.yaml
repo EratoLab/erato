@@ -24,7 +24,7 @@ scenarioSecretsConfig:
 erato:
   commonAnnotations:
     reloader.stakater.com/auto: "true"
-  
+
   ingress:
     enabled: true
     host: app.erato.internal
@@ -72,7 +72,7 @@ erato:
       login_url = "http://dex.erato.internal/auth"
       redeem_url = "http://erato-local-dex.erato-local-ns.svc.cluster.local:5556/token"
       oidc_jwks_url = "http://erato-local-dex.erato-local-ns.svc.cluster.local:5556/keys"
-      redirect_url = "http://app.erato.internal/oauth2/callback"
+      redirect_url = "https://app.erato.internal/oauth2/callback"
       skip_auth_regex = ["^/health", "^/metrics"]
       pass_authorization_header = true
       pass_access_token = true
@@ -119,7 +119,7 @@ dex:
     staticClients:
     - id: erato-app
       redirectURIs:
-      - 'http://app.erato.internal/oauth2/callback'
+      - 'https://app.erato.internal/oauth2/callback'
       name: 'Erato App'
       secret: ZXJhdG8tc2VjcmV0
     enablePasswordDB: true

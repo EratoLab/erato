@@ -20,6 +20,10 @@ spec:
     - host: {{ .Values.ingress.host | quote }}
       http:
         paths:
+          {{- with .Values.ingress.extraPaths }}
+          {{- tpl (. | toYaml | nindent 10) $ }}
+          {{- end }}
+          # Main application routes through oauth2-proxy (if enabled)
           - path: /
             pathType: Prefix
             backend:

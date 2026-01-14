@@ -17,6 +17,62 @@ export const login = async (page: Page, email: string, password = "admin") => {
 };
 
 /**
+ * Login via Azure Entra ID (Microsoft) authentication
+ * This handles the Microsoft login flow which redirects to login.microsoftonline.com
+ */
+export const loginWithEntraId = async (
+  page: Page,
+  email: string,
+  password: string,
+) => {
+  console.log(`[ENTRA_ID_LOGIN] Starting Entra ID login for: ${email}`);
+
+  await page.getByRole("button", { name: "Sign in with" }).click();
+
+  // Wait for redirect to Microsoft login page
+  await page.waitForURL(
+    (url) => url.hostname.includes("login.microsoftonline.com"),
+    {
+      timeout: 10000,
+    },
+  );
+  console.log(`[ENTRA_ID_LOGIN] Redirected to Microsoft login page`);
+
+  // Fill in email
+  const emailInput = page.getByPlaceholder("Email, phone, or Skype");
+  await emailInput.waitFor({ state: "visible", timeout: 10000 });
+  await emailInput.fill(email);
+  await emailInput.press("Enter");
+  console.log(`[ENTRA_ID_LOGIN] Email submitted`);
+
+  // Wait for password page and fill in password
+  const passwordInput = page.getByPlaceholder("Password");
+  await passwordInput.waitFor({ state: "visible", timeout: 10000 });
+  await passwordInput.fill(password);
+  await passwordInput.press("Enter");
+  console.log(`[ENTRA_ID_LOGIN] Password submitted`);
+
+  // Handle "Stay signed in?" prompt if it appears
+  try {
+    const staySignedInButton = page.getByRole("button", { name: "Yes" });
+    await staySignedInButton.waitFor({ state: "visible", timeout: 5000 });
+    await staySignedInButton.click();
+    console.log(`[ENTRA_ID_LOGIN] Clicked 'Stay signed in' button`);
+  } catch (e) {
+    console.log(`[ENTRA_ID_LOGIN] No 'Stay signed in' prompt (this is okay)`);
+  }
+
+  // Wait for redirect back to the app
+  await page.waitForURL(
+    (url) => !url.hostname.includes("login.microsoftonline.com"),
+    {
+      timeout: 15000,
+    },
+  );
+  console.log(`[ENTRA_ID_LOGIN] Redirected back to app, login complete`);
+};
+
+/**
  * Creates a new authenticated context for a different user
  * Use this when you need to test with a different user than the default admin@example.com
  */
@@ -382,6 +438,73 @@ async function getCurrentScenario(page: Page): Promise<string | null> {
 }
 
 /**
+ * Get scenario-specific data from the E2E scenario data server.
+ * This endpoint is publicly accessible (bypasses oauth2-proxy) to allow
+ * E2E tests to retrieve authentication credentials before logging in.
+ *
+ * Returns null if the data cannot be fetched or parsed.
+ *
+ * Example usage:
+ * ```typescript
+ * const scenarioData = await getScenarioData(page);
+ * if (scenarioData?.entraid_user1_email) {
+ *   await loginWithEntraId(page, scenarioData.entraid_user1_email, scenarioData.entraid_user1_password);
+ * }
+ * ```
+ */
+export async function getScenarioData(
+  page: Page,
+): Promise<Record<string, any> | null> {
+  try {
+    // Fetch scenario data from the public endpoint
+    const response = await page.request.get(
+      "/e2e-scenario-data/scenario-data.toml",
+    );
+
+    if (!response.ok()) {
+      console.warn(
+        `[SCENARIO_DATA] Failed to fetch scenario data: ${response.status()} ${response.statusText()}`,
+      );
+      return null;
+    }
+
+    const tomlContent = await response.text();
+
+    // Parse TOML content - we need to extract the [frontend.additional_environment] section
+    // and specifically the SCENARIO_DATA inline table
+    const scenarioDataMatch = tomlContent.match(
+      /SCENARIO_DATA\s*=\s*\{([^}]+)\}/,
+    );
+
+    if (!scenarioDataMatch) {
+      console.warn(`[SCENARIO_DATA] No SCENARIO_DATA found in TOML content`);
+      return null;
+    }
+
+    // Parse the inline table: { key1 = "value1", key2 = "value2" }
+    const inlineTableContent = scenarioDataMatch[1];
+    const data: Record<string, any> = {};
+
+    const keyValuePairs = inlineTableContent.split(",");
+    for (const pair of keyValuePairs) {
+      const [key, value] = pair.split("=").map((s) => s.trim());
+      if (key && value) {
+        // Remove quotes from value
+        data[key] = value.replace(/^["']|["']$/g, "");
+      }
+    }
+
+    console.log(
+      `[SCENARIO_DATA] Successfully fetched scenario data with ${Object.keys(data).length} keys`,
+    );
+    return data;
+  } catch (error) {
+    console.warn(`[SCENARIO_DATA] Error getting scenario data: ${error}`);
+    return null;
+  }
+}
+
+/**
  * Ensure the correct test scenario is deployed before running a test.
  * This function works independently of the current page state by creating
  * a temporary page to check and switch scenarios.
@@ -390,11 +513,11 @@ async function getCurrentScenario(page: Page): Promise<string | null> {
  * If in k3d but wrong scenario, switches to the required scenario.
  *
  * @param page - The Playwright page object (used to get browser context)
- * @param requiredScenario - The scenario that this test requires ('basic', 'tight-budget', or 'assistants')
+ * @param requiredScenario - The scenario that this test requires ('basic', 'tight-budget', 'assistants', or 'entra_id')
  */
 export async function ensureTestScenario(
   page: Page,
-  requiredScenario: "basic" | "tight-budget" | "assistants",
+  requiredScenario: "basic" | "tight-budget" | "assistants" | "entra_id",
 ): Promise<void> {
   await test.step(`Ensure test scenario: ${requiredScenario}`, async () => {
     // Create a new page for scenario detection/switching, independent of current page state

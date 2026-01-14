@@ -58,7 +58,7 @@ export default defineConfig({
    */
   projects: [
     // Authentication setup - runs first
-    { name: "setup", testMatch: /auth\.setup\.ts/ },
+    { name: "setup", testMatch: /\/auth\.setup\.ts/ },
 
     // Scenario setup projects
     {
@@ -86,10 +86,27 @@ export default defineConfig({
       dependencies: ["setup"],
     },
 
+    // Entra ID authentication setup - runs independently using Entra ID credentials
+    { name: "setup-entra-id-auth", testMatch: /entra-id\.auth\.setup\.ts/ },
+
+    // Entra ID scenario setup - switches to entra-id scenario
+    {
+      name: "setup-entra-id",
+      testMatch: /entra-id\.setup\.ts/,
+      use: {
+        storageState: "playwright/.auth/entra-id.json",
+      },
+      dependencies: ["setup-entra-id-auth"],
+    },
+
     // Chromium - Basic scenario tests
     {
       name: "chromium-basic",
-      testIgnore: [/.*\.tight-budget\.spec\.ts$/, /.*\.assistants\.spec\.ts$/],
+      testIgnore: [
+        /.*\.assistants\.spec\.ts$/,
+        /.*\.entra-id\.spec\.ts$/,
+        /.*\.tight-budget\.spec\.ts$/,
+      ],
       use: {
         ...devices["Desktop Chrome"],
         storageState: "playwright/.auth/user.json",
@@ -122,7 +139,12 @@ export default defineConfig({
     // Firefox - Basic scenario tests
     {
       name: "firefox-basic",
-      testIgnore: [/.*\.tight-budget\.spec\.ts$/, /.*\.assistants\.spec\.ts$/],
+
+      testIgnore: [
+        /.*\.assistants\.spec\.ts$/,
+        /.*\.entra-id\.spec\.ts$/,
+        /.*\.tight-budget\.spec\.ts$/,
+      ],
       use: {
         ...devices["Desktop Firefox"],
         storageState: "playwright/.auth/user.json",
@@ -150,6 +172,28 @@ export default defineConfig({
         storageState: "playwright/.auth/user.json",
       },
       dependencies: ["setup-assistants"],
+    },
+
+    // Chromium - Entra ID scenario tests
+    {
+      name: "chromium-entra-id",
+      testMatch: /.*\.entra-id\.spec\.ts$/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "playwright/.auth/entra-id.json",
+      },
+      dependencies: ["setup-entra-id"],
+    },
+
+    // Firefox - Entra ID scenario tests
+    {
+      name: "firefox-entra-id",
+      testMatch: /.*\.entra-id\.spec\.ts$/,
+      use: {
+        ...devices["Desktop Firefox"],
+        storageState: "playwright/.auth/entra-id.json",
+      },
+      dependencies: ["setup-entra-id"],
     },
 
     // TODO: Currently deactivated, because there are issues with using `0.0.0.0` as host during auth flow

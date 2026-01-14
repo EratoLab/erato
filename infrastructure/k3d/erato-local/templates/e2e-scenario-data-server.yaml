@@ -1,0 +1,105 @@
+{{- if .Values.scenarioSecretsConfig.enabled }}
+---
+# Deployment for a simple nginx server that serves the scenario secrets file
+# This allows E2E tests to retrieve authentication credentials without going through oauth2-proxy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-e2e-scenario-data-server
+  labels:
+    {{- include "erato-local.labels" . | nindent 4 }}
+    app.kubernetes.io/component: e2e-scenario-data-server
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: e2e-scenario-data-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: e2e-scenario-data-server
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+          name: http
+        volumeMounts:
+        - name: scenario-secrets
+          mountPath: /usr/share/nginx/html
+          readOnly: true
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+          readOnly: true
+      volumes:
+      - name: scenario-secrets
+        secret:
+          secretName: {{ .Release.Name }}-erato-scenario-{{ .Values.scenarioSecretsConfig.scenario | replace "_" "-" }}-secrets
+          items:
+          - key: erato.scenario.auto.toml
+            path: scenario-data.toml
+      - name: nginx-config
+        configMap:
+          name: {{ .Release.Name }}-e2e-scenario-data-nginx-config
+
+---
+# Service for the scenario data server
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-e2e-scenario-data-server
+  labels:
+    {{- include "erato-local.labels" . | nindent 4 }}
+    app.kubernetes.io/component: e2e-scenario-data-server
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: e2e-scenario-data-server
+
+---
+# ConfigMap for nginx configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-e2e-scenario-data-nginx-config
+  labels:
+    {{- include "erato-local.labels" . | nindent 4 }}
+    app.kubernetes.io/component: e2e-scenario-data-server
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+
+        location / {
+            root /usr/share/nginx/html;
+            # Serve the scenario-data.toml file
+            try_files /scenario-data.toml =404;
+
+            # Add CORS headers for local testing
+            add_header Access-Control-Allow-Origin *;
+            add_header Access-Control-Allow-Methods "GET, OPTIONS";
+            add_header Access-Control-Allow-Headers "Content-Type";
+
+            # Set content type for TOML files
+            types {
+                text/plain toml;
+            }
+            default_type text/plain;
+        }
+    }
+{{- end }}

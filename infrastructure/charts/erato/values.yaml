@@ -22,6 +22,17 @@ ingress:
   tls:
     enabled: false
     secretName: ""
+  # Additional paths to add to the ingress
+  # Example:
+  # extraPaths:
+  #   - path: /custom-path
+  #     pathType: Prefix
+  #     backend:
+  #       service:
+  #         name: my-service
+  #         port:
+  #           name: http
+  extraPaths: []
 
 oauth2Proxy:
   enabled: true
