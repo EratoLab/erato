@@ -27,8 +27,6 @@ class ScriptConfig(BaseModel):
     build_local: bool = False
     helm_set_args: list[str] = Field(default_factory=list)
     chart_dep_update: bool = False
-    use_alt_erato_toml: bool = False
-    api_key: Optional[str] = None
     with_telepresence: bool = False
     file_storage_config_source: Optional[str] = None
     test_scenario: str = "basic"
@@ -98,6 +96,24 @@ def check_prerequisites():
         if result.returncode != 0:
             print(f"{cmd} is required but not installed. Aborting.", file=sys.stderr)
             sys.exit(1)
+
+
+def check_e2e_secrets() -> bool:
+    """Check if E2E secrets are configured.
+
+    Returns:
+        True if secrets are configured, False otherwise
+    """
+    script_dir = Path(__file__).resolve().parent
+    try:
+        result = run_command(
+            [str(script_dir / "setup-e2e-secrets"), "check"],
+            check=False,
+            capture_output=True
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def get_cluster_status(cluster_name: str) -> ClusterStatus:
@@ -273,33 +289,6 @@ def perform_local_build(config: ScriptConfig) -> list[str]:
         "--set", f"erato.backend.image.repository=k3d-registry.localhost:5000/{build_config.combined_image_path}",
         "--set", f"erato.backend.image.tag={build_config.build_tag}"
     ]
-
-
-def handle_alt_erato_toml(config: ScriptConfig, cluster_config: ClusterConfig) -> list[str]:
-    """Handle alternative erato.toml configuration."""
-    if not config.use_alt_erato_toml:
-        return []
-    
-    alt_toml_path = cluster_config.chart_path / "config" / "erato.alt.toml"
-    
-    if config.api_key:
-        print(f"Generating {alt_toml_path} from template...")
-        template_path = cluster_config.chart_path / "config" / "erato.alt.template.toml"
-        
-        with open(template_path, "r") as f:
-            template_content = f.read()
-        
-        alt_content = template_content.replace("<API_KEY>", config.api_key)
-        
-        with open(alt_toml_path, "w") as f:
-            f.write(alt_content)
-    
-    if not alt_toml_path.exists():
-        print(f"Error: --use-alt-erato-toml is set, but {alt_toml_path} does not exist.", file=sys.stderr)
-        print("Please create it or use --api-key to generate it.", file=sys.stderr)
-        sys.exit(1)
-    
-    return ["--set", "erato.backend.configFile.useAlt=true"]
 
 
 def handle_file_storage_config(config: ScriptConfig) -> list[str]:
@@ -499,15 +488,6 @@ def main():
         help="Update Helm chart dependencies"
     )
     parser.add_argument(
-        "--use-alt-erato-toml",
-        action="store_true",
-        help="Use alternative erato.toml configuration"
-    )
-    parser.add_argument(
-        "--api-key",
-        help="API key to generate alternative erato.toml (implies --use-alt-erato-toml)"
-    )
-    parser.add_argument(
         "--with-telepresence",
         action="store_true",
         help="Install Telepresence for local development"
@@ -539,8 +519,6 @@ def main():
         erato_image_tag=args.erato_image_tag,
         build_local=args.build_local,
         chart_dep_update=args.chart_dep_update,
-        use_alt_erato_toml=args.use_alt_erato_toml or bool(args.api_key),
-        api_key=args.api_key,
         with_telepresence=args.with_telepresence,
         file_storage_config_source=args.file_storage_config_source,
         test_scenario=args.scenario
@@ -561,6 +539,14 @@ def main():
     
     # Execute setup steps
     check_prerequisites()
+
+    # Check E2E secrets configuration
+    if not check_e2e_secrets():
+        print("⚠️  WARNING: E2E secrets not configured.")
+        print("   Run: ./scripts/setup-e2e-secrets apply")
+        print("   See: infrastructure/k3d/erato-local/config/e2e-secrets.template.toml")
+        print()
+
     create_or_use_cluster(cluster_config)
     
     # Switch kubectl context
@@ -580,11 +566,43 @@ def main():
         print("Performing local build...")
         build_helm_args = perform_local_build(config)
         helm_args = build_helm_args  # Override with build-specific args
-    
-    # Handle alternative erato.toml
-    alt_toml_args = handle_alt_erato_toml(config, cluster_config)
-    helm_args.extend(alt_toml_args)
-    
+
+    # Handle E2E scenario secrets
+    # Check if any scenario secret files exist
+    secrets_exist = any(
+        (cluster_config.chart_path / f"config/erato.scenario-{scenario}.auto.toml").exists()
+        for scenario in VALID_SCENARIOS
+    )
+
+    if secrets_exist:
+        import json
+        helm_args.extend(["--set", "scenarioSecretsConfig.enabled=true"])
+        helm_args.extend(["--set", f"scenarioSecretsConfig.scenario={config.test_scenario}"])
+        # Build the complete extraConfigFiles array with the scenario secrets entry
+        secret_name = f"erato-local-erato-scenario-{config.test_scenario}-secrets"
+        extra_config_files = [
+            {
+                "name": "file-storage",
+                "configMapName": "erato-local-erato-file-storage-config",
+                "configMapKey": "erato.file-storage.toml"
+            },
+            {
+                "name": "test-scenario",
+                "configMapName": "erato-local-erato-test-scenario-config",
+                "configMapKey": "erato.scenario.toml"
+            },
+            {
+                "name": "scenario-secrets",
+                "secretName": secret_name,
+                "secretKey": "erato.scenario.auto.toml"
+            },
+            {
+                "name": "frontend-env",
+                "inlineContent": "[frontend.additional_environment]\nFOO_BAR = \"true\""
+            }
+        ]
+        helm_args.extend(["--set-json", f"erato.backend.extraConfigFiles={json.dumps(extra_config_files)}"])
+
     # Handle file storage config
     file_storage_args = handle_file_storage_config(config)
     helm_args.extend(file_storage_args)

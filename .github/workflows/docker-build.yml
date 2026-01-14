@@ -329,13 +329,26 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Setup E2E secrets
+        working-directory: ./infrastructure/k3d/erato-local/config
+        run: |
+          # Write secrets file from GitHub secret
+          cat > e2e-secrets.toml <<'EOF'
+          ${{ secrets.E2E_SECRETS_TOML }}
+          EOF
+
+          # Apply secrets to generate .auto.toml files
+          ../../../scripts/setup-e2e-secrets apply
+
+          # Verify secrets are configured correctly
+          ../../../scripts/setup-e2e-secrets check
+
       - name: Spin up k3d cluster for tests
         working-directory: ./infrastructure
         run: |
           ./scripts/setup-dev --wait --chart-dep-update \
             --erato-image-repository ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }} \
             --erato-image-tag ${{ env.SHA_TAG }}-amd64 \
-            --api-key "${{ secrets.E2E_OPENAI_API_KEY }}" \
             --scenario ${{ matrix.scenario }}
 
       - name: Install pnpm
@@ -458,11 +471,11 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push Backend image
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6.15.0
         with:
           context: ./backend
           push: true
@@ -471,9 +484,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-amd64-buildcache
 
       - name: Build and push Frontend image
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6.15.0
         with:
           context: ./frontend
           push: true
@@ -482,9 +497,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-amd64-buildcache
 
       - name: Build and push Combined image
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6.15.0
         with:
           context: .
           file: ./Dockerfile.combined
@@ -498,6 +515,8 @@ jobs:
             REGISTRY=${{ env.REGISTRY }}
             BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-amd64', env.RELEASE_VERSION) || format('{0}-amd64', env.SHA_TAG) }}
             FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-amd64', env.RELEASE_VERSION) || format('{0}-amd64', env.SHA_TAG) }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-amd64-buildcache
 
   build-and-push-arm64:
     runs-on: ubuntu-22.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2204-arm
@@ -515,11 +534,11 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push Backend image
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6.15.0
         with:
           context: ./backend
           push: true
@@ -528,9 +547,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.BACKEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest-arm64-buildcache
 
       - name: Build and push Frontend image
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6.15.0
         with:
           context: ./frontend
           push: true
@@ -539,9 +560,11 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
             ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.FRONTEND_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest-arm64-buildcache
 
       - name: Build and push Combined image
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6.15.0
         with:
           context: .
           file: ./Dockerfile.combined
@@ -555,6 +578,8 @@ jobs:
             REGISTRY=${{ env.REGISTRY }}
             BACKEND_IMAGE=${{ env.BACKEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-arm64', env.RELEASE_VERSION) || format('{0}-arm64', env.SHA_TAG) }}
             FRONTEND_IMAGE=${{ env.FRONTEND_IMAGE_NAME }}:${{ env.RELEASE_VERSION != '' && format('{0}-arm64', env.RELEASE_VERSION) || format('{0}-arm64', env.SHA_TAG) }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:latest-arm64-buildcache
 
   create-manifests:
     needs: [build-and-push-amd64, build-and-push-arm64]
@@ -567,8 +592,8 @@ jobs:
           username: ${{ secrets.HARBOR_USERNAME }}
           password: ${{ secrets.HARBOR_PASSWORD }}
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Create and push manifests
         run: |

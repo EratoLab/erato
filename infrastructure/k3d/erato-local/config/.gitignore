@@ -1,1 +1,3 @@
 erato.alt.toml
+*.auto.toml
+e2e-secrets.toml
