@@ -57,12 +57,8 @@ export const DefaultMessageControls = ({
 }: ExtendedMessageControlsProps) => {
   const [isCopied, setIsCopied] = useState(false);
 
-  // Chat-level edit permission from context; default true if unspecified
-  const canEditChat = context.canEdit !== false; // default to true if unspecified
-  // const isDialogOwner = context.dialogOwnerId === profile.profile?.id;
+  const canEditChat = context.canEdit !== false;
 
-  // Derive feedback state from initialFeedback prop
-  // This avoids unnecessary re-renders from useEffect + useState combination
   const [feedbackState, setFeedbackState] = useState<
     "liked" | "disliked" | null
   >(() => {
@@ -72,7 +68,6 @@ export const DefaultMessageControls = ({
     return null;
   });
 
-  // Sync feedbackState when initialFeedback changes (e.g., after cache invalidation)
   useEffect(() => {
     if (initialFeedback) {
       const newState =
@@ -92,7 +87,6 @@ export const DefaultMessageControls = ({
 
   const handleAction = useCallback(
     async (actionType: "copy" | "edit" | "like" | "dislike") => {
-      // If feedback already exists and user clicks the filled button, show view dialog
       if (
         (actionType === "like" || actionType === "dislike") &&
         feedbackState !== null &&
@@ -103,8 +97,6 @@ export const DefaultMessageControls = ({
         return;
       }
 
-      // Prevent duplicate feedback submissions if already submitted but cache not yet updated
-      // This handles the case where feedbackState is set locally but initialFeedback hasn't arrived yet
       if (
         (actionType === "like" || actionType === "dislike") &&
         feedbackState !== null
@@ -136,7 +128,6 @@ export const DefaultMessageControls = ({
     [onAction, messageId, feedbackState, initialFeedback, onViewFeedback],
   );
 
-  // Ensure safeCreatedAt is always a Date object
   const safeCreatedAt =
     createdAt instanceof Date ? createdAt : new Date(createdAt ?? Date.now());
   const isUser = isUserMessage;
@@ -150,7 +141,6 @@ export const DefaultMessageControls = ({
       )}
     >
       <div className="flex items-center gap-2">
-        {/* Raw/Formatted toggle - always visible for any message */}
         {onToggleRawMarkdown && (
           <Button
             onClick={onToggleRawMarkdown}
@@ -281,7 +271,6 @@ export const DefaultMessageControls = ({
         )}
       </div>
 
-      {/* Timestamp */}
       <MessageTimestamp createdAt={safeCreatedAt} />
     </div>
   );

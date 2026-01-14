@@ -6,11 +6,12 @@ import { MemoryRouter } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { useChatMessaging } from "@/hooks/chat/useChatMessaging";
-import { messages as enMessages } from "@/locales/en/messages.json";
 import { useChatContext } from "@/providers/ChatProvider";
 import { FeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import ChatPageStructure from "../ChatPageStructure.client";
+
+import { messages as enMessages } from "@/locales/en/messages.json";
 
 import "@testing-library/jest-dom";
 

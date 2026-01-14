@@ -36,24 +36,20 @@ export function SharingDialog({
 }: SharingDialogProps) {
   const { _ } = useLingui();
 
-  // State for selected subjects
   const [selectedSubjects, setSelectedSubjects] = useState<
     OrganizationMember[]
   >([]);
   const [successMessage, setSuccessMessage] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
-  // State for subject type toggle (users vs groups)
   const [subjectTypeFilter, setSubjectTypeFilter] =
     useState<SubjectTypeFilter>("user");
 
-  // Fetch organization members (users and groups)
   const {
     members: availableSubjects,
     isLoading: isLoadingMembers,
     error: membersError,
   } = useOrganizationMembers();
 
-  // Fetch and manage share grants
   const {
     grants,
     isLoading: isLoadingGrants,
@@ -65,13 +61,11 @@ export function SharingDialog({
     resourceId,
   });
 
-  // Selected IDs for checkbox state
   const selectedIds = useMemo(
     () => selectedSubjects.map((s) => s.id),
     [selectedSubjects],
   );
 
-  // Auto-clear success messages after 3 seconds
   useEffect(() => {
     if (successMessage) {
       const timer = setTimeout(() => setSuccessMessage(""), 3000);
@@ -79,15 +73,10 @@ export function SharingDialog({
     }
   }, [successMessage]);
 
-  // Clear selections when filter changes to avoid confusion
-  // (user wouldn't see what's selected if it's from the other type)
   useEffect(() => {
     setSelectedSubjects([]);
   }, [subjectTypeFilter]);
 
-  // Toggle subject selection
-  // Memoized with empty deps: uses setState callback form, stable reference prevents
-  // SubjectSelector and all SubjectRow items from re-rendering
   const handleToggleSubject = useCallback((subject: OrganizationMember) => {
     setSelectedSubjects((prev) => {
       const isSelected = prev.some((s) => s.id === subject.id);
@@ -96,10 +85,8 @@ export function SharingDialog({
       }
       return [...prev, subject];
     });
-  }, []); // Empty deps: uses setState callback form
+  }, []);
 
-  // Handle adding selected subjects
-  // Not memoized: only called via button onClick, not passed to memoized children
   const handleAdd = async () => {
     if (selectedSubjects.length === 0) return;
 
@@ -139,9 +126,6 @@ export function SharingDialog({
     }
   };
 
-  // Handle removing a grant
-  // Memoized: passed to ShareGrantsList (memo) which passes to GrantRow (memo) items
-  // Prevents re-rendering the entire grants list on parent re-renders
   const handleRemove = useCallback(
     async (grantId: string) => {
       setSuccessMessage("");
@@ -168,13 +152,11 @@ export function SharingDialog({
     [deleteGrant],
   );
 
-  // Handle dialog close
-  // Not memoized: ModalBase is not memoized, and onClose likely changes on parent re-renders
   const handleClose = () => {
     setSelectedSubjects([]);
     setSuccessMessage("");
     setErrorMessage("");
-    setSubjectTypeFilter("user"); // Reset to default
+    setSubjectTypeFilter("user");
     onClose();
   };
 
@@ -190,7 +172,6 @@ export function SharingDialog({
       )}
     >
       <div className="space-y-5">
-        {/* Success/Error alerts */}
         {successMessage ? <Alert type="success">{successMessage}</Alert> : null}
         {errorMessage ? <Alert type="error">{errorMessage}</Alert> : null}
         {membersError ? (
@@ -210,24 +191,20 @@ export function SharingDialog({
           </Alert>
         ) : null}
 
-        {/* Add people section */}
         <div>
           <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
             {t({ id: "sharing.addPeople.title", message: "Add people" })}
           </h3>
 
-          {/* Toggle between users and groups */}
           <div className="mb-3">
             <SegmentedControl
               options={[
                 {
                   value: "user" as const,
-                  // Reuse existing translation key
                   label: t({ id: "sharing.section.users", message: "Users" }),
                 },
                 {
                   value: "group" as const,
-                  // Reuse existing translation key
                   label: t({ id: "sharing.section.groups", message: "Groups" }),
                 },
               ]}
@@ -260,7 +237,6 @@ export function SharingDialog({
           </Button>
         </div>
 
-        {/* Current access section */}
         <div>
           <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
             {t({
