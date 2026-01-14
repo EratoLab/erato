@@ -595,23 +595,33 @@ describe("useChatMessaging", () => {
     // Initially should have no messages
     expect(Object.keys(result.current.messages)).toHaveLength(0);
 
-    // Send a message (this creates optimistic user message)
+    // Send a message (this creates optimistic user message + optimistic assistant message)
     await act(async () => {
       await result.current.sendMessage("Hello new chat!");
     });
 
-    // Should now show the optimistic user message even with null chatId
-    expect(Object.keys(result.current.messages)).toHaveLength(1);
-    expect(result.current.messageOrder).toHaveLength(1);
+    // Should now show both optimistic user and assistant messages (ERMAIN-88 fix)
+    expect(Object.keys(result.current.messages)).toHaveLength(2);
+    expect(result.current.messageOrder).toHaveLength(2);
 
-    // Check the optimistic message content
-    const messageId = result.current.messageOrder[0];
-    const message = result.current.messages[messageId];
-    expect(message.content).toEqual([
+    // Check the optimistic user message (first message)
+    const userMessageId = result.current.messageOrder[0];
+    const userMessage = result.current.messages[userMessageId];
+    expect(userMessage.content).toEqual([
       { content_type: "text", text: "Hello new chat!" },
     ]);
-    expect(message.role).toBe("user");
-    expect(message.status).toBe("sending");
+    expect(userMessage.role).toBe("user");
+    expect(userMessage.status).toBe("sending");
+
+    // Check the optimistic assistant message (second message)
+    const assistantMessageId = result.current.messageOrder[1];
+    const assistantMessage = result.current.messages[assistantMessageId];
+    expect(assistantMessage.role).toBe("assistant");
+    // Status is "complete" because isStreaming is false for the optimistic placeholder
+    // The UI shows "thinking" state based on temp-assistant- ID, not status
+    expect(assistantMessage.status).toBe("complete");
+    expect(assistantMessage.id).toMatch(/^temp-assistant-/);
+    expect(assistantMessage.content).toEqual([]); // Empty content initially
   });
 
   it("should return empty messages when chatId is null and no local messages (after archiving)", () => {
