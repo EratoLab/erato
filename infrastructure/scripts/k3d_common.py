@@ -3,7 +3,7 @@
 from typing import List
 
 # Valid scenario names
-VALID_SCENARIOS = ["basic", "tight-budget", "assistants"]
+VALID_SCENARIOS = ["basic", "tight-budget", "assistants", "entra_id"]
 
 
 def get_scenario_source_file(scenario: str) -> str:

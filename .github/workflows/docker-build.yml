@@ -308,6 +308,8 @@ jobs:
             projects: "--project chromium-tight-budget --project firefox-tight-budget"
           - scenario: assistants
             projects: "--project chromium-assistants --project firefox-assistants"
+          - scenario: entra_id
+            projects: "--project chromium-entra-id --project firefox-entra-id"
     permissions:
       contents: read
     steps:

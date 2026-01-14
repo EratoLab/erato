@@ -37,7 +37,10 @@ test(
     await textbox.fill("Please write a short poem about the sun");
     await textbox.press("Enter");
 
-    await chatIsReadyToChat(page, { expectAssistantResponse: true });
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 15000,
+    });
 
     // Verify that the URL is a chat URL and save the chat ID
     await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/);
@@ -79,10 +82,11 @@ test(
       // Increased timeout, as uploading a 20MB file can take a while
       timeout: 30000,
     });
-    
+
     // Verify the error message content
     await expect(page.getByTestId("file-upload-error")).toContainText(
       "File is too large",
+      { timeout: 30000 },
     );
   },
 );

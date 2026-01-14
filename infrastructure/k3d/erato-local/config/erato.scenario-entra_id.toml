@@ -1,0 +1,7 @@
+# Azure Entra ID Authentication Scenario
+# This scenario uses Azure Entra ID for authentication instead of local Dex
+# OAuth2-Proxy will be configured to use Azure Entra ID for authentication
+# Test user credentials are injected automatically by setup-e2e-secrets
+
+[frontend.additional_environment]
+K3D_TEST_SCENARIO = "entra_id"
