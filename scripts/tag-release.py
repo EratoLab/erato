@@ -25,8 +25,8 @@ def run_git_command(args, check=True):
             sys.exit(1)
 
 def main():
-    # Read version from Cargo.toml
-    cargo_toml_path = Path(__file__).parent.parent / "backend" / "Cargo.toml"
+    # Read version from the main erato package in the workspace
+    cargo_toml_path = Path(__file__).parent.parent / "backend" / "erato" / "Cargo.toml"
     if not cargo_toml_path.exists():
         print(f"Error: {cargo_toml_path} not found.", file=sys.stderr)
         sys.exit(1)
@@ -34,12 +34,12 @@ def main():
     with open(cargo_toml_path, "r") as f:
         content = f.read()
         cargo_data = tomlkit.parse(content)
-    
+
     version = cargo_data.get("package", {}).get("version")
     if not version:
-        print("Could not find version in backend/Cargo.toml", file=sys.stderr)
+        print("Could not find version in backend/erato/Cargo.toml", file=sys.stderr)
         sys.exit(1)
-    
+
     print(f"Version found: {version}")
 
     # Check current branch is main
