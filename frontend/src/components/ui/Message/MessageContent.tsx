@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {
@@ -108,19 +108,11 @@ export const MessageContent = memo(function MessageContent({
     [fileDownloadUrls],
   );
 
-  // If showing raw, just show text
-  if (showRaw) {
-    return (
-      <article className="max-w-none">
-        <pre className="whitespace-pre-wrap rounded-md bg-theme-bg-tertiary p-4 font-mono text-sm text-theme-fg-primary">
-          <code>{displayText}</code>
-        </pre>
-      </article>
-    );
-  }
-
   // Define custom components for react-markdown
-  const markdownComponents: Partial<Components> = {
+  // Memoize to prevent recreating on every render
+  // Must be called before any conditional returns
+  const markdownComponents: Partial<Components> = useMemo(
+    () => ({
     // Custom code block rendering with syntax highlighting
     // @ts-expect-error - react-markdown types don't expose inline prop
     code({ inline, className, children, ...props }) {
@@ -337,36 +329,53 @@ export const MessageContent = memo(function MessageContent({
 
       return <section {...props}>{children}</section>;
     },
-  };
+    }),
+    [isDarkMode],
+  );
 
   // Create dynamic components based on streaming state
-  const components: Partial<Components> = {
-    ...markdownComponents,
-    // Override p component for streaming to handle incomplete markdown
-    p: isStreaming
-      ? ({ children, ...props }) => {
-          // Check if this paragraph contains only incomplete markdown
-          if (
-            typeof children === "string" &&
-            children.match(/^(\*{1,2}|_{1,2}|~{1,2}|`{1,3})[^*_~`]*$/)
-          ) {
+  // Memoize to prevent recreating on every render
+  const components: Partial<Components> = useMemo(
+    () => ({
+      ...markdownComponents,
+      // Override p component for streaming to handle incomplete markdown
+      p: isStreaming
+        ? ({ children, ...props }) => {
+            // Check if this paragraph contains only incomplete markdown
+            if (
+              typeof children === "string" &&
+              children.match(/^(\*{1,2}|_{1,2}|~{1,2}|`{1,3})[^*_~`]*$/)
+            ) {
+              return (
+                <span
+                  className="whitespace-pre-wrap text-theme-fg-primary"
+                  {...props}
+                >
+                  {children}
+                </span>
+              );
+            }
             return (
-              <span
-                className="whitespace-pre-wrap text-theme-fg-primary"
-                {...props}
-              >
+              <p className="mb-4 text-theme-fg-primary last:mb-0" {...props}>
                 {children}
-              </span>
+              </p>
             );
           }
-          return (
-            <p className="mb-4 text-theme-fg-primary last:mb-0" {...props}>
-              {children}
-            </p>
-          );
-        }
-      : markdownComponents.p,
-  };
+        : markdownComponents.p,
+    }),
+    [markdownComponents, isStreaming],
+  );
+
+  // If showing raw, just show text (after hooks are called)
+  if (showRaw) {
+    return (
+      <article className="max-w-none">
+        <pre className="whitespace-pre-wrap rounded-md bg-theme-bg-tertiary p-4 font-mono text-sm text-theme-fg-primary">
+          <code>{displayText}</code>
+        </pre>
+      </article>
+    );
+  }
 
   return (
     <article className="max-w-none">

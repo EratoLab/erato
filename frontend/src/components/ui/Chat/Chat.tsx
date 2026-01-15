@@ -140,23 +140,26 @@ export const Chat = ({
   const { profile } = useProfile();
 
   // Convert the chat history data to the format expected by the sidebar
-  const sessions: ChatSession[] = Array.isArray(chatHistory)
-    ? chatHistory.map((chat) => ({
-        id: chat.id,
-        title:
-          chat.title_by_summary ||
-          t({ id: "chat.newChat.title", message: "New Chat" }), // Use title from API
-        updatedAt: chat.last_message_at || new Date().toISOString(), // Use last message timestamp
-        messages: [], // We don't need to populate messages here
-        metadata: {
-          lastMessage: {
-            content: chat.title_by_summary || "", // Reuse title as a preview if no actual message available
-            timestamp: chat.last_message_at || new Date().toISOString(),
+  // Memoize to prevent recreating the array on every render
+  const sessions: ChatSession[] = useMemo(() => {
+    return Array.isArray(chatHistory)
+      ? chatHistory.map((chat) => ({
+          id: chat.id,
+          title:
+            chat.title_by_summary ||
+            t({ id: "chat.newChat.title", message: "New Chat" }), // Use title from API
+          updatedAt: chat.last_message_at || new Date().toISOString(), // Use last message timestamp
+          messages: [], // We don't need to populate messages here
+          metadata: {
+            lastMessage: {
+              content: chat.title_by_summary || "", // Reuse title as a preview if no actual message available
+              timestamp: chat.last_message_at || new Date().toISOString(),
+            },
+            fileCount: chat.file_uploads.length,
           },
-          fileCount: chat.file_uploads.length,
-        },
-      }))
-    : [];
+        }))
+      : [];
+  }, [chatHistory]);
 
   const canEditForCurrentChat = Array.isArray(chatHistory)
     ? !!chatHistory.find((c) => c.id === (currentChatId ?? ""))?.can_edit
