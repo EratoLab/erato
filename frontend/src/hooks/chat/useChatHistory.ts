@@ -20,6 +20,8 @@ import { deepMerge } from "@/lib/generated/v1betaApi/v1betaApiUtils";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
+import { useMessagingStore } from "./store/messagingStore";
+
 // Import the correct response type and the RecentChat type from schemas
 // No longer needed after switching to invalidateQueries:
 // import type {
@@ -111,6 +113,12 @@ export function useChatHistory() {
   const createNewChat = useCallback(async () => {
     try {
       logger.log("Creating new chat - navigating to /chat/new");
+
+      // CRITICAL: Clear ALL state before navigation - messages, streaming, AND abort SSE
+      // This prevents stale messages and stops any active streaming
+      useMessagingStore.getState().abortActiveSSE();
+      useMessagingStore.getState().clearUserMessages();
+      useMessagingStore.getState().resetStreaming();
 
       // Set the pending flag first to prevent unwanted changes during navigation
       logger.log("Setting isNewChatPending to TRUE");

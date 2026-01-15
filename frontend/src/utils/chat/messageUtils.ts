@@ -35,13 +35,24 @@ export function mergeDisplayMessages(
   apiMessages: Message[],
   localUserMessages: Message[],
 ): Record<string, Message> {
-  // Track which user messages content from API to prevent duplicates
-  // Extract text from ContentPart[] for comparison
-  const apiUserMessageContents = new Set(
-    apiMessages
-      .filter((msg) => msg.role === "user")
-      .map((msg) => extractTextFromContent(msg.content)),
-  );
+  // Build a map of very recent API user message content with their timestamps
+  // Only consider messages from the last 5 seconds for deduplication
+  // This is tight enough to catch temp→real message transitions (usually < 1s)
+  // but allows users to send the same message again quickly
+  const recentApiUserMessages = new Map<string, Date>();
+  const now = new Date();
+  const DEDUP_WINDOW_MS = 5000; // 5 seconds - tight window for temp message matching
+
+  apiMessages
+    .filter((msg) => msg.role === "user")
+    .forEach((msg) => {
+      const createdAt = new Date(msg.createdAt);
+      const age = now.getTime() - createdAt.getTime();
+      if (age <= DEDUP_WINDOW_MS) {
+        const content = extractTextFromContent(msg.content);
+        recentApiUserMessages.set(content, createdAt);
+      }
+    });
 
   const messageMap = new Map<string, Message>();
 
@@ -52,10 +63,24 @@ export function mergeDisplayMessages(
 
   // Then add local messages only if they don't conflict
   localUserMessages.forEach((msg) => {
+    const localCreatedAt = new Date(msg.createdAt);
+    const content = extractTextFromContent(msg.content);
+    const apiMessageTime = recentApiUserMessages.get(content);
+
+    // Check if this looks like a duplicate of a very recent API message
+    // A message is a duplicate if:
+    // 1. It has the same content as an API message
+    // 2. The API message is very recent (within 5 seconds)
+    // 3. The local message timestamp is very close to the API message (within 3 seconds)
+    // This tight window catches temp→confirmed transitions without blocking rapid re-sends
+    const isDuplicateOfRecentMessage =
+      msg.role === "user" &&
+      apiMessageTime &&
+      Math.abs(localCreatedAt.getTime() - apiMessageTime.getTime()) < 3000;
+
     if (
       (!messageMap.has(msg.id) || msg.status === "sending") &&
-      (msg.role !== "user" ||
-        !apiUserMessageContents.has(extractTextFromContent(msg.content)))
+      !isDuplicateOfRecentMessage
     ) {
       messageMap.set(msg.id, msg);
     }

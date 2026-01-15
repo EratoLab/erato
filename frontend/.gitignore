@@ -52,3 +52,5 @@ src/locales/**/*.ts
 src/locales/**/*.json
 public/custom-theme/**/locales/**/*.ts
 public/custom-theme/**/locales/**/*.json
+
+.pnpm-store

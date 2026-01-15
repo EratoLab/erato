@@ -53,6 +53,7 @@ interface ChatContextValue {
   messages: Record<string, ChatMessage>;
   messageOrder: string[];
   isStreaming: boolean;
+  isPendingResponse: boolean; // True immediately when send is clicked (for input disabling)
   isFinalizing: boolean;
   streamingContent: ContentPart[];
   isMessagingLoading: boolean;
@@ -158,6 +159,7 @@ export function ChatProvider({
     messages,
     isLoading: isMessagingLoading,
     isStreaming,
+    isPendingResponse,
     isFinalizing,
     streamingContent,
     error: messagingError,
@@ -283,6 +285,7 @@ export function ChatProvider({
       messageOrder: orderedMessageIds, // Add the ordered message IDs
       isMessagingLoading,
       isStreaming,
+      isPendingResponse,
       isFinalizing,
       streamingContent,
       messagingError,
@@ -328,6 +331,7 @@ export function ChatProvider({
     messages,
     isMessagingLoading,
     isStreaming,
+    isPendingResponse,
     isFinalizing,
     streamingContent,
     messagingError,

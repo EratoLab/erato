@@ -118,9 +118,13 @@ const mockQueryClient = {
 };
 
 // Mock the useQueryClient hook
-vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => mockQueryClient,
-}));
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    useQueryClient: () => mockQueryClient,
+  };
+});
 
 // Mock implementations
 const mockUseChatMessages = useChatMessages as unknown as ReturnType<
