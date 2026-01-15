@@ -117,6 +117,47 @@ def check_e2e_secrets() -> bool:
         return False
 
 
+def fetch_latest_main_commit() -> str:
+    """Fetch and return the latest commit SHA from upstream main branch.
+
+    Returns:
+        The commit SHA of the latest commit on origin/main
+
+    Raises:
+        SystemExit if git operations fail
+    """
+    print("Fetching latest commit from upstream main branch...")
+
+    # Fetch the latest from origin
+    result = run_command(
+        ["git", "fetch", "origin", "main"],
+        capture_output=True,
+        check=False
+    )
+
+    if result.returncode != 0:
+        print("Error: Failed to fetch from origin/main", file=sys.stderr)
+        print(f"Git error: {result.stderr}", file=sys.stderr)
+        sys.exit(1)
+
+    # Get the commit SHA of origin/main
+    result = run_command(
+        ["git", "rev-parse", "origin/main"],
+        capture_output=True,
+        check=False
+    )
+
+    if result.returncode != 0:
+        print("Error: Failed to get commit SHA from origin/main", file=sys.stderr)
+        print(f"Git error: {result.stderr}", file=sys.stderr)
+        sys.exit(1)
+
+    commit_sha = result.stdout.strip()
+    print(f"✓ Using commit from origin/main: {commit_sha}")
+
+    return commit_sha
+
+
 def get_cluster_status(cluster_name: str) -> ClusterStatus:
     """Check if a k3d cluster exists and if it's running."""
     import json
@@ -488,7 +529,7 @@ def main():
     parser.add_argument(
         "--erato-image-tag",
         default=None,
-        help="Erato image tag (if not specified, uses chart default)"
+        help="Erato image tag (if not specified, uses chart default). Use 'fetch-latest-main' to automatically fetch and use the latest commit from origin/main"
     )
     parser.add_argument(
         "--chart-dep-update",
@@ -531,9 +572,13 @@ def main():
         file_storage_config_source=args.file_storage_config_source,
         test_scenario=args.scenario
     )
-    
+
+    # Handle magic string "fetch-latest-main" for image tag
+    if config.erato_image_tag == "fetch-latest-main":
+        config.erato_image_tag = fetch_latest_main_commit()
+
     cluster_config = ClusterConfig()
-    
+
     # Change to infrastructure directory
     script_dir = Path(__file__).resolve().parent
     infrastructure_dir = script_dir.parent
