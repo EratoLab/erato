@@ -109,7 +109,9 @@ export const ChatInput = ({
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
 
   // Get necessary state from context instead of useChat()
-  const { isStreaming, isMessagingLoading, isUploading } = useChatContext();
+  // isPendingResponse is true immediately when send is clicked (before streaming starts)
+  const { isPendingResponse, isMessagingLoading, isUploading } =
+    useChatContext();
 
   // Combine loading states
   const isLoading = propIsLoading ?? isMessagingLoading;
@@ -184,6 +186,7 @@ export const ChatInput = ({
   }, [mode, editInitialContent]);
 
   // Create the submit handler
+  // Use isPendingResponse instead of isStreaming to block submission immediately when send is clicked
   const handleSubmit = createSubmitHandler(
     message,
     attachedFiles,
@@ -212,7 +215,7 @@ export const ChatInput = ({
         );
       }
     },
-    isLoading || isStreaming,
+    isLoading || isPendingResponse,
     disabled,
     () => setMessage(""),
   );
@@ -227,11 +230,12 @@ export const ChatInput = ({
   }, [message]);
 
   // Combine disabled states
+  // Use isPendingResponse instead of isStreaming to disable immediately when send is clicked
   const isDisabled =
     disabled ||
     isUploading || // From context (drag & drop)
     isLoading ||
-    isStreaming ||
+    isPendingResponse || // True immediately when send is clicked
     isFileButtonProcessing; // From button callback
 
   // Add token limit exceeded to disabled state for the send button
@@ -273,10 +277,11 @@ export const ChatInput = ({
   );
 
   // Determine if send button should be enabled
+  // Use isPendingResponse instead of isStreaming to disable immediately when send is clicked
   const canSendMessage =
     (message.trim() || attachedFiles.length > 0) &&
     !isLoading &&
-    !isStreaming &&
+    !isPendingResponse &&
     !disabled &&
     !isUploading &&
     !isAnyTokenLimitExceeded;
@@ -357,7 +362,7 @@ export const ChatInput = ({
                 : placeholder
           }
           rows={1}
-          disabled={isLoading || isStreaming || disabled || isUploading}
+          disabled={isLoading || isPendingResponse || disabled || isUploading}
           tabIndex={0}
           autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
           className={clsx(
@@ -396,7 +401,7 @@ export const ChatInput = ({
                     disabled={
                       attachedFiles.length >= maxFiles ||
                       isLoading ||
-                      isStreaming ||
+                      isPendingResponse ||
                       disabled ||
                       isUploading || // isUploading from context (drag & drop)
                       isFileButtonProcessing // Add button processing state

@@ -64,7 +64,7 @@ export function useExplicitNavigation() {
 
   const shouldNavigateFromNewChat = useCallback(
     (chatId: string) => {
-      return location.pathname === "/chat/new" && chatId;
+      return location.pathname === "/chat/new" && !!chatId;
     },
     [location.pathname],
   );

@@ -26,6 +26,7 @@ const eslintConfig = [
       "dist/**/*", // Vite build output
       "node_modules/**/*",
       "out/**/*",
+      ".pnpm-store/**/*", // pnpm store directory
       "src/hooks/chat/__tests__/useChatHistory.test.tsx",
     ],
   },

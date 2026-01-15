@@ -13,7 +13,7 @@
  * This approach eliminates the need for complex ID mapping and localStorage persistence,
  * resulting in less flickering during navigation and a more reliable message history.
  */
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, skipToken } from "@tanstack/react-query";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 import { useChatHistory } from "@/hooks";
@@ -123,9 +123,11 @@ export function useChatMessaging(
     setError,
     setNewlyCreatedChatIdInStore,
     setAwaitingFirstStreamChunkForNewChat,
+    setSSEAbortCallback,
   } = useMessagingStore();
   const sseCleanupRef = useRef<(() => void) | null>(null);
   const isSubmittingRef = useRef(false);
+  const isUnmountingRef = useRef(false); // Track if we're unmounting to skip unnecessary refetch
   // Remove pendingChatIdRef, use state instead
   // const pendingChatIdRef = useRef<string | null>(null);
   const [newlyCreatedChatId, setNewlyCreatedChatId] = useState<string | null>(
@@ -141,11 +143,11 @@ export function useChatMessaging(
     const isInTransition =
       useMessagingStore.getState().isInNavigationTransition;
 
+    // Reset unmounting flag on mount
+    isUnmountingRef.current = false;
+
     // Only log in development
     if (process.env.NODE_ENV === "development") {
-      // logger.log(
-      //   `[CHAT_FLOW_LIFECYCLE] useChatMessaging mounted for chatId: ${currentChatId ?? "null"}`,
-      // );
       logger.log(
         `[DEBUG_STREAMING] useChatMessaging mounted. chatId: ${currentChatId ?? "null"}, silentChatId: ${silentChatId ?? "null"}, isInTransition: ${isInTransition}`,
       );
@@ -157,9 +159,13 @@ export function useChatMessaging(
         "[DEBUG_STREAMING] Skipping state reset during navigation transition to preserve optimistic state.",
       );
       return () => {
-        logger.log(
-          `[DEBUG_STREAMING] useChatMessaging cleanup skipped during transition. chatId: ${currentChatId ?? "null"}`,
-        );
+        // Mark unmounting even during transition
+        isUnmountingRef.current = true;
+        if (process.env.NODE_ENV === "development") {
+          logger.log(
+            `[DEBUG_STREAMING] useChatMessaging unmounting (transition). chatId: ${currentChatId ?? "null"}`,
+          );
+        }
       };
     }
 
@@ -207,9 +213,6 @@ export function useChatMessaging(
     return () => {
       // Only log in development
       if (process.env.NODE_ENV === "development") {
-        // logger.log(
-        //   `[CHAT_FLOW_LIFECYCLE] useChatMessaging unmounting for chatId: ${currentChatId ?? "null"}`,
-        // );
         logger.log(
           `[DEBUG_STREAMING] useChatMessaging unmounting. chatId: ${currentChatId ?? "null"}`,
         );
@@ -217,14 +220,11 @@ export function useChatMessaging(
     };
   }, [chatId, clearCompletedUserMessages, resetStreaming, silentChatId]); // Added silentChatId to dep array for mount log
 
-  // Skip the query if no chatId is provided
-  const skipQuery = !chatId;
+  // Skip the query if no chatId is provided using skipToken
+  // This prevents the query from being executed even if refetch() is called
   const chatMessagesQuery = useChatMessages(
-    skipQuery
-      ? { pathParams: { chatId: "" } }
-      : { pathParams: { chatId: chatId } },
+    chatId ? { pathParams: { chatId } } : skipToken,
     {
-      enabled: !skipQuery,
       refetchOnWindowFocus: true,
     },
   );
@@ -234,6 +234,12 @@ export function useChatMessaging(
   const handleRefetchAndClear = useCallback(
     async (options: { invalidate?: boolean; logContext: string }) => {
       const { invalidate = false, logContext } = options;
+
+      // CRITICAL GUARD: Skip refetch if we're unmounting/navigating away
+      // This prevents expensive 3-second timeouts when SSE callbacks fire during navigation
+      if (isUnmountingRef.current) {
+        return;
+      }
 
       // Don't clear optimistic state during navigation transition
       const isInTransition =
@@ -385,33 +391,34 @@ export function useChatMessaging(
     const capturedChatIdForCleanup = chatId; // Capture chatId for the cleanup function
 
     return () => {
+      // Mark that we're unmounting - this prevents SSE onClose from triggering expensive refetch
+      isUnmountingRef.current = true;
+
       const isInTransition =
         useMessagingStore.getState().isInNavigationTransition;
 
-      // Skip SSE cleanup during navigation transition to preserve connection
-      if (isInTransition) {
+      // Skip SSE cleanup ONLY when transitioning FROM new chat (null) TO existing chat
+      // This preserves the connection when the backend returns a real chat ID
+      // DO NOT skip if transitioning FROM existing chat (real ID) to anywhere else
+      const isTransitioningFromNewToExisting =
+        isInTransition && capturedChatIdForCleanup === null;
+
+      if (isTransitioningFromNewToExisting) {
         logger.log(
-          `[DEBUG_STREAMING] SSE Cleanup skipped during navigation transition for chatId: ${capturedChatIdForCleanup ?? "null"}`,
+          `[DEBUG_STREAMING] SSE Cleanup skipped during navigation transition for chatId: ${String(capturedChatIdForCleanup)}`,
         );
         return;
       }
 
-      // logger.log(
-      //   `[CHAT_FLOW_LIFECYCLE_DEBUG] Running cleanup for capturedChatId: ${capturedChatIdForCleanup ?? "null"}. Current sseCleanupRef.current is ${sseCleanupRef.current ? "set" : "null"}.`,
-      // );
       if (sseCleanupRef.current) {
-        // logger.log(
-        //   `[CHAT_FLOW_LIFECYCLE_DEBUG] Calling sseCleanupRef.current() for capturedChatId: ${capturedChatIdForCleanup ?? "null"}`,
-        // );
         logger.log(
-          `[DEBUG_STREAMING] SSE Cleanup: Closing SSE connection for chatId: ${capturedChatIdForCleanup ?? "null"}`,
+          `[DEBUG_STREAMING] SSE Cleanup: Closing SSE connection for chatId: ${String(capturedChatIdForCleanup)}`,
         );
-        sseCleanupRef.current();
+        sseCleanupRef.current(); // This calls abort on the SSE connection
         sseCleanupRef.current = null;
-      } else {
-        // logger.log(
-        //   `[CHAT_FLOW_LIFECYCLE_DEBUG] sseCleanupRef.current was null for capturedChatId: ${capturedChatIdForCleanup ?? "null"}, no cleanup call needed.`,
-        // );
+
+        // Clear the callback from the store as well
+        setSSEAbortCallback(null);
       }
 
       // Reset submission flag on unmount to prevent stale state
@@ -428,7 +435,7 @@ export function useChatMessaging(
       logger.log("SSE Cleanup: Clearing error state.");
       setError(null);
     };
-  }, [chatId, resetStreaming, setError]);
+  }, [chatId, resetStreaming, setError, setSSEAbortCallback]);
 
   // Combine API messages and locally added user messages
   const combinedMessages = useMemo(() => {
@@ -470,12 +477,17 @@ export function useChatMessaging(
     const merged = mergeDisplayMessages(apiMsgs, localUserMsgs);
 
     if (process.env.NODE_ENV === "development" && localUserMsgs.length > 0) {
+      const userMsgInMerged = Object.values(merged).filter(
+        (m) => m.role === "user" && m.id.startsWith("temp-"),
+      );
       logger.log(
         "[DEBUG_STREAMING] Combined messages (using mergeDisplayMessages):",
         {
           apiMessages: apiMsgs.length,
           localMessages: localUserMsgs.length,
           finalMessages: Object.keys(merged).length,
+          tempUserMsgsInResult: userMsgInMerged.length,
+          allMessageIds: Object.keys(merged),
           currentChatId: chatId,
           userMessagesState: userMessages, // Log the actual userMessages from store
         },
@@ -856,6 +868,9 @@ export function useChatMessaging(
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           `[DEBUG_STREAMING] sendMessage: Calling createSSEConnection. Current sseCleanupRef is ${sseCleanupRef.current ? "set" : "null"}.`,
         );
+
+        // Store the abort function in both the ref AND the global store
+        // This allows external code (like createNewChat) to abort the connection
         sseCleanupRef.current = createSSEConnection(sseUrl, {
           onMessage: processStreamEvent,
           onError: (errorEvent) => {
@@ -942,6 +957,11 @@ export function useChatMessaging(
           },
           body: JSON.stringify(requestBody),
         });
+
+        // Store the abort callback in the global store so it can be called from anywhere
+        // This allows createNewChat to abort streaming without needing direct access to the ref
+        setSSEAbortCallback(sseCleanupRef.current);
+
         // logger.log(
         //   `[CHAT_FLOW_LIFECYCLE_DEBUG] sendMessage: Assigned new cleanup to sseCleanupRef.current for chatId: ${chatId ?? "null"}.`,
         // );
@@ -992,6 +1012,7 @@ export function useChatMessaging(
       handleRefetchAndClear,
       setNewlyCreatedChatIdInStore,
       setAwaitingFirstStreamChunkForNewChat,
+      setSSEAbortCallback,
     ],
   );
 
@@ -1067,6 +1088,9 @@ export function useChatMessaging(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestBody),
         });
+
+        // Store the abort callback in the global store
+        setSSEAbortCallback(sseCleanupRef.current);
       } catch (err) {
         logger.error("[DEBUG_STREAMING] editMessage error:", err);
         setError(
@@ -1083,6 +1107,7 @@ export function useChatMessaging(
       processStreamEvent,
       resetStreaming,
       setError,
+      setSSEAbortCallback,
       streaming.isStreaming,
     ],
   );
@@ -1157,6 +1182,9 @@ export function useChatMessaging(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestBody),
         });
+
+        // Store the abort callback in the global store
+        setSSEAbortCallback(sseCleanupRef.current);
       } catch (err) {
         logger.error("[DEBUG_STREAMING] regenerateMessage error:", err);
         setError(
@@ -1175,14 +1203,20 @@ export function useChatMessaging(
       processStreamEvent,
       resetStreaming,
       setError,
+      setSSEAbortCallback,
       streaming.isStreaming,
     ],
   );
+
+  // isPendingResponse is true from the moment send is clicked until streaming completes
+  // This is different from isStreaming which only becomes true after the first chunk arrives
+  const isPendingResponse = streaming.currentMessageId !== null;
 
   return {
     messages,
     isLoading: chatMessagesQuery.isLoading,
     isStreaming: streaming.isStreaming,
+    isPendingResponse, // True immediately when send is clicked (for input disabling)
     isFinalizing: streaming.isFinalizing,
     streamingContent: streaming.content,
     error: chatMessagesQuery.error ?? error,

@@ -20,6 +20,8 @@ import { deepMerge } from "@/lib/generated/v1betaApi/v1betaApiUtils";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
+import { useMessagingStore } from "./store/messagingStore";
+
 // Import the correct response type and the RecentChat type from schemas
 // No longer needed after switching to invalidateQueries:
 // import type {
@@ -97,6 +99,18 @@ export function useChatHistory() {
         return;
       }
 
+      // Mark current chat's data as stale before navigating away
+      // This ensures React Query will refetch when returning to this chat
+      // Especially important if the chat was streaming when we navigated away
+      if (currentChatId) {
+        logger.log(
+          `navigateToChat: Marking chat ${currentChatId} as stale before navigating to ${chatId}`,
+        );
+        void queryClient.invalidateQueries({
+          queryKey: ["chatMessages", { chatId: currentChatId }],
+        });
+      }
+
       // Look up the chat to check if it has an assistant
       const chat = chats.find((c) => c.id === chatId);
       const url = getChatUrl(chatId, chat?.assistant_id);
@@ -104,13 +118,19 @@ export function useChatHistory() {
       logger.log(`navigateToChat: Navigating to ${url}`);
       navigate(url);
     },
-    [navigate, isNewChatPending, chats],
+    [navigate, isNewChatPending, chats, currentChatId, queryClient],
   );
 
   // Create a new chat and navigate to it
   const createNewChat = useCallback(async () => {
     try {
       logger.log("Creating new chat - navigating to /chat/new");
+
+      // CRITICAL: Clear ALL state before navigation - messages, streaming, AND abort SSE
+      // This prevents stale messages and stops any active streaming
+      useMessagingStore.getState().abortActiveSSE();
+      useMessagingStore.getState().clearUserMessages();
+      useMessagingStore.getState().resetStreaming();
 
       // Set the pending flag first to prevent unwanted changes during navigation
       logger.log("Setting isNewChatPending to TRUE");

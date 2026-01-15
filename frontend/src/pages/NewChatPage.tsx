@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { createLogger } from "@/utils/debugLogger";
@@ -11,12 +11,23 @@ export default function NewChatPage() {
     (state) => state.setNewChatPending,
   );
 
-  useEffect(() => {
-    logger.log(
-      "[DEBUG_REDIRECT] NewChatPage mounted - resetting new chat pending flag to false (currentChatId derived from URL)",
-    );
-    setNewChatPending(false);
-  }, [setNewChatPending]);
+  const isNewChatPending = useChatHistoryStore(
+    (state) => state.isNewChatPending,
+  );
+
+  // CRITICAL FIX: Use useLayoutEffect to reset flag synchronously before paint
+  // This ensures the flag is reset even on same-route navigation (/chat/new → /chat/new)
+  // where React Router doesn't remount the component
+  // No dependency array - runs on every render to catch same-route navigations
+  useLayoutEffect(() => {
+    if (isNewChatPending) {
+      logger.log(
+        "[DEBUG_REDIRECT] NewChatPage: Resetting isNewChatPending flag to false",
+      );
+      setNewChatPending(false);
+    }
+  }); // Intentionally no deps - must run every render to catch flag changes
+
   useEffect(() => {
     const pageTitle = t({ id: "branding.page_title_suffix" });
     const pageTitlePart = t({

@@ -40,6 +40,7 @@ export interface MessagingStore {
   isAwaitingFirstStreamChunkForNewChat: boolean; // New state for pre-navigation hold
   newlyCreatedChatId: string | null; // To store the ID of a newly created chat
   isInNavigationTransition: boolean; // Flag to preserve state during explicit navigation
+  sseAbortCallback: (() => void) | null; // Callback to abort active SSE connection
   setStreaming: (state: Partial<StreamingState>) => void;
   resetStreaming: () => void;
   addUserMessage: (message: Message) => void;
@@ -50,6 +51,8 @@ export interface MessagingStore {
   setAwaitingFirstStreamChunkForNewChat: (isAwaiting: boolean) => void; // Action for the new state
   setNewlyCreatedChatIdInStore: (chatId: string | null) => void; // Action for newlyCreatedChatId
   setNavigationTransition: (inTransition: boolean) => void; // Action for navigation transition flag
+  setSSEAbortCallback: (callback: (() => void) | null) => void; // Store SSE abort callback
+  abortActiveSSE: () => void; // Abort any active SSE connection
 }
 
 // Initial streaming state
@@ -63,7 +66,7 @@ export const initialStreamingState: StreamingState = {
 };
 
 // Create a store for messaging state
-export const useMessagingStore = create<MessagingStore>((set) => {
+export const useMessagingStore = create<MessagingStore>((set, get) => {
   return {
     streaming: initialStreamingState,
     userMessages: {},
@@ -71,6 +74,7 @@ export const useMessagingStore = create<MessagingStore>((set) => {
     isAwaitingFirstStreamChunkForNewChat: false, // Initialize new state
     newlyCreatedChatId: null, // Initialize newlyCreatedChatId
     isInNavigationTransition: false, // Initialize navigation transition flag
+    sseAbortCallback: null, // Initialize SSE abort callback
     setStreaming: (update) =>
       set((prev) => {
         const newState = { ...prev.streaming, ...update };
@@ -206,5 +210,23 @@ export const useMessagingStore = create<MessagingStore>((set) => {
           isInNavigationTransition: inTransition,
         };
       }),
+    setSSEAbortCallback: (callback) =>
+      set((prev) => {
+        return {
+          ...prev,
+          sseAbortCallback: callback,
+        };
+      }),
+    abortActiveSSE: () => {
+      const state = get();
+      if (state.sseAbortCallback) {
+        if (process.env.NODE_ENV === "development") {
+          logger.log("abortActiveSSE: Aborting active SSE connection");
+        }
+        state.sseAbortCallback();
+        // Clear the callback after aborting
+        set({ sseAbortCallback: null });
+      }
+    },
   };
 });
