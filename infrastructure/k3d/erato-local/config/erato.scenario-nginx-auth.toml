@@ -1,0 +1,13 @@
+# Nginx-Auth Authentication Scenario
+# This scenario uses nginx with njs (JavaScript) to generate JWT tokens from URL parameters/headers
+# instead of oauth2-proxy/Dex OIDC authentication
+#
+# Authentication flow:
+# 1. User accesses URL with ?user=<username> parameter
+# 2. nginx-auth generates JWT token using HMAC-SHA256
+# 3. Request forwarded to erato-app with Authorization: Bearer <JWT> header
+#
+# For testing: https://app.erato.internal/?user=testuser
+
+[frontend.additional_environment]
+K3D_TEST_SCENARIO = "nginx-auth"

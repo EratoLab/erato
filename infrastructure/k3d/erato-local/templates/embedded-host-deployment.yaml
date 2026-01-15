@@ -1,0 +1,58 @@
+{{- if and .Values.nginxAuth.enabled .Values.nginxAuth.embeddedHost.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-embedded-host
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-embedded-host
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.nginxAuth.embeddedHost.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Release.Name }}-embedded-host
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Release.Name }}-embedded-host
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        reloader.stakater.com/auto: "true"
+    spec:
+      containers:
+        - name: nginx
+          image: "{{ .Values.nginxAuth.embeddedHost.image.repository }}:{{ .Values.nginxAuth.embeddedHost.image.tag }}"
+          imagePullPolicy: {{ .Values.nginxAuth.embeddedHost.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: html-content
+              mountPath: /usr/share/nginx/html
+          resources:
+            {{- toYaml .Values.nginxAuth.embeddedHost.resources | nindent 12 }}
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: {{ .Release.Name }}-embedded-host-config
+        - name: html-content
+          configMap:
+            name: {{ .Release.Name }}-embedded-host-html
+{{- end }}

@@ -1,0 +1,36 @@
+{{- if and .Values.nginxAuth.enabled .Values.nginxAuth.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-nginx-auth
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-nginx-auth
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- with .Values.nginxAuth.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.nginxAuth.ingress.className }}
+  ingressClassName: {{ .Values.nginxAuth.ingress.className }}
+  {{- end }}
+  {{- if .Values.nginxAuth.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.nginxAuth.ingress.host }}
+      {{- if .Values.nginxAuth.ingress.tls.secretName }}
+      secretName: {{ .Values.nginxAuth.ingress.tls.secretName }}
+      {{- end }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.nginxAuth.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-nginx-auth
+                port:
+                  number: {{ .Values.nginxAuth.service.port }}
+{{- end }}
