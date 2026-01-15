@@ -99,6 +99,18 @@ export function useChatHistory() {
         return;
       }
 
+      // Mark current chat's data as stale before navigating away
+      // This ensures React Query will refetch when returning to this chat
+      // Especially important if the chat was streaming when we navigated away
+      if (currentChatId) {
+        logger.log(
+          `navigateToChat: Marking chat ${currentChatId} as stale before navigating to ${chatId}`,
+        );
+        void queryClient.invalidateQueries({
+          queryKey: ["chatMessages", { chatId: currentChatId }],
+        });
+      }
+
       // Look up the chat to check if it has an assistant
       const chat = chats.find((c) => c.id === chatId);
       const url = getChatUrl(chatId, chat?.assistant_id);
@@ -106,7 +118,7 @@ export function useChatHistory() {
       logger.log(`navigateToChat: Navigating to ${url}`);
       navigate(url);
     },
-    [navigate, isNewChatPending, chats],
+    [navigate, isNewChatPending, chats, currentChatId, queryClient],
   );
 
   // Create a new chat and navigate to it
