@@ -44,7 +44,6 @@ export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
       contentClassName="max-w-lg"
     >
       <div className="space-y-4">
-        {/* Sentiment indicator */}
         <div className="flex items-center gap-2 text-sm text-theme-fg-secondary">
           {sentiment === "positive" ? (
             <>
@@ -61,7 +60,6 @@ export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
           )}
         </div>
 
-        {/* Comment display (if present) */}
         {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- comment type is incorrectly generated as null|undefined */}
         {feedback.comment && (
           <div>
@@ -76,7 +74,6 @@ export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
           </div>
         )}
 
-        {/* Action buttons */}
         <div className="flex justify-end gap-2">
           <Button
             variant="secondary"

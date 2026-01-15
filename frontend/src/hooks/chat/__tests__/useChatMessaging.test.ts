@@ -133,8 +133,6 @@ const mockCreateSSEConnection = createSSEConnection as unknown as ReturnType<
   typeof vi.fn
 >;
 
-// Removed unused mock variables - we're using the imported hooks directly
-
 // Set up onMessage callback to capture
 let sseCallbacks: {
   onMessage?: (event: SSEEvent) => void;
@@ -604,7 +602,6 @@ describe("useChatMessaging", () => {
     expect(Object.keys(result.current.messages)).toHaveLength(2);
     expect(result.current.messageOrder).toHaveLength(2);
 
-    // Check the optimistic user message (first message)
     const userMessageId = result.current.messageOrder[0];
     const userMessage = result.current.messages[userMessageId];
     expect(userMessage.content).toEqual([
@@ -613,15 +610,12 @@ describe("useChatMessaging", () => {
     expect(userMessage.role).toBe("user");
     expect(userMessage.status).toBe("sending");
 
-    // Check the optimistic assistant message (second message)
     const assistantMessageId = result.current.messageOrder[1];
     const assistantMessage = result.current.messages[assistantMessageId];
     expect(assistantMessage.role).toBe("assistant");
-    // Status is "complete" because isStreaming is false for the optimistic placeholder
-    // The UI shows "thinking" state based on temp-assistant- ID, not status
     expect(assistantMessage.status).toBe("complete");
     expect(assistantMessage.id).toMatch(/^temp-assistant-/);
-    expect(assistantMessage.content).toEqual([]); // Empty content initially
+    expect(assistantMessage.content).toEqual([]);
   });
 
   it("should return empty messages when chatId is null and no local messages (after archiving)", () => {

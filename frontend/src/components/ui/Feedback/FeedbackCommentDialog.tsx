@@ -33,7 +33,6 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
   const [comment, setComment] = useState(initialComment);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sync comment state when dialog opens or initialComment changes (e.g., switching to edit mode)
   useEffect(() => {
     if (isOpen) {
       setComment(initialComment);
@@ -45,7 +44,7 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
     try {
       await onSubmit(comment);
       if (mode === "create") {
-        setComment(""); // Clear comment after successful submission in create mode
+        setComment("");
       }
     } finally {
       setIsSubmitting(false);
@@ -54,14 +53,13 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
 
   const handleSkip = useCallback(() => {
     if (mode === "create") {
-      setComment(""); // Clear any entered comment in create mode
+      setComment("");
     }
     onClose();
   }, [onClose, mode]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      // Submit on Ctrl/Cmd + Enter
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
         void handleSubmit();
@@ -82,14 +80,12 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
       contentClassName="max-w-lg"
     >
       <div className="space-y-4">
-        {/* Error message */}
         {error && (
           <div className="rounded-md bg-theme-error-bg p-3 text-sm text-theme-error-fg">
             {error}
           </div>
         )}
 
-        {/* Sentiment indicator */}
         <div className="flex items-center gap-2 text-sm text-theme-fg-secondary">
           {sentiment === "positive" ? (
             <>
@@ -108,7 +104,6 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
           )}
         </div>
 
-        {/* Comment textarea */}
         <div>
           <label
             htmlFor="feedback-comment"
@@ -139,7 +134,6 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
           </p>
         </div>
 
-        {/* Action buttons */}
         <div className="flex justify-end gap-2">
           <Button
             variant="secondary"

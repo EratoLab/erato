@@ -35,7 +35,6 @@ import type {
 import type { FileType } from "@/utils/fileTypes";
 import type React from "react";
 
-// Create logger for this component
 const logger = createLogger("UI", "Chat");
 
 export interface ChatProps {
@@ -113,10 +112,8 @@ export const Chat = ({
   assistantId,
   initialModelOverride,
 }: ChatProps) => {
-  // Use the sidebar context
   const { isOpen: sidebarCollapsed, toggle: onToggleCollapse } = useSidebar();
 
-  // Get chat data and actions from context provider
   const {
     sendMessage,
     editMessage,
@@ -135,18 +132,17 @@ export const Chat = ({
 
   const { profile } = useProfile();
 
-  // Convert the chat history data to the format expected by the sidebar
   const sessions: ChatSession[] = Array.isArray(chatHistory)
     ? chatHistory.map((chat) => ({
         id: chat.id,
         title:
           chat.title_by_summary ||
-          t({ id: "chat.newChat.title", message: "New Chat" }), // Use title from API
-        updatedAt: chat.last_message_at || new Date().toISOString(), // Use last message timestamp
-        messages: [], // We don't need to populate messages here
+          t({ id: "chat.newChat.title", message: "New Chat" }),
+        updatedAt: chat.last_message_at || new Date().toISOString(),
+        messages: [],
         metadata: {
           lastMessage: {
-            content: chat.title_by_summary || "", // Reuse title as a preview if no actual message available
+            content: chat.title_by_summary || "",
             timestamp: chat.last_message_at || new Date().toISOString(),
           },
           fileCount: chat.file_uploads.length,
@@ -158,7 +154,6 @@ export const Chat = ({
     ? !!chatHistory.find((c) => c.id === (currentChatId ?? ""))?.can_edit
     : false;
 
-  // Use chat actions hook for handlers
   const { handleSendMessage: baseHandleSendMessage, handleMessageAction } =
     useChatActions({
       switchSession,
@@ -166,7 +161,6 @@ export const Chat = ({
       onMessageAction,
     });
 
-  // Enhanced sendMessage handler that refreshes the sidebar after sending
   const handleSendMessage = useCallback(
     (message: string, inputFileIds?: string[], modelId?: string) => {
       logger.log("[CHAT_FLOW] Chat - handleSendMessage called", {
@@ -187,13 +181,11 @@ export const Chat = ({
     [baseHandleSendMessage, refreshChats, assistantId],
   );
 
-  // Local edit state (simple UX; further polish can come later)
   const [editState, setEditState] = useState<
     | { mode: "edit"; messageId: string; initialContent: ContentPart[] }
     | { mode: "compose" }
   >({ mode: "compose" });
 
-  // Debug logging for edit state changes
   useEffect(() => {
     logger.log("Edit state changed:", editState);
   }, [editState]);
@@ -218,18 +210,14 @@ export const Chat = ({
     [regenerateMessage],
   );
 
-  // Handler for when the error boundary resets
   const handleErrorReset = useCallback(() => {
-    // Refresh chats on error reset
     void refreshChats();
   }, [refreshChats]);
 
-  // Handle session select with void return type
   const handleSessionSelectWrapper = (sessionId: string) => {
     logger.log(
       `[CHAT_FLOW] Handling session select in Chat component for session: ${sessionId}`,
     );
-    // Call handleSessionSelect or directly use switchSession if that's not working
     if (customSessionSelect) {
       customSessionSelect(sessionId);
     } else {
@@ -240,29 +228,22 @@ export const Chat = ({
     }
   };
 
-  // Handle archiving a session
   const handleArchiveSession = (sessionId: string) => {
-    // Use void to explicitly ignore the promise returned by archiveChat
     void archiveChat(sessionId);
   };
 
-  // Function to capture the scrollToBottom from MessageList
   const scrollToBottomRef = useRef<(() => void) | null>(null);
   const handleMessageListRef = useCallback((scrollToBottom: () => void) => {
     scrollToBottomRef.current = scrollToBottom;
   }, []);
 
-  // Handle creating a new chat
   const handleNewChat = useCallback(async () => {
     logger.log("[CHAT_FLOW] New chat button clicked");
 
     try {
       if (onNewChat) {
-        // Use custom handler if provided
         onNewChat();
       } else {
-        // Otherwise use the default behavior from context
-        // Don't chain with then() - use await for cleaner flow
         await createChat();
         logger.log("[CHAT_FLOW] New chat creation completed");
       }
@@ -271,7 +252,6 @@ export const Chat = ({
     }
   }, [onNewChat, createChat]);
 
-  // Use the file preview modal hook
   const {
     isPreviewModalOpen,
     fileToPreview,
@@ -279,10 +259,8 @@ export const Chat = ({
     closePreviewModal,
   } = useFilePreviewModal();
 
-  // Query client for cache invalidation after feedback submission
   const queryClient = useQueryClient();
 
-  // Callback to invalidate chat messages cache after feedback submission
   const handleFeedbackSuccess = useCallback(() => {
     if (currentChatId) {
       void queryClient.invalidateQueries({
@@ -293,7 +271,6 @@ export const Chat = ({
     }
   }, [queryClient, currentChatId]);
 
-  // Use the message feedback hook for all feedback-related logic
   const {
     feedbackDialogState,
     feedbackViewDialogState,
@@ -310,20 +287,13 @@ export const Chat = ({
     onFeedbackSuccess: handleFeedbackSuccess,
   });
 
-  // Restore placeholder definitions for props passed to MessageList
   const hasOlderMessages = false;
-  const loadOlderMessages = () => {
-    // Pagination not yet implemented
-  };
+  const loadOlderMessages = () => {};
 
-  // Restore a basic handleFileAttachments function needed by ChatInput
   const handleFileAttachments = useCallback((files: FileUploadItem[]) => {
     logger.log(
-      `handleFileAttachments in Chat.tsx called with: ${files.length} files. (Currently only enables button rendering)`,
+      `handleFileAttachments in Chat.tsx called with: ${files.length} files.`,
     );
-    // This function might be needed later if we want Chat.tsx
-    // to be aware of files attached in ChatInput before sending.
-    // For now, its presence enables the button in ChatInput.
   }, []);
 
   if (process.env.NODE_ENV === "development") {
@@ -477,14 +447,12 @@ export const Chat = ({
         </div>
       </ChatErrorBoundary>
 
-      {/* Render the File Preview Modal */}
       <FilePreviewModal
         isOpen={isPreviewModalOpen}
         onClose={closePreviewModal}
         file={fileToPreview}
       />
 
-      {/* Render the Feedback View Dialog */}
       <FeedbackViewDialog
         isOpen={feedbackViewDialogState.isOpen}
         onClose={closeFeedbackViewDialog}
@@ -497,7 +465,6 @@ export const Chat = ({
         }
       />
 
-      {/* Render the Feedback Comment Dialog */}
       <FeedbackCommentDialog
         isOpen={feedbackDialogState.isOpen}
         onClose={closeFeedbackDialog}

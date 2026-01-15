@@ -2,11 +2,12 @@ import "@testing-library/jest-dom";
 import { i18n } from "@lingui/core";
 import { beforeAll, afterEach, afterAll } from "vitest";
 
-import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { server } from "./mocks/server";
 
 import type { Messages } from "@lingui/core";
+
+import { messages as enMessages } from "@/locales/en/messages.json";
 
 // Initialize i18n for all tests
 i18n.load("en", enMessages as unknown as Messages);
