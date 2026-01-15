@@ -159,6 +159,80 @@ dex:
       username: "user"
       userID: "08a8684b-db88-4b73-90a9-3cd166100006"
 
+# Nginx-based authentication (alternative to oauth2-proxy/Dex)
+# When enabled, replaces oauth2-proxy with JWT generation from URL parameters/headers
+nginxAuth:
+  enabled: false  # Set to true for nginx-auth scenario
+  replicas: 1
+  image:
+    repository: nginx
+    tag: "1.25-alpine"
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+
+  # JWT configuration
+  jwtSecret: "erato-nginx-jwt-secret-key-change-in-production"
+  jwtExpirationSeconds: 3600  # 1 hour
+  jwtIssuer: "nginx-jwt-generator"
+  jwtAudience: "erato"
+
+  # Cookie configuration
+  cookieName: "erato-auth-user"
+  cookieSameSite: "None"  # "None" for iframe compatibility, "Lax" for same-site only
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  ingress:
+    enabled: true
+    host: app.erato.internal
+    className: nginx
+    annotations: {}
+    tls:
+      enabled: false
+      secretName: ""
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  # Embedded host configuration - serves a test page with iframe
+  embeddedHost:
+    enabled: true
+    replicas: 1
+    image:
+      repository: nginx
+      tag: "1.25-alpine"
+      pullPolicy: IfNotPresent
+
+    service:
+      type: ClusterIP
+      port: 80
+
+    ingress:
+      enabled: true
+      host: embedded-host.erato.internal
+      className: nginx
+      annotations: {}
+      tls:
+        enabled: false
+        secretName: ""
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  extraEnv: []
+
 # Main chart values
 postgresql:
   enabled: true

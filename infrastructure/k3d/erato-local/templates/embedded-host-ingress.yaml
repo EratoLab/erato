@@ -1,0 +1,36 @@
+{{- if and .Values.nginxAuth.enabled .Values.nginxAuth.embeddedHost.enabled .Values.nginxAuth.embeddedHost.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-embedded-host
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-embedded-host
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- with .Values.nginxAuth.embeddedHost.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.nginxAuth.embeddedHost.ingress.className }}
+  ingressClassName: {{ .Values.nginxAuth.embeddedHost.ingress.className }}
+  {{- end }}
+  {{- if .Values.nginxAuth.embeddedHost.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.nginxAuth.embeddedHost.ingress.host }}
+      {{- if .Values.nginxAuth.embeddedHost.ingress.tls.secretName }}
+      secretName: {{ .Values.nginxAuth.embeddedHost.ingress.tls.secretName }}
+      {{- end }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.nginxAuth.embeddedHost.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-embedded-host
+                port:
+                  number: {{ .Values.nginxAuth.embeddedHost.service.port }}
+{{- end }}

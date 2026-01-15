@@ -1,0 +1,19 @@
+{{- if and .Values.nginxAuth.enabled .Values.nginxAuth.embeddedHost.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-embedded-host
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-embedded-host
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.nginxAuth.embeddedHost.service.type }}
+  ports:
+    - port: {{ .Values.nginxAuth.embeddedHost.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ .Release.Name }}-embedded-host
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

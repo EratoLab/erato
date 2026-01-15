@@ -1,0 +1,25 @@
+{{- if and .Values.nginxAuth.enabled .Values.nginxAuth.embeddedHost.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-embedded-host-config
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-embedded-host
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: config
+data:
+  nginx.conf: |
+{{ tpl (.Files.Get "files/embedded-host-nginx.conf") . | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-embedded-host-html
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-embedded-host
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: config
+data:
+  index.html: |
+{{ tpl (.Files.Get "files/embedded-host.html") . | indent 4 }}
+{{- end }}

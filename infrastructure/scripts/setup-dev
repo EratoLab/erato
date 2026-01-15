@@ -445,7 +445,7 @@ def ensure_hosts_entries(cluster_config: ClusterConfig):
                 print(f"Please manually add: 127.0.0.1 {host}", file=sys.stderr)
 
 
-def print_completion_message(cluster_config: ClusterConfig):
+def print_completion_message(cluster_config: ClusterConfig, config: ScriptConfig = None):
     """Print completion message with access information."""
     print()
     print("Setup complete! Your development environment is ready.")
@@ -455,6 +455,13 @@ def print_completion_message(cluster_config: ClusterConfig):
     print("Default login credentials:")
     print("  Username: admin@example.com")
     print("  Password: admin")
+
+    # Print nginx-auth scenario specific information
+    if config and config.test_scenario == "nginx-auth":
+        print()
+        print("📱 Nginx-Auth Scenario Enabled:")
+        print("  Access embedded test page at: https://embedded-host.erato.internal")
+        print("  (This URL is only available in the nginx-auth scenario)")
 
 
 def main():
@@ -697,7 +704,15 @@ def main():
     # Handle test scenario
     scenario_args = get_helm_scenario_args(config.test_scenario)
     helm_args.extend(scenario_args)
-    
+
+    # Handle nginx-auth scenario - disable oauth2-proxy and dex, enable nginxAuth
+    if config.test_scenario == "nginx-auth":
+        print("Configuring nginx-auth scenario: disabling oauth2-proxy and Dex, enabling nginx-auth")
+        helm_args.extend(["--set", "erato.oauth2Proxy.enabled=false"])
+        helm_args.extend(["--set", "dex.enabled=false"])
+        helm_args.extend(["--set", "nginxAuth.enabled=true"])
+        helm_args.extend(["--set", "erato.ingress.enabled=false"])
+
     # Install components
     install_nginx_ingress()
     install_telepresence(config)
@@ -720,9 +735,9 @@ def main():
 
     # Ensure DNS entries
     ensure_hosts_entries(cluster_config)
-    
+
     # Print completion message
-    print_completion_message(cluster_config)
+    print_completion_message(cluster_config, config)
 
 
 if __name__ == "__main__":
