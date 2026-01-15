@@ -106,6 +106,7 @@ export const chatIsReadyToChat = async (
     const textbox = page.getByRole("textbox", { name: "Type a message..." });
     await expect(textbox).toBeVisible();
     await expect(textbox).toBeEnabled();
+    // Expect that assistant message is visible during or after the stream
     if (args?.expectAssistantResponse) {
       await expect(page.getByTestId("message-assistant")).toBeVisible();
     }
@@ -113,6 +114,10 @@ export const chatIsReadyToChat = async (
       ? { timeout: args?.loadingTimeoutMs }
       : {};
     await expect(page.getByText("Loading")).toHaveCount(0, loadingOpts);
+    // Expect that assistant message is visible after the loading indicator has been removed (after stream finished)
+    if (args?.expectAssistantResponse) {
+      await expect(page.getByTestId("message-assistant")).toBeVisible();
+    }
   });
 };
 
