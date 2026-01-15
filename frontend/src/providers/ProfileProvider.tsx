@@ -1,4 +1,4 @@
-import { createContext, type ReactNode } from "react";
+import { createContext, useMemo, type ReactNode } from "react";
 
 import { useProfileApi } from "@/hooks/profile/useProfileApi";
 
@@ -16,9 +16,14 @@ export const ProfileContext = createContext<ProfileContextType | undefined>(
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const { profile, isLoading, error } = useProfileApi();
+
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  const value = useMemo(
+    () => ({ profile, isLoading, error }),
+    [profile, isLoading, error],
+  );
+
   return (
-    <ProfileContext.Provider value={{ profile, isLoading, error }}>
-      {children}
-    </ProfileContext.Provider>
+    <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>
   );
 }
