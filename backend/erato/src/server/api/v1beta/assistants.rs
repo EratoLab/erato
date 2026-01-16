@@ -184,6 +184,9 @@ pub async fn create_assistant(
     .await
     .map_err(log_internal_server_error)?;
 
+    // Invalidate policy data so the new assistant is available for sharing
+    app_state.global_policy_engine.invalidate_data().await;
+
     // Process file associations if provided
     if let Some(file_ids) = request.file_ids {
         for file_id_str in file_ids {
@@ -469,6 +472,9 @@ pub async fn update_assistant(
         }
     })?;
 
+    // Invalidate policy data to reflect the updated assistant
+    app_state.global_policy_engine.invalidate_data().await;
+
     // Process file associations if provided
     if let Some(new_file_ids_opt) = request.file_ids {
         // Get the current files for this assistant
@@ -640,6 +646,9 @@ pub async fn archive_assistant(
                     log_internal_server_error(e)
                 }
             })?;
+
+    // Invalidate policy data to reflect the archived assistant
+    app_state.global_policy_engine.invalidate_data().await;
 
     tracing::info!(
         "User {} archived assistant '{}' with ID: {}",
