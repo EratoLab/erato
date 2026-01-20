@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 use utoipa::{IntoParams, ToSchema};
 
+use crate::models::assistant::FileInfo;
+
 /// An assistant model
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Assistant {
@@ -169,6 +171,46 @@ pub struct ArchiveAssistantResponse {
     pub archived_at: DateTime<FixedOffset>,
 }
 
+/// Helper function to convert FileInfo to AssistantFile with presigned download URL
+async fn file_info_to_assistant_file(
+    file: FileInfo,
+    file_capability: FileCapability,
+    app_state: &AppState,
+) -> Result<AssistantFile, StatusCode> {
+    // Get the file storage provider
+    let file_storage_provider = app_state
+        .file_storage_providers
+        .get(&file.file_storage_provider_id)
+        .ok_or_else(|| {
+            tracing::error!(
+                "File storage provider '{}' not found for file '{}'",
+                file.file_storage_provider_id,
+                file.id
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Generate a presigned download URL
+    let download_url = file_storage_provider
+        .generate_presigned_download_url(&file.file_storage_path, None)
+        .await
+        .map_err(|e| {
+            tracing::error!(
+                "Failed to generate download URL for file {}: {}",
+                file.id,
+                e
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(AssistantFile {
+        id: file.id.to_string(),
+        filename: file.filename,
+        download_url,
+        file_capability,
+    })
+}
+
 /// Create a new assistant
 #[utoipa::path(
     post,
@@ -291,21 +333,13 @@ pub async fn create_assistant(
     // Get all file capabilities for this user
     let all_capabilities = get_file_capabilities(supports_image_understanding);
 
-    // Convert files to API format
-    let api_files = assistant_with_files
-        .files
-        .into_iter()
-        .map(|file| {
-            let file_capability =
-                find_file_capability_by_filename(&all_capabilities, &file.filename);
-            AssistantFile {
-                id: file.id.to_string(),
-                filename: file.filename,
-                download_url: format!("/api/v1beta/files/{}", file.id),
-                file_capability,
-            }
-        })
-        .collect();
+    // Convert files to API format with presigned download URLs
+    let mut api_files = Vec::new();
+    for file in assistant_with_files.files {
+        let file_capability = find_file_capability_by_filename(&all_capabilities, &file.filename);
+        let assistant_file = file_info_to_assistant_file(file, file_capability, &app_state).await?;
+        api_files.push(assistant_file);
+    }
 
     Ok((
         StatusCode::CREATED,
@@ -455,21 +489,13 @@ pub async fn get_assistant(
     // Get all file capabilities for this user
     let all_capabilities = get_file_capabilities(supports_image_understanding);
 
-    // Convert files to API format
-    let api_files = assistant_with_files
-        .files
-        .into_iter()
-        .map(|file| {
-            let file_capability =
-                find_file_capability_by_filename(&all_capabilities, &file.filename);
-            AssistantFile {
-                id: file.id.to_string(),
-                filename: file.filename,
-                download_url: format!("/api/v1beta/files/{}", file.id),
-                file_capability,
-            }
-        })
-        .collect();
+    // Convert files to API format with presigned download URLs
+    let mut api_files = Vec::new();
+    for file in assistant_with_files.files {
+        let file_capability = find_file_capability_by_filename(&all_capabilities, &file.filename);
+        let assistant_file = file_info_to_assistant_file(file, file_capability, &app_state).await?;
+        api_files.push(assistant_file);
+    }
 
     Ok(Json(AssistantWithFiles {
         assistant: Assistant {
@@ -652,21 +678,13 @@ pub async fn update_assistant(
     // Get all file capabilities for this user
     let all_capabilities = get_file_capabilities(supports_image_understanding);
 
-    // Convert files to API format
-    let api_files = assistant_with_files
-        .files
-        .into_iter()
-        .map(|file| {
-            let file_capability =
-                find_file_capability_by_filename(&all_capabilities, &file.filename);
-            AssistantFile {
-                id: file.id.to_string(),
-                filename: file.filename,
-                download_url: format!("/api/v1beta/files/{}", file.id),
-                file_capability,
-            }
-        })
-        .collect();
+    // Convert files to API format with presigned download URLs
+    let mut api_files = Vec::new();
+    for file in assistant_with_files.files {
+        let file_capability = find_file_capability_by_filename(&all_capabilities, &file.filename);
+        let assistant_file = file_info_to_assistant_file(file, file_capability, &app_state).await?;
+        api_files.push(assistant_file);
+    }
 
     Ok(Json(UpdateAssistantResponse {
         assistant: AssistantWithFiles {
