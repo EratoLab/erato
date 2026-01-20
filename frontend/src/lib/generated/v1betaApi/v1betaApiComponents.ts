@@ -1363,6 +1363,140 @@ export const useCreateChat = (
   });
 };
 
+export type FileCapabilitiesQueryParams = {
+  /**
+   * Optional model ID to get capabilities specific to that model
+   */
+  model_id?: string;
+};
+
+export type FileCapabilitiesError = Fetcher.ErrorWrapper<undefined>;
+
+export type FileCapabilitiesResponse = Schemas.FileCapability[];
+
+export type FileCapabilitiesVariables = {
+  queryParams?: FileCapabilitiesQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * This endpoint returns all available file capabilities based on the configured
+ * file processors and model capabilities. An optional model_id can be provided
+ * to get capabilities specific to that model (particularly for image understanding).
+ */
+export const fetchFileCapabilities = (
+  variables: FileCapabilitiesVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    FileCapabilitiesResponse,
+    FileCapabilitiesError,
+    undefined,
+    {},
+    FileCapabilitiesQueryParams,
+    {}
+  >({
+    url: "/api/v1beta/me/file-capabilities",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+/**
+ * This endpoint returns all available file capabilities based on the configured
+ * file processors and model capabilities. An optional model_id can be provided
+ * to get capabilities specific to that model (particularly for image understanding).
+ */
+export function fileCapabilitiesQuery(variables: FileCapabilitiesVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<FileCapabilitiesResponse>;
+};
+
+export function fileCapabilitiesQuery(
+  variables: FileCapabilitiesVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<FileCapabilitiesResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function fileCapabilitiesQuery(
+  variables: FileCapabilitiesVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/file-capabilities",
+      operationId: "fileCapabilities",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchFileCapabilities(variables, signal),
+  };
+}
+
+/**
+ * This endpoint returns all available file capabilities based on the configured
+ * file processors and model capabilities. An optional model_id can be provided
+ * to get capabilities specific to that model (particularly for image understanding).
+ */
+export const useSuspenseFileCapabilities = <TData = FileCapabilitiesResponse,>(
+  variables: FileCapabilitiesVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      FileCapabilitiesResponse,
+      FileCapabilitiesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    FileCapabilitiesResponse,
+    FileCapabilitiesError,
+    TData
+  >({
+    ...fileCapabilitiesQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+/**
+ * This endpoint returns all available file capabilities based on the configured
+ * file processors and model capabilities. An optional model_id can be provided
+ * to get capabilities specific to that model (particularly for image understanding).
+ */
+export const useFileCapabilities = <TData = FileCapabilitiesResponse,>(
+  variables: FileCapabilitiesVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      FileCapabilitiesResponse,
+      FileCapabilitiesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    FileCapabilitiesResponse,
+    FileCapabilitiesError,
+    TData
+  >({
+    ...fileCapabilitiesQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type UploadFileQueryParams = {
   /**
    * Optional chat ID to associate the file with. If not provided, creates standalone files.
@@ -2927,6 +3061,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/budget";
       operationId: "budgetStatus";
       variables: BudgetStatusVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/file-capabilities";
+      operationId: "fileCapabilities";
+      variables: FileCapabilitiesVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/frequent_assistants";

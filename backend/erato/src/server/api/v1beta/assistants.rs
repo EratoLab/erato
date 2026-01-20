@@ -1,3 +1,6 @@
+use crate::models::file_capability::{
+    FileCapability, find_file_capability_by_filename, get_file_capabilities,
+};
 use crate::models::{assistant, permissions, share_grant};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
@@ -66,6 +69,9 @@ pub struct AssistantFile {
     pub filename: String,
     /// Pre-signed URL for downloading the file
     pub download_url: String,
+    /// The file capability that was evaluated for this file
+    #[serde(rename = "file_capability")]
+    pub file_capability: FileCapability,
 }
 
 /// A share grant to create with the assistant
@@ -260,14 +266,29 @@ pub async fn create_assistant(
     .await
     .map_err(log_internal_server_error)?;
 
+    // Determine if any available model supports image understanding
+    let available_models = app_state.available_models(&me_user.groups);
+    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
+        let config = app_state.config.get_chat_provider(provider_id);
+        config.model_capabilities.supports_image_understanding
+    });
+
+    // Get all file capabilities for this user
+    let all_capabilities = get_file_capabilities(supports_image_understanding);
+
     // Convert files to API format
     let api_files = assistant_with_files
         .files
         .into_iter()
-        .map(|file| AssistantFile {
-            id: file.id.to_string(),
-            filename: file.filename,
-            download_url: format!("/api/v1beta/files/{}", file.id),
+        .map(|file| {
+            let file_capability =
+                find_file_capability_by_filename(&all_capabilities, &file.filename);
+            AssistantFile {
+                id: file.id.to_string(),
+                filename: file.filename,
+                download_url: format!("/api/v1beta/files/{}", file.id),
+                file_capability,
+            }
         })
         .collect();
 
@@ -390,14 +411,29 @@ pub async fn get_assistant(
         }
     })?;
 
+    // Determine if any available model supports image understanding
+    let available_models = app_state.available_models(&me_user.groups);
+    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
+        let config = app_state.config.get_chat_provider(provider_id);
+        config.model_capabilities.supports_image_understanding
+    });
+
+    // Get all file capabilities for this user
+    let all_capabilities = get_file_capabilities(supports_image_understanding);
+
     // Convert files to API format
     let api_files = assistant_with_files
         .files
         .into_iter()
-        .map(|file| AssistantFile {
-            id: file.id.to_string(),
-            filename: file.filename,
-            download_url: format!("/api/v1beta/files/{}", file.id),
+        .map(|file| {
+            let file_capability =
+                find_file_capability_by_filename(&all_capabilities, &file.filename);
+            AssistantFile {
+                id: file.id.to_string(),
+                filename: file.filename,
+                download_url: format!("/api/v1beta/files/{}", file.id),
+                file_capability,
+            }
         })
         .collect();
 
@@ -572,14 +608,29 @@ pub async fn update_assistant(
     .await
     .map_err(log_internal_server_error)?;
 
+    // Determine if any available model supports image understanding
+    let available_models = app_state.available_models(&me_user.groups);
+    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
+        let config = app_state.config.get_chat_provider(provider_id);
+        config.model_capabilities.supports_image_understanding
+    });
+
+    // Get all file capabilities for this user
+    let all_capabilities = get_file_capabilities(supports_image_understanding);
+
     // Convert files to API format
     let api_files = assistant_with_files
         .files
         .into_iter()
-        .map(|file| AssistantFile {
-            id: file.id.to_string(),
-            filename: file.filename,
-            download_url: format!("/api/v1beta/files/{}", file.id),
+        .map(|file| {
+            let file_capability =
+                find_file_capability_by_filename(&all_capabilities, &file.filename);
+            AssistantFile {
+                id: file.id.to_string(),
+                filename: file.filename,
+                download_url: format!("/api/v1beta/files/{}", file.id),
+                file_capability,
+            }
         })
         .collect();
 

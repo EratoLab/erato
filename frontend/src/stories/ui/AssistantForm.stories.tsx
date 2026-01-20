@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import type { AssistantFormData } from "@/components/ui/Assistant/AssistantForm";
 import type {
@@ -75,11 +76,13 @@ const mockFiles: FileUploadItem[] = [
     id: "file-1",
     filename: "documentation.pdf",
     download_url: "#",
+    file_capability: FileTypeUtil.createMockFileCapability("documentation.pdf"),
   },
   {
     id: "file-2",
     filename: "guidelines.txt",
     download_url: "#",
+    file_capability: FileTypeUtil.createMockFileCapability("guidelines.txt"),
   },
 ];
 

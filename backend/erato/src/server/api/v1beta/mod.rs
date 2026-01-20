@@ -15,6 +15,9 @@ use crate::models::assistant::create_standalone_file_upload;
 use crate::models::chat::{
     archive_chat, get_frequent_assistants, get_or_create_chat, get_recent_chats,
 };
+use crate::models::file_capability::{
+    FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
+};
 use crate::models::message::{ContentPart, MessageSchema};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
@@ -79,6 +82,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
         .route("/models", get(available_models))
+        .route("/file-capabilities", get(file_capabilities))
         .route("/budget", get(budget::budget_status))
         .route(
             "/organization/users",
@@ -187,6 +191,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         archive_chat_endpoint,
         token_usage::token_usage_estimate,
         available_models,
+        file_capabilities,
         budget::budget_status,
         assistants::create_assistant,
         assistants::list_assistants,
@@ -227,6 +232,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         ArchiveChatRequest,
         ArchiveChatResponse,
         ChatModel,
+        FileCapability,
+        FileOperation,
+        FileCapabilitiesQuery,
         FeedbackSentiment,
         MessageFeedbackRequest,
         MessageFeedback,
@@ -515,6 +523,9 @@ pub struct FileUploadItem {
     filename: String,
     /// Pre-signed URL for downloading the file directly from storage
     download_url: String,
+    /// The file capability that was evaluated for this file
+    #[serde(rename = "file_capability")]
+    file_capability: FileCapability,
 }
 
 /// Minimal file reference containing only the file ID
@@ -587,6 +598,16 @@ pub async fn upload_file(
     } else {
         None
     };
+
+    // Determine if any available model supports image understanding
+    let available_models = app_state.available_models(&me_user.groups);
+    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
+        let config = app_state.config.get_chat_provider(provider_id);
+        config.model_capabilities.supports_image_understanding
+    });
+
+    // Get all file capabilities for this user
+    let all_capabilities = get_file_capabilities(supports_image_understanding);
 
     let mut uploaded_files = Vec::new();
 
@@ -678,11 +699,15 @@ pub async fn upload_file(
             file_upload.id
         );
 
+        // Evaluate the file capability for this file
+        let file_capability = find_file_capability_by_filename(&all_capabilities, &filename);
+
         // Add this file to our list of uploaded files
         uploaded_files.push(FileUploadItem {
             id: file_upload.id.to_string(),
             filename,
             download_url,
+            file_capability,
         });
     }
 
@@ -739,6 +764,16 @@ async fn link_sharepoint_file_impl(
     request: &LinkFileRequest,
 ) -> Result<Json<FileUploadResponse>, StatusCode> {
     use graph_rs_sdk::{GraphClient, GraphClientConfiguration};
+
+    // Determine if any available model supports image understanding
+    let available_models = app_state.available_models(&me_user.groups);
+    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
+        let config = app_state.config.get_chat_provider(provider_id);
+        config.model_capabilities.supports_image_understanding
+    });
+
+    // Get all file capabilities for this user
+    let all_capabilities = get_file_capabilities(supports_image_understanding);
 
     // Check if SharePoint integration is enabled
     if !app_state
@@ -834,6 +869,9 @@ async fn link_sharepoint_file_impl(
         file_upload.id
     );
 
+    // Evaluate the file capability for this file
+    let file_capability = find_file_capability_by_filename(&all_capabilities, &filename);
+
     app_state.global_policy_engine.invalidate_data().await;
 
     Ok(Json(FileUploadResponse {
@@ -841,6 +879,7 @@ async fn link_sharepoint_file_impl(
             id: file_upload.id.to_string(),
             filename,
             download_url,
+            file_capability,
         }],
     }))
 }
@@ -1292,6 +1331,16 @@ pub async fn frequent_assistants(
     .await
     .map_err(log_internal_server_error)?;
 
+    // Determine if any available model supports image understanding
+    let available_models = app_state.available_models(&me_user.groups);
+    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
+        let config = app_state.config.get_chat_provider(provider_id);
+        config.model_capabilities.supports_image_understanding
+    });
+
+    // Get all file capabilities for this user
+    let all_capabilities = get_file_capabilities(supports_image_understanding);
+
     // Convert from model FrequentAssistant to API FrequentAssistantItem
     let current_user_id = &user_id;
     let api_assistants: Vec<FrequentAssistantItem> = frequent
@@ -1302,10 +1351,15 @@ pub async fn frequent_assistants(
                 .assistant
                 .files
                 .into_iter()
-                .map(|file| AssistantFile {
-                    id: file.id.to_string(),
-                    filename: file.filename,
-                    download_url: format!("/api/v1beta/files/{}", file.id),
+                .map(|file| {
+                    let file_capability =
+                        find_file_capability_by_filename(&all_capabilities, &file.filename);
+                    AssistantFile {
+                        id: file.id.to_string(),
+                        filename: file.filename,
+                        download_url: format!("/api/v1beta/files/{}", file.id),
+                        file_capability,
+                    }
                 })
                 .collect();
 
@@ -1461,6 +1515,16 @@ pub async fn get_file(
     // Parse the file ID
     let file_id = Uuid::parse_str(&file_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
+    // Determine if any available model supports image understanding
+    let available_models = app_state.available_models(&me_user.groups);
+    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
+        let config = app_state.config.get_chat_provider(provider_id);
+        config.model_capabilities.supports_image_understanding
+    });
+
+    // Get all file capabilities for this user
+    let all_capabilities = get_file_capabilities(supports_image_understanding);
+
     // Get the file upload record with its download URL
     let file_upload = models::file_upload::get_file_upload_with_url(
         &app_state.db,
@@ -1480,11 +1544,16 @@ pub async fn get_file(
         }
     })?;
 
+    // Evaluate the file capability for this file
+    let file_capability =
+        find_file_capability_by_filename(&all_capabilities, &file_upload.filename);
+
     // Convert to FileUploadItem and return
     Ok(Json(FileUploadItem {
         id: file_upload.id.to_string(),
         filename: file_upload.filename,
         download_url: file_upload.download_url,
+        file_capability,
     }))
 }
 
@@ -1599,4 +1668,60 @@ pub async fn available_models(
         .collect();
 
     Ok(Json(models))
+}
+
+/// Get available file capabilities
+///
+/// This endpoint returns all available file capabilities based on the configured
+/// file processors and model capabilities. An optional model_id can be provided
+/// to get capabilities specific to that model (particularly for image understanding).
+#[utoipa::path(
+    get,
+    path = "/me/file-capabilities",
+    params(
+        ("model_id" = Option<String>, Query, description = "Optional model ID to get capabilities specific to that model")
+    ),
+    responses(
+        (status = OK, body = Vec<FileCapability>, description = "Successfully retrieved file capabilities"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = NOT_FOUND, description = "When the specified model_id is not found"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn file_capabilities(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    axum::extract::Query(params): axum::extract::Query<FileCapabilitiesQuery>,
+) -> Result<Json<Vec<FileCapability>>, StatusCode> {
+    // Determine if image understanding is supported
+    let supports_image_understanding = if let Some(model_id) = params.model_id {
+        // Get the specific model's capabilities
+        let provider_config = app_state.config.get_chat_provider(&model_id);
+
+        provider_config
+            .model_capabilities
+            .supports_image_understanding
+    } else {
+        // Without a specific model, check if ANY available model supports image understanding
+        let available_models = app_state.available_models(&me_user.groups);
+
+        available_models.iter().any(|(provider_id, _)| {
+            let config = app_state.config.get_chat_provider(provider_id);
+            config.model_capabilities.supports_image_understanding
+        })
+    };
+
+    // Get file capabilities based on image support
+    let capabilities = get_file_capabilities(supports_image_understanding);
+
+    Ok(Json(capabilities))
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct FileCapabilitiesQuery {
+    /// Optional model ID to get capabilities specific to that model
+    model_id: Option<String>,
 }

@@ -119,6 +119,10 @@ export type AssistantFile = {
    */
   download_url: string;
   /**
+   * The file capability that was evaluated for this file
+   */
+  file_capability: FileCapability;
+  /**
    * The original filename
    */
   filename: string;
@@ -566,6 +570,43 @@ export type EditMessageStreamingResponseMessage =
  */
 export type FeedbackSentiment = "positive" | "negative";
 
+export type FileCapabilitiesQuery = {
+  /**
+   * Optional model ID to get capabilities specific to that model
+   */
+  model_id?: null | undefined;
+};
+
+/**
+ * Represents what operations can be performed on files with specific types
+ */
+export type FileCapability = {
+  /**
+   * File extensions this capability applies to (e.g., ["docx", "doc"])
+   * Special value "*" indicates all extensions
+   */
+  extensions: string[];
+  /**
+   * Stable identifier (e.g., 'word', 'pdf', 'image', 'other')
+   */
+  id: string;
+  /**
+   * MIME types this capability applies to (e.g., ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"])
+   *
+   * [see original specs]
+   */
+  mime_types: string[];
+  /**
+   * Operations that can be performed on matching files
+   */
+  operations: FileOperation[];
+};
+
+/**
+ * Operations that can be performed on files
+ */
+export type FileOperation = "extract_text" | "analyze_image";
+
 /**
  * Minimal file reference containing only the file ID
  */
@@ -584,6 +625,10 @@ export type FileUploadItem = {
    * Pre-signed URL for downloading the file directly from storage
    */
   download_url: string;
+  /**
+   * The file capability that was evaluated for this file
+   */
+  file_capability: FileCapability;
   /**
    * The original filename of the uploaded file
    */

@@ -701,6 +701,54 @@
         ]
       }
     },
+    "/api/v1beta/me/file-capabilities": {
+      "get": {
+        "tags": [],
+        "summary": "Get available file capabilities",
+        "description": "This endpoint returns all available file capabilities based on the configured\nfile processors and model capabilities. An optional model_id can be provided\nto get capabilities specific to that model (particularly for image understanding).",
+        "operationId": "file_capabilities",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "query",
+            "description": "Optional model ID to get capabilities specific to that model",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved file capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileCapability"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "When the specified model_id is not found"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/files": {
       "post": {
         "tags": [
@@ -1658,12 +1706,17 @@
         "required": [
           "id",
           "filename",
-          "download_url"
+          "download_url",
+          "file_capability"
         ],
         "properties": {
           "download_url": {
             "type": "string",
             "description": "Pre-signed URL for downloading the file"
+          },
+          "file_capability": {
+            "$ref": "#/components/schemas/FileCapability",
+            "description": "The file capability that was evaluated for this file"
           },
           "filename": {
             "type": "string",
@@ -2494,6 +2547,63 @@
           "negative"
         ]
       },
+      "FileCapabilitiesQuery": {
+        "type": "object",
+        "properties": {
+          "model_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional model ID to get capabilities specific to that model"
+          }
+        }
+      },
+      "FileCapability": {
+        "type": "object",
+        "description": "Represents what operations can be performed on files with specific types",
+        "required": [
+          "id",
+          "extensions",
+          "mime_types",
+          "operations"
+        ],
+        "properties": {
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "File extensions this capability applies to (e.g., [\"docx\", \"doc\"])\nSpecial value \"*\" indicates all extensions"
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable identifier (e.g., 'word', 'pdf', 'image', 'other')"
+          },
+          "mime_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "MIME types this capability applies to (e.g., [\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\"])\nMay contain wildcards like \"image/*\" or \"*/*\""
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileOperation"
+            },
+            "description": "Operations that can be performed on matching files"
+          }
+        }
+      },
+      "FileOperation": {
+        "type": "string",
+        "description": "Operations that can be performed on files",
+        "enum": [
+          "extract_text",
+          "analyze_image"
+        ]
+      },
       "FileReference": {
         "type": "object",
         "description": "Minimal file reference containing only the file ID",
@@ -2513,12 +2623,17 @@
         "required": [
           "id",
           "filename",
-          "download_url"
+          "download_url",
+          "file_capability"
         ],
         "properties": {
           "download_url": {
             "type": "string",
             "description": "Pre-signed URL for downloading the file directly from storage"
+          },
+          "file_capability": {
+            "$ref": "#/components/schemas/FileCapability",
+            "description": "The file capability that was evaluated for this file"
           },
           "filename": {
             "type": "string",

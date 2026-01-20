@@ -227,6 +227,7 @@ export const FileUploadWithTokenCheck: React.FC<
                 id: f.id,
                 filename: f.filename,
                 download_url: f.download_url,
+                file_capability: f.file_capability,
               })),
             );
           }

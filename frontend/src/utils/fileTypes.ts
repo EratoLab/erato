@@ -8,6 +8,8 @@ import {
   MultiplePages,
 } from "../components/ui/icons";
 
+import type { FileCapability } from "../lib/generated/v1betaApi/v1betaApiSchemas";
+
 /**
  * Supported file types in the application
  */
@@ -406,5 +408,234 @@ export class FileTypeUtil {
     }
 
     return null;
+  }
+
+  /**
+   * Create a mock file capability for testing purposes
+   * @param filename - The filename to determine the capability for
+   * @returns A FileCapability object appropriate for the file
+   */
+  static createMockFileCapability(filename: string): FileCapability {
+    const extension = this.getExtension(filename).toLowerCase();
+
+    // Map extensions to backend capability IDs
+    const extensionToCapability: Record<string, FileCapability> = {
+      // Word documents
+      doc: {
+        id: "word",
+        extensions: ["doc", "docx"],
+        mime_types: [
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
+        operations: ["extract_text"],
+      },
+      docx: {
+        id: "word",
+        extensions: ["doc", "docx"],
+        mime_types: [
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
+        operations: ["extract_text"],
+      },
+      // PDF
+      pdf: {
+        id: "pdf",
+        extensions: ["pdf"],
+        mime_types: ["application/pdf"],
+        operations: ["extract_text"],
+      },
+      // Excel
+      xls: {
+        id: "excel",
+        extensions: ["xls", "xlsx"],
+        mime_types: [
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ],
+        operations: ["extract_text"],
+      },
+      xlsx: {
+        id: "excel",
+        extensions: ["xls", "xlsx"],
+        mime_types: [
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ],
+        operations: ["extract_text"],
+      },
+      // PowerPoint
+      ppt: {
+        id: "powerpoint",
+        extensions: ["ppt", "pptx"],
+        mime_types: [
+          "application/vnd.ms-powerpoint",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ],
+        operations: ["extract_text"],
+      },
+      pptx: {
+        id: "powerpoint",
+        extensions: ["ppt", "pptx"],
+        mime_types: [
+          "application/vnd.ms-powerpoint",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ],
+        operations: ["extract_text"],
+      },
+      // Images
+      jpg: {
+        id: "image",
+        extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif"],
+        mime_types: ["image/*"],
+        operations: ["analyze_image"],
+      },
+      jpeg: {
+        id: "image",
+        extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif"],
+        mime_types: ["image/*"],
+        operations: ["analyze_image"],
+      },
+      png: {
+        id: "image",
+        extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif"],
+        mime_types: ["image/*"],
+        operations: ["analyze_image"],
+      },
+      gif: {
+        id: "image",
+        extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif"],
+        mime_types: ["image/*"],
+        operations: ["analyze_image"],
+      },
+      webp: {
+        id: "image",
+        extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif"],
+        mime_types: ["image/*"],
+        operations: ["analyze_image"],
+      },
+      bmp: {
+        id: "image",
+        extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif"],
+        mime_types: ["image/*"],
+        operations: ["analyze_image"],
+      },
+      tiff: {
+        id: "image",
+        extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif"],
+        mime_types: ["image/*"],
+        operations: ["analyze_image"],
+      },
+      tif: {
+        id: "image",
+        extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif"],
+        mime_types: ["image/*"],
+        operations: ["analyze_image"],
+      },
+      // Text files
+      txt: {
+        id: "text",
+        extensions: [
+          "txt",
+          "md",
+          "markdown",
+          "json",
+          "xml",
+          "csv",
+          "html",
+          "htm",
+        ],
+        mime_types: [
+          "text/plain",
+          "text/markdown",
+          "application/json",
+          "application/xml",
+          "text/xml",
+          "text/csv",
+          "text/html",
+        ],
+        operations: ["extract_text"],
+      },
+      md: {
+        id: "text",
+        extensions: [
+          "txt",
+          "md",
+          "markdown",
+          "json",
+          "xml",
+          "csv",
+          "html",
+          "htm",
+        ],
+        mime_types: [
+          "text/plain",
+          "text/markdown",
+          "application/json",
+          "application/xml",
+          "text/xml",
+          "text/csv",
+          "text/html",
+        ],
+        operations: ["extract_text"],
+      },
+      json: {
+        id: "text",
+        extensions: [
+          "txt",
+          "md",
+          "markdown",
+          "json",
+          "xml",
+          "csv",
+          "html",
+          "htm",
+        ],
+        mime_types: [
+          "text/plain",
+          "text/markdown",
+          "application/json",
+          "application/xml",
+          "text/xml",
+          "text/csv",
+          "text/html",
+        ],
+        operations: ["extract_text"],
+      },
+      csv: {
+        id: "text",
+        extensions: [
+          "txt",
+          "md",
+          "markdown",
+          "json",
+          "xml",
+          "csv",
+          "html",
+          "htm",
+        ],
+        mime_types: [
+          "text/plain",
+          "text/markdown",
+          "application/json",
+          "application/xml",
+          "text/xml",
+          "text/csv",
+          "text/html",
+        ],
+        operations: ["extract_text"],
+      },
+    };
+
+    // Return the specific capability or the fallback "other"
+    return (
+      extensionToCapability[extension] ?? {
+        id: "other",
+        extensions: ["*"],
+        mime_types: ["*/*"],
+        operations: [],
+      }
+    );
   }
 }
