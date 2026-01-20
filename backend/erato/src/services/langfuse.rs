@@ -384,8 +384,17 @@ impl LangfuseClient {
 
         let timestamp_iso = system_time_to_iso_string(SystemTime::now());
 
+        // Generate unique event ID by appending timestamp-derived suffix
+        // This prevents event deduplication while keeping body.id stable for upsert
+        let now = SystemTime::now();
+        let timestamp_nanos = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let unique_event_id = format!("{}_event_{}", request.id, timestamp_nanos);
+
         let ingestion_event = IngestionEvent {
-            id: request.id.clone(),
+            id: unique_event_id,
             r#type: "score-create".to_string(),
             timestamp: timestamp_iso,
             body: IngestionEventBody::ScoreCreate(CreateScoreEvent {

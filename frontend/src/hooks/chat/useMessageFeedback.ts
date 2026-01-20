@@ -250,22 +250,30 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
 
   /**
    * Switches from view mode to edit mode for feedback.
+   *
+   * @param newSentiment - Optional new sentiment to use when editing (allows changing sentiment)
    */
-  const switchToEditMode = useCallback(() => {
-    if (feedbackViewDialogState.feedback) {
-      const feedback = feedbackViewDialogState.feedback;
-      setFeedbackDialogState({
-        isOpen: true,
-        messageId: feedbackViewDialogState.messageId,
-        sentiment: feedback.sentiment === "positive" ? "positive" : "negative",
-        mode: "edit",
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- comment type is incorrectly generated as null|undefined
-        initialComment: feedback.comment ?? "",
-        error: null,
-      });
-      closeFeedbackViewDialog();
-    }
-  }, [feedbackViewDialogState, closeFeedbackViewDialog]);
+  const switchToEditMode = useCallback(
+    (newSentiment?: "positive" | "negative") => {
+      if (feedbackViewDialogState.feedback) {
+        const feedback = feedbackViewDialogState.feedback;
+        const sentiment =
+          newSentiment ??
+          (feedback.sentiment === "positive" ? "positive" : "negative");
+        setFeedbackDialogState({
+          isOpen: true,
+          messageId: feedbackViewDialogState.messageId,
+          sentiment,
+          mode: "edit",
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- comment type is incorrectly generated as null|undefined
+          initialComment: feedback.comment ?? "",
+          error: null,
+        });
+        closeFeedbackViewDialog();
+      }
+    },
+    [feedbackViewDialogState, closeFeedbackViewDialog],
+  );
 
   /**
    * Checks if editing is allowed based on time limit configuration.
