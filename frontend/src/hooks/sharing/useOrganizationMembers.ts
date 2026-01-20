@@ -20,21 +20,29 @@ interface UseOrganizationMembersResult {
 
 /**
  * Hook for fetching all organization users and groups
+ *
+ * Only fetches users and groups that the current user is "involved" with:
+ * - Groups: only groups the user is a member of
+ * - Users: only users who share at least one group with the current user
  */
 export function useOrganizationMembers(): UseOrganizationMembersResult {
-  // Fetch users
+  // Fetch users (only those sharing groups with the current user)
   const {
     data: usersData,
     isLoading: isLoadingUsers,
     error: usersError,
-  } = useListOrganizationUsers({});
+  } = useListOrganizationUsers({
+    queryParams: { is_involved: true },
+  });
 
-  // Fetch groups
+  // Fetch groups (only those the user is a member of)
   const {
     data: groupsData,
     isLoading: isLoadingGroups,
     error: groupsError,
-  } = useListOrganizationGroups({});
+  } = useListOrganizationGroups({
+    queryParams: { is_involved: true },
+  });
 
   // Combine loading states
   const isLoading = isLoadingUsers || isLoadingGroups;
