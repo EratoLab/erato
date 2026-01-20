@@ -3,13 +3,13 @@ use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::sentry::log_internal_server_error;
 use crate::state::AppState;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::{Extension, Json};
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 /// An assistant model
 #[derive(Debug, Serialize, ToSchema)]
@@ -137,6 +137,21 @@ pub struct UpdateAssistantResponse {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct ArchiveAssistantRequest {
     // Empty for now - using path parameter for assistant_id
+}
+
+/// Query parameters for listing assistants
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct ListAssistantsQuery {
+    /// Filter assistants by sharing relation
+    /// - `all` (default): All assistants are listed
+    /// - `owned_by_user`: Only assistants owned by the user
+    /// - `shared_with_user`: Only assistants shared with the user (= all - owned_by_user)
+    #[serde(default = "default_sharing_relation")]
+    pub sharing_relation: String,
+}
+
+fn default_sharing_relation() -> String {
+    "all".to_string()
 }
 
 /// Response when archiving an assistant
@@ -301,8 +316,12 @@ pub async fn create_assistant(
     get,
     path = "/assistants",
     tag = "assistants",
+    params(
+        ListAssistantsQuery
+    ),
     responses(
         (status = OK, body = Vec<Assistant>, description = "Successfully retrieved user's assistants"),
+        (status = BAD_REQUEST, description = "Invalid query parameters"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error")
     ),
@@ -314,11 +333,26 @@ pub async fn list_assistants(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
+    Query(query): Query<ListAssistantsQuery>,
 ) -> Result<Json<Vec<Assistant>>, StatusCode> {
-    // Get all assistants for the user
-    let assistants = assistant::get_user_assistants(&app_state.db, &policy, &me_user.to_subject())
-        .await
-        .map_err(log_internal_server_error)?;
+    // Validate the sharing_relation parameter
+    if !["all", "owned_by_user", "shared_with_user"].contains(&query.sharing_relation.as_str()) {
+        tracing::error!(
+            "Invalid sharing_relation parameter: {}",
+            query.sharing_relation
+        );
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Get all assistants for the user with the specified filter
+    let assistants = assistant::get_user_assistants(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &query.sharing_relation,
+    )
+    .await
+    .map_err(log_internal_server_error)?;
 
     // Convert to API format
     let current_user_id = &me_user.id;

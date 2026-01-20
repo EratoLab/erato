@@ -95,10 +95,16 @@ pub async fn create_assistant(
 }
 
 /// Get all assistants available to the user (owner's assistants + shared assistants)
+///
+/// The `sharing_relation` parameter filters the results:
+/// - `"all"` (default): Returns all assistants (owned + shared)
+/// - `"owned_by_user"`: Returns only assistants owned by the user
+/// - `"shared_with_user"`: Returns only assistants shared with the user (not owned)
 pub async fn get_user_assistants(
     conn: &DatabaseConnection,
     _policy: &PolicyEngine,
     subject: &Subject,
+    sharing_relation: &str,
 ) -> Result<Vec<assistants::Model>, Report> {
     // Get the user ID from subject (subject contains the user UUID)
     let user_id_str = subject.user_id();
@@ -108,38 +114,12 @@ pub async fn get_user_assistants(
         .await?
         .wrap_err("User not found")?;
 
-    // Query all non-archived assistants owned by the user
-    let owned_assistants = Assistants::find()
-        .filter(
-            Condition::all()
-                .add(assistants::Column::OwnerUserId.eq(user.id))
-                .add(assistants::Column::ArchivedAt.is_null()),
-        )
-        .all(conn)
-        .await?;
-
-    // Get assistants shared with the user via share_grants (including organization group grants)
-    let share_grants = share_grant::get_resources_shared_with_subject_and_groups(
-        conn,
-        user_id_str,
-        subject.organization_user_id(),
-        "assistant",
-        subject.organization_group_ids(),
-    )
-    .await?;
-
-    // Collect the assistant IDs from share grants
-    let shared_assistant_ids: Vec<Uuid> = share_grants
-        .iter()
-        .filter_map(|grant| Uuid::parse_str(&grant.resource_id).ok())
-        .collect();
-
-    // Query all non-archived shared assistants
-    let shared_assistants = if !shared_assistant_ids.is_empty() {
+    // Query all non-archived assistants owned by the user (if needed by filter)
+    let owned_assistants = if sharing_relation == "owned_by_user" || sharing_relation == "all" {
         Assistants::find()
             .filter(
                 Condition::all()
-                    .add(assistants::Column::Id.is_in(shared_assistant_ids))
+                    .add(assistants::Column::OwnerUserId.eq(user.id))
                     .add(assistants::Column::ArchivedAt.is_null()),
             )
             .all(conn)
@@ -148,14 +128,72 @@ pub async fn get_user_assistants(
         vec![]
     };
 
-    // Combine owned and shared assistants, removing duplicates
-    let mut all_assistants = owned_assistants;
-    for shared_assistant in shared_assistants {
-        // Only add if not already in the list (in case user owns an assistant that was also shared with them)
-        if !all_assistants.iter().any(|a| a.id == shared_assistant.id) {
-            all_assistants.push(shared_assistant);
+    // Get assistants shared with the user via share_grants (if needed by filter)
+    let shared_assistants = if sharing_relation == "shared_with_user" || sharing_relation == "all" {
+        let share_grants = share_grant::get_resources_shared_with_subject_and_groups(
+            conn,
+            user_id_str,
+            subject.organization_user_id(),
+            "assistant",
+            subject.organization_group_ids(),
+        )
+        .await?;
+
+        // Collect the assistant IDs from share grants
+        let shared_assistant_ids: Vec<Uuid> = share_grants
+            .iter()
+            .filter_map(|grant| Uuid::parse_str(&grant.resource_id).ok())
+            .collect();
+
+        // Query all non-archived shared assistants
+        if !shared_assistant_ids.is_empty() {
+            Assistants::find()
+                .filter(
+                    Condition::all()
+                        .add(assistants::Column::Id.is_in(shared_assistant_ids))
+                        .add(assistants::Column::ArchivedAt.is_null()),
+                )
+                .all(conn)
+                .await?
+        } else {
+            vec![]
         }
-    }
+    } else {
+        vec![]
+    };
+
+    // Combine based on filter
+    let mut all_assistants = match sharing_relation {
+        "owned_by_user" => owned_assistants,
+        "shared_with_user" => {
+            // Filter out assistants that are owned by the user
+            shared_assistants
+                .into_iter()
+                .filter(|a| a.owner_user_id != user.id)
+                .collect()
+        }
+        "all" => {
+            // Combine owned and shared assistants, removing duplicates
+            let mut combined = owned_assistants;
+            for shared_assistant in shared_assistants {
+                // Only add if not already in the list (in case user owns an assistant that was also shared with them)
+                if !combined.iter().any(|a| a.id == shared_assistant.id) {
+                    combined.push(shared_assistant);
+                }
+            }
+            combined
+        }
+        _ => {
+            // Default case: same as "all"
+            let mut combined = owned_assistants;
+            for shared_assistant in shared_assistants {
+                if !combined.iter().any(|a| a.id == shared_assistant.id) {
+                    combined.push(shared_assistant);
+                }
+            }
+            combined
+        }
+    };
 
     // Sort by updated_at desc
     all_assistants.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));

@@ -18,11 +18,23 @@ type QueryFnOptions = {
   signal?: AbortController["signal"];
 };
 
+export type ListAssistantsQueryParams = {
+  /**
+   * Filter assistants by sharing relation
+   * - `all` (default): All assistants are listed
+   * - `owned_by_user`: Only assistants owned by the user
+   * - `shared_with_user`: Only assistants shared with the user (= all - owned_by_user)
+   */
+  sharing_relation?: string;
+};
+
 export type ListAssistantsError = Fetcher.ErrorWrapper<undefined>;
 
 export type ListAssistantsResponse = Schemas.Assistant[];
 
-export type ListAssistantsVariables = V1betaApiContext["fetcherOptions"];
+export type ListAssistantsVariables = {
+  queryParams?: ListAssistantsQueryParams;
+} & V1betaApiContext["fetcherOptions"];
 
 export const fetchListAssistants = (
   variables: ListAssistantsVariables,
@@ -33,7 +45,7 @@ export const fetchListAssistants = (
     ListAssistantsError,
     undefined,
     {},
-    {},
+    ListAssistantsQueryParams,
     {}
   >({ url: "/api/v1beta/assistants", method: "get", ...variables, signal });
 
