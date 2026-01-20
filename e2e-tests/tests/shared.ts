@@ -104,8 +104,6 @@ export const chatIsReadyToChat = async (
 ) => {
   await test.step(`Wait for chat to be ready to Chat (either initial or to wait for finish message streaming)`, async () => {
     const textbox = page.getByRole("textbox", { name: "Type a message..." });
-    await expect(textbox).toBeVisible();
-    await expect(textbox).toBeEnabled();
     // Expect that assistant message is visible during or after the stream
     if (args?.expectAssistantResponse) {
       await expect(page.getByTestId("message-assistant")).toBeVisible();
@@ -118,6 +116,8 @@ export const chatIsReadyToChat = async (
     if (args?.expectAssistantResponse) {
       await expect(page.getByTestId("message-assistant")).toBeVisible();
     }
+    await expect(textbox).toBeVisible();
+    await expect(textbox).toBeEnabled();
   });
 };
 
