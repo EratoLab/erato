@@ -645,3 +645,209 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
     assert!(get_response_json["files"].is_array());
     assert_eq!(get_response_json["files"].as_array().unwrap().len(), 0);
 }
+
+/// Test the sharing_relation filter for listing assistants.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+///
+/// # Test Behavior
+/// Verifies that the list_assistants endpoint correctly filters by sharing_relation:
+/// - `all`: Returns both owned and shared assistants
+/// - `owned_by_user`: Returns only assistants owned by the user
+/// - `shared_with_user`: Returns only assistants shared with the user (not owned)
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
+    // Create app state with the database connection
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+
+    // Create two test users
+    let user1_subject = TEST_USER_SUBJECT;
+    let user1 = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        user1_subject,
+        None,
+    )
+    .await
+    .expect("Failed to create user 1");
+
+    let user2_subject = "test-subject-2-sharing-filter";
+    let user2 = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        user2_subject,
+        None,
+    )
+    .await
+    .expect("Failed to create user 2");
+
+    // Create assistants owned by user1
+    let owned_assistant1 = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user1.id.to_string()),
+        "Owned Assistant 1".to_string(),
+        Some("User 1 owns this".to_string()),
+        "You are owned assistant 1".to_string(),
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to create owned assistant 1");
+
+    let owned_assistant2 = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user1.id.to_string()),
+        "Owned Assistant 2".to_string(),
+        Some("User 1 owns this too".to_string()),
+        "You are owned assistant 2".to_string(),
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to create owned assistant 2");
+
+    // Create assistants owned by user2 that will be shared with user1
+    let shared_assistant1 = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user2.id.to_string()),
+        "Shared Assistant 1".to_string(),
+        Some("User 2 owns this, shared with user 1".to_string()),
+        "You are shared assistant 1".to_string(),
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to create shared assistant 1");
+
+    let shared_assistant2 = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user2.id.to_string()),
+        "Shared Assistant 2".to_string(),
+        Some("User 2 owns this, shared with user 1".to_string()),
+        "You are shared assistant 2".to_string(),
+        None,
+        None,
+    )
+    .await
+    .expect("Failed to create shared assistant 2");
+
+    // Share the assistants with user1
+    erato::models::share_grant::create_share_grant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user2.id.to_string()),
+        "assistant".to_string(),
+        shared_assistant1.id.to_string(),
+        "user".to_string(),
+        "id".to_string(),
+        user1.id.to_string(),
+        "viewer".to_string(),
+    )
+    .await
+    .expect("Failed to create share grant 1");
+
+    erato::models::share_grant::create_share_grant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user2.id.to_string()),
+        "assistant".to_string(),
+        shared_assistant2.id.to_string(),
+        "user".to_string(),
+        "id".to_string(),
+        user1.id.to_string(),
+        "viewer".to_string(),
+    )
+    .await
+    .expect("Failed to create share grant 2");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+
+    // Create the test server with our router
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Test 1: List all assistants (default behavior, sharing_relation=all)
+    let response = server
+        .get("/api/v1beta/assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::OK);
+    let all_assistants: Value = response.json();
+    let all_array = all_assistants
+        .as_array()
+        .expect("Response should be an array");
+    assert_eq!(all_array.len(), 4); // 2 owned + 2 shared
+
+    // Test 2: List all assistants with explicit sharing_relation=all
+    let response = server
+        .get("/api/v1beta/assistants?sharing_relation=all")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::OK);
+    let all_explicit: Value = response.json();
+    let all_explicit_array = all_explicit
+        .as_array()
+        .expect("Response should be an array");
+    assert_eq!(all_explicit_array.len(), 4); // 2 owned + 2 shared
+
+    // Test 3: List only owned assistants (sharing_relation=owned_by_user)
+    let response = server
+        .get("/api/v1beta/assistants?sharing_relation=owned_by_user")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::OK);
+    let owned_only: Value = response.json();
+    let owned_array = owned_only.as_array().expect("Response should be an array");
+    assert_eq!(owned_array.len(), 2); // Only 2 owned assistants
+
+    // Verify they are the correct assistants
+    let owned_ids: Vec<String> = owned_array
+        .iter()
+        .map(|a| a["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(owned_ids.contains(&owned_assistant1.id.to_string()));
+    assert!(owned_ids.contains(&owned_assistant2.id.to_string()));
+
+    // Test 4: List only shared assistants (sharing_relation=shared_with_user)
+    let response = server
+        .get("/api/v1beta/assistants?sharing_relation=shared_with_user")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::OK);
+    let shared_only: Value = response.json();
+    let shared_array = shared_only.as_array().expect("Response should be an array");
+    assert_eq!(shared_array.len(), 2); // Only 2 shared assistants
+
+    // Verify they are the correct assistants
+    let shared_ids: Vec<String> = shared_array
+        .iter()
+        .map(|a| a["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(shared_ids.contains(&shared_assistant1.id.to_string()));
+    assert!(shared_ids.contains(&shared_assistant2.id.to_string()));
+
+    // Verify can_edit is false for shared assistants
+    for assistant in shared_array {
+        assert_eq!(assistant["can_edit"], false);
+    }
+
+    // Test 5: Invalid sharing_relation value should return 400 Bad Request
+    let response = server
+        .get("/api/v1beta/assistants?sharing_relation=invalid_value")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(response.status_code(), http::StatusCode::BAD_REQUEST);
+}

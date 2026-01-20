@@ -13,6 +13,17 @@
         ],
         "summary": "List all assistants available to the user",
         "operationId": "list_assistants",
+        "parameters": [
+          {
+            "name": "sharing_relation",
+            "in": "query",
+            "description": "Filter assistants by sharing relation\n- `all` (default): All assistants are listed\n- `owned_by_user`: Only assistants owned by the user\n- `shared_with_user`: Only assistants shared with the user (= all - owned_by_user)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successfully retrieved user's assistants",
@@ -26,6 +37,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid query parameters"
           },
           "401": {
             "description": "When no valid JWT token is provided"
