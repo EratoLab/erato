@@ -5,6 +5,7 @@ import {
   getMockItemsByDriveId,
   getMockItemsByFolderId,
 } from "@/stories/ui/cloud/mockCloudData";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import type * as Schemas from "../generated/v1betaApi/v1betaApiSchemas"; // Import schema types if needed
 
@@ -56,6 +57,7 @@ export const handlers = [
       filename: "test-file.txt",
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       download_url: `http://localhost/download/${fileId}`,
+      file_capability: FileTypeUtil.createMockFileCapability("test-file.txt"),
     };
     return HttpResponse.json(response);
   }),
@@ -142,6 +144,7 @@ export const handlers = [
           id: `uploaded-file-${chatId}-${index}-${Date.now()}`,
           filename: file.name,
           download_url: `http://localhost/download/uploaded-file-${chatId}-${index}`,
+          file_capability: FileTypeUtil.createMockFileCapability(file.name),
         }),
       );
 
@@ -193,12 +196,14 @@ export const handlers = [
   // Mock POST /api/v1beta/me/files/link (Link cloud files)
   http.post("/api/v1beta/me/files/link", async () => {
     // Simulate successful file linking
+    const filename = "Linked Document.pdf";
     const response: Schemas.FileUploadResponse = {
       files: [
         {
           id: `linked-file-${Date.now()}`,
-          filename: "Linked Document.pdf",
+          filename,
           download_url: `http://localhost/download/linked-file-${Date.now()}`,
+          file_capability: FileTypeUtil.createMockFileCapability(filename),
         },
       ],
     };

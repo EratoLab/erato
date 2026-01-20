@@ -6,6 +6,7 @@ import {
   useCreateChat,
   fetchUploadFile,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { useFileDropzone } from "../useFileDropzone";
 import { useFileUploadStore } from "../useFileUploadStore";
@@ -58,11 +59,13 @@ describe("useFileDropzone", () => {
           id: "file1",
           filename: "test1.pdf",
           download_url: "http://example.com/file1.pdf",
+          file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
         },
         {
           id: "file2",
           filename: "test2.jpg",
           download_url: "http://example.com/file2.jpg",
+          file_capability: FileTypeUtil.createMockFileCapability("test2.jpg"),
         },
       ],
     });
@@ -90,11 +93,13 @@ describe("useFileDropzone", () => {
           id: "file1",
           filename: "test1.pdf",
           download_url: "http://example.com/file1.pdf",
+          file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
         },
         {
           id: "file2",
           filename: "test2.jpg",
           download_url: "http://example.com/file2.jpg",
+          file_capability: FileTypeUtil.createMockFileCapability("test2.jpg"),
         },
       ],
     });
@@ -127,11 +132,13 @@ describe("useFileDropzone", () => {
           id: "file1",
           filename: "test1.pdf",
           download_url: "http://example.com/file1.pdf",
+          file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
         },
         {
           id: "file2",
           filename: "test2.jpg",
           download_url: "http://example.com/file2.jpg",
+          file_capability: FileTypeUtil.createMockFileCapability("test2.jpg"),
         },
       ],
     });
@@ -175,11 +182,13 @@ describe("useFileDropzone", () => {
         id: "file1",
         filename: "test1.pdf",
         download_url: "http://example.com/file1.pdf",
+        file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
       },
       {
         id: "file2",
         filename: "test2.jpg",
         download_url: "http://example.com/file2.jpg",
+        file_capability: FileTypeUtil.createMockFileCapability("test2.jpg"),
       },
     ]);
     expect(result.current.error).toBeNull();
@@ -190,11 +199,13 @@ describe("useFileDropzone", () => {
         id: "file1",
         filename: "test1.pdf",
         download_url: "http://example.com/file1.pdf",
+        file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
       },
       {
         id: "file2",
         filename: "test2.jpg",
         download_url: "http://example.com/file2.jpg",
+        file_capability: FileTypeUtil.createMockFileCapability("test2.jpg"),
       },
     ]);
   });
@@ -208,6 +219,7 @@ describe("useFileDropzone", () => {
           id: "file1",
           filename: "test1.pdf",
           download_url: "http://example.com/file1.pdf",
+          file_capability: FileTypeUtil.createMockFileCapability("test1.pdf"),
         },
       ],
     });

@@ -1,5 +1,6 @@
 pub mod assistant;
 pub mod chat;
+pub mod file_capability;
 pub mod file_upload;
 pub mod message;
 pub mod message_feedback;

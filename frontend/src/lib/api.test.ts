@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 
+import { FileTypeUtil } from "@/utils/fileTypes";
+
 import {
   fetchChats,
   fetchChatMessages,
@@ -145,6 +147,8 @@ describe("API Client Tests", () => {
             id: "mock-id-123",
             filename: mockFileName,
             download_url: "http://mock.download/mock-id-123",
+            file_capability:
+              FileTypeUtil.createMockFileCapability(mockFileName),
           },
         ],
       };
@@ -208,11 +212,13 @@ describe("API Client Tests", () => {
           id: "mock-multi-id-1",
           filename: "file1.txt",
           download_url: "http://mock.download/mock-multi-id-1",
+          file_capability: FileTypeUtil.createMockFileCapability("file1.txt"),
         },
         {
           id: "mock-multi-id-2",
           filename: "file2.png",
           download_url: "http://mock.download/mock-multi-id-2",
+          file_capability: FileTypeUtil.createMockFileCapability("file2.png"),
         },
       ],
     };
