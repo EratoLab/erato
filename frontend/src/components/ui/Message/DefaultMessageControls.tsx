@@ -92,12 +92,18 @@ export const DefaultMessageControls = ({
 
   const handleAction = useCallback(
     async (actionType: "copy" | "edit" | "like" | "dislike") => {
-      // If feedback already exists and user clicks the filled button, show view dialog
+      // Determine if user is clicking the same sentiment they already submitted
+      const isClickingSameSentiment =
+        (actionType === "like" && feedbackState === "liked") ||
+        (actionType === "dislike" && feedbackState === "disliked");
+
+      // If feedback already exists and user clicks the SAME filled button, show view dialog
       if (
         (actionType === "like" || actionType === "dislike") &&
         feedbackState !== null &&
         initialFeedback &&
-        onViewFeedback
+        onViewFeedback &&
+        isClickingSameSentiment
       ) {
         onViewFeedback(messageId, initialFeedback);
         return;
@@ -105,9 +111,11 @@ export const DefaultMessageControls = ({
 
       // Prevent duplicate feedback submissions if already submitted but cache not yet updated
       // This handles the case where feedbackState is set locally but initialFeedback hasn't arrived yet
+      // ONLY prevent if clicking the same sentiment (allow changing sentiment)
       if (
         (actionType === "like" || actionType === "dislike") &&
-        feedbackState !== null
+        feedbackState !== null &&
+        isClickingSameSentiment
       ) {
         logger.log(
           `Feedback already submitted for message ${messageId}, waiting for cache update`,
