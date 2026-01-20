@@ -1,9 +1,151 @@
 # Infrastructure overview
 
-🚧Work in progress 🚧
+This page provides an overview of the core architecture and infrastructure components that make up the Erato platform. Understanding these components is essential for successfully deploying and operating Erato in your environment.
 
-The main components involved in a typical Erato deployment are:
+Erato's architecture is designed with **extensibility** at its core - particularly through the Model Context Protocol (MCP) servers - enabling you to integrate external data sources, APIs, and tools to meet your organization's specific needs.
 
-- The Erato backend (also serves the static frontend bundle)
-- PostgreSQL database for persistent storage
-- [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) for OIDC authentication
+The modular design also has significant **operational impact**: the number of running services is kept intentionally small for simpler operation and maintenance, while still allowing you to scale individual components independently and adapt the deployment to your infrastructure requirements.
+Some parts (e.g. file processor) also have to option to involve external services as part of their processign steps in order to make them more extensible.
+
+For detailed deployment instructions using Helm, see the [Helm deployment guide](./deployment_helm).
+
+## Architecture Diagram (simplified)
+
+The following diagram illustrates the simplified architecture of an Erato deployment:
+
+```mermaid
+graph LR
+    User[User]
+    AuthProxy[Authorization Proxy<br/>oauth2-proxy]
+    Erato[Erato App<br/>Backend + Frontend]
+    DB[(PostgreSQL<br/>Database)]
+
+    subgraph MCPGroup[MCP Servers]
+        direction TB
+        MCP1[MCP Server 1]
+        MCP2[MCP Server 2]
+        MCPn[MCP Server N]
+        MCP1 ~~~ MCP2
+        MCP2 ~~~ MCPn
+    end
+
+    User --> AuthProxy
+    AuthProxy --> Erato
+    Erato --> MCPGroup
+    Erato --> DB
+
+    style User fill:none,stroke:#3b82f6,stroke-width:3px
+    style AuthProxy fill:none,stroke:#f59e0b,stroke-width:3px
+    style Erato fill:none,stroke:#10b981,stroke-width:3px
+    style DB fill:none,stroke:#ef4444,stroke-width:3px
+    style MCPGroup fill:none,stroke:#a855f7,stroke-width:3px,stroke-dasharray: 5 5
+    style MCP1 fill:none,stroke:#a855f7,stroke-width:2px
+    style MCP2 fill:none,stroke:#a855f7,stroke-width:2px
+    style MCPn fill:none,stroke:#a855f7,stroke-width:2px
+```
+
+**Flow description:**
+
+1. **User** accesses the application through their browser
+2. **Authorization Proxy** ([oauth2-proxy](./oauth2_proxy)) handles authentication and validates user sessions via OIDC
+3. **Erato App** serves the frontend and provides the backend API
+4. **PostgreSQL Database** stores all persistent data (conversations, documents, user settings, etc.)
+5. **MCP Servers** provide external integrations and tool capabilities (can be multiple instances for different services)
+
+## Extended Architecture (Example)
+
+The following diagram shows a more concrete example of an Erato deployment with specific MCP servers and external integrations:
+
+```mermaid
+graph LR
+    User[User]
+
+    subgraph AuthLayer[ ]
+        direction TB
+        EntraID[Microsoft<br/>Entra ID]
+        AuthProxy[Authorization Proxy<br/>oauth2-proxy]
+        EntraID ~~~ AuthProxy
+    end
+
+    Erato[Erato App<br/>Backend + Frontend]
+    DB[(PostgreSQL<br/>Database)]
+
+    subgraph MCPServers[MCP Servers]
+        direction TB
+
+        subgraph MCPBuiltin[Built-in MCP Servers]
+            direction TB
+            WebAccess[Web Access<br/>MCP Server]
+            WebSearch[Web Search<br/>MCP Server]
+            WebAccess ~~~ WebSearch
+        end
+
+        subgraph MCPCustom[Custom MCP Servers]
+            direction TB
+            IntranetMCP[Intranet<br/>MCP Server]
+        end
+
+        subgraph MCPExternal[External MCP Servers]
+            direction TB
+            JiraMCP[JIRA<br/>MCP Server]
+        end
+
+        MCPBuiltin ~~~ MCPCustom
+        MCPCustom ~~~ MCPExternal
+    end
+
+    Intranet[Internal Intranet<br/>Service]
+    JiraSaaS[JIRA<br/>SaaS Service]
+
+    User --> AuthLayer
+    AuthProxy --> Erato
+    EntraID -.-> AuthProxy
+    Erato -.-> EntraID
+    Erato --> DB
+    Erato -->|auth: none/simple| WebAccess
+    Erato -->|auth: none/simple| WebSearch
+    Erato -->|auth: forwarded| IntranetMCP
+    Erato -->|auth: oauth2| JiraMCP
+    IntranetMCP --> Intranet
+    JiraMCP --> JiraSaaS
+
+    style User fill:none,stroke:#3b82f6,stroke-width:3px
+    style AuthLayer fill:none,stroke:none
+    style AuthProxy fill:none,stroke:#f59e0b,stroke-width:3px
+    style EntraID fill:none,stroke:#06b6d4,stroke-width:3px
+    style Erato fill:none,stroke:#10b981,stroke-width:3px
+    style DB fill:none,stroke:#ef4444,stroke-width:3px
+    style MCPServers fill:none,stroke:none
+    style MCPBuiltin fill:none,stroke:#8b5cf6,stroke-width:3px,stroke-dasharray: 5 5
+    style MCPCustom fill:none,stroke:#a855f7,stroke-width:3px,stroke-dasharray: 5 5
+    style MCPExternal fill:none,stroke:#ec4899,stroke-width:3px,stroke-dasharray: 5 5
+    style WebAccess fill:none,stroke:#8b5cf6,stroke-width:2px
+    style WebSearch fill:none,stroke:#8b5cf6,stroke-width:2px
+    style IntranetMCP fill:none,stroke:#a855f7,stroke-width:2px
+    style JiraMCP fill:none,stroke:#ec4899,stroke-width:2px
+    style Intranet fill:none,stroke:#64748b,stroke-width:3px
+    style JiraSaaS fill:none,stroke:#64748b,stroke-width:3px
+```
+
+**Key components in this example:**
+
+1. **Microsoft Entra ID** provides identity and authentication services:
+
+   - The authorization proxy uses it for OIDC authentication
+   - The Erato application reads user and group information from the identity provider for access control and user management
+
+2. **Built-in MCP Servers** (Web Access, Web Search) are deployed as part of the Erato installation and provide web browsing capabilities:
+
+   - **Authentication**: `none/simple` - These servers require no authentication or simple API keys, as they don't access sensitive organizational data
+
+3. **Custom MCP Servers** extend functionality with organization-specific integrations:
+
+   - **Intranet MCP Server** connects to internal company intranet services
+   - **Authentication**: `forwarded` - User authentication credentials are forwarded from Erato to the MCP server, allowing it to access the intranet service on behalf of the authenticated user
+
+4. **External MCP Servers** are provided by external SaaS vendors:
+
+   - **JIRA MCP Server** integrates with external SaaS JIRA instance for project management
+   - **Authentication**: `oauth2` - The MCP server uses OAuth2 to authenticate with the JIRA service, typically using service account credentials or user-delegated tokens
+
+5. External services (Intranet, JIRA) are accessed through their respective MCP servers, maintaining a clean separation of concerns and proper authentication boundaries
