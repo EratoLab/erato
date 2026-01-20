@@ -1927,14 +1927,24 @@ export const useAvailableModels = <TData = AvailableModelsResponse,>(
   });
 };
 
+export type ListOrganizationGroupsQueryParams = {
+  /**
+   * Filter to only show groups the requesting user is "involved" with.
+   * When true, only returns groups that the requesting user is a member of.
+   */
+  is_involved?: boolean;
+};
+
 export type ListOrganizationGroupsError = Fetcher.ErrorWrapper<undefined>;
 
-export type ListOrganizationGroupsVariables =
-  V1betaApiContext["fetcherOptions"];
+export type ListOrganizationGroupsVariables = {
+  queryParams?: ListOrganizationGroupsQueryParams;
+} & V1betaApiContext["fetcherOptions"];
 
 /**
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches all groups from the MS Graph API with full pagination.
+ * When is_involved=true, only returns groups the user is a member of.
  */
 export const fetchListOrganizationGroups = (
   variables: ListOrganizationGroupsVariables,
@@ -1945,7 +1955,7 @@ export const fetchListOrganizationGroups = (
     ListOrganizationGroupsError,
     undefined,
     {},
-    {},
+    ListOrganizationGroupsQueryParams,
     {}
   >({
     url: "/api/v1beta/me/organization/groups",
@@ -1957,6 +1967,7 @@ export const fetchListOrganizationGroups = (
 /**
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches all groups from the MS Graph API with full pagination.
+ * When is_involved=true, only returns groups the user is a member of.
  */
 export function listOrganizationGroupsQuery(
   variables: ListOrganizationGroupsVariables,
@@ -1996,6 +2007,7 @@ export function listOrganizationGroupsQuery(
 /**
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches all groups from the MS Graph API with full pagination.
+ * When is_involved=true, only returns groups the user is a member of.
  */
 export const useSuspenseListOrganizationGroups = <
   TData = Schemas.OrganizationGroupsResponse,
@@ -2025,6 +2037,7 @@ export const useSuspenseListOrganizationGroups = <
 /**
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches all groups from the MS Graph API with full pagination.
+ * When is_involved=true, only returns groups the user is a member of.
  */
 export const useListOrganizationGroups = <
   TData = Schemas.OrganizationGroupsResponse,
@@ -2055,13 +2068,24 @@ export const useListOrganizationGroups = <
   });
 };
 
+export type ListOrganizationUsersQueryParams = {
+  /**
+   * Filter to only show users the requesting user is "involved" with.
+   * When true, only returns users who share at least one group with the requesting user.
+   */
+  is_involved?: boolean;
+};
+
 export type ListOrganizationUsersError = Fetcher.ErrorWrapper<undefined>;
 
-export type ListOrganizationUsersVariables = V1betaApiContext["fetcherOptions"];
+export type ListOrganizationUsersVariables = {
+  queryParams?: ListOrganizationUsersQueryParams;
+} & V1betaApiContext["fetcherOptions"];
 
 /**
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches all users from the MS Graph API with full pagination.
+ * When is_involved=true, only returns users who share at least one group with the requesting user.
  */
 export const fetchListOrganizationUsers = (
   variables: ListOrganizationUsersVariables,
@@ -2072,7 +2096,7 @@ export const fetchListOrganizationUsers = (
     ListOrganizationUsersError,
     undefined,
     {},
-    {},
+    ListOrganizationUsersQueryParams,
     {}
   >({
     url: "/api/v1beta/me/organization/users",
@@ -2084,6 +2108,7 @@ export const fetchListOrganizationUsers = (
 /**
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches all users from the MS Graph API with full pagination.
+ * When is_involved=true, only returns users who share at least one group with the requesting user.
  */
 export function listOrganizationUsersQuery(
   variables: ListOrganizationUsersVariables,
@@ -2123,6 +2148,7 @@ export function listOrganizationUsersQuery(
 /**
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches all users from the MS Graph API with full pagination.
+ * When is_involved=true, only returns users who share at least one group with the requesting user.
  */
 export const useSuspenseListOrganizationUsers = <
   TData = Schemas.OrganizationUsersResponse,
@@ -2152,6 +2178,7 @@ export const useSuspenseListOrganizationUsers = <
 /**
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches all users from the MS Graph API with full pagination.
+ * When is_involved=true, only returns users who share at least one group with the requesting user.
  */
 export const useListOrganizationUsers = <
   TData = Schemas.OrganizationUsersResponse,

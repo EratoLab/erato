@@ -1056,8 +1056,19 @@
           "entra_id"
         ],
         "summary": "List all groups in the organization.",
-        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches all groups from the MS Graph API with full pagination.",
+        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches all groups from the MS Graph API with full pagination.\nWhen is_involved=true, only returns groups the user is a member of.",
         "operationId": "list_organization_groups",
+        "parameters": [
+          {
+            "name": "is_involved",
+            "in": "query",
+            "description": "Filter to only show groups the requesting user is \"involved\" with.\nWhen true, only returns groups that the requesting user is a member of.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "List of organization groups",
@@ -1089,8 +1100,19 @@
           "entra_id"
         ],
         "summary": "List all users in the organization.",
-        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches all users from the MS Graph API with full pagination.",
+        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches all users from the MS Graph API with full pagination.\nWhen is_involved=true, only returns users who share at least one group with the requesting user.",
         "operationId": "list_organization_users",
+        "parameters": [
+          {
+            "name": "is_involved",
+            "in": "query",
+            "description": "Filter to only show users the requesting user is \"involved\" with.\nWhen true, only returns users who share at least one group with the requesting user.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "List of organization users",

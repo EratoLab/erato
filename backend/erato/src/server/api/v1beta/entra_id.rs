@@ -5,12 +5,30 @@
 
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::state::AppState;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::{Extension, Json};
 use graph_rs_sdk::{GraphClient, GraphClientConfiguration, ODataQuery};
-use serde::Serialize;
-use utoipa::ToSchema;
+use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
+
+/// Query parameters for listing organization users
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+pub struct ListUsersQuery {
+    /// Filter to only show users the requesting user is "involved" with.
+    /// When true, only returns users who share at least one group with the requesting user.
+    #[serde(default)]
+    pub is_involved: bool,
+}
+
+/// Query parameters for listing organization groups
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+pub struct ListGroupsQuery {
+    /// Filter to only show groups the requesting user is "involved" with.
+    /// When true, only returns groups that the requesting user is a member of.
+    #[serde(default)]
+    pub is_involved: bool,
+}
 
 /// An organization user
 #[derive(Debug, Serialize, ToSchema)]
@@ -74,6 +92,79 @@ fn create_graph_client(access_token: &str) -> GraphClient {
     )
 }
 
+/// Fetch all groups the current user belongs to using transitive_member_of.
+/// Returns a Vec of group IDs.
+async fn fetch_user_groups(
+    client: &GraphClient,
+) -> Result<Vec<String>, StatusCode> {
+    let response_deque = client
+        .me()
+        .transitive_member_of()
+        .list_transitive_member_of()
+        .select(&["id"])
+        .paging()
+        .json::<GroupsResponse>()
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to fetch user's groups from Graph API: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let mut group_ids = Vec::new();
+    for response in response_deque {
+        let groups_response = response.into_body().map_err(|e| {
+            tracing::error!("Failed to parse groups response: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        for group_item in &groups_response.value {
+            group_ids.push(group_item.id.clone());
+        }
+    }
+
+    Ok(group_ids)
+}
+
+/// Fetch all user IDs that are members of the given groups.
+/// Returns a HashSet of user IDs.
+async fn fetch_users_in_groups(
+    client: &GraphClient,
+    group_ids: &[String],
+) -> Result<std::collections::HashSet<String>, StatusCode> {
+    use std::collections::HashSet;
+
+    let mut user_ids = HashSet::new();
+
+    for group_id in group_ids {
+        // Fetch members of this group
+        let response_deque = client
+            .groups()
+            .id(group_id)
+            .list_members()
+            .select(&["id"])
+            .paging()
+            .json::<GroupMembersResponse>()
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to fetch members for group {}: {:?}", group_id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        for response in response_deque {
+            let members_response = response.into_body().map_err(|e| {
+                tracing::error!("Failed to parse group members response: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+            for member_item in &members_response.value {
+                user_ids.insert(member_item.id.clone());
+            }
+        }
+    }
+
+    Ok(user_ids)
+}
+
 /// Helper struct for deserializing users from MS Graph API.
 #[derive(Debug, serde::Deserialize)]
 struct UsersResponse {
@@ -100,14 +191,29 @@ struct GroupItem {
     display_name: Option<String>,
 }
 
+/// Helper struct for deserializing group members from MS Graph API.
+#[derive(Debug, serde::Deserialize)]
+struct GroupMembersResponse {
+    value: Vec<GroupMemberItem>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct GroupMemberItem {
+    id: String,
+}
+
 /// List all users in the organization.
 ///
 /// If the Entra ID integration is not enabled, returns an empty list.
 /// If enabled, fetches all users from the MS Graph API with full pagination.
+/// When is_involved=true, only returns users who share at least one group with the requesting user.
 #[utoipa::path(
     get,
     path = "/me/organization/users",
     tag = "entra_id",
+    params(
+        ListUsersQuery
+    ),
     responses(
         (status = OK, body = OrganizationUsersResponse, description = "List of organization users"),
         (status = UNAUTHORIZED, description = "No access token available"),
@@ -120,6 +226,7 @@ struct GroupItem {
 pub async fn list_organization_users(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Query(query): Query<ListUsersQuery>,
 ) -> Result<Json<OrganizationUsersResponse>, StatusCode> {
     // If Entra ID is not enabled, return empty list
     if !check_entra_id_enabled(&app_state) {
@@ -129,6 +236,20 @@ pub async fn list_organization_users(
 
     let access_token = get_access_token(&me_user)?;
     let client = create_graph_client(access_token);
+
+    // If is_involved filter is enabled, first fetch the user's groups using transitive_member_of,
+    // then fetch all users in those groups
+    let involved_user_ids = if query.is_involved {
+        let user_group_ids = fetch_user_groups(&client).await?;
+        if user_group_ids.is_empty() {
+            // User is not in any groups, return empty list
+            tracing::info!("User is not in any groups, returning empty users list");
+            return Ok(Json(OrganizationUsersResponse { users: Vec::new() }));
+        }
+        Some(fetch_users_in_groups(&client, &user_group_ids).await?)
+    } else {
+        None
+    };
 
     // Use the graph-rs-sdk's built-in pagination support
     // This automatically handles all @odata.nextLink pages
@@ -153,6 +274,13 @@ pub async fn list_organization_users(
         })?;
 
         for user_item in &users_response.value {
+            // If is_involved filter is enabled, only include users that are in the involved_user_ids set
+            if let Some(ref involved_ids) = involved_user_ids {
+                if !involved_ids.contains(&user_item.id) {
+                    continue;
+                }
+            }
+
             users.push(OrganizationUser {
                 id: user_item.id.clone(),
                 display_name: user_item.display_name.clone().unwrap_or_default(),
@@ -161,7 +289,15 @@ pub async fn list_organization_users(
         }
     }
 
-    tracing::info!("Fetched {} users from organization", users.len());
+    if query.is_involved {
+        tracing::info!(
+            "Filtered to {} users (sharing groups with requesting user) from organization",
+            users.len()
+        );
+    } else {
+        tracing::info!("Fetched {} users from organization", users.len());
+    }
+
     Ok(Json(OrganizationUsersResponse { users }))
 }
 
@@ -169,10 +305,14 @@ pub async fn list_organization_users(
 ///
 /// If the Entra ID integration is not enabled, returns an empty list.
 /// If enabled, fetches all groups from the MS Graph API with full pagination.
+/// When is_involved=true, only returns groups the user is a member of.
 #[utoipa::path(
     get,
     path = "/me/organization/groups",
     tag = "entra_id",
+    params(
+        ListGroupsQuery
+    ),
     responses(
         (status = OK, body = OrganizationGroupsResponse, description = "List of organization groups"),
         (status = UNAUTHORIZED, description = "No access token available"),
@@ -185,6 +325,7 @@ pub async fn list_organization_users(
 pub async fn list_organization_groups(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Query(query): Query<ListGroupsQuery>,
 ) -> Result<Json<OrganizationGroupsResponse>, StatusCode> {
     // If Entra ID is not enabled, return empty list
     if !check_entra_id_enabled(&app_state) {
@@ -197,17 +338,34 @@ pub async fn list_organization_groups(
 
     // Use the graph-rs-sdk's built-in pagination support
     // This automatically handles all @odata.nextLink pages
-    let response_deque = client
-        .groups()
-        .list_group()
-        .select(&["id", "displayName"])
-        .paging()
-        .json::<GroupsResponse>()
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to fetch groups from Graph API: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let response_deque = if query.is_involved {
+        // When is_involved=true, use me().transitive_member_of() to get only groups the user belongs to
+        client
+            .me()
+            .transitive_member_of()
+            .list_transitive_member_of()
+            .select(&["id", "displayName"])
+            .paging()
+            .json::<GroupsResponse>()
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to fetch user's groups from Graph API: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+    } else {
+        // When is_involved=false, fetch all groups in the organization
+        client
+            .groups()
+            .list_group()
+            .select(&["id", "displayName"])
+            .paging()
+            .json::<GroupsResponse>()
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to fetch groups from Graph API: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+    };
 
     // Collect all groups from all pages
     let mut groups = Vec::new();
@@ -226,6 +384,14 @@ pub async fn list_organization_groups(
         }
     }
 
-    tracing::info!("Fetched {} groups from organization", groups.len());
+    if query.is_involved {
+        tracing::info!(
+            "Fetched {} groups (user is member of) from organization",
+            groups.len()
+        );
+    } else {
+        tracing::info!("Fetched {} groups from organization", groups.len());
+    }
+
     Ok(Json(OrganizationGroupsResponse { groups }))
 }
