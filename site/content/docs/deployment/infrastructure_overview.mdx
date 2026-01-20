@@ -149,3 +149,234 @@ graph LR
    - **Authentication**: `oauth2` - The MCP server uses OAuth2 to authenticate with the JIRA service, typically using service account credentials or user-delegated tokens
 
 5. External services (Intranet, JIRA) are accessed through their respective MCP servers, maintaining a clean separation of concerns and proper authentication boundaries
+
+## Message Lifecycle
+
+This section explains how Erato processes chat messages from submission through LLM generation and final persistence.
+
+### High-Level Overview
+
+The message lifecycle consists of five main phases:
+
+```mermaid
+sequenceDiagram
+    participant 🌐 Frontend
+    participant 🖥️ Backend API
+    participant 💾 PostgreSQL
+    participant 📊 Langfuse
+    participant 🤖 LLM Provider
+    participant 🔧 MCP Servers
+
+    rect rgba(59, 130, 246, 0.15)
+    Note over 🌐 Frontend,💾 PostgreSQL: 1. Submission & Persistence
+    end
+    🌐 Frontend->>🖥️ Backend API: Submit message (SSE)
+    🖥️ Backend API->>💾 PostgreSQL: Save user message
+    🖥️ Backend API->>🌐 Frontend: SSE: UserMessageCreated
+
+    rect rgba(16, 185, 129, 0.15)
+    Note over 🖥️ Backend API,💾 PostgreSQL: 2. File Processing & Composition
+    end
+    🖥️ Backend API->>🖥️ Backend API: Process uploaded files
+    🖥️ Backend API->>💾 PostgreSQL: Retrieve message history
+    🖥️ Backend API->>🖥️ Backend API: Compose generation input
+
+    rect rgba(245, 158, 11, 0.15)
+    Note over 🖥️ Backend API,📊 Langfuse: 3. Tracing Setup (if enabled)
+    end
+    🖥️ Backend API->>📊 Langfuse: Create trace
+    🖥️ Backend API->>🔧 MCP Servers: List available tools
+
+    rect rgba(168, 85, 247, 0.15)
+    Note over 🖥️ Backend API,🔧 MCP Servers: 4. Turn Lifecycle Loop
+    end
+    loop Until final message generated
+        🖥️ Backend API->>🔧 MCP Servers: Execute pending tool calls
+        🖥️ Backend API->>🤖 LLM Provider: Stream chat completion
+        🤖 LLM Provider-->>🖥️ Backend API: Response + tool calls
+        🖥️ Backend API->>🌐 Frontend: SSE: Text deltas & tool updates
+    end
+
+    rect rgba(236, 72, 153, 0.15)
+    Note over 🖥️ Backend API,💾 PostgreSQL: 5. Finalization
+    end
+    🖥️ Backend API->>💾 PostgreSQL: Save assistant message
+    🖥️ Backend API->>📊 Langfuse: Update trace output
+    🖥️ Backend API->>🌐 Frontend: SSE: MessageComplete
+```
+
+### Phase 1: Submission & Persistence
+
+The request arrives via SSE endpoint and the user message is immediately persisted:
+
+```mermaid
+sequenceDiagram
+    participant 🌐 Frontend
+    participant 🖥️ Backend API
+    participant 💾 PostgreSQL
+
+    🌐 Frontend->>🖥️ Backend API: Submit message (SSE)<br/>- user_message<br/>- input_files_ids<br/>- previous_message_id (optional)<br/>- chat_id (optional)
+
+    🖥️ Backend API->>💾 PostgreSQL: Get or create chat
+    💾 PostgreSQL-->>🖥️ Backend API: Chat record
+
+    🖥️ Backend API->>💾 PostgreSQL: Save user message<br/>- Message content (JSON)<br/>- Chat association<br/>- Previous message link<br/>- Attached file references
+    💾 PostgreSQL-->>🖥️ Backend API: message_id
+
+    🖥️ Backend API->>🌐 Frontend: SSE: UserMessageCreated<br/>- message_id<br/>- chat_id
+```
+
+**Key operations:**
+
+- Chat is created if it doesn't exist
+- User message is immediately saved to ensure it's not lost
+- Frontend receives confirmation via SSE event
+
+### Phase 2: File Processing & Message Composition
+
+Files are processed and the complete LLM input is assembled from multiple sources:
+
+```mermaid
+sequenceDiagram
+    participant 🖥️ Backend API
+    participant 💾 PostgreSQL
+    participant 📦 File Storage
+    participant 📊 Langfuse
+
+    Note over 🖥️ Backend API: File Processing (parallel)
+    loop For each input file
+        🖥️ Backend API->>📦 File Storage: Fetch file contents
+        📦 File Storage-->>🖥️ Backend API: Raw file data
+        🖥️ Backend API->>🖥️ Backend API: Extract text (PDF, DOCX, etc.)<br/>Cache result
+    end
+
+    Note over 🖥️ Backend API,💾 PostgreSQL: Message History Retrieval
+    🖥️ Backend API->>💾 PostgreSQL: Retrieve messages<br/>for this chat
+    💾 PostgreSQL-->>🖥️ Backend API: Historical messages (JSON)
+
+    Note over 🖥️ Backend API,📊 Langfuse: System Prompt Retrieval (optional)
+    opt Langfuse prompt management enabled
+        🖥️ Backend API->>📊 Langfuse: Retrieve system prompt<br/>for chat provider
+        📊 Langfuse-->>🖥️ Backend API: System prompt text
+    end
+
+    Note over 🖥️ Backend API: Composition
+    🖥️ Backend API->>🖥️ Backend API: Build generation input:<br/>1. System prompt (global)<br/>2. Assistant prompt (if configured)<br/>3. Message history (parsed)<br/>4. File contents (as text/images)<br/>5. Current user message
+```
+
+**Key operations:**
+
+- Files are processed in parallel with caching for performance
+- Message history is retrieved
+- Generation input is composed in specific order: system prompt → assistant prompt → history → files → current message
+
+### Phase 3: Turn Lifecycle Loop
+
+The core generation loop handles multi-turn interactions with tool calls:
+
+```mermaid
+sequenceDiagram
+    participant 🌐 Frontend
+    participant 🖥️ Backend API
+    participant 📊 Langfuse
+    participant 🤖 LLM Provider
+    participant 🔧 MCP Servers
+
+    Note over 🖥️ Backend API: Turn Loop (max 15 iterations)
+    loop For each turn (turn_number++)
+
+        alt Turn > 1: Process pending tool calls
+            loop For each pending tool call
+                🖥️ Backend API->>🌐 Frontend: SSE: ToolCallProposed
+                🖥️ Backend API->>🔧 MCP Servers: call_tool(server_id, name, args)
+                🔧 MCP Servers-->>🖥️ Backend API: Tool result (JSON/text)
+                🖥️ Backend API->>🌐 Frontend: SSE: ToolCallUpdate (status: success)
+                🖥️ Backend API->>📊 Langfuse: Record tool call span
+                🖥️ Backend API->>🖥️ Backend API: Append tool result to messages
+            end
+        end
+
+        Note over 🖥️ Backend API,🤖 LLM Provider: LLM Generation
+        🖥️ Backend API->>📊 Langfuse: Start generation span
+        🖥️ Backend API->>🤖 LLM Provider: Request chat completion (streaming)<br/>- messages (with tool results)<br/>- tools (MCP tool definitions)
+
+        loop Stream response
+            🤖 LLM Provider-->>🖥️ Backend API: Chunk: text delta
+            🖥️ Backend API->>🌐 Frontend: SSE: MessageTextDelta
+        end
+
+        🤖 LLM Provider-->>🖥️ Backend API: StreamEnd:<br/>- finish_reason<br/>- tool_calls (if any)<br/>- usage (tokens)
+
+        🖥️ Backend API->>📊 Langfuse: Finish generation span<br/>- input tokens<br/>- output tokens<br/>- model<br/>- latency
+
+        alt finish_reason == "tool_calls"
+            🖥️ Backend API->>🖥️ Backend API: Add tool calls to pending queue
+            Note over 🖥️ Backend API: Continue to next turn
+        else finish_reason == "stop"
+            Note over 🖥️ Backend API: Exit loop - generation complete
+        end
+    end
+```
+
+**Key operations:**
+
+- Each turn starts by executing any pending tool calls from the previous turn
+- Tool calls are executed via MCP servers with real-time SSE updates
+- LLM generation is streamed with text deltas sent to frontend
+- If LLM requests more tool calls, loop continues (up to 15 turns)
+- Langfuse tracks each turn separately with detailed metrics
+
+### Phase 4: Finalization
+
+The complete assistant message is saved with all metadata:
+
+```mermaid
+sequenceDiagram
+    participant 🌐 Frontend
+    participant 🖥️ Backend API
+    participant 💾 PostgreSQL
+    participant 📊 Langfuse
+
+    Note over 🖥️ Backend API: Assemble final message
+    🖥️ Backend API->>🖥️ Backend API: Build message JSON:<br/>- role: "assistant"<br/>- content: [text, tool_uses]<br/>- generation_metadata
+
+    🖥️ Backend API->>💾 PostgreSQL: Save assistant message<br/>- Message content (JSON)<br/>- Generation input context<br/>- Generation parameters<br/>- Metadata (model, tokens, tools, turns)
+    💾 PostgreSQL-->>🖥️ Backend API: assistant_message_id
+
+    🖥️ Backend API->>📊 Langfuse: Update trace<br/>- output (final message)<br/>- metadata (cumulative stats)
+
+    🖥️ Backend API->>🌐 Frontend: SSE: MessageComplete<br/>- message_id<br/>- total_tokens<br/>- turn_count
+```
+
+**Key operations:**
+
+- Assistant message is constructed with all text content and tool uses
+- Complete message is saved with generation metadata (model, tokens, turns)
+- Langfuse trace is updated with final output
+- Frontend receives completion event
+
+### Langfuse Integration
+
+When enabled, Langfuse provides observability throughout the lifecycle:
+
+**Trace Creation:**
+
+- Trace ID created at start of request
+- Associated with user_id and session_id (chat_id)
+
+**Generation Spans:**
+
+- One span per turn
+- Captures input messages, output, token counts, and latency
+- Includes model and provider information
+
+**Tool Call Tracking:**
+
+- Each tool call recorded as metadata
+- Tool names aggregated for trace-level statistics
+
+**Final Metrics:**
+
+- Cumulative token usage across all turns
+- Total turn count
+- Complete request duration
