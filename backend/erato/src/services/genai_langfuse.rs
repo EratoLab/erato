@@ -218,25 +218,56 @@ pub fn generate_langfuse_ids() -> (String, String) {
     (observation_id, trace_id)
 }
 
-/// Create a simple generation name from the first user message
+/// Create a simple generation name from the latest user message
+///
+/// This function finds the last contiguous block of user messages and extracts
+/// the name from the first message in that block (which is the actual latest
+/// user-provided message before any assistant responses).
 pub fn generate_name_from_chat_request(chat_request: &ChatRequest) -> Option<String> {
-    // Look for the first user message and extract a short name from it
-    for message in &chat_request.messages {
-        if matches!(message.role, genai::chat::ChatRole::User)
-            && let Some(text) = message.content.first_text()
-        {
-            // Take first 50 characters and clean up for a name
-            let name = text
-                .chars()
-                .take(50)
-                .collect::<String>()
-                .trim()
-                .replace('\n', " ")
-                .replace('\r', "");
+    // Find the last contiguous block of user messages by iterating from the end
+    // We need to skip any trailing non-user messages (tool, assistant, system)
+    // and then find the first user message in the contiguous user block
+    let mut in_user_block = false;
+    let mut first_user_message_text = None;
 
-            if !name.is_empty() {
-                return Some(name);
+    for message in chat_request.messages.iter().rev() {
+        if !in_user_block {
+            // Skip any trailing non-user messages until we find a user message
+            if matches!(message.role, genai::chat::ChatRole::User) {
+                in_user_block = true;
+                // Store the text as we iterate - the LAST one we encounter before
+                // hitting a non-user message will be the FIRST message of the block
+                if let Some(text) = message.content.first_text() {
+                    first_user_message_text = Some(text);
+                }
             }
+        } else {
+            // We're in a user message block
+            if !matches!(message.role, genai::chat::ChatRole::User) {
+                // Hit a non-user message, so we've found the end of the block
+                break;
+            }
+            // Still in user block, update to keep track of the first message
+            // (which will be the last one we see before breaking)
+            if let Some(text) = message.content.first_text() {
+                first_user_message_text = Some(text);
+            }
+        }
+    }
+
+    // If we found a user message, format it as the name
+    if let Some(text) = first_user_message_text {
+        // Take first 50 characters and clean up for a name
+        let name = text
+            .chars()
+            .take(50)
+            .collect::<String>()
+            .trim()
+            .replace('\n', " ")
+            .replace('\r', "");
+
+        if !name.is_empty() {
+            return Some(name);
         }
     }
 
@@ -533,16 +564,36 @@ mod tests {
 
     #[test]
     fn test_generate_name_from_chat_request() {
+        // Test case 1: Simple conversation with assistant response in between
         let chat_request = ChatRequest {
             messages: vec![
                 ChatMessage::system("You are a helpful assistant"),
                 ChatMessage::user("What is the capital of France?"),
+                ChatMessage::assistant("The capital of France is Paris."),
+                ChatMessage::user("And what about Germany?"),
             ],
             ..Default::default()
         };
 
         let name = generate_name_from_chat_request(&chat_request);
-        assert_eq!(name, Some("What is the capital of France?".to_string()));
+        // Should extract from the latest user message (first message in last contiguous user block)
+        assert_eq!(name, Some("And what about Germany?".to_string()));
+
+        // Test case 2: Multiple user messages in a row (contiguous block)
+        let chat_request2 = ChatRequest {
+            messages: vec![
+                ChatMessage::system("You are a helpful assistant"),
+                ChatMessage::user("First question"),
+                ChatMessage::assistant("Answer 1"),
+                ChatMessage::user("Second question"),
+                ChatMessage::user("Third question with more context"), // This is part of the same contiguous block
+            ],
+            ..Default::default()
+        };
+
+        let name2 = generate_name_from_chat_request(&chat_request2);
+        // Should extract from the FIRST message of the last contiguous user block
+        assert_eq!(name2, Some("Second question".to_string()));
     }
 
     #[test]
