@@ -451,4 +451,3 @@ async fn test_entra_id_list_groups_with_is_involved_filter(pool: Pool<Postgres>)
         );
     }
 }
-

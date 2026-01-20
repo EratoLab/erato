@@ -94,9 +94,7 @@ fn create_graph_client(access_token: &str) -> GraphClient {
 
 /// Fetch all groups the current user belongs to using transitive_member_of.
 /// Returns a Vec of group IDs.
-async fn fetch_user_groups(
-    client: &GraphClient,
-) -> Result<Vec<String>, StatusCode> {
+async fn fetch_user_groups(client: &GraphClient) -> Result<Vec<String>, StatusCode> {
     let response_deque = client
         .me()
         .transitive_member_of()
@@ -274,11 +272,18 @@ pub async fn list_organization_users(
         })?;
 
         for user_item in &users_response.value {
+            // Filter out the current user (no need to share with ourselves)
+            if let Some(ref current_user_id) = me_user.profile.organization_user_id
+                && &user_item.id == current_user_id
+            {
+                continue;
+            }
+
             // If is_involved filter is enabled, only include users that are in the involved_user_ids set
-            if let Some(ref involved_ids) = involved_user_ids {
-                if !involved_ids.contains(&user_item.id) {
-                    continue;
-                }
+            if let Some(ref involved_ids) = involved_user_ids
+                && !involved_ids.contains(&user_item.id)
+            {
+                continue;
             }
 
             users.push(OrganizationUser {
