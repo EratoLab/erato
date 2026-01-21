@@ -123,10 +123,39 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={t({
-              id: "feedback.comment.placeholder",
-              message: "What could have been better?",
-            })}
+            placeholder={(() => {
+              // Try to get sentiment-specific placeholder first
+              let sentimentPlaceholder =
+                sentiment === "positive"
+                  ? t({
+                      id: "feedback.comment.placeholder.positive",
+                      message: "", // eslint-disable-line lingui/no-single-variables-to-translate
+                    })
+                  : t({
+                      id: "feedback.comment.placeholder.negative",
+                      message: "", // eslint-disable-line lingui/no-single-variables-to-translate
+                    });
+
+              // In case no override is provided, lingui falls back to fill in the msgId.
+              // In this case we clear the string.
+              if (
+                sentimentPlaceholder ===
+                  "feedback.comment.placeholder.positive" ||
+                sentimentPlaceholder === "feedback.comment.placeholder.negative"
+              ) {
+                sentimentPlaceholder = "";
+              }
+
+              // If sentiment-specific placeholder is provided (not empty), use it
+              // Otherwise fall back to the default placeholder
+              return (
+                sentimentPlaceholder ||
+                t({
+                  id: "feedback.comment.placeholder",
+                  message: "What could have been better?",
+                })
+              );
+            })()}
             rows={4}
             disabled={isSubmitting}
             aria-label={t({
