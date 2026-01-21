@@ -8,6 +8,7 @@ import {
   ThemeMode,
   useTheme,
 } from "../src/components/providers/ThemeProvider";
+import { FeatureConfigProvider } from "../src/providers/FeatureConfigProvider";
 import { defaultTheme, darkTheme } from "../src/config/theme";
 import { themes as storybookThemes } from "@storybook/theming";
 import type { Decorator } from "@storybook/react";
@@ -207,6 +208,15 @@ const withQueryClient: Decorator = (Story) => {
   );
 };
 
+// FeatureConfig decorator to provide feature flags context
+const withFeatureConfig: Decorator = (Story) => {
+  return (
+    <FeatureConfigProvider>
+      <Story />
+    </FeatureConfigProvider>
+  );
+};
+
 // Main theme decorator that ties everything together
 const withThemeDecorator: Decorator = (Story, context) => {
   const { globals } = context;
@@ -321,7 +331,10 @@ const preview: Preview = {
     // Apply QueryClient context second (needed for React Query hooks)
     withQueryClient,
 
-    // Apply i18n context third (before theme)
+    // Apply FeatureConfig context third (needed for feature flags)
+    withFeatureConfig,
+
+    // Apply i18n context fourth (before theme)
     withI18n,
 
     // Apply theme background based on selected theme
