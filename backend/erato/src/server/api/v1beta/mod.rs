@@ -843,6 +843,16 @@ async fn link_sharepoint_file_impl(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    // Extract the SharePoint download URL from the MS Graph API response
+    let download_url = item_json
+        .get("@microsoft.graph.downloadUrl")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            tracing::error!("No download URL found in MS Graph API response");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .to_string();
+
     // Create the file upload record
     let file_upload = models::file_upload::create_sharepoint_file_upload(
         &app_state.db,
@@ -858,9 +868,6 @@ async fn link_sharepoint_file_impl(
         tracing::error!("Failed to create file upload record: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-
-    // Generate a placeholder download URL (SharePoint URLs require access token at request time)
-    let download_url = format!("/api/v1beta/files/{}", file_upload.id);
 
     tracing::info!(
         "User {} linked SharePoint file '{}', assigned ID: {}",
