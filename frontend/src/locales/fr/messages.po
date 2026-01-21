@@ -319,6 +319,16 @@ msgstr "Qu'est-ce qui aurait pu être mieux ?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.placeholder.negative"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
+msgid "feedback.comment.placeholder.positive"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackCommentDialog.tsx
 msgid "feedback.comment.positive"
 msgstr "Vous avez trouvé cette réponse utile"
 
