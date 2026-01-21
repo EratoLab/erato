@@ -176,7 +176,10 @@ async fn file_info_to_assistant_file(
     file: FileInfo,
     file_capability: FileCapability,
     app_state: &AppState,
+    access_token: Option<&str>,
 ) -> Result<AssistantFile, StatusCode> {
+    use crate::services::file_storage::SharepointContext;
+
     // Get the file storage provider
     let file_storage_provider = app_state
         .file_storage_providers
@@ -190,9 +193,18 @@ async fn file_info_to_assistant_file(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    // Build the context for Sharepoint (will be ignored by other providers)
+    let sharepoint_ctx = access_token.map(|token| SharepointContext {
+        access_token: token,
+    });
+
     // Generate a presigned download URL
     let download_url = file_storage_provider
-        .generate_presigned_download_url(&file.file_storage_path, None)
+        .generate_presigned_download_url_with_context(
+            &file.file_storage_path,
+            None,
+            sharepoint_ctx.as_ref(),
+        )
         .await
         .map_err(|e| {
             tracing::error!(
@@ -337,7 +349,13 @@ pub async fn create_assistant(
     let mut api_files = Vec::new();
     for file in assistant_with_files.files {
         let file_capability = find_file_capability_by_filename(&all_capabilities, &file.filename);
-        let assistant_file = file_info_to_assistant_file(file, file_capability, &app_state).await?;
+        let assistant_file = file_info_to_assistant_file(
+            file,
+            file_capability,
+            &app_state,
+            me_user.access_token.as_deref(),
+        )
+        .await?;
         api_files.push(assistant_file);
     }
 
@@ -493,7 +511,13 @@ pub async fn get_assistant(
     let mut api_files = Vec::new();
     for file in assistant_with_files.files {
         let file_capability = find_file_capability_by_filename(&all_capabilities, &file.filename);
-        let assistant_file = file_info_to_assistant_file(file, file_capability, &app_state).await?;
+        let assistant_file = file_info_to_assistant_file(
+            file,
+            file_capability,
+            &app_state,
+            me_user.access_token.as_deref(),
+        )
+        .await?;
         api_files.push(assistant_file);
     }
 
@@ -682,7 +706,13 @@ pub async fn update_assistant(
     let mut api_files = Vec::new();
     for file in assistant_with_files.files {
         let file_capability = find_file_capability_by_filename(&all_capabilities, &file.filename);
-        let assistant_file = file_info_to_assistant_file(file, file_capability, &app_state).await?;
+        let assistant_file = file_info_to_assistant_file(
+            file,
+            file_capability,
+            &app_state,
+            me_user.access_token.as_deref(),
+        )
+        .await?;
         api_files.push(assistant_file);
     }
 
