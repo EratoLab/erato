@@ -1,8 +1,8 @@
 # cargo-chef version = 0.1.73
 # Rust version = 1.91.1 - Should be kept up-to-date with rust-toolchain.toml
-# Bookworm = Debian 12 -> LTS support until 2028
+# Trixie = Debian 13 -> LTS support until 2030
 # Pinned for security & build performance reasons
-FROM lukemathwalker/cargo-chef:0.1.73-rust-1.91.1-bookworm@sha256:ac22e8377f914b774d0d3a27cb60ab93b9115d39ef3f72e01f2dfbb55433b3eb AS chef
+FROM lukemathwalker/cargo-chef:0.1.73-rust-1.91.1-trixie@sha256:0952ecbcded4600a826cb52277fb662df5c56abecc3acd5475988f88f015e7aa AS chef
 WORKDIR /app
 
 FROM chef AS planner
@@ -24,7 +24,7 @@ COPY . .
 RUN cargo build --release
 
 # Pinned for security & build performance reasons
-FROM debian:bookworm-slim@sha256:e899040a73d36e2b36fa33216943539d9957cba8172b858097c2cabcdb20a3e2
+FROM debian:trixie-slim@sha256:5cf544fad978371b3df255b61e209b373583cb88b733475c86e49faa15ac2104
 
 WORKDIR /app
 
