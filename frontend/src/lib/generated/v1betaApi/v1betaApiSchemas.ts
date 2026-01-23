@@ -938,6 +938,14 @@ export type OrganizationUser = {
    */
   id: string;
   /**
+   * The job title of the user
+   */
+  job_title?: null | undefined;
+  /**
+   * The email address of the user
+   */
+  mail?: null | undefined;
+  /**
    * The subject type ID to use when creating a share grant (always "organization_user_id")
    */
   subject_type_id: string;

@@ -1118,7 +1118,7 @@
           "entra_id"
         ],
         "summary": "List all groups in the organization.",
-        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches all groups from the MS Graph API with full pagination.\nWhen is_involved=true, only returns groups the user is a member of.",
+        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches groups from the MS Graph API.\nWhen is_involved=true, only returns groups the user is a member of.\nWhen query is provided, uses $search for fuzzy matching and returns only the first page for performance.",
         "operationId": "list_organization_groups",
         "parameters": [
           {
@@ -1128,6 +1128,18 @@
             "required": false,
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Optional search query to filter groups by displayName.\nUses Microsoft Graph $search parameter with fuzzy, tokenized matching.\nWhen provided, only the first page of results is returned for performance.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         ],
@@ -1162,7 +1174,7 @@
           "entra_id"
         ],
         "summary": "List all users in the organization.",
-        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches all users from the MS Graph API with full pagination.\nWhen is_involved=true, only returns users who share at least one group with the requesting user.",
+        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches users from the MS Graph API.\nWhen is_involved=true, only returns users who share at least one group with the requesting user.\nWhen query is provided, uses $search for fuzzy matching and returns only the first page for performance.",
         "operationId": "list_organization_users",
         "parameters": [
           {
@@ -1172,6 +1184,18 @@
             "required": false,
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Optional search query to filter users by displayName.\nUses Microsoft Graph $search parameter with fuzzy, tokenized matching.\nWhen provided, only the first page of results is returned for performance.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         ],
@@ -3287,6 +3311,20 @@
           "id": {
             "type": "string",
             "description": "The unique ID of the user"
+          },
+          "job_title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The job title of the user"
+          },
+          "mail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The email address of the user"
           },
           "subject_type_id": {
             "type": "string",
