@@ -6,7 +6,7 @@
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::state::AppState;
 use axum::extract::{Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::{Extension, Json};
 use graph_rs_sdk::{GraphClient, GraphClientConfiguration, ODataQuery};
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,12 @@ pub struct ListUsersQuery {
     /// When true, only returns users who share at least one group with the requesting user.
     #[serde(default)]
     pub is_involved: bool,
+
+    /// Optional search query to filter users by displayName.
+    /// Uses Microsoft Graph $search parameter with fuzzy, tokenized matching.
+    /// When provided, only the first page of results is returned for performance.
+    #[serde(default)]
+    pub query: Option<String>,
 }
 
 /// Query parameters for listing organization groups
@@ -28,6 +34,12 @@ pub struct ListGroupsQuery {
     /// When true, only returns groups that the requesting user is a member of.
     #[serde(default)]
     pub is_involved: bool,
+
+    /// Optional search query to filter groups by displayName.
+    /// Uses Microsoft Graph $search parameter with fuzzy, tokenized matching.
+    /// When provided, only the first page of results is returned for performance.
+    #[serde(default)]
+    pub query: Option<String>,
 }
 
 /// An organization user
@@ -37,6 +49,10 @@ pub struct OrganizationUser {
     pub id: String,
     /// The display name of the user
     pub display_name: String,
+    /// The job title of the user
+    pub job_title: Option<String>,
+    /// The email address of the user
+    pub mail: Option<String>,
     /// The subject type ID to use when creating a share grant (always "organization_user_id")
     pub subject_type_id: String,
 }
@@ -98,7 +114,7 @@ async fn fetch_user_groups(client: &GraphClient) -> Result<Vec<String>, StatusCo
     let response_deque = client
         .me()
         .transitive_member_of()
-        .list_transitive_member_of()
+        .as_group()
         .select(&["id"])
         .paging()
         .json::<GroupsResponse>()
@@ -135,7 +151,9 @@ async fn fetch_users_in_groups(
 
     for group_id in group_ids {
         // Fetch members of this group
-        let response_deque = client
+        // Note: Some groups may not exist or be inaccessible (e.g., deleted groups, special directory objects)
+        // We skip these groups with a warning instead of failing the entire request
+        let response_deque = match client
             .groups()
             .id(group_id)
             .list_members()
@@ -143,16 +161,30 @@ async fn fetch_users_in_groups(
             .paging()
             .json::<GroupMembersResponse>()
             .await
-            .map_err(|e| {
-                tracing::error!("Failed to fetch members for group {}: {:?}", group_id, e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+        {
+            Ok(deque) => deque,
+            Err(e) => {
+                tracing::warn!(
+                    "Skipping group {} - unable to fetch members (group may not exist or be inaccessible): {:?}",
+                    group_id,
+                    e
+                );
+                continue;
+            }
+        };
 
         for response in response_deque {
-            let members_response = response.into_body().map_err(|e| {
-                tracing::error!("Failed to parse group members response: {:?}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+            let members_response = match response.into_body() {
+                Ok(resp) => resp,
+                Err(e) => {
+                    tracing::warn!(
+                        "Skipping group {} - failed to parse members response: {:?}",
+                        group_id,
+                        e
+                    );
+                    continue;
+                }
+            };
 
             for member_item in &members_response.value {
                 user_ids.insert(member_item.id.clone());
@@ -174,6 +206,9 @@ struct UserItem {
     id: String,
     #[serde(rename = "displayName")]
     display_name: Option<String>,
+    #[serde(rename = "jobTitle")]
+    job_title: Option<String>,
+    mail: Option<String>,
 }
 
 /// Helper struct for deserializing groups from MS Graph API.
@@ -203,8 +238,9 @@ struct GroupMemberItem {
 /// List all users in the organization.
 ///
 /// If the Entra ID integration is not enabled, returns an empty list.
-/// If enabled, fetches all users from the MS Graph API with full pagination.
+/// If enabled, fetches users from the MS Graph API.
 /// When is_involved=true, only returns users who share at least one group with the requesting user.
+/// When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
 #[utoipa::path(
     get,
     path = "/me/organization/users",
@@ -251,10 +287,81 @@ pub async fn list_organization_users(
 
     // Use the graph-rs-sdk's built-in pagination support
     // This automatically handles all @odata.nextLink pages
+    // When search query is provided, only fetch the first page for performance
+    let mut users = Vec::new();
+
+    if let Some(ref search_query) = query.query {
+        // Validate and sanitize query
+        let trimmed = search_query.trim();
+        if trimmed.is_empty() {
+            // Empty query - fall through to full pagination
+        } else if trimmed.len() > 100 {
+            tracing::warn!("Query too long: {} chars (max 100)", trimmed.len());
+            return Err(StatusCode::BAD_REQUEST);
+        } else {
+            // Search query provided - use $search and fetch only first page
+            tracing::info!("Searching users with query: {}", trimmed);
+            let users_response = client
+                .users()
+                .list_user()
+                .select(&["id", "displayName", "jobTitle", "mail"])
+                .header(
+                    HeaderName::from_static("consistencylevel"),
+                    HeaderValue::from_static("eventual"),
+                ) // Required for $search
+                .search(format!("\"displayName:{}\"", trimmed))
+                // See https://learn.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0&tabs=http#optional-query-parameters
+                // > The default and maximum page sizes are 100 and 999 user objects respectively
+                .top("999")
+                .send()
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to search users from Graph API: {:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?
+                .json::<UsersResponse>()
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to parse users search response: {:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+
+            // Process the search results
+            for user_item in &users_response.value {
+                // Filter out the current user (no need to share with ourselves)
+                if let Some(ref current_user_id) = me_user.profile.organization_user_id
+                    && &user_item.id == current_user_id
+                {
+                    continue;
+                }
+
+                // If is_involved filter is enabled, only include users that are in the involved_user_ids set
+                if let Some(ref involved_ids) = involved_user_ids
+                    && !involved_ids.contains(&user_item.id)
+                {
+                    continue;
+                }
+
+                users.push(OrganizationUser {
+                    id: user_item.id.clone(),
+                    display_name: user_item.display_name.clone().unwrap_or_default(),
+                    job_title: user_item.job_title.clone(),
+                    mail: user_item.mail.clone(),
+                    subject_type_id: "organization_user_id".to_string(),
+                });
+            }
+
+            // Early return with search results
+            tracing::info!("Found {} users matching search query", users.len());
+            return Ok(Json(OrganizationUsersResponse { users }));
+        }
+    }
+
+    // No search query (or empty query) - use existing pagination to fetch all pages
     let response_deque = client
         .users()
         .list_user()
-        .select(&["id", "displayName"])
+        .select(&["id", "displayName", "jobTitle", "mail"])
         .paging()
         .json::<UsersResponse>()
         .await
@@ -264,7 +371,6 @@ pub async fn list_organization_users(
         })?;
 
     // Collect all users from all pages
-    let mut users = Vec::new();
     for response in response_deque {
         let users_response = response.into_body().map_err(|e| {
             tracing::error!("Failed to parse users response: {:?}", e);
@@ -289,6 +395,8 @@ pub async fn list_organization_users(
             users.push(OrganizationUser {
                 id: user_item.id.clone(),
                 display_name: user_item.display_name.clone().unwrap_or_default(),
+                job_title: user_item.job_title.clone(),
+                mail: user_item.mail.clone(),
                 subject_type_id: "organization_user_id".to_string(),
             });
         }
@@ -309,8 +417,9 @@ pub async fn list_organization_users(
 /// List all groups in the organization.
 ///
 /// If the Entra ID integration is not enabled, returns an empty list.
-/// If enabled, fetches all groups from the MS Graph API with full pagination.
+/// If enabled, fetches groups from the MS Graph API.
 /// When is_involved=true, only returns groups the user is a member of.
+/// When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
 #[utoipa::path(
     get,
     path = "/me/organization/groups",
@@ -341,14 +450,106 @@ pub async fn list_organization_groups(
     let access_token = get_access_token(&me_user)?;
     let client = create_graph_client(access_token);
 
+    // Validate and sanitize query parameter
+    let sanitized_query = if let Some(ref q) = query.query {
+        let trimmed = q.trim();
+        if trimmed.is_empty() {
+            None
+        } else if trimmed.len() > 100 {
+            tracing::warn!("Query too long: {} chars (max 100)", trimmed.len());
+            return Err(StatusCode::BAD_REQUEST);
+        } else {
+            Some(trimmed.to_string())
+        }
+    } else {
+        None
+    };
+
     // Use the graph-rs-sdk's built-in pagination support
     // This automatically handles all @odata.nextLink pages
+    // When search query is provided, only fetch the first page for performance
+    let mut groups = Vec::new();
+
+    if let Some(ref search_query) = sanitized_query {
+        // Search query provided - use $search and fetch only first page
+        let groups_response = if query.is_involved {
+            // Branch 1: Search within user's groups
+            tracing::info!("Searching user's groups with query: {}", search_query);
+            client
+                .me()
+                .transitive_member_of()
+                .as_group()
+                .select(&["id", "displayName"])
+                .header(
+                    HeaderName::from_static("consistencylevel"),
+                    HeaderValue::from_static("eventual"),
+                ) // Required for $search
+                .search(format!("\"displayName:{}\"", search_query))
+                // See https://learn.microsoft.com/en-us/graph/api/group-list?view=graph-rest-1.0&tabs=http#optional-query-parameters
+                // > The default and maximum page sizes are 100 and 999 group objects respectively
+                .top("999")
+                .send()
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to search user's groups from Graph API: {:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?
+                .json::<GroupsResponse>()
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to parse groups search response: {:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?
+        } else {
+            // Branch 2: Search all organization groups
+            tracing::info!("Searching organization groups with query: {}", search_query);
+            client
+                .groups()
+                .list_group()
+                .select(&["id", "displayName"])
+                .header(
+                    HeaderName::from_static("consistencylevel"),
+                    HeaderValue::from_static("eventual"),
+                ) // Required for $search
+                .search(format!("\"displayName:{}\"", search_query))
+                // See https://learn.microsoft.com/en-us/graph/api/group-list?view=graph-rest-1.0&tabs=http#optional-query-parameters
+                // > The default and maximum page sizes are 100 and 999 group objects respectively
+                .top("999")
+                .send()
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to search groups from Graph API: {:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?
+                .json::<GroupsResponse>()
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to parse groups search response: {:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?
+        };
+
+        // Process the search results
+        for group_item in &groups_response.value {
+            groups.push(OrganizationGroup {
+                id: group_item.id.clone(),
+                display_name: group_item.display_name.clone().unwrap_or_default(),
+                subject_type_id: "organization_group_id".to_string(),
+            });
+        }
+
+        // Early return with search results
+        tracing::info!("Found {} groups matching search query", groups.len());
+        return Ok(Json(OrganizationGroupsResponse { groups }));
+    }
+
+    // No search query - use existing pagination to fetch all pages
     let response_deque = if query.is_involved {
         // When is_involved=true, use me().transitive_member_of() to get only groups the user belongs to
         client
             .me()
             .transitive_member_of()
-            .list_transitive_member_of()
+            .as_group()
             .select(&["id", "displayName"])
             .paging()
             .json::<GroupsResponse>()
@@ -373,7 +574,6 @@ pub async fn list_organization_groups(
     };
 
     // Collect all groups from all pages
-    let mut groups = Vec::new();
     for response in response_deque {
         let groups_response = response.into_body().map_err(|e| {
             tracing::error!("Failed to parse groups response: {:?}", e);
