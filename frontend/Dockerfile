@@ -1,4 +1,4 @@
-FROM node:22.10.0-bookworm-slim AS base
+FROM node:22.10.0-trixie@sha256:fc5e389d729715b222aa179c29c054d9fe497966cb1478397df378d28986ef5e AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"

@@ -19,7 +19,7 @@ env:
 
 jobs:
   build-and-push-amd64:
-    runs-on: ubuntu-22.04 # blacksmith-8vcpu-ubuntu-2204
+    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
     permissions:
       contents: read
 
@@ -55,7 +55,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-and-push-arm64:
-    runs-on: ubuntu-22.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2204-arm
+    runs-on: ubuntu-24.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2404-arm
     permissions:
       contents: read
 
@@ -92,7 +92,7 @@ jobs:
 
   create-manifests:
     needs: [build-and-push-amd64, build-and-push-arm64]
-    runs-on: ubuntu-22.04 # blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Get current time
         id: current-time
