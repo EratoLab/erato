@@ -1,9 +1,10 @@
+use crate::config::{ModelReasoningEffort, ModelSettings, ModelVerbosity};
 use crate::models::message::{ContentPart, GenerationInputMessages, InputMessage, MessageRole};
 use eyre::Result;
-use genai::chat::ChatRequest;
 use genai::chat::ChatRole as GenAiChatRole;
 use genai::chat::MessageContent as GenAiMessageContent;
 use genai::chat::{ChatMessage, ToolResponse};
+use genai::chat::{ChatOptions, ChatRequest, ReasoningEffort, Verbosity};
 use serde_json::{Value as JsonValue, json};
 use std::sync::Arc;
 
@@ -191,4 +192,56 @@ pub fn into_openai_request_parts(chat_req: &ChatRequest) -> Result<OpenAIRequest
     });
 
     Ok(OpenAIRequestParts { messages, tools })
+}
+
+fn map_reasoning_effort(effort: ModelReasoningEffort) -> ReasoningEffort {
+    match effort {
+        ModelReasoningEffort::None => ReasoningEffort::None,
+        ModelReasoningEffort::Minimal => ReasoningEffort::Minimal,
+        ModelReasoningEffort::Low => ReasoningEffort::Low,
+        ModelReasoningEffort::Medium => ReasoningEffort::Medium,
+        ModelReasoningEffort::High => ReasoningEffort::High,
+    }
+}
+
+fn map_verbosity(verbosity: ModelVerbosity) -> Verbosity {
+    match verbosity {
+        ModelVerbosity::Low => Verbosity::Low,
+        ModelVerbosity::Medium => Verbosity::Medium,
+        ModelVerbosity::High => Verbosity::High,
+    }
+}
+
+fn apply_model_settings(mut options: ChatOptions, model_settings: &ModelSettings) -> ChatOptions {
+    if let Some(temperature) = model_settings.temperature {
+        options = options.with_temperature(temperature);
+    }
+    if let Some(top_p) = model_settings.top_p {
+        options = options.with_top_p(top_p);
+    }
+    if let Some(reasoning_effort) = model_settings.reasoning_effort {
+        options = options.with_reasoning_effort(map_reasoning_effort(reasoning_effort));
+    }
+    if let Some(verbosity) = model_settings.verbosity {
+        options = options.with_verbosity(map_verbosity(verbosity));
+    }
+    options
+}
+
+pub fn build_chat_options_for_completion(model_settings: &ModelSettings) -> ChatOptions {
+    let options = ChatOptions::default()
+        .with_capture_content(true)
+        .with_capture_tool_calls(true)
+        .with_capture_usage(true);
+    apply_model_settings(options, model_settings)
+}
+
+pub fn build_chat_options_for_summary(
+    model_settings: &ModelSettings,
+    max_tokens: u32,
+) -> ChatOptions {
+    let options = ChatOptions::default()
+        .with_capture_content(true)
+        .with_max_tokens(max_tokens);
+    apply_model_settings(options, model_settings)
 }

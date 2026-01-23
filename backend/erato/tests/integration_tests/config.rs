@@ -1,6 +1,6 @@
 //! Configuration parsing and validation tests.
 
-use erato::config::AppConfig;
+use erato::config::{AppConfig, ModelReasoningEffort, ModelVerbosity};
 use std::io::Write;
 use tempfile::Builder;
 use test_log::test;
@@ -1281,4 +1281,124 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = 
         basic_provider.model_capabilities.cost_output_tokens_per_1m,
         0.0
     );
+}
+
+/// Tests model settings configuration.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that model settings including temperature, top_p, reasoning effort, and verbosity
+/// are correctly parsed for a provider.
+#[test]
+fn test_config_with_model_settings() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["primary"]
+
+[chat_providers.providers.primary]
+provider_kind = "openai"
+model_name = "gpt-4"
+api_key = "sk-test-key"
+
+[chat_providers.providers.primary.model_settings]
+generate_images = false
+temperature = 0.2
+top_p = 0.9
+reasoning_effort = "minimal"
+verbosity = "high"
+
+[file_storage_providers.test]
+provider_kind = "s3"
+config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+    config = config.migrate();
+
+    let provider = &config.chat_providers.as_ref().unwrap().providers["primary"];
+    assert!(!provider.model_settings.generate_images);
+    assert_eq!(provider.model_settings.temperature, Some(0.2));
+    assert_eq!(provider.model_settings.top_p, Some(0.9));
+    assert_eq!(
+        provider.model_settings.reasoning_effort,
+        Some(ModelReasoningEffort::Minimal)
+    );
+    assert_eq!(
+        provider.model_settings.verbosity,
+        Some(ModelVerbosity::High)
+    );
+}
+
+/// Tests default model settings when not explicitly configured.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that model settings default to expected values when omitted.
+#[test]
+fn test_config_with_default_model_settings() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["basic"]
+
+[chat_providers.providers.basic]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+api_key = "sk-test-key"
+
+[file_storage_providers.test]
+provider_kind = "s3"
+config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+    config = config.migrate();
+
+    let provider = &config.chat_providers.as_ref().unwrap().providers["basic"];
+    assert!(!provider.model_settings.generate_images);
+    assert_eq!(provider.model_settings.temperature, None);
+    assert_eq!(provider.model_settings.top_p, None);
+    assert_eq!(provider.model_settings.reasoning_effort, None);
+    assert_eq!(provider.model_settings.verbosity, None);
 }

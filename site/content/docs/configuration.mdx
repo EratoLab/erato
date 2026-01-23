@@ -404,11 +404,19 @@ The `model_settings` field allows you to configure how the model should behave d
 ```toml
 [chat_providers.providers.image-gen.model_settings]
 generate_images = true
+temperature = 0.2
+top_p = 0.9
+reasoning_effort = "minimal"
+verbosity = "high"
 ```
 
 **Fields:**
 
 - **`generate_images`** _(default: false)_ - When set to `true`, the model will generate images instead of text. This is useful for image generation models like DALL-E. The user's message text will be used as the prompt for image generation. The generated image is automatically downloaded, stored as a file upload, and added to the chat history as an image file pointer.
+- **`temperature`** _(default: None)_ - Optional sampling temperature for generation (higher values increase randomness).
+- **`top_p`** _(default: None)_ - Optional nucleus sampling parameter to control diversity.
+- **`reasoning_effort`** _(default: None)_ - Optional reasoning effort for supported models. Values: `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`.
+- **`verbosity`** _(default: None)_ - Optional verbosity for supported models. Values: `"low"`, `"medium"`, `"high"`.
 
 **Note:** Image generation requires a model that supports the image generation API (currently only OpenAI's DALL-E models are supported). The chat history is not sent when generating images - only the most recent user message text is used as the prompt.
 

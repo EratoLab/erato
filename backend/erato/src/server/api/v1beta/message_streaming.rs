@@ -17,6 +17,7 @@ use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::background_tasks::{
     StreamingEvent, StreamingTask, ToolCallStatus as BgToolCallStatus,
 };
+use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
 use crate::services::genai_langfuse::{
     TracedGenerationBuilder, create_trace_with_generation_from_chat, generate_langfuse_ids,
     generate_name_from_chat_request,
@@ -1086,10 +1087,7 @@ async fn prepare_chat_request(
     let mut chat_request = resolved_generation_input_messages
         .clone()
         .into_chat_request();
-    let chat_options = ChatOptions::default()
-        .with_capture_content(true)
-        .with_capture_tool_calls(true)
-        .with_capture_usage(true);
+    let chat_options = build_chat_options_for_completion(&chat_provider_config.model_settings);
 
     // Get all MCP server tools and filter by assistant configuration
     let all_mcp_server_tools = app_state.mcp_servers.list_tools(chat.id).await;
@@ -1809,10 +1807,6 @@ pub async fn generate_chat_summary(
     let mut chat_request: ChatRequest = Default::default();
     chat_request = chat_request.append_message(GenAiChatMessage::user(prompt));
     let max_tokens = app_state.max_tokens_for_summary();
-    let mut chat_options = ChatOptions::default()
-        .with_capture_content(true)
-        // NOTE: Desired tokens are more like ~30, but we have some buffer in case a reasoning model is used
-        .with_max_tokens(max_tokens);
 
     // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
     let chat_provider = app_state.chat_provider_for_summary().wrap_err_with(|| {
@@ -1821,6 +1815,8 @@ pub async fn generate_chat_summary(
             chat.id
         )
     })?;
+    let mut chat_options =
+        build_chat_options_for_summary(&chat_provider.model_settings, max_tokens);
 
     tracing::debug!(
         "[SUMMARY] Using provider '{}' for summary generation (chat_id={})",
@@ -1828,10 +1824,11 @@ pub async fn generate_chat_summary(
         chat.id
     );
 
-    if chat_provider.model_name.starts_with("o1-")
-        || chat_provider.model_name.starts_with("o2-")
-        || chat_provider.model_name.starts_with("o3-")
-        || chat_provider.model_name.starts_with("o4-")
+    if chat_provider.model_settings.reasoning_effort.is_none()
+        && (chat_provider.model_name.starts_with("o1-")
+            || chat_provider.model_name.starts_with("o2-")
+            || chat_provider.model_name.starts_with("o3-")
+            || chat_provider.model_name.starts_with("o4-"))
     {
         chat_options = chat_options.with_reasoning_effort(ReasoningEffort::Low);
     }

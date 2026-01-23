@@ -1118,11 +1118,37 @@ impl Default for ModelCapabilities {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelReasoningEffort {
+    None,
+    Minimal,
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelVerbosity {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
 pub struct ModelSettings {
     // Whether the model should generate images instead of text
     #[serde(default)]
     pub generate_images: bool,
+    // Optional sampling temperature for generation.
+    pub temperature: Option<f64>,
+    // Optional nucleus sampling parameter.
+    pub top_p: Option<f64>,
+    // Optional reasoning effort level for supported models.
+    pub reasoning_effort: Option<ModelReasoningEffort>,
+    // Optional verbosity setting for supported models.
+    pub verbosity: Option<ModelVerbosity>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
