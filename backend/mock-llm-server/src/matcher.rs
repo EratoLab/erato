@@ -46,6 +46,15 @@ pub struct ToolCallsResponseConfig {
     pub delay_ms: u64,
 }
 
+/// Error response configuration (non-streaming)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorResponseConfig {
+    /// HTTP status code to return
+    pub status_code: u16,
+    /// JSON error body to return
+    pub body: Value,
+}
+
 /// Configuration for a response to return when a pattern matches
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResponseConfig {
@@ -55,6 +64,8 @@ pub enum ResponseConfig {
     ToolCall(ToolCallResponseConfig),
     /// Multiple tool calls response (parallel tool calls)
     ToolCalls(ToolCallsResponseConfig),
+    /// Error response with status code and JSON body
+    Error(ErrorResponseConfig),
 }
 
 /// Match rule that checks user message pattern using substring matching
@@ -178,6 +189,13 @@ impl Mock {
                 for tool_call in &config.tool_calls {
                     println!("      - {}", tool_call.tool_name);
                 }
+            }
+            ResponseConfig::Error(config) => {
+                println!(
+                    "    {}: error response with status {}",
+                    "Response".bold(),
+                    config.status_code
+                );
             }
         }
         println!();

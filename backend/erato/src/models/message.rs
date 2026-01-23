@@ -21,6 +21,57 @@ pub struct GenerationParameters {
     pub generation_chat_provider_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case", tag = "error_type")]
+/// Represents different types of errors that can occur during message generation.
+pub enum GenerationErrorType {
+    /// Content was filtered by the model provider's content policy.
+    #[serde(rename = "content_filter")]
+    ContentFilter {
+        /// Description of why the content was filtered.
+        error_description: String,
+        /// Additional details about which filters were triggered.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        filter_details: Option<JsonValue>,
+    },
+    /// Rate limit was exceeded.
+    #[allow(dead_code)]
+    #[serde(rename = "rate_limit")]
+    RateLimit {
+        /// Description of the rate limit error.
+        error_description: String,
+    },
+    /// Model or provider is unavailable.
+    #[allow(dead_code)]
+    #[serde(rename = "model_unavailable")]
+    ModelUnavailable {
+        /// Description of the availability issue.
+        error_description: String,
+    },
+    /// Invalid request parameters.
+    #[allow(dead_code)]
+    #[serde(rename = "invalid_request")]
+    InvalidRequest {
+        /// Description of what was invalid.
+        error_description: String,
+    },
+    /// Generic error from the model provider.
+    #[serde(rename = "provider_error")]
+    ProviderError {
+        /// Description of the provider error.
+        error_description: String,
+        /// HTTP status code if available.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        status_code: Option<u16>,
+    },
+    /// Internal server error.
+    #[serde(rename = "internal_error")]
+    InternalError {
+        /// Description of the internal error.
+        error_description: String,
+    },
+}
+
 /// Metadata about the generation process, including usage statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerationMetadata {
@@ -39,6 +90,9 @@ pub struct GenerationMetadata {
     /// Langfuse trace ID for this generation (if Langfuse tracing was enabled)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub langfuse_trace_id: Option<String>,
+    /// Error information if generation failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<GenerationErrorType>,
 }
 
 /// Role of the message author

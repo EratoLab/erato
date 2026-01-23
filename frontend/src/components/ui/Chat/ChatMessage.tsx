@@ -12,6 +12,7 @@ import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
 import { isImageFile } from "@/utils/file/fileTypeUtils";
 
+import { Alert } from "../Feedback/Alert";
 import { Avatar } from "../Feedback/Avatar";
 import { LoadingIndicator } from "../Feedback/LoadingIndicator";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
@@ -20,15 +21,16 @@ import { MessageContent } from "../Message/MessageContent";
 import { messageStyles } from "../styles/chatMessageStyles";
 
 import type {
+  MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
-  MessageAction,
 } from "../../../types/message-controls";
 import type {
-  UserProfile,
   FileUploadItem,
   MessageFeedback,
+  UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { MessageErrorFilterDetails } from "@/types/chat";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 
 export interface ChatMessageProps {
@@ -102,8 +104,7 @@ export const ChatMessage = memo(function ChatMessage({
   const lightbox = useImageLightbox();
 
   // Content validation
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if ((!message.content || message.content.length === 0) && !message.loading) {
+  if (message.content.length === 0 && !message.loading && !message.error) {
     return null;
   }
 
@@ -139,6 +140,24 @@ export const ChatMessage = memo(function ChatMessage({
               )}
             </div>
           </div>
+
+          {message.error && (
+            <Alert
+              type="error"
+              title={getErrorTitle(message.error.error_type)}
+              className="mb-3"
+              data-testid="chat-message-error"
+            >
+              <p>{getErrorDescription(message.error.error_type)}</p>
+              {getErrorCta(message.error.error_type) && (
+                <p className="mt-2">{getErrorCta(message.error.error_type)}</p>
+              )}
+              {renderContentFilterDetails(
+                message.error.error_type,
+                message.error.filter_details,
+              )}
+            </Alert>
+          )}
 
           <MessageContent
             content={message.content}
@@ -230,6 +249,143 @@ export const ChatMessage = memo(function ChatMessage({
     </div>
   );
 });
+
+const renderContentFilterDetails = (
+  errorType: string,
+  filterDetails?: MessageErrorFilterDetails | null,
+) => {
+  if (errorType !== "content_filter" || !filterDetails) {
+    return null;
+  }
+
+  const filteredCategories = Object.entries(filterDetails)
+    .filter(([, details]) => details.filtered)
+    .map(([category, details]) => ({
+      category,
+      severity: details.severity,
+    }));
+
+  if (filteredCategories.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2 text-xs">
+      <div className="font-medium">
+        {t({
+          id: "chat.message.error.variant.content_filter.filtered_categories",
+          message: "Filtered categories",
+        })}
+      </div>
+      <ul className="mt-1 list-disc pl-5">
+        {filteredCategories.map(({ category, severity }) => (
+          <li key={category}>
+            {getContentFilterCategoryLabel(category)} (
+            {getContentFilterSeverityLabel(severity)})
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+const getErrorTitle = (errorType: string) => {
+  if (errorType === "content_filter") {
+    return undefined;
+  }
+
+  return t({
+    id: "chat.message.error.title",
+    message: "Assistant error",
+  });
+};
+
+const getErrorDescription = (errorType: string) => {
+  if (errorType === "content_filter") {
+    return t({
+      id: "chat.message.error.variant.content_filter",
+      message:
+        "The response was filtered due to the prompt triggering content management policy.",
+    });
+  }
+
+  return t({
+    id: "chat.message.error.variant.default",
+    message: "The assistant was unable to respond.",
+  });
+};
+
+const getErrorCta = (errorType: string) => {
+  if (errorType === "content_filter") {
+    return t({
+      id: "chat.message.error.variant.content_filter.cta",
+      message:
+        "Please try again with a different message that avoids the filtered categories.",
+    });
+  }
+
+  return undefined;
+};
+
+const getContentFilterCategoryLabel = (category: string) => {
+  switch (category) {
+    case "hate":
+      return t({
+        id: "chat.message.error.variant.content_filter.hate",
+        message: "Hate",
+      });
+    case "self_harm":
+      return t({
+        id: "chat.message.error.variant.content_filter.self_harm",
+        message: "Self harm",
+      });
+    case "sexual":
+      return t({
+        id: "chat.message.error.variant.content_filter.sexual",
+        message: "Sexual",
+      });
+    case "violence":
+      return t({
+        id: "chat.message.error.variant.content_filter.violence",
+        message: "Violence",
+      });
+    default:
+      return formatFilterLabel(category);
+  }
+};
+
+const getContentFilterSeverityLabel = (severity: string) => {
+  switch (severity) {
+    case "safe":
+      return t({
+        id: "chat.message.error.variant.content_filter.safe_severity",
+        message: "safe",
+      });
+    case "low":
+      return t({
+        id: "chat.message.error.variant.content_filter.low_severity",
+        message: "low severity",
+      });
+    case "medium":
+      return t({
+        id: "chat.message.error.variant.content_filter.medium_severity",
+        message: "medium severity",
+      });
+    case "high":
+      return t({
+        id: "chat.message.error.variant.content_filter.high_severity",
+        message: "high severity",
+      });
+    default:
+      return formatFilterLabel(severity);
+  }
+};
+
+const formatFilterLabel = (value: string) =>
+  value
+    .split("_")
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 
 // Helper component to fetch and display a single attached file
 const AttachedFile = ({

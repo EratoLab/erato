@@ -150,6 +150,71 @@ msgid "chat.message.aria"
 msgstr "Nachricht"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.title"
+msgstr "Assistentenfehler"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter"
+msgstr "Die Antwort wurde gefiltert, weil die Eingabe oder Ausgabe gegen die Inhaltsrichtlinien verstößt."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter.cta"
+msgstr "Bitte versuche es erneut mit einer anderen Nachricht, die die gefilterten Kategorien vermeidet."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter.filtered_categories"
+msgstr "Gefilterte Kategorien"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter.hate"
+msgstr "Hass"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter.high_severity"
+msgstr "hohe Schwere"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter.low_severity"
+msgstr "geringe Schwere"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter.medium_severity"
+msgstr "mittlere Schwere"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter.safe_severity"
+msgstr "sicher"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter.self_harm"
+msgstr "Selbstverletzung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter.sexual"
+msgstr "Sexuell"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.content_filter.violence"
+msgstr "Gewalt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.default"
+msgstr "Der Assistent konnte nicht antworten."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.newChat.title"
 msgstr "Neuer Chat"

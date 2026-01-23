@@ -220,6 +220,12 @@ pub enum StreamingEvent {
         content: Vec<ContentPart>,
         message: ChatMessage,
     },
+    /// An error occurred during message generation
+    #[serde(rename = "error")]
+    Error {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<JsonValue>,
+    },
     /// Stream has ended
     #[serde(rename = "stream_end")]
     StreamEnd,

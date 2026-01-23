@@ -5,6 +5,28 @@
 
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
+export type ContentFilterCategory =
+  | "hate"
+  | "self_harm"
+  | "sexual"
+  | "violence";
+export type ContentFilterSeverity = "safe" | "low" | "medium" | "high" | string;
+
+export interface MessageErrorFilterDetail {
+  filtered: boolean;
+  severity: ContentFilterSeverity;
+}
+
+export type MessageErrorFilterDetails = Partial<
+  Record<ContentFilterCategory, MessageErrorFilterDetail>
+>;
+
+export interface MessageError {
+  error_description: string;
+  error_type: string;
+  filter_details?: MessageErrorFilterDetails | null;
+}
+
 export interface Message {
   id: string;
   content: ContentPart[];
@@ -12,6 +34,7 @@ export interface Message {
   createdAt: string;
   input_files_ids?: string[];
   status?: "sending" | "complete" | "error";
+  error?: MessageError;
   previous_message_id?: string;
   // Whether this message is in the active thread per backend lineage logic
   is_message_in_active_thread?: boolean;

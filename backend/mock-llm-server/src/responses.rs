@@ -320,6 +320,7 @@ pub async fn stream_response(
             static_config.delay_ms,
             static_config.initial_delay_ms,
         ),
+        ResponseConfig::Error(_) => Vec::new(),
         ResponseConfig::ToolCall(tool_config) => build_tool_call_streaming_response(
             tool_config.tool_name,
             tool_config.arguments,
