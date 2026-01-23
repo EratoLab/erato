@@ -1,5 +1,6 @@
 use axum::{
     extract::{Extension, Request, State},
+    http::StatusCode,
     response::{sse::Event, Sse},
     Json,
 };
@@ -22,17 +23,28 @@ pub async fn chat_completions(
     State(matcher): State<Arc<Matcher>>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
-) -> Result<Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>>, Json<Value>>
-{
+) -> Result<
+    Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>>,
+    (StatusCode, Json<Value>),
+> {
     let uri = request.uri().path().to_string();
 
     // Extract the JSON body
     let bytes = axum::body::to_bytes(request.into_body(), usize::MAX)
         .await
-        .map_err(|_| Json(serde_json::json!({"error": "Failed to read request body"})))?;
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Failed to read request body"})),
+            )
+        })?;
 
-    let chat_request: ChatCompletionRequest = serde_json::from_slice(&bytes)
-        .map_err(|_| Json(serde_json::json!({"error": "Invalid JSON"})))?;
+    let chat_request: ChatCompletionRequest = serde_json::from_slice(&bytes).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid JSON"})),
+        )
+    })?;
 
     log::log_request(
         request_id.as_str(),
@@ -50,6 +62,19 @@ pub async fn chat_completions(
 
     // Build the streaming response based on config type
     let actions = match response_config {
+        crate::matcher::ResponseConfig::Error(error_config) => {
+            log::log_with_id(
+                request_id.as_str(),
+                &format!(
+                    "Matched error response with status {}",
+                    error_config.status_code
+                ),
+            );
+            return Err((
+                StatusCode::from_u16(error_config.status_code).unwrap_or(StatusCode::BAD_REQUEST),
+                Json(error_config.body),
+            ));
+        }
         crate::matcher::ResponseConfig::Static(static_config) => {
             log::log_with_id(
                 request_id.as_str(),

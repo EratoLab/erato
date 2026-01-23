@@ -6,8 +6,8 @@ use crate::models::chat::{
 };
 use crate::models::message::{
     ContentPart, ContentPartImage, ContentPartImageFilePointer, ContentPartText,
-    GenerationInputMessages, GenerationMetadata, GenerationParameters, MessageRole, MessageSchema,
-    ToolCallStatus as MessageToolCallStatus, ToolUse,
+    GenerationErrorType, GenerationInputMessages, GenerationMetadata, GenerationParameters,
+    MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus, ToolUse,
     get_generation_input_messages_by_previous_message_id, get_message_by_id, submit_message,
     update_message_generation_metadata,
 };
@@ -41,7 +41,7 @@ use sea_orm::EntityTrait;
 use sea_orm::JsonValue;
 use sea_orm::prelude::Uuid;
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::Sender;
@@ -117,6 +117,17 @@ pub struct MessageSubmitStreamingResponseToolCallUpdate {
     #[schema(nullable = false)]
     progress_message: Option<String>,
     output: Option<JsonValue>,
+}
+
+#[derive(Serialize, ToSchema, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub struct MessageSubmitStreamingResponseError {
+    /// The message ID if available (may not be present if error occurred before message creation).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message_id: Option<Uuid>,
+    /// The error details.
+    #[serde(flatten)]
+    error: GenerationErrorType,
 }
 
 trait SendAsSseEvent {
@@ -212,6 +223,9 @@ pub enum MessageSubmitStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "error")]
+    /// Sent when an error occurs during message generation.
+    Error(MessageSubmitStreamingResponseError),
 }
 
 impl SendAsSseEvent for MessageSubmitStreamingResponseMessage {
@@ -224,6 +238,7 @@ impl SendAsSseEvent for MessageSubmitStreamingResponseMessage {
             Self::TextDelta(_) => "text_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::Error(_) => "error",
         }
     }
 
@@ -282,6 +297,123 @@ impl From<MessageSubmitStreamingResponseToolCallUpdate> for MessageSubmitStreami
     }
 }
 
+impl From<MessageSubmitStreamingResponseError> for MessageSubmitStreamingResponseMessage {
+    fn from(value: MessageSubmitStreamingResponseError) -> Self {
+        MessageSubmitStreamingResponseMessage::Error(value)
+    }
+}
+
+fn parse_error_body(
+    body: &Value,
+    message_id: Uuid,
+    status_code: Option<u16>,
+) -> Option<MessageSubmitStreamingResponseError> {
+    let error_obj = body.get("error")?;
+    if let Some(code) = error_obj.get("code").and_then(|c| c.as_str())
+        && code == "content_filter"
+    {
+        let error_message = error_obj
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Content was filtered by the provider's content policy");
+
+        let filter_details = error_obj
+            .get("innererror")
+            .and_then(|ie| ie.get("content_filter_result"))
+            .cloned();
+
+        return Some(MessageSubmitStreamingResponseError {
+            message_id: Some(message_id),
+            error: GenerationErrorType::ContentFilter {
+                error_description: error_message.to_string(),
+                filter_details,
+            },
+        });
+    }
+
+    Some(MessageSubmitStreamingResponseError {
+        message_id: Some(message_id),
+        error: GenerationErrorType::ProviderError {
+            error_description: error_obj
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Provider returned an error response")
+                .to_string(),
+            status_code,
+        },
+    })
+}
+
+/// Parse an error from the LLM streaming response and create an appropriate error type.
+async fn parse_streaming_error(
+    err: genai::Error,
+    message_id: Uuid,
+) -> MessageSubmitStreamingResponseError {
+    if let genai::Error::ChatResponse { body, .. } = &err
+        && let Some(parsed) = parse_error_body(body, message_id, None)
+    {
+        return parsed;
+    }
+
+    if let genai::Error::WebModelCall { webc_error, .. }
+    | genai::Error::WebAdapterCall { webc_error, .. } = &err
+    {
+        match webc_error {
+            genai::webc::Error::ResponseFailedStatus { status, body, .. } => {
+                if let Ok(body_json) = serde_json::from_str::<Value>(body)
+                    && let Some(parsed) =
+                        parse_error_body(&body_json, message_id, Some(status.as_u16()))
+                {
+                    return parsed;
+                }
+                return MessageSubmitStreamingResponseError {
+                    message_id: Some(message_id),
+                    error: GenerationErrorType::ProviderError {
+                        error_description: body.clone(),
+                        status_code: Some(status.as_u16()),
+                    },
+                };
+            }
+            genai::webc::Error::ResponseFailedNotJson { body, .. } => {
+                return MessageSubmitStreamingResponseError {
+                    message_id: Some(message_id),
+                    error: GenerationErrorType::ProviderError {
+                        error_description: body.clone(),
+                        status_code: None,
+                    },
+                };
+            }
+            _ => {}
+        }
+    }
+
+    MessageSubmitStreamingResponseError {
+        message_id: Some(message_id),
+        error: GenerationErrorType::InternalError {
+            error_description: "An unexpected error occurred during generation".to_string(),
+        },
+    }
+}
+
+async fn fetch_non_streaming_error(
+    app_state: &AppState,
+    chat_request: ChatRequest,
+    chat_options: &ChatOptions,
+    message_id: Uuid,
+    chat_provider_id: Option<&str>,
+    user_groups: &[String],
+) -> Option<MessageSubmitStreamingResponseError> {
+    let client = app_state
+        .genai_for_chatcompletion(chat_provider_id, user_groups)
+        .ok()?;
+    match client
+        .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(chat_options))
+        .await
+    {
+        Err(err) => Some(parse_streaming_error(err, message_id).await),
+        Ok(_) => None,
+    }
+}
 /// Convert a StreamingEvent to an SSE Event for message submission
 fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
     let (event_name, data) = match event {
@@ -381,6 +513,27 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             }))?;
             ("assistant_message_completed", data)
         }
+        StreamingEvent::Error { error } => {
+            let data_value = match error {
+                Some(error_value) => match error_value {
+                    JsonValue::Object(map) => {
+                        let mut map = map.clone();
+                        map.entry("message_type".to_string())
+                            .or_insert(JsonValue::String("error".to_string()));
+                        JsonValue::Object(map)
+                    }
+                    _ => json!({
+                        "message_type": "error",
+                        "error": error_value
+                    }),
+                },
+                None => json!({
+                    "message_type": "error"
+                }),
+            };
+            let data = serde_json::to_string(&data_value)?;
+            ("error", data)
+        }
         StreamingEvent::StreamEnd => {
             let data = serde_json::to_string(&serde_json::json!({
                 "message_type": "stream_end"
@@ -422,6 +575,9 @@ pub enum RegenerateMessageStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "error")]
+    /// Sent when an error occurs during message generation.
+    Error(MessageSubmitStreamingResponseError),
 }
 
 impl SendAsSseEvent for RegenerateMessageStreamingResponseMessage {
@@ -432,6 +588,7 @@ impl SendAsSseEvent for RegenerateMessageStreamingResponseMessage {
             Self::TextDelta(_) => "text_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::Error(_) => "error",
         }
     }
 
@@ -480,6 +637,12 @@ impl From<MessageSubmitStreamingResponseToolCallUpdate>
     }
 }
 
+impl From<MessageSubmitStreamingResponseError> for RegenerateMessageStreamingResponseMessage {
+    fn from(value: MessageSubmitStreamingResponseError) -> Self {
+        RegenerateMessageStreamingResponseMessage::Error(value)
+    }
+}
+
 #[derive(serde::Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct EditMessageRequest {
@@ -524,6 +687,9 @@ pub enum EditMessageStreamingResponseMessage {
     #[serde(rename = "tool_call_update")]
     /// Sent to update the status of a tool call execution by the backend.
     ToolCallUpdate(MessageSubmitStreamingResponseToolCallUpdate),
+    #[serde(rename = "error")]
+    /// Sent when an error occurs during message generation.
+    Error(MessageSubmitStreamingResponseError),
     #[serde(rename = "user_message_saved")]
     /// Sent when the edited user message has been saved.
     UserMessageSaved(MessageSubmitStreamingResponseUserMessageSaved),
@@ -537,6 +703,7 @@ impl SendAsSseEvent for EditMessageStreamingResponseMessage {
             Self::TextDelta(_) => "text_delta",
             Self::ToolCallProposed(_) => "tool_call_proposed",
             Self::ToolCallUpdate(_) => "tool_call_update",
+            Self::Error(_) => "error",
             Self::UserMessageSaved(_) => "user_message_saved",
         }
     }
@@ -581,6 +748,12 @@ impl From<MessageSubmitStreamingResponseToolCallProposed> for EditMessageStreami
 impl From<MessageSubmitStreamingResponseToolCallUpdate> for EditMessageStreamingResponseMessage {
     fn from(value: MessageSubmitStreamingResponseToolCallUpdate) -> Self {
         EditMessageStreamingResponseMessage::ToolCallUpdate(value)
+    }
+}
+
+impl From<MessageSubmitStreamingResponseError> for EditMessageStreamingResponseMessage {
+    fn from(value: MessageSubmitStreamingResponseError) -> Self {
+        EditMessageStreamingResponseMessage::Error(value)
     }
 }
 
@@ -1112,7 +1285,8 @@ async fn stream_generate_chat_completion<
     MSG: SendAsSseEvent
         + From<MessageSubmitStreamingResponseMessageTextDelta>
         + From<MessageSubmitStreamingResponseToolCallProposed>
-        + From<MessageSubmitStreamingResponseToolCallUpdate>,
+        + From<MessageSubmitStreamingResponseToolCallUpdate>
+        + From<MessageSubmitStreamingResponseError>,
 >(
     tx: Sender<Result<Event, Report>>,
     app_state: &AppState,
@@ -1155,6 +1329,9 @@ async fn stream_generate_chat_completion<
     } else {
         None
     };
+    let langfuse_trace_id = tracing_client
+        .as_ref()
+        .map(|client| client.trace_id().to_string());
     let max_tool_call_iterations = 15;
     let mut unfinished_tool_calls: Vec<genai::chat::ToolCall> = vec![];
     let mut current_turn = 0;
@@ -1168,6 +1345,49 @@ async fn stream_generate_chat_completion<
     let mut total_completion_tokens = 0u32;
     let mut total_total_tokens = 0u32;
     let mut total_reasoning_tokens = 0u32;
+
+    let build_generation_metadata =
+        |total_prompt_tokens: u32,
+         total_completion_tokens: u32,
+         total_total_tokens: u32,
+         total_reasoning_tokens: u32,
+         langfuse_trace_id: Option<String>,
+         error: Option<GenerationErrorType>| {
+            if total_prompt_tokens > 0
+                || total_completion_tokens > 0
+                || total_total_tokens > 0
+                || total_reasoning_tokens > 0
+                || langfuse_trace_id.is_some()
+                || error.is_some()
+            {
+                Some(GenerationMetadata {
+                    used_prompt_tokens: if total_prompt_tokens > 0 {
+                        Some(total_prompt_tokens)
+                    } else {
+                        None
+                    },
+                    used_completion_tokens: if total_completion_tokens > 0 {
+                        Some(total_completion_tokens)
+                    } else {
+                        None
+                    },
+                    used_total_tokens: if total_total_tokens > 0 {
+                        Some(total_total_tokens)
+                    } else {
+                        None
+                    },
+                    used_reasoning_tokens: if total_reasoning_tokens > 0 {
+                        Some(total_reasoning_tokens)
+                    } else {
+                        None
+                    },
+                    langfuse_trace_id,
+                    error,
+                })
+            } else {
+                None
+            }
+        };
 
     // Track all tool calls across all turns for Langfuse metadata
     let mut all_tool_names: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -1318,10 +1538,32 @@ async fn stream_generate_chat_completion<
         {
             Ok(stream) => stream,
             Err(err) => {
-                let _ = tx
-                    .send(Err(err).wrap_err("Failed to start chat stream with LLM provider"))
-                    .await;
-                return Err(());
+                let error_event = parse_streaming_error(err, assistant_message_id).await;
+                let error_payload = Some(error_event.error.clone());
+
+                if let Some(task) = streaming_task
+                    && let Ok(error_json) = serde_json::to_value(
+                        MessageSubmitStreamingResponseMessage::Error(error_event.clone()),
+                    )
+                {
+                    let _ = task
+                        .send_event(StreamingEvent::Error {
+                            error: Some(error_json),
+                        })
+                        .await;
+                }
+
+                let message: MSG = error_event.into();
+                message.send_event(tx.clone()).await?;
+                let generation_metadata = build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    error_payload,
+                );
+                break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
         };
 
@@ -1358,10 +1600,35 @@ async fn stream_generate_chat_completion<
                 },
                 Err(err) => {
                     if let genai::Error::JsonValueExt(_) = err {
-                    } else {
-                        let _ = tx.send(Err(err).wrap_err("Error from chat stream")).await;
-                        return Err(());
+                        continue;
                     }
+
+                    let error_event = parse_streaming_error(err, assistant_message_id).await;
+                    let error_payload = Some(error_event.error.clone());
+
+                    if let Some(task) = streaming_task
+                        && let Ok(error_json) = serde_json::to_value(
+                            MessageSubmitStreamingResponseMessage::Error(error_event.clone()),
+                        )
+                    {
+                        let _ = task
+                            .send_event(StreamingEvent::Error {
+                                error: Some(error_json),
+                            })
+                            .await;
+                    }
+
+                    let message: MSG = error_event.into();
+                    message.send_event(tx.clone()).await?;
+                    let generation_metadata = build_generation_metadata(
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_total_tokens,
+                        total_reasoning_tokens,
+                        langfuse_trace_id.clone(),
+                        error_payload,
+                    );
+                    break 'loop_call_turns Ok((current_message_content, generation_metadata));
                 }
             }
         }
@@ -1572,40 +1839,14 @@ async fn stream_generate_chat_completion<
                         });
                     }
 
-                    // Create generation metadata from accumulated usage
-                    let generation_metadata = if total_prompt_tokens > 0
-                        || total_completion_tokens > 0
-                        || total_total_tokens > 0
-                        || tracing_client.is_some()
-                    {
-                        Some(GenerationMetadata {
-                            used_prompt_tokens: if total_prompt_tokens > 0 {
-                                Some(total_prompt_tokens)
-                            } else {
-                                None
-                            },
-                            used_completion_tokens: if total_completion_tokens > 0 {
-                                Some(total_completion_tokens)
-                            } else {
-                                None
-                            },
-                            used_total_tokens: if total_total_tokens > 0 {
-                                Some(total_total_tokens)
-                            } else {
-                                None
-                            },
-                            used_reasoning_tokens: if total_reasoning_tokens > 0 {
-                                Some(total_reasoning_tokens)
-                            } else {
-                                None
-                            },
-                            langfuse_trace_id: tracing_client
-                                .as_ref()
-                                .map(|c| c.trace_id().to_string()),
-                        })
-                    } else {
-                        None
-                    };
+                    let generation_metadata = build_generation_metadata(
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_total_tokens,
+                        total_reasoning_tokens,
+                        langfuse_trace_id.clone(),
+                        None,
+                    );
                     break 'loop_call_turns Ok((current_message_content, generation_metadata));
                 }
             } else {
@@ -1634,44 +1875,54 @@ async fn stream_generate_chat_completion<
                     });
                 }
 
-                // Create generation metadata from accumulated usage
-                let generation_metadata = if total_prompt_tokens > 0
-                    || total_completion_tokens > 0
-                    || total_total_tokens > 0
-                    || tracing_client.is_some()
-                {
-                    Some(GenerationMetadata {
-                        used_prompt_tokens: if total_prompt_tokens > 0 {
-                            Some(total_prompt_tokens)
-                        } else {
-                            None
-                        },
-                        used_completion_tokens: if total_completion_tokens > 0 {
-                            Some(total_completion_tokens)
-                        } else {
-                            None
-                        },
-                        used_total_tokens: if total_total_tokens > 0 {
-                            Some(total_total_tokens)
-                        } else {
-                            None
-                        },
-                        used_reasoning_tokens: if total_reasoning_tokens > 0 {
-                            Some(total_reasoning_tokens)
-                        } else {
-                            None
-                        },
-                        langfuse_trace_id: tracing_client
-                            .as_ref()
-                            .map(|c| c.trace_id().to_string()),
-                    })
-                } else {
-                    None
-                };
+                let generation_metadata = build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    None,
+                );
                 break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
         } else {
-            // TODO: Send error that stream ended without sending stream_end event
+            if let Some(error_event) = fetch_non_streaming_error(
+                app_state,
+                current_turn_chat_request.clone(),
+                &chat_options,
+                assistant_message_id,
+                chat_provider_id,
+                user_groups,
+            )
+            .await
+            {
+                let error_payload = Some(error_event.error.clone());
+
+                if let Some(task) = streaming_task
+                    && let Ok(error_json) = serde_json::to_value(
+                        MessageSubmitStreamingResponseMessage::Error(error_event.clone()),
+                    )
+                {
+                    let _ = task
+                        .send_event(StreamingEvent::Error {
+                            error: Some(error_json),
+                        })
+                        .await;
+                }
+
+                let message: MSG = error_event.into();
+                message.send_event(tx.clone()).await?;
+                let generation_metadata = build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    error_payload,
+                );
+                break 'loop_call_turns Ok((current_message_content, generation_metadata));
+            }
+
             break 'loop_call_turns Err(());
         }
     }
@@ -2696,6 +2947,30 @@ async fn run_message_submit_task(
     let (end_content, generation_metadata) = generation_task
         .await
         .map_err(|_| "Failed during chat completion generation".to_string())?;
+
+    if let Some(metadata) = generation_metadata.as_ref()
+        && metadata.error.is_some()
+    {
+        let has_error_event = task
+            .get_event_history()
+            .await
+            .iter()
+            .any(|event| matches!(event, StreamingEvent::Error { .. }));
+
+        if !has_error_event {
+            let mut error_value = metadata
+                .error
+                .clone()
+                .and_then(|error| serde_json::to_value(error).ok());
+            if let Some(JsonValue::Object(map)) = error_value.as_mut() {
+                map.entry("message_id".to_string())
+                    .or_insert(JsonValue::String(initial_assistant_message.id.to_string()));
+            }
+            let _ = task
+                .send_event(StreamingEvent::Error { error: error_value })
+                .await;
+        }
+    }
 
     // Update generation metadata
     if let Some(metadata) = generation_metadata

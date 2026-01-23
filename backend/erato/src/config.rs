@@ -575,7 +575,8 @@ pub struct ChatProviderConfig {
     // E.g. 'http://localhost:11434/v1/'
     //
     // For Azure OpenAI, this should be the deployment endpoint URL ending with
-    // either `.api.cognitive.microsoft.com`, `.openai.azure.com`, or `.services.ai.azure.com`
+    // either `.api.cognitive.microsoft.com`, `.openai.azure.com`,
+    // `.cognitiveservices.azure.com`, or `.services.ai.azure.com`
     // E.g. 'https://germanywestcentral.api.cognitive.microsoft.com'
     pub base_url: Option<String>,
     pub api_key: Option<String>,

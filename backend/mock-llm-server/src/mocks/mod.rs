@@ -1,8 +1,9 @@
 use crate::matcher::{
-    MatchRule, MatchRuleLastMessageIsUserWithPattern, MatchRuleUserMessagePattern, Mock,
-    ResponseConfig, StaticResponseConfig, ToolCallDef, ToolCallResponseConfig,
-    ToolCallsResponseConfig,
+    ErrorResponseConfig, MatchRule, MatchRuleLastMessageIsUserWithPattern,
+    MatchRuleUserMessagePattern, Mock, ResponseConfig, StaticResponseConfig, ToolCallDef,
+    ToolCallResponseConfig, ToolCallsResponseConfig,
 };
+use serde_json::json;
 
 /// Generate chunks for a long running response with second-by-second progress
 fn generate_long_running_chunks(seconds: usize) -> Vec<String> {
@@ -186,6 +187,32 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "ContentFilterError".to_string(),
+            description: "Returns an OpenAI-style content filter error response".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "erotic".to_string(),
+                },
+            )],
+            response: ResponseConfig::Error(ErrorResponseConfig {
+                status_code: 400,
+                body: json!({
+                    "error": {
+                        "code": "content_filter",
+                        "message": "The response was filtered due to the prompt triggering content management policy.",
+                        "innererror": {
+                            "content_filter_result": {
+                                "sexual": { "filtered": true, "severity": "medium" },
+                                "violence": { "filtered": false, "severity": "low" },
+                                "hate": { "filtered": false, "severity": "safe" },
+                                "self_harm": { "filtered": false, "severity": "safe" }
+                            }
+                        }
+                    }
+                }),
+            }),
+        },
+        Mock {
             name: "ReadSecretToolCall".to_string(),
             description: "Returns a tool call to read_text_file when last message is user asking to read secret"
                 .to_string(),
@@ -258,7 +285,7 @@ mod tests {
         let mocks = get_default_mocks();
 
         // Verify we have the expected number of mocks
-        assert_eq!(mocks.len(), 10);
+        assert_eq!(mocks.len(), 11);
 
         // Verify all mocks have names
         for mock in &mocks {

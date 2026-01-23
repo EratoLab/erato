@@ -7,7 +7,7 @@ import type {
   ChatMessage as ApiChatMessage,
   MessageFeedback,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { Message } from "@/types/chat";
+import type { Message, MessageError } from "@/types/chat";
 
 /**
  * Interface for UI-specific message properties
@@ -37,6 +37,7 @@ export function mapApiMessageToUiMessage(
   apiMessage: ApiChatMessage,
 ): UiChatMessage {
   const toolCalls = extractToolCallsFromContent(apiMessage.content);
+  const error = (apiMessage as ApiChatMessage & { error?: unknown }).error;
 
   return {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
@@ -60,6 +61,7 @@ export function mapApiMessageToUiMessage(
     status: "complete",
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     feedback: apiMessage.feedback ?? undefined,
+    error: isMessageError(error) ? error : undefined,
   };
 }
 
@@ -90,6 +92,22 @@ export function mapMessageToUiMessage(message: Message): UiChatMessage {
     input_files_ids: message.input_files_ids ?? undefined,
   };
 }
+
+const isMessageError = (error: unknown): error is MessageError => {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as {
+    error_description?: unknown;
+    error_type?: unknown;
+  };
+
+  return (
+    typeof candidate.error_description === "string" &&
+    typeof candidate.error_type === "string"
+  );
+};
 
 /**
  * Transforms a batch of API messages to UI messages

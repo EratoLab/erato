@@ -210,3 +210,18 @@ export const Reasoning: Story = {
     onMessageAction: async () => true,
   },
 };
+
+export const ContentFilterError: Story = {
+  args: {
+    message: ChatMessageFactory.samples.assistantError,
+    controlsContext: defaultControlsContext,
+    onMessageAction: async () => true,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: "Assistant message with a content filter error state.",
+      },
+    },
+  },
+};

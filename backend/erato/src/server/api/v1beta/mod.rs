@@ -18,7 +18,7 @@ use crate::models::chat::{
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
 };
-use crate::models::message::{ContentPart, MessageSchema};
+use crate::models::message::{ContentPart, GenerationErrorType, GenerationMetadata, MessageSchema};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
@@ -423,6 +423,10 @@ pub struct ChatMessage {
     role: String,
     /// The text content of the message
     content: Vec<ContentPart>,
+    /// Optional error information if generation failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    error: Option<GenerationErrorType>,
     /// When the message was created
     created_at: DateTime<FixedOffset>,
     /// When the message was last updated
@@ -901,11 +905,19 @@ impl ChatMessage {
         feedback: Option<crate::db::entity::message_feedbacks::Model>,
     ) -> Result<Self, Report> {
         let parsed_message = MessageSchema::validate(&msg.raw_message)?;
+        let error = msg
+            .generation_metadata
+            .as_ref()
+            .and_then(|metadata| {
+                serde_json::from_value::<GenerationMetadata>(metadata.clone()).ok()
+            })
+            .and_then(|metadata| metadata.error);
         Ok(ChatMessage {
             id: msg.id.to_string(),
             chat_id: msg.chat_id.to_string(),
             role: parsed_message.role.to_string(),
             content: parsed_message.content,
+            error,
             created_at: msg.created_at,
             updated_at: msg.updated_at,
             previous_message_id: msg.previous_message_id.map(|id| id.to_string()),

@@ -209,6 +209,10 @@ export type ChatMessage = {
    */
   created_at: string;
   /**
+   * Optional error information if generation failed
+   */
+  error?: GenerationErrorType;
+  /**
    * Optional feedback for this message
    */
   feedback?: MessageFeedback;
@@ -561,6 +565,9 @@ export type EditMessageStreamingResponseMessage =
   | (MessageSubmitStreamingResponseToolCallUpdate & {
       message_type: "tool_call_update";
     })
+  | (MessageSubmitStreamingResponseError & {
+      message_type: "error";
+    })
   | (MessageSubmitStreamingResponseUserMessageSaved & {
       message_type: "user_message_saved";
     });
@@ -670,6 +677,61 @@ export type FrequentAssistantsResponse = {
    */
   assistants: FrequentAssistantItem[];
 };
+
+/**
+ * Represents different types of errors that can occur during message generation.
+ */
+export type GenerationErrorType =
+  | {
+      /**
+       * Description of why the content was filtered.
+       */
+      error_description: string;
+      error_type: "content_filter";
+      filter_details?: null | Value;
+    }
+  | {
+      /**
+       * Description of the rate limit error.
+       */
+      error_description: string;
+      error_type: "rate_limit";
+    }
+  | {
+      /**
+       * Description of the availability issue.
+       */
+      error_description: string;
+      error_type: "model_unavailable";
+    }
+  | {
+      /**
+       * Description of what was invalid.
+       */
+      error_description: string;
+      error_type: "invalid_request";
+    }
+  | {
+      /**
+       * Description of the provider error.
+       */
+      error_description: string;
+      error_type: "provider_error";
+      /**
+       * HTTP status code if available.
+       *
+       * @format int32
+       * @minimum 0
+       */
+      status_code?: null | undefined;
+    }
+  | {
+      /**
+       * Description of the internal error.
+       */
+      error_description: string;
+      error_type: "internal_error";
+    };
 
 /**
  * Request to link an external file (SharePoint, Google Drive, etc.)
@@ -806,6 +868,18 @@ export type MessageSubmitStreamingResponseChatCreated = {
   chat_id: string;
 };
 
+/**
+ * Represents different types of errors that can occur during message generation.
+ */
+export type MessageSubmitStreamingResponseError = GenerationErrorType & {
+  /**
+   * The message ID if available (may not be present if error occurred before message creation).
+   *
+   * @format uuid
+   */
+  message_id?: null | undefined;
+};
+
 export type MessageSubmitStreamingResponseMessage =
   | (MessageSubmitStreamingResponseChatCreated & {
       message_type: "chat_created";
@@ -827,6 +901,9 @@ export type MessageSubmitStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseToolCallUpdate & {
       message_type: "tool_call_update";
+    })
+  | (MessageSubmitStreamingResponseError & {
+      message_type: "error";
     });
 
 export type MessageSubmitStreamingResponseMessageComplete = {
@@ -1082,6 +1159,9 @@ export type RegenerateMessageStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseToolCallUpdate & {
       message_type: "tool_call_update";
+    })
+  | (MessageSubmitStreamingResponseError & {
+      message_type: "error";
     });
 
 export type ResumeStreamRequest = {

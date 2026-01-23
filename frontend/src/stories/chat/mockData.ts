@@ -1,6 +1,7 @@
 import { faker } from "@faker-js/faker";
 
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { MessageError } from "@/types/chat";
 
 interface ChatMessage {
   id: string;
@@ -10,7 +11,10 @@ interface ChatMessage {
   createdAt: string;
   authorId: string;
   status?: "sending" | "complete" | "error";
+  error?: MessageError;
   previous_message_id?: string;
+  input_files_ids?: string[];
+  is_message_in_active_thread?: boolean;
 }
 
 // Helper to convert string to ContentPart[]
@@ -70,6 +74,38 @@ export const ChatMessageFactory = {
       ),
       sender: "assistant",
       createdAt: new Date(2024, 0, 1, 12, 2).toISOString(),
+    }),
+    assistantError: createChatMessage({
+      id: "019bebcd-2204-7bff-a965-5b1e4d5ea30a",
+      content: [],
+      sender: "assistant",
+      createdAt: "2026-01-23T17:00:48.001082Z",
+      previous_message_id: "019bebcd-21ed-7a3b-a069-35fe71d69fb5",
+      is_message_in_active_thread: true,
+      input_files_ids: [],
+      error: {
+        error_description:
+          "The response was filtered due to the prompt triggering content management policy.",
+        error_type: "content_filter",
+        filter_details: {
+          hate: {
+            filtered: false,
+            severity: "safe",
+          },
+          self_harm: {
+            filtered: false,
+            severity: "safe",
+          },
+          sexual: {
+            filtered: true,
+            severity: "medium",
+          },
+          violence: {
+            filtered: false,
+            severity: "low",
+          },
+        },
+      },
     }),
   },
 };

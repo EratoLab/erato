@@ -1877,6 +1877,10 @@
             "format": "date-time",
             "description": "When the message was created"
           },
+          "error": {
+            "$ref": "#/components/schemas/GenerationErrorType",
+            "description": "Optional error information if generation failed"
+          },
           "feedback": {
             "$ref": "#/components/schemas/MessageFeedback",
             "description": "Optional feedback for this message"
@@ -2555,6 +2559,29 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseError",
+                "description": "Sent when an error occurs during message generation."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "error"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent when an error occurs during message generation."
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/MessageSubmitStreamingResponseUserMessageSaved",
                 "description": "Sent when the edited user message has been saved."
               },
@@ -2736,6 +2763,151 @@
             "description": "The list of frequently used assistants"
           }
         }
+      },
+      "GenerationErrorType": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Content was filtered by the model provider's content policy.",
+            "required": [
+              "error_description",
+              "error_type"
+            ],
+            "properties": {
+              "error_description": {
+                "type": "string",
+                "description": "Description of why the content was filtered."
+              },
+              "error_type": {
+                "type": "string",
+                "enum": [
+                  "content_filter"
+                ]
+              },
+              "filter_details": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Value",
+                    "description": "Additional details about which filters were triggered."
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Rate limit was exceeded.",
+            "required": [
+              "error_description",
+              "error_type"
+            ],
+            "properties": {
+              "error_description": {
+                "type": "string",
+                "description": "Description of the rate limit error."
+              },
+              "error_type": {
+                "type": "string",
+                "enum": [
+                  "rate_limit"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Model or provider is unavailable.",
+            "required": [
+              "error_description",
+              "error_type"
+            ],
+            "properties": {
+              "error_description": {
+                "type": "string",
+                "description": "Description of the availability issue."
+              },
+              "error_type": {
+                "type": "string",
+                "enum": [
+                  "model_unavailable"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Invalid request parameters.",
+            "required": [
+              "error_description",
+              "error_type"
+            ],
+            "properties": {
+              "error_description": {
+                "type": "string",
+                "description": "Description of what was invalid."
+              },
+              "error_type": {
+                "type": "string",
+                "enum": [
+                  "invalid_request"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Generic error from the model provider.",
+            "required": [
+              "error_description",
+              "error_type"
+            ],
+            "properties": {
+              "error_description": {
+                "type": "string",
+                "description": "Description of the provider error."
+              },
+              "error_type": {
+                "type": "string",
+                "enum": [
+                  "provider_error"
+                ]
+              },
+              "status_code": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32",
+                "description": "HTTP status code if available.",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Internal server error.",
+            "required": [
+              "error_description",
+              "error_type"
+            ],
+            "properties": {
+              "error_description": {
+                "type": "string",
+                "description": "Description of the internal error."
+              },
+              "error_type": {
+                "type": "string",
+                "enum": [
+                  "internal_error"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Represents different types of errors that can occur during message generation."
       },
       "LinkFileRequest": {
         "type": "object",
@@ -2927,6 +3099,27 @@
           }
         }
       },
+      "MessageSubmitStreamingResponseError": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/GenerationErrorType",
+            "description": "The error details."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "message_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "The message ID if available (may not be present if error occurred before message creation)."
+              }
+            }
+          }
+        ]
+      },
       "MessageSubmitStreamingResponseMessage": {
         "oneOf": [
           {
@@ -3089,6 +3282,29 @@
               }
             ],
             "description": "Sent to update the status of a tool call execution by the backend."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseError",
+                "description": "Sent when an error occurs during message generation."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "error"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent when an error occurs during message generation."
           }
         ]
       },
@@ -3595,6 +3811,29 @@
               }
             ],
             "description": "Sent to update the status of a tool call execution by the backend."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseError",
+                "description": "Sent when an error occurs during message generation."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "error"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent when an error occurs during message generation."
           }
         ]
       },
