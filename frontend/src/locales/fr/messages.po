@@ -88,6 +88,46 @@ msgid "assistant.form.validation.prompt.tooShort"
 msgstr "Le prompt système doit contenir au moins 10 caractères"
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.empty.owned_by_user"
+msgstr "Vous n'avez pas encore créé d'assistants"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.empty.shared_with_user"
+msgstr "Aucun assistant n'a été partagé avec vous"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.filter.all"
+msgstr "Tous"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.filter.owned_by_user"
+msgstr "Mes assistants"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.filter.shared_with_user"
+msgstr "Partagés avec moi"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.list.title.all"
+msgstr "Tous les assistants"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.list.title.owned_by_user"
+msgstr "Mes assistants"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.list.title.shared_with_user"
+msgstr "Partagés avec moi"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 #: src/pages/AssistantChatSpacePage.tsx
 msgid "branding.assistant_name"
@@ -855,6 +895,10 @@ msgstr ""
 msgid "Assistants"
 msgstr ""
 
+#: src/pages/AssistantsListPage.tsx
+msgid "Assistants that others share with you will appear here"
+msgstr ""
+
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "Attach File"
 msgstr "Joindre un fichier"
@@ -1099,6 +1143,10 @@ msgstr ""
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
 msgstr "Fichier"
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Filter assistants"
+msgstr ""
 
 #: src/components/ui/Message/MessageContent.tsx
 msgid "Footnotes"
@@ -1466,10 +1514,6 @@ msgstr ""
 
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You have reached or exceeded your budget limit of {formattedLimit}. Current spending: {formattedSpending}."
-msgstr ""
-
-#: src/pages/AssistantsListPage.tsx
-msgid "Your Assistants"
 msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx

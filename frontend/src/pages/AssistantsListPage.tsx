@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
+import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
@@ -22,8 +23,15 @@ import {
 export default function AssistantsListPage() {
   const navigate = useNavigate();
 
-  // Fetch all assistants
-  const { data, isLoading, error, refetch } = useListAssistants({});
+  // State for tab filtering
+  const [selectedTab, setSelectedTab] = useState<
+    "all" | "owned_by_user" | "shared_with_user"
+  >("all");
+
+  // Fetch assistants with sharing_relation filter
+  const { data, isLoading, error, refetch } = useListAssistants({
+    queryParams: { sharing_relation: selectedTab },
+  });
 
   // Archive assistant mutation
   const archiveAssistantMutation = useArchiveAssistant();
@@ -39,6 +47,27 @@ export default function AssistantsListPage() {
   }, []);
 
   const assistants = data ?? [];
+
+  // Get dynamic list header text based on selected tab
+  const getListHeaderText = () => {
+    switch (selectedTab) {
+      case "all":
+        return t({
+          id: "assistants.list.title.all",
+          message: "All Assistants",
+        });
+      case "owned_by_user":
+        return t({
+          id: "assistants.list.title.owned_by_user",
+          message: "My Assistants",
+        });
+      case "shared_with_user":
+        return t({
+          id: "assistants.list.title.shared_with_user",
+          message: "Shared With Me",
+        });
+    }
+  };
 
   // Handle navigation to create page
   const handleCreateNew = () => {
@@ -80,6 +109,35 @@ export default function AssistantsListPage() {
       {/* Content */}
       <div className="flex-1 overflow-auto">
         <div className="mx-auto max-w-4xl p-6">
+          {/* Tab control for filtering */}
+          <div className="mb-6 flex justify-center">
+            <SegmentedControl
+              options={[
+                {
+                  value: "all" as const,
+                  label: t({ id: "assistants.filter.all", message: "All" }),
+                },
+                {
+                  value: "owned_by_user" as const,
+                  label: t({
+                    id: "assistants.filter.owned_by_user",
+                    message: "My Assistants",
+                  }),
+                },
+                {
+                  value: "shared_with_user" as const,
+                  label: t({
+                    id: "assistants.filter.shared_with_user",
+                    message: "Shared With Me",
+                  }),
+                },
+              ]}
+              value={selectedTab}
+              onChange={setSelectedTab}
+              aria-label={t`Filter assistants`}
+            />
+          </div>
+
           {/* Loading state */}
           {isLoading && (
             <div className="flex items-center justify-center py-12">
@@ -103,18 +161,35 @@ export default function AssistantsListPage() {
               <div className="text-center">
                 <EditIcon className="mx-auto mb-4 size-12 text-theme-fg-muted" />
                 <h2 className="mb-2 text-xl font-semibold text-theme-fg-primary">
-                  {t`No assistants yet`}
+                  {selectedTab === "all" && t`No assistants yet`}
+                  {selectedTab === "owned_by_user" &&
+                    t({
+                      id: "assistants.empty.owned_by_user",
+                      message: "You haven't created any assistants yet",
+                    })}
+                  {selectedTab === "shared_with_user" &&
+                    t({
+                      id: "assistants.empty.shared_with_user",
+                      message: "No assistants have been shared with you",
+                    })}
                 </h2>
                 <p className="mb-6 text-theme-fg-secondary">
-                  {t`Create your first assistant to get started`}
+                  {selectedTab === "all" &&
+                    t`Create your first assistant to get started`}
+                  {selectedTab === "owned_by_user" &&
+                    t`Create your first assistant to get started`}
+                  {selectedTab === "shared_with_user" &&
+                    t`Assistants that others share with you will appear here`}
                 </p>
-                <Button
-                  variant="primary"
-                  icon={<PlusIcon />}
-                  onClick={handleCreateNew}
-                >
-                  {t`Create Your First Assistant`}
-                </Button>
+                {selectedTab !== "shared_with_user" && (
+                  <Button
+                    variant="primary"
+                    icon={<PlusIcon />}
+                    onClick={handleCreateNew}
+                  >
+                    {t`Create Your First Assistant`}
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -125,7 +200,7 @@ export default function AssistantsListPage() {
               {/* List header with count and create button */}
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-medium text-theme-fg-primary">
-                  {t`Your Assistants`}
+                  {getListHeaderText()}
                 </h2>
                 <Button
                   variant="primary"
