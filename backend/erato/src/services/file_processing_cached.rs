@@ -196,10 +196,16 @@ pub async fn process_single_file_cached<'a>(
                 file_id = %file_id,
                 filename = %file_upload.filename,
                 error = %err,
-                "Failed to process file"
+                "Failed to process file - returning placeholder"
             );
             span.record("error", true);
-            Ok(None)
+            // Return file info even on error so it gets added as a pointer
+            // The actual error handling happens in resolve_file_pointers_in_generation_input
+            Ok(Some(FileContentsForGeneration {
+                id: *file_id,
+                filename: file_upload.filename,
+                contents_as_text: String::new(), // Empty content - won't be used for pointers
+            }))
         }
     }
 }
@@ -233,19 +239,18 @@ pub async fn process_files_parallel_cached<'a>(
 
     let results = futures::future::join_all(futures).await;
 
-    // Collect successful results
+    // Collect all results (including files that had parsing errors)
     let mut converted_files = vec![];
-    let mut failed_count = 0;
 
     for result in results {
         match result {
             Ok(Some(file_contents)) => converted_files.push(file_contents),
             Ok(None) => {
-                failed_count += 1;
+                // This should not happen anymore, but keep for safety
+                tracing::warn!("Unexpected None result from file processing");
             }
             Err(err) => {
                 span.record("successful_files", converted_files.len());
-                span.record("failed_files", failed_count);
                 span.record("had_error", true);
                 tracing::error!(error = %err, "Error processing file");
                 return Err(err);
@@ -254,12 +259,10 @@ pub async fn process_files_parallel_cached<'a>(
     }
 
     span.record("successful_files", converted_files.len());
-    span.record("failed_files", failed_count);
 
     tracing::debug!(
         num_files = file_ids.len(),
-        successful = converted_files.len(),
-        failed = failed_count,
+        processed = converted_files.len(),
         "Completed parallel file processing"
     );
 
