@@ -15,6 +15,7 @@ pub mod policy;
 pub mod server;
 pub mod services;
 pub mod state;
+pub mod system_prompt_renderer;
 pub mod telemetry;
 
 #[derive(OpenApi)]

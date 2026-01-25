@@ -5,6 +5,7 @@ use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
+use crate::system_prompt_renderer::SystemPromptRenderer;
 use eyre::Report;
 use genai::adapter::AdapterKind;
 use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
@@ -95,6 +96,7 @@ pub struct AppState {
     pub langfuse_client: LangfuseClient,
     pub global_policy_engine: GlobalPolicyEngine,
     pub background_tasks: BackgroundTaskManager,
+    pub system_prompt_renderer: SystemPromptRenderer,
     /// Cache mapping file_id -> parsed file contents
     pub file_contents_cache: Cache<Uuid, String>,
     /// Cache mapping file_contents -> token count
@@ -126,6 +128,9 @@ impl AppState {
         // Initialize the background task manager
         let background_tasks = BackgroundTaskManager::new();
 
+        // Initialize the system prompt renderer
+        let system_prompt_renderer = SystemPromptRenderer::new();
+
         // Initialize file contents cache with MB-based weigher
         let file_contents_cache = Cache::builder()
             .weigher(|_key: &Uuid, value: &String| -> u32 {
@@ -154,6 +159,7 @@ impl AppState {
             langfuse_client,
             global_policy_engine,
             background_tasks,
+            system_prompt_renderer,
             file_contents_cache,
             token_count_cache,
         })
@@ -427,21 +433,24 @@ impl AppState {
     }
 
     /// Get the system prompt for a given chat provider configuration.
-    /// This resolves either a static system prompt or retrieves one from Langfuse.
+    /// This resolves either a static system prompt or retrieves one from Langfuse,
+    /// and renders any placeholders (e.g., {erato_inject_now_date}).
     pub async fn get_system_prompt(
         &self,
         config: &ChatProviderConfig,
     ) -> Result<Option<String>, Report> {
-        // If a static system prompt is configured, return it
+        // If a static system prompt is configured, render and return it
         if let Some(system_prompt) = &config.system_prompt {
+            let rendered_prompt = self.system_prompt_renderer.render(system_prompt);
             tracing::debug!(
-                system_prompt_length = system_prompt.len(),
-                "Using static system prompt"
+                original_length = system_prompt.len(),
+                rendered_length = rendered_prompt.len(),
+                "Using static system prompt (rendered)"
             );
-            return Ok(Some(system_prompt.clone()));
+            return Ok(Some(rendered_prompt));
         }
 
-        // If Langfuse system prompt is configured, retrieve it
+        // If Langfuse system prompt is configured, retrieve and render it
         if let Some(langfuse_config) = &config.system_prompt_langfuse {
             tracing::debug!(
                 prompt_name = %langfuse_config.prompt_name,
@@ -454,14 +463,16 @@ impl AppState {
                 .await?;
 
             let system_prompt = extract_system_prompt_from_langfuse_prompt(&langfuse_prompt)?;
+            let rendered_prompt = self.system_prompt_renderer.render(&system_prompt);
 
             tracing::debug!(
                 prompt_name = %langfuse_config.prompt_name,
-                system_prompt_length = system_prompt.len(),
-                "Successfully retrieved system prompt from Langfuse"
+                original_length = system_prompt.len(),
+                rendered_length = rendered_prompt.len(),
+                "Successfully retrieved and rendered system prompt from Langfuse"
             );
 
-            return Ok(Some(system_prompt));
+            return Ok(Some(rendered_prompt));
         }
 
         // No system prompt configured
