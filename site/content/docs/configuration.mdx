@@ -817,6 +817,82 @@ config = { endpoint = "https://eratoeu.blob.core.windows.net", container = "erat
 default_file_storage_provider = "s3_primary"
 ```
 
+### `file_processor`
+
+Configuration for the file processing engine that extracts text content from uploaded documents. Erato supports multiple file processor backends with different capabilities.
+
+**Type:** `object | None`
+
+**Default behavior:** If not configured, Erato uses the `parser-core` processor by default.
+
+#### `file_processor.processor`
+
+The file processor backend to use for extracting text from uploaded files.
+
+**Type:** `string`
+
+**Default:** `"parser-core"`
+
+**Supported values:**
+
+- `"parser-core"` - The original file processor (default). Provides reliable text extraction for common document formats.
+- `"kreuzberg"` - Advanced file processor with page-aware markdown extraction. Extracts content with page boundary markers, making it easy to identify which page content comes from.
+
+**Example:**
+
+```toml
+[file_processor]
+processor = "kreuzberg"
+```
+
+#### Processor Comparison
+
+| Feature           | parser-core                              | kreuzberg                |
+| ----------------- | ---------------------------------------- | ------------------------ |
+| Text extraction   | ✅                                       | ✅                       |
+| Page awareness    | ❌                                       | ✅                       |
+| Page markers      | ❌                                       | ✅ (`<page number="N">`) |
+| Output format     | Plain text                               | Markdown                 |
+| Supported formats | Word, PDF, Excel, PowerPoint, text files | Same as parser-core      |
+
+#### Page-Aware Extraction
+
+When using `kreuzberg`, extracted content includes XML-style page markers that clearly indicate page boundaries:
+
+```markdown
+<page number="1">
+First page content here...
+
+<page number="2">
+Second page content here...
+```
+
+This is particularly useful when working with:
+
+- Multi-page legal documents where page references matter
+- Academic papers with citations to specific pages
+- Technical documentation with page-specific diagrams
+- Any scenario where knowing the source page of content is important
+
+**Example configuration:**
+
+```toml
+[file_processor]
+# Use kreuzberg for page-aware extraction
+processor = "kreuzberg"
+```
+
+**Testing page-aware extraction:**
+
+You can generate test PDFs with distinct content per page using the provided script:
+
+```bash
+cd e2e-tests
+./scripts/generate_multipage_test_pdf.py test.pdf 20
+```
+
+This creates a PDF with 20 pages, each containing unique identifiers like `PAGE-001`, `PAGE-002`, etc.
+
 ### `model_permissions`
 
 Configuration for controlling user access to chat providers based on user attributes like group membership. This allows you to implement fine-grained access control, such as restricting premium models to certain user groups or providing different models to different teams.

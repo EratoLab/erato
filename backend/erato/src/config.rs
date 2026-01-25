@@ -56,6 +56,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub caches: CachesConfig,
 
+    // File processor configuration for controlling which file parsing library to use.
+    #[serde(default)]
+    pub file_processor: FileProcessorConfig,
+
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
     pub cleanup_enabled: bool,
@@ -220,6 +224,16 @@ impl AppConfig {
         // Validate budget configuration
         if let Err(e) = config.budget.validate() {
             panic!("Invalid budget configuration: {}", e);
+        }
+
+        // Validate file processor configuration
+        if config.file_processor.processor != "parser-core"
+            && config.file_processor.processor != "kreuzberg"
+        {
+            panic!(
+                "Invalid file processor '{}'. Must be 'parser-core' or 'kreuzberg'",
+                config.file_processor.processor
+            );
         }
 
         // Validate that Langfuse is configured if any chat provider uses it
@@ -918,6 +932,25 @@ impl Default for CachesConfig {
         Self {
             file_contents_cache_mb: default_file_contents_cache_mb(),
             token_count_cache_mb: default_token_count_cache_mb(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct FileProcessorConfig {
+    /// Which file processor to use: "parser-core" or "kreuzberg"
+    #[serde(default = "default_processor")]
+    pub processor: String,
+}
+
+fn default_processor() -> String {
+    "parser-core".to_string()
+}
+
+impl Default for FileProcessorConfig {
+    fn default() -> Self {
+        Self {
+            processor: default_processor(),
         }
     }
 }

@@ -135,6 +135,12 @@ async fn test_app_state_internal(
         .max_capacity(app_config.caches.token_count_cache_mb * 1024 * 1024)
         .build();
 
+    // Initialize file processor
+    let file_processor = erato::services::file_processor::create_file_processor(
+        &app_config.file_processor.processor,
+    )
+    .unwrap();
+
     let app_state = AppState {
         db: db.clone(),
         default_file_storage_provider: None,
@@ -148,6 +154,7 @@ async fn test_app_state_internal(
         system_prompt_renderer: erato::system_prompt_renderer::SystemPromptRenderer::new(),
         file_contents_cache,
         token_count_cache,
+        file_processor,
     };
 
     // For tests: Initialize policy engine and work around the middleware rebuild issue
