@@ -67,6 +67,7 @@ axum-tracing-opentelemetry = "0.32.2"
 base64 = "0.22.1"
 # Tokio console for async debugging
 console-subscriber = { version = "0.5.0", optional = true }
+kreuzberg = "4.1.2"
 
 [dependencies.sentry]
 version = "0.41.0"

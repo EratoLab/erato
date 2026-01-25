@@ -50,8 +50,8 @@ pub async fn get_file_contents_cached<'a>(
             span.record("file_bytes_length", file_bytes.len());
             tracing::debug!(file_id = %file_id, bytes_len = file_bytes.len(), "File bytes read from storage");
 
-            // Parse the file
-            let parsed_content = parse_file(file_bytes).await?;
+            // Parse the file using the configured file processor
+            let parsed_content = parse_file(app_state.file_processor.as_ref(), file_bytes).await?;
             let content = remove_null_characters(&parsed_content);
 
             tracing::debug!(file_id = %file_id, content_len = content.len(), "File parsed and cached");

@@ -3,6 +3,14 @@ provider_kind = "s3"
 config = { endpoint = "http://localhost:9000", bucket = "erato-storage", region = "us-east-1", access_key_id = "erato-app-user", secret_access_key = "erato-app-password" }
 # max_upload_size_kb = 102400  # Optional: Maximum file upload size in KB (100 MB example)
 
+# File processor configuration
+# Controls which file processing engine is used to extract text from uploaded documents.
+# [file_processor]
+# processor = "parser-core"  # Default: "parser-core" - Reliable text extraction for common formats
+                             # Alternative: "kreuzberg" - Advanced processor with page-aware markdown extraction
+                             # Kreuzberg adds page markers like <page number="1">, <page number="2">, etc.
+                             # This is useful for multi-page documents where page references matter.
+
 # Chat providers for e2e tests
 [chat_providers]
 priority_order = ["test-token-limit"]

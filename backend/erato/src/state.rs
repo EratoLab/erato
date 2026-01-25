@@ -85,7 +85,7 @@ impl GlobalPolicyEngine {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
     pub default_file_storage_provider: Option<String>,
@@ -101,6 +101,34 @@ pub struct AppState {
     pub file_contents_cache: Cache<Uuid, String>,
     /// Cache mapping file_contents -> token count
     pub token_count_cache: Cache<String, usize>,
+    /// File processor for extracting text from files
+    pub file_processor: Arc<dyn crate::services::file_processor::FileProcessor>,
+}
+
+impl std::fmt::Debug for AppState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppState")
+            .field("db", &"<DatabaseConnection>")
+            .field(
+                "default_file_storage_provider",
+                &self.default_file_storage_provider,
+            )
+            .field(
+                "file_storage_providers",
+                &self.file_storage_providers.keys(),
+            )
+            .field("mcp_servers", &self.mcp_servers)
+            .field("config", &self.config)
+            .field("actor_manager", &self.actor_manager)
+            .field("langfuse_client", &self.langfuse_client)
+            .field("global_policy_engine", &self.global_policy_engine)
+            .field("background_tasks", &self.background_tasks)
+            .field("system_prompt_renderer", &self.system_prompt_renderer)
+            .field("file_contents_cache", &"<Cache>")
+            .field("token_count_cache", &"<Cache>")
+            .field("file_processor", &"<FileProcessor>")
+            .finish()
+    }
 }
 
 impl AppState {
@@ -149,6 +177,11 @@ impl AppState {
             .max_capacity(config.caches.token_count_cache_mb * 1024 * 1024)
             .build();
 
+        // Initialize file processor based on configuration
+        let file_processor = crate::services::file_processor::create_file_processor(
+            &config.file_processor.processor,
+        )?;
+
         Ok(Self {
             db,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
@@ -162,6 +195,7 @@ impl AppState {
             system_prompt_renderer,
             file_contents_cache,
             token_count_cache,
+            file_processor,
         })
     }
 
