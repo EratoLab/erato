@@ -905,6 +905,40 @@ async fn download_and_store_generated_image(
     Ok((file_upload.id, download_url))
 }
 
+/// Format an error message for files that cannot be retrieved
+fn format_file_error_message(filename: &str, file_id: Uuid, is_parsing_error: bool) -> String {
+    let mut content = String::new();
+    content.push_str("File:\n");
+    content.push_str(&format!("file name: {}\n", filename));
+    content.push_str(&format!("file_id: erato_file_id:{}\n", file_id));
+
+    if is_parsing_error {
+        content.push_str(
+            "No file contents available as the file was not parseable. This info should be returned to the user."
+        );
+    } else {
+        content.push_str(
+            "Unable to retrieve file contents due to an unknown error. Please contact support if this issue persists."
+        );
+    }
+
+    content
+}
+
+/// Format successful file content with metadata header
+fn format_successful_file_content(filename: &str, file_id: Uuid, text: &str) -> String {
+    let mut content = String::new();
+    content.push_str("File:\n");
+    content.push_str(&format!("file name: {}\n", filename));
+    content.push_str(&format!("file_id: erato_file_id:{}\n", file_id));
+    content.push_str("File contents\n");
+    content.push_str("---\n");
+    content.push_str(text);
+    content.push_str("\n---");
+
+    content
+}
+
 /// Resolve TextFilePointer and ImageFilePointer content parts in generation input messages by extracting file contents JIT.
 /// This prevents storing duplicate file contents in the database.
 async fn resolve_file_pointers_in_generation_input(
@@ -971,14 +1005,11 @@ async fn resolve_file_pointers_in_generation_input(
                                                 text.len()
                                             );
 
-                                            // Format the text similar to how it was done before
-                                            let mut content = String::new();
-                                            content.push_str(&format!("File: {}\n", file.filename));
-                                            content.push_str("File contents\n");
-                                            content.push_str("---\n");
-                                            content.push_str(&text);
-                                            content.push_str("\n---");
-
+                                            let content = format_successful_file_content(
+                                                &file.filename,
+                                                file_upload_id,
+                                                &text,
+                                            );
                                             ContentPart::Text(ContentPartText { text: content })
                                         }
                                         Ok(Err(err)) => {
@@ -988,12 +1019,12 @@ async fn resolve_file_pointers_in_generation_input(
                                                 file_upload_id,
                                                 err
                                             );
-                                            ContentPart::Text(ContentPartText {
-                                                text: format!(
-                                                    "[Failed to parse file: {}]",
-                                                    file_upload_id
-                                                ),
-                                            })
+                                            let content = format_file_error_message(
+                                                &file.filename,
+                                                file_upload_id,
+                                                true,
+                                            );
+                                            ContentPart::Text(ContentPartText { text: content })
                                         }
                                         Err(join_err) => {
                                             tracing::error!(
@@ -1002,12 +1033,12 @@ async fn resolve_file_pointers_in_generation_input(
                                                 file_upload_id,
                                                 join_err
                                             );
-                                            ContentPart::Text(ContentPartText {
-                                                text: format!(
-                                                    "[Error parsing file: {}]",
-                                                    file_upload_id
-                                                ),
-                                            })
+                                            let content = format_file_error_message(
+                                                &file.filename,
+                                                file_upload_id,
+                                                false,
+                                            );
+                                            ContentPart::Text(ContentPartText { text: content })
                                         }
                                     }
                                 }
@@ -1017,9 +1048,12 @@ async fn resolve_file_pointers_in_generation_input(
                                         file_upload_id,
                                         err
                                     );
-                                    ContentPart::Text(ContentPartText {
-                                        text: format!("[Failed to read file: {}]", file_upload_id),
-                                    })
+                                    let content = format_file_error_message(
+                                        &file.filename,
+                                        file_upload_id,
+                                        false,
+                                    );
+                                    ContentPart::Text(ContentPartText { text: content })
                                 }
                             }
                         } else {
@@ -1028,12 +1062,9 @@ async fn resolve_file_pointers_in_generation_input(
                                 file.file_storage_provider_id,
                                 file_upload_id
                             );
-                            ContentPart::Text(ContentPartText {
-                                text: format!(
-                                    "[File storage provider not found for file: {}]",
-                                    file_upload_id
-                                ),
-                            })
+                            let content =
+                                format_file_error_message(&file.filename, file_upload_id, false);
+                            ContentPart::Text(ContentPartText { text: content })
                         }
                     }
                     Ok(None) => {
@@ -1041,9 +1072,8 @@ async fn resolve_file_pointers_in_generation_input(
                             "File upload {} referenced in TextFilePointer not found, using placeholder text",
                             file_upload_id
                         );
-                        ContentPart::Text(ContentPartText {
-                            text: format!("[File not found: {}]", file_upload_id),
-                        })
+                        let content = format_file_error_message("Unknown", file_upload_id, false);
+                        ContentPart::Text(ContentPartText { text: content })
                     }
                     Err(err) => {
                         tracing::error!(
@@ -1051,9 +1081,8 @@ async fn resolve_file_pointers_in_generation_input(
                             file_upload_id,
                             err
                         );
-                        ContentPart::Text(ContentPartText {
-                            text: format!("[Error fetching file: {}]", file_upload_id),
-                        })
+                        let content = format_file_error_message("Unknown", file_upload_id, false);
+                        ContentPart::Text(ContentPartText { text: content })
                     }
                 }
             }
@@ -1110,12 +1139,12 @@ async fn resolve_file_pointers_in_generation_input(
                                         file_upload_id,
                                         err
                                     );
-                                    ContentPart::Text(ContentPartText {
-                                        text: format!(
-                                            "[Failed to read image file: {}]",
-                                            file_upload_id
-                                        ),
-                                    })
+                                    let content = format_file_error_message(
+                                        &file.filename,
+                                        file_upload_id,
+                                        false,
+                                    );
+                                    ContentPart::Text(ContentPartText { text: content })
                                 }
                             }
                         } else {
@@ -1124,12 +1153,9 @@ async fn resolve_file_pointers_in_generation_input(
                                 file.file_storage_provider_id,
                                 file_upload_id
                             );
-                            ContentPart::Text(ContentPartText {
-                                text: format!(
-                                    "[File storage provider not found for image file: {}]",
-                                    file_upload_id
-                                ),
-                            })
+                            let content =
+                                format_file_error_message(&file.filename, file_upload_id, false);
+                            ContentPart::Text(ContentPartText { text: content })
                         }
                     }
                     Ok(None) => {
@@ -1137,9 +1163,8 @@ async fn resolve_file_pointers_in_generation_input(
                             "File upload {} referenced in ImageFilePointer not found, using placeholder text",
                             file_upload_id
                         );
-                        ContentPart::Text(ContentPartText {
-                            text: format!("[Image file not found: {}]", file_upload_id),
-                        })
+                        let content = format_file_error_message("Unknown", file_upload_id, false);
+                        ContentPart::Text(ContentPartText { text: content })
                     }
                     Err(err) => {
                         tracing::error!(
@@ -1147,9 +1172,8 @@ async fn resolve_file_pointers_in_generation_input(
                             file_upload_id,
                             err
                         );
-                        ContentPart::Text(ContentPartText {
-                            text: format!("[Error fetching image file: {}]", file_upload_id),
-                        })
+                        let content = format_file_error_message("Unknown", file_upload_id, false);
+                        ContentPart::Text(ContentPartText { text: content })
                     }
                 }
             }
