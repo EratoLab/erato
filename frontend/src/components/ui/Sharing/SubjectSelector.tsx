@@ -52,7 +52,7 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
     } = useOrganizationMembersSearch({
       query: debouncedQuery,
       subjectTypeFilter,
-      minQueryLength: 2,
+      minQueryLength: 0, // Allow empty query to load initial results
     });
 
     // Create a set of subject IDs that already have grants
@@ -82,9 +82,6 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
 
     // Check if search is still pending (debounce timer is running)
     const isSearchPending = isPending();
-
-    // Check if query meets minimum length
-    const meetsMinLength = searchQuery.trim().length >= 2;
 
     // Get filter-specific labels
     const getAllGrantedLabel = () => {
@@ -136,11 +133,6 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
 
     // Render content based on state
     const renderContent = () => {
-      // Query too short or empty - don't show anything (placeholder is self-explanatory)
-      if (!meetsMinLength) {
-        return null;
-      }
-
       // Error state
       if (searchError) {
         return (
@@ -249,7 +241,7 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
               disabled={disabled}
             />
             {/* Show subtle loading indicator when search is pending or searching */}
-            {meetsMinLength && (isSearchPending || isSearching) && (
+            {(isSearchPending || isSearching) && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 <div className="size-4 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
               </div>

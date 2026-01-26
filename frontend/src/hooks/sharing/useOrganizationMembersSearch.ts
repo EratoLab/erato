@@ -31,21 +31,22 @@ interface UseOrganizationMembersSearchParams {
 /**
  * Hook for searching organization users and groups with backend filtering
  *
- * Only fetches when query meets minimum length requirement (default: 2 characters).
+ * Fetches initial results when query is empty, then filters when query is provided.
  * Filters by subject type (users, groups, or all).
  *
- * @param query - Search query string
+ * @param query - Search query string (empty string fetches first page)
  * @param subjectTypeFilter - Filter to show only users, only groups, or all
- * @param minQueryLength - Minimum query length before triggering search (default: 2)
+ * @param minQueryLength - Minimum query length before triggering search (default: 0 to load initial results)
  */
 export function useOrganizationMembersSearch({
   query,
   subjectTypeFilter,
-  minQueryLength = 2,
+  minQueryLength = 0,
 }: UseOrganizationMembersSearchParams): UseOrganizationMembersSearchResult {
-  // Only search if query meets minimum length
-  const shouldSearch = query.trim().length >= minQueryLength;
+  // Search if query is empty (initial load) or meets minimum length
   const trimmedQuery = query.trim();
+  const shouldSearch =
+    trimmedQuery.length === 0 || trimmedQuery.length >= minQueryLength;
 
   // Determine which endpoints to call based on filter
   const shouldFetchUsers =
@@ -67,6 +68,7 @@ export function useOrganizationMembersSearch({
     shouldFetchUsers
       ? {
           queryParams: {
+            // Pass empty string for initial load to get first page
             query: trimmedQuery,
           },
         }
@@ -74,8 +76,7 @@ export function useOrganizationMembersSearch({
   );
 
   // Fetch groups with search query
-  // Note: is_involved filter is NOT used here - backend search returns relevant results
-  // based on the query. is_involved is only for the "fetch all" scenario.
+  // Note: is_involved filter is used for groups to only show groups the user is a member of
   const {
     data: groupsData,
     isLoading: isLoadingGroups,
@@ -86,6 +87,7 @@ export function useOrganizationMembersSearch({
       ? {
           queryParams: {
             query: trimmedQuery,
+            is_involved: true,
           },
         }
       : skipToken,
