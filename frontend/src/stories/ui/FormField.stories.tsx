@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { InfoTooltip } from "@/components/ui/Controls/InfoTooltip";
 import { FormField } from "@/components/ui/Input/FormField";
 import { Input } from "@/components/ui/Input/Input";
 import { Textarea } from "@/components/ui/Input/Textarea";
@@ -361,6 +362,50 @@ export const MonospaceInForm: Story = {
           rows={8}
           placeholder="You are a helpful assistant that..."
         />
+      </FormField>
+    </div>
+  ),
+};
+
+// With label action (InfoTooltip)
+export const WithLabelAction: Story = {
+  args: {
+    label: "System Prompt",
+    children: null,
+  },
+  render: () => (
+    <div className="w-[600px] space-y-4">
+      <FormField
+        label="System Prompt"
+        required
+        helpText="Define how the assistant should behave"
+        htmlFor="system-prompt-1"
+        labelAction={<InfoTooltip translationId="story.tooltip.systemPrompt" />}
+      >
+        <Textarea
+          id="system-prompt-1"
+          monospace
+          rows={6}
+          placeholder="You are a helpful assistant that..."
+        />
+      </FormField>
+
+      <FormField
+        label="Default Model"
+        helpText="Choose which model to use by default"
+        htmlFor="model-select"
+        labelAction={<InfoTooltip translationId="story.tooltip.model" />}
+      >
+        <Input id="model-select" placeholder="GPT-4" disabled />
+      </FormField>
+
+      <FormField
+        label="Default Files"
+        helpText="Files available to the assistant in every chat"
+        htmlFor="file-upload"
+        labelAction={<InfoTooltip translationId="story.tooltip.files" />}
+      >
+        <Input id="file-upload" placeholder="No files uploaded" disabled />
       </FormField>
     </div>
   ),

@@ -3,6 +3,7 @@ import { useState, useCallback } from "react";
 
 import { ModelSelector } from "@/components/ui/Chat/ModelSelector";
 import { Button } from "@/components/ui/Controls/Button";
+import { InfoTooltip } from "@/components/ui/Controls/InfoTooltip";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import {
   FileAttachmentsPreview,
@@ -342,6 +343,9 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
           error={touched.prompt ? errors.prompt : undefined}
           helpText={t`Define how the assistant should behave and respond`}
           htmlFor="assistant-prompt"
+          labelAction={
+            <InfoTooltip translationId="assistant.form.systemPrompt.tooltip" />
+          }
         >
           <Textarea
             id="assistant-prompt"
@@ -369,6 +373,9 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
                 "Optional: Choose which model this assistant should use by default",
             })}
             htmlFor="assistant-model"
+            labelAction={
+              <InfoTooltip translationId="assistant.form.defaultModel.tooltip" />
+            }
           >
             <ModelSelector
               availableModels={availableModels}
@@ -388,6 +395,9 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
               "Optional: Upload files from your computer or OneDrive that will be available to this assistant in every chat",
           })}
           htmlFor="assistant-files"
+          labelAction={
+            <InfoTooltip translationId="assistant.form.defaultFiles.tooltip" />
+          }
         >
           <div className="space-y-3">
             <AssistantFileUploadSelector
