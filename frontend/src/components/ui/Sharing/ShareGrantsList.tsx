@@ -13,7 +13,7 @@ interface ShareGrantsListProps {
   canManage: boolean;
   isLoading?: boolean;
   className?: string;
-  availableSubjects: OrganizationMember[];
+  availableSubjects?: OrganizationMember[];
 }
 
 /**
@@ -28,9 +28,10 @@ export const ShareGrantsList = memo<ShareGrantsListProps>(
     canManage,
     isLoading = false,
     className = "",
-    availableSubjects,
+    availableSubjects = [],
   }) => {
     // Create a lookup map for subject display names
+    // This may be empty if not provided, in which case we'll show subject IDs
     const subjectLookup = useMemo(() => {
       const map = new Map<string, string>();
       availableSubjects.forEach((subject) => {

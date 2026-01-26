@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Controls/Button";
 import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
-import { useShareGrants, useOrganizationMembers } from "@/hooks/sharing";
+import { useShareGrants } from "@/hooks/sharing";
 
 import { ShareGrantsList } from "./ShareGrantsList";
 import { SubjectSelector } from "./SubjectSelector";
@@ -45,13 +45,6 @@ export function SharingDialog({
   // State for subject type toggle (users vs groups)
   const [subjectTypeFilter, setSubjectTypeFilter] =
     useState<SubjectTypeFilter>("user");
-
-  // Fetch organization members (users and groups)
-  const {
-    members: availableSubjects,
-    isLoading: isLoadingMembers,
-    error: membersError,
-  } = useOrganizationMembers();
 
   // Fetch and manage share grants
   const {
@@ -193,14 +186,6 @@ export function SharingDialog({
         {/* Success/Error alerts */}
         {successMessage ? <Alert type="success">{successMessage}</Alert> : null}
         {errorMessage ? <Alert type="error">{errorMessage}</Alert> : null}
-        {membersError ? (
-          <Alert type="error">
-            {t({
-              id: "sharing.error.loadMembers",
-              message: "Failed to load users and groups",
-            })}
-          </Alert>
-        ) : null}
         {grantsError ? (
           <Alert type="error">
             {t({
@@ -241,10 +226,8 @@ export function SharingDialog({
           </div>
 
           <SubjectSelector
-            availableSubjects={availableSubjects}
             selectedIds={selectedIds}
             onToggleSubject={handleToggleSubject}
-            isLoading={isLoadingMembers}
             existingGrants={grants ?? []}
             subjectTypeFilter={subjectTypeFilter}
           />
@@ -275,7 +258,6 @@ export function SharingDialog({
             }}
             canManage={true}
             isLoading={isLoadingGrants}
-            availableSubjects={availableSubjects}
           />
         </div>
       </div>

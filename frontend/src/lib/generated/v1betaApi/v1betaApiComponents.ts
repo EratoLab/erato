@@ -2085,7 +2085,7 @@ export type ListOrganizationGroupsQueryParams = {
    * When provided (even if empty), only the first page of results is returned for performance.
    * This optimizes search field implementations where typing starts with an empty query.
    */
-  query?: null | undefined;
+  query?: string;
 };
 
 export type ListOrganizationGroupsError = Fetcher.ErrorWrapper<undefined>;
@@ -2241,7 +2241,7 @@ export type ListOrganizationUsersQueryParams = {
    * When provided (even if empty), only the first page of results is returned for performance.
    * This optimizes search field implementations where typing starts with an empty query.
    */
-  query?: null | undefined;
+  query?: string;
 };
 
 export type ListOrganizationUsersError = Fetcher.ErrorWrapper<undefined>;

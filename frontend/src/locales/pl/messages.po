@@ -628,23 +628,8 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.empty.noGroups"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.empty.noMembers"
-msgstr "Brak dostępnych użytkowników lub grup"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.empty.noResults"
 msgstr "Nie znaleziono wyników"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.empty.noUsers"
-msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SharingDialog.tsx
@@ -652,7 +637,7 @@ msgid "sharing.error.loadGrants"
 msgstr "Nie udało się załadować obecnego dostępu"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Sharing/SharingDialog.tsx
+#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.error.loadMembers"
 msgstr "Nie udało się załadować użytkowników i grup"
 
@@ -711,6 +696,21 @@ msgstr "Dostęp został pomyślnie usunięty"
 #: src/components/ui/Sharing/ShareGrantsList.tsx
 msgid "sharing.role.viewer"
 msgstr "Oglądający"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.search.startTyping"
+msgstr "Zacznij pisać, aby wyszukać użytkowników lub grupy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.search.startTypingGroups"
+msgstr "Zacznij pisać, aby wyszukać grupy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Sharing/SubjectSelector.tsx
+msgid "sharing.search.startTypingUsers"
+msgstr "Zacznij pisać, aby wyszukać użytkowników"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SubjectSelector.tsx

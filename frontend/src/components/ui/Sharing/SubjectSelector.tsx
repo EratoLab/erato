@@ -1,40 +1,20 @@
 import { t, msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
-import { useMemo, useState, memo, useDeferredValue } from "react";
+import { useMemo, useState, memo } from "react";
+import { useDebounce } from "use-debounce";
 
 import { Input } from "@/components/ui/Input/Input";
-import { useFuzzySearch } from "@/hooks/search/useFuzzySearch";
+import { useOrganizationMembersSearch } from "@/hooks/sharing";
 
 import type { ShareGrant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { OrganizationMember } from "@/types/sharing";
-
-// Module-level constants - stable references, no need for useMemo/useCallback
-// eslint-disable-next-line lingui/no-unlocalized-strings
-const SEARCH_KEYS = ["display_name"];
-
-// Pure sorting function - prioritize users over groups, then alphabetically
-const sortByTypeAndName = (a: OrganizationMember, b: OrganizationMember) => {
-  // Users come before groups
-  if (a.type !== b.type) {
-    return a.type === "user" ? -1 : 1;
-  }
-  // Within same type, sort alphabetically
-  return a.display_name.localeCompare(b.display_name);
-};
-
-// Sort alphabetically only (for single-type views)
-const sortByName = (a: OrganizationMember, b: OrganizationMember) => {
-  return a.display_name.localeCompare(b.display_name);
-};
 
 /** Filter type for subject selector */
 export type SubjectTypeFilter = "all" | "user" | "group";
 
 interface SubjectSelectorProps {
-  availableSubjects: OrganizationMember[];
   selectedIds: string[];
   onToggleSubject: (subject: OrganizationMember) => void;
-  isLoading?: boolean;
   disabled?: boolean;
   className?: string;
   existingGrants?: ShareGrant[];
@@ -45,58 +25,46 @@ interface SubjectSelectorProps {
 /**
  * SubjectSelector component for selecting users and groups to share with
  *
- * Provides a searchable list with checkboxes for multi-select
+ * Provides a searchable list with checkboxes for multi-select.
+ * Uses backend search to filter users and groups instead of client-side filtering.
  */
 export const SubjectSelector = memo<SubjectSelectorProps>(
   ({
-    availableSubjects,
     selectedIds,
     onToggleSubject,
-    isLoading = false,
     disabled = false,
     className = "",
     existingGrants = [],
     subjectTypeFilter = "all",
   }) => {
     const [searchQuery, setSearchQuery] = useState("");
+    // Use use-debounce library for consistent debounce behavior across the app
+    // isPending() returns true while the debounce timer is running
+    const [debouncedQuery, { isPending }] = useDebounce(searchQuery, 300);
 
-    // Defer search query to keep input responsive during expensive search operations
-    // React 18 concurrent feature - search runs with lower priority than typing
-    const deferredSearchQuery = useDeferredValue(searchQuery);
+    // Use backend search hook
+    const {
+      members: searchResults,
+      isLoading,
+      error: searchError,
+      isSearching,
+    } = useOrganizationMembersSearch({
+      query: debouncedQuery,
+      subjectTypeFilter,
+      minQueryLength: 2,
+    });
 
     // Create a set of subject IDs that already have grants
     const grantedSubjectIds = useMemo(() => {
       return new Set(existingGrants.map((grant) => grant.subject_id));
     }, [existingGrants]);
 
-    // Filter out subjects that already have grants and apply type filter
-    const unGrantedSubjects = useMemo(() => {
-      return availableSubjects.filter((subject) => {
-        // Filter out already granted subjects
-        if (grantedSubjectIds.has(subject.id)) {
-          return false;
-        }
-        // Apply type filter
-        if (subjectTypeFilter !== "all" && subject.type !== subjectTypeFilter) {
-          return false;
-        }
-        return true;
-      });
-    }, [availableSubjects, grantedSubjectIds, subjectTypeFilter]);
-
-    // Determine sort function based on filter - no need for type grouping when showing single type
-    const sortFn = subjectTypeFilter === "all" ? sortByTypeAndName : sortByName;
-
-    // Fuzzy search with user prioritization (using unGranted subjects)
-    // Using module-level constants for keys and sortFn - stable references
-    // Search uses deferred query to prevent blocking the input field
-    const filteredSubjects = useFuzzySearch({
-      items: unGrantedSubjects,
-      keys: SEARCH_KEYS,
-      query: deferredSearchQuery,
-      threshold: 0.3,
-      sortFn,
-    });
+    // Filter out subjects that already have grants
+    const filteredSubjects = useMemo(() => {
+      return searchResults.filter(
+        (subject) => !grantedSubjectIds.has(subject.id),
+      );
+    }, [searchResults, grantedSubjectIds]);
 
     // Group filtered subjects by type (only needed for "all" view)
     const { users, groups } = useMemo(() => {
@@ -111,26 +79,29 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
       return { users: usersList, groups: groupsList };
     }, [filteredSubjects, subjectTypeFilter]);
 
-    // Check if search is still pending (input is ahead of deferred value)
-    const isSearchPending = searchQuery !== deferredSearchQuery;
+    // Check if search is still pending (debounce timer is running)
+    const isSearchPending = isPending();
+
+    // Check if query meets minimum length
+    const meetsMinLength = searchQuery.trim().length >= 2;
 
     // Get filter-specific labels
-    const getEmptyLabel = () => {
+    const getStartTypingLabel = () => {
       switch (subjectTypeFilter) {
         case "user":
           return t({
-            id: "sharing.empty.noUsers",
-            message: "No users available",
+            id: "sharing.search.startTypingUsers",
+            message: "Start typing to search for users",
           });
         case "group":
           return t({
-            id: "sharing.empty.noGroups",
-            message: "No groups available",
+            id: "sharing.search.startTypingGroups",
+            message: "Start typing to search for groups",
           });
         default:
           return t({
-            id: "sharing.empty.noMembers",
-            message: "No users or groups available",
+            id: "sharing.search.startTyping",
+            message: "Start typing to search for users or groups",
           });
       }
     };
@@ -175,61 +146,65 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
       }
     };
 
-    // Loading state
-    if (isLoading) {
-      return (
-        <div className={`py-12 text-center ${className}`}>
-          <div className="mx-auto mb-4 size-8 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-          <p className="text-sm text-theme-fg-secondary">
-            {t({ id: "sharing.loading", message: "Loading..." })}
-          </p>
-        </div>
-      );
-    }
+    // Determine which content to show below the search input
+    const allGranted =
+      filteredSubjects.length === 0 &&
+      searchResults.length > 0 &&
+      !isLoading &&
+      !isSearching;
 
-    // Empty state (no subjects available for this filter)
-    if (unGrantedSubjects.length === 0 && availableSubjects.length === 0) {
-      return (
-        <div className={`py-8 text-center ${className}`}>
-          <p className="text-sm text-theme-fg-muted">{getEmptyLabel()}</p>
-        </div>
-      );
-    }
-
-    // All subjects already have grants
-    if (unGrantedSubjects.length === 0) {
-      return (
-        <div className={`py-8 text-center ${className}`}>
-          <p className="text-sm text-theme-fg-muted">{getAllGrantedLabel()}</p>
-        </div>
-      );
-    }
-
-    return (
-      <div className={className}>
-        {/* Search input */}
-        <div className="mb-3">
-          <div className="relative">
-            <Input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={getSearchPlaceholder()}
-              disabled={disabled}
-            />
-            {/* Show subtle loading indicator when search is pending */}
-            {isSearchPending && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <div className="size-4 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-              </div>
-            )}
+    // Render content based on state
+    const renderContent = () => {
+      // Query too short or empty - show start typing message
+      if (!meetsMinLength) {
+        return (
+          <div className="py-12 text-center">
+            <p className="text-sm text-theme-fg-muted">
+              {getStartTypingLabel()}
+            </p>
           </div>
-        </div>
+        );
+      }
 
-        {/* Results list */}
+      // Error state
+      if (searchError) {
+        return (
+          <div className="py-8 text-center">
+            <p className="text-sm text-red-600 dark:text-red-400">
+              {t({
+                id: "sharing.error.loadMembers",
+                message: "Failed to load users and groups",
+              })}
+            </p>
+          </div>
+        );
+      }
+
+      // All found subjects already have grants
+      if (allGranted) {
+        return (
+          <div className="py-8 text-center">
+            <p className="text-sm text-theme-fg-muted">
+              {getAllGrantedLabel()}
+            </p>
+          </div>
+        );
+      }
+
+      // Results list
+      return (
         <div className="max-h-64 overflow-y-auto rounded-lg border border-theme-border">
+          {/* Loading state */}
+          {(isLoading || isSearching) && filteredSubjects.length === 0 && (
+            <div className="py-8 text-center">
+              <p className="text-sm text-theme-fg-secondary">
+                {t({ id: "sharing.loading", message: "Loading..." })}
+              </p>
+            </div>
+          )}
+
           {/* Empty search results */}
-          {filteredSubjects.length === 0 && searchQuery.trim() && (
+          {filteredSubjects.length === 0 && !isLoading && !isSearching && (
             <div className="py-8 text-center">
               <p className="text-sm text-theme-fg-muted">
                 {t({
@@ -284,6 +259,33 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
             </>
           )}
         </div>
+      );
+    };
+
+    // Single return - Input is always the same element, preserving focus
+    return (
+      <div className={className}>
+        {/* Search input - always rendered to preserve focus */}
+        <div className="mb-3">
+          <div className="relative">
+            <Input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={getSearchPlaceholder()}
+              disabled={disabled}
+            />
+            {/* Show subtle loading indicator when search is pending or searching */}
+            {meetsMinLength && (isSearchPending || isSearching) && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="size-4 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Content area - varies based on state */}
+        {renderContent()}
       </div>
     );
   },

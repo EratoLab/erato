@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { useDebounce } from "use-debounce";
 
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { SearchIcon, CloseIcon } from "@/components/ui/icons";
@@ -18,23 +19,6 @@ interface SearchResult {
   context?: string;
 }
 
-// Simple debounce hook
-const useDebounce = (value: string, delay: number) => {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-};
-
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -46,8 +30,8 @@ export default function SearchPage() {
   // Get feature configurations
   const { autofocus: shouldAutofocus } = useChatInputFeature();
 
-  // Debounce search query
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  // Debounce search query using use-debounce library for consistency
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
 
   // Convert chat history to SearchResult format
   const allChats = useMemo(() => {
