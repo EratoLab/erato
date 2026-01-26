@@ -88,6 +88,46 @@ msgid "assistant.form.validation.prompt.tooShort"
 msgstr "System prompt must be at least 10 characters"
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.empty.owned_by_user"
+msgstr "You haven't created any assistants yet"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.empty.shared_with_user"
+msgstr "No assistants have been shared with you"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.filter.all"
+msgstr "All"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.filter.owned_by_user"
+msgstr "My Assistants"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.filter.shared_with_user"
+msgstr "Shared With Me"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.list.title.all"
+msgstr "All Assistants"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.list.title.owned_by_user"
+msgstr "My Assistants"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsListPage.tsx
+msgid "assistants.list.title.shared_with_user"
+msgstr "Shared With Me"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 #: src/pages/AssistantChatSpacePage.tsx
 msgid "branding.assistant_name"
@@ -855,6 +895,10 @@ msgstr "Assistant updated successfully!"
 msgid "Assistants"
 msgstr "Assistants"
 
+#: src/pages/AssistantsListPage.tsx
+msgid "Assistants that others share with you will appear here"
+msgstr "Assistants that others share with you will appear here"
+
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "Attach File"
 msgstr "Attach File"
@@ -1099,6 +1143,10 @@ msgstr "Failed to update assistant. Please try again."
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
 msgid "File"
 msgstr "File"
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Filter assistants"
+msgstr "Filter assistants"
 
 #: src/components/ui/Message/MessageContent.tsx
 msgid "Footnotes"
@@ -1467,10 +1515,6 @@ msgstr "You don't have permission to edit this assistant. Only the owner can mod
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You have reached or exceeded your budget limit of {formattedLimit}. Current spending: {formattedSpending}."
 msgstr "You have reached or exceeded your budget limit of {formattedLimit}. Current spending: {formattedSpending}."
-
-#: src/pages/AssistantsListPage.tsx
-msgid "Your Assistants"
-msgstr "Your Assistants"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Your conversations with this assistant"
