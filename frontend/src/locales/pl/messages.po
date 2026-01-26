@@ -699,21 +699,6 @@ msgstr "Oglądający"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.search.startTyping"
-msgstr "Zacznij pisać, aby wyszukać użytkowników lub grupy"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.search.startTypingGroups"
-msgstr "Zacznij pisać, aby wyszukać grupy"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.search.startTypingUsers"
-msgstr "Zacznij pisać, aby wyszukać użytkowników"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.searchPlaceholder"
 msgstr "Szukaj użytkowników i grup..."
 

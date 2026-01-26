@@ -699,21 +699,6 @@ msgstr "Lecteur"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.search.startTyping"
-msgstr "Commencez à taper pour rechercher des utilisateurs ou des groupes"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.search.startTypingGroups"
-msgstr "Commencez à taper pour rechercher des groupes"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.search.startTypingUsers"
-msgstr "Commencez à taper pour rechercher des utilisateurs"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.searchPlaceholder"
 msgstr "Rechercher des utilisateurs et groupes..."
 
