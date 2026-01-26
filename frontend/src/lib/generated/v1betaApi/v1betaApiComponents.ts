@@ -2082,7 +2082,8 @@ export type ListOrganizationGroupsQueryParams = {
   /**
    * Optional search query to filter groups by displayName.
    * Uses Microsoft Graph $search parameter with fuzzy, tokenized matching.
-   * When provided, only the first page of results is returned for performance.
+   * When provided (even if empty), only the first page of results is returned for performance.
+   * This optimizes search field implementations where typing starts with an empty query.
    */
   query?: null | undefined;
 };
@@ -2097,7 +2098,8 @@ export type ListOrganizationGroupsVariables = {
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches groups from the MS Graph API.
  * When is_involved=true, only returns groups the user is a member of.
- * When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
+ * When query parameter is provided (even if empty), returns only the first page for performance.
+ * Non-empty queries use $search for fuzzy matching.
  */
 export const fetchListOrganizationGroups = (
   variables: ListOrganizationGroupsVariables,
@@ -2121,7 +2123,8 @@ export const fetchListOrganizationGroups = (
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches groups from the MS Graph API.
  * When is_involved=true, only returns groups the user is a member of.
- * When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
+ * When query parameter is provided (even if empty), returns only the first page for performance.
+ * Non-empty queries use $search for fuzzy matching.
  */
 export function listOrganizationGroupsQuery(
   variables: ListOrganizationGroupsVariables,
@@ -2162,7 +2165,8 @@ export function listOrganizationGroupsQuery(
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches groups from the MS Graph API.
  * When is_involved=true, only returns groups the user is a member of.
- * When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
+ * When query parameter is provided (even if empty), returns only the first page for performance.
+ * Non-empty queries use $search for fuzzy matching.
  */
 export const useSuspenseListOrganizationGroups = <
   TData = Schemas.OrganizationGroupsResponse,
@@ -2193,7 +2197,8 @@ export const useSuspenseListOrganizationGroups = <
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches groups from the MS Graph API.
  * When is_involved=true, only returns groups the user is a member of.
- * When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
+ * When query parameter is provided (even if empty), returns only the first page for performance.
+ * Non-empty queries use $search for fuzzy matching.
  */
 export const useListOrganizationGroups = <
   TData = Schemas.OrganizationGroupsResponse,
@@ -2233,7 +2238,8 @@ export type ListOrganizationUsersQueryParams = {
   /**
    * Optional search query to filter users by displayName.
    * Uses Microsoft Graph $search parameter with fuzzy, tokenized matching.
-   * When provided, only the first page of results is returned for performance.
+   * When provided (even if empty), only the first page of results is returned for performance.
+   * This optimizes search field implementations where typing starts with an empty query.
    */
   query?: null | undefined;
 };
@@ -2248,7 +2254,8 @@ export type ListOrganizationUsersVariables = {
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches users from the MS Graph API.
  * When is_involved=true, only returns users who share at least one group with the requesting user.
- * When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
+ * When query parameter is provided (even if empty), returns only the first page for performance.
+ * Non-empty queries use $search for fuzzy matching.
  */
 export const fetchListOrganizationUsers = (
   variables: ListOrganizationUsersVariables,
@@ -2272,7 +2279,8 @@ export const fetchListOrganizationUsers = (
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches users from the MS Graph API.
  * When is_involved=true, only returns users who share at least one group with the requesting user.
- * When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
+ * When query parameter is provided (even if empty), returns only the first page for performance.
+ * Non-empty queries use $search for fuzzy matching.
  */
 export function listOrganizationUsersQuery(
   variables: ListOrganizationUsersVariables,
@@ -2313,7 +2321,8 @@ export function listOrganizationUsersQuery(
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches users from the MS Graph API.
  * When is_involved=true, only returns users who share at least one group with the requesting user.
- * When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
+ * When query parameter is provided (even if empty), returns only the first page for performance.
+ * Non-empty queries use $search for fuzzy matching.
  */
 export const useSuspenseListOrganizationUsers = <
   TData = Schemas.OrganizationUsersResponse,
@@ -2344,7 +2353,8 @@ export const useSuspenseListOrganizationUsers = <
  * If the Entra ID integration is not enabled, returns an empty list.
  * If enabled, fetches users from the MS Graph API.
  * When is_involved=true, only returns users who share at least one group with the requesting user.
- * When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
+ * When query parameter is provided (even if empty), returns only the first page for performance.
+ * Non-empty queries use $search for fuzzy matching.
  */
 export const useListOrganizationUsers = <
   TData = Schemas.OrganizationUsersResponse,

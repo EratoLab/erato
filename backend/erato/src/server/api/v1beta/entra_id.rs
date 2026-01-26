@@ -22,7 +22,8 @@ pub struct ListUsersQuery {
 
     /// Optional search query to filter users by displayName.
     /// Uses Microsoft Graph $search parameter with fuzzy, tokenized matching.
-    /// When provided, only the first page of results is returned for performance.
+    /// When provided (even if empty), only the first page of results is returned for performance.
+    /// This optimizes search field implementations where typing starts with an empty query.
     #[serde(default)]
     pub query: Option<String>,
 }
@@ -37,7 +38,8 @@ pub struct ListGroupsQuery {
 
     /// Optional search query to filter groups by displayName.
     /// Uses Microsoft Graph $search parameter with fuzzy, tokenized matching.
-    /// When provided, only the first page of results is returned for performance.
+    /// When provided (even if empty), only the first page of results is returned for performance.
+    /// This optimizes search field implementations where typing starts with an empty query.
     #[serde(default)]
     pub query: Option<String>,
 }
@@ -240,7 +242,8 @@ struct GroupMemberItem {
 /// If the Entra ID integration is not enabled, returns an empty list.
 /// If enabled, fetches users from the MS Graph API.
 /// When is_involved=true, only returns users who share at least one group with the requesting user.
-/// When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
+/// When query parameter is provided (even if empty), returns only the first page for performance.
+/// Non-empty queries use $search for fuzzy matching.
 #[utoipa::path(
     get,
     path = "/me/organization/users",
@@ -293,15 +296,37 @@ pub async fn list_organization_users(
     if let Some(ref search_query) = query.query {
         // Validate and sanitize query
         let trimmed = search_query.trim();
-        if trimmed.is_empty() {
-            // Empty query - fall through to full pagination
-        } else if trimmed.len() > 100 {
+        if trimmed.len() > 100 {
             tracing::warn!("Query too long: {} chars (max 100)", trimmed.len());
             return Err(StatusCode::BAD_REQUEST);
+        }
+
+        // When query parameter is provided (even if empty), only fetch first page for performance
+        // This is useful for search field implementations where typing starts with an empty query
+        let users_response = if trimmed.is_empty() {
+            // Empty query - fetch first page without search
+            tracing::info!("Fetching first page of users (empty query)");
+            client
+                .users()
+                .list_user()
+                .select(&["id", "displayName", "jobTitle", "mail"])
+                .top("999")
+                .send()
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to fetch users from Graph API: {:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?
+                .json::<UsersResponse>()
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to parse users response: {:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?
         } else {
-            // Search query provided - use $search and fetch only first page
+            // Non-empty query - use $search and fetch only first page
             tracing::info!("Searching users with query: {}", trimmed);
-            let users_response = client
+            client
                 .users()
                 .list_user()
                 .select(&["id", "displayName", "jobTitle", "mail"])
@@ -324,37 +349,37 @@ pub async fn list_organization_users(
                 .map_err(|e| {
                     tracing::error!("Failed to parse users search response: {:?}", e);
                     StatusCode::INTERNAL_SERVER_ERROR
-                })?;
+                })?
+        };
 
-            // Process the search results
-            for user_item in &users_response.value {
-                // Filter out the current user (no need to share with ourselves)
-                if let Some(ref current_user_id) = me_user.profile.organization_user_id
-                    && &user_item.id == current_user_id
-                {
-                    continue;
-                }
-
-                // If is_involved filter is enabled, only include users that are in the involved_user_ids set
-                if let Some(ref involved_ids) = involved_user_ids
-                    && !involved_ids.contains(&user_item.id)
-                {
-                    continue;
-                }
-
-                users.push(OrganizationUser {
-                    id: user_item.id.clone(),
-                    display_name: user_item.display_name.clone().unwrap_or_default(),
-                    job_title: user_item.job_title.clone(),
-                    mail: user_item.mail.clone(),
-                    subject_type_id: "organization_user_id".to_string(),
-                });
+        // Process the results
+        for user_item in &users_response.value {
+            // Filter out the current user (no need to share with ourselves)
+            if let Some(ref current_user_id) = me_user.profile.organization_user_id
+                && &user_item.id == current_user_id
+            {
+                continue;
             }
 
-            // Early return with search results
-            tracing::info!("Found {} users matching search query", users.len());
-            return Ok(Json(OrganizationUsersResponse { users }));
+            // If is_involved filter is enabled, only include users that are in the involved_user_ids set
+            if let Some(ref involved_ids) = involved_user_ids
+                && !involved_ids.contains(&user_item.id)
+            {
+                continue;
+            }
+
+            users.push(OrganizationUser {
+                id: user_item.id.clone(),
+                display_name: user_item.display_name.clone().unwrap_or_default(),
+                job_title: user_item.job_title.clone(),
+                mail: user_item.mail.clone(),
+                subject_type_id: "organization_user_id".to_string(),
+            });
         }
+
+        // Early return with results
+        tracing::info!("Found {} users (first page only)", users.len());
+        return Ok(Json(OrganizationUsersResponse { users }));
     }
 
     // No search query (or empty query) - use existing pagination to fetch all pages
@@ -419,7 +444,8 @@ pub async fn list_organization_users(
 /// If the Entra ID integration is not enabled, returns an empty list.
 /// If enabled, fetches groups from the MS Graph API.
 /// When is_involved=true, only returns groups the user is a member of.
-/// When query is provided, uses $search for fuzzy matching and returns only the first page for performance.
+/// When query parameter is provided (even if empty), returns only the first page for performance.
+/// Non-empty queries use $search for fuzzy matching.
 #[utoipa::path(
     get,
     path = "/me/organization/groups",
@@ -450,86 +476,122 @@ pub async fn list_organization_groups(
     let access_token = get_access_token(&me_user)?;
     let client = create_graph_client(access_token);
 
-    // Validate and sanitize query parameter
-    let sanitized_query = if let Some(ref q) = query.query {
-        let trimmed = q.trim();
-        if trimmed.is_empty() {
-            None
-        } else if trimmed.len() > 100 {
-            tracing::warn!("Query too long: {} chars (max 100)", trimmed.len());
-            return Err(StatusCode::BAD_REQUEST);
-        } else {
-            Some(trimmed.to_string())
-        }
-    } else {
-        None
-    };
-
     // Use the graph-rs-sdk's built-in pagination support
     // This automatically handles all @odata.nextLink pages
-    // When search query is provided, only fetch the first page for performance
+    // When query parameter is provided (even if empty), only fetch the first page for performance
     let mut groups = Vec::new();
 
-    if let Some(ref search_query) = sanitized_query {
-        // Search query provided - use $search and fetch only first page
-        let groups_response = if query.is_involved {
-            // Branch 1: Search within user's groups
-            tracing::info!("Searching user's groups with query: {}", search_query);
-            client
-                .me()
-                .transitive_member_of()
-                .as_group()
-                .select(&["id", "displayName"])
-                .header(
-                    HeaderName::from_static("consistencylevel"),
-                    HeaderValue::from_static("eventual"),
-                ) // Required for $search
-                .search(format!("\"displayName:{}\"", search_query))
-                // See https://learn.microsoft.com/en-us/graph/api/group-list?view=graph-rest-1.0&tabs=http#optional-query-parameters
-                // > The default and maximum page sizes are 100 and 999 group objects respectively
-                .top("999")
-                .send()
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to search user's groups from Graph API: {:?}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?
-                .json::<GroupsResponse>()
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to parse groups search response: {:?}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?
+    if let Some(ref q) = query.query {
+        // Validate query length
+        let trimmed = q.trim();
+        if trimmed.len() > 100 {
+            tracing::warn!("Query too long: {} chars (max 100)", trimmed.len());
+            return Err(StatusCode::BAD_REQUEST);
+        }
+
+        // When query parameter is provided (even if empty), only fetch first page for performance
+        // This is useful for search field implementations where typing starts with an empty query
+        let groups_response = if trimmed.is_empty() {
+            // Empty query - fetch first page without search
+            if query.is_involved {
+                tracing::info!("Fetching first page of user's groups (empty query)");
+                client
+                    .me()
+                    .transitive_member_of()
+                    .as_group()
+                    .select(&["id", "displayName"])
+                    .top("999")
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to fetch user's groups from Graph API: {:?}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?
+                    .json::<GroupsResponse>()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to parse groups response: {:?}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?
+            } else {
+                tracing::info!("Fetching first page of organization groups (empty query)");
+                client
+                    .groups()
+                    .list_group()
+                    .select(&["id", "displayName"])
+                    .top("999")
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to fetch groups from Graph API: {:?}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?
+                    .json::<GroupsResponse>()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to parse groups response: {:?}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?
+            }
         } else {
-            // Branch 2: Search all organization groups
-            tracing::info!("Searching organization groups with query: {}", search_query);
-            client
-                .groups()
-                .list_group()
-                .select(&["id", "displayName"])
-                .header(
-                    HeaderName::from_static("consistencylevel"),
-                    HeaderValue::from_static("eventual"),
-                ) // Required for $search
-                .search(format!("\"displayName:{}\"", search_query))
-                // See https://learn.microsoft.com/en-us/graph/api/group-list?view=graph-rest-1.0&tabs=http#optional-query-parameters
-                // > The default and maximum page sizes are 100 and 999 group objects respectively
-                .top("999")
-                .send()
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to search groups from Graph API: {:?}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?
-                .json::<GroupsResponse>()
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to parse groups search response: {:?}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?
+            // Non-empty query - use $search and fetch only first page
+            if query.is_involved {
+                tracing::info!("Searching user's groups with query: {}", trimmed);
+                client
+                    .me()
+                    .transitive_member_of()
+                    .as_group()
+                    .select(&["id", "displayName"])
+                    .header(
+                        HeaderName::from_static("consistencylevel"),
+                        HeaderValue::from_static("eventual"),
+                    ) // Required for $search
+                    .search(format!("\"displayName:{}\"", trimmed))
+                    // See https://learn.microsoft.com/en-us/graph/api/group-list?view=graph-rest-1.0&tabs=http#optional-query-parameters
+                    // > The default and maximum page sizes are 100 and 999 group objects respectively
+                    .top("999")
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to search user's groups from Graph API: {:?}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?
+                    .json::<GroupsResponse>()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to parse groups search response: {:?}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?
+            } else {
+                tracing::info!("Searching organization groups with query: {}", trimmed);
+                client
+                    .groups()
+                    .list_group()
+                    .select(&["id", "displayName"])
+                    .header(
+                        HeaderName::from_static("consistencylevel"),
+                        HeaderValue::from_static("eventual"),
+                    ) // Required for $search
+                    .search(format!("\"displayName:{}\"", trimmed))
+                    // See https://learn.microsoft.com/en-us/graph/api/group-list?view=graph-rest-1.0&tabs=http#optional-query-parameters
+                    // > The default and maximum page sizes are 100 and 999 group objects respectively
+                    .top("999")
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to search groups from Graph API: {:?}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?
+                    .json::<GroupsResponse>()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to parse groups search response: {:?}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?
+            }
         };
 
-        // Process the search results
+        // Process the results
         for group_item in &groups_response.value {
             groups.push(OrganizationGroup {
                 id: group_item.id.clone(),
@@ -538,8 +600,8 @@ pub async fn list_organization_groups(
             });
         }
 
-        // Early return with search results
-        tracing::info!("Found {} groups matching search query", groups.len());
+        // Early return with results
+        tracing::info!("Found {} groups (first page only)", groups.len());
         return Ok(Json(OrganizationGroupsResponse { groups }));
     }
 
