@@ -1852,7 +1852,8 @@
           "created_at",
           "updated_at",
           "is_message_in_active_thread",
-          "input_files_ids"
+          "input_files_ids",
+          "files"
         ],
         "properties": {
           "chat_id": {
@@ -1878,6 +1879,13 @@
           "feedback": {
             "$ref": "#/components/schemas/MessageFeedback",
             "description": "Optional feedback for this message"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileUploadItem"
+            },
+            "description": "Resolved file objects for all input_files_ids"
           },
           "id": {
             "type": "string",

@@ -27,6 +27,7 @@ interface StandardMessageListProps {
   onMessageAction: (action: MessageAction) => Promise<boolean>;
   onFilePreview?: (file: FileUploadItem) => void;
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
+  allFileDownloadUrls: Record<string, string>;
 }
 
 export const StandardMessageList: React.FC<StandardMessageListProps> = ({
@@ -43,6 +44,7 @@ export const StandardMessageList: React.FC<StandardMessageListProps> = ({
   onMessageAction,
   onFilePreview,
   onViewFeedback,
+  allFileDownloadUrls,
 }) => {
   return (
     <>
@@ -66,6 +68,7 @@ export const StandardMessageList: React.FC<StandardMessageListProps> = ({
             onFilePreview={onFilePreview}
             onViewFeedback={onViewFeedback}
             className={getMessageClassName(isNew)}
+            allFileDownloadUrls={allFileDownloadUrls}
           />
         );
       })}

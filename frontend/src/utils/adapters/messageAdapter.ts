@@ -5,6 +5,7 @@ import {
 
 import type {
   ChatMessage as ApiChatMessage,
+  FileUploadItem,
   MessageFeedback,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message, MessageError } from "@/types/chat";
@@ -19,6 +20,7 @@ export interface UiChatMessage extends Message {
   authorId: string;
   previous_message_id?: string;
   input_files_ids?: string[];
+  files?: FileUploadItem[];
   loading?: {
     state: "typing" | "thinking" | "done" | "error";
     context?: string;
@@ -53,6 +55,7 @@ export function mapApiMessageToUiMessage(
     is_message_in_active_thread: apiMessage.is_message_in_active_thread,
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     input_files_ids: apiMessage.input_files_ids || undefined,
+    files: apiMessage.files,
     previous_message_id:
       apiMessage.previous_message_id &&
       typeof apiMessage.previous_message_id === "string"

@@ -985,19 +985,13 @@ async fn resolve_file_pointers_in_generation_input(
 
                             match file_bytes_result {
                                 Ok(file_bytes) => {
-                                    // Use parser_core to extract text from the file
-                                    let file_bytes_for_parsing = file_bytes.clone();
-                                    let parse_result = tokio::task::spawn_blocking(move || {
-                                        parser_core::parse(&file_bytes_for_parsing).map(
-                                            |text_with_possible_escapes| {
-                                                remove_null_characters(&text_with_possible_escapes)
-                                            },
-                                        )
-                                    })
-                                    .await;
+                                    // Use the configured file processor to extract text from the file
+                                    let parse_result =
+                                        app_state.file_processor.parse_file(file_bytes).await;
 
                                     match parse_result {
-                                        Ok(Ok(text)) => {
+                                        Ok(text) => {
+                                            let text = remove_null_characters(&text);
                                             tracing::debug!(
                                                 "Successfully extracted text from file pointer {}: {} (text length: {})",
                                                 file.filename,
@@ -1012,7 +1006,7 @@ async fn resolve_file_pointers_in_generation_input(
                                             );
                                             ContentPart::Text(ContentPartText { text: content })
                                         }
-                                        Ok(Err(err)) => {
+                                        Err(err) => {
                                             tracing::warn!(
                                                 "Failed to parse file {}: {} - Error: {}, using placeholder text",
                                                 file.filename,
@@ -1023,20 +1017,6 @@ async fn resolve_file_pointers_in_generation_input(
                                                 &file.filename,
                                                 file_upload_id,
                                                 true,
-                                            );
-                                            ContentPart::Text(ContentPartText { text: content })
-                                        }
-                                        Err(join_err) => {
-                                            tracing::error!(
-                                                "Blocking task panicked while parsing file {}: {} - Error: {}, using placeholder text",
-                                                file.filename,
-                                                file_upload_id,
-                                                join_err
-                                            );
-                                            let content = format_file_error_message(
-                                                &file.filename,
-                                                file_upload_id,
-                                                false,
                                             );
                                             ContentPart::Text(ContentPartText { text: content })
                                         }

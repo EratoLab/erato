@@ -22,6 +22,8 @@ interface MessageContentProps {
   isStreaming?: boolean;
   showRaw?: boolean;
   onImageClick?: (image: UiImagePart) => void;
+  /** Map of file IDs to their download URLs for erato-file:// link resolution */
+  fileDownloadUrls?: Record<string, string>;
 }
 
 export const MessageContent = memo(function MessageContent({
@@ -29,6 +31,7 @@ export const MessageContent = memo(function MessageContent({
   isStreaming = false,
   showRaw = false,
   onImageClick,
+  fileDownloadUrls = {},
 }: MessageContentProps) {
   const { effectiveTheme } = useTheme();
   const isDarkMode = effectiveTheme === "dark";
@@ -41,6 +44,51 @@ export const MessageContent = memo(function MessageContent({
     isStreaming && !textContent.endsWith("\n")
       ? textContent + "▊"
       : textContent;
+
+  // URL transform function to handle erato-file:// protocol
+  const transformUrl = React.useCallback(
+    (url: string) => {
+      // eslint-disable-next-line lingui/no-unlocalized-strings
+      if (url.startsWith("erato-file://")) {
+        try {
+          // Parse the URL to extract file ID and page parameter
+          const urlObj = new URL(url);
+          const fileId =
+            urlObj.hostname || urlObj.pathname.replace(/^\/\//, "");
+          console.log({ fileId });
+          console.log({ fileDownloadUrls });
+
+          // Check for page parameter in both query string (?page=N) and hash fragment (#page=N)
+          let pageParam = urlObj.searchParams.get("page");
+          if (!pageParam && urlObj.hash) {
+            // Parse hash fragment for page parameter (e.g., #page=4)
+            const hashMatch = urlObj.hash.match(/^#page=(\d+)$/);
+            if (hashMatch) {
+              pageParam = hashMatch[1];
+            }
+          }
+
+          // Look up the download URL for this file
+          const downloadUrl = fileDownloadUrls[fileId];
+
+          if (downloadUrl) {
+            // Construct the final URL with the page parameter
+            return pageParam ? `${downloadUrl}#page=${pageParam}` : downloadUrl;
+          }
+
+          // If file not found, return a hash to prevent navigation
+          return "#file-not-found";
+        } catch (error) {
+          console.warn("Failed to parse erato-file:// URL:", url, error);
+          return "#invalid-url";
+        }
+      }
+
+      // Return unchanged URL for all other protocols
+      return url;
+    },
+    [fileDownloadUrls],
+  );
 
   // If showing raw, just show text
   if (showRaw) {
@@ -309,6 +357,7 @@ export const MessageContent = memo(function MessageContent({
         <Markdown
           remarkPlugins={[remarkGfm]}
           components={components}
+          urlTransform={transformUrl}
           // Handle incomplete markdown patterns gracefully
           skipHtml={false}
           unwrapDisallowed={false}

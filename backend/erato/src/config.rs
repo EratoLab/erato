@@ -938,13 +938,14 @@ impl Default for CachesConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct FileProcessorConfig {
-    /// Which file processor to use: "parser-core" or "kreuzberg"
+    /// File processor to use (currently only "kreuzberg" is supported)
+    /// parser-core has been removed as it was unmaintained and yanked
     #[serde(default = "default_processor")]
     pub processor: String,
 }
 
 fn default_processor() -> String {
-    "parser-core".to_string()
+    "kreuzberg".to_string()
 }
 
 impl Default for FileProcessorConfig {

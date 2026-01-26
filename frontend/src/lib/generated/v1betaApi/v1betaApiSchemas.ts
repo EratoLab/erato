@@ -217,6 +217,10 @@ export type ChatMessage = {
    */
   feedback?: MessageFeedback;
   /**
+   * Resolved file objects for all input_files_ids
+   */
+  files: FileUploadItem[];
+  /**
    * The unique ID of the message
    */
   id: string;
