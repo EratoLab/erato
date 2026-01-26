@@ -1,56 +1,65 @@
 # Customer Component Overrides
 
-This folder is for **local testing** of customer component overrides.
+This folder contains examples and a workspace for customer-specific component overrides.
 
-> **Note:** Files in this folder (except `.gitkeep` and `README.md`) are gitignored
-> and will not be committed to the repository.
+> **Full Documentation:** See the [Component Customization](../../site/content/docs/features/component_customization.mdx) guide for complete details.
 
-## How to Test Customer Overrides Locally
+## Folder Structure
 
-1. Create your custom component in this folder:
+```
+/src/customer/
+├── README.md              # This file (committed)
+├── examples/              # Example implementations (committed)
+│   └── FileSourceSelectorGrid.tsx.example
+└── components/            # Your custom components (gitignored)
+    └── .gitkeep
+```
 
-   ```
-   src/customer/
-     components/
-       FileSourceSelectorGrid.tsx   # Your custom implementation
-   ```
+- **`examples/`** - Reference implementations you can copy and modify
+- **`components/`** - Your working directory for custom components (gitignored)
 
-2. Update `src/config/componentRegistry.ts` to use your component:
+## Quick Start
 
-   ```typescript
-   import { FileSourceSelectorGrid } from "@/customer/components/FileSourceSelectorGrid";
-
-   export const componentRegistry: ComponentRegistry = {
-     FileSourceSelector: FileSourceSelectorGrid,
-   };
-   ```
-
-3. Run the dev server and test your changes.
-
-4. **Important:** Do not commit changes to `componentRegistry.ts` in the main repo.
-   The registry should always have `null` values in the main repo.
-
-## Example: Grid Buttons Layout
-
-See `examples/FileSourceSelectorGrid.tsx.example` for a sample implementation
-of a two-column button grid layout for the FileSourceSelector.
-
-To use it:
+### 1. Copy an Example
 
 ```bash
 cp src/customer/examples/FileSourceSelectorGrid.tsx.example \
    src/customer/components/FileSourceSelectorGrid.tsx
 ```
 
-Then update the registry as described above.
+### 2. Register Your Component
+
+Update `src/config/componentRegistry.ts`:
+
+```typescript
+// Add import at the top
+import { FileSourceSelectorGrid } from "@/customer/components/FileSourceSelectorGrid";
+
+// Set in the registry
+export const componentRegistry: ComponentRegistry = {
+  AssistantFileSourceSelector: FileSourceSelectorGrid, // Grid for assistant form
+  ChatFileSourceSelector: null, // Keep default dropdown for chat
+};
+```
+
+### 3. Test Locally
+
+Run the dev server and navigate to the assistant form to see your custom component.
 
 ## For Customer Forks
 
-In a customer fork, you would:
+In a customer fork:
 
-1. Create components in this folder (they won't conflict with upstream)
-2. Modify `src/config/componentRegistry.ts` to import your components
-3. When merging upstream, keep your version of `componentRegistry.ts`:
+1. Components in `components/` won't conflict with upstream (gitignored)
+2. Modify `componentRegistry.ts` to import your components
+3. When merging upstream, keep your version:
    ```bash
    git checkout --ours src/config/componentRegistry.ts
    ```
+
+## Available Override Points
+
+| Registry Key                  | Location       | Description                            |
+| ----------------------------- | -------------- | -------------------------------------- |
+| `AssistantFileSourceSelector` | Assistant form | File source selector for default files |
+| `ChatFileSourceSelector`      | Chat input     | File source selector for chat uploads  |

@@ -49,9 +49,8 @@ next-env.d.ts
 
 # Customer component overrides (for local testing)
 # See src/config/componentRegistry.ts for usage
-/src/customer/*
-!/src/customer/.gitkeep
-!/src/customer/README.md
+/src/customer/components/*
+!/src/customer/components/.gitkeep
 
 # Compiled translation files
 src/locales/**/*.ts

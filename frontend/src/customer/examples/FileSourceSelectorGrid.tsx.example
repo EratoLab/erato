@@ -1,0 +1,116 @@
+/**
+ * FileSourceSelectorGrid - Example Customer Override
+ *
+ * This is an example implementation of a two-column grid layout
+ * for the FileSourceSelector component.
+ *
+ * To use this:
+ * 1. Copy this file to: src/customer/components/FileSourceSelectorGrid.tsx
+ * 2. Update src/config/componentRegistry.ts to import and use it
+ *
+ * @example
+ * // In componentRegistry.ts:
+ * import { FileSourceSelectorGrid } from "@/customer/components/FileSourceSelectorGrid";
+ *
+ * export const componentRegistry: ComponentRegistry = {
+ *   AssistantFileSourceSelector: FileSourceSelectorGrid,
+ * };
+ */
+import { t } from "@lingui/core/macro";
+import { Cloud, Upload } from "iconoir-react";
+import { memo } from "react";
+
+import { FileUploadLoading } from "@/components/ui/FileUpload/FileUploadStates";
+
+import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
+
+/**
+ * Grid-based file source selector with two-column button layout.
+ *
+ * Displays file source options as buttons in a horizontal grid
+ * with icon on the left and text on the right.
+ */
+export const FileSourceSelectorGrid = memo<FileSourceSelectorProps>(
+  ({
+    availableProviders,
+    onSelectDisk,
+    onSelectCloud,
+    disabled = false,
+    isProcessing = false,
+    className = "",
+  }) => {
+    if (isProcessing) {
+      return <FileUploadLoading className={className} />;
+    }
+
+    const buttonBaseClasses =
+      "flex items-center justify-center gap-3 rounded-lg border border-theme-border bg-theme-bg-secondary px-6 py-4 text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50";
+
+    return (
+      <div className={`grid grid-cols-2 gap-4 ${className}`}>
+        {/* Upload from Computer button */}
+        <button
+          type="button"
+          onClick={onSelectDisk}
+          disabled={disabled}
+          className={buttonBaseClasses}
+          aria-label={t({
+            id: "fileSourceSelector.uploadFromComputer",
+            message: "Upload from Computer",
+          })}
+        >
+          <Upload className="size-5" />
+          <span>
+            {t({
+              id: "fileSourceSelector.gridUploadFiles",
+              message: "Upload files",
+            })}
+          </span>
+        </button>
+
+        {/* OneDrive/SharePoint button */}
+        {availableProviders.includes("sharepoint") && (
+          <button
+            type="button"
+            onClick={() => onSelectCloud("sharepoint")}
+            disabled={disabled}
+            className={buttonBaseClasses}
+            aria-label={t({
+              id: "fileSourceSelector.uploadFromOneDrive",
+              message: "Upload from OneDrive",
+            })}
+          >
+            <Cloud className="size-5" />
+            <span>
+              {t({
+                id: "fileSourceSelector.gridFromOneDrive",
+                message: "From OneDrive",
+              })}
+            </span>
+          </button>
+        )}
+
+        {/* Future: Google Drive button */}
+        {/* {availableProviders.includes("googledrive") && (
+          <button
+            type="button"
+            onClick={() => onSelectCloud("googledrive")}
+            disabled={disabled}
+            className={buttonBaseClasses}
+          >
+            <Cloud className="size-5" />
+            <span>
+              {t({
+                id: "fileSourceSelector.gridFromGoogleDrive",
+                message: "From Google Drive",
+              })}
+            </span>
+          </button>
+        )} */}
+      </div>
+    );
+  },
+);
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+FileSourceSelectorGrid.displayName = "FileSourceSelectorGrid";
