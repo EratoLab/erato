@@ -1,0 +1,211 @@
+# Component Customization
+
+Erato provides a component registry system that allows customer forks to override specific UI components without modifying core application code. This enables deep customization while maintaining easy upstream synchronization.
+
+## Overview
+
+The component registry pattern provides:
+
+- **Zero dead code** - Custom components only exist in customer forks
+- **Minimal merge conflicts** - Only one file (`componentRegistry.ts`) differs between forks
+- **Type-safe contracts** - TypeScript ensures custom components match expected props
+- **Granular control** - Override components in specific locations (e.g., assistant form vs. chat input)
+
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       Main Repository                        │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  componentRegistry.ts                                │    │
+│  │  ─────────────────────                               │    │
+│  │  AssistantFileSourceSelector: null  (use default)    │    │
+│  │  ChatFileSourceSelector: null       (use default)    │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                      Customer Fork                           │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  componentRegistry.ts                                │    │
+│  │  ─────────────────────                               │    │
+│  │  AssistantFileSourceSelector: FileSourceSelectorGrid │    │
+│  │  ChatFileSourceSelector: null       (use default)    │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                              │                               │
+│                              ▼                               │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  /src/customer/components/FileSourceSelectorGrid.tsx │    │
+│  │  (Custom implementation)                             │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Available Override Points
+
+| Registry Key | Location | Description |
+|--------------|----------|-------------|
+| `AssistantFileSourceSelector` | Assistant form | File source selector when adding default files to an assistant |
+| `ChatFileSourceSelector` | Chat input | File source selector when uploading files to a conversation |
+
+## Implementing a Custom Component
+
+### Step 1: Create Your Component
+
+Create your custom component in `/src/customer/components/`:
+
+```tsx
+// /src/customer/components/FileSourceSelectorGrid.tsx
+import { t } from "@lingui/core/macro";
+import { Cloud, Upload } from "iconoir-react";
+import { memo } from "react";
+
+import { FileUploadLoading } from "@/components/ui/FileUpload/FileUploadStates";
+
+import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
+
+export const FileSourceSelectorGrid = memo<FileSourceSelectorProps>(
+  ({
+    availableProviders,
+    onSelectDisk,
+    onSelectCloud,
+    disabled = false,
+    isProcessing = false,
+    className = "",
+  }) => {
+    if (isProcessing) {
+      return <FileUploadLoading className={className} />;
+    }
+
+    const buttonBaseClasses =
+      "flex items-center justify-center gap-3 rounded-lg border border-theme-border bg-theme-bg-secondary px-6 py-4 text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50";
+
+    return (
+      <div className={`grid grid-cols-2 gap-4 ${className}`}>
+        {/* Upload from Computer button */}
+        <button
+          type="button"
+          onClick={onSelectDisk}
+          disabled={disabled}
+          className={buttonBaseClasses}
+        >
+          <Upload className="size-5" />
+          <span>
+            {t({
+              id: "fileSourceSelector.gridUploadFiles",
+              message: "Upload files",
+            })}
+          </span>
+        </button>
+
+        {/* OneDrive/SharePoint button */}
+        {availableProviders.includes("sharepoint") && (
+          <button
+            type="button"
+            onClick={() => onSelectCloud("sharepoint")}
+            disabled={disabled}
+            className={buttonBaseClasses}
+          >
+            <Cloud className="size-5" />
+            <span>
+              {t({
+                id: "fileSourceSelector.gridFromOneDrive",
+                message: "From OneDrive",
+              })}
+            </span>
+          </button>
+        )}
+      </div>
+    );
+  },
+);
+
+FileSourceSelectorGrid.displayName = "FileSourceSelectorGrid";
+```
+
+### Step 2: Register Your Component
+
+Update `src/config/componentRegistry.ts` to use your component:
+
+```tsx
+import { FileSourceSelectorGrid } from "@/customer/components/FileSourceSelectorGrid";
+
+import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
+import type { ComponentType } from "react";
+
+export interface ComponentRegistry {
+  AssistantFileSourceSelector: ComponentType<FileSourceSelectorProps> | null;
+  ChatFileSourceSelector: ComponentType<FileSourceSelectorProps> | null;
+}
+
+export const componentRegistry: ComponentRegistry = {
+  AssistantFileSourceSelector: FileSourceSelectorGrid, // Use grid in assistant form
+  ChatFileSourceSelector: null, // Keep default dropdown in chat
+};
+```
+
+## Merge Strategy
+
+When pulling upstream changes into your fork:
+
+```bash
+# Fetch upstream changes
+git fetch upstream
+
+# Merge, keeping your registry file
+git merge upstream/main
+
+# If conflict in componentRegistry.ts, keep your version
+git checkout --ours src/config/componentRegistry.ts
+git add src/config/componentRegistry.ts
+git commit
+```
+
+## Directory Structure
+
+Customer forks should organize custom components in a dedicated folder:
+
+```
+/src/customer/
+├── components/
+│   ├── FileSourceSelectorGrid.tsx    # Custom file selector
+│   └── ...                           # Other custom components
+├── hooks/
+│   └── ...                           # Custom hooks if needed
+└── styles/
+    └── ...                           # Custom styles if needed
+```
+
+This folder structure ensures:
+- Clear separation from core code
+- No merge conflicts on customer-specific files
+- Easy identification of customizations
+
+## Type Safety
+
+Custom components must match the expected props interface. TypeScript will catch any mismatches at compile time:
+
+```tsx
+// The component must accept FileSourceSelectorProps
+export interface FileSourceSelectorProps {
+  availableProviders: CloudProvider[];
+  onSelectDisk: () => void;
+  onSelectCloud: (provider: CloudProvider) => void;
+  disabled?: boolean;
+  isProcessing?: boolean;
+  className?: string;
+}
+```
+
+## Best Practices
+
+1. **Use theme variables** - Use `theme-*` CSS classes to respect the customer's theme colors
+2. **Maintain accessibility** - Include proper ARIA labels and keyboard navigation
+3. **Handle all states** - Implement `isProcessing` and `disabled` states
+4. **Use i18n** - Wrap user-facing text in translation functions
+5. **Keep it focused** - Only override what's necessary; rely on defaults for everything else
+
+## See Also
+
+- [Theming](./theming) - Customize colors, logos, and branding
+- [Internationalization (i18n)](./internationalization_i18n) - Language support and custom translations

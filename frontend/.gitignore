@@ -47,6 +47,12 @@ next-env.d.ts
 /public/custom-theme/*
 !/public/custom-theme/.gitkeep
 
+# Customer component overrides (for local testing)
+# See src/config/componentRegistry.ts for usage
+/src/customer/*
+!/src/customer/.gitkeep
+!/src/customer/README.md
+
 # Compiled translation files
 src/locales/**/*.ts
 src/locales/**/*.json
