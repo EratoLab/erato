@@ -21,6 +21,10 @@ export interface FormFieldProps {
    */
   helpText?: string;
   /**
+   * Optional action element to display inline after the label (e.g., InfoTooltip)
+   */
+  labelAction?: React.ReactNode;
+  /**
    * The input or textarea element
    */
   children: React.ReactNode;
@@ -63,6 +67,7 @@ export const FormField: React.FC<FormFieldProps> = ({
   required = false,
   error,
   helpText,
+  labelAction,
   children,
   htmlFor,
   className,
@@ -73,12 +78,17 @@ export const FormField: React.FC<FormFieldProps> = ({
         htmlFor={htmlFor}
         className="mb-1.5 block text-sm font-medium text-theme-fg-primary"
       >
-        {label}
-        {required && (
-          <span className="ml-1 text-theme-error-fg" role="presentation">
-            *
+        <span className="inline-flex items-center gap-1.5">
+          <span>
+            {label}
+            {required && (
+              <span className="ml-1 text-theme-error-fg" role="presentation">
+                *
+              </span>
+            )}
           </span>
-        )}
+          {labelAction && <span>{labelAction}</span>}
+        </span>
       </label>
       {children}
       {helpText && !error && (

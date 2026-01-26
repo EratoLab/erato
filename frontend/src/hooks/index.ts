@@ -10,6 +10,9 @@ export * from "./chat";
 // File hooks
 export * from "./files";
 
+// i18n hooks
+export * from "./i18n";
+
 // Sharing hooks
 export * from "./sharing";
 

@@ -532,6 +532,11 @@ msgid "home.redirecting"
 msgstr "Przekierowanie do czatu..."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Controls/InfoTooltip.tsx
+msgid "infotooltip.aria.label"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.copy.aria"
 msgstr "Kopiuj wiadomość"
