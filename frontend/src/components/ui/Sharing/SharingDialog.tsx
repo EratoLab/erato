@@ -178,7 +178,7 @@ export function SharingDialog({
       title={_(
         msg({
           id: "sharing.dialog.title",
-          message: `Share ${resourceName}`,
+          message: `Share "${resourceName}"`,
         }),
       )}
     >
@@ -231,35 +231,38 @@ export function SharingDialog({
             existingGrants={grants ?? []}
             subjectTypeFilter={subjectTypeFilter}
           />
-          <Button
-            variant="primary"
-            onClick={() => {
-              void handleAdd();
-            }}
-            className="mt-3"
-            disabled={selectedSubjects.length === 0}
-          >
-            {t({ id: "sharing.addPeople.button", message: "Add" })}
-          </Button>
+          <div className="mt-3 flex justify-end">
+            <Button
+              variant="primary"
+              onClick={() => {
+                void handleAdd();
+              }}
+              disabled={selectedSubjects.length === 0}
+            >
+              {t({ id: "sharing.addPeople.button", message: "Add" })}
+            </Button>
+          </div>
         </div>
 
-        {/* Current access section */}
-        <div>
-          <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
-            {t({
-              id: "sharing.currentAccess.title",
-              message: "Current access",
-            })}
-          </h3>
-          <ShareGrantsList
-            grants={grants ?? []}
-            onRemove={(grantId: string) => {
-              void handleRemove(grantId);
-            }}
-            canManage={true}
-            isLoading={isLoadingGrants}
-          />
-        </div>
+        {/* Current access section - only show when there are grants or loading */}
+        {(isLoadingGrants || (grants && grants.length > 0)) && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
+              {t({
+                id: "sharing.currentAccess.title",
+                message: "Current access",
+              })}
+            </h3>
+            <ShareGrantsList
+              grants={grants ?? []}
+              onRemove={(grantId: string) => {
+                void handleRemove(grantId);
+              }}
+              canManage={true}
+              isLoading={isLoadingGrants}
+            />
+          </div>
+        )}
       </div>
     </ModalBase>
   );

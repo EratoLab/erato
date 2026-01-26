@@ -260,7 +260,7 @@ function MockSharingDialog({
     <ModalBase
       isOpen={isOpen}
       onClose={handleClose}
-      title={`Share ${resourceName}`}
+      title={`Share "${resourceName}"`}
     >
       <div className="space-y-5">
         {successMessage && <Alert type="success">{successMessage}</Alert>}
@@ -290,27 +290,31 @@ function MockSharingDialog({
             subjectTypeFilter={subjectTypeFilter}
           />
 
-          <Button
-            variant="primary"
-            onClick={() => void handleAdd()}
-            className="mt-3"
-            disabled={selectedSubjects.length === 0}
-          >
-            Add
-          </Button>
+          <div className="mt-3 flex justify-end">
+            <Button
+              variant="primary"
+              onClick={() => void handleAdd()}
+              disabled={selectedSubjects.length === 0}
+            >
+              Add
+            </Button>
+          </div>
         </div>
 
-        <div>
-          <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
-            Current access
-          </h3>
-          <ShareGrantsList
-            grants={grants}
-            onRemove={(id) => void handleRemove(id)}
-            canManage={true}
-            isLoading={showLoadingGrants}
-          />
-        </div>
+        {/* Current access section - only show when there are grants or loading */}
+        {(showLoadingGrants || grants.length > 0) && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
+              Current access
+            </h3>
+            <ShareGrantsList
+              grants={grants}
+              onRemove={(id) => void handleRemove(id)}
+              canManage={true}
+              isLoading={showLoadingGrants}
+            />
+          </div>
+        )}
       </div>
     </ModalBase>
   );

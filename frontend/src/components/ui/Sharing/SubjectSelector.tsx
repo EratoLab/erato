@@ -3,6 +3,7 @@ import { useLingui } from "@lingui/react";
 import { useMemo, useState, memo } from "react";
 import { useDebounce } from "use-debounce";
 
+import { Alert } from "@/components/ui/Feedback/Alert";
 import { Input } from "@/components/ui/Input/Input";
 import { useOrganizationMembersSearch } from "@/hooks/sharing";
 
@@ -169,14 +170,12 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
       // Error state
       if (searchError) {
         return (
-          <div className="py-8 text-center">
-            <p className="text-sm text-red-600 dark:text-red-400">
-              {t({
-                id: "sharing.error.loadMembers",
-                message: "Failed to load users and groups",
-              })}
-            </p>
-          </div>
+          <Alert type="error">
+            {t({
+              id: "sharing.error.loadMembers",
+              message: "Failed to load users and groups",
+            })}
+          </Alert>
         );
       }
 

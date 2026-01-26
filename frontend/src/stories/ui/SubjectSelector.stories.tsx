@@ -7,6 +7,7 @@
 
 import { useState, memo } from "react";
 
+import { Alert } from "@/components/ui/Feedback/Alert";
 import { Input } from "@/components/ui/Input/Input";
 
 import {
@@ -110,13 +111,7 @@ const SubjectSelectorView = memo<SubjectSelectorViewProps>(
       }
 
       if (showError) {
-        return (
-          <div className="py-8 text-center">
-            <p className="text-sm text-red-600 dark:text-red-400">
-              Failed to load users and groups
-            </p>
-          </div>
-        );
+        return <Alert type="error">Failed to load users and groups</Alert>;
       }
 
       return (
