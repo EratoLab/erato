@@ -33,6 +33,30 @@ const deepMergeBugPattern =
   /Object\.assign\(source\[key\], deepMerge\(\(target as any\)\[key\], source\[key\]\)\);/g;
 const deepMergeFix = `Object.assign(source[key], deepMerge((target && (target as any)[key]) || {}, source[key]));`;
 
+// --- Fix error status code handling in v1betaApiFetcher.ts ---
+const fetcherFile = path.join(targetDir, "v1betaApiFetcher.ts");
+// Pattern 1: Fix the ErrorWrapper type to add number type for status
+const errorWrapperPattern =
+  /export type ErrorWrapper<TError> =\s*\|\s*TError\s*\|\s*\{\s*status:\s*"unknown";\s*payload:\s*string\s*\};/s;
+const errorWrapperFix = `export type ErrorWrapper<TError> =
+  | TError
+  | { status: "unknown"; payload: string }
+  | { status: number; payload: string };`;
+
+// Pattern 2: Fix the error handling to preserve HTTP status codes
+const errorHandlingPattern =
+  /} catch \(e\) \{\s*error = \{\s*status: "unknown" as const,\s*payload:\s*e instanceof Error\s*\? `Unexpected error \(\$\{e\.message\}\)`\s*: "Unexpected error"\s*\};\s*\}/s;
+const errorHandlingFix = `} catch (e) {
+        // Always preserve the HTTP status code, even if we can't parse the response
+        error = {
+          status: response.status,
+          payload:
+              e instanceof Error
+                  ? \`Unexpected error (\${e.message})\`
+                  : "Unexpected error",
+        };
+      }`;
+
 async function patchVoidTypes(filePath) {
   try {
     const content = await fs.readFile(filePath, "utf8");
@@ -128,6 +152,41 @@ async function fixDeepMerge(filePath) {
   return false; // Indicate no change
 }
 
+async function fixFetcherErrorHandling(filePath) {
+  try {
+    let content = await fs.readFile(filePath, "utf8");
+    const relativeFilePath = path.relative(process.cwd(), filePath);
+    let changed = false;
+
+    // Fix ErrorWrapper type
+    if (errorWrapperPattern.test(content)) {
+      console.log(`Found ErrorWrapper type to fix in: ${relativeFilePath}`);
+      content = content.replace(errorWrapperPattern, errorWrapperFix);
+      changed = true;
+    }
+
+    // Fix error handling logic
+    if (errorHandlingPattern.test(content)) {
+      console.log(`Found error handling to fix in: ${relativeFilePath}`);
+      content = content.replace(errorHandlingPattern, errorHandlingFix);
+      changed = true;
+    }
+
+    if (changed) {
+      await fs.writeFile(filePath, content, "utf8");
+      console.log(`Fixed error handling in fetcher: ${relativeFilePath}`);
+      return true;
+    } else {
+      console.log(
+        `No fetcher error handling fixes needed in: ${relativeFilePath}`,
+      );
+    }
+  } catch (error) {
+    console.error(`Error fixing fetcher error handling in ${filePath}:`, error);
+  }
+  return false; // Indicate no change
+}
+
 async function run() {
   console.log(`Scanning ${targetDir} for post-processing...`);
   let changesMade = false;
@@ -157,6 +216,11 @@ async function run() {
 
     // Fix deepMerge function in utils file
     if (await fixDeepMerge(utilsFile)) {
+      changesMade = true;
+    }
+
+    // Fix error handling in fetcher file
+    if (await fixFetcherErrorHandling(fetcherFile)) {
       changesMade = true;
     }
 
