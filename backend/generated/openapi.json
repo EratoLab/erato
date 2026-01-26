@@ -1118,7 +1118,7 @@
           "entra_id"
         ],
         "summary": "List all groups in the organization.",
-        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches groups from the MS Graph API.\nWhen is_involved=true, only returns groups the user is a member of.\nWhen query is provided, uses $search for fuzzy matching and returns only the first page for performance.",
+        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches groups from the MS Graph API.\nWhen is_involved=true, only returns groups the user is a member of.\nWhen query parameter is provided (even if empty), returns only the first page for performance.\nNon-empty queries use $search for fuzzy matching.",
         "operationId": "list_organization_groups",
         "parameters": [
           {
@@ -1133,7 +1133,7 @@
           {
             "name": "query",
             "in": "query",
-            "description": "Optional search query to filter groups by displayName.\nUses Microsoft Graph $search parameter with fuzzy, tokenized matching.\nWhen provided, only the first page of results is returned for performance.",
+            "description": "Optional search query to filter groups by displayName.\nUses Microsoft Graph $search parameter with fuzzy, tokenized matching.\nWhen provided (even if empty), only the first page of results is returned for performance.\nThis optimizes search field implementations where typing starts with an empty query.",
             "required": false,
             "schema": {
               "type": [
@@ -1174,7 +1174,7 @@
           "entra_id"
         ],
         "summary": "List all users in the organization.",
-        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches users from the MS Graph API.\nWhen is_involved=true, only returns users who share at least one group with the requesting user.\nWhen query is provided, uses $search for fuzzy matching and returns only the first page for performance.",
+        "description": "If the Entra ID integration is not enabled, returns an empty list.\nIf enabled, fetches users from the MS Graph API.\nWhen is_involved=true, only returns users who share at least one group with the requesting user.\nWhen query parameter is provided (even if empty), returns only the first page for performance.\nNon-empty queries use $search for fuzzy matching.",
         "operationId": "list_organization_users",
         "parameters": [
           {
@@ -1189,7 +1189,7 @@
           {
             "name": "query",
             "in": "query",
-            "description": "Optional search query to filter users by displayName.\nUses Microsoft Graph $search parameter with fuzzy, tokenized matching.\nWhen provided, only the first page of results is returned for performance.",
+            "description": "Optional search query to filter users by displayName.\nUses Microsoft Graph $search parameter with fuzzy, tokenized matching.\nWhen provided (even if empty), only the first page of results is returned for performance.\nThis optimizes search field implementations where typing starts with an empty query.",
             "required": false,
             "schema": {
               "type": [
