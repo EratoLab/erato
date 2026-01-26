@@ -23,6 +23,34 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   useUploadFeature: vi.fn(() => ({ enabled: true })),
 }));
 
+// Mock FileCapabilitiesProvider
+vi.mock("@/providers/FileCapabilitiesProvider", () => ({
+  useFileCapabilitiesContext: vi.fn(() => ({
+    capabilities: [
+      {
+        id: "pdf",
+        extensions: ["pdf"],
+        mime_types: ["application/pdf"],
+        operations: ["extract_text"],
+      },
+      {
+        id: "image",
+        extensions: ["jpg", "jpeg", "png"],
+        mime_types: ["image/*"],
+        operations: ["analyze_image"],
+      },
+      {
+        id: "text",
+        extensions: ["txt"],
+        mime_types: ["text/plain"],
+        operations: ["extract_text"],
+      },
+    ],
+    isLoading: false,
+    error: null,
+  })),
+}));
+
 // Mock react-dropzone
 vi.mock("react-dropzone", () => {
   return {

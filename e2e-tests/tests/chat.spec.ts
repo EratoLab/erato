@@ -159,6 +159,110 @@ test(
   },
 );
 
+test(
+  "Uploading an unsupported file type shows an error and blocks upload",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    // Track network requests to verify no upload request is made
+    const uploadRequests: string[] = [];
+    await page.route("**/api/v1beta/me/files*", async (route) => {
+      uploadRequests.push(route.request().url());
+      await route.continue();
+    });
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+
+    // Start waiting for file chooser before clicking the button
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload Files" }).click();
+    const fileChooser = await fileChooserPromise;
+
+    // Create a test file with an unsupported extension (.zip)
+    // Using a Buffer to create an in-memory file
+    await fileChooser.setFiles({
+      name: "test-archive.zip",
+      mimeType: "application/zip",
+      buffer: Buffer.from("fake zip content for testing"),
+    });
+
+    // Use data-testid for robust error checking
+    await expect(page.getByTestId("file-upload-error")).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Verify the error message mentions the file cannot be processed
+    await expect(page.getByTestId("file-upload-error")).toContainText(
+      "cannot be processed",
+      { timeout: 10000 },
+    );
+
+    // Verify that the specific filename is mentioned
+    await expect(page.getByTestId("file-upload-error")).toContainText(
+      "test-archive.zip",
+      { timeout: 10000 },
+    );
+
+    // Verify that no upload request was made (file was blocked before upload)
+    expect(uploadRequests.length).toBe(0);
+
+    // Verify no file appears in the attachments
+    await expect(page.getByText("Attachments")).not.toBeVisible();
+  },
+);
+
+test(
+  "Uploading multiple files with some unsupported blocks all files",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    // Track network requests to verify no upload request is made
+    const uploadRequests: string[] = [];
+    await page.route("**/api/v1beta/me/files*", async (route) => {
+      uploadRequests.push(route.request().url());
+      await route.continue();
+    });
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+
+    // Start waiting for file chooser before clicking the button
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload Files" }).click();
+    const fileChooser = await fileChooserPromise;
+
+    // Upload multiple files: one valid PDF and one invalid ZIP
+    await fileChooser.setFiles([
+      {
+        name: "valid-document.pdf",
+        mimeType: "application/pdf",
+        buffer: Buffer.from("fake pdf content"),
+      },
+      {
+        name: "invalid-archive.zip",
+        mimeType: "application/zip",
+        buffer: Buffer.from("fake zip content"),
+      },
+    ]);
+
+    // Use data-testid for robust error checking
+    await expect(page.getByTestId("file-upload-error")).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Verify the error message mentions the invalid file
+    await expect(page.getByTestId("file-upload-error")).toContainText(
+      "invalid-archive.zip",
+      { timeout: 10000 },
+    );
+
+    // Verify that no upload request was made (all files blocked)
+    expect(uploadRequests.length).toBe(0);
+
+    // Verify no files appear in the attachments
+    await expect(page.getByText("Attachments")).not.toBeVisible();
+  },
+);
+
 // no-ci for right now, as sometimes the LLM doesn't accept that it has ability to analyze images
 test(
   "Can upload an image and get AI response about its contents",

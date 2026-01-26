@@ -7,12 +7,15 @@ import {
   type UploadFileVariables,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useUploadFeature } from "@/providers/FeatureConfigProvider";
+import { useFileCapabilitiesContext } from "@/providers/FileCapabilitiesProvider";
 import { createLogger } from "@/utils/debugLogger";
+import { validateFiles } from "@/utils/fileCapabilities";
 import { FileTypeUtil, FILE_TYPES } from "@/utils/fileTypes";
 
 import {
   UploadTooLargeError,
   UploadUnknownError,
+  UnsupportedFileTypeError,
   type UploadError,
   isUploadTooLarge,
 } from "./errors";
@@ -88,6 +91,10 @@ export function useFileDropzone({
     maxSizeFormatted,
   } = useUploadFeature();
 
+  // Get file capabilities for pre-upload validation
+  const { capabilities, isLoading: isLoadingCapabilities } =
+    useFileCapabilitiesContext();
+
   // Use the Zustand store for state management
   const {
     uploadedFiles,
@@ -144,6 +151,22 @@ export function useFileDropzone({
       try {
         setUploading(true);
         setError(null);
+
+        // Pre-validate files against capabilities (if loaded)
+        if (!isLoadingCapabilities && capabilities.length > 0) {
+          const { valid, invalid } = validateFiles(files, capabilities);
+
+          // If there are invalid files, throw error and don't upload ANY files
+          if (invalid.length > 0) {
+            throw new UnsupportedFileTypeError(invalid.map((f) => f.name));
+          }
+
+          // Only proceed with valid files
+          files = valid;
+        } else {
+          // Capabilities not loaded - log warning and allow upload (backend will validate)
+          logger.warn("File capabilities not loaded, skipping pre-validation");
+        }
 
         const filesToUpload = files.slice(0, multiple ? maxFiles : 1);
 
@@ -212,7 +235,8 @@ export function useFileDropzone({
         logger.error("Error uploading files (outer catch):", err);
         const isKnownError =
           err instanceof UploadTooLargeError ||
-          err instanceof UploadUnknownError;
+          err instanceof UploadUnknownError ||
+          err instanceof UnsupportedFileTypeError;
 
         setError(isKnownError ? err : new UploadUnknownError());
       } finally {
@@ -223,6 +247,8 @@ export function useFileDropzone({
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isUploading is handled separately
     [
+      capabilities,
+      isLoadingCapabilities,
       disabled,
       multiple,
       maxFiles,

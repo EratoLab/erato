@@ -1,6 +1,7 @@
 "use client";
 
 import { ChatProvider } from "./ChatProvider";
+import { FileCapabilitiesProvider } from "./FileCapabilitiesProvider";
 import { ProfileProvider } from "./ProfileProvider";
 
 import type { FileType } from "@/utils/fileTypes";
@@ -23,9 +24,11 @@ export function RootProvider({
 }: RootProviderProps) {
   return (
     <ProfileProvider>
-      <ChatProvider acceptedFileTypes={acceptedFileTypes}>
-        {children}
-      </ChatProvider>
+      <FileCapabilitiesProvider>
+        <ChatProvider acceptedFileTypes={acceptedFileTypes}>
+          {children}
+        </ChatProvider>
+      </FileCapabilitiesProvider>
     </ProfileProvider>
   );
 }

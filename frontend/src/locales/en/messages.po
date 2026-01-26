@@ -796,6 +796,11 @@ msgstr "File is too large. Maximum size: {maxSize}."
 msgid "upload.error.unknown"
 msgstr "An unknown error occurred during upload. Please reload the page and try again."
 
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
+msgid "upload.error.unsupportedFileType"
+msgstr "Unsupported file type(s): {filenames}"
+
 # ==============================
 # Unstable IDs
 # ==============================
@@ -1410,6 +1415,14 @@ msgstr "System theme"
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Test Locale Changes:"
 msgstr "Test Locale Changes:"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "The file \"{filename}\" cannot be processed by the AI and was not uploaded."
+msgstr "The file \"{filename}\" cannot be processed by the AI and was not uploaded."
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "The following files cannot be processed and were not uploaded: {filenames}"
+msgstr "The following files cannot be processed and were not uploaded: {filenames}"
 
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Thinking"

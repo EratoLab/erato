@@ -35,6 +35,24 @@ export class CloudLinkError extends Error {
 }
 
 /**
+ * Error for unsupported file types (no operations available)
+ */
+export class UnsupportedFileTypeError extends Error {
+  public readonly filenames: string[];
+
+  constructor(filenames: string | string[]) {
+    const filenameArray = Array.isArray(filenames) ? filenames : [filenames];
+    const message = i18n._("upload.error.unsupportedFileType", {
+      filenames: filenameArray.join(", "),
+    });
+    super(message);
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    this.name = "UnsupportedFileTypeError";
+    this.filenames = filenameArray;
+  }
+}
+
+/**
  * Checks if an error indicates a file upload was too large.
  *
  * This function handles two cases:
@@ -83,7 +101,17 @@ export function isUploadTooLarge(error: unknown): error is ApiUploadFileError {
   return false;
 }
 
+/**
+ * Checks if an error is an unsupported file type error
+ */
+export function isUnsupportedFileType(
+  error: unknown,
+): error is UnsupportedFileTypeError {
+  return error instanceof UnsupportedFileTypeError;
+}
+
 export type UploadError =
   | UploadTooLargeError
   | UploadUnknownError
-  | CloudLinkError;
+  | CloudLinkError
+  | UnsupportedFileTypeError;
