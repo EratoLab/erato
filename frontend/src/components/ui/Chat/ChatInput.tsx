@@ -6,6 +6,7 @@ import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import { useFileDropzone } from "@/hooks/files";
+import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { useChatContext } from "@/providers/ChatProvider";
 import {
@@ -292,6 +293,18 @@ export const ChatInput = ({
     attachedFiles,
   );
 
+  // Helper function to get the appropriate file error message
+  const getFileErrorMessage = useCallback(() => {
+    if (uploadError instanceof UnsupportedFileTypeError) {
+      const filename = uploadError.filenames[0];
+      const filenames = uploadError.filenames.join(", ");
+      return uploadError.filenames.length === 1
+        ? t`The file "${filename}" cannot be processed by the AI and was not uploaded.`
+        : t`The following files cannot be processed and were not uploaded: ${filenames}`;
+    }
+    return fileError;
+  }, [uploadError, fileError]);
+
   return (
     <form
       className={clsx("mx-auto mb-4 w-full sm:w-5/6 md:w-4/5", className)}
@@ -330,7 +343,7 @@ export const ChatInput = ({
           className="mb-2"
           data-testid="file-upload-error"
         >
-          {fileError}
+          {getFileErrorMessage()}
         </Alert>
       )}
 

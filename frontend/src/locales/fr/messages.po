@@ -796,6 +796,11 @@ msgstr "Le fichier est trop volumineux. Taille maximale : {maxSize}."
 msgid "upload.error.unknown"
 msgstr ""
 
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
+msgid "upload.error.unsupportedFileType"
+msgstr "Type(s) de fichier non pris en charge : {filenames}"
+
 # ==============================
 # Unstable IDs
 # ==============================
@@ -1410,6 +1415,14 @@ msgstr "Thème système"
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Test Locale Changes:"
 msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "The file \"{filename}\" cannot be processed by the AI and was not uploaded."
+msgstr "Le fichier \"{filename}\" ne peut pas être traité par l'IA et n'a pas été téléchargé."
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "The following files cannot be processed and were not uploaded: {filenames}"
+msgstr "Les fichiers suivants ne peuvent pas être traités et n'ont pas été téléchargés : {filenames}"
 
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Thinking"
