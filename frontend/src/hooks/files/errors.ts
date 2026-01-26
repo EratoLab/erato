@@ -50,12 +50,14 @@ export class CloudLinkError extends Error {
  */
 export function isUploadTooLarge(error: unknown): error is ApiUploadFileError {
   // Case 1: Check for a status property (numeric or string) equal to 413
+  // Note: The API fetcher returns status as a number (response.status), but we also
+  // check for string "413" for backwards compatibility
   if (
     typeof error === "object" &&
     error !== null &&
     "status" in error &&
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (error as any).status === "413"
+    ((error as any).status === 413 || (error as any).status === "413")
   ) {
     return true;
   }
