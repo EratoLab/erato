@@ -87,26 +87,6 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
     const meetsMinLength = searchQuery.trim().length >= 2;
 
     // Get filter-specific labels
-    const getStartTypingLabel = () => {
-      switch (subjectTypeFilter) {
-        case "user":
-          return t({
-            id: "sharing.search.startTypingUsers",
-            message: "Start typing to search for users",
-          });
-        case "group":
-          return t({
-            id: "sharing.search.startTypingGroups",
-            message: "Start typing to search for groups",
-          });
-        default:
-          return t({
-            id: "sharing.search.startTyping",
-            message: "Start typing to search for users or groups",
-          });
-      }
-    };
-
     const getAllGrantedLabel = () => {
       switch (subjectTypeFilter) {
         case "user":
@@ -156,15 +136,9 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
 
     // Render content based on state
     const renderContent = () => {
-      // Query too short or empty - show start typing message
+      // Query too short or empty - don't show anything (placeholder is self-explanatory)
       if (!meetsMinLength) {
-        return (
-          <div className="py-12 text-center">
-            <p className="text-sm text-theme-fg-muted">
-              {getStartTypingLabel()}
-            </p>
-          </div>
-        );
+        return null;
       }
 
       // Error state

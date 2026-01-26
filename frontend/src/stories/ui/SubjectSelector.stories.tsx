@@ -88,26 +88,9 @@ const SubjectSelectorView = memo<SubjectSelectorViewProps>(
       }
     };
 
-    const getStartTypingLabel = () => {
-      switch (subjectTypeFilter) {
-        case "user":
-          return "Start typing to search for users";
-        case "group":
-          return "Start typing to search for groups";
-        default:
-          return "Start typing to search for users or groups";
-      }
-    };
-
     const renderContent = () => {
       if (showStartTyping) {
-        return (
-          <div className="py-12 text-center">
-            <p className="text-sm text-theme-fg-muted">
-              {getStartTypingLabel()}
-            </p>
-          </div>
-        );
+        return null;
       }
 
       if (showError) {
@@ -246,12 +229,12 @@ const meta = {
 Sub-component for selecting users and groups to share with.
 
 **Features:**
-- Search input with typeahead
+- Search input with self-explanatory placeholder
 - Type badges (User/Group)
 - Multi-select with checkboxes
 - Grouped display (Users first, then Groups)
 - Loading states during search
-- Empty states for no query and no results
+- Empty states for no results
 
 **Note:** These stories use a presentational wrapper with mock data.
 The real component uses \`useOrganizationMembersSearch\` for backend search.
@@ -292,9 +275,9 @@ function SubjectSelectorStory(
 }
 
 /**
- * Initial empty state - prompts user to start typing
+ * Initial empty state - placeholder is self-explanatory
  */
-export const StartTyping: Story = {
+export const EmptyState: Story = {
   render: (args) => <SubjectSelectorStory {...args} />,
   args: {
     members: [],

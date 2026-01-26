@@ -76,17 +76,6 @@ const MockSubjectSelector = memo<MockSubjectSelectorProps>(
       }
     };
 
-    const getStartTypingLabel = () => {
-      switch (subjectTypeFilter) {
-        case "user":
-          return "Start typing to search for users";
-        case "group":
-          return "Start typing to search for groups";
-        default:
-          return "Start typing to search for users or groups";
-      }
-    };
-
     return (
       <div>
         <div className="mb-3">
@@ -98,13 +87,7 @@ const MockSubjectSelector = memo<MockSubjectSelectorProps>(
           />
         </div>
 
-        {!meetsMinLength ? (
-          <div className="py-12 text-center">
-            <p className="text-sm text-theme-fg-muted">
-              {getStartTypingLabel()}
-            </p>
-          </div>
-        ) : filtered.length === 0 ? (
+        {!meetsMinLength ? null : filtered.length === 0 ? (
           <div className="max-h-64 overflow-y-auto rounded-lg border border-theme-border">
             <div className="py-8 text-center">
               <p className="text-sm text-theme-fg-muted">No matches found</p>
