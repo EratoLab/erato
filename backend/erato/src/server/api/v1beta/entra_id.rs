@@ -25,6 +25,7 @@ pub struct ListUsersQuery {
     /// When provided (even if empty), only the first page of results is returned for performance.
     /// This optimizes search field implementations where typing starts with an empty query.
     #[serde(default)]
+    #[param(nullable = false)]
     pub query: Option<String>,
 }
 
@@ -41,6 +42,7 @@ pub struct ListGroupsQuery {
     /// When provided (even if empty), only the first page of results is returned for performance.
     /// This optimizes search field implementations where typing starts with an empty query.
     #[serde(default)]
+    #[param(nullable = false)]
     pub query: Option<String>,
 }
 

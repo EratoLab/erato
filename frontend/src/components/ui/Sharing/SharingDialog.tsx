@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Controls/Button";
 import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
-import { useShareGrants, useOrganizationMembers } from "@/hooks/sharing";
+import { useShareGrants } from "@/hooks/sharing";
 
 import { ShareGrantsList } from "./ShareGrantsList";
 import { SubjectSelector } from "./SubjectSelector";
@@ -45,13 +45,6 @@ export function SharingDialog({
   // State for subject type toggle (users vs groups)
   const [subjectTypeFilter, setSubjectTypeFilter] =
     useState<SubjectTypeFilter>("user");
-
-  // Fetch organization members (users and groups)
-  const {
-    members: availableSubjects,
-    isLoading: isLoadingMembers,
-    error: membersError,
-  } = useOrganizationMembers();
 
   // Fetch and manage share grants
   const {
@@ -185,7 +178,7 @@ export function SharingDialog({
       title={_(
         msg({
           id: "sharing.dialog.title",
-          message: `Share ${resourceName}`,
+          message: `Share "${resourceName}"`,
         }),
       )}
     >
@@ -193,14 +186,6 @@ export function SharingDialog({
         {/* Success/Error alerts */}
         {successMessage ? <Alert type="success">{successMessage}</Alert> : null}
         {errorMessage ? <Alert type="error">{errorMessage}</Alert> : null}
-        {membersError ? (
-          <Alert type="error">
-            {t({
-              id: "sharing.error.loadMembers",
-              message: "Failed to load users and groups",
-            })}
-          </Alert>
-        ) : null}
         {grantsError ? (
           <Alert type="error">
             {t({
@@ -241,43 +226,43 @@ export function SharingDialog({
           </div>
 
           <SubjectSelector
-            availableSubjects={availableSubjects}
             selectedIds={selectedIds}
             onToggleSubject={handleToggleSubject}
-            isLoading={isLoadingMembers}
             existingGrants={grants ?? []}
             subjectTypeFilter={subjectTypeFilter}
           />
-          <Button
-            variant="primary"
-            onClick={() => {
-              void handleAdd();
-            }}
-            className="mt-3"
-            disabled={selectedSubjects.length === 0}
-          >
-            {t({ id: "sharing.addPeople.button", message: "Add" })}
-          </Button>
+          <div className="mt-3 flex justify-end">
+            <Button
+              variant="primary"
+              onClick={() => {
+                void handleAdd();
+              }}
+              disabled={selectedSubjects.length === 0}
+            >
+              {t({ id: "sharing.addPeople.button", message: "Add" })}
+            </Button>
+          </div>
         </div>
 
-        {/* Current access section */}
-        <div>
-          <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
-            {t({
-              id: "sharing.currentAccess.title",
-              message: "Current access",
-            })}
-          </h3>
-          <ShareGrantsList
-            grants={grants ?? []}
-            onRemove={(grantId: string) => {
-              void handleRemove(grantId);
-            }}
-            canManage={true}
-            isLoading={isLoadingGrants}
-            availableSubjects={availableSubjects}
-          />
-        </div>
+        {/* Current access section - only show when there are grants or loading */}
+        {(isLoadingGrants || (grants && grants.length > 0)) && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
+              {t({
+                id: "sharing.currentAccess.title",
+                message: "Current access",
+              })}
+            </h3>
+            <ShareGrantsList
+              grants={grants ?? []}
+              onRemove={(grantId: string) => {
+                void handleRemove(grantId);
+              }}
+              canManage={true}
+              isLoading={isLoadingGrants}
+            />
+          </div>
+        )}
       </div>
     </ModalBase>
   );

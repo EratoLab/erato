@@ -1136,10 +1136,7 @@
             "description": "Optional search query to filter groups by displayName.\nUses Microsoft Graph $search parameter with fuzzy, tokenized matching.\nWhen provided (even if empty), only the first page of results is returned for performance.\nThis optimizes search field implementations where typing starts with an empty query.",
             "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -1192,10 +1189,7 @@
             "description": "Optional search query to filter users by displayName.\nUses Microsoft Graph $search parameter with fuzzy, tokenized matching.\nWhen provided (even if empty), only the first page of results is returned for performance.\nThis optimizes search field implementations where typing starts with an empty query.",
             "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],

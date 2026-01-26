@@ -628,23 +628,8 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.empty.noGroups"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.empty.noMembers"
-msgstr "No hay usuarios o grupos disponibles"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.empty.noResults"
 msgstr "No se encontraron coincidencias"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Sharing/SubjectSelector.tsx
-msgid "sharing.empty.noUsers"
-msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Sharing/SharingDialog.tsx
@@ -652,7 +637,7 @@ msgid "sharing.error.loadGrants"
 msgstr "No se pudo cargar el acceso actual"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Sharing/SharingDialog.tsx
+#: src/components/ui/Sharing/SubjectSelector.tsx
 msgid "sharing.error.loadMembers"
 msgstr "No se pudieron cargar los usuarios y grupos"
 

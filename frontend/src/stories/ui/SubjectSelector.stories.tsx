@@ -1,26 +1,226 @@
 /**
  * SubjectSelector Component Stories
  *
- * Stories for the subject (user/group) selector component used in sharing
+ * Stories showing the visual states of the subject selector component.
+ * Uses a presentational wrapper to display static UI states without backend.
  */
 
-import { useState } from "react";
+import { useState, memo } from "react";
 
-import { SubjectSelector } from "@/components/ui/Sharing/SubjectSelector";
+import { Alert } from "@/components/ui/Feedback/Alert";
+import { Input } from "@/components/ui/Input/Input";
 
 import {
   mockOrganizationMembers,
+  mockShareGrants,
   mockUsers,
   mockGroups,
-  mockShareGrants,
 } from "./sharing/mockSharingData";
 
+import type { ShareGrant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { OrganizationMember } from "@/types/sharing";
 import type { Meta, StoryObj } from "@storybook/react";
 
+/**
+ * Presentational SubjectSelector for Storybook
+ *
+ * This is a simplified version that accepts data as props for visual testing.
+ * The real SubjectSelector component fetches data via useOrganizationMembersSearch.
+ */
+interface SubjectSelectorViewProps {
+  members: OrganizationMember[];
+  selectedIds: string[];
+  onToggleSubject: (subject: OrganizationMember) => void;
+  disabled?: boolean;
+  className?: string;
+  existingGrants?: ShareGrant[];
+  subjectTypeFilter?: "all" | "user" | "group";
+  isLoading?: boolean;
+  isSearching?: boolean;
+  searchQuery?: string;
+  showStartTyping?: boolean;
+  showError?: boolean;
+}
+
+const SubjectSelectorView = memo<SubjectSelectorViewProps>(
+  ({
+    members,
+    selectedIds,
+    onToggleSubject,
+    disabled = false,
+    className = "",
+    existingGrants = [],
+    subjectTypeFilter = "all",
+    isLoading = false,
+    isSearching = false,
+    searchQuery = "",
+    showStartTyping = false,
+    showError = false,
+  }) => {
+    const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
+
+    // Filter out already granted subjects
+    const grantedSubjectIds = new Set(
+      existingGrants.map((grant) => grant.subject_id),
+    );
+    const filteredSubjects = members.filter(
+      (subject) => !grantedSubjectIds.has(subject.id),
+    );
+
+    // Group by type
+    const users =
+      subjectTypeFilter === "group"
+        ? []
+        : filteredSubjects.filter((s) => s.type === "user");
+    const groups =
+      subjectTypeFilter === "user"
+        ? []
+        : filteredSubjects.filter((s) => s.type === "group");
+
+    const getSearchPlaceholder = () => {
+      switch (subjectTypeFilter) {
+        case "user":
+          return "Search users...";
+        case "group":
+          return "Search groups...";
+        default:
+          return "Search users and groups...";
+      }
+    };
+
+    const renderContent = () => {
+      if (showStartTyping) {
+        return null;
+      }
+
+      if (showError) {
+        return <Alert type="error">Failed to load users and groups</Alert>;
+      }
+
+      return (
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-theme-border">
+          {(isLoading || isSearching) && filteredSubjects.length === 0 && (
+            <div className="py-8 text-center">
+              <p className="text-sm text-theme-fg-secondary">Loading...</p>
+            </div>
+          )}
+
+          {filteredSubjects.length === 0 && !isLoading && !isSearching && (
+            <div className="py-8 text-center">
+              <p className="text-sm text-theme-fg-muted">No matches found</p>
+            </div>
+          )}
+
+          {users.length > 0 && (
+            <>
+              {subjectTypeFilter === "all" && (
+                <div className="bg-theme-bg-secondary px-4 py-2 text-xs font-medium uppercase tracking-wider text-theme-fg-muted">
+                  Users
+                </div>
+              )}
+              <div className="divide-y divide-theme-border">
+                {users.map((user) => (
+                  <SubjectRow
+                    key={user.id}
+                    subject={user}
+                    isSelected={selectedIds.includes(user.id)}
+                    onToggle={onToggleSubject}
+                    disabled={disabled}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {groups.length > 0 && (
+            <>
+              {subjectTypeFilter === "all" && (
+                <div className="bg-theme-bg-secondary px-4 py-2 text-xs font-medium uppercase tracking-wider text-theme-fg-muted">
+                  Groups
+                </div>
+              )}
+              <div className="divide-y divide-theme-border">
+                {groups.map((group) => (
+                  <SubjectRow
+                    key={group.id}
+                    subject={group}
+                    isSelected={selectedIds.includes(group.id)}
+                    onToggle={onToggleSubject}
+                    disabled={disabled}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <div className={className}>
+        <div className="mb-3">
+          <div className="relative">
+            <Input
+              type="search"
+              value={localSearchQuery}
+              onChange={(e) => setLocalSearchQuery(e.target.value)}
+              placeholder={getSearchPlaceholder()}
+              disabled={disabled}
+            />
+            {isSearching && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="size-4 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
+              </div>
+            )}
+          </div>
+        </div>
+        {renderContent()}
+      </div>
+    );
+  },
+);
+SubjectSelectorView.displayName = "SubjectSelectorView";
+
+// Row component
+interface SubjectRowProps {
+  subject: OrganizationMember;
+  isSelected: boolean;
+  onToggle: (subject: OrganizationMember) => void;
+  disabled: boolean;
+}
+
+const SubjectRow = memo<SubjectRowProps>(
+  ({ subject, isSelected, onToggle, disabled }) => {
+    return (
+      <div className="theme-transition flex items-center gap-3 px-4 py-3 hover:bg-theme-bg-hover">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggle(subject)}
+          disabled={disabled}
+          className="size-4 rounded border-theme-border text-theme-fg-accent focus:ring-theme-focus disabled:cursor-not-allowed"
+          aria-label={`Select ${subject.display_name}`}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-medium text-theme-fg-primary">
+              {subject.display_name}
+            </span>
+            <span className="shrink-0 rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
+              {subject.type === "user" ? "User" : "Group"}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  },
+);
+SubjectRow.displayName = "SubjectRow";
+
+// Story metadata
 const meta = {
   title: "UI/Sharing/SubjectSelector",
-  component: SubjectSelector,
+  component: SubjectSelectorView,
   parameters: {
     layout: "padded",
     docs: {
@@ -29,37 +229,33 @@ const meta = {
 Sub-component for selecting users and groups to share with.
 
 **Features:**
-- Searchable list with fuzzy filtering
+- Search input with self-explanatory placeholder
 - Type badges (User/Group)
 - Multi-select with checkboxes
 - Grouped display (Users first, then Groups)
-- Loading skeleton states
-- Empty states for no results and no members
+- Loading states during search
+- Empty states for no results
+
+**Note:** These stories use a presentational wrapper with mock data.
+The real component uses \`useOrganizationMembersSearch\` for backend search.
         `,
       },
     },
   },
   tags: ["autodocs"],
-  argTypes: {
-    isLoading: {
-      control: "boolean",
-      description: "Show loading skeleton",
-    },
-    disabled: {
-      control: "boolean",
-      description: "Disable selection",
-    },
-  },
-} satisfies Meta<typeof SubjectSelector>;
+} satisfies Meta<typeof SubjectSelectorView>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// Wrapper to handle selection state
+// Interactive wrapper
 function SubjectSelectorStory(
-  args: React.ComponentProps<typeof SubjectSelector>,
+  args: React.ComponentProps<typeof SubjectSelectorView>,
 ) {
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- storybook args may be undefined
+    args.selectedIds || [],
+  );
 
   const handleToggle = (subject: OrganizationMember) => {
     setSelectedIds((prev) =>
@@ -70,7 +266,7 @@ function SubjectSelectorStory(
   };
 
   return (
-    <SubjectSelector
+    <SubjectSelectorView
       {...args}
       selectedIds={selectedIds}
       onToggleSubject={handleToggle}
@@ -79,86 +275,110 @@ function SubjectSelectorStory(
 }
 
 /**
- * Default selector with users and groups
+ * Initial empty state - placeholder is self-explanatory
  */
-export const Default: Story = {
+export const EmptyState: Story = {
   render: (args) => <SubjectSelectorStory {...args} />,
   args: {
-    availableSubjects: mockOrganizationMembers,
+    members: [],
     selectedIds: [],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
-    disabled: false,
+    onToggleSubject: () => {},
+    showStartTyping: true,
   },
 };
 
 /**
- * With some pre-selected subjects
- */
-export const WithSelection: Story = {
-  render: (args) => <SubjectSelectorStory {...args} />,
-  args: {
-    availableSubjects: mockOrganizationMembers,
-    selectedIds: ["user-001", "group-001"],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
-    disabled: false,
-  },
-};
-
-/**
- * Loading state with skeleton
+ * Loading state while searching
  */
 export const Loading: Story = {
   render: (args) => <SubjectSelectorStory {...args} />,
   args: {
-    availableSubjects: [],
+    members: [],
     selectedIds: [],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: true,
-    disabled: false,
+    onToggleSubject: () => {},
+    isSearching: true,
+    searchQuery: "alice",
   },
 };
 
 /**
- * Empty state - no members available
+ * Error state when search fails
  */
-export const Empty: Story = {
+export const Error: Story = {
   render: (args) => <SubjectSelectorStory {...args} />,
   args: {
-    availableSubjects: [],
+    members: [],
     selectedIds: [],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
-    disabled: false,
+    onToggleSubject: () => {},
+    showError: true,
+    searchQuery: "test",
   },
 };
 
 /**
- * Only users (no groups)
+ * No results found
+ */
+export const NoResults: Story = {
+  render: (args) => <SubjectSelectorStory {...args} />,
+  args: {
+    members: [],
+    selectedIds: [],
+    onToggleSubject: () => {},
+    searchQuery: "xyz",
+  },
+};
+
+/**
+ * With search results - all types
+ */
+export const WithResults: Story = {
+  render: (args) => <SubjectSelectorStory {...args} />,
+  args: {
+    members: mockOrganizationMembers,
+    selectedIds: [],
+    onToggleSubject: () => {},
+    searchQuery: "a",
+  },
+};
+
+/**
+ * Users only filter
  */
 export const UsersOnly: Story = {
   render: (args) => <SubjectSelectorStory {...args} />,
   args: {
-    availableSubjects: mockUsers,
+    members: mockUsers,
     selectedIds: [],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
-    disabled: false,
+    onToggleSubject: () => {},
+    subjectTypeFilter: "user",
+    searchQuery: "a",
   },
 };
 
 /**
- * Only groups (no users)
+ * Groups only filter
  */
 export const GroupsOnly: Story = {
   render: (args) => <SubjectSelectorStory {...args} />,
   args: {
-    availableSubjects: mockGroups,
+    members: mockGroups,
     selectedIds: [],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
-    disabled: false,
+    onToggleSubject: () => {},
+    subjectTypeFilter: "group",
+    searchQuery: "team",
+  },
+};
+
+/**
+ * With selections
+ */
+export const WithSelections: Story = {
+  render: (args) => <SubjectSelectorStory {...args} />,
+  args: {
+    members: mockOrganizationMembers,
+    selectedIds: ["user-001", "group-002"],
+    onToggleSubject: () => {},
+    searchQuery: "a",
   },
 };
 
@@ -168,109 +388,24 @@ export const GroupsOnly: Story = {
 export const Disabled: Story = {
   render: (args) => <SubjectSelectorStory {...args} />,
   args: {
-    availableSubjects: mockOrganizationMembers,
+    members: mockOrganizationMembers,
     selectedIds: ["user-001"],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
+    onToggleSubject: () => {},
     disabled: true,
+    searchQuery: "a",
   },
 };
 
 /**
- * Large list with many members
- */
-export const LargeList: Story = {
-  render: (args) => <SubjectSelectorStory {...args} />,
-  args: {
-    availableSubjects: [
-      ...mockOrganizationMembers,
-      // Add more mock users to demonstrate scrolling
-      ...Array.from({ length: 20 }, (_, i) => ({
-        id: `user-${100 + i}`,
-        display_name: `User ${100 + i}`,
-        subject_type_id: "organization_user_id" as const,
-        type: "user" as const,
-      })),
-    ],
-    selectedIds: [],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
-    disabled: false,
-  },
-};
-
-/**
- * With existing grants (filtered out)
- * Shows that already-granted subjects are filtered from the list
+ * With existing grants filtered out
  */
 export const WithExistingGrants: Story = {
   render: (args) => <SubjectSelectorStory {...args} />,
   args: {
-    availableSubjects: mockOrganizationMembers,
+    members: mockOrganizationMembers,
     selectedIds: [],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
-    disabled: false,
+    onToggleSubject: () => {},
     existingGrants: mockShareGrants,
-  },
-};
-
-/**
- * All subjects already granted (empty state)
- */
-export const AllGranted: Story = {
-  render: (args) => <SubjectSelectorStory {...args} />,
-  args: {
-    availableSubjects: mockOrganizationMembers,
-    selectedIds: [],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
-    disabled: false,
-    existingGrants: mockOrganizationMembers.map((member, i) => ({
-      id: `grant-${i}`,
-      resource_type: "assistant",
-      resource_id: "assistant-123",
-      subject_type:
-        member.type === "user"
-          ? ("user" as const)
-          : ("organization_group" as const),
-      subject_id_type: member.subject_type_id,
-      subject_id: member.id,
-      role: "viewer" as const,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })),
-  },
-};
-
-/**
- * Filtered to show only users (with subjectTypeFilter prop)
- * Uses the new filter prop to show only users from the full list
- */
-export const FilteredUsersOnly: Story = {
-  render: (args) => <SubjectSelectorStory {...args} />,
-  args: {
-    availableSubjects: mockOrganizationMembers,
-    selectedIds: [],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
-    disabled: false,
-    subjectTypeFilter: "user",
-  },
-};
-
-/**
- * Filtered to show only groups (with subjectTypeFilter prop)
- * Uses the new filter prop to show only groups from the full list
- */
-export const FilteredGroupsOnly: Story = {
-  render: (args) => <SubjectSelectorStory {...args} />,
-  args: {
-    availableSubjects: mockOrganizationMembers,
-    selectedIds: [],
-    onToggleSubject: (subject) => console.log("Toggled:", subject),
-    isLoading: false,
-    disabled: false,
-    subjectTypeFilter: "group",
+    searchQuery: "a",
   },
 };

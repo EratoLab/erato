@@ -1,76 +1,176 @@
 /**
  * SharingDialog Component Stories
  *
- * Stories for the complete sharing dialog
- *
- * Note: Since SharingDialog uses React Query hooks internally, we provide
- * mock implementations using a standalone component version for Storybook.
+ * Stories showing the visual states of the sharing dialog.
+ * Uses mock data and a presentational implementation for Storybook.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, memo } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { Input } from "@/components/ui/Input/Input";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { ShareGrantsList } from "@/components/ui/Sharing/ShareGrantsList";
-import { SubjectSelector } from "@/components/ui/Sharing/SubjectSelector";
 import { ShareIcon } from "@/components/ui/icons";
 
 import {
-  mockOrganizationMembers,
   mockShareGrants,
+  mockUsers,
+  mockGroups,
 } from "./sharing/mockSharingData";
 
 import type { ShareGrant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { OrganizationMember } from "@/types/sharing";
 import type { Meta, StoryObj } from "@storybook/react";
 
-const meta = {
-  title: "UI/Sharing/SharingDialog",
-  component: MockSharingDialog,
-  parameters: {
-    layout: "centered",
-    docs: {
-      description: {
-        component: `
-Complete dialog for managing resource sharing.
+/**
+ * Presentational SubjectSelector for stories
+ * Accepts data as props instead of using hooks
+ */
+interface MockSubjectSelectorProps {
+  members: OrganizationMember[];
+  selectedIds: string[];
+  onToggleSubject: (subject: OrganizationMember) => void;
+  existingGrants?: ShareGrant[];
+  subjectTypeFilter?: "all" | "user" | "group";
+}
 
-**Features:**
-- Modal with overlay and focus trap
-- Subject selector with search
-- Current grants list
-- Add and remove functionality
-- Success/error message handling
-- Loading states
-- Resource-agnostic design (works for assistants, chats, etc.)
+const MockSubjectSelector = memo<MockSubjectSelectorProps>(
+  ({
+    members,
+    selectedIds,
+    onToggleSubject,
+    existingGrants = [],
+    subjectTypeFilter = "all",
+  }) => {
+    const [searchQuery, setSearchQuery] = useState("");
 
-**Note:** These stories use mock data and a standalone implementation.
-In production, the SharingDialog component uses real API calls via
-the \`useShareGrants\` and \`useOrganizationMembers\` hooks.
-        `,
-      },
-      story: {
-        inline: false,
-        iframeHeight: 700,
-      },
-    },
+    // Filter by search and existing grants
+    const grantedIds = new Set(existingGrants.map((g) => g.subject_id));
+    const filtered = members.filter((m) => {
+      if (grantedIds.has(m.id)) return false;
+      if (
+        searchQuery &&
+        !m.display_name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+        return false;
+      if (subjectTypeFilter !== "all" && m.type !== subjectTypeFilter)
+        return false;
+      return true;
+    });
+
+    const users = filtered.filter((m) => m.type === "user");
+    const groups = filtered.filter((m) => m.type === "group");
+    const meetsMinLength = searchQuery.trim().length >= 2;
+
+    const getPlaceholder = () => {
+      switch (subjectTypeFilter) {
+        case "user":
+          return "Search users...";
+        case "group":
+          return "Search groups...";
+        default:
+          return "Search users and groups...";
+      }
+    };
+
+    return (
+      <div>
+        <div className="mb-3">
+          <Input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={getPlaceholder()}
+          />
+        </div>
+
+        {!meetsMinLength ? null : filtered.length === 0 ? (
+          <div className="max-h-64 overflow-y-auto rounded-lg border border-theme-border">
+            <div className="py-8 text-center">
+              <p className="text-sm text-theme-fg-muted">No matches found</p>
+            </div>
+          </div>
+        ) : (
+          <div className="max-h-64 overflow-y-auto rounded-lg border border-theme-border">
+            {users.length > 0 && (
+              <>
+                {subjectTypeFilter === "all" && (
+                  <div className="bg-theme-bg-secondary px-4 py-2 text-xs font-medium uppercase tracking-wider text-theme-fg-muted">
+                    Users
+                  </div>
+                )}
+                <div className="divide-y divide-theme-border">
+                  {users.map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-theme-bg-hover"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(user.id)}
+                        onChange={() => onToggleSubject(user)}
+                        className="size-4 rounded border-theme-border"
+                      />
+                      <span className="font-medium text-theme-fg-primary">
+                        {user.display_name}
+                      </span>
+                      <span className="rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
+                        User
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {groups.length > 0 && (
+              <>
+                {subjectTypeFilter === "all" && (
+                  <div className="bg-theme-bg-secondary px-4 py-2 text-xs font-medium uppercase tracking-wider text-theme-fg-muted">
+                    Groups
+                  </div>
+                )}
+                <div className="divide-y divide-theme-border">
+                  {groups.map((group) => (
+                    <div
+                      key={group.id}
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-theme-bg-hover"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(group.id)}
+                        onChange={() => onToggleSubject(group)}
+                        className="size-4 rounded border-theme-border"
+                      />
+                      <span className="font-medium text-theme-fg-primary">
+                        {group.display_name}
+                      </span>
+                      <span className="rounded-full bg-theme-bg-secondary px-2 py-0.5 text-xs text-theme-fg-secondary">
+                        Group
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
   },
-  tags: ["autodocs"],
-} satisfies Meta<typeof MockSharingDialog>;
+);
+MockSubjectSelector.displayName = "MockSubjectSelector";
 
-export default meta;
-type Story = StoryObj<typeof meta>;
-
-// Mock dialog implementation for Storybook
+/**
+ * Mock SharingDialog for Storybook
+ */
 interface MockSharingDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  resourceType: "assistant";
-  resourceId: string;
   resourceName: string;
   initialGrants?: ShareGrant[];
-  initialMembers?: OrganizationMember[];
-  showLoadingMembers?: boolean;
   showLoadingGrants?: boolean;
 }
 
@@ -79,36 +179,31 @@ function MockSharingDialog({
   onClose,
   resourceName,
   initialGrants = mockShareGrants,
-  initialMembers = mockOrganizationMembers,
-  showLoadingMembers = false,
   showLoadingGrants = false,
 }: MockSharingDialogProps) {
   const [selectedSubjects, setSelectedSubjects] = useState<
     OrganizationMember[]
   >([]);
   const [grants, setGrants] = useState<ShareGrant[]>(initialGrants);
-  const [successMessage, setSuccessMessage] = useState<string>("");
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [subjectTypeFilter, setSubjectTypeFilter] = useState<"user" | "group">(
+    "user",
+  );
 
   const selectedIds = selectedSubjects.map((s) => s.id);
 
-  const handleToggleSubject = useCallback((subject: OrganizationMember) => {
-    setSelectedSubjects((prev) => {
-      const isSelected = prev.some((s) => s.id === subject.id);
-      if (isSelected) {
-        return prev.filter((s) => s.id !== subject.id);
-      }
-      return [...prev, subject];
-    });
+  const handleToggle = useCallback((subject: OrganizationMember) => {
+    setSelectedSubjects((prev) =>
+      prev.some((s) => s.id === subject.id)
+        ? prev.filter((s) => s.id !== subject.id)
+        : [...prev, subject],
+    );
   }, []);
 
   const handleAdd = useCallback(async () => {
     if (selectedSubjects.length === 0) return;
+    await new Promise((r) => setTimeout(r, 300));
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    // Add new grants
     const newGrants: ShareGrant[] = selectedSubjects.map((subject) => ({
       id: `grant-${Date.now()}-${subject.id}`,
       resource_type: "assistant",
@@ -128,9 +223,7 @@ function MockSharingDialog({
   }, [selectedSubjects]);
 
   const handleRemove = useCallback(async (grantId: string) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
+    await new Promise((r) => setTimeout(r, 300));
     setGrants((prev) => prev.filter((g) => g.id !== grantId));
     setSuccessMessage("Access removed successfully");
     setTimeout(() => setSuccessMessage(""), 3000);
@@ -139,67 +232,114 @@ function MockSharingDialog({
   const handleClose = useCallback(() => {
     setSelectedSubjects([]);
     setSuccessMessage("");
-    setErrorMessage("");
+    setSubjectTypeFilter("user");
     onClose();
   }, [onClose]);
+
+  // Get members based on filter
+  const members = subjectTypeFilter === "user" ? mockUsers : mockGroups;
 
   return (
     <ModalBase
       isOpen={isOpen}
       onClose={handleClose}
-      title={`Share ${resourceName}`}
+      title={`Share "${resourceName}"`}
     >
       <div className="space-y-5">
         {successMessage && <Alert type="success">{successMessage}</Alert>}
-        {errorMessage && <Alert type="error">{errorMessage}</Alert>}
 
         <div>
           <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
             Add people
           </h3>
-          <SubjectSelector
-            availableSubjects={initialMembers}
+
+          <div className="mb-3">
+            <SegmentedControl
+              options={[
+                { value: "user" as const, label: "Users" },
+                { value: "group" as const, label: "Groups" },
+              ]}
+              value={subjectTypeFilter}
+              onChange={setSubjectTypeFilter}
+              aria-label="Filter by users or groups"
+            />
+          </div>
+
+          <MockSubjectSelector
+            members={members}
             selectedIds={selectedIds}
-            onToggleSubject={handleToggleSubject}
-            isLoading={showLoadingMembers}
+            onToggleSubject={handleToggle}
+            existingGrants={grants}
+            subjectTypeFilter={subjectTypeFilter}
           />
-          <Button
-            variant="primary"
-            onClick={() => {
-              void handleAdd();
-            }}
-            className="mt-3"
-            disabled={selectedSubjects.length === 0}
-          >
-            Add
-          </Button>
+
+          <div className="mt-3 flex justify-end">
+            <Button
+              variant="primary"
+              onClick={() => void handleAdd()}
+              disabled={selectedSubjects.length === 0}
+            >
+              Add
+            </Button>
+          </div>
         </div>
 
-        <div>
-          <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
-            Current access
-          </h3>
-          <ShareGrantsList
-            grants={grants}
-            onRemove={(grantId: string) => {
-              void handleRemove(grantId);
-            }}
-            canManage={true}
-            isLoading={showLoadingGrants}
-            availableSubjects={initialMembers}
-          />
-        </div>
+        {/* Current access section - only show when there are grants or loading */}
+        {(showLoadingGrants || grants.length > 0) && (
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-theme-fg-primary">
+              Current access
+            </h3>
+            <ShareGrantsList
+              grants={grants}
+              onRemove={(id) => void handleRemove(id)}
+              canManage={true}
+              isLoading={showLoadingGrants}
+            />
+          </div>
+        )}
       </div>
     </ModalBase>
   );
 }
 
-// Wrapper to handle open/close state
-function SharingDialogStory(
+// Story metadata
+const meta = {
+  title: "UI/Sharing/SharingDialog",
+  component: MockSharingDialog,
+  parameters: {
+    layout: "centered",
+    docs: {
+      description: {
+        component: `
+Complete dialog for managing resource sharing.
+
+**Features:**
+- Modal with overlay and focus trap
+- Subject selector with search
+- User/Group filter toggle
+- Current grants list
+- Add and remove functionality
+- Success/error messages
+
+**Note:** These stories use mock data. The real component uses
+\`useShareGrants\` and backend search via \`useOrganizationMembersSearch\`.
+        `,
+      },
+      story: { inline: false, iframeHeight: 700 },
+    },
+  },
+  tags: ["autodocs"],
+} satisfies Meta<typeof MockSharingDialog>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+// Wrapper for button trigger
+function DialogWithTrigger(
   args: React.ComponentProps<typeof MockSharingDialog>,
 ) {
   const [isOpen, setIsOpen] = useState(false);
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-theme-bg-secondary p-8">
       <Button
@@ -209,7 +349,6 @@ function SharingDialogStory(
       >
         Open Sharing Dialog
       </Button>
-
       <MockSharingDialog
         {...args}
         isOpen={isOpen}
@@ -220,150 +359,65 @@ function SharingDialogStory(
 }
 
 /**
- * Default sharing dialog for an assistant
- *
- * Note: This uses mock data. In production, the dialog fetches real data
- * from the backend via hooks.
+ * Default - click button to open dialog
  */
 export const Default: Story = {
-  render: (args) => <SharingDialogStory {...args} />,
+  render: (args) => <DialogWithTrigger {...args} />,
   args: {
     isOpen: false,
-    onClose: () => console.log("Close dialog"),
-    resourceType: "assistant",
-    resourceId: "assistant-123",
+    onClose: () => {},
     resourceName: "My Research Assistant",
   },
 };
 
 /**
- * Dialog already open
- *
- * Useful for testing the dialog contents without clicking the button.
+ * Already open with grants
  */
 export const AlreadyOpen: Story = {
   render: (args) => <MockSharingDialog {...args} />,
   args: {
     isOpen: true,
-    onClose: () => console.log("Close dialog"),
-    resourceType: "assistant",
-    resourceId: "assistant-123",
+    onClose: () => {},
     resourceName: "Customer Support Assistant",
     initialGrants: mockShareGrants,
-    initialMembers: mockOrganizationMembers,
   },
 };
 
 /**
- * Long resource name
- *
- * Tests how the dialog handles lengthy assistant names.
- */
-export const LongResourceName: Story = {
-  render: (args) => <SharingDialogStory {...args} />,
-  args: {
-    isOpen: false,
-    onClose: () => console.log("Close dialog"),
-    resourceType: "assistant",
-    resourceId: "assistant-456",
-    resourceName:
-      "Advanced Data Analysis and Visualization Assistant with Multiple Capabilities",
-  },
-};
-
-/**
- * Dialog with empty grants (no one has access yet)
+ * Empty grants - no one has access yet
  */
 export const EmptyGrants: Story = {
   render: (args) => <MockSharingDialog {...args} />,
   args: {
     isOpen: true,
-    onClose: () => console.log("Close dialog"),
-    resourceType: "assistant",
-    resourceId: "assistant-456",
+    onClose: () => {},
     resourceName: "New Assistant",
     initialGrants: [],
-    initialMembers: mockOrganizationMembers,
   },
 };
 
 /**
- * Loading states
+ * Loading grants state
  */
-export const LoadingMembers: Story = {
-  render: (args) => <MockSharingDialog {...args} />,
-  args: {
-    isOpen: true,
-    onClose: () => console.log("Close dialog"),
-    resourceType: "assistant",
-    resourceId: "assistant-789",
-    resourceName: "Loading Demo",
-    initialGrants: mockShareGrants,
-    showLoadingMembers: true,
-  },
-};
-
 export const LoadingGrants: Story = {
   render: (args) => <MockSharingDialog {...args} />,
   args: {
     isOpen: true,
-    onClose: () => console.log("Close dialog"),
-    resourceType: "assistant",
-    resourceId: "assistant-789",
+    onClose: () => {},
     resourceName: "Loading Demo",
-    initialMembers: mockOrganizationMembers,
     showLoadingGrants: true,
   },
 };
 
-// Component for InteractiveDemo story
-function InteractiveDemoComponent(
-  args: React.ComponentProps<typeof MockSharingDialog>,
-) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-theme-fg-secondary">
-        Click the button below to open the sharing dialog and try:
-      </p>
-      <ul className="list-inside list-disc space-y-1 text-sm text-theme-fg-muted">
-        <li>Searching for users and groups</li>
-        <li>Selecting multiple subjects</li>
-        <li>Adding them to the access list</li>
-        <li>Removing existing grants (with confirmation)</li>
-      </ul>
-      <Button
-        variant="primary"
-        icon={<ShareIcon className="size-4" />}
-        onClick={() => setIsOpen(true)}
-      >
-        Open Sharing Dialog
-      </Button>
-      <MockSharingDialog
-        {...args}
-        isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
-      />
-    </div>
-  );
-}
-
 /**
- * Interactive demo
- *
- * Try opening the dialog and interacting with it. The dialog will show
- * mock data for users, groups, and existing grants.
+ * Long resource name
  */
-export const InteractiveDemo: Story = {
-  render: (args) => <InteractiveDemoComponent {...args} />,
+export const LongResourceName: Story = {
+  render: (args) => <DialogWithTrigger {...args} />,
   args: {
     isOpen: false,
-    onClose: () => console.log("Close dialog"),
-    resourceType: "assistant",
-    resourceId: "assistant-789",
-    resourceName: "Interactive Demo Assistant",
-    initialGrants: mockShareGrants.slice(0, 1), // Start with one grant
-    initialMembers: mockOrganizationMembers,
+    onClose: () => {},
+    resourceName:
+      "Advanced Data Analysis and Visualization Assistant with Multiple Capabilities",
   },
 };

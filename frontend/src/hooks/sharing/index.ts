@@ -6,3 +6,4 @@
 
 export * from "./useShareGrants";
 export * from "./useOrganizationMembers";
+export * from "./useOrganizationMembersSearch";
