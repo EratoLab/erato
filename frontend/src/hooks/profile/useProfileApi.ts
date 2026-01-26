@@ -4,7 +4,7 @@
  * Uses the generated API hooks to fetch and manage user profile data
  * while adding application-specific logic.
  */
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 
 import { useProfile as useProfileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
@@ -21,13 +21,27 @@ export function useProfileApi() {
     {},
     {
       retry: false,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: "always",
     },
   );
 
   const refreshProfile = useCallback(async () => {
     await refetch();
   }, [refetch]);
+
+  // Handle session expiry by reloading the page when we get a 401/403 error
+  // This will trigger a redirect to the login page
+  useEffect(() => {
+    if (error) {
+      console.error("Profile fetch error:", error);
+      const errorObj = error as { status?: number | string };
+      const status = errorObj.status;
+      if (status === 401 || status === 403) {
+        console.log("Session expired, reloading page to redirect to login");
+        window.location.reload();
+      }
+    }
+  }, [error]);
 
   return {
     profile,
