@@ -23,7 +23,7 @@ pub struct FileCapability {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FileOperation {
-    /// Extract text content from the file (via parser-core or OCR)
+    /// Extract text content from the file (via Kreuzberg or OCR)
     ExtractText,
 
     /// Analyze image using model's image understanding capabilities
@@ -91,7 +91,7 @@ impl FileCapability {
     }
 }
 
-/// Builds the list of available file capabilities based on parser-core and model capabilities
+/// Builds the list of available file capabilities based on the file processor and model capabilities
 pub fn get_file_capabilities(supports_image_understanding: bool) -> Vec<FileCapability> {
     // Build the image capability based on model support
     let image_capability = if supports_image_understanding {
@@ -130,7 +130,7 @@ pub fn get_file_capabilities(supports_image_understanding: bool) -> Vec<FileCapa
     };
 
     vec![
-        // Word documents - parser-core supports these
+        // Word documents - supported by Kreuzberg
         FileCapability::new(
             "word",
             vec!["doc".to_string(), "docx".to_string()],
@@ -141,14 +141,14 @@ pub fn get_file_capabilities(supports_image_understanding: bool) -> Vec<FileCapa
             ],
             vec![FileOperation::ExtractText],
         ),
-        // PDF documents - parser-core supports these
+        // PDF documents - supported by Kreuzberg
         FileCapability::new(
             "pdf",
             vec!["pdf".to_string()],
             vec!["application/pdf".to_string()],
             vec![FileOperation::ExtractText],
         ),
-        // Excel spreadsheets - parser-core supports these
+        // Excel spreadsheets - supported by Kreuzberg
         FileCapability::new(
             "excel",
             vec!["xls".to_string(), "xlsx".to_string()],
@@ -158,7 +158,7 @@ pub fn get_file_capabilities(supports_image_understanding: bool) -> Vec<FileCapa
             ],
             vec![FileOperation::ExtractText],
         ),
-        // PowerPoint presentations - parser-core supports these
+        // PowerPoint presentations - supported by Kreuzberg
         FileCapability::new(
             "powerpoint",
             vec!["ppt".to_string(), "pptx".to_string()],
@@ -169,7 +169,7 @@ pub fn get_file_capabilities(supports_image_understanding: bool) -> Vec<FileCapa
             ],
             vec![FileOperation::ExtractText],
         ),
-        // Plain text files - parser-core supports these
+        // Plain text files - supported by Kreuzberg
         FileCapability::new(
             "text",
             vec![

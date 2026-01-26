@@ -443,6 +443,8 @@ pub struct ChatMessage {
     is_message_in_active_thread: bool,
     /// The IDs of the files that were used to generate this message
     input_files_ids: Vec<String>,
+    /// Resolved file objects for all input_files_ids
+    files: Vec<FileUploadItem>,
     /// Optional feedback for this message
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -519,7 +521,7 @@ struct MultipartFormFile {
 }
 
 /// Response for file upload
-#[derive(Serialize, ToSchema, Debug)]
+#[derive(Serialize, Deserialize, Clone, ToSchema, Debug)]
 pub struct FileUploadItem {
     /// The unique ID of the uploaded file
     id: String,
@@ -929,6 +931,7 @@ impl ChatMessage {
                 .iter()
                 .map(|id| id.to_string())
                 .collect(),
+            files: vec![], // Will be populated separately
             feedback: feedback.map(|f| MessageFeedback {
                 id: f.id.to_string(),
                 sentiment: FeedbackSentiment::from(f.sentiment),
@@ -1083,12 +1086,69 @@ pub async fn chat_messages(
             .wrap_err("Failed to get message feedbacks")
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Convert the messages to the API response format with feedback
+    // Collect all unique file IDs from all messages
+    let all_file_ids: std::collections::HashSet<Uuid> = messages
+        .iter()
+        .flat_map(|msg| {
+            msg.input_file_uploads
+                .as_ref()
+                .map(|uploads| uploads.to_vec())
+                .unwrap_or_default()
+        })
+        .collect();
+
+    // Determine if any available model supports image understanding
+    let available_models = app_state.available_models(&me_user.groups);
+    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
+        let config = app_state.config.get_chat_provider(provider_id);
+        config.model_capabilities.supports_image_understanding
+    });
+
+    // Get all file capabilities for this user
+    let all_capabilities = get_file_capabilities(supports_image_understanding);
+
+    // Fetch all file uploads with their download URLs
+    let mut file_uploads_map = std::collections::HashMap::new();
+    for file_id in all_file_ids {
+        if let Ok(file_upload) = models::file_upload::get_file_upload_with_url(
+            &app_state.db,
+            &policy,
+            &me_user.to_subject(),
+            &file_id,
+            &app_state.file_storage_providers,
+        )
+        .await
+        {
+            let file_capability =
+                find_file_capability_by_filename(&all_capabilities, &file_upload.filename);
+            file_uploads_map.insert(
+                file_id,
+                FileUploadItem {
+                    id: file_upload.id.to_string(),
+                    filename: file_upload.filename,
+                    download_url: file_upload.download_url,
+                    file_capability,
+                },
+            );
+        }
+    }
+
+    // Convert the messages to the API response format with feedback and files
     let converted_messages: Result<Vec<ChatMessage>, Report> = messages
         .into_iter()
         .map(|msg| {
             let feedback = feedbacks.get(&msg.id).cloned();
-            ChatMessage::from_model_with_feedback(msg, feedback)
+            let mut chat_message = ChatMessage::from_model_with_feedback(msg.clone(), feedback)?;
+
+            // Populate files for this message
+            chat_message.files = msg
+                .input_file_uploads
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|file_id| file_uploads_map.get(file_id).cloned())
+                .collect();
+
+            Ok(chat_message)
         })
         .collect();
 

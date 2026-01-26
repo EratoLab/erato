@@ -31,6 +31,7 @@ export interface MessageItemProps {
   className?: string;
   onFilePreview?: (file: FileUploadItem) => void;
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
+  allFileDownloadUrls: Record<string, string>;
 }
 
 // Memoized message item component with custom comparison
@@ -50,6 +51,7 @@ export const MessageItem = memo<MessageItemProps>(
     className,
     onFilePreview,
     onViewFeedback,
+    allFileDownloadUrls,
   }) => {
     // Debug message loading state
     // useEffect(() => {
@@ -94,6 +96,7 @@ export const MessageItem = memo<MessageItemProps>(
           onMessageAction={onMessageAction}
           onFilePreview={onFilePreview}
           onViewFeedback={onViewFeedback}
+          allFileDownloadUrls={allFileDownloadUrls}
         />
       </div>
     );

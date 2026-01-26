@@ -37,6 +37,7 @@ export const handlers = [
           updated_at: new Date().toISOString(),
           is_message_in_active_thread: true,
           input_files_ids: [],
+          files: [],
         },
       ],
       stats: {

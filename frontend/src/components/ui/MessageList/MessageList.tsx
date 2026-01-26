@@ -27,6 +27,7 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 import type React from "react";
 
 /**
@@ -409,6 +410,18 @@ export const MessageList = memo<MessageListProps>(
       handleLoadMore,
     });
 
+    // Collect all file download URLs from all messages for erato-file:// link resolution
+    const allFileDownloadUrls = useMemo(() => {
+      const urlMap: Record<string, string> = {};
+      messageOrder.forEach((messageId) => {
+        const message = messages[messageId] as UiChatMessage;
+        (message.files ?? []).forEach((file) => {
+          urlMap[file.id] = file.download_url;
+        });
+      });
+      return urlMap;
+    }, [messageOrder, messages]);
+
     // Check if there are no messages to display
     const showEmptyState = messageOrder.length === 0 && !isPending;
 
@@ -487,6 +500,7 @@ export const MessageList = memo<MessageListProps>(
               onMessageAction={onMessageAction}
               onFilePreview={onFilePreview}
               onViewFeedback={onViewFeedback}
+              allFileDownloadUrls={allFileDownloadUrls}
             />
           ) : (
             <StandardMessageList
@@ -503,6 +517,7 @@ export const MessageList = memo<MessageListProps>(
               onMessageAction={onMessageAction}
               onFilePreview={onFilePreview}
               onViewFeedback={onViewFeedback}
+              allFileDownloadUrls={allFileDownloadUrls}
             />
           )}
         </div>
