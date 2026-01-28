@@ -76,7 +76,7 @@ export const FormField: React.FC<FormFieldProps> = ({
     <div className={clsx("w-full", className)}>
       <label
         htmlFor={htmlFor}
-        className="mb-1.5 block text-sm font-medium text-theme-fg-primary"
+        className="mb-2 block text-base font-semibold text-theme-fg-primary"
       >
         <span className="inline-flex items-center gap-1.5">
           <span>
@@ -92,7 +92,7 @@ export const FormField: React.FC<FormFieldProps> = ({
       </label>
       {children}
       {helpText && !error && (
-        <p className="mt-1.5 text-sm text-theme-fg-secondary">{helpText}</p>
+        <p className="mt-2 text-sm text-theme-fg-secondary">{helpText}</p>
       )}
     </div>
   );

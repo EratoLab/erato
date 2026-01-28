@@ -286,7 +286,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className={className}>
-      <div className="space-y-5">
+      <div className="space-y-6">
         {/* Success message */}
         {successMessage && <Alert type="success">{successMessage}</Alert>}
 

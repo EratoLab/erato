@@ -9,6 +9,7 @@ import { t } from "@lingui/core/macro";
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
+import { componentRegistry } from "@/config/componentRegistry";
 import { CloudLinkError } from "@/hooks/files/errors";
 import { useStandaloneFileUpload } from "@/hooks/files/useStandaloneFileUpload";
 import { fetchLinkFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -236,14 +237,26 @@ export const AssistantFileUploadSelector: React.FC<
             />
           </div>
 
-          <FileSourceSelector
-            availableProviders={availableProviders}
-            onSelectDisk={handleSelectDisk}
-            onSelectCloud={handleSelectCloud}
-            disabled={disabled || isProcessing}
-            isProcessing={isProcessing}
-            className={className}
-          />
+          {/* Use custom component from registry if available, otherwise default */}
+          {componentRegistry.AssistantFileSourceSelector ? (
+            <componentRegistry.AssistantFileSourceSelector
+              availableProviders={availableProviders}
+              onSelectDisk={handleSelectDisk}
+              onSelectCloud={handleSelectCloud}
+              disabled={disabled || isProcessing}
+              isProcessing={isProcessing}
+              className={className}
+            />
+          ) : (
+            <FileSourceSelector
+              availableProviders={availableProviders}
+              onSelectDisk={handleSelectDisk}
+              onSelectCloud={handleSelectCloud}
+              disabled={disabled || isProcessing}
+              isProcessing={isProcessing}
+              className={className}
+            />
+          )}
         </>
       ) : (
         <FileUploadButton

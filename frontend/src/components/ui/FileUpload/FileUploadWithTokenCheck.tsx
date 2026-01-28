@@ -8,6 +8,7 @@ import { t } from "@lingui/core/macro";
 import { useEffect, useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 
+import { componentRegistry } from "@/config/componentRegistry";
 import { UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
@@ -293,13 +294,24 @@ export const FileUploadWithTokenCheck: React.FC<
             />
           </div>
 
-          <FileSourceSelector
-            availableProviders={availableProviders}
-            onSelectDisk={handleSelectDisk}
-            onSelectCloud={handleSelectCloud}
-            disabled={disabled || isProcessing}
-            className={className}
-          />
+          {/* Use custom component from registry if available, otherwise default */}
+          {componentRegistry.ChatFileSourceSelector ? (
+            <componentRegistry.ChatFileSourceSelector
+              availableProviders={availableProviders}
+              onSelectDisk={handleSelectDisk}
+              onSelectCloud={handleSelectCloud}
+              disabled={disabled || isProcessing}
+              className={className}
+            />
+          ) : (
+            <FileSourceSelector
+              availableProviders={availableProviders}
+              onSelectDisk={handleSelectDisk}
+              onSelectCloud={handleSelectCloud}
+              disabled={disabled || isProcessing}
+              className={className}
+            />
+          )}
         </>
       ) : (
         <FileUploadButton
