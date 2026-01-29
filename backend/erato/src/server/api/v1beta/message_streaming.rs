@@ -1184,6 +1184,7 @@ async fn prepare_chat_request(
     organization_group_ids: &[String],
     requested_chat_provider_id: Option<&str>,
     access_token: Option<&str>,
+    preferred_language: Option<&str>,
 ) -> Result<(ChatRequest, ChatOptions, GenerationInputMessages), Report> {
     // Create subject from chat owner with organization info if available
     let subject = if organization_user_id.is_some() || !organization_group_ids.is_empty() {
@@ -1241,7 +1242,9 @@ async fn prepare_chat_request(
     // Resolve system prompt dynamically based on chat provider configuration
     let chat_provider_config =
         app_state.chat_provider_for_chatcompletion(effective_chat_provider_id, user_groups)?;
-    let system_prompt = app_state.get_system_prompt(&chat_provider_config).await?;
+    let system_prompt = app_state
+        .get_system_prompt(&chat_provider_config, preferred_language)
+        .await?;
 
     let generation_input_messages = get_generation_input_messages_by_previous_message_id(
         &app_state.db,
@@ -2749,6 +2752,7 @@ async fn run_message_submit_task(
         &me_user.organization_group_ids,
         request.chat_provider_id.as_deref(),
         me_user.access_token.as_deref(),
+        Some(me_user.preferred_language.as_str()),
     )
     .await
     .map_err(|e| format!("Failed to prepare chat request: {}", e))?;
@@ -3079,6 +3083,7 @@ pub async fn regenerate_message_sse(
             &me_user.organization_group_ids,
             request.chat_provider_id.as_deref(),
             me_user.access_token.as_deref(),
+            Some(me_user.preferred_language.as_str()),
         )
         .await;
         if let Err(err) = prepare_chat_request_res {
@@ -3332,6 +3337,7 @@ pub async fn edit_message_sse(
             &me_user.organization_group_ids,
             request.chat_provider_id.as_deref(),
             me_user.access_token.as_deref(),
+            Some(me_user.preferred_language.as_str()),
         )
         .await;
         if let Err(err) = prepare_chat_request_res {

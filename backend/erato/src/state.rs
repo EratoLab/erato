@@ -5,7 +5,7 @@ use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
-use crate::system_prompt_renderer::SystemPromptRenderer;
+use crate::system_prompt_renderer::{RenderContext, SystemPromptRenderer};
 use eyre::Report;
 use genai::adapter::AdapterKind;
 use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
@@ -468,14 +468,17 @@ impl AppState {
 
     /// Get the system prompt for a given chat provider configuration.
     /// This resolves either a static system prompt or retrieves one from Langfuse,
-    /// and renders any placeholders (e.g., {erato_inject_now_date}).
+    /// and renders any placeholders (e.g., {{erato_inject_preferred_language_code}}).
     pub async fn get_system_prompt(
         &self,
         config: &ChatProviderConfig,
+        preferred_language: Option<&str>,
     ) -> Result<Option<String>, Report> {
+        let ctx = RenderContext { preferred_language };
+
         // If a static system prompt is configured, render and return it
         if let Some(system_prompt) = &config.system_prompt {
-            let rendered_prompt = self.system_prompt_renderer.render(system_prompt);
+            let rendered_prompt = self.system_prompt_renderer.render(system_prompt, &ctx);
             tracing::debug!(
                 original_length = system_prompt.len(),
                 rendered_length = rendered_prompt.len(),
@@ -497,7 +500,7 @@ impl AppState {
                 .await?;
 
             let system_prompt = extract_system_prompt_from_langfuse_prompt(&langfuse_prompt)?;
-            let rendered_prompt = self.system_prompt_renderer.render(&system_prompt);
+            let rendered_prompt = self.system_prompt_renderer.render(&system_prompt, &ctx);
 
             tracing::debug!(
                 prompt_name = %langfuse_config.prompt_name,

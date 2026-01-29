@@ -119,6 +119,7 @@ pub async fn token_usage_estimate(
             files_for_generation.clone(),
             &me_user.groups,
             request.chat_provider_id.as_deref(),
+            Some(me_user.preferred_language.as_str()),
         )
         .await
         {
@@ -395,11 +396,14 @@ async fn prepare_input_messages(
     files_for_generation: Vec<FileContentsForGeneration>,
     user_groups: &[String],
     requested_chat_provider_id: Option<&str>,
+    preferred_language: Option<&str>,
 ) -> Result<GenerationInputMessages, Report> {
     // Resolve system prompt dynamically based on chat provider configuration
     let chat_provider_config =
         app_state.chat_provider_for_chatcompletion(requested_chat_provider_id, user_groups)?;
-    let system_prompt = app_state.get_system_prompt(&chat_provider_config).await?;
+    let system_prompt = app_state
+        .get_system_prompt(&chat_provider_config, preferred_language)
+        .await?;
 
     crate::models::message::get_generation_input_messages_by_previous_message_id(
         &app_state.db,
