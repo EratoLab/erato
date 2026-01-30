@@ -2,7 +2,7 @@ use crate::models::file_upload::get_file_upload_by_id;
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming::{
-    FileContentsForGeneration, remove_null_characters,
+    FileContent, FileContentsForGeneration, remove_null_characters,
 };
 use crate::services::file_parsing::parse_file;
 use crate::services::file_storage::{FileStorage, SharepointContext};
@@ -13,7 +13,91 @@ use std::sync::Arc;
 use tiktoken_rs::o200k_base;
 use tracing::{Instrument, instrument};
 
-/// Get file contents from cache or fetch/parse
+/// Helper function to determine if a file is an image based on extension
+fn is_image_file(filename: &str) -> bool {
+    if let Some(extension) = filename.rsplit('.').next() {
+        matches!(
+            extension.to_lowercase().as_str(),
+            "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "svg" | "tiff" | "tif" | "ico"
+        )
+    } else {
+        false
+    }
+}
+
+/// Helper function to get MIME type from file extension
+fn get_mime_type_from_extension(filename: &str) -> String {
+    if let Some(extension) = filename.rsplit('.').next() {
+        match extension.to_lowercase().as_str() {
+            "jpg" | "jpeg" => "image/jpeg".to_string(),
+            "png" => "image/png".to_string(),
+            "gif" => "image/gif".to_string(),
+            "webp" => "image/webp".to_string(),
+            "bmp" => "image/bmp".to_string(),
+            "svg" => "image/svg+xml".to_string(),
+            "tiff" | "tif" => "image/tiff".to_string(),
+            "ico" => "image/x-icon".to_string(),
+            _ => "application/octet-stream".to_string(),
+        }
+    } else {
+        "application/octet-stream".to_string()
+    }
+}
+
+/// Get raw file bytes from cache or storage
+#[instrument(
+    skip_all,
+    fields(
+        file_id = %file_id,
+        file_bytes_length = tracing::field::Empty,
+    )
+)]
+async fn get_file_bytes_cached<'a>(
+    app_state: &AppState,
+    file_id: &Uuid,
+    file_storage: &FileStorage,
+    file_storage_path: &str,
+    sharepoint_ctx: Option<&SharepointContext<'a>>,
+) -> Result<Vec<u8>, Report> {
+    let span = tracing::Span::current();
+
+    let result = app_state
+        .file_bytes_cache
+        .try_get_with_by_ref(file_id, async {
+            tracing::debug!(file_id = %file_id, "File bytes cache miss - fetching");
+
+            let file_bytes = file_storage
+                .read_file_to_bytes_with_context(file_storage_path, sharepoint_ctx)
+                .await
+                .wrap_err(format!(
+                    "Failed to read file from storage: {}",
+                    file_storage_path
+                ))?;
+
+            span.record("file_bytes_length", file_bytes.len());
+            tracing::debug!(
+                file_id = %file_id,
+                bytes_len = file_bytes.len(),
+                "File bytes read from storage and cached"
+            );
+
+            Ok::<_, Report>(file_bytes)
+        })
+        .await
+        .map_err(|arc_err| {
+            Arc::try_unwrap(arc_err).unwrap_or_else(|arc| eyre::eyre!("{}", arc))
+        })?;
+
+    span.record("file_bytes_length", result.len());
+    Ok(result)
+}
+
+/// Get parsed text file contents from cache or fetch/parse
+///
+/// This function now operates in two tiers:
+/// 1. Check file_contents_cache for parsed text
+/// 2. If miss, check file_bytes_cache for raw bytes, then parse
+/// 3. If miss, fetch from storage, cache bytes, then parse
 #[instrument(
     skip_all,
     fields(
@@ -35,37 +119,138 @@ pub async fn get_file_contents_cached<'a>(
     span.record("file_id", &file_id_str);
     span.record("file_storage_path", file_storage_path);
 
-    // Use try_get_with_by_ref to ensure concurrent requests for the same file_id
-    // are deduplicated into a single fetch/parse operation
-    let result = app_state.file_contents_cache
+    // First check the parsed content cache
+    let result = app_state
+        .file_contents_cache
         .try_get_with_by_ref(file_id, async {
-            tracing::debug!(file_id = %file_id, "File contents cache miss - fetching");
+            tracing::debug!(file_id = %file_id, "Parsed content cache miss");
 
-            // Fetch and parse the file
-            let file_bytes = file_storage
-                .read_file_to_bytes_with_context(file_storage_path, sharepoint_ctx)
-                .await
-                .wrap_err(format!("Failed to read file from storage: {}", file_storage_path))?;
+            // Get raw bytes (might be cached at byte level)
+            let file_bytes = get_file_bytes_cached(
+                app_state,
+                file_id,
+                file_storage,
+                file_storage_path,
+                sharepoint_ctx,
+            )
+            .await?;
 
             span.record("file_bytes_length", file_bytes.len());
-            tracing::debug!(file_id = %file_id, bytes_len = file_bytes.len(), "File bytes read from storage");
 
             // Parse the file using the configured file processor
             let parsed_content = parse_file(app_state.file_processor.as_ref(), file_bytes).await?;
             let content = remove_null_characters(&parsed_content);
 
-            tracing::debug!(file_id = %file_id, content_len = content.len(), "File parsed and cached");
+            tracing::debug!(
+                file_id = %file_id,
+                content_len = content.len(),
+                "File parsed and cached"
+            );
 
             Ok::<_, Report>(content)
         })
         .await
         .map_err(|arc_err| {
-            // Try to unwrap the Arc, or create a new error with the same message
             Arc::try_unwrap(arc_err).unwrap_or_else(|arc| eyre::eyre!("{}", arc))
         })?;
 
     span.record("content_length", result.len());
     Ok(result)
+}
+
+/// Get file contents (text or image) with auto-detection and unified caching
+///
+/// This is the new unified entry point that:
+/// - Auto-detects file type from filename
+/// - Routes to appropriate caching strategy
+/// - Returns unified FileContentsForGeneration
+#[instrument(
+    skip_all,
+    fields(
+        file_id = %file_id,
+        filename = tracing::field::Empty,
+        file_type = tracing::field::Empty,
+    )
+)]
+pub async fn get_file_cached<'a>(
+    app_state: &AppState,
+    file_id: &Uuid,
+    file_storage: &FileStorage,
+    file_storage_path: &str,
+    filename: &str,
+    sharepoint_ctx: Option<&SharepointContext<'a>>,
+) -> Result<FileContentsForGeneration, Report> {
+    let span = tracing::Span::current();
+    span.record("filename", filename);
+
+    let is_image = is_image_file(filename);
+    span.record("file_type", if is_image { "image" } else { "text" });
+
+    if is_image {
+        // Image path: cache raw bytes only
+        tracing::debug!(
+            file_id = %file_id,
+            filename = %filename,
+            "Processing as image file"
+        );
+
+        let raw_bytes = get_file_bytes_cached(
+            app_state,
+            file_id,
+            file_storage,
+            file_storage_path,
+            sharepoint_ctx,
+        )
+        .await?;
+
+        let mime_type = get_mime_type_from_extension(filename);
+
+        tracing::debug!(
+            file_id = %file_id,
+            filename = %filename,
+            bytes_len = raw_bytes.len(),
+            mime_type = %mime_type,
+            "Image file loaded (cached as raw bytes)"
+        );
+
+        Ok(FileContentsForGeneration {
+            id: *file_id,
+            filename: filename.to_string(),
+            content: FileContent::Image {
+                raw_bytes,
+                mime_type,
+            },
+        })
+    } else {
+        // Text path: cache both bytes and parsed content
+        tracing::debug!(
+            file_id = %file_id,
+            filename = %filename,
+            "Processing as text file"
+        );
+
+        let text = get_file_contents_cached(
+            app_state,
+            file_id,
+            file_storage,
+            file_storage_path,
+            sharepoint_ctx,
+        )
+        .await?;
+
+        tracing::debug!(
+            file_id = %file_id,
+            filename = %filename,
+            text_len = text.len(),
+            "Text file loaded and parsed"
+        );
+
+        Ok(FileContentsForGeneration {
+            id: *file_id,
+            filename: filename.to_string(),
+            content: FileContent::Text(text),
+        })
+    }
 }
 
 /// Get token count from cache or calculate
@@ -121,13 +306,15 @@ pub async fn get_token_count_cached(app_state: &AppState, content: &str) -> Resu
 }
 
 /// Process a single file and return its contents (with caching)
+///
+/// Now uses the unified get_file_cached function
 #[instrument(
     skip_all,
     fields(
         file_id = tracing::field::Empty,
         filename = tracing::field::Empty,
         file_storage_provider_id = tracing::field::Empty,
-        text_length = tracing::field::Empty,
+        file_type = tracing::field::Empty,
         error = tracing::field::Empty,
     )
 )]
@@ -152,11 +339,6 @@ pub async fn process_single_file_cached<'a>(
         "file_storage_provider_id",
         &file_upload.file_storage_provider_id,
     );
-    tracing::debug!(
-        file_id = %file_id,
-        filename = %file_upload.filename,
-        "Retrieved file upload record"
-    );
 
     // Get the file storage provider
     let file_storage = app_state
@@ -167,45 +349,50 @@ pub async fn process_single_file_cached<'a>(
             file_upload.file_storage_provider_id
         ))?;
 
-    // Get file contents using cache
-    match get_file_contents_cached(
+    // Use unified caching function
+    match get_file_cached(
         app_state,
         file_id,
         file_storage,
         &file_upload.file_storage_path,
+        &file_upload.filename,
         sharepoint_ctx,
     )
     .await
     {
-        Ok(text) => {
-            span.record("text_length", text.len());
+        Ok(file_contents) => {
+            let file_type = match &file_contents.content {
+                FileContent::Text(t) => {
+                    span.record("file_type", "text");
+                    format!("text ({} chars)", t.len())
+                }
+                FileContent::Image { raw_bytes, mime_type } => {
+                    span.record("file_type", "image");
+                    format!("image ({} bytes, {})", raw_bytes.len(), mime_type)
+                }
+            };
+
             tracing::debug!(
                 file_id = %file_id,
                 filename = %file_upload.filename,
-                text_len = text.len(),
+                file_type = %file_type,
                 "Successfully processed file"
             );
-            Ok(Some(FileContentsForGeneration {
-                id: *file_id,
-                filename: file_upload.filename,
-                contents_as_text: text,
-            }))
+
+            Ok(Some(file_contents))
         }
         Err(err) => {
             tracing::warn!(
                 file_id = %file_id,
                 filename = %file_upload.filename,
                 error = %err,
-                "Failed to process file - returning placeholder"
+                "Failed to process file - returning None"
             );
             span.record("error", true);
-            // Return file info even on error so it gets added as a pointer
-            // The actual error handling happens in resolve_file_pointers_in_generation_input
-            Ok(Some(FileContentsForGeneration {
-                id: *file_id,
-                filename: file_upload.filename,
-                contents_as_text: String::new(), // Empty content - won't be used for pointers
-            }))
+
+            // On error, return None instead of placeholder
+            // Caller decides how to handle missing files
+            Ok(None)
         }
     }
 }
