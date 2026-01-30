@@ -9,6 +9,7 @@ pub mod langfuse;
 pub mod mcp_manager;
 pub mod mcp_session_manager;
 pub mod mcp_transports;
+pub mod prompt_composition;
 
 #[cfg(feature = "sentry")]
 pub mod sentry;

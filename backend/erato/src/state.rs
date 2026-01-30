@@ -97,7 +97,9 @@ pub struct AppState {
     pub global_policy_engine: GlobalPolicyEngine,
     pub background_tasks: BackgroundTaskManager,
     pub system_prompt_renderer: SystemPromptRenderer,
-    /// Cache mapping file_id -> parsed file contents
+    /// Cache mapping file_id -> raw file bytes (for both text and images)
+    pub file_bytes_cache: Cache<Uuid, Vec<u8>>,
+    /// Cache mapping file_id -> parsed file contents (text files only)
     pub file_contents_cache: Cache<Uuid, String>,
     /// Cache mapping file_contents -> token count
     pub token_count_cache: Cache<String, usize>,
@@ -124,6 +126,7 @@ impl std::fmt::Debug for AppState {
             .field("global_policy_engine", &self.global_policy_engine)
             .field("background_tasks", &self.background_tasks)
             .field("system_prompt_renderer", &self.system_prompt_renderer)
+            .field("file_bytes_cache", &"<Cache>")
             .field("file_contents_cache", &"<Cache>")
             .field("token_count_cache", &"<Cache>")
             .field("file_processor", &"<FileProcessor>")
@@ -159,6 +162,15 @@ impl AppState {
         // Initialize the system prompt renderer
         let system_prompt_renderer = SystemPromptRenderer::new();
 
+        // Initialize file bytes cache with MB-based weigher
+        let file_bytes_cache = Cache::builder()
+            .weigher(|_key: &Uuid, value: &Vec<u8>| -> u32 {
+                // Weight by byte vector length
+                value.len().try_into().unwrap_or(u32::MAX)
+            })
+            .max_capacity(config.caches.file_bytes_cache_mb * 1024 * 1024)
+            .build();
+
         // Initialize file contents cache with MB-based weigher
         let file_contents_cache = Cache::builder()
             .weigher(|_key: &Uuid, value: &String| -> u32 {
@@ -193,6 +205,7 @@ impl AppState {
             global_policy_engine,
             background_tasks,
             system_prompt_renderer,
+            file_bytes_cache,
             file_contents_cache,
             token_count_cache,
             file_processor,
