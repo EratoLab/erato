@@ -380,3 +380,93 @@ When enabled, Langfuse provides observability throughout the lifecycle:
 - Cumulative token usage across all turns
 - Total turn count
 - Complete request duration
+
+## Stream Buffering & Reconnection
+
+Erato implements a robust streaming infrastructure that allows clients to reconnect to ongoing message generations without losing any events. This is particularly important for handling network interruptions or browser tab refreshes.
+
+### Architecture Overview
+
+```mermaid
+sequenceDiagram
+    participant 🌐 Client 1
+    participant 🌐 Client 2
+    participant 🖥️ Backend API
+    participant 📦 Streaming Buffer
+    participant 🤖 Generation Task
+
+    Note over 🖥️ Backend API,📦 Streaming Buffer: Initial Connection
+    🌐 Client 1->>🖥️ Backend API: POST /me/messages/submit (SSE)
+    🖥️ Backend API->>📦 Streaming Buffer: Create StreamingTask<br/>- Broadcast channel<br/>- Event history
+    🖥️ Backend API->>🤖 Generation Task: Start background generation
+    🖥️ Backend API->>🌐 Client 1: Subscribe to live events
+
+    loop Generation in progress
+        🤖 Generation Task->>📦 Streaming Buffer: Send event
+        📦 Streaming Buffer->>📦 Streaming Buffer: 1. Store in history<br/>2. Broadcast to subscribers
+        📦 Streaming Buffer->>🌐 Client 1: SSE event
+    end
+
+    Note over 🌐 Client 1: Connection drops
+
+    Note over 🖥️ Backend API,📦 Streaming Buffer: Reconnection
+    🌐 Client 2->>🖥️ Backend API: POST /me/messages/resumestream<br/>- chat_id
+    🖥️ Backend API->>📦 Streaming Buffer: Get task by chat_id
+    📦 Streaming Buffer-->>🖥️ Backend API: StreamingTask
+    🖥️ Backend API->>📦 Streaming Buffer: Get event history
+    📦 Streaming Buffer-->>🖥️ Backend API: All previous events
+
+    Note over 🖥️ Backend API,🌐 Client 2: Replay + Live Stream
+    loop Replay history
+        🖥️ Backend API->>🌐 Client 2: Historical event
+    end
+
+    🖥️ Backend API->>🌐 Client 2: Subscribe to live events
+
+    loop Ongoing generation
+        🤖 Generation Task->>📦 Streaming Buffer: Send new event
+        📦 Streaming Buffer->>🌐 Client 2: SSE event (live)
+    end
+```
+
+### How It Works
+
+**1. Streaming Buffer Creation**
+
+When a message submission starts, the backend creates a `StreamingTask` associated with the chat ID:
+
+- **Broadcast Channel**: Uses Tokio's broadcast channel with 1,000 event capacity for live streaming
+- **Event History**: Stores up to 10,000 events in memory for replay capability
+- **Task Lifecycle**: Managed per-chat, allowing only one active generation per chat
+
+**2. Event Flow**
+
+Every event generated during message processing follows this flow:
+
+1. Event is sent to the `StreamingTask`
+2. Event is stored in the history buffer (if under 10,000 events)
+3. Event is broadcast to all currently subscribed clients via the broadcast channel
+4. If no clients are subscribed, the event is still stored in history
+
+**3. Reconnection Process**
+
+Clients can reconnect to an ongoing generation using the `/me/messages/resumestream` endpoint:
+
+```
+POST /api/v1beta/me/messages/resumestream
+{
+  "chat_id": "uuid-of-chat"
+}
+```
+
+The reconnection process:
+
+1. **Verify Access**: Checks that the user has permission to access the chat
+2. **Retrieve Task**: Looks up the active `StreamingTask` for the chat_id
+3. **Get History**: Retrieves all events stored in the event history
+4. **Replay Events**: Streams all historical events to the client first
+5. **Subscribe to Live**: After replay, subscribes to live events
+6. **Seamless Transition**: Client receives complete event stream without gaps
+
+This architecture allows us to do generation over long-running tasks that are resilient to network connection issues or
+user behaviour that may terminate a generation task (e.g. closing a browser tab with ongoing generation)

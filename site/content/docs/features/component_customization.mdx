@@ -43,10 +43,10 @@ The component registry pattern provides:
 
 ## Available Override Points
 
-| Registry Key | Location | Description |
-|--------------|----------|-------------|
+| Registry Key                  | Location       | Description                                                    |
+| ----------------------------- | -------------- | -------------------------------------------------------------- |
 | `AssistantFileSourceSelector` | Assistant form | File source selector when adding default files to an assistant |
-| `ChatFileSourceSelector` | Chat input | File source selector when uploading files to a conversation |
+| `ChatFileSourceSelector`      | Chat input     | File source selector when uploading files to a conversation    |
 
 ## Implementing a Custom Component
 
@@ -177,6 +177,7 @@ Customer forks should organize custom components in a dedicated folder:
 ```
 
 This folder structure ensures:
+
 - Clear separation from core code
 - No merge conflicts on customer-specific files
 - Easy identification of customizations
