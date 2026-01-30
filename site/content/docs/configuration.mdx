@@ -823,7 +823,7 @@ Configuration for the file processing engine that extracts text content from upl
 
 **Type:** `object | None`
 
-**Default behavior:** If not configured, Erato uses the `parser-core` processor by default.
+**Default behavior:** If not configured, Erato uses the `kreuzberg` processor by default.
 
 #### `file_processor.processor`
 
@@ -831,11 +831,12 @@ The file processor backend to use for extracting text from uploaded files.
 
 **Type:** `string`
 
-**Default:** `"parser-core"`
+**Default:** `"kreuzberg"`
 
 **Supported values:**
 
-- `"parser-core"` - The original file processor (default). Provides reliable text extraction for common document formats.
+> Since the removal of the `parser-core` file processor, there is only a single option `kreuzberg`
+
 - `"kreuzberg"` - Advanced file processor with page-aware markdown extraction. Extracts content with page boundary markers, making it easy to identify which page content comes from.
 
 **Example:**
@@ -847,13 +848,13 @@ processor = "kreuzberg"
 
 #### Processor Comparison
 
-| Feature           | parser-core                              | kreuzberg                |
-| ----------------- | ---------------------------------------- | ------------------------ |
-| Text extraction   | ✅                                       | ✅                       |
-| Page awareness    | ❌                                       | ✅                       |
-| Page markers      | ❌                                       | ✅ (`<page number="N">`) |
-| Output format     | Plain text                               | Markdown                 |
-| Supported formats | Word, PDF, Excel, PowerPoint, text files | Same as parser-core      |
+| Feature           | kreuzberg                                |
+| ----------------- | ---------------------------------------- |
+| Text extraction   | ✅                                       |
+| Page awareness    | ✅                                       |
+| Page markers      | ✅ (`<page number="N">`)                 |
+| Output format     | Markdown                                 |
+| Supported formats | Word, PDF, Excel, PowerPoint, text files |
 
 #### Page-Aware Extraction
 
