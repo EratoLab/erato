@@ -1,0 +1,188 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+## TL;DR
+
+```bash
+helm repo add erato https://eratolab.github.io/erato
+helm install my-erato erato/{{ template "chart.name" . }}
+```
+
+## Introduction
+
+This chart bootstraps an [Erato](https://github.com/EratoLab/erato) deployment on a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
+
+Erato is a chat application that provides a modern interface for AI-powered conversations.
+
+## Prerequisites
+
+- Kubernetes 1.23+
+- Helm 3.8.0+
+- PV provisioner support in the underlying infrastructure (if persistence is required)
+
+## Installing the Chart
+
+To install the chart with the release name `my-erato`:
+
+```bash
+helm install my-erato erato/{{ template "chart.name" . }}
+```
+
+The command deploys Erato on the Kubernetes cluster with default configuration. The [Parameters](#parameters) section lists the parameters that can be configured during installation.
+
+> **Tip**: List all releases using `helm list`
+
+## Uninstalling the Chart
+
+To uninstall/delete the `my-erato` deployment:
+
+```bash
+helm uninstall my-erato
+```
+
+The command removes all the Kubernetes components associated with the chart and deletes the release.
+
+## Configuration and Installation Details
+
+### External PostgreSQL Database
+
+The chart requires an external PostgreSQL database. Configure the connection using:
+
+```yaml
+postgresql:
+  external:
+    connectionString:
+      value: "postgresql://user:password@hostname:5432/database"
+```
+
+For production deployments, it's recommended to use a secret:
+
+```yaml
+postgresql:
+  external:
+    connectionString:
+      valueFrom:
+        secretKeyRef:
+          name: postgres-credentials
+          key: connection-string
+```
+
+### Erato Configuration File
+
+The application configuration can be provided in three ways:
+
+1. **Using a Secret (Recommended for Production)**:
+
+```yaml
+backend:
+  configFile:
+    secretName: erato-config
+    secretKey: erato.toml
+```
+
+2. **Using a ConfigMap**:
+
+```yaml
+backend:
+  configFile:
+    configMapName: erato-config
+    configMapKey: erato.toml
+```
+
+3. **Inline Configuration**:
+
+```yaml
+backend:
+  configFile:
+    inlineContent: |
+      [server]
+      host = "0.0.0.0"
+      port = 8080
+```
+
+### Additional Configuration Files
+
+You can mount additional configuration files (e.g., `*.auto.erato.toml` files) using the `backend.extraConfigFiles` array:
+
+```yaml
+backend:
+  extraConfigFiles:
+    - name: mcp-servers
+      secretName: mcp-config-secret
+      secretKey: mcp-servers.toml
+    - name: custom-settings
+      inlineContent: |
+        [custom]
+        setting = "value"
+```
+
+### OAuth2 Proxy
+
+The chart includes an optional OAuth2 Proxy for authentication. To enable it:
+
+```yaml
+oauth2Proxy:
+  enabled: true
+  config: |
+    http_address = "0.0.0.0:4180"
+    upstreams = ["http://localhost:8080"]
+    email_domains = ["example.com"]
+    cookie_secret = "your-secret-here"
+```
+
+### Ingress Configuration
+
+To expose Erato externally, configure the ingress:
+
+```yaml
+ingress:
+  enabled: true
+  host: chat.example.com
+  className: nginx
+  tls:
+    enabled: true
+    secretName: erato-tls
+```
+
+{{ template "chart.requirementsSection" . }}
+
+{{ template "chart.valuesSection" . }}
+
+## Troubleshooting
+
+### Database Connection Issues
+
+If you're experiencing database connection issues, verify:
+
+1. The connection string is correct and accessible from the cluster
+2. Network policies allow traffic to the database
+3. The database user has appropriate permissions
+
+### OAuth2 Proxy Configuration
+
+If authentication isn't working:
+
+1. Check the OAuth2 Proxy logs: `kubectl logs -l app.kubernetes.io/component=oauth2-proxy`
+2. Verify the cookie secret is properly configured
+3. Ensure redirect URIs are correctly registered with your OAuth provider
+
+## Upgrading
+
+### To 0.5.0
+
+This version removed the embedded PostgreSQL subchart. You must now provide an external PostgreSQL database connection string.
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+---
+
+{{ template "helm-docs.versionFooter" . }}

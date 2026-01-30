@@ -5,8 +5,8 @@ fetch_json_schema:
     mkdir -p ./tests_schema
     curl https://raw.githubusercontent.com/helm-unittest/helm-unittest/refs/tags/v1.0.1/schema/helm-testsuite.json --output ./tests_schema/helm-testsuite.json
 
-# Run all tests (unit tests + linting)
-test: validate_schema unittest lint
+# Run all tests (unit tests + linting + docs check)
+test: validate_schema unittest lint docs-check
 
 # Run helm unit tests
 unittest:
@@ -22,3 +22,47 @@ validate_schema:
 # Install/update chart dependencies
 deps:
     helm dependency update
+
+# Generate README.md from values.yaml and README.md.gotmpl using helm-docs
+docs:
+    #!/usr/bin/env bash
+    if command -v helm-docs &> /dev/null; then
+        helm-docs .
+    else
+        echo "helm-docs not found, using docker..."
+        docker run --rm -v "$(pwd):/helm-docs" -u $(id -u):$(id -g) jnorwood/helm-docs:latest
+    fi
+
+# Check if README.md is up-to-date with values.yaml (for CI)
+docs-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Save the current README.md if it exists
+    if [ -f README.md ]; then
+        cp README.md README.md.backup
+    fi
+
+    # Generate new README
+    if command -v helm-docs &> /dev/null; then
+        helm-docs .
+    else
+        docker run --rm -v "$(pwd):/helm-docs" -u $(id -u):$(id -g) jnorwood/helm-docs:latest
+    fi
+
+    # Check if there are differences
+    if [ -f README.md.backup ]; then
+        if ! diff -q README.md README.md.backup > /dev/null 2>&1; then
+            echo "❌ README.md is out of date!"
+            echo "Please run 'just docs' to regenerate the documentation."
+            rm README.md.backup
+            exit 1
+        else
+            echo "✅ README.md is up to date!"
+            rm README.md.backup
+        fi
+    else
+        echo "❌ README.md was missing!"
+        echo "Generated README.md - please commit this file."
+        exit 1
+    fi

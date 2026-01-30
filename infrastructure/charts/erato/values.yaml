@@ -1,28 +1,31 @@
 global:
-  # A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
-  # but is never parsed/interpreted by the application to trigger environment-specific behavior.
+  # global.environment -- Environment marker for diagnostic/observability tools (not parsed by application)
   environment: production
+  # global.imagePullSecrets -- Global Docker registry secret names as an array
   imagePullSecrets: []
 
-## @param nameOverride String to partially override common.names.fullname
-##
+# nameOverride -- String to partially override common.names.fullname
 nameOverride: ""
-## @param commonLabels Labels to add to all deployed objects
-##
+# commonLabels -- Labels to add to all deployed objects
 commonLabels: {}
-## @param commonAnnotations Annotations to add to all deployed objects
-##
+# commonAnnotations -- Annotations to add to all deployed objects
 commonAnnotations: {}
 
 ingress:
+  # ingress.enabled -- Enable ingress record generation for Erato
   enabled: true
+  # ingress.host -- Default host for the ingress record
   host: app.erato.internal
+  # ingress.className -- IngressClass that will be used to implement the Ingress
   className: nginx
+  # ingress.annotations -- Additional annotations for the Ingress resource
   annotations: {}
   tls:
+    # ingress.tls.enabled -- Enable TLS configuration for the host defined at ingress.host
     enabled: false
+    # ingress.tls.secretName -- Secret containing TLS certificate
     secretName: ""
-  # Additional paths to add to the ingress
+  # ingress.extraPaths -- Additional paths to add to the ingress (e.g., for custom services)
   # Example:
   # extraPaths:
   #   - path: /custom-path
@@ -35,18 +38,28 @@ ingress:
   extraPaths: []
 
 oauth2Proxy:
+  # oauth2Proxy.enabled -- Enable OAuth2 Proxy for authentication
   enabled: true
   image:
+    # oauth2Proxy.image.repository -- OAuth2 Proxy image repository
     repository: quay.io/oauth2-proxy/oauth2-proxy
+    # oauth2Proxy.image.tag -- OAuth2 Proxy image tag
     tag: v7.8.1
+    # oauth2Proxy.image.pullPolicy -- OAuth2 Proxy image pull policy
     pullPolicy: IfNotPresent
+    # oauth2Proxy.image.pullSecrets -- OAuth2 Proxy image pull secrets
     pullSecrets: []
+  # oauth2Proxy.extraEnvVars -- Array with extra environment variables to add to oauth2-proxy
   extraEnvVars: []
+  # oauth2Proxy.extraEnvVarsCM -- Name of existing ConfigMap containing extra env vars for oauth2-proxy
   extraEnvVarsCM: ""
+  # oauth2Proxy.extraEnvVarsSecret -- Name of existing Secret containing extra env vars for oauth2-proxy
   extraEnvVarsSecret: ""
+  # oauth2Proxy.extraVolumes -- Optionally specify extra list of additional volumes for the oauth2-proxy pod
   extraVolumes: []
+  # oauth2Proxy.extraVolumeMounts -- Optionally specify extra list of additional volumeMounts for the oauth2-proxy container
   extraVolumeMounts: []
-  # Full configuration file content for oauth2-proxy
+  # oauth2Proxy.config -- Full configuration file content for oauth2-proxy
   config: |
     # Example configuration - replace with your own
     # http_address = "0.0.0.0:4180"
@@ -55,78 +68,94 @@ oauth2Proxy:
     # cookie_secret = ""
     # cookie_secure = true
     # skip_auth_regex = ["^/health", "^/metrics"]
-  ## @param oauth2Proxy.deploymentAnnotations Annotations to add to the oauth2-proxy deployment
-  ##
+  # oauth2Proxy.deploymentAnnotations -- Annotations to add to the oauth2-proxy deployment
   deploymentAnnotations: {}
-  ## @param oauth2Proxy.podAnnotations Annotations to add to the oauth2-proxy pod
-  ##
+  # oauth2Proxy.podAnnotations -- Annotations to add to the oauth2-proxy pod
   podAnnotations: {}
   resources:
     requests:
+      # oauth2Proxy.resources.requests.cpu -- The requested CPU for oauth2-proxy
       cpu: 100m
+      # oauth2Proxy.resources.requests.memory -- The requested memory for oauth2-proxy
       memory: 128Mi
     limits:
+      # oauth2Proxy.resources.limits.cpu -- The CPU limit for oauth2-proxy
       cpu: 500m
+      # oauth2Proxy.resources.limits.memory -- The memory limit for oauth2-proxy
       memory: 256Mi
 
   redis:
+    # oauth2Proxy.redis.enabled -- Enable Redis for OAuth2 Proxy session storage
     enabled: true
     image:
+      # oauth2Proxy.redis.image.repository -- Redis image repository
       repository: redis
+      # oauth2Proxy.redis.image.tag -- Redis image tag
       tag: 7.0-alpine
+      # oauth2Proxy.redis.image.pullPolicy -- Redis image pull policy
       pullPolicy: IfNotPresent
     resources:
       requests:
+        # oauth2Proxy.redis.resources.requests.cpu -- The requested CPU for Redis
         cpu: 10m
+        # oauth2Proxy.redis.resources.requests.memory -- The requested memory for Redis
         memory: 32Mi
       limits:
+        # oauth2Proxy.redis.resources.limits.cpu -- The CPU limit for Redis
         cpu: 100m
+        # oauth2Proxy.redis.resources.limits.memory -- The memory limit for Redis
         memory: 128Mi
     persistence:
+      # oauth2Proxy.redis.persistence.enabled -- Enable persistence using Persistent Volume Claims
       enabled: true
+      # oauth2Proxy.redis.persistence.size -- Persistent Volume size
       size: 1Gi
+      # oauth2Proxy.redis.persistence.storageClass -- Persistent Volume storage class
       # storageClass: ""
+      # oauth2Proxy.redis.persistence.accessModes -- Persistent Volume access modes
       accessModes:
         - ReadWriteOnce
 
-# Backend configuration
 backend:
   image:
+    # backend.image.repository -- Backend image repository
     repository: harbor.imassage.me/erato/app
+    # backend.image.tag -- Backend image tag (immutable tags are recommended)
     tag: ""
+    # backend.image.pullPolicy -- Backend image pull policy
     pullPolicy: IfNotPresent
+    # backend.image.pullSecrets -- Backend image pull secrets
     pullSecrets: []
-  # Optional deployment version for cache headers on static files (theme, locales).
-  # If not set, falls back to the Docker image tag.
-  # This version is used to generate ETag headers, ensuring cache invalidation on deployments.
+  # backend.deploymentVersion -- Optional deployment version for cache headers on static files (falls back to image tag if not set)
   deploymentVersion: ""
+  # backend.replicaCount -- Number of backend replicas to deploy
   replicaCount: 1
+  # backend.extraEnvVars -- Array with extra environment variables to add to backend
   extraEnvVars: []
+  # backend.extraEnvVarsCM -- Name of existing ConfigMap containing extra env vars for backend
   extraEnvVarsCM: ""
+  # backend.extraEnvVarsSecret -- Name of existing Secret containing extra env vars for backend
   extraEnvVarsSecret: ""
+  # backend.extraVolumes -- Optionally specify extra list of additional volumes for the backend pod
   extraVolumes: []
+  # backend.extraVolumeMounts -- Optionally specify extra list of additional volumeMounts for the backend container
   extraVolumeMounts: []
-  ## @param backend.deploymentAnnotations Annotations to add to the backend deployment
-  ##
+  # backend.deploymentAnnotations -- Annotations to add to the backend deployment
   deploymentAnnotations: {}
-  ## @param backend.podAnnotations Annotations to add to the backend pod
-  ##
+  # backend.podAnnotations -- Annotations to add to the backend pod
   podAnnotations: {}
-  # Optional configuration for mounting erato.toml from a secret, configMap, or inline content
   configFile:
-    # Name of the secret containing the erato.toml file
+    # backend.configFile.secretName -- Name of the secret containing the erato.toml file
     secretName: ""
-    # Key in the secret that contains the erato.toml content
+    # backend.configFile.secretKey -- Key in the secret that contains the erato.toml content
     secretKey: ""
-    # Name of the configMap containing the erato.toml file (alternative to secretName/secretKey)
+    # backend.configFile.configMapName -- Name of the configMap containing the erato.toml file (alternative to secretName/secretKey)
     configMapName: ""
-    # Key in the configMap that contains the erato.toml content
+    # backend.configFile.configMapKey -- Key in the configMap that contains the erato.toml content
     configMapKey: ""
-    # Inline content for erato.toml (alternative to secret/configMap)
+    # backend.configFile.inlineContent -- Inline content for erato.toml (alternative to secret/configMap)
     inlineContent: ""
-  # Optional list of additional config files to mount (e.g., *.auto.erato.toml files)
-  # Each item can use secret, configMap, or inline content just like configFile above
-  extraConfigFiles: []
+  # backend.extraConfigFiles -- Optional list of additional config files to mount (e.g., *.auto.erato.toml files)
   # Example:
   # extraConfigFiles:
   #   - name: mcp-servers
@@ -139,27 +168,32 @@ backend:
   #     inlineContent: |
   #       [mcp_servers.example]
   #       ...
+  extraConfigFiles: []
   resources:
     requests:
+      # backend.resources.requests.cpu -- The requested CPU for backend
       cpu: 100m
+      # backend.resources.requests.memory -- The requested memory for backend
       memory: 128Mi
     limits:
+      # backend.resources.limits.cpu -- The CPU limit for backend
       cpu: 500m
+      # backend.resources.limits.memory -- The memory limit for backend
       memory: 512Mi
   service:
+    # backend.service.type -- Backend service type
     type: ClusterIP
+    # backend.service.port -- Backend service HTTP port
     port: 8080
+  # backend.envSecrets -- Array of secret names to load as environment variables
   envSecrets: []
 
 postgresql:
-  # Deprecated: Has no effect. Support for postgresql sub-chart has been removed.
+  # postgresql.enabled -- Deprecated - has no effect. Support for postgresql sub-chart has been removed.
   enabled: false
 
-  # If postgresql.enabled is falsse, you can set the following values to connect to an existing
-  # external PostgreSQL database
   external:
-    # TODO: Align to what e.g. bitnami/keycloak chart does to connect to an external database
-    # Can either be value or valueFrom
+    # postgresql.external.connectionString.value -- PostgreSQL connection string (plain value)
     connectionString:
       value: "postgresql://postgres:postgres@localhost:5432/postgres"
 
