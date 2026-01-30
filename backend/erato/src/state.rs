@@ -97,7 +97,9 @@ pub struct AppState {
     pub global_policy_engine: GlobalPolicyEngine,
     pub background_tasks: BackgroundTaskManager,
     pub system_prompt_renderer: SystemPromptRenderer,
-    /// Cache mapping file_id -> parsed file contents
+    /// Cache mapping file_id -> raw file bytes (for both text and images)
+    pub file_bytes_cache: Cache<Uuid, Vec<u8>>,
+    /// Cache mapping file_id -> parsed file contents (text files only)
     pub file_contents_cache: Cache<Uuid, String>,
     /// Cache mapping file_contents -> token count
     pub token_count_cache: Cache<String, usize>,
@@ -124,6 +126,7 @@ impl std::fmt::Debug for AppState {
             .field("global_policy_engine", &self.global_policy_engine)
             .field("background_tasks", &self.background_tasks)
             .field("system_prompt_renderer", &self.system_prompt_renderer)
+            .field("file_bytes_cache", &"<Cache>")
             .field("file_contents_cache", &"<Cache>")
             .field("token_count_cache", &"<Cache>")
             .field("file_processor", &"<FileProcessor>")
@@ -159,6 +162,15 @@ impl AppState {
         // Initialize the system prompt renderer
         let system_prompt_renderer = SystemPromptRenderer::new();
 
+        // Initialize file bytes cache with MB-based weigher
+        let file_bytes_cache = Cache::builder()
+            .weigher(|_key: &Uuid, value: &Vec<u8>| -> u32 {
+                // Weight by byte vector length
+                value.len().try_into().unwrap_or(u32::MAX)
+            })
+            .max_capacity(config.caches.file_bytes_cache_mb * 1024 * 1024)
+            .build();
+
         // Initialize file contents cache with MB-based weigher
         let file_contents_cache = Cache::builder()
             .weigher(|_key: &Uuid, value: &String| -> u32 {
@@ -193,13 +205,14 @@ impl AppState {
             global_policy_engine,
             background_tasks,
             system_prompt_renderer,
+            file_bytes_cache,
             file_contents_cache,
             token_count_cache,
             file_processor,
         })
     }
 
-    pub fn chat_provider_for_summary(&self) -> Result<ChatProviderConfig, Report> {
+    pub fn chat_provider_for_summary(&self) -> Result<ChatProviderConfigWithId, Report> {
         // Check if a specific summary chat provider is configured
         let chat_provider_id = if let Some(ref chat_providers) = self.config.chat_providers {
             if let Some(ref summary_provider_id) = chat_providers.summary.summary_chat_provider_id {
@@ -221,7 +234,10 @@ impl AppState {
             self.config.determine_chat_provider(None, None)?
         };
 
-        Ok(self.config.get_chat_provider(chat_provider_id).clone())
+        Ok(ChatProviderConfigWithId {
+            chat_provider_id: chat_provider_id.to_string(),
+            chat_provider_config: self.config.get_chat_provider(chat_provider_id).clone(),
+        })
     }
 
     pub fn max_tokens_for_summary(&self) -> u32 {
@@ -233,7 +249,7 @@ impl AppState {
     }
 
     pub fn genai_for_summary(&self) -> Result<GenaiClient, Report> {
-        Self::build_genai_client(self.chat_provider_for_summary()?)
+        Self::build_genai_client(self.chat_provider_for_summary()?.chat_provider_config)
     }
 
     pub fn genai_for_chatcompletion(
@@ -241,23 +257,17 @@ impl AppState {
         requested_chat_provider: Option<&str>,
         user_groups: &[String],
     ) -> Result<GenaiClient, Report> {
-        let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user(user_groups);
-        let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
-            .as_ref()
-            .map(|list| list.iter().map(|s| s.as_str()).collect());
-
-        let chat_provider_id = self
-            .config
-            .determine_chat_provider(allowlist_refs.as_deref(), requested_chat_provider)?;
-        let chat_provider_config = self.config.get_chat_provider(chat_provider_id);
-        Self::build_genai_client(chat_provider_config.clone())
+        Self::build_genai_client(
+            self.chat_provider_for_chatcompletion(requested_chat_provider, user_groups)?
+                .chat_provider_config,
+        )
     }
 
     pub fn chat_provider_for_chatcompletion(
         &self,
         requested_chat_provider: Option<&str>,
         user_groups: &[String],
-    ) -> Result<ChatProviderConfig, Report> {
+    ) -> Result<ChatProviderConfigWithId, Report> {
         let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user(user_groups);
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
@@ -266,7 +276,11 @@ impl AppState {
         let chat_provider_id = self
             .config
             .determine_chat_provider(allowlist_refs.as_deref(), requested_chat_provider)?;
-        Ok(self.config.get_chat_provider(chat_provider_id).clone())
+
+        Ok(ChatProviderConfigWithId {
+            chat_provider_id: chat_provider_id.to_string(),
+            chat_provider_config: self.config.get_chat_provider(chat_provider_id).clone(),
+        })
     }
 
     /// Determines chat provider allowlist for a user based on their group memberships.
@@ -570,6 +584,11 @@ fn extract_system_prompt_from_langfuse_prompt(prompt: &LangfusePrompt) -> Result
             prompt.name
         )),
     }
+}
+
+pub struct ChatProviderConfigWithId {
+    pub chat_provider_id: String,
+    pub chat_provider_config: ChatProviderConfig,
 }
 
 pub fn default_endpoint(kind: AdapterKind) -> Endpoint {

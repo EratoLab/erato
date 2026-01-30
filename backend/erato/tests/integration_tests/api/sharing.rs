@@ -605,7 +605,7 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
     let result_with_org_id = erato::models::assistant::get_assistant_by_id(
         &app_state.db,
         &PolicyEngine::new(),
-        &erato::policy::types::Subject::UserWithGroups {
+        &erato::policy::types::Subject::UserWithOrganizationInfo {
             id: user_b.id.to_string(),
             organization_user_id: Some(user_b_org_id.to_string()),
             organization_group_ids: vec![],

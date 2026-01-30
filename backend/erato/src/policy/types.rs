@@ -13,7 +13,7 @@ pub struct SubjectId(pub String);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Subject {
     User(String),
-    UserWithGroups {
+    UserWithOrganizationInfo {
         id: String,
         organization_user_id: Option<String>,
         organization_group_ids: Vec<String>,
@@ -30,21 +30,21 @@ impl Subject {
     pub fn into_parts(self) -> (SubjectKind, SubjectId) {
         match self {
             Subject::User(id) => (SubjectKind::User, SubjectId(id)),
-            Subject::UserWithGroups { id, .. } => (SubjectKind::User, SubjectId(id)),
+            Subject::UserWithOrganizationInfo { id, .. } => (SubjectKind::User, SubjectId(id)),
         }
     }
 
     pub fn user_id(&self) -> &str {
         match self {
             Subject::User(id) => id,
-            Subject::UserWithGroups { id, .. } => id,
+            Subject::UserWithOrganizationInfo { id, .. } => id,
         }
     }
 
     pub fn organization_user_id(&self) -> Option<&str> {
         match self {
             Subject::User(_) => None,
-            Subject::UserWithGroups {
+            Subject::UserWithOrganizationInfo {
                 organization_user_id,
                 ..
             } => organization_user_id.as_deref(),
@@ -54,7 +54,7 @@ impl Subject {
     pub fn organization_group_ids(&self) -> &[String] {
         match self {
             Subject::User(_) => &[],
-            Subject::UserWithGroups {
+            Subject::UserWithOrganizationInfo {
                 organization_group_ids,
                 ..
             } => organization_group_ids,

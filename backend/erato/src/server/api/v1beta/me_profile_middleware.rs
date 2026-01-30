@@ -111,7 +111,7 @@ impl MeProfile {
         if self.profile.organization_user_id.is_some()
             || !self.profile.organization_group_ids.is_empty()
         {
-            Subject::UserWithGroups {
+            Subject::UserWithOrganizationInfo {
                 id: self.profile.id.clone(),
                 organization_user_id: self.profile.organization_user_id.clone(),
                 organization_group_ids: self.profile.organization_group_ids.clone(),

@@ -126,6 +126,15 @@ async fn test_app_state_internal(
         .max_capacity(app_config.caches.file_contents_cache_mb * 1024 * 1024)
         .build();
 
+    // Initialize file bytes cache with MB-based weigher
+    let file_bytes_cache = moka::future::Cache::builder()
+        .weigher(|_key: &sea_orm::prelude::Uuid, value: &Vec<u8>| -> u32 {
+            // Weight by byte vector length
+            value.len().try_into().unwrap_or(u32::MAX)
+        })
+        .max_capacity(app_config.caches.file_bytes_cache_mb * 1024 * 1024)
+        .build();
+
     // Initialize token count cache with MB-based weigher
     let token_count_cache = moka::future::Cache::builder()
         .weigher(|key: &String, _value: &usize| -> u32 {
@@ -152,6 +161,7 @@ async fn test_app_state_internal(
         global_policy_engine,
         background_tasks: BackgroundTaskManager::new(),
         system_prompt_renderer: erato::system_prompt_renderer::SystemPromptRenderer::new(),
+        file_bytes_cache,
         file_contents_cache,
         token_count_cache,
         file_processor,
