@@ -95,7 +95,7 @@ pub struct GenerationMetadata {
     pub error: Option<GenerationErrorType>,
 }
 
-/// Role of the message author
+/// Role of the message author (as defined by the LLM providers)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum MessageRole {

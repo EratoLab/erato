@@ -8,8 +8,7 @@ use crate::models::message::{
     ContentPart, ContentPartImage, ContentPartImageFilePointer, ContentPartText,
     GenerationErrorType, GenerationInputMessages, GenerationMetadata, GenerationParameters,
     MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus, ToolUse,
-    get_generation_input_messages_by_previous_message_id, get_message_by_id, submit_message,
-    update_message_generation_metadata,
+    get_message_by_id, submit_message, update_message_generation_metadata,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::ChatMessage;
@@ -24,8 +23,12 @@ use crate::services::genai_langfuse::{
 };
 use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::convert_mcp_tools_to_genai_tools;
+use crate::services::prompt_composition::{
+    AppStateFileResolver, AppStatePromptProvider, DatabaseMessageRepository,
+    PromptCompositionUserInput, compose_prompt_messages,
+};
 use crate::services::sentry::capture_report;
-use crate::state::AppState;
+use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::State;
 use axum::response::Sse;
 use axum::response::sse::Event;
@@ -35,7 +38,7 @@ use eyre::{Report, eyre};
 use futures::Stream;
 use genai::chat::{
     ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatRole, ChatStreamEvent,
-    MessageContent, ReasoningEffort, StreamChunk, StreamEnd,
+    MessageContent, StreamChunk, StreamEnd,
 };
 use sea_orm::EntityTrait;
 use sea_orm::JsonValue;
@@ -49,6 +52,31 @@ use tokio_stream::StreamExt as _;
 use tracing;
 use tracing::{Instrument, instrument};
 use utoipa::ToSchema;
+
+/// Input parameters extracted from MeProfile for chat request preparation.
+/// This type acts as a safeguard to only expose the specific attributes
+/// needed during chat generation, rather than passing the full MeProfile.
+#[derive(Debug, Clone)]
+pub struct MeProfileChatRequestInput<'a> {
+    pub user_groups: &'a [String],
+    pub organization_user_id: Option<&'a str>,
+    pub organization_group_ids: &'a [String],
+    pub access_token: Option<&'a str>,
+    pub preferred_language: &'a str,
+}
+
+impl<'a> MeProfileChatRequestInput<'a> {
+    /// Create a new MeProfileChatRequestInput from a MeProfile reference.
+    pub fn from_me_profile(me_profile: &'a MeProfile) -> Self {
+        Self {
+            user_groups: &me_profile.groups,
+            organization_user_id: me_profile.organization_user_id.as_deref(),
+            organization_group_ids: &me_profile.organization_group_ids,
+            access_token: me_profile.access_token.as_deref(),
+            preferred_language: &me_profile.preferred_language,
+        }
+    }
+}
 
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -804,25 +832,6 @@ async fn bg_stream_save_user_message(
     Ok(saved_user_message)
 }
 
-/// Helper function to get MIME type from file extension
-fn get_mime_type_from_extension(filename: &str) -> String {
-    if let Some(extension) = filename.rsplit('.').next() {
-        match extension.to_lowercase().as_str() {
-            "jpg" | "jpeg" => "image/jpeg".to_string(),
-            "png" => "image/png".to_string(),
-            "gif" => "image/gif".to_string(),
-            "webp" => "image/webp".to_string(),
-            "bmp" => "image/bmp".to_string(),
-            "svg" => "image/svg+xml".to_string(),
-            "tiff" | "tif" => "image/tiff".to_string(),
-            "ico" => "image/x-icon".to_string(),
-            _ => "application/octet-stream".to_string(),
-        }
-    } else {
-        "application/octet-stream".to_string()
-    }
-}
-
 /// Download and store a generated image from URL or base64 data
 async fn download_and_store_generated_image(
     app_state: &AppState,
@@ -958,204 +967,30 @@ async fn resolve_file_pointers_in_generation_input(
     for input_message in generation_input_messages.messages {
         let resolved_content = match input_message.content {
             ContentPart::TextFilePointer(ref file_pointer) => {
-                // Extract text from the file pointer JIT
+                // Extract file content from the pointer JIT using cached version
                 let file_upload_id = file_pointer.file_upload_id;
+                let is_image_pointer = false;
 
-                // Get the file upload record - use entity directly since we're reading from generation_input_messages
-                // which already went through authorization when it was created
-                let file_upload_result = FileUploads::find_by_id(file_upload_id)
-                    .one(&app_state.db)
-                    .await;
-
-                match file_upload_result {
-                    Ok(Some(file)) => {
-                        // Get the file storage provider
-                        let file_storage = app_state
-                            .file_storage_providers
-                            .get(&file.file_storage_provider_id);
-
-                        if let Some(file_storage) = file_storage {
-                            // Read the file content using the unified interface
-                            let file_bytes_result = file_storage
-                                .read_file_to_bytes_with_context(
-                                    &file.file_storage_path,
-                                    sharepoint_ctx.as_ref(),
-                                )
-                                .await;
-
-                            match file_bytes_result {
-                                Ok(file_bytes) => {
-                                    // Use the configured file processor to extract text from the file
-                                    let parse_result =
-                                        app_state.file_processor.parse_file(file_bytes).await;
-
-                                    match parse_result {
-                                        Ok(text) => {
-                                            let text = remove_null_characters(&text);
-                                            tracing::debug!(
-                                                "Successfully extracted text from file pointer {}: {} (text length: {})",
-                                                file.filename,
-                                                file_upload_id,
-                                                text.len()
-                                            );
-
-                                            let content = format_successful_file_content(
-                                                &file.filename,
-                                                file_upload_id,
-                                                &text,
-                                            );
-                                            ContentPart::Text(ContentPartText { text: content })
-                                        }
-                                        Err(err) => {
-                                            tracing::warn!(
-                                                "Failed to parse file {}: {} - Error: {}, using placeholder text",
-                                                file.filename,
-                                                file_upload_id,
-                                                err
-                                            );
-                                            let content = format_file_error_message(
-                                                &file.filename,
-                                                file_upload_id,
-                                                true,
-                                            );
-                                            ContentPart::Text(ContentPartText { text: content })
-                                        }
-                                    }
-                                }
-                                Err(err) => {
-                                    tracing::warn!(
-                                        "Failed to read file {} from storage: {}, using placeholder text",
-                                        file_upload_id,
-                                        err
-                                    );
-                                    let content = format_file_error_message(
-                                        &file.filename,
-                                        file_upload_id,
-                                        false,
-                                    );
-                                    ContentPart::Text(ContentPartText { text: content })
-                                }
-                            }
-                        } else {
-                            tracing::warn!(
-                                "File storage provider {} not found for file {}, using placeholder text",
-                                file.file_storage_provider_id,
-                                file_upload_id
-                            );
-                            let content =
-                                format_file_error_message(&file.filename, file_upload_id, false);
-                            ContentPart::Text(ContentPartText { text: content })
-                        }
-                    }
-                    Ok(None) => {
-                        tracing::warn!(
-                            "File upload {} referenced in TextFilePointer not found, using placeholder text",
-                            file_upload_id
-                        );
-                        let content = format_file_error_message("Unknown", file_upload_id, false);
-                        ContentPart::Text(ContentPartText { text: content })
-                    }
-                    Err(err) => {
-                        tracing::error!(
-                            "Database error fetching file upload {}: {}, using placeholder text",
-                            file_upload_id,
-                            err
-                        );
-                        let content = format_file_error_message("Unknown", file_upload_id, false);
-                        ContentPart::Text(ContentPartText { text: content })
-                    }
-                }
+                resolve_file_pointer(
+                    app_state,
+                    file_upload_id,
+                    is_image_pointer,
+                    sharepoint_ctx.as_ref(),
+                )
+                .await
             }
             ContentPart::ImageFilePointer(ref file_pointer) => {
-                // Extract image from the file pointer JIT and encode to base64
+                // Extract file content from the pointer JIT using cached version
                 let file_upload_id = file_pointer.file_upload_id;
+                let is_image_pointer = true;
 
-                // Get the file upload record
-                let file_upload_result = FileUploads::find_by_id(file_upload_id)
-                    .one(&app_state.db)
-                    .await;
-
-                match file_upload_result {
-                    Ok(Some(file)) => {
-                        // Get the file storage provider
-                        let file_storage = app_state
-                            .file_storage_providers
-                            .get(&file.file_storage_provider_id);
-
-                        if let Some(file_storage) = file_storage {
-                            // Read the file content using the unified interface
-                            let file_bytes_result = file_storage
-                                .read_file_to_bytes_with_context(
-                                    &file.file_storage_path,
-                                    sharepoint_ctx.as_ref(),
-                                )
-                                .await;
-
-                            match file_bytes_result {
-                                Ok(file_bytes) => {
-                                    // Encode to base64
-                                    use base64::{Engine as _, engine::general_purpose};
-                                    let base64_data = general_purpose::STANDARD.encode(&file_bytes);
-
-                                    // Determine MIME type from extension
-                                    let content_type = get_mime_type_from_extension(&file.filename);
-
-                                    tracing::debug!(
-                                        "Successfully encoded image from file pointer {}: {} (size: {} bytes, content_type: {})",
-                                        file.filename,
-                                        file_upload_id,
-                                        file_bytes.len(),
-                                        content_type
-                                    );
-
-                                    ContentPart::Image(ContentPartImage {
-                                        content_type,
-                                        base64_data,
-                                    })
-                                }
-                                Err(err) => {
-                                    tracing::warn!(
-                                        "Failed to read image file {} from storage: {}, using placeholder text",
-                                        file_upload_id,
-                                        err
-                                    );
-                                    let content = format_file_error_message(
-                                        &file.filename,
-                                        file_upload_id,
-                                        false,
-                                    );
-                                    ContentPart::Text(ContentPartText { text: content })
-                                }
-                            }
-                        } else {
-                            tracing::warn!(
-                                "File storage provider {} not found for image file {}, using placeholder text",
-                                file.file_storage_provider_id,
-                                file_upload_id
-                            );
-                            let content =
-                                format_file_error_message(&file.filename, file_upload_id, false);
-                            ContentPart::Text(ContentPartText { text: content })
-                        }
-                    }
-                    Ok(None) => {
-                        tracing::warn!(
-                            "File upload {} referenced in ImageFilePointer not found, using placeholder text",
-                            file_upload_id
-                        );
-                        let content = format_file_error_message("Unknown", file_upload_id, false);
-                        ContentPart::Text(ContentPartText { text: content })
-                    }
-                    Err(err) => {
-                        tracing::error!(
-                            "Database error fetching image file upload {}: {}, using placeholder text",
-                            file_upload_id,
-                            err
-                        );
-                        let content = format_file_error_message("Unknown", file_upload_id, false);
-                        ContentPart::Text(ContentPartText { text: content })
-                    }
-                }
+                resolve_file_pointer(
+                    app_state,
+                    file_upload_id,
+                    is_image_pointer,
+                    sharepoint_ctx.as_ref(),
+                )
+                .await
             }
             // Pass through other content parts unchanged
             other => other,
@@ -1172,118 +1007,286 @@ async fn resolve_file_pointers_in_generation_input(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn prepare_chat_request(
+/// Helper function to resolve a file pointer (text or image) to its actual content
+async fn resolve_file_pointer(
     app_state: &AppState,
-    policy: &PolicyEngine,
-    chat: &chats::Model,
-    previous_message_id: &Uuid,
-    mut new_input_files: Vec<FileContentsForGeneration>,
-    user_groups: &[String],
-    organization_user_id: Option<&str>,
-    organization_group_ids: &[String],
-    requested_chat_provider_id: Option<&str>,
-    access_token: Option<&str>,
-    preferred_language: Option<&str>,
-) -> Result<(ChatRequest, ChatOptions, GenerationInputMessages), Report> {
-    // Create subject from chat owner with organization info if available
-    let subject = if organization_user_id.is_some() || !organization_group_ids.is_empty() {
-        crate::policy::types::Subject::UserWithGroups {
-            id: chat.owner_user_id.clone(),
-            organization_user_id: organization_user_id.map(String::from),
-            organization_group_ids: organization_group_ids.to_vec(),
+    file_upload_id: Uuid,
+    is_image_pointer: bool,
+    sharepoint_ctx: Option<&crate::services::file_storage::SharepointContext<'_>>,
+) -> ContentPart {
+    use crate::services::file_processing_cached::get_file_cached;
+
+    // Get the file upload record - use entity directly since we're reading from generation_input_messages
+    // which already went through authorization when it was created
+    let file_upload_result = FileUploads::find_by_id(file_upload_id)
+        .one(&app_state.db)
+        .await;
+
+    match file_upload_result {
+        Ok(Some(file)) => {
+            // Get the file storage provider
+            let file_storage = app_state
+                .file_storage_providers
+                .get(&file.file_storage_provider_id);
+
+            if let Some(file_storage) = file_storage {
+                // Use unified get_file_cached
+                match get_file_cached(
+                    app_state,
+                    &file_upload_id,
+                    file_storage,
+                    &file.file_storage_path,
+                    &file.filename,
+                    sharepoint_ctx,
+                )
+                .await
+                {
+                    Ok(file_contents) => {
+                        // Route based on expected pointer type and actual content
+                        match (&file_contents.content, is_image_pointer) {
+                            (FileContent::Text(text), false) => {
+                                // TextFilePointer → Text content (expected case)
+                                tracing::debug!(
+                                    "Successfully extracted text from file pointer {}: {} (text length: {})",
+                                    file.filename,
+                                    file_upload_id,
+                                    text.len()
+                                );
+
+                                let content = format_successful_file_content(
+                                    &file.filename,
+                                    file_upload_id,
+                                    text,
+                                );
+                                ContentPart::Text(ContentPartText { text: content })
+                            }
+                            (FileContent::Image { .. }, true) => {
+                                // ImageFilePointer → Image content (expected case)
+                                if let Some(image) = file_contents.as_base64_image() {
+                                    tracing::debug!(
+                                        "Successfully encoded image: {} ({} bytes, {})",
+                                        file.filename,
+                                        image.base64_data.len(),
+                                        image.content_type
+                                    );
+                                    ContentPart::Image(image)
+                                } else {
+                                    unreachable!(
+                                        "as_base64_image should always succeed for Image variant"
+                                    )
+                                }
+                            }
+                            (FileContent::Text(_), true) => {
+                                // ImageFilePointer → Text content (mismatch)
+                                tracing::warn!(
+                                    "ImageFilePointer resolved to text file: {}",
+                                    file_upload_id
+                                );
+                                let content = format_file_error_message(
+                                    &file.filename,
+                                    file_upload_id,
+                                    false,
+                                );
+                                ContentPart::Text(ContentPartText { text: content })
+                            }
+                            (FileContent::Image { .. }, false) => {
+                                // TextFilePointer → Image content (mismatch)
+                                tracing::warn!(
+                                    "TextFilePointer resolved to image file: {}",
+                                    file_upload_id
+                                );
+                                let content = format_file_error_message(
+                                    &file.filename,
+                                    file_upload_id,
+                                    false,
+                                );
+                                ContentPart::Text(ContentPartText { text: content })
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        // Check if it's a parsing error by examining the error message
+                        let is_parsing_error =
+                            err.to_string().contains("parse") || err.to_string().contains("Parse");
+
+                        tracing::warn!(
+                            "Failed to get file contents for {}: {} - Error: {}, using placeholder text",
+                            file.filename,
+                            file_upload_id,
+                            err
+                        );
+                        let content = format_file_error_message(
+                            &file.filename,
+                            file_upload_id,
+                            is_parsing_error,
+                        );
+                        ContentPart::Text(ContentPartText { text: content })
+                    }
+                }
+            } else {
+                tracing::warn!(
+                    "File storage provider {} not found for file {}, using placeholder text",
+                    file.file_storage_provider_id,
+                    file_upload_id
+                );
+                let content = format_file_error_message(&file.filename, file_upload_id, false);
+                ContentPart::Text(ContentPartText { text: content })
+            }
         }
-    } else {
-        crate::policy::types::Subject::User(chat.owner_user_id.clone())
-    };
-
-    // Get assistant configuration if this chat is based on an assistant
-    let assistant_config = crate::models::chat::get_chat_assistant_configuration(
-        &app_state.db,
-        policy,
-        &subject,
-        chat,
-    )
-    .await?;
-
-    // Retrieve assistant prompt if assistant is configured
-    let assistant_prompt = assistant_config.as_ref().map(|a| a.prompt.clone());
-
-    // Check if this is the first user message in the chat
-    // We check this by seeing if the previous message (which we just saved) is the first message
-    let is_first_user_message = {
-        let message =
-            get_message_by_id(&app_state.db, policy, &subject, previous_message_id).await?;
-        message.previous_message_id.is_none()
-    };
-
-    // If this is the first message and assistant has files, add them to input files
-    if is_first_user_message
-        && let Some(ref assistant) = assistant_config
-        && !assistant.files.is_empty()
-    {
-        tracing::debug!(
-            "Adding {} assistant files to first message in chat",
-            assistant.files.len()
-        );
-        let assistant_files =
-            get_assistant_files_for_generation(app_state, &assistant.files, access_token).await?;
-        new_input_files.extend(assistant_files);
+        Ok(None) => {
+            tracing::warn!(
+                "File upload {} referenced in file pointer not found, using placeholder text",
+                file_upload_id
+            );
+            let content = format_file_error_message("Unknown", file_upload_id, false);
+            ContentPart::Text(ContentPartText { text: content })
+        }
+        Err(err) => {
+            tracing::error!(
+                "Database error fetching file upload {}: {}, using placeholder text",
+                file_upload_id,
+                err
+            );
+            let content = format_file_error_message("Unknown", file_upload_id, false);
+            ContentPart::Text(ContentPartText { text: content })
+        }
     }
+}
 
-    // Determine the chat provider to use
-    // If assistant has a default and user didn't specify, use assistant's default
-    let effective_chat_provider_id = requested_chat_provider_id.or_else(|| {
-        assistant_config
-            .as_ref()
-            .and_then(|a| a.default_chat_provider.as_deref())
-    });
+pub struct PreparedChatRequest {
+    // Our internal abstract structure of the message chain
+    generation_input_messages: GenerationInputMessages,
+    // Our internal abstract representation of generation parameters
+    generation_parameters: GenerationParameters,
+    // Prepared `genai` `ChatRequest` (messages + available tools)
+    chat_request: ChatRequest,
+    // Prepared `genai` `ChatOptions` (e.g. reasoning effort)
+    chat_options: ChatOptions,
+}
 
-    // Resolve system prompt dynamically based on chat provider configuration
-    let chat_provider_config =
-        app_state.chat_provider_for_chatcompletion(effective_chat_provider_id, user_groups)?;
-    let system_prompt = app_state
-        .get_system_prompt(&chat_provider_config, preferred_language)
+/// Prepares a chat request for LLM generation.
+///
+/// This function is boxed to reduce stack usage, as it has a deep async call chain.
+#[allow(clippy::too_many_arguments)]
+fn prepare_chat_request<'a>(
+    app_state: &'a AppState,
+    policy: &'a PolicyEngine,
+    chat: &'a chats::Model,
+    user_input: PromptCompositionUserInput,
+    me_profile_input: &'a MeProfileChatRequestInput<'a>,
+) -> std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<PreparedChatRequest, Report>> + Send + 'a>,
+> {
+    Box::pin(async move {
+        // Create subject from chat owner with organization info if available
+        let subject = if me_profile_input.organization_user_id.is_some()
+            || !me_profile_input.organization_group_ids.is_empty()
+        {
+            crate::policy::types::Subject::UserWithOrganizationInfo {
+                id: chat.owner_user_id.clone(),
+                organization_user_id: me_profile_input.organization_user_id.map(String::from),
+                organization_group_ids: me_profile_input.organization_group_ids.to_vec(),
+            }
+        } else {
+            crate::policy::types::Subject::User(chat.owner_user_id.clone())
+        };
+
+        // Create the dependency adapters
+        let message_repo = DatabaseMessageRepository {
+            conn: &app_state.db,
+            policy,
+            subject: &subject,
+        };
+        let file_resolver = AppStateFileResolver {
+            app_state,
+            access_token: me_profile_input.access_token,
+        };
+        let prompt_provider = AppStatePromptProvider {
+            app_state,
+            policy,
+            subject: &subject,
+        };
+
+        // Get assistant configuration to check for default provider
+        let assistant_config = crate::models::chat::get_chat_assistant_configuration(
+            &app_state.db,
+            policy,
+            &subject,
+            chat,
+        )
         .await?;
 
-    let generation_input_messages = get_generation_input_messages_by_previous_message_id(
-        &app_state.db,
-        system_prompt,
-        assistant_prompt,
-        previous_message_id,
-        Some(10),
-        new_input_files,
-    )
-    .await?;
+        // Determine the chat provider to use
+        let requested_chat_provider_id = user_input.requested_chat_provider_id.as_deref();
+        let effective_chat_provider_id = requested_chat_provider_id.or_else(|| {
+            assistant_config
+                .as_ref()
+                .and_then(|a| a.default_chat_provider.as_deref())
+        });
 
-    // Resolve TextFilePointer to Text by extracting file contents JIT
-    let resolved_generation_input_messages = resolve_file_pointers_in_generation_input(
-        app_state,
-        generation_input_messages.clone(),
-        access_token,
-    )
-    .await?;
+        // Resolve chat provider configuration
+        let ChatProviderConfigWithId {
+            chat_provider_config,
+            chat_provider_id,
+        } = app_state.chat_provider_for_chatcompletion(
+            effective_chat_provider_id,
+            me_profile_input.user_groups,
+        )?;
 
-    let mut chat_request = resolved_generation_input_messages
-        .clone()
-        .into_chat_request();
-    let chat_options = build_chat_options_for_completion(&chat_provider_config.model_settings);
+        // Use the new prompt composition service
+        let generation_input_messages = compose_prompt_messages(
+            &message_repo,
+            &file_resolver,
+            &prompt_provider,
+            chat,
+            &user_input,
+            &chat_provider_config,
+            Some(me_profile_input.preferred_language),
+        )
+        .await?;
 
-    // Get all MCP server tools and filter by assistant configuration
-    let all_mcp_server_tools = app_state.mcp_servers.list_tools(chat.id).await;
-    let filtered_mcp_tools =
-        filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
+        // Resolve TextFilePointer to Text by extracting file contents JIT
+        let resolved_generation_input_messages = resolve_file_pointers_in_generation_input(
+            app_state,
+            generation_input_messages.clone(),
+            me_profile_input.access_token,
+        )
+        .await?;
 
-    let tools = convert_mcp_tools_to_genai_tools(filtered_mcp_tools);
-    if !tools.is_empty() {
-        chat_request.tools = Some(tools);
-    } else {
-        tracing::trace!("Not adding empty list of tools, as that may lead to hallucinated tools");
-    }
+        // Get all MCP server tools and filter by assistant configuration
+        let all_mcp_server_tools = app_state.mcp_servers.list_tools(chat.id).await;
+        let filtered_mcp_tools =
+            filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
+        let generation_mcp_tools = filtered_mcp_tools;
 
-    // Return the unresolved version for saving to DB (to avoid duplicating file contents)
-    // The resolved version is already used in chat_request
-    Ok((chat_request, chat_options, generation_input_messages))
+        // Build genai ChatRequest (messages + tools) + ChatOptions
+        let mut chat_request = resolved_generation_input_messages
+            .clone()
+            .into_chat_request();
+        let chat_request_tools = convert_mcp_tools_to_genai_tools(generation_mcp_tools);
+        if !chat_request_tools.is_empty() {
+            chat_request.tools = Some(chat_request_tools);
+        } else {
+            tracing::trace!(
+                "Not adding empty list of tools, as that may lead to hallucinated tools"
+            );
+        }
+        let chat_options = build_chat_options_for_completion(&chat_provider_config.model_settings);
+
+        // Create generation parameters with the determined chat provider ID
+        let generation_parameters = GenerationParameters {
+            generation_chat_provider_id: Some(chat_provider_id),
+        };
+
+        // Return the unresolved version for saving to DB (to avoid duplicating file contents)
+        // The resolved version is already used in chat_request
+        Ok(PreparedChatRequest {
+            generation_input_messages,
+            generation_parameters,
+            chat_request,
+            chat_options,
+        })
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2067,29 +2070,23 @@ pub async fn generate_chat_summary(
     let max_tokens = app_state.max_tokens_for_summary();
 
     // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
-    let chat_provider = app_state.chat_provider_for_summary().wrap_err_with(|| {
+    let ChatProviderConfigWithId {
+        chat_provider_config,
+        ..
+    } = app_state.chat_provider_for_summary().wrap_err_with(|| {
         format!(
             "[SUMMARY] Failed to get chat provider for summary (chat_id={})",
             chat.id
         )
     })?;
-    let mut chat_options =
-        build_chat_options_for_summary(&chat_provider.model_settings, max_tokens);
+    let chat_options =
+        build_chat_options_for_summary(&chat_provider_config.model_settings, max_tokens);
 
     tracing::debug!(
         "[SUMMARY] Using provider '{}' for summary generation (chat_id={})",
-        chat_provider.model_name,
+        chat_provider_config.model_name,
         chat.id
     );
-
-    if chat_provider.model_settings.reasoning_effort.is_none()
-        && (chat_provider.model_name.starts_with("o1-")
-            || chat_provider.model_name.starts_with("o2-")
-            || chat_provider.model_name.starts_with("o3-")
-            || chat_provider.model_name.starts_with("o4-"))
-    {
-        chat_options = chat_options.with_reasoning_effort(ReasoningEffort::Low);
-    }
 
     tracing::debug!("[SUMMARY] Calling genai API (chat_id={})", chat.id);
     let summary_completion = app_state
@@ -2147,7 +2144,38 @@ pub async fn generate_chat_summary(
 pub struct FileContentsForGeneration {
     pub id: Uuid,
     pub filename: String,
-    pub contents_as_text: String,
+    pub content: FileContent,
+}
+
+#[derive(Debug, Clone)]
+pub enum FileContent {
+    /// Parsed text content (ready to use)
+    Text(String),
+    /// Raw image bytes with MIME type (encode to base64 on-demand)
+    Image {
+        raw_bytes: Vec<u8>,
+        mime_type: String,
+    },
+}
+
+impl FileContentsForGeneration {
+    /// Helper to encode image to base64 if this is an image file
+    pub fn as_base64_image(&self) -> Option<ContentPartImage> {
+        match &self.content {
+            FileContent::Text(_) => None,
+            FileContent::Image {
+                raw_bytes,
+                mime_type,
+            } => {
+                use base64::{Engine as _, engine::general_purpose};
+                let base64_data = general_purpose::STANDARD.encode(raw_bytes);
+                Some(ContentPartImage {
+                    content_type: mime_type.clone(),
+                    base64_data,
+                })
+            }
+        }
+    }
 }
 
 // Remove null characters from a string, so that it may be saved in Postgres.
@@ -2156,51 +2184,13 @@ pub fn remove_null_characters(s: &str) -> String {
     s.chars().filter(|&c| c != '\0').collect()
 }
 
-/// Process files attached to a message and extract their text content
-async fn process_input_files(
-    tx: Sender<Result<Event, Report>>,
-    app_state: &AppState,
-    policy: &PolicyEngine,
-    me_user: &MeProfile,
-    input_files_ids: &[Uuid],
-) -> Result<Vec<FileContentsForGeneration>, ()> {
-    use crate::services::file_processing_cached;
-    use crate::services::file_storage::SharepointContext;
-
-    // Build the context for Sharepoint (will be ignored by other providers)
-    let sharepoint_ctx = me_user
-        .access_token
-        .as_deref()
-        .map(|token| SharepointContext {
-            access_token: token,
-        });
-
-    // Use the cached parallel processing function
-    match file_processing_cached::process_files_parallel_cached(
-        app_state,
-        policy,
-        me_user,
-        input_files_ids,
-        sharepoint_ctx,
-    )
-    .await
-    {
-        Ok(files) => Ok(files),
-        Err(err) => {
-            let _ = tx
-                .send(Err(err).wrap_err("Failed to process input files"))
-                .await;
-            Err(())
-        }
-    }
-}
-
 /// Get assistant files and convert them to FileContentsForGeneration format
 ///
 /// This function downloads and extracts text from files associated with an assistant.
 /// Unlike process_input_files, this doesn't require a sender for streaming events.
 ///
 /// For SharePoint files, an access token must be provided to fetch the file contents.
+#[allow(dead_code)]
 async fn get_assistant_files_for_generation(
     app_state: &AppState,
     assistant_files: &[crate::models::assistant::FileInfo],
@@ -2249,7 +2239,7 @@ async fn get_assistant_files_for_generation(
             Ok::<_, Report>(FileContentsForGeneration {
                 id: file_id,
                 filename,
-                contents_as_text: text,
+                content: FileContent::Text(text),
             })
         }
     });
@@ -2720,61 +2710,33 @@ async fn run_message_submit_task(
         );
     }
 
-    // Process input files
-    let (temp_tx, mut temp_rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
-
-    // Consume events from the channel in the background
-    tokio::spawn(async move {
-        while temp_rx.recv().await.is_some() {
-            // Discard file processing events
-        }
-    });
-
-    let files_for_generation = process_input_files(
-        temp_tx,
-        app_state,
-        policy,
-        me_user,
-        &request.input_files_ids,
-    )
-    .await
-    .map_err(|_| "Failed to process input files".to_string())?;
-
     // Prepare chat request
-    let (chat_request, chat_options, generation_input_messages) = prepare_chat_request(
-        app_state,
-        policy,
-        &chat,
-        &saved_user_message.id,
-        files_for_generation,
-        &me_user.groups,
-        me_user.organization_user_id.as_deref(),
-        &me_user.organization_group_ids,
-        request.chat_provider_id.as_deref(),
-        me_user.access_token.as_deref(),
-        Some(me_user.preferred_language.as_str()),
-    )
-    .await
-    .map_err(|e| format!("Failed to prepare chat request: {}", e))?;
+    let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
+    let user_input = PromptCompositionUserInput {
+        just_submitted_user_message_id: saved_user_message.id,
+        requested_chat_provider_id: request.chat_provider_id.clone(),
+        new_input_file_ids: request.input_files_ids.clone(),
+    };
+    let PreparedChatRequest {
+        chat_request,
+        chat_options,
+        generation_input_messages,
+        generation_parameters,
+    } = prepare_chat_request(app_state, policy, &chat, user_input, &me_profile_input)
+        .await
+        .map_err(|e| format!("Failed to prepare chat request: {}", e))?;
 
-    // Determine chat provider ID
-    let chat_provider_allowlist =
-        app_state.determine_chat_provider_allowlist_for_user(&me_user.groups);
-    let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
-        .as_ref()
-        .map(|list| list.iter().map(|s| s.as_str()).collect());
-
-    let chat_provider_id = app_state
-        .config
-        .determine_chat_provider(
-            allowlist_refs.as_deref(),
-            request.chat_provider_id.as_deref(),
-        )
-        .unwrap_or("unknown")
-        .to_string();
+    // Extract chat provider ID from generation parameters (clone to avoid borrow issues)
+    let chat_provider_id = generation_parameters
+        .generation_chat_provider_id
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
 
     // Get the chat provider configuration to check if image generation is enabled
-    let chat_provider_config = app_state
+    let ChatProviderConfigWithId {
+        chat_provider_config,
+        ..
+    } = app_state
         .chat_provider_for_chatcompletion(Some(&chat_provider_id), &me_user.groups)
         .map_err(|e| format!("Failed to get chat provider config: {}", e))?;
 
@@ -2803,10 +2765,6 @@ async fn run_message_submit_task(
             "role": "assistant",
             "content": [],
         });
-
-        let generation_parameters = GenerationParameters {
-            generation_chat_provider_id: Some(chat_provider_id.clone()),
-        };
 
         let initial_assistant_message = submit_message(
             &app_state.db,
@@ -2900,10 +2858,6 @@ async fn run_message_submit_task(
         "role": "assistant",
         "content": [],
     });
-
-    let generation_parameters = GenerationParameters {
-        generation_chat_provider_id: Some(chat_provider_id.clone()),
-    };
 
     let initial_assistant_message = submit_message(
         &app_state.db,
@@ -3063,58 +3017,34 @@ pub async fn regenerate_message_sse(
             .input_file_uploads
             .clone()
             .unwrap_or_default();
-        let files_for_generation = process_input_files(
-            tx.clone(),
-            &app_state,
-            &policy,
-            &me_user,
-            &input_files_for_previous_message,
-        )
-        .await?;
 
-        let prepare_chat_request_res = prepare_chat_request(
-            &app_state,
-            &policy,
-            &chat,
-            &previous_message.id,
-            files_for_generation.clone(),
-            &me_user.groups,
-            me_user.organization_user_id.as_deref(),
-            &me_user.organization_group_ids,
-            request.chat_provider_id.as_deref(),
-            me_user.access_token.as_deref(),
-            Some(me_user.preferred_language.as_str()),
-        )
-        .await;
+        let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
+        let user_input = crate::services::prompt_composition::PromptCompositionUserInput {
+            just_submitted_user_message_id: previous_message.id,
+            requested_chat_provider_id: request.chat_provider_id.clone(),
+            new_input_file_ids: input_files_for_previous_message,
+        };
+        let prepare_chat_request_res =
+            prepare_chat_request(&app_state, &policy, &chat, user_input, &me_profile_input).await;
         if let Err(err) = prepare_chat_request_res {
             let _ = tx.send(Err(err)).await;
             return Err(());
         }
-        let (chat_request, chat_options, generation_input_messages) =
-            prepare_chat_request_res.unwrap();
+        let PreparedChatRequest {
+            chat_request,
+            chat_options,
+            generation_input_messages,
+            generation_parameters,
+        } = prepare_chat_request_res.unwrap();
 
         // ---- SAVE INITIAL EMPTY ASSISTANT MESSAGE (for regeneration) ----
         let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
 
-        // Determine the chat provider ID that will be used for generation
-        // Use the user's allowlist to filter available providers
-        let chat_provider_allowlist =
-            app_state.determine_chat_provider_allowlist_for_user(&me_user.groups);
-        let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
-            .as_ref()
-            .map(|list| list.iter().map(|s| s.as_str()).collect());
-
-        let chat_provider_id = app_state
-            .config
-            .determine_chat_provider(
-                allowlist_refs.as_deref(),
-                request.chat_provider_id.as_deref(),
-            )
-            .unwrap_or("unknown")
-            .to_string();
-        let generation_parameters = GenerationParameters {
-            generation_chat_provider_id: Some(chat_provider_id.clone()),
-        };
+        // Extract chat provider ID from generation parameters (clone to avoid borrow issues)
+        let chat_provider_id = generation_parameters
+            .generation_chat_provider_id
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
 
         let initial_assistant_message = match submit_message(
             &app_state.db,
@@ -3318,57 +3248,33 @@ pub async fn edit_message_sse(
             return Err(());
         }
 
-        let files_for_generation = process_input_files(
-            tx.clone(),
-            &app_state,
-            &policy,
-            &me_user,
-            &replace_input_files_ids,
-        )
-        .await?;
-        let prepare_chat_request_res = prepare_chat_request(
-            &app_state,
-            &policy,
-            &chat,
-            &saved_user_message.id,
-            files_for_generation.clone(),
-            &me_user.groups,
-            me_user.organization_user_id.as_deref(),
-            &me_user.organization_group_ids,
-            request.chat_provider_id.as_deref(),
-            me_user.access_token.as_deref(),
-            Some(me_user.preferred_language.as_str()),
-        )
-        .await;
+        let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
+        let user_input = PromptCompositionUserInput {
+            just_submitted_user_message_id: saved_user_message.id,
+            requested_chat_provider_id: request.chat_provider_id.clone(),
+            new_input_file_ids: replace_input_files_ids,
+        };
+        let prepare_chat_request_res =
+            prepare_chat_request(&app_state, &policy, &chat, user_input, &me_profile_input).await;
         if let Err(err) = prepare_chat_request_res {
             let _ = tx.send(Err(err)).await;
             return Err(());
         }
-        let (chat_request, chat_options, generation_input_messages) =
-            prepare_chat_request_res.unwrap();
+        let PreparedChatRequest {
+            chat_request,
+            chat_options,
+            generation_input_messages,
+            generation_parameters,
+        } = prepare_chat_request_res.unwrap();
 
         // ---- SAVE INITIAL EMPTY ASSISTANT MESSAGE (for edit) ----
         let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
 
-        // Determine the chat provider ID that will be used for generation
-        // Use the user's allowlist to filter available providers
-        let chat_provider_allowlist =
-            app_state.determine_chat_provider_allowlist_for_user(&me_user.groups);
-        let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
-            .as_ref()
-            .map(|list| list.iter().map(|s| s.as_str()).collect());
-
-        let chat_provider_id = app_state
-            .config
-            .determine_chat_provider(
-                allowlist_refs.as_deref(),
-                request.chat_provider_id.as_deref(),
-            )
-            .unwrap_or("unknown")
-            .to_string();
-        let generation_parameters = GenerationParameters {
-            generation_chat_provider_id: Some(chat_provider_id.clone()),
-        };
+        // Extract chat provider ID from generation parameters (clone to avoid borrow issues)
+        let chat_provider_id = generation_parameters
+            .generation_chat_provider_id
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
 
         let initial_assistant_message = match submit_message(
             &app_state.db,

@@ -908,7 +908,12 @@ pub struct ExperimentalAssistantsConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct CachesConfig {
-    // Maximum size in MB for file contents cache
+    // Maximum size in MB for file bytes cache (raw file bytes for both text and images)
+    // Defaults to 100MB
+    #[serde(default = "default_file_bytes_cache_mb")]
+    pub file_bytes_cache_mb: u64,
+
+    // Maximum size in MB for file contents cache (parsed text files only)
     // Defaults to 100MB
     #[serde(default = "default_file_contents_cache_mb")]
     pub file_contents_cache_mb: u64,
@@ -917,6 +922,10 @@ pub struct CachesConfig {
     // Defaults to 100MB
     #[serde(default = "default_token_count_cache_mb")]
     pub token_count_cache_mb: u64,
+}
+
+fn default_file_bytes_cache_mb() -> u64 {
+    100
 }
 
 fn default_file_contents_cache_mb() -> u64 {
@@ -930,6 +939,7 @@ fn default_token_count_cache_mb() -> u64 {
 impl Default for CachesConfig {
     fn default() -> Self {
         Self {
+            file_bytes_cache_mb: default_file_bytes_cache_mb(),
             file_contents_cache_mb: default_file_contents_cache_mb(),
             token_count_cache_mb: default_token_count_cache_mb(),
         }

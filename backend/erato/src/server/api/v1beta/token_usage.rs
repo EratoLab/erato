@@ -1,9 +1,9 @@
 use crate::models::message::{ContentPart, GenerationInputMessages, MessageRole};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
-use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
+use crate::server::api::v1beta::message_streaming::{FileContent, FileContentsForGeneration};
 use crate::services::file_processing_cached;
-use crate::state::AppState;
+use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::State;
 use axum::{Extension, Json};
 use eyre::Report;
@@ -141,26 +141,32 @@ pub async fn token_usage_estimate(
         );
         let mut messages = GenerationInputMessages { messages: vec![] };
         for file in files_for_generation.clone() {
-            let content = format!("File: {}\n{}", file.filename, file.contents_as_text);
-            messages
-                .messages
-                .push(crate::models::message::InputMessage {
-                    role: MessageRole::User,
-                    content: ContentPart::Text(content.into()),
-                });
+            // Only process text files for token usage estimation
+            if let FileContent::Text(ref text) = file.content {
+                let content = format!("File: {}\n{}", file.filename, text);
+                messages
+                    .messages
+                    .push(crate::models::message::InputMessage {
+                        role: MessageRole::User,
+                        content: ContentPart::Text(content.into()),
+                    });
+            }
         }
         messages
     } else {
         // If no previous message ID or existing chat ID, just create a new generation with the files
         let mut messages = GenerationInputMessages { messages: vec![] };
         for file in files_for_generation.clone() {
-            let content = format!("File: {}\n{}", file.filename, file.contents_as_text);
-            messages
-                .messages
-                .push(crate::models::message::InputMessage {
-                    role: MessageRole::User,
-                    content: ContentPart::Text(content.into()),
-                });
+            // Only process text files for token usage estimation
+            if let FileContent::Text(ref text) = file.content {
+                let content = format!("File: {}\n{}", file.filename, text);
+                messages
+                    .messages
+                    .push(crate::models::message::InputMessage {
+                        role: MessageRole::User,
+                        content: ContentPart::Text(content.into()),
+                    });
+            }
         }
         messages
     };
@@ -223,22 +229,28 @@ pub async fn token_usage_estimate(
         );
 
         let app_state_ref = &app_state;
-        let file_token_futures = files_for_generation.iter().map(|file| {
-            let file_id = file.id.to_string();
-            let filename = file.filename.clone();
-            let content = file.contents_as_text.clone();
-            async move {
-                let token_count =
-                    file_processing_cached::get_token_count_cached(app_state_ref, &content)
-                        .await
-                        .map_err(|err| {
-                            format!("Failed to count tokens for file {}: {}", filename, err)
-                        })?;
-                Ok::<_, String>(TokenUsageResponseFileItem {
-                    id: file_id,
-                    filename,
-                    token_count,
+        let file_token_futures = files_for_generation.iter().filter_map(|file| {
+            // Only count tokens for text files
+            if let FileContent::Text(ref text) = file.content {
+                let file_id = file.id.to_string();
+                let filename = file.filename.clone();
+                let content = text.clone();
+                Some(async move {
+                    let token_count =
+                        file_processing_cached::get_token_count_cached(app_state_ref, &content)
+                            .await
+                            .map_err(|err| {
+                                format!("Failed to count tokens for file {}: {}", filename, err)
+                            })?;
+                    Ok::<_, String>(TokenUsageResponseFileItem {
+                        id: file_id,
+                        filename,
+                        token_count,
+                    })
                 })
+            } else {
+                // Skip image files for token counting
+                None
             }
         });
 
@@ -338,7 +350,10 @@ pub async fn token_usage_estimate(
     let chat_provider_config = match app_state
         .chat_provider_for_chatcompletion(request.chat_provider_id.as_deref(), &me_user.groups)
     {
-        Ok(config) => config,
+        Ok(ChatProviderConfigWithId {
+            chat_provider_config,
+            ..
+        }) => chat_provider_config,
         Err(err) => {
             return Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -399,8 +414,10 @@ async fn prepare_input_messages(
     preferred_language: Option<&str>,
 ) -> Result<GenerationInputMessages, Report> {
     // Resolve system prompt dynamically based on chat provider configuration
-    let chat_provider_config =
-        app_state.chat_provider_for_chatcompletion(requested_chat_provider_id, user_groups)?;
+    let ChatProviderConfigWithId {
+        chat_provider_config,
+        ..
+    } = app_state.chat_provider_for_chatcompletion(requested_chat_provider_id, user_groups)?;
     let system_prompt = app_state
         .get_system_prompt(&chat_provider_config, preferred_language)
         .await?;

@@ -461,7 +461,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_authorize_with_organization_group_share_grant() {
-        let subject = Subject::UserWithGroups {
+        let subject = Subject::UserWithOrganizationInfo {
             id: "user_3".to_string(),
             organization_user_id: None,
             organization_group_ids: vec!["org-group-1".to_string(), "org-group-2".to_string()],
@@ -501,7 +501,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_authorize_without_organization_group_share_grant() {
-        let subject = Subject::UserWithGroups {
+        let subject = Subject::UserWithOrganizationInfo {
             id: "user_3".to_string(),
             organization_user_id: None,
             organization_group_ids: vec!["org-group-2".to_string()], // Not in org-group-1
