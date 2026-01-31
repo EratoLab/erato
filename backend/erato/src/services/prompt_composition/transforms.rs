@@ -68,7 +68,6 @@ pub async fn build_abstract_sequence(
 
     let most_recent_history_message =
         most_recent_assistant_with_gen_input.or(most_recent_with_gen_input);
-    dbg!(&sequence);
 
     // 5. Check if we should add system prompts
     // System prompts should only be added if:
@@ -113,7 +112,6 @@ pub async fn build_abstract_sequence(
             });
         }
     }
-    dbg!(&sequence);
 
     // 10. Add previous messages to the sequence
     // If we found an assistant message with generation_input_messages,
@@ -205,14 +203,12 @@ pub async fn build_abstract_sequence(
             }
         }
     }
-    dbg!(&sequence);
 
     // 11. Add current user input files (as file references)
     let _ = is_first_message;
     for file_id in new_input_file_ids {
         sequence.push(AbstractChatSequencePart::UserFile { file_id });
     }
-    dbg!(&sequence);
 
     Ok(sequence)
 }
