@@ -12,8 +12,10 @@ use crate::models::message::{
     get_message_by_id, submit_message, update_message_generation_metadata,
 };
 use crate::policy::engine::PolicyEngine;
+use crate::policy::types::Subject;
 use crate::server::api::v1beta::ChatMessage;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::server::api::v1beta::message_streaming_file_extraction::post_process_mcp_tool_result;
 use crate::services::background_tasks::{
     StreamingEvent, StreamingTask, ToolCallStatus as BgToolCallStatus,
 };
@@ -1341,6 +1343,8 @@ async fn stream_generate_chat_completion<
 >(
     tx: Sender<Result<Event, Report>>,
     app_state: &AppState,
+    policy: &PolicyEngine,
+    subject: &Subject,
     chat_request: ChatRequest,
     chat_options: ChatOptions,
     assistant_message_id: Uuid,
@@ -1499,18 +1503,40 @@ async fn stream_generate_chat_completion<
                 .convert_tool_call_to_managed_tool_call(chat_id, unfinished_tool_call.clone())
                 .await
                 .unwrap();
+            let output_schema = managed_tool_call.tool.output_schema.clone();
             match app_state
                 .mcp_servers
                 .call_tool(chat_id, managed_tool_call)
                 .await
             {
                 Ok(tool_call_result) => {
+                    let post_processed = match post_process_mcp_tool_result(
+                        app_state,
+                        policy,
+                        subject,
+                        chat_id,
+                        &unfinished_tool_call,
+                        output_schema.as_ref(),
+                        &tool_call_result,
+                    )
+                    .await
+                    {
+                        Ok(result) => result,
+                        Err(err) => {
+                            let _ = tx
+                                .send(Err(err).wrap_err("Failed to process MCP tool output"))
+                                .await;
+                            return Err(());
+                        }
+                    };
+                    let tool_response = post_processed.tool_response;
+                    let output_value = post_processed.output_value;
+                    let image_content_parts = post_processed.image_content_parts;
+
                     // Emit event for tool call update
                     {
                         let finished_tool_call = unfinished_tool_call.clone();
-                        let output_value = serde_json::from_str(&tool_call_result.content)
-                            .ok()
-                            .or(Some(JsonValue::String(tool_call_result.content.clone())));
+                        let output_value_for_event = output_value.clone();
                         let proposed_call = MessageSubmitStreamingResponseToolCallUpdate {
                             message_id: assistant_message_id,
                             content_index: current_message_content.len(),
@@ -1519,7 +1545,7 @@ async fn stream_generate_chat_completion<
                             input: Some(finished_tool_call.fn_arguments.clone()),
                             status: ToolCallStatus::Success,
                             progress_message: None,
-                            output: output_value.clone(),
+                            output: output_value_for_event.clone(),
                         };
                         // Forward to streaming_task if present
                         if let Some(task) = streaming_task {
@@ -1532,7 +1558,7 @@ async fn stream_generate_chat_completion<
                                     input: Some(finished_tool_call.fn_arguments),
                                     status: BgToolCallStatus::Success,
                                     progress_message: None,
-                                    output: output_value,
+                                    output: output_value_for_event,
                                 })
                                 .await;
                         }
@@ -1548,13 +1574,14 @@ async fn stream_generate_chat_completion<
                             tool_name: finished_tool_call.fn_name,
                             input: Some(finished_tool_call.fn_arguments),
                             progress_message: None,
-                            output: serde_json::from_str(&tool_call_result.content)
-                                .ok()
-                                .or(Some(JsonValue::String(tool_call_result.content.clone()))),
+                            output: output_value.clone(),
                         }));
+                        if !image_content_parts.is_empty() {
+                            current_message_content.extend(image_content_parts);
+                        }
                     }
 
-                    current_turn_tool_responses.push(tool_call_result)
+                    current_turn_tool_responses.push(tool_response)
                 }
                 Err(err) => {
                     // TODO: Send event and message_content
@@ -2983,9 +3010,12 @@ async fn run_message_submit_task(
         }
     });
 
+    let subject = me_user.to_subject();
     let generation_task = stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
         temp_tx2.clone(),
         app_state,
+        policy,
+        &subject,
         chat_request,
         chat_options,
         initial_assistant_message.id,
@@ -3176,10 +3206,13 @@ pub async fn regenerate_message_sse(
         }
         // ---- END EMIT ----
 
+        let subject = me_user.to_subject();
         let (end_content, generation_metadata) =
             stream_generate_chat_completion::<RegenerateMessageStreamingResponseMessage>(
                 tx.clone(),
                 &app_state,
+                &policy,
+                &subject,
                 chat_request,
                 chat_options,
                 initial_assistant_message.id, // Pass assistant_message_id
@@ -3405,10 +3438,13 @@ pub async fn edit_message_sse(
         }
         // ---- END EMIT ----
 
+        let subject = me_user.to_subject();
         let (end_content, generation_metadata) =
             stream_generate_chat_completion::<EditMessageStreamingResponseMessage>(
                 tx.clone(),
                 &app_state,
+                &policy,
+                &subject,
                 chat_request,
                 chat_options,
                 initial_assistant_message.id, // Pass assistant_message_id
