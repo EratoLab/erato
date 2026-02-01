@@ -3984,6 +3984,17 @@
             "format": "date-time",
             "description": "When this share grant was created"
           },
+          "group_profile": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrganizationGroup",
+                "description": "The group profile for organization group share grants."
+              }
+            ]
+          },
           "id": {
             "type": "string",
             "description": "The unique ID of the share grant"
@@ -4016,6 +4027,17 @@
             "type": "string",
             "format": "date-time",
             "description": "When this share grant was last updated"
+          },
+          "user_profile": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrganizationUser",
+                "description": "The user profile for organization user share grants."
+              }
+            ]
           }
         }
       },

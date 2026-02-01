@@ -1,5 +1,7 @@
+use crate::db::entity::share_grants;
 use crate::models::share_grant;
 use crate::policy::engine::PolicyEngine;
+use crate::server::api::v1beta::entra_id::{OrganizationGroup, OrganizationUser};
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::sentry::log_internal_server_error;
 use crate::state::AppState;
@@ -7,9 +9,28 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::{Extension, Json};
 use chrono::{DateTime, FixedOffset};
+use graph_rs_sdk::{GraphClient, GraphClientConfiguration, ODataQuery};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
+use std::collections::{HashMap, HashSet};
 use utoipa::ToSchema;
+
+#[derive(Debug, Deserialize)]
+struct GraphUserItem {
+    id: String,
+    #[serde(rename = "displayName")]
+    display_name: Option<String>,
+    #[serde(rename = "jobTitle")]
+    job_title: Option<String>,
+    mail: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphGroupItem {
+    id: String,
+    #[serde(rename = "displayName")]
+    display_name: Option<String>,
+}
 
 /// A share grant model
 #[derive(Debug, Serialize, ToSchema)]
@@ -32,6 +53,10 @@ pub struct ShareGrant {
     pub created_at: DateTime<FixedOffset>,
     /// When this share grant was last updated
     pub updated_at: DateTime<FixedOffset>,
+    /// The user profile for organization user share grants.
+    pub user_profile: Option<OrganizationUser>,
+    /// The group profile for organization group share grants.
+    pub group_profile: Option<OrganizationGroup>,
 }
 
 /// Request to create a new share grant
@@ -73,6 +98,171 @@ pub struct ListShareGrantsQuery {
 pub struct ListShareGrantsResponse {
     /// The list of share grants
     pub grants: Vec<ShareGrant>,
+}
+
+fn entra_id_enabled(app_state: &AppState) -> bool {
+    app_state.config.integrations.experimental_entra_id.enabled
+}
+
+fn create_graph_client(access_token: &str) -> GraphClient {
+    GraphClient::from(
+        GraphClientConfiguration::new()
+            .access_token(access_token)
+            .connection_verbose(true),
+    )
+}
+
+async fn fetch_user_profiles(
+    client: &GraphClient,
+    user_ids: &[String],
+) -> HashMap<String, OrganizationUser> {
+    let mut profiles = HashMap::new();
+
+    for user_id in user_ids {
+        let response = match client
+            .user(user_id)
+            .get_user()
+            .select(&["id", "displayName", "jobTitle", "mail"])
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to fetch user profile {} from Graph API: {:?}",
+                    user_id,
+                    e
+                );
+                continue;
+            }
+        };
+
+        let user_item = match response.json::<GraphUserItem>().await {
+            Ok(user_item) => user_item,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to parse user profile {} from Graph API: {:?}",
+                    user_id,
+                    e
+                );
+                continue;
+            }
+        };
+
+        profiles.insert(
+            user_item.id.clone(),
+            OrganizationUser {
+                id: user_item.id,
+                display_name: user_item.display_name.unwrap_or_default(),
+                job_title: user_item.job_title,
+                mail: user_item.mail,
+                subject_type_id: "organization_user_id".to_string(),
+            },
+        );
+    }
+
+    profiles
+}
+
+async fn fetch_group_profiles(
+    client: &GraphClient,
+    group_ids: &[String],
+) -> HashMap<String, OrganizationGroup> {
+    let mut profiles = HashMap::new();
+
+    for group_id in group_ids {
+        let response = match client
+            .group(group_id)
+            .get_group()
+            .select(&["id", "displayName"])
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to fetch group profile {} from Graph API: {:?}",
+                    group_id,
+                    e
+                );
+                continue;
+            }
+        };
+
+        let group_item = match response.json::<GraphGroupItem>().await {
+            Ok(group_item) => group_item,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to parse group profile {} from Graph API: {:?}",
+                    group_id,
+                    e
+                );
+                continue;
+            }
+        };
+
+        profiles.insert(
+            group_item.id.clone(),
+            OrganizationGroup {
+                id: group_item.id,
+                display_name: group_item.display_name.unwrap_or_default(),
+                subject_type_id: "organization_group_id".to_string(),
+            },
+        );
+    }
+
+    profiles
+}
+
+async fn fetch_profiles_for_grants(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    grants: &[share_grants::Model],
+) -> (
+    HashMap<String, OrganizationUser>,
+    HashMap<String, OrganizationGroup>,
+) {
+    if !entra_id_enabled(app_state) {
+        return (HashMap::new(), HashMap::new());
+    }
+
+    let mut user_ids = HashSet::new();
+    let mut group_ids = HashSet::new();
+
+    for grant in grants {
+        if grant.subject_type == "user" && grant.subject_id_type == "organization_user_id" {
+            user_ids.insert(grant.subject_id.clone());
+        }
+
+        if grant.subject_type == "organization_group"
+            && grant.subject_id_type == "organization_group_id"
+        {
+            group_ids.insert(grant.subject_id.clone());
+        }
+    }
+
+    if user_ids.is_empty() && group_ids.is_empty() {
+        return (HashMap::new(), HashMap::new());
+    }
+
+    let access_token = match me_user.access_token.as_deref() {
+        Some(token) => token,
+        None => {
+            tracing::warn!("No access token available for share grant profile lookup");
+            return (HashMap::new(), HashMap::new());
+        }
+    };
+
+    let client = create_graph_client(access_token);
+    let user_ids: Vec<String> = user_ids.into_iter().collect();
+    let group_ids: Vec<String> = group_ids.into_iter().collect();
+
+    let (user_profiles, group_profiles) = tokio::join!(
+        fetch_user_profiles(&client, &user_ids),
+        fetch_group_profiles(&client, &group_ids)
+    );
+
+    (user_profiles, group_profiles)
 }
 
 /// Create a new share grant
@@ -146,6 +336,23 @@ pub async fn create_share_grant(
         created_grant.resource_id
     );
 
+    let (user_profiles, group_profiles) =
+        fetch_profiles_for_grants(&app_state, &me_user, std::slice::from_ref(&created_grant)).await;
+    let user_profile = if created_grant.subject_type == "user"
+        && created_grant.subject_id_type == "organization_user_id"
+    {
+        user_profiles.get(&created_grant.subject_id).cloned()
+    } else {
+        None
+    };
+    let group_profile = if created_grant.subject_type == "organization_group"
+        && created_grant.subject_id_type == "organization_group_id"
+    {
+        group_profiles.get(&created_grant.subject_id).cloned()
+    } else {
+        None
+    };
+
     Ok((
         StatusCode::CREATED,
         Json(CreateShareGrantResponse {
@@ -159,6 +366,8 @@ pub async fn create_share_grant(
                 role: created_grant.role,
                 created_at: created_grant.created_at,
                 updated_at: created_grant.updated_at,
+                user_profile,
+                group_profile,
             },
         }),
     ))
@@ -214,18 +423,39 @@ pub async fn list_share_grants(
         }
     })?;
 
+    let (user_profiles, group_profiles) =
+        fetch_profiles_for_grants(&app_state, &me_user, &grants).await;
     let api_grants = grants
         .into_iter()
-        .map(|grant| ShareGrant {
-            id: grant.id.to_string(),
-            resource_type: grant.resource_type,
-            resource_id: grant.resource_id,
-            subject_type: grant.subject_type,
-            subject_id_type: grant.subject_id_type,
-            subject_id: grant.subject_id,
-            role: grant.role,
-            created_at: grant.created_at,
-            updated_at: grant.updated_at,
+        .map(|grant| {
+            let user_profile = if grant.subject_type == "user"
+                && grant.subject_id_type == "organization_user_id"
+            {
+                user_profiles.get(&grant.subject_id).cloned()
+            } else {
+                None
+            };
+            let group_profile = if grant.subject_type == "organization_group"
+                && grant.subject_id_type == "organization_group_id"
+            {
+                group_profiles.get(&grant.subject_id).cloned()
+            } else {
+                None
+            };
+
+            ShareGrant {
+                id: grant.id.to_string(),
+                resource_type: grant.resource_type,
+                resource_id: grant.resource_id,
+                subject_type: grant.subject_type,
+                subject_id_type: grant.subject_id_type,
+                subject_id: grant.subject_id,
+                role: grant.role,
+                created_at: grant.created_at,
+                updated_at: grant.updated_at,
+                user_profile,
+                group_profile,
+            }
         })
         .collect();
 

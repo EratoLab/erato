@@ -9,6 +9,7 @@ import { ShareGrantsList } from "@/components/ui/Sharing/ShareGrantsList";
 import {
   mockShareGrants,
   mockOrganizationMembers,
+  mockShareGrantsWithProfiles,
 } from "./sharing/mockSharingData";
 
 import type { Meta, StoryObj } from "@storybook/react";
@@ -112,6 +113,19 @@ export const SingleGrant: Story = {
     canManage: true,
     isLoading: false,
     availableSubjects: mockOrganizationMembers,
+  },
+};
+
+/**
+ * Grants with profile display names coming from the API.
+ */
+export const WithProfileDisplayNames: Story = {
+  args: {
+    grants: mockShareGrantsWithProfiles,
+    onRemove: (grantId) => console.log("Remove grant:", grantId),
+    canManage: true,
+    isLoading: false,
+    availableSubjects: [],
   },
 };
 
