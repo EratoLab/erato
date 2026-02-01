@@ -392,6 +392,8 @@ export const Chat = ({
             "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
             "sm:mt-0",
             // Add left margin when sidebar is expanded on desktop to prevent overlap
+            // Transition margin to match sidebar animation (300ms)
+            "transition-[margin] duration-300 ease-in-out motion-reduce:transition-none",
             !sidebarCollapsed && "sm:ml-80",
             className,
           )}

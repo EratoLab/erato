@@ -106,7 +106,7 @@ const ChatHistoryHeader = memo<{
   sidebarLogoPath?: string | null;
 }>(
   ({ collapsed, isSlimMode, onToggleCollapse, showTitle, sidebarLogoPath }) => (
-    <div className="flex border-b border-theme-border p-2">
+    <div className="flex min-h-[60px] border-b border-theme-border p-2">
       {/* In slim mode, show logo with hover toggle or just toggle button */}
       {isSlimMode && (
         <div className="flex w-12">
@@ -127,27 +127,32 @@ const ChatHistoryHeader = memo<{
         </div>
       )}
       {/* In expanded mode, show toggle button and title */}
-      {!collapsed && (
-        <>
-          <div className="flex w-12 justify-center">
-            <Button
-              onClick={onToggleCollapse}
-              variant="sidebar-icon"
-              icon={<SidebarToggleIcon />}
-              className="rotate-180"
-              aria-label={t`collapse sidebar`}
-              aria-expanded="true"
-            />
-          </div>
-          <div className="flex flex-1 items-center">
-            {showTitle && (
-              <h2 className="font-semibold text-theme-fg-primary">
-                {t`Chat History`}
-              </h2>
-            )}
-          </div>
-        </>
-      )}
+      {/* Keep content rendered but use opacity transition to avoid header height jump */}
+      <div
+        className={clsx(
+          "flex w-full transition-opacity duration-300",
+          collapsed ? "pointer-events-none opacity-0" : "opacity-100",
+        )}
+      >
+        <div className="flex w-12 justify-center">
+          <Button
+            onClick={onToggleCollapse}
+            variant="sidebar-icon"
+            icon={<SidebarToggleIcon />}
+            className="rotate-180"
+            aria-label={t`collapse sidebar`}
+            aria-expanded="true"
+            tabIndex={collapsed ? -1 : 0}
+          />
+        </div>
+        <div className="flex flex-1 items-center">
+          {showTitle && (
+            <h2 className="font-semibold text-theme-fg-primary">
+              {t`Chat History`}
+            </h2>
+          )}
+        </div>
+      </div>
     </div>
   ),
 );
