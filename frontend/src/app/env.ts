@@ -16,6 +16,9 @@ export type Env = {
   messageFeedbackCommentsEnabled: boolean;
   messageFeedbackEditTimeLimitSeconds: number | null;
   maxUploadSizeBytes: number;
+  sidebarCollapsedMode: "hidden" | "slim";
+  sidebarLogoPath: string | null;
+  sidebarLogoDarkPath: string | null;
 };
 
 declare global {
@@ -38,6 +41,9 @@ declare global {
     MESSAGE_FEEDBACK_COMMENTS_ENABLED?: boolean;
     MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS?: number;
     MAX_UPLOAD_SIZE_BYTES?: number;
+    SIDEBAR_COLLAPSED_MODE?: string;
+    SIDEBAR_LOGO_PATH?: string;
+    SIDEBAR_LOGO_DARK_PATH?: string;
   }
 }
 
@@ -123,6 +129,25 @@ export const env = (): Env => {
     ? Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES)
     : (window.MAX_UPLOAD_SIZE_BYTES ?? DEFAULT_MAX_BODY_LIMIT_BYTES);
 
+  const sidebarCollapsedMode =
+    import.meta.env.VITE_SIDEBAR_COLLAPSED_MODE ??
+    window.SIDEBAR_COLLAPSED_MODE ??
+    "hidden";
+
+  let sidebarLogoPath =
+    import.meta.env.VITE_SIDEBAR_LOGO_PATH ?? window.SIDEBAR_LOGO_PATH ?? null;
+  if (sidebarLogoPath === "") {
+    sidebarLogoPath = null;
+  }
+
+  let sidebarLogoDarkPath =
+    import.meta.env.VITE_SIDEBAR_LOGO_DARK_PATH ??
+    window.SIDEBAR_LOGO_DARK_PATH ??
+    null;
+  if (sidebarLogoDarkPath === "") {
+    sidebarLogoDarkPath = null;
+  }
+
   return {
     apiRootUrl,
     themeCustomerName: customerName,
@@ -141,5 +166,8 @@ export const env = (): Env => {
     messageFeedbackCommentsEnabled,
     messageFeedbackEditTimeLimitSeconds,
     maxUploadSizeBytes,
+    sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",
+    sidebarLogoPath,
+    sidebarLogoDarkPath,
   };
 };

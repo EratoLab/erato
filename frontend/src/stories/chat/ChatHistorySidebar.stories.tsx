@@ -185,3 +185,47 @@ export const Empty: Story = {
     },
   },
 };
+
+export const SlimModeWithoutLogo: Story = {
+  args: {
+    collapsed: true,
+    onNewChat: action("New chat clicked"),
+    onToggleCollapse: action("Sidebar toggled"),
+    showTitle: false,
+    sessions: mockSessions,
+    currentSessionId: "1",
+    onSessionSelect: action("Session selected"),
+    onSessionArchive: action("Session archived"),
+    isLoading: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Slim mode sidebar with icon-only navigation. No sidebar logo configured, so toggle button is shown. Set VITE_SIDEBAR_COLLAPSED_MODE=slim or frontend.sidebar_collapsed_mode=slim to enable.",
+      },
+    },
+  },
+};
+
+export const SlimModeWithLogo: Story = {
+  args: {
+    collapsed: true,
+    onNewChat: action("New chat clicked"),
+    onToggleCollapse: action("Sidebar toggled"),
+    showTitle: false,
+    sessions: mockSessions,
+    currentSessionId: "1",
+    onSessionSelect: action("Session selected"),
+    onSessionArchive: action("Session archived"),
+    isLoading: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Slim mode sidebar with logo. When logo is configured via frontend.sidebar_logo_path, it displays in the header. Hover over logo to see toggle icon overlay. Requires: VITE_SIDEBAR_COLLAPSED_MODE=slim and a valid sidebar logo file.",
+      },
+    },
+  },
+};

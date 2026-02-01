@@ -384,7 +384,6 @@ export const Chat = ({
         showTimestamps={showTimestamps}
         isLoading={chatHistoryLoading}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
-        className="fixed inset-0 z-50 sm:relative sm:z-auto"
         userProfile={profile}
       />
       <ChatErrorBoundary onReset={handleErrorReset}>
@@ -392,6 +391,8 @@ export const Chat = ({
           className={clsx(
             "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
             "sm:mt-0",
+            // Add left margin when sidebar is expanded on desktop to prevent overlap
+            !sidebarCollapsed && "sm:ml-80",
             className,
           )}
           role="region"

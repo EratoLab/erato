@@ -30,6 +30,9 @@ const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_COMMENTS_ENABLED: &str =
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS: &str =
     "MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS";
 const FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES: &str = "MAX_UPLOAD_SIZE_BYTES";
+const FRONTEND_ENV_KEY_SIDEBAR_COLLAPSED_MODE: &str = "SIDEBAR_COLLAPSED_MODE";
+const FRONTEND_ENV_KEY_SIDEBAR_LOGO_PATH: &str = "SIDEBAR_LOGO_PATH";
+const FRONTEND_ENV_KEY_SIDEBAR_LOGO_DARK_PATH: &str = "SIDEBAR_LOGO_DARK_PATH";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -110,6 +113,26 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
         FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES.to_string(),
         Value::Number(max_upload_size.into()),
     );
+
+    // Inject sidebar configuration
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_SIDEBAR_COLLAPSED_MODE.to_string(),
+        Value::String(config.frontend.sidebar_collapsed_mode.clone()),
+    );
+
+    if let Some(path) = &config.frontend.sidebar_logo_path {
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_SIDEBAR_LOGO_PATH.to_string(),
+            Value::String(path.clone()),
+        );
+    }
+
+    if let Some(path) = &config.frontend.sidebar_logo_dark_path {
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_SIDEBAR_LOGO_DARK_PATH.to_string(),
+            Value::String(path.clone()),
+        );
+    }
 
     // Inject pairs from frontend.additional_environment
     for (key, value) in &config.additional_frontend_environment() {

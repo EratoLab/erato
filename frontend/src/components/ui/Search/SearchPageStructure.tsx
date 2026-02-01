@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import clsx from "clsx";
 import { useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -100,12 +101,19 @@ export default function SearchPageStructure({
         showTimestamps={true}
         isLoading={chatHistoryLoading}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
-        className="fixed inset-0 z-50 sm:relative sm:z-auto"
         userProfile={profile}
       />
 
       {/* Main search content area */}
-      <div className="flex h-full min-w-0 flex-1 flex-col">{children}</div>
+      <div
+        className={clsx(
+          "flex h-full min-w-0 flex-1 flex-col",
+          // Add left margin when sidebar is expanded on desktop to prevent overlap
+          !sidebarCollapsed && "sm:ml-80",
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }
