@@ -47,7 +47,7 @@ pub struct ListGroupsQuery {
 }
 
 /// An organization user
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, Clone)]
 pub struct OrganizationUser {
     /// The unique ID of the user
     pub id: String,
@@ -69,7 +69,7 @@ pub struct OrganizationUsersResponse {
 }
 
 /// An organization group
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, Clone)]
 pub struct OrganizationGroup {
     /// The unique ID of the group
     pub id: String,

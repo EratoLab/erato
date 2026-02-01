@@ -97,8 +97,12 @@ interface GrantRowProps {
 
 const GrantRow = memo<GrantRowProps>(
   ({ grant, onRemove, canManage, subjectLookup }) => {
-    // Look up display name from the lookup map, fallback to ID if not found
-    const displayName = subjectLookup.get(grant.subject_id) ?? grant.subject_id;
+    const profileDisplayName =
+      grant.user_profile?.display_name ?? grant.group_profile?.display_name;
+    const displayName =
+      profileDisplayName ??
+      subjectLookup.get(grant.subject_id) ??
+      grant.subject_id;
     const isGroup = grant.subject_type === "organization_group";
 
     return (

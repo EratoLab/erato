@@ -2,7 +2,11 @@
  * Mock data for sharing components stories
  */
 
-import type { ShareGrant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  OrganizationGroup,
+  OrganizationUser,
+  ShareGrant,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { OrganizationMember } from "@/types/sharing";
 
 /**
@@ -111,3 +115,45 @@ export const mockShareGrants: ShareGrant[] = [
     updated_at: "2025-12-03T09:15:00Z",
   },
 ];
+
+const mockUserProfiles: Record<string, OrganizationUser> = {
+  "user-001": {
+    id: "user-001",
+    display_name: "Alice Johnson (Profile)",
+    job_title: null,
+    mail: null,
+    subject_type_id: "organization_user_id",
+  },
+  "user-003": {
+    id: "user-003",
+    display_name: "Carol Williams (Profile)",
+    job_title: null,
+    mail: null,
+    subject_type_id: "organization_user_id",
+  },
+};
+
+const mockGroupProfiles: Record<string, OrganizationGroup> = {
+  "group-001": {
+    id: "group-001",
+    display_name: "Engineering Team (Profile)",
+    subject_type_id: "organization_group_id",
+  },
+};
+
+/**
+ * Mock share grants that include profile data from the API.
+ */
+export const mockShareGrantsWithProfiles: ShareGrant[] = mockShareGrants.map(
+  (grant) => ({
+    ...grant,
+    user_profile:
+      grant.subject_type === "user"
+        ? (mockUserProfiles[grant.subject_id] ?? null)
+        : null,
+    group_profile:
+      grant.subject_type === "organization_group"
+        ? (mockGroupProfiles[grant.subject_id] ?? null)
+        : null,
+  }),
+);

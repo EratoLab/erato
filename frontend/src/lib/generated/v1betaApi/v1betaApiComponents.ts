@@ -1375,6 +1375,84 @@ export const useCreateChat = (
   });
 };
 
+export type FacetsError = Fetcher.ErrorWrapper<undefined>;
+
+export type FacetsVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchFacets = (variables: FacetsVariables, signal?: AbortSignal) =>
+  v1betaApiFetch<Schemas.FacetsResponse, FacetsError, undefined, {}, {}, {}>({
+    url: "/api/v1beta/me/facets",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function facetsQuery(variables: FacetsVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.FacetsResponse>;
+};
+
+export function facetsQuery(
+  variables: FacetsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.FacetsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function facetsQuery(variables: FacetsVariables | reactQuery.SkipToken) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/facets",
+      operationId: "facets",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchFacets(variables, signal),
+  };
+}
+
+export const useSuspenseFacets = <TData = Schemas.FacetsResponse,>(
+  variables: FacetsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<Schemas.FacetsResponse, FacetsError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.FacetsResponse,
+    FacetsError,
+    TData
+  >({
+    ...facetsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useFacets = <TData = Schemas.FacetsResponse,>(
+  variables: FacetsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<Schemas.FacetsResponse, FacetsError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<Schemas.FacetsResponse, FacetsError, TData>({
+    ...facetsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type FileCapabilitiesQueryParams = {
   /**
    * Optional model ID to get capabilities specific to that model
@@ -3103,6 +3181,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/budget";
       operationId: "budgetStatus";
       variables: BudgetStatusVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/facets";
+      operationId: "facets";
+      variables: FacetsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/file-capabilities";
