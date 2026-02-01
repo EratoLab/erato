@@ -9,6 +9,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { env } from "@/app/env";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { defaultThemeConfig } from "@/config/themeConfig";
+import { useResponsiveCollapsedMode } from "@/hooks/ui";
 import {
   useAssistantsFeature,
   useSidebarFeature,
@@ -327,14 +328,17 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       logoDarkPath: envLogoDarkPath,
     } = useSidebarFeature();
 
-    // Memoize slim/hidden mode calculations
+    // Get responsive collapsed mode (forces hidden on mobile even if config is slim)
+    const effectiveCollapsedMode = useResponsiveCollapsedMode(collapsedMode);
+
+    // Memoize slim/hidden mode calculations using effective mode
     const isSlimMode = useMemo(
-      () => collapsed && collapsedMode === "slim",
-      [collapsed, collapsedMode],
+      () => collapsed && effectiveCollapsedMode === "slim",
+      [collapsed, effectiveCollapsedMode],
     );
     const isHiddenMode = useMemo(
-      () => collapsed && collapsedMode === "hidden",
-      [collapsed, collapsedMode],
+      () => collapsed && effectiveCollapsedMode === "hidden",
+      [collapsed, effectiveCollapsedMode],
     );
 
     // Get theme information
