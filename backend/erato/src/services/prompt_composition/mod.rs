@@ -43,6 +43,7 @@ use crate::models::message::GenerationInputMessages;
 use eyre::Report;
 
 pub mod adapters;
+pub mod allowlist;
 pub mod traits;
 pub mod transforms;
 pub mod types;
@@ -52,6 +53,7 @@ mod tests;
 
 // Re-export commonly used types
 pub use adapters::{AppStateFileResolver, AppStatePromptProvider, DatabaseMessageRepository};
+pub use allowlist::build_mcp_tool_allowlist;
 pub use traits::{FileResolver, MessageRepository, PromptProvider};
 pub use transforms::{build_abstract_sequence, resolve_sequence, to_concrete_request};
 pub use types::{
