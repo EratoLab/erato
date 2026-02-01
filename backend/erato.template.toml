@@ -97,3 +97,30 @@ chat_provider_ids = ["test-token-limit"]
 # [experimental_assistants]
 # # Whether to enable the experimental assistants feature in the frontend (default: false)
 # enabled = false
+
+# Experimental facets feature configuration
+# [experimental_facets]
+# # Whether only a single facet can be selected at the same time (default: false)
+# only_single_facet = false
+# # Whether to include the facet display name in the chat box indicator (default: false)
+# show_facet_indicator_with_display_name = false
+# # List of facet IDs in priority order for display
+# priority_order = ["extended_thinking", "web_search"]
+# # Global tool allowlist applied regardless of selected facets
+# tool_call_allowlist = ["web-search-mcp/*"]
+# # Global facet prompt template (optional; empty string disables)
+# facet_prompt_template = ""
+# # Facets that should be selected by default in the frontend
+# default_selected_facets = ["web_search"]
+#
+# [experimental_facets.facets.extended_thinking]
+# display_name = "Extended thinking"
+# icon = "iconoir-lightbulb"
+# disable_facet_prompt_template = true
+# model_settings = { reasoning_effort = "high" }
+#
+# [experimental_facets.facets.web_search]
+# display_name = "Web search"
+# icon = "iconoir-globe"
+# tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
+# additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."

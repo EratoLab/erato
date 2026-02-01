@@ -1342,6 +1342,110 @@ Once the assistants feature has stabilized, this configuration will be replaced 
 enabled = true  # Will default to true once stable
 ```
 
+### `experimental_facets`
+
+Configuration for the experimental facets feature. Facets allow users to select tool-focused modes (e.g. web search) with optional tool allowlists, model setting overrides, and system prompt additions.
+
+**Note:** This is an experimental feature. The configuration key may change once the feature has stabilized.
+
+#### `experimental_facets.facets`
+
+Map of facet configurations, keyed by facet id. Each facet defines display properties and optional behavior.
+
+**Type:** `object`
+
+**Example:**
+
+```toml
+[experimental_facets.facets.extended_thinking]
+display_name = "Extended thinking"
+icon = "iconoir-lightbulb"
+disable_facet_prompt_template = true
+model_settings = { reasoning_effort = "high" }
+
+[experimental_facets.facets.web_search]
+display_name = "Web search"
+icon = "iconoir-globe"
+tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
+additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."
+```
+
+#### `experimental_facets.priority_order`
+
+List of facet IDs in the order they should be displayed.
+
+**Type:** `list<string>`
+
+**Default value:** `[]`
+
+**Example:**
+
+```toml
+[experimental_facets]
+priority_order = ["extended_thinking", "web_search"]
+```
+
+#### `experimental_facets.tool_call_allowlist`
+
+Global tool allowlist that applies regardless of selected facets.
+
+**Type:** `list<string>`
+
+**Default value:** `[]`
+
+**Example:**
+
+```toml
+[experimental_facets]
+tool_call_allowlist = ["web-search-mcp/*"]
+```
+
+#### `experimental_facets.facet_prompt_template`
+
+Optional global prompt template injected when facets are selected. Set to an empty string to disable.
+
+**Type:** `string | None`
+
+**Default value:** `None`
+
+**Example:**
+
+```toml
+[experimental_facets]
+facet_prompt_template = ""
+```
+
+#### `experimental_facets.only_single_facet`
+
+Whether only a single facet can be selected at the same time.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
+#### `experimental_facets.show_facet_indicator_with_display_name`
+
+Whether the chat box indicator should include the facet display name.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
+#### `experimental_facets.default_selected_facets`
+
+Facets that should be selected by default in the frontend (no backend logic is applied).
+
+**Type:** `list<string>`
+
+**Default value:** `[]`
+
+**Example:**
+
+```toml
+[experimental_facets]
+default_selected_facets = ["web_search"]
+```
+
 ### `budget`
 
 Configuration for budget tracking and display functionality. This feature allows you to track and display per-user spending based on token usage and model pricing.
