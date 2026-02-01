@@ -3,12 +3,14 @@
 use axum::Router;
 use axum::http;
 use axum_test::TestServer;
+use erato::config::{ExperimentalFacetsConfig, FacetConfig, ModelSettings};
 use erato::db::entity::{chats, messages};
 use erato::server::router::router;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, prelude::Uuid};
 use serde_json::{Value, json};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
+use std::collections::HashMap;
 
 use crate::test_app_state;
 use crate::test_utils::{
@@ -28,7 +30,43 @@ use crate::test_utils::{
 async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
     // Set up mock LLM server
-    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+
+    let mut facets = HashMap::new();
+    facets.insert(
+        "extended_thinking".to_string(),
+        FacetConfig {
+            display_name: "Extended thinking".to_string(),
+            icon: Some("iconoir-lightbulb".to_string()),
+            additional_system_prompt: None,
+            tool_call_allowlist: vec![],
+            model_settings: ModelSettings::default(),
+            disable_facet_prompt_template: true,
+        },
+    );
+    facets.insert(
+        "web_search".to_string(),
+        FacetConfig {
+            display_name: "Web search".to_string(),
+            icon: Some("iconoir-globe".to_string()),
+            additional_system_prompt: Some(
+                "Please execute one or multiple web searches.".to_string(),
+            ),
+            tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
+            model_settings: ModelSettings::default(),
+            disable_facet_prompt_template: false,
+        },
+    );
+    app_config.experimental_facets = ExperimentalFacetsConfig {
+        facets,
+        priority_order: vec!["extended_thinking".to_string(), "web_search".to_string()],
+        tool_call_allowlist: vec![],
+        facet_prompt_template: None,
+        only_single_facet: false,
+        show_facet_indicator_with_display_name: true,
+        default_selected_facets: vec![],
+    };
+
     let app_state = test_app_state(app_config, pool).await;
 
     // Create a test user
@@ -48,10 +86,16 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
     // Create two chats by submitting messages
     let mut chat_ids = Vec::new();
     for i in 1..=2 {
+        let selected_facets = if i == 1 {
+            vec!["web_search"]
+        } else {
+            vec!["extended_thinking"]
+        };
         // Submit a message to create a new chat
         let message_request = json!({
             "previous_message_id": null,
-            "user_message": format!("Test message for chat {}", i)
+            "user_message": format!("Test message for chat {}", i),
+            "selected_facet_ids": selected_facets
         });
 
         // Send the message to create a chat
@@ -143,6 +187,32 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
 
     // Verify we have exactly 2 chats
     assert_eq!(chats.len(), 2, "Expected 2 chats, got {}", chats.len());
+
+    let mut facets_by_chat_id: HashMap<String, Vec<String>> = HashMap::new();
+    for chat in chats.iter() {
+        let chat_id = chat
+            .get("id")
+            .and_then(Value::as_str)
+            .expect("Chat is missing 'id' field");
+        let facets = chat
+            .get("last_selected_facets")
+            .and_then(Value::as_array)
+            .expect("Chat is missing 'last_selected_facets'")
+            .iter()
+            .filter_map(Value::as_str)
+            .map(String::from)
+            .collect::<Vec<_>>();
+        facets_by_chat_id.insert(chat_id.to_string(), facets);
+    }
+
+    assert_eq!(
+        facets_by_chat_id.get(&chat_ids[0]).cloned(),
+        Some(vec!["web_search".to_string()])
+    );
+    assert_eq!(
+        facets_by_chat_id.get(&chat_ids[1]).cloned(),
+        Some(vec!["extended_thinking".to_string()])
+    );
 
     // Verify each chat has the expected fields, including can_edit
     for chat in chats {

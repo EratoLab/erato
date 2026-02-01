@@ -50,6 +50,7 @@ use chrono::{DateTime, FixedOffset};
 use eyre::{Report, WrapErr};
 use serde::{Deserialize, Serialize};
 use sqlx::types::{Uuid, chrono};
+use std::collections::HashSet;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::instrument;
 use utoipa::{OpenApi, ToSchema};
@@ -72,6 +73,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // build our application with a route
     let me_routes = Router::new()
         .route("/profile", get(profile))
+        .route("/facets", get(facets))
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/messages/regeneratestream", post(regenerate_message_sse))
         .route("/messages/editstream", post(edit_message_sse))
@@ -176,6 +178,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         messages,
         chats,
         profile,
+        facets,
         chat_messages,
         submit_message_feedback,
         recent_chats,
@@ -212,6 +215,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         Message,
         Chat,
         RecentChat,
+        FacetInfo,
+        GlobalFacetSettings,
+        FacetsResponse,
         ChatMessage,
         ChatMessageStats,
         ChatMessagesResponse,
@@ -312,6 +318,90 @@ pub async fn profile(
     Ok(Json(me_user.profile.clone()))
 }
 
+#[derive(Debug, Serialize, ToSchema)]
+pub struct FacetInfo {
+    id: String,
+    display_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    icon: Option<String>,
+    default_enabled: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct GlobalFacetSettings {
+    /// Whether one or multiple facets may be selected
+    only_single_facet: bool,
+    /// Whether to show facet indicator with display name
+    show_facet_indicator_with_display_name: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct FacetsResponse {
+    global_facet_settings: GlobalFacetSettings,
+    facets: Vec<FacetInfo>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/me/facets",
+    responses(
+        (status = OK, body = FacetsResponse),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn facets(
+    State(app_state): State<AppState>,
+    Extension(_me_user): Extension<MeProfile>,
+) -> Result<Json<FacetsResponse>, StatusCode> {
+    let config = &app_state.config.experimental_facets;
+    let mut facets = Vec::new();
+    let mut seen = HashSet::new();
+
+    for facet_id in &config.priority_order {
+        if let Some(facet) = config.facets.get(facet_id) {
+            let default_enabled = config.default_selected_facets.contains(facet_id);
+            facets.push(FacetInfo {
+                id: facet_id.clone(),
+                display_name: facet.display_name.clone(),
+                icon: facet.icon.clone(),
+                default_enabled,
+            });
+            seen.insert(facet_id.clone());
+        }
+    }
+
+    let mut remaining: Vec<String> = config
+        .facets
+        .keys()
+        .filter(|facet_id| !seen.contains(*facet_id))
+        .cloned()
+        .collect();
+    remaining.sort();
+    for facet_id in remaining {
+        if let Some(facet) = config.facets.get(&facet_id) {
+            let default_enabled = config.default_selected_facets.contains(&facet_id);
+            facets.push(FacetInfo {
+                id: facet_id,
+                display_name: facet.display_name.clone(),
+                icon: facet.icon.clone(),
+                default_enabled,
+            });
+        }
+    }
+
+    Ok(Json(FacetsResponse {
+        global_facet_settings: GlobalFacetSettings {
+            only_single_facet: config.only_single_facet,
+            show_facet_indicator_with_display_name: config.show_facet_indicator_with_display_name,
+        },
+        facets,
+    }))
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct Message {
     id: String,
@@ -340,6 +430,10 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     last_chat_provider_id: Option<String>,
+    /// The facets selected for the most recent message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    last_selected_facets: Option<Vec<String>>,
     /// The model information for the most recent message, if available
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -1346,6 +1440,7 @@ async fn extend_recent_chats_to_api_model(
             file_uploads: file_references,
             archived_at: chat.archived_at,
             last_chat_provider_id: chat.last_chat_provider_id.clone(),
+            last_selected_facets: chat.last_selected_facets.clone(),
             last_model,
             can_edit,
             assistant_id: chat.assistant_id.map(|id| id.to_string()),

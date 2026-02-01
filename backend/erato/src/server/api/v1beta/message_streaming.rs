@@ -1,3 +1,4 @@
+use crate::config::ExperimentalFacetsConfig;
 use crate::db::entity::prelude::*;
 use crate::db::entity_ext::{chats, messages};
 use crate::models::chat::{
@@ -45,6 +46,7 @@ use sea_orm::JsonValue;
 use sea_orm::prelude::Uuid;
 use serde::Serialize;
 use serde_json::{Value, json};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::Sender;
@@ -225,6 +227,9 @@ pub struct MessageSubmitRequest {
     /// Optional assistant ID to associate with the chat when creating a new chat.
     /// If provided with an existing_chat_id, this field is ignored.
     assistant_id: Option<Uuid>,
+    /// IDs of facets selected by the user for this generation.
+    #[serde(default)]
+    selected_facet_ids: Vec<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -582,6 +587,9 @@ pub struct RegenerateMessageRequest {
     #[schema(example = "primary")]
     /// The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
     chat_provider_id: Option<String>,
+    /// IDs of facets selected by the user for this generation.
+    #[serde(default)]
+    selected_facet_ids: Vec<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -687,6 +695,9 @@ pub struct EditMessageRequest {
     #[schema(example = "primary")]
     /// The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
     chat_provider_id: Option<String>,
+    /// IDs of facets selected by the user for this generation.
+    #[serde(default)]
+    selected_facet_ids: Vec<String>,
 }
 
 #[derive(serde::Deserialize, ToSchema)]
@@ -1164,6 +1175,18 @@ pub struct PreparedChatRequest {
     chat_options: ChatOptions,
 }
 
+fn build_selected_facets(
+    config: &ExperimentalFacetsConfig,
+    selected_facet_ids: &[String],
+) -> HashMap<String, bool> {
+    let selected_set: HashSet<&String> = selected_facet_ids.iter().collect();
+    config
+        .facets
+        .keys()
+        .map(|id| (id.clone(), selected_set.contains(id)))
+        .collect()
+}
+
 /// Prepares a chat request for LLM generation.
 ///
 /// This function is boxed to reduce stack usage, as it has a deep async call chain.
@@ -1276,6 +1299,10 @@ fn prepare_chat_request<'a>(
         // Create generation parameters with the determined chat provider ID
         let generation_parameters = GenerationParameters {
             generation_chat_provider_id: Some(chat_provider_id),
+            selected_facets: build_selected_facets(
+                &app_state.config.experimental_facets,
+                &user_input.selected_facet_ids,
+            ),
         };
 
         // Return the unresolved version for saving to DB (to avoid duplicating file contents)
@@ -2716,6 +2743,7 @@ async fn run_message_submit_task(
         just_submitted_user_message_id: saved_user_message.id,
         requested_chat_provider_id: request.chat_provider_id.clone(),
         new_input_file_ids: request.input_files_ids.clone(),
+        selected_facet_ids: request.selected_facet_ids.clone(),
     };
     let PreparedChatRequest {
         chat_request,
@@ -3023,6 +3051,7 @@ pub async fn regenerate_message_sse(
             just_submitted_user_message_id: previous_message.id,
             requested_chat_provider_id: request.chat_provider_id.clone(),
             new_input_file_ids: input_files_for_previous_message,
+            selected_facet_ids: request.selected_facet_ids.clone(),
         };
         let prepare_chat_request_res =
             prepare_chat_request(&app_state, &policy, &chat, user_input, &me_profile_input).await;
@@ -3253,6 +3282,7 @@ pub async fn edit_message_sse(
             just_submitted_user_message_id: saved_user_message.id,
             requested_chat_provider_id: request.chat_provider_id.clone(),
             new_input_file_ids: replace_input_files_ids,
+            selected_facet_ids: request.selected_facet_ids.clone(),
         };
         let prepare_chat_request_res =
             prepare_chat_request(&app_state, &policy, &chat, user_input, &me_profile_input).await;

@@ -22,6 +22,9 @@ pub struct PromptCompositionUserInput {
     /// These are file references that will be resolved to actual content
     /// via the centralized file resolution in `resolve_file_pointers_in_generation_input`.
     pub new_input_file_ids: Vec<Uuid>,
+
+    /// IDs of facets selected by the user for this generation.
+    pub selected_facet_ids: Vec<String>,
 }
 
 /// Represents the abstract sequence of chat messages before any I/O operations.
