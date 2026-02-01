@@ -128,31 +128,34 @@ const ChatHistoryHeader = memo<{
       )}
       {/* In expanded mode, show toggle button and title */}
       {/* Keep content rendered but use opacity transition to avoid header height jump */}
-      <div
-        className={clsx(
-          "flex w-full transition-opacity duration-300",
-          collapsed ? "pointer-events-none opacity-0" : "opacity-100",
-        )}
-      >
-        <div className="flex w-12 justify-center">
-          <Button
-            onClick={onToggleCollapse}
-            variant="sidebar-icon"
-            icon={<SidebarToggleIcon />}
-            className="rotate-180"
-            aria-label={t`collapse sidebar`}
-            aria-expanded="true"
-            tabIndex={collapsed ? -1 : 0}
-          />
-        </div>
-        <div className="flex flex-1 items-center">
-          {showTitle && (
-            <h2 className="font-semibold text-theme-fg-primary">
-              {t`Chat History`}
-            </h2>
+      {/* Only show when not in slim mode to prevent both buttons appearing simultaneously */}
+      {!isSlimMode && (
+        <div
+          className={clsx(
+            "flex w-full transition-opacity duration-300",
+            collapsed ? "pointer-events-none opacity-0" : "opacity-100",
           )}
+        >
+          <div className="flex w-12 justify-center">
+            <Button
+              onClick={onToggleCollapse}
+              variant="sidebar-icon"
+              icon={<SidebarToggleIcon />}
+              className="rotate-180"
+              aria-label={t`collapse sidebar`}
+              aria-expanded="true"
+              tabIndex={collapsed ? -1 : 0}
+            />
+          </div>
+          <div className="flex flex-1 items-center">
+            {showTitle && (
+              <h2 className="font-semibold text-theme-fg-primary">
+                {t`Chat History`}
+              </h2>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   ),
 );
