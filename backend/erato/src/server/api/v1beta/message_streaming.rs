@@ -24,6 +24,7 @@ use crate::services::genai_langfuse::{
 };
 use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::convert_mcp_tools_to_genai_tools;
+use crate::services::prompt_composition::build_mcp_tool_allowlist;
 use crate::services::prompt_composition::{
     AppStateFileResolver, AppStatePromptProvider, DatabaseMessageRepository,
     PromptCompositionUserInput, compose_prompt_messages,
@@ -1277,11 +1278,16 @@ fn prepare_chat_request<'a>(
         )
         .await?;
 
-        // Get all MCP server tools and filter by assistant configuration
+        // Get all MCP server tools and filter by assistant configuration and facets
         let all_mcp_server_tools = app_state.mcp_servers.list_tools(chat.id).await;
         let filtered_mcp_tools =
             filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
-        let generation_mcp_tools = filtered_mcp_tools;
+        let facet_allowlist = build_mcp_tool_allowlist(
+            &app_state.config.experimental_facets,
+            &user_input.selected_facet_ids,
+        );
+        let generation_mcp_tools =
+            filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
 
         // Build genai ChatRequest (messages + tools) + ChatOptions
         let mut chat_request = resolved_generation_input_messages
@@ -2314,6 +2320,50 @@ fn filter_mcp_tools_by_assistant(
 
     // No restrictions, return all tools
     all_tools
+}
+
+/// Filter MCP tools based on facet tool allowlists.
+///
+/// If no allowlist is provided, all tools are returned.
+fn filter_mcp_tools_by_allowlist(
+    all_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
+    allowlist: Option<&[String]>,
+) -> Vec<crate::services::mcp_session_manager::ManagedTool> {
+    let Some(allowlist) = allowlist else {
+        return all_tools;
+    };
+
+    if allowlist.is_empty() {
+        return all_tools;
+    }
+
+    all_tools
+        .into_iter()
+        .filter(|tool| is_tool_allowed_by_allowlist(tool, allowlist))
+        .collect()
+}
+
+fn is_tool_allowed_by_allowlist(
+    tool: &crate::services::mcp_session_manager::ManagedTool,
+    allowlist: &[String],
+) -> bool {
+    let qualified_name = format!("{}/{}", tool.server_id, tool.tool.name);
+
+    allowlist.iter().any(|pattern| {
+        if pattern == "*" {
+            return true;
+        }
+
+        if !pattern.contains('/') {
+            return pattern == &tool.server_id;
+        }
+
+        if let Some(prefix) = pattern.strip_suffix("/*") {
+            return qualified_name.starts_with(&format!("{}/", prefix));
+        }
+
+        pattern == &qualified_name
+    })
 }
 
 // ===== UNIFIED VALIDATION HELPERS =====
