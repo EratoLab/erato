@@ -3,7 +3,7 @@ mod test_cases {
     use super::super::traits::{FileResolver, MessageRepository, PromptProvider};
     use super::super::transforms::{build_abstract_sequence, resolve_sequence};
     use super::super::types::{AbstractChatSequencePart, PromptSpec};
-    use crate::config::ChatProviderConfig;
+    use crate::config::{ChatProviderConfig, ExperimentalFacetsConfig};
     use crate::db::entity::{chats, messages};
     use crate::models::assistant::{AssistantWithFiles, FileInfo};
     use crate::models::message::{ContentPart, ContentPartText, MessageRole, MessageSchema};
@@ -307,6 +307,8 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await;
@@ -348,6 +350,8 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await;
@@ -392,6 +396,8 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await;
@@ -448,6 +454,8 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await;
@@ -506,6 +514,8 @@ mod test_cases {
             &msg2_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await;
@@ -545,6 +555,8 @@ mod test_cases {
             &msg_id,
             new_file_ids,
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await;
@@ -665,6 +677,8 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -688,6 +702,8 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -756,6 +772,8 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -806,6 +824,8 @@ mod test_cases {
             &msg_id,
             new_file_ids,
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -884,6 +904,8 @@ mod test_cases {
             &msg_id,
             vec![user_file_id],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -973,6 +995,8 @@ mod test_cases {
             &msg_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1058,6 +1082,8 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1096,6 +1122,8 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1159,6 +1187,8 @@ mod test_cases {
             &msg1_id,
             vec![user_file_id],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1196,6 +1226,8 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1261,6 +1293,8 @@ mod test_cases {
             &msg1_id,
             vec![user_file_id],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1295,6 +1329,8 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1330,6 +1366,8 @@ mod test_cases {
             &msg5_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1403,6 +1441,8 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1442,6 +1482,8 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1508,6 +1550,8 @@ mod test_cases {
             &msg1_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await
@@ -1556,6 +1600,8 @@ mod test_cases {
             &msg3_id,
             vec![],
             &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
             None,
         )
         .await

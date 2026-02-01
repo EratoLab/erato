@@ -32,6 +32,7 @@
 //!     &chat,
 //!     &user_input,
 //!     &chat_provider_config,
+//!     &ExperimentalFacetsConfig::default(),
 //!     preferred_language,
 //! ).await?;
 //! ```
@@ -67,6 +68,7 @@ pub use types::{
 ///
 /// Note: File pointers are NOT resolved to actual content here. That happens
 /// separately via `resolve_file_pointers_in_generation_input` before sending to LLM.
+#[allow(clippy::too_many_arguments)]
 pub async fn compose_prompt_messages(
     message_repo: &impl MessageRepository,
     file_resolver: &impl FileResolver,
@@ -74,6 +76,7 @@ pub async fn compose_prompt_messages(
     chat: &chats::Model,
     user_input: &PromptCompositionUserInput,
     chat_provider_config: &ChatProviderConfig,
+    experimental_facets: &crate::config::ExperimentalFacetsConfig,
     preferred_language: Option<&str>,
 ) -> Result<GenerationInputMessages, Report> {
     // Phase 1: Build abstract sequence
@@ -84,6 +87,8 @@ pub async fn compose_prompt_messages(
         &user_input.just_submitted_user_message_id,
         user_input.new_input_file_ids.clone(),
         chat_provider_config,
+        experimental_facets,
+        &user_input.selected_facet_ids,
         preferred_language,
     )
     .await?;

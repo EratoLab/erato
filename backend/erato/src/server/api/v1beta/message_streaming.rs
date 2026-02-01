@@ -1264,6 +1264,7 @@ fn prepare_chat_request<'a>(
             chat,
             &user_input,
             &chat_provider_config,
+            &app_state.config.experimental_facets,
             Some(me_profile_input.preferred_language),
         )
         .await?;
