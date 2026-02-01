@@ -24,10 +24,12 @@ use crate::services::genai_langfuse::{
 };
 use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::convert_mcp_tools_to_genai_tools;
-use crate::services::prompt_composition::build_mcp_tool_allowlist;
 use crate::services::prompt_composition::{
     AppStateFileResolver, AppStatePromptProvider, DatabaseMessageRepository,
     PromptCompositionUserInput, compose_prompt_messages,
+};
+use crate::services::prompt_composition::{
+    build_mcp_tool_allowlist, build_model_settings_for_facets,
 };
 use crate::services::sentry::capture_report;
 use crate::state::{AppState, ChatProviderConfigWithId};
@@ -1301,7 +1303,12 @@ fn prepare_chat_request<'a>(
                 "Not adding empty list of tools, as that may lead to hallucinated tools"
             );
         }
-        let chat_options = build_chat_options_for_completion(&chat_provider_config.model_settings);
+        let effective_model_settings = build_model_settings_for_facets(
+            &chat_provider_config.model_settings,
+            &app_state.config.experimental_facets,
+            &user_input.selected_facet_ids,
+        );
+        let chat_options = build_chat_options_for_completion(&effective_model_settings);
 
         // Create generation parameters with the determined chat provider ID
         let generation_parameters = GenerationParameters {
@@ -2820,7 +2827,12 @@ async fn run_message_submit_task(
         .map_err(|e| format!("Failed to get chat provider config: {}", e))?;
 
     // Check if image generation is enabled for this model
-    if chat_provider_config.model_settings.generate_images {
+    let effective_model_settings = build_model_settings_for_facets(
+        &chat_provider_config.model_settings,
+        &app_state.config.experimental_facets,
+        &request.selected_facet_ids,
+    );
+    if effective_model_settings.generate_images {
         tracing::info!("Image generation mode enabled, generating image instead of text");
 
         // Extract the user's prompt from the last user message
