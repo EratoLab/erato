@@ -1263,6 +1263,11 @@ msgstr "von"
 msgid "Open menu"
 msgstr "Menü öffnen"
 
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.prompt-optimizer.tooltip"
+msgstr "Prompt optimieren"
+
 #: src/components/ui/ToolCall/ToolCallOutput.tsx
 msgid "Output"
 msgstr "Ausgabe"

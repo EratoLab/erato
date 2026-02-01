@@ -1,10 +1,13 @@
 import { t } from "@lingui/core/macro";
-import { useState, useCallback } from "react";
+import { MagicWand } from "iconoir-react";
+import { useCallback, useRef, useState } from "react";
 
+import { env } from "@/app/env";
 import { ModelSelector } from "@/components/ui/Chat/ModelSelector";
 import { Button } from "@/components/ui/Controls/Button";
 import { InfoTooltip } from "@/components/ui/Controls/InfoTooltip";
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import {
   FileAttachmentsPreview,
   AssistantFileUploadSelector,
@@ -14,6 +17,7 @@ import { Input } from "@/components/ui/Input/Input";
 import { Textarea } from "@/components/ui/Input/Textarea";
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useFilePreviewModal } from "@/hooks/ui";
+import { usePromptOptimizer } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import type {
   ChatModel,
@@ -123,6 +127,15 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     openPreviewModal,
     closePreviewModal,
   } = useFilePreviewModal();
+  const promptOptimizer = usePromptOptimizer();
+  const isPromptOptimizerEnabled = env().promptOptimizerEnabled;
+  const isOptimizingPrompt = promptOptimizer.isPending;
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  /* eslint-disable lingui/no-unlocalized-strings */
+  const insertTextCommand = "insertText";
+  const inputEventName = "input";
+  const insertReplacementInputType = "insertReplacementText";
+  /* eslint-enable lingui/no-unlocalized-strings */
 
   // Validation
   const validateField = useCallback(
@@ -253,6 +266,58 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     setFormData((prev) => ({ ...prev, defaultModel: model }));
   }, []);
 
+  const handleOptimizePrompt = useCallback(async () => {
+    if (!formData.prompt.trim().length || isOptimizingPrompt) {
+      return;
+    }
+
+    try {
+      const response = await promptOptimizer.mutateAsync({
+        body: { prompt: formData.prompt },
+      });
+      if (response.optimized_prompt) {
+        const promptTextarea = promptTextareaRef.current;
+        if (promptTextarea) {
+          promptTextarea.focus();
+          promptTextarea.select();
+          const execCommandSucceeded =
+            typeof document !== "undefined" &&
+            typeof document.execCommand === "function" &&
+            document.execCommand(
+              insertTextCommand,
+              false,
+              response.optimized_prompt,
+            );
+          if (!execCommandSucceeded) {
+            const existingValue = promptTextarea.value;
+            promptTextarea.setRangeText(
+              response.optimized_prompt,
+              0,
+              existingValue.length,
+              "end",
+            );
+            const inputEvent =
+              typeof InputEvent !== "undefined"
+                ? new InputEvent(inputEventName, {
+                    bubbles: true,
+                    inputType: insertReplacementInputType,
+                    data: response.optimized_prompt,
+                  })
+                : new Event(inputEventName, { bubbles: true });
+            promptTextarea.dispatchEvent(inputEvent);
+          }
+          if (promptTextarea.value !== response.optimized_prompt) {
+            handleFieldChange("prompt", response.optimized_prompt);
+          }
+        } else {
+          handleFieldChange("prompt", response.optimized_prompt);
+        }
+      }
+    } catch {
+      // No-op: errors are handled by existing page-level error handling.
+    }
+  }, [formData.prompt, handleFieldChange, isOptimizingPrompt, promptOptimizer]);
+
   // Form submission
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -344,11 +409,42 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
           helpText={t`Define how the assistant should behave and respond`}
           htmlFor="assistant-prompt"
           labelAction={
-            <InfoTooltip translationId="assistant.form.systemPrompt.tooltip" />
+            <>
+              {isPromptOptimizerEnabled && (
+                <Button
+                  type="button"
+                  variant="icon-only"
+                  size="sm"
+                  icon={
+                    isOptimizingPrompt ? (
+                      <SpinnerIcon size="sm" />
+                    ) : (
+                      <MagicWand className="size-4" />
+                    )
+                  }
+                  disabled={
+                    isSubmitting ||
+                    isOptimizingPrompt ||
+                    formData.prompt.trim().length === 0
+                  }
+                  onClick={() => void handleOptimizePrompt()}
+                  aria-label={t({
+                    id: "assistant.form.prompt-optimizer.tooltip",
+                    message: "Optimize prompt",
+                  })}
+                  title={t({
+                    id: "assistant.form.prompt-optimizer.tooltip",
+                    message: "Optimize prompt",
+                  })}
+                />
+              )}
+              <InfoTooltip translationId="assistant.form.systemPrompt.tooltip" />
+            </>
           }
         >
           <Textarea
             id="assistant-prompt"
+            ref={promptTextareaRef}
             value={formData.prompt}
             onChange={(e) => handleFieldChange("prompt", e.target.value)}
             onBlur={() => handleFieldBlur("prompt")}

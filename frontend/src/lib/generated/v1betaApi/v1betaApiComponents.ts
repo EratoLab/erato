@@ -2802,6 +2802,52 @@ export const useSubmitMessageFeedback = (
   });
 };
 
+export type PromptOptimizerError = Fetcher.ErrorWrapper<undefined>;
+
+export type PromptOptimizerVariables = {
+  body: Schemas.PromptOptimizerRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchPromptOptimizer = (
+  variables: PromptOptimizerVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.PromptOptimizerResponse,
+    PromptOptimizerError,
+    Schemas.PromptOptimizerRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/prompt-optimizer",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const usePromptOptimizer = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.PromptOptimizerResponse,
+      PromptOptimizerError,
+      PromptOptimizerVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.PromptOptimizerResponse,
+    PromptOptimizerError,
+    PromptOptimizerVariables
+  >({
+    mutationFn: (variables: PromptOptimizerVariables) =>
+      fetchPromptOptimizer(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ListShareGrantsQueryParams = {
   /**
    * The type of resource (e.g., 'assistant')

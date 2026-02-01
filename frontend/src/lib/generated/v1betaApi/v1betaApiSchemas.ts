@@ -1073,6 +1073,26 @@ export type OrganizationUsersResponse = {
   users: OrganizationUser[];
 };
 
+/**
+ * Request to optimize a prompt using the configured prompt optimizer.
+ */
+export type PromptOptimizerRequest = {
+  /**
+   * The prompt to optimize.
+   */
+  prompt: string;
+};
+
+/**
+ * Response containing the optimized prompt.
+ */
+export type PromptOptimizerResponse = {
+  /**
+   * The optimized prompt returned by the model.
+   */
+  optimized_prompt: string;
+};
+
 export type RecentChat = {
   /**
    * When this chat was archived by the user.
