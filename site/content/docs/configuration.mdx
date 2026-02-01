@@ -1312,6 +1312,40 @@ http_headers = { "Authorization" = "Bearer your-token", "X-API-Key" = "your-api-
 
 See the [MCP Servers](./features/mcp_servers) documentation for more information about Model Context Protocol integration.
 
+### `prompt_optimizer`
+
+Configuration for the prompt optimizer. When enabled, the backend exposes the `POST /prompt-optimizer` endpoint to optimize user prompts using a dedicated chat provider and system prompt.
+
+#### `prompt_optimizer.enabled`
+
+Whether to enable the prompt optimizer feature.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+#### `prompt_optimizer.chat_provider_id`
+
+The chat provider ID to use for prompt optimization. Must match a provider configured in `chat_providers`.
+
+**Type:** `string`
+
+#### `prompt_optimizer.prompt`
+
+System prompt used by the prompt optimizer. If omitted, a built-in non-interactive default prompt is used.
+
+**Type:** `string | None`
+
+**Example:**
+
+```toml
+[prompt_optimizer]
+enabled = true
+chat_provider_id = "gpt-4o-mini"
+# Optional override:
+# prompt = "Rewrite the user's prompt to be clearer, more specific, and action-oriented. Return only the improved prompt."
+```
+
 ### `experimental_assistants`
 
 Configuration for the experimental assistants feature. This allows enabling the assistants functionality in the frontend, which provides users with pre-configured chat assistants tuned for specific use-cases.

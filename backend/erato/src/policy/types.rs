@@ -68,6 +68,8 @@ pub enum ResourceKind {
     Chat,
     #[serde(rename = "chat_singleton")]
     ChatSingleton,
+    #[serde(rename = "prompt_optimizer_singleton")]
+    PromptOptimizerSingleton,
     #[serde(rename = "message")]
     Message,
     #[serde(rename = "message_feedback")]
@@ -93,6 +95,7 @@ impl ResourceId {
 pub enum Resource {
     Chat(String),
     ChatSingleton,
+    PromptOptimizerSingleton,
     Message(String),
     MessageFeedback(String),
     Assistant(String),
@@ -111,6 +114,10 @@ impl Resource {
         match self {
             Resource::Chat(id) => (ResourceKind::Chat, ResourceId(id)),
             Resource::ChatSingleton => (ResourceKind::ChatSingleton, ResourceId::singleton()),
+            Resource::PromptOptimizerSingleton => (
+                ResourceKind::PromptOptimizerSingleton,
+                ResourceId::singleton(),
+            ),
             Resource::Message(id) => (ResourceKind::Message, ResourceId(id)),
             Resource::MessageFeedback(id) => (ResourceKind::MessageFeedback, ResourceId(id)),
             Resource::Assistant(id) => (ResourceKind::Assistant, ResourceId(id)),
