@@ -4,7 +4,7 @@ use axum::Router;
 use axum::http;
 use axum_test::TestServer;
 use erato::config::{ExperimentalFacetsConfig, FacetConfig, ModelSettings};
-use erato::models::message::GenerationParameters;
+use erato::models::message::{GenerationInputMessages, GenerationParameters};
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
 use sea_orm::prelude::Uuid;
@@ -311,6 +311,212 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
             .get("extended_thinking")
             .copied(),
         Some(true)
+    );
+}
+
+/// Test facet prompt injection behavior across a two-turn chat.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+
+    let mut facets = HashMap::new();
+    facets.insert(
+        "web_search".to_string(),
+        FacetConfig {
+            display_name: "Web search".to_string(),
+            icon: Some("iconoir-globe".to_string()),
+            additional_system_prompt: Some("Use web search now.".to_string()),
+            tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
+            model_settings: ModelSettings::default(),
+            disable_facet_prompt_template: false,
+        },
+    );
+    facets.insert(
+        "extended_thinking".to_string(),
+        FacetConfig {
+            display_name: "Extended thinking".to_string(),
+            icon: Some("iconoir-lightbulb".to_string()),
+            additional_system_prompt: Some("Use extended thinking now.".to_string()),
+            tool_call_allowlist: vec![],
+            model_settings: ModelSettings::default(),
+            disable_facet_prompt_template: true,
+        },
+    );
+    app_config.experimental_facets = ExperimentalFacetsConfig {
+        facets,
+        priority_order: vec!["web_search".to_string(), "extended_thinking".to_string()],
+        tool_call_allowlist: vec![],
+        facet_prompt_template: Some(
+            "Facet {{facet_display_name}} tools:\n{{facet_tools_list}}".to_string(),
+        ),
+        only_single_facet: false,
+        show_facet_indicator_with_display_name: true,
+        default_selected_facets: vec![],
+    };
+
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let issuer = TEST_USER_ISSUER;
+    let subject = TEST_USER_SUBJECT;
+    let _user = get_or_create_user(&app_state.db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let facets_response = server
+        .get("/api/v1beta/me/facets")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    facets_response.assert_status_ok();
+
+    let first_request = json!({
+        "previous_message_id": null,
+        "user_message": "First turn",
+        "selected_facet_ids": ["web_search"]
+    });
+    let first_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&first_request)
+        .await;
+    first_response.assert_status_ok();
+
+    let first_events = parse_sse_events(&first_response);
+    let chat_id = extract_chat_id(&first_events).expect("Expected chat_id from first turn");
+    let first_assistant_message_id = first_events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected assistant_message_completed event with message_id");
+
+    let second_request = json!({
+        "previous_message_id": first_assistant_message_id,
+        "user_message": "Second turn",
+        "selected_facet_ids": ["extended_thinking"]
+    });
+    let second_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&second_request)
+        .await;
+    second_response.assert_status_ok();
+
+    let chat_uuid: Uuid = chat_id.parse().expect("Failed to parse chat UUID");
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(chat_uuid))
+        .filter(erato::db::entity::messages::Column::GenerationInputMessages.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch messages with generation input messages");
+
+    assert_eq!(
+        assistant_messages.len(),
+        2,
+        "Expected two assistant messages with generation input messages"
+    );
+
+    let first_gen_input: GenerationInputMessages = serde_json::from_value(
+        assistant_messages[0]
+            .generation_input_messages
+            .clone()
+            .expect("Missing generation_input_messages"),
+    )
+    .expect("Failed to deserialize generation input messages for first turn");
+    let first_gen_input_value = serde_json::to_value(&first_gen_input)
+        .expect("Failed to serialize generation input messages");
+    let first_system_texts: Vec<String> = first_gen_input_value["messages"]
+        .as_array()
+        .expect("Expected messages array")
+        .iter()
+        .filter(|msg| msg["role"].as_str() == Some("system"))
+        .filter_map(|msg| {
+            if msg["content"]["content_type"].as_str() == Some("text") {
+                msg["content"]["text"].as_str().map(str::to_string)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let expected_template = "Facet Web search tools:\n- web-search-mcp/*".to_string();
+    assert!(
+        first_system_texts
+            .iter()
+            .any(|text| text == &expected_template),
+        "Expected facet prompt template for web_search"
+    );
+    assert!(
+        first_system_texts
+            .iter()
+            .any(|text| text.contains("Use web search now.")),
+        "Expected additional_system_prompt for web_search"
+    );
+
+    let second_gen_input: GenerationInputMessages = serde_json::from_value(
+        assistant_messages[1]
+            .generation_input_messages
+            .clone()
+            .expect("Missing generation_input_messages"),
+    )
+    .expect("Failed to deserialize generation input messages for second turn");
+    let second_gen_input_value = serde_json::to_value(&second_gen_input)
+        .expect("Failed to serialize generation input messages");
+    let second_system_texts: Vec<String> = second_gen_input_value["messages"]
+        .as_array()
+        .expect("Expected messages array")
+        .iter()
+        .filter(|msg| msg["role"].as_str() == Some("system"))
+        .filter_map(|msg| {
+            if msg["content"]["content_type"].as_str() == Some("text") {
+                msg["content"]["text"].as_str().map(str::to_string)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert!(
+        second_system_texts
+            .iter()
+            .any(|text| text.contains("Use extended thinking now.")),
+        "Expected additional_system_prompt for extended_thinking"
+    );
+    assert!(
+        second_system_texts
+            .iter()
+            .all(|text| !text.contains("Facet Web search tools")),
+        "Did not expect web_search template on second turn"
+    );
+    assert!(
+        second_system_texts
+            .iter()
+            .all(|text| !text.contains("Use web search now.")),
+        "Did not expect web_search additional prompt on second turn"
+    );
+    assert!(
+        second_system_texts
+            .iter()
+            .all(|text| !text.contains("Facet Extended thinking tools")),
+        "Did not expect facet prompt template for extended_thinking when disabled"
     );
 }
 

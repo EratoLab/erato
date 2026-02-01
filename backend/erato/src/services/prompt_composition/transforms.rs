@@ -9,13 +9,16 @@ use super::types::{
     ResolvedChatSequence,
 };
 use crate::config::ChatProviderConfig;
+use crate::config::ExperimentalFacetsConfig;
 use crate::db::entity::chats;
+use crate::db::entity::messages;
 use crate::models::message::{
     ContentPart, ContentPartImageFilePointer, ContentPartText, ContentPartTextFilePointer,
-    GenerationInputMessages, InputMessage, MessageRole, MessageSchema,
+    GenerationInputMessages, GenerationParameters, InputMessage, MessageRole, MessageSchema,
 };
 use eyre::Report;
 use sea_orm::prelude::Uuid;
+use std::collections::HashMap;
 
 /// Phase 1: Build the abstract sequence of chat messages.
 /// This phase determines the logical structure and ordering without performing any I/O.
@@ -25,6 +28,7 @@ use sea_orm::prelude::Uuid;
 /// - Decides whether to include assistant files (only on first message)
 /// - Decides whether to include system and assistant prompts
 /// - Determines message ordering
+#[allow(clippy::too_many_arguments)]
 pub async fn build_abstract_sequence(
     message_repo: &impl MessageRepository,
     prompt_provider: &impl PromptProvider,
@@ -32,6 +36,8 @@ pub async fn build_abstract_sequence(
     previous_message_id: &Uuid,
     new_input_file_ids: Vec<Uuid>,
     chat_provider_config: &ChatProviderConfig,
+    experimental_facets: &ExperimentalFacetsConfig,
+    selected_facet_ids: &[String],
     preferred_language: Option<&str>,
 ) -> Result<AbstractChatSequence, Report> {
     let mut sequence = AbstractChatSequence::new();
@@ -109,6 +115,42 @@ pub async fn build_abstract_sequence(
         for file_info in &assistant.files {
             sequence.push(AbstractChatSequencePart::AssistantFile {
                 file_id: file_info.id,
+            });
+        }
+    }
+
+    // 9.5 Inject facet prompts for newly enabled facets
+    let facet_toggle_states =
+        detect_facet_toggle_states(&previous_messages, experimental_facets, selected_facet_ids);
+
+    for (facet_id, toggle_state) in &facet_toggle_states.states {
+        if !matches!(toggle_state, FacetToggleState::NewlyEnabled) {
+            continue;
+        }
+        let Some(facet) = experimental_facets.facets.get(facet_id) else {
+            continue;
+        };
+
+        if let Some(template) = &experimental_facets.facet_prompt_template
+            && !template.is_empty()
+            && !facet.disable_facet_prompt_template
+        {
+            sequence.push(AbstractChatSequencePart::FacetPromptTemplate {
+                spec: PromptSpec::Static {
+                    content: template.clone(),
+                },
+                facet_id: facet_id.clone(),
+                facet_display_name: facet.display_name.clone(),
+                facet_tools_list: facet.tool_call_allowlist.clone(),
+            });
+        }
+
+        if let Some(prompt) = &facet.additional_system_prompt {
+            sequence.push(AbstractChatSequencePart::FacetAdditionalSystemPrompt {
+                spec: PromptSpec::Static {
+                    content: prompt.clone(),
+                },
+                facet_id: facet_id.clone(),
             });
         }
     }
@@ -275,6 +317,47 @@ pub async fn resolve_sequence(
                 }
             }
 
+            AbstractChatSequencePart::FacetPromptTemplate {
+                spec,
+                facet_id: _,
+                facet_display_name,
+                facet_tools_list,
+            } => {
+                let content = match spec {
+                    PromptSpec::Static { content } => {
+                        render_facet_template(&content, &facet_display_name, &facet_tools_list)
+                    }
+                    PromptSpec::Langfuse { prompt_name: _ } => {
+                        return Err(eyre::eyre!(
+                            "Langfuse prompt should have been resolved earlier"
+                        ));
+                    }
+                };
+
+                input_messages.push(InputMessage {
+                    role: MessageRole::System,
+                    content: ContentPart::Text(ContentPartText { text: content }),
+                });
+                has_system_message = true;
+            }
+
+            AbstractChatSequencePart::FacetAdditionalSystemPrompt { spec, facet_id: _ } => {
+                let content = match spec {
+                    PromptSpec::Static { content } => content,
+                    PromptSpec::Langfuse { prompt_name: _ } => {
+                        return Err(eyre::eyre!(
+                            "Langfuse prompt should have been resolved earlier"
+                        ));
+                    }
+                };
+
+                input_messages.push(InputMessage {
+                    role: MessageRole::System,
+                    content: ContentPart::Text(ContentPartText { text: content }),
+                });
+                has_system_message = true;
+            }
+
             AbstractChatSequencePart::HistoricMessagesFromGenerationInputMessages {
                 message_id,
             } => {
@@ -362,6 +445,81 @@ pub async fn resolve_sequence(
     let resolved = ResolvedChatSequence::new(input_messages);
 
     Ok((resolved, unresolved))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FacetToggleState {
+    NewlyEnabled,
+    NewlyDisabled,
+    StayEnabled,
+    StayDisabled,
+}
+
+#[derive(Debug, Default)]
+struct FacetToggleStates {
+    states: HashMap<String, FacetToggleState>,
+}
+
+fn detect_facet_toggle_states(
+    previous_messages: &[messages::Model],
+    experimental_facets: &ExperimentalFacetsConfig,
+    selected_facet_ids: &[String],
+) -> FacetToggleStates {
+    let previous_facets = previous_messages.iter().rev().find_map(|msg| {
+        let is_assistant = msg
+            .raw_message
+            .get("role")
+            .and_then(|v| v.as_str())
+            .map(|role| role == "assistant")
+            .unwrap_or(false);
+        if !is_assistant {
+            return None;
+        }
+        msg.generation_parameters
+            .as_ref()
+            .and_then(|params| serde_json::from_value::<GenerationParameters>(params.clone()).ok())
+    });
+
+    let previous_selected_facets = previous_facets
+        .map(|params| params.selected_facets)
+        .unwrap_or_default();
+
+    let current_selected_facet_ids: std::collections::HashSet<&String> =
+        selected_facet_ids.iter().collect();
+
+    let mut states = HashMap::new();
+    for facet_id in experimental_facets.facets.keys() {
+        let was_enabled = previous_selected_facets
+            .get(facet_id)
+            .copied()
+            .unwrap_or(false);
+        let is_enabled = current_selected_facet_ids.contains(facet_id);
+        let state = match (was_enabled, is_enabled) {
+            (false, true) => FacetToggleState::NewlyEnabled,
+            (true, false) => FacetToggleState::NewlyDisabled,
+            (true, true) => FacetToggleState::StayEnabled,
+            (false, false) => FacetToggleState::StayDisabled,
+        };
+        states.insert(facet_id.clone(), state);
+    }
+
+    FacetToggleStates { states }
+}
+
+fn render_facet_template(
+    template: &str,
+    facet_display_name: &str,
+    facet_tools_list: &[String],
+) -> String {
+    let tools_list = if facet_tools_list.is_empty() {
+        String::new()
+    } else {
+        format!("- {}", facet_tools_list.join("\n- "))
+    };
+
+    template
+        .replace("{{facet_display_name}}", facet_display_name)
+        .replace("{{facet_tools_list}}", &tools_list)
 }
 
 /// Phase 3: Convert the resolved sequence to a concrete chat request.

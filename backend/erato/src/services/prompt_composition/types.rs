@@ -47,6 +47,17 @@ pub enum AbstractChatSequencePart {
     /// Assistant-specific system prompt
     AssistantPrompt { spec: PromptSpec },
 
+    /// Global facet prompt template (rendered with facet metadata)
+    FacetPromptTemplate {
+        spec: PromptSpec,
+        facet_id: String,
+        facet_display_name: String,
+        facet_tools_list: Vec<String>,
+    },
+
+    /// Facet-specific additional system prompt
+    FacetAdditionalSystemPrompt { spec: PromptSpec, facet_id: String },
+
     /// File attached to the current user input
     UserFile { file_id: Uuid },
 
