@@ -1407,6 +1407,52 @@
         ]
       }
     },
+    "/api/v1beta/prompt-optimizer": {
+      "post": {
+        "tags": [],
+        "summary": "Optimize a prompt using the configured prompt optimizer.",
+        "operationId": "prompt_optimizer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptOptimizerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully optimized the prompt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptOptimizerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid prompt"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "Prompt optimizer is not enabled"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/share-grants": {
       "get": {
         "tags": [
@@ -3660,6 +3706,32 @@
               "$ref": "#/components/schemas/OrganizationUser"
             },
             "description": "List of users in the organization"
+          }
+        }
+      },
+      "PromptOptimizerRequest": {
+        "type": "object",
+        "description": "Request to optimize a prompt using the configured prompt optimizer.",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "The prompt to optimize."
+          }
+        }
+      },
+      "PromptOptimizerResponse": {
+        "type": "object",
+        "description": "Response containing the optimized prompt.",
+        "required": [
+          "optimized_prompt"
+        ],
+        "properties": {
+          "optimized_prompt": {
+            "type": "string",
+            "description": "The optimized prompt returned by the model."
           }
         }
       },

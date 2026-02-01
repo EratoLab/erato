@@ -21,7 +21,8 @@ use crate::models::file_capability::{
 use crate::models::message::{ContentPart, GenerationErrorType, GenerationMetadata, MessageSchema};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
-use crate::policy::types::Subject;
+use crate::policy::engine::authorize;
+use crate::policy::types::{Action, Resource, Subject};
 use crate::server::api::v1beta::assistants::{
     ArchiveAssistantResponse, Assistant, AssistantFile, AssistantWithFiles, CreateAssistantRequest,
     CreateAssistantResponse, UpdateAssistantRequest, UpdateAssistantResponse, archive_assistant,
@@ -38,8 +39,9 @@ use crate::server::api::v1beta::share_grants::{
     CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
     create_share_grant, delete_share_grant, list_share_grants,
 };
+use crate::services::genai::build_chat_options_for_completion;
 use crate::services::sentry::log_internal_server_error;
-use crate::state::AppState;
+use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -48,6 +50,7 @@ use axum::{Extension, Json, Router, middleware};
 use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
 use eyre::{Report, WrapErr};
+use genai::chat::{ChatMessage as GenAiChatMessage, ChatRequest};
 use serde::{Deserialize, Serialize};
 use sqlx::types::{Uuid, chrono};
 use std::collections::HashSet;
@@ -121,6 +124,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/token_usage/estimate",
             post(token_usage::token_usage_estimate),
         )
+        .route("/prompt-optimizer", post(prompt_optimizer))
         // Assistants routes - manually registered for clarity and consistency
         .route("/assistants", post(create_assistant))
         .route("/assistants", get(list_assistants))
@@ -193,6 +197,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         get_file,
         archive_chat_endpoint,
         token_usage::token_usage_estimate,
+        prompt_optimizer,
         available_models,
         file_capabilities,
         budget::budget_status,
@@ -260,6 +265,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         token_usage::TokenUsageStats,
         token_usage::TokenUsageResponseFileItem,
         token_usage::TokenUsageResponse,
+        PromptOptimizerRequest,
+        PromptOptimizerResponse,
         budget::BudgetStatusResponse,
         crate::config::BudgetCurrency,
         sharepoint::Drive,
@@ -661,6 +668,20 @@ pub struct LinkFileRequest {
     /// Provider-specific metadata (e.g., drive_id, item_id for SharePoint)
     #[schema(value_type = SharepointProviderMetadata)]
     pub provider_metadata: serde_json::Value,
+}
+
+/// Request to optimize a prompt using the configured prompt optimizer.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PromptOptimizerRequest {
+    /// The prompt to optimize.
+    pub prompt: String,
+}
+
+/// Response containing the optimized prompt.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PromptOptimizerResponse {
+    /// The optimized prompt returned by the model.
+    pub optimized_prompt: String,
 }
 
 /// Upload files and return UUIDs for each
@@ -1810,6 +1831,96 @@ pub async fn archive_chat_endpoint(
         chat_id: updated_chat.id.to_string(),
         archived_at,
     }))
+}
+
+/// Optimize a prompt using the configured prompt optimizer.
+#[utoipa::path(
+    post,
+    path = "/prompt-optimizer",
+    request_body = PromptOptimizerRequest,
+    responses(
+        (status = OK, body = PromptOptimizerResponse, description = "Successfully optimized the prompt"),
+        (status = BAD_REQUEST, description = "Invalid prompt"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = NOT_FOUND, description = "Prompt optimizer is not enabled"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn prompt_optimizer(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+    Json(request): Json<PromptOptimizerRequest>,
+) -> Result<Json<PromptOptimizerResponse>, StatusCode> {
+    if !app_state.config.prompt_optimizer.enabled {
+        tracing::warn!("Prompt optimizer is not enabled");
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    if request.prompt.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    policy.rebuild_data_if_needed_req(&app_state.db).await?;
+
+    authorize!(
+        policy,
+        &me_user.to_subject(),
+        &Resource::PromptOptimizerSingleton,
+        Action::Create
+    )
+    .map_err(|e| {
+        tracing::warn!("Prompt optimizer authorization failed: {}", e);
+        StatusCode::UNAUTHORIZED
+    })?;
+
+    let system_prompt = app_state
+        .config
+        .prompt_optimizer
+        .prompt
+        .as_deref()
+        .ok_or_else(|| {
+            tracing::error!("Prompt optimizer is enabled but no system prompt configured");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let ChatProviderConfigWithId {
+        chat_provider_config,
+        ..
+    } = app_state
+        .chat_provider_for_prompt_optimizer()
+        .map_err(|e| {
+            tracing::error!("Failed to get prompt optimizer chat provider: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let chat_options = build_chat_options_for_completion(&chat_provider_config.model_settings);
+    let mut chat_request: ChatRequest = Default::default();
+    chat_request = chat_request.append_message(GenAiChatMessage::system(system_prompt.to_string()));
+    chat_request = chat_request.append_message(GenAiChatMessage::user(request.prompt));
+
+    let optimized_completion = app_state
+        .genai_for_prompt_optimizer()
+        .map_err(log_internal_server_error)?
+        .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to optimize prompt: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let optimized_prompt = optimized_completion
+        .first_text()
+        .ok_or_else(|| {
+            tracing::error!("No text content in prompt optimizer response");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .to_string();
+
+    Ok(Json(PromptOptimizerResponse { optimized_prompt }))
 }
 
 /// Get available chat models for the user

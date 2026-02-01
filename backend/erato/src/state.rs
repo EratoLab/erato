@@ -6,7 +6,7 @@ use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
 use crate::system_prompt_renderer::{RenderContext, SystemPromptRenderer};
-use eyre::Report;
+use eyre::{OptionExt, Report};
 use genai::adapter::AdapterKind;
 use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
 use genai::{Client as GenaiClient, ModelIden, ServiceTarget};
@@ -250,6 +250,37 @@ impl AppState {
 
     pub fn genai_for_summary(&self) -> Result<GenaiClient, Report> {
         Self::build_genai_client(self.chat_provider_for_summary()?.chat_provider_config)
+    }
+
+    pub fn chat_provider_for_prompt_optimizer(&self) -> Result<ChatProviderConfigWithId, Report> {
+        let prompt_optimizer = &self.config.prompt_optimizer;
+        let chat_provider_id = prompt_optimizer
+            .chat_provider_id
+            .as_deref()
+            .ok_or_eyre("Prompt optimizer chat provider is not configured")?;
+
+        if let Some(chat_providers) = &self.config.chat_providers {
+            if !chat_providers.providers.contains_key(chat_provider_id) {
+                return Err(eyre::eyre!(
+                    "Configured prompt optimizer chat provider '{}' not found in providers",
+                    chat_provider_id
+                ));
+            }
+        } else if self.config.chat_provider.is_none() {
+            return Err(eyre::eyre!("No chat provider configuration found"));
+        }
+
+        Ok(ChatProviderConfigWithId {
+            chat_provider_id: chat_provider_id.to_string(),
+            chat_provider_config: self.config.get_chat_provider(chat_provider_id).clone(),
+        })
+    }
+
+    pub fn genai_for_prompt_optimizer(&self) -> Result<GenaiClient, Report> {
+        Self::build_genai_client(
+            self.chat_provider_for_prompt_optimizer()?
+                .chat_provider_config,
+        )
     }
 
     pub fn genai_for_chatcompletion(

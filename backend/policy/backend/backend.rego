@@ -40,6 +40,7 @@ not_logged_in := "__not_logged_in__"
 # Resource kinds
 resource_kind_chat := "chat"
 resource_kind_chat_singleton := "chat_singleton"
+resource_kind_prompt_optimizer_singleton := "prompt_optimizer_singleton"
 resource_kind_message_feedback := "message_feedback"
 resource_kind_assistant := "assistant"
 resource_kind_assistant_singleton := "assistant_singleton"
@@ -99,6 +100,17 @@ allow if {
 
 	# Check for chat create action on singleton resource
 	input.resource_kind == resource_kind_chat_singleton
+	input.action == action_create
+}
+
+# A logged-in user can use the prompt optimizer.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for prompt optimizer create action on singleton resource
+	input.resource_kind == resource_kind_prompt_optimizer_singleton
 	input.action == action_create
 }
 

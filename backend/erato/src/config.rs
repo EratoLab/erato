@@ -5,6 +5,33 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use utoipa::ToSchema;
 
+const DEFAULT_PROMPT_OPTIMIZER_PROMPT: &str = r#"
+You are Lyra, a master-level AI prompt optimization specialist.
+Your mission: transform any user input into precision-crafted prompts that unlock AI's full potential across all platforms.
+
+Use the 4-D methodology:
+1) Deconstruct: extract core intent, key entities, and context; identify output requirements and constraints; map what is provided vs. missing.
+2) Diagnose: audit for clarity gaps and ambiguity; check specificity and completeness; assess structure and complexity needs.
+3) Develop: select optimal techniques based on request type (creative: multi-perspective + tone emphasis; technical: constraint-based + precision focus; educational: few-shot examples + clear structure; complex: systematic frameworks); assign an appropriate AI role/expertise; enhance context and implement a logical structure.
+4) Deliver: construct the optimized prompt and format based on complexity.
+
+Optimization techniques:
+- Foundation: role assignment, context layering, output specs, task decomposition.
+- Advanced: few-shot learning, multi-perspective analysis, constraint optimization.
+
+Platform notes: ChatGPT (structured sections, conversation starters), Claude (longer context, reasoning frameworks), Gemini (creative tasks, comparative analysis), others (apply universal best practices).
+
+Non-interactive mode requirements:
+- Do not ask questions or request more information.
+- Do not display any welcome message.
+- Do not mention modes or your internal process.
+- If key details are missing, make minimal reasonable assumptions and proceed.
+- Use internal reasoning but do not reveal it.
+
+Output format:
+- Return only the optimized prompt as plain text.
+- No headings, no bullet points, no quotes, no explanations."#;
+
 #[derive(Debug, Default, Deserialize, PartialEq, Clone)]
 pub struct AppConfig {
     // A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
@@ -51,6 +78,10 @@ pub struct AppConfig {
     // Experimental assistants configuration.
     #[serde(default)]
     pub experimental_assistants: ExperimentalAssistantsConfig,
+
+    // Prompt optimizer configuration.
+    #[serde(default)]
+    pub prompt_optimizer: PromptOptimizerConfig,
 
     // Experimental facets configuration.
     #[serde(default)]
@@ -105,7 +136,9 @@ impl AppConfig {
             .set_default("http_port", "3130")?
             .set_default("frontend_bundle_path", "./public")?
             .set_default("cleanup_enabled", false)?
-            .set_default("cleanup_archived_max_age_days", 30)?;
+            .set_default("cleanup_archived_max_age_days", 30)?
+            .set_default("prompt_optimizer.enabled", false)?
+            .set_default("prompt_optimizer.prompt", DEFAULT_PROMPT_OPTIMIZER_PROMPT)?;
 
         let config_files_to_load: Vec<String> = if let Some(paths) = config_file_paths {
             paths
@@ -221,6 +254,11 @@ impl AppConfig {
         // Validate chat providers configuration
         if let Err(e) = config.validate_chat_providers() {
             panic!("Invalid chat providers configuration: {}", e);
+        }
+
+        // Validate prompt optimizer configuration
+        if let Err(e) = config.validate_prompt_optimizer() {
+            panic!("Invalid prompt optimizer configuration: {}", e);
         }
 
         // Validate model permissions configuration
@@ -358,6 +396,42 @@ impl AppConfig {
                 ));
             }
         }
+        Ok(())
+    }
+
+    pub fn validate_prompt_optimizer(&self) -> Result<(), eyre::Report> {
+        if !self.prompt_optimizer.enabled {
+            return Ok(());
+        }
+
+        let prompt = self.prompt_optimizer.prompt.as_deref().unwrap_or("");
+        if prompt.trim().is_empty() {
+            return Err(eyre!(
+                "Prompt optimizer enabled but `prompt_optimizer.prompt` is not set"
+            ));
+        }
+
+        let chat_provider_id = self
+            .prompt_optimizer
+            .chat_provider_id
+            .as_deref()
+            .ok_or_else(|| {
+                eyre!("Prompt optimizer enabled but `prompt_optimizer.chat_provider_id` is not set")
+            })?;
+
+        if let Some(chat_providers) = &self.chat_providers {
+            if !chat_providers.providers.contains_key(chat_provider_id) {
+                return Err(eyre!(
+                    "Prompt optimizer chat provider '{}' not found in configured chat_providers",
+                    chat_provider_id
+                ));
+            }
+        } else if self.chat_provider.is_none() {
+            return Err(eyre!(
+                "Prompt optimizer enabled but no chat provider configuration found"
+            ));
+        }
+
         Ok(())
     }
 
@@ -568,6 +642,18 @@ pub struct SummaryConfig {
     // Maximum output tokens for summary generation.
     // Defaults to 300 if not specified.
     pub max_tokens: Option<u32>,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+pub struct PromptOptimizerConfig {
+    // Whether the prompt optimizer is enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+    // The chat provider ID to use for prompt optimization.
+    pub chat_provider_id: Option<String>,
+    // The system prompt to use for prompt optimization.
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone)]

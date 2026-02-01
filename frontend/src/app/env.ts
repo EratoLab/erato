@@ -10,6 +10,7 @@ export type Env = {
   disableChatInputAutofocus: boolean;
   disableLogout: boolean;
   assistantsEnabled: boolean;
+  promptOptimizerEnabled: boolean;
   sharepointEnabled: boolean;
   messageFeedbackEnabled: boolean;
   messageFeedbackCommentsEnabled: boolean;
@@ -31,6 +32,7 @@ declare global {
     DISABLE_CHAT_INPUT_AUTOFOCUS?: boolean;
     DISABLE_LOGOUT?: boolean;
     ASSISTANTS_ENABLED?: boolean;
+    PROMPT_OPTIMIZER_ENABLED?: boolean;
     SHAREPOINT_ENABLED?: boolean;
     MESSAGE_FEEDBACK_ENABLED?: boolean;
     MESSAGE_FEEDBACK_COMMENTS_ENABLED?: boolean;
@@ -97,6 +99,10 @@ export const env = (): Env => {
     import.meta.env.VITE_ASSISTANTS_ENABLED === "true"
       ? true
       : (window.ASSISTANTS_ENABLED ?? false);
+  const promptOptimizerEnabled =
+    import.meta.env.VITE_PROMPT_OPTIMIZER_ENABLED === "true"
+      ? true
+      : (window.PROMPT_OPTIMIZER_ENABLED ?? false);
   const sharepointEnabled =
     import.meta.env.VITE_SHAREPOINT_ENABLED === "true"
       ? true
@@ -129,6 +135,7 @@ export const env = (): Env => {
     disableChatInputAutofocus,
     disableLogout,
     assistantsEnabled,
+    promptOptimizerEnabled,
     sharepointEnabled,
     messageFeedbackEnabled,
     messageFeedbackCommentsEnabled,

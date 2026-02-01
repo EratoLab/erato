@@ -42,6 +42,12 @@ cost_output_tokens_per_1m = 0.0
 rule_type = "allow-all"
 chat_provider_ids = ["test-token-limit"]
 
+# Prompt optimizer configuration
+# [prompt_optimizer]
+# enabled = false
+# chat_provider_id = "test-token-limit"
+# prompt = "Optional override. If omitted, a default non-interactive prompt-optimizer system prompt is used."
+
 # From ./run_mcp_server.sh
 # [mcp_servers.file_provider]
 # transport_type = "sse"
