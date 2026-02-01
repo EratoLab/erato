@@ -10,6 +10,7 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, to_value};
+use std::collections::HashMap;
 use std::fmt;
 use utoipa::ToSchema;
 
@@ -19,6 +20,9 @@ pub struct GenerationParameters {
     /// The chat provider ID that was used to generate the message
     #[serde(skip_serializing_if = "Option::is_none")]
     pub generation_chat_provider_id: Option<String>,
+    /// Facets selected for this generation (facet_id -> enabled), includes all available facets
+    #[serde(default)]
+    pub selected_facets: HashMap<String, bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

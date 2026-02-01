@@ -158,6 +158,8 @@ pub struct RecentChat {
     pub owner_user_id: String,
     /// The chat provider ID used for the most recent message
     pub last_chat_provider_id: Option<String>,
+    /// The facets selected for the most recent message
+    pub last_selected_facets: Option<Vec<String>>,
     /// The assistant ID if this chat is based on an assistant
     pub assistant_id: Option<Uuid>,
     /// The name of the assistant if this chat is based on an assistant
@@ -346,9 +348,17 @@ pub async fn get_recent_chats(
         HashMap::new()
     };
 
+    #[derive(Debug, Clone)]
+    struct LastGenerationInfo {
+        provider_id: Option<String>,
+        selected_facets: Option<Vec<String>>,
+    }
+
     // Batch query: Get the most recent message with generation_parameters for each chat
     // We query all messages that could be the "last" one, then pick the latest per chat in memory
-    let last_provider_ids_map: HashMap<Uuid, Option<String>> = if !authorized_chat_ids.is_empty() {
+    let last_generation_info_map: HashMap<Uuid, LastGenerationInfo> = if !authorized_chat_ids
+        .is_empty()
+    {
         let messages_with_params: Vec<messages::Model> = Messages::find()
             .filter(messages::Column::ChatId.is_in(authorized_chat_ids.clone()))
             .filter(messages::Column::IsMessageInActiveThread.eq(true))
@@ -358,16 +368,33 @@ pub async fn get_recent_chats(
             .await?;
 
         // Group by chat_id and take the first (most recent) for each
-        let mut map: HashMap<Uuid, Option<String>> = HashMap::new();
+        let mut map: HashMap<Uuid, LastGenerationInfo> = HashMap::new();
         for msg in messages_with_params {
             // Only insert if we haven't seen this chat_id yet (first = most recent due to ORDER BY)
             if let std::collections::hash_map::Entry::Vacant(e) = map.entry(msg.chat_id) {
-                let provider_id = msg.generation_parameters.and_then(|params| {
-                    serde_json::from_value::<GenerationParameters>(params)
-                        .ok()
-                        .and_then(|gp| gp.generation_chat_provider_id)
-                });
-                e.insert(provider_id);
+                let generation_info = msg
+                    .generation_parameters
+                    .and_then(|params| serde_json::from_value::<GenerationParameters>(params).ok())
+                    .map(|gp| {
+                        let selected_facets: Vec<String> = gp
+                            .selected_facets
+                            .into_iter()
+                            .filter_map(|(id, enabled)| enabled.then_some(id))
+                            .collect();
+                        LastGenerationInfo {
+                            provider_id: gp.generation_chat_provider_id,
+                            selected_facets: if selected_facets.is_empty() {
+                                None
+                            } else {
+                                Some(selected_facets)
+                            },
+                        }
+                    })
+                    .unwrap_or(LastGenerationInfo {
+                        provider_id: None,
+                        selected_facets: None,
+                    });
+                e.insert(generation_info);
             }
         }
         map
@@ -379,10 +406,11 @@ pub async fn get_recent_chats(
     let recent_chats: Vec<RecentChat> = authorized_chats
         .iter()
         .map(|chat_with_msg| {
-            let last_chat_provider_id = last_provider_ids_map
-                .get(&chat_with_msg.id)
-                .cloned()
-                .flatten();
+            let last_generation_info = last_generation_info_map.get(&chat_with_msg.id);
+            let last_chat_provider_id =
+                last_generation_info.and_then(|info| info.provider_id.clone());
+            let last_selected_facets =
+                last_generation_info.and_then(|info| info.selected_facets.clone());
 
             let assistant_name = chat_with_msg
                 .assistant_id
@@ -398,6 +426,7 @@ pub async fn get_recent_chats(
                 archived_at: chat_with_msg.archived_at,
                 owner_user_id: chat_with_msg.owner_user_id.clone(),
                 last_chat_provider_id,
+                last_selected_facets,
                 assistant_id: chat_with_msg.assistant_id,
                 assistant_name,
             }

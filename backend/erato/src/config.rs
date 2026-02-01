@@ -52,6 +52,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub experimental_assistants: ExperimentalAssistantsConfig,
 
+    // Experimental facets configuration.
+    #[serde(default)]
+    pub experimental_facets: ExperimentalFacetsConfig,
+
     // Caches configuration for file contents and token counts.
     #[serde(default)]
     pub caches: CachesConfig,
@@ -135,7 +139,10 @@ impl AppConfig {
                 .list_separator(" ")
                 .with_list_parse_key("chat_provider.additional_request_parameters")
                 .with_list_parse_key("chat_provider.additional_request_headers")
-                .with_list_parse_key("chat_providers.priority_order"),
+                .with_list_parse_key("chat_providers.priority_order")
+                .with_list_parse_key("experimental_facets.priority_order")
+                .with_list_parse_key("experimental_facets.tool_call_allowlist")
+                .with_list_parse_key("experimental_facets.default_selected_facets"),
         );
         Ok(builder)
     }
@@ -904,6 +911,64 @@ pub struct ExperimentalAssistantsConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
+pub struct ExperimentalFacetsConfig {
+    // Map of facet id to facet configuration.
+    #[serde(default)]
+    pub facets: HashMap<String, FacetConfig>,
+
+    // List of facet IDs in priority order for display.
+    #[serde(default)]
+    pub priority_order: Vec<String>,
+
+    // Global tool allowlist applied regardless of selected facets.
+    #[serde(default)]
+    pub tool_call_allowlist: Vec<String>,
+
+    // Global facet prompt template (optional).
+    #[serde(default)]
+    pub facet_prompt_template: Option<String>,
+
+    // Whether only a single facet can be selected at the same time.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub only_single_facet: bool,
+
+    // Whether to include the facet display name in the chat box indicator.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub show_facet_indicator_with_display_name: bool,
+
+    // Facets that should be selected by default in the frontend.
+    #[serde(default)]
+    pub default_selected_facets: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
+pub struct FacetConfig {
+    // Human readable name for the facet.
+    pub display_name: String,
+
+    // Optional icon identifier (e.g. "iconoir-lightbulb").
+    pub icon: Option<String>,
+
+    // Additional system prompt to inject when this facet is selected.
+    pub additional_system_prompt: Option<String>,
+
+    // Allowlist of tools for this facet.
+    #[serde(default)]
+    pub tool_call_allowlist: Vec<String>,
+
+    // Optional model settings overrides for this facet.
+    #[serde(default)]
+    pub model_settings: ModelSettings,
+
+    // Disable the global facet prompt template for this facet.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub disable_facet_prompt_template: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]

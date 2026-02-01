@@ -1402,3 +1402,112 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = 
     assert_eq!(provider.model_settings.reasoning_effort, None);
     assert_eq!(provider.model_settings.verbosity, None);
 }
+
+#[test]
+fn test_config_with_experimental_facets() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["basic"]
+
+[chat_providers.providers.basic]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+api_key = "sk-test-key"
+
+[file_storage_providers.test]
+provider_kind = "s3"
+config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+
+[experimental_facets]
+only_single_facet = true
+show_facet_indicator_with_display_name = true
+priority_order = ["extended_thinking", "web_search"]
+tool_call_allowlist = ["web-search-mcp/*"]
+facet_prompt_template = ""
+default_selected_facets = ["web_search"]
+
+[experimental_facets.facets.extended_thinking]
+display_name = "Extended thinking"
+icon = "iconoir-lightbulb"
+disable_facet_prompt_template = true
+model_settings = { reasoning_effort = "high", verbosity = "low" }
+
+[experimental_facets.facets.web_search]
+display_name = "Web search"
+icon = "iconoir-globe"
+tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
+additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    let facets = &config.experimental_facets;
+    assert!(facets.only_single_facet);
+    assert!(facets.show_facet_indicator_with_display_name);
+    assert_eq!(
+        facets.priority_order,
+        vec!["extended_thinking".to_string(), "web_search".to_string()]
+    );
+    assert_eq!(
+        facets.tool_call_allowlist,
+        vec!["web-search-mcp/*".to_string()]
+    );
+    assert_eq!(facets.facet_prompt_template, Some("".to_string()));
+    assert_eq!(
+        facets.default_selected_facets,
+        vec!["web_search".to_string()]
+    );
+
+    let extended = facets
+        .facets
+        .get("extended_thinking")
+        .expect("extended_thinking facet missing");
+    assert_eq!(extended.display_name, "Extended thinking");
+    assert_eq!(extended.icon, Some("iconoir-lightbulb".to_string()));
+    assert!(extended.disable_facet_prompt_template);
+    assert_eq!(
+        extended.model_settings.reasoning_effort,
+        Some(ModelReasoningEffort::High)
+    );
+    assert_eq!(extended.model_settings.verbosity, Some(ModelVerbosity::Low));
+
+    let web_search = facets
+        .facets
+        .get("web_search")
+        .expect("web_search facet missing");
+    assert_eq!(web_search.display_name, "Web search");
+    assert_eq!(web_search.icon, Some("iconoir-globe".to_string()));
+    assert_eq!(
+        web_search.tool_call_allowlist,
+        vec![
+            "web-search-mcp/*".to_string(),
+            "web-access-mcp/*".to_string()
+        ]
+    );
+    assert_eq!(
+        web_search.additional_system_prompt,
+        Some(
+            "Please execute one or multiple web searches to answer the user's question."
+                .to_string()
+        )
+    );
+}
