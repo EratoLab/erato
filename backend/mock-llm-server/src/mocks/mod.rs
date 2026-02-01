@@ -228,6 +228,23 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "GenerateCatMcpToolCall".to_string(),
+            description:
+                "Returns a tool call to generate_image when last message asks for generate cat mcp"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "generate cat mcp".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "generate_image".to_string(),
+                arguments: r#"{"prompt":"A cute cat, studio lighting","num_images":1,"width":1024,"height":1024}"#
+                    .to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
             name: "ToolResultResponse".to_string(),
             description: "Returns a text response when the last message is a tool result"
                 .to_string(),
@@ -285,7 +302,7 @@ mod tests {
         let mocks = get_default_mocks();
 
         // Verify we have the expected number of mocks
-        assert_eq!(mocks.len(), 11);
+        assert_eq!(mocks.len(), 12);
 
         // Verify all mocks have names
         for mock in &mocks {

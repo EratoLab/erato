@@ -4,6 +4,7 @@ pub mod budget;
 pub mod entra_id;
 pub mod me_profile_middleware;
 pub mod message_streaming;
+mod message_streaming_file_extraction;
 pub mod policy_engine_middleware;
 pub mod share_grants;
 pub mod sharepoint;

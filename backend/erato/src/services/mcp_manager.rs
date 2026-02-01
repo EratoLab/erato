@@ -2,7 +2,7 @@ use crate::config::AppConfig;
 use crate::services::mcp_session_manager::{ManagedTool, McpSessionManager};
 use eyre::{Report, eyre};
 use genai::chat::Tool as GenaiTool;
-use genai::chat::{ToolCall as GenaiToolCall, ToolResponse};
+use genai::chat::ToolCall as GenaiToolCall;
 use rmcp::model::CallToolRequestParam;
 use sea_orm::prelude::Uuid;
 use std::sync::Arc;
@@ -17,6 +17,7 @@ pub struct McpServers {
 pub struct ManagedToolCall {
     pub server_id: String,
     pub tool_call: GenaiToolCall,
+    pub tool: rmcp::model::Tool,
 }
 
 impl Default for McpServers {
@@ -65,6 +66,7 @@ impl McpServers {
             Ok(ManagedToolCall {
                 server_id: managed_tool.server_id.clone(),
                 tool_call,
+                tool: managed_tool.tool.clone(),
             })
         } else {
             Err(eyre!(
@@ -74,12 +76,12 @@ impl McpServers {
         }
     }
 
-    /// Call a tool on the appropriate MCP server
+    /// Call a tool on the appropriate MCP server and return the raw MCP result
     pub async fn call_tool(
         &self,
         chat_id: Uuid,
         managed_tool_call: ManagedToolCall,
-    ) -> Result<ToolResponse, Report> {
+    ) -> Result<rmcp::model::CallToolResult, Report> {
         let params = CallToolRequestParam {
             name: managed_tool_call.tool_call.fn_name.clone().into(),
             arguments: managed_tool_call
@@ -89,51 +91,9 @@ impl McpServers {
                 .cloned(),
         };
 
-        let result = self
-            .session_manager
+        self.session_manager
             .call_tool(chat_id, &managed_tool_call.server_id, params)
-            .await?;
-
-        // Convert the MCP tool result to a GenAI ToolResponse
-        // MCP returns a list of content items, we'll concatenate text items
-        let content = result
-            .content
-            .into_iter()
-            .filter_map(|annotated_content| {
-                // Extract the actual content from the Annotated wrapper
-                match annotated_content.raw {
-                    rmcp::model::RawContent::Text(text_content) => {
-                        Some(text_content.text.to_string())
-                    }
-                    rmcp::model::RawContent::Image { .. } => {
-                        // For now, skip image content
-                        // TODO: Handle image content appropriately
-                        None
-                    }
-                    rmcp::model::RawContent::Resource { .. } => {
-                        // For now, skip resource content
-                        // TODO: Handle resource content appropriately
-                        None
-                    }
-                    rmcp::model::RawContent::Audio(_) => {
-                        // For now, skip audio content
-                        // TODO: Handle audio content appropriately
-                        None
-                    }
-                    rmcp::model::RawContent::ResourceLink(_) => {
-                        // For now, skip resource link content
-                        // TODO: Handle resource link content appropriately
-                        None
-                    }
-                }
-            })
-            .collect::<Vec<String>>()
-            .join("\n");
-
-        Ok(ToolResponse {
-            call_id: managed_tool_call.tool_call.call_id,
-            content,
-        })
+            .await
     }
 }
 
