@@ -20,8 +20,6 @@
  * git add src/config/componentRegistry.ts
  * ```
  */
-// Customer override - remove before committing to main repo
-import { FileSourceSelectorGrid } from "@/customer/components/FileSourceSelectorGrid";
 
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { ComponentType } from "react";
@@ -60,6 +58,6 @@ export interface ComponentRegistry {
  * Customer forks modify this file to provide custom implementations.
  */
 export const componentRegistry: ComponentRegistry = {
-  AssistantFileSourceSelector: FileSourceSelectorGrid,
+  AssistantFileSourceSelector: null,
   ChatFileSourceSelector: null,
 };

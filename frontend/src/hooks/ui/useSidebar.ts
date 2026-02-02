@@ -46,6 +46,7 @@ export function useResponsiveCollapsedMode(
 
   useEffect(() => {
     // Tailwind's sm: breakpoint is 640px
+    // eslint-disable-next-line lingui/no-unlocalized-strings
     const mediaQuery = window.matchMedia("(min-width: 640px)");
 
     // Initial check
