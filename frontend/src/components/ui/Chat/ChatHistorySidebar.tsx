@@ -27,6 +27,7 @@ import {
   SearchIcon,
   EditIcon,
   ResolvedIcon,
+  ChevronRightIcon,
 } from "../icons";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -298,6 +299,43 @@ const SearchNavigationItem = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 SearchNavigationItem.displayName = "SearchNavigationItem";
 
+const CollapsibleSection = memo<{
+  title: string;
+  defaultExpanded?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}>(({ title, defaultExpanded = true, children, className }) => {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  return (
+    <div className={className}>
+      <div className="px-2 py-1">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left hover:bg-theme-bg-hover"
+          aria-expanded={isExpanded}
+          aria-label={isExpanded ? t`Collapse ${title}` : t`Expand ${title}`}
+          type="button"
+        >
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-theme-fg-muted">
+            {title}
+          </h3>
+          <ChevronRightIcon
+            className={clsx(
+              "size-3 text-theme-fg-muted transition-transform",
+              isExpanded ? "rotate-90" : "rotate-0",
+            )}
+          />
+        </button>
+      </div>
+      {isExpanded && <div>{children}</div>}
+    </div>
+  );
+});
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+CollapsibleSection.displayName = "CollapsibleSection";
+
 const ChatHistoryFooter = memo<{
   userProfile?: UserProfile;
   onSignOut: () => void;
@@ -515,14 +553,18 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 ) : isLoading ? (
                   <ChatHistoryListSkeleton />
                 ) : (
-                  <ChatHistoryList
-                    sessions={sessions}
-                    currentSessionId={currentSessionId}
-                    onSessionSelect={onSessionSelect}
-                    onSessionArchive={onSessionArchive}
-                    showTimestamps={showTimestamps}
-                    className="flex-1 p-2"
-                  />
+                  <CollapsibleSection
+                    title={t({ id: "chat.history.recent", message: "Recent" })}
+                    defaultExpanded={true}
+                  >
+                    <ChatHistoryList
+                      sessions={sessions}
+                      currentSessionId={currentSessionId}
+                      onSessionSelect={onSessionSelect}
+                      onSessionArchive={onSessionArchive}
+                      showTimestamps={showTimestamps}
+                    />
+                  </CollapsibleSection>
                 )}
               </div>
             </div>

@@ -195,6 +195,11 @@ msgid "chat.file.preview.aria"
 msgstr "Aperçu du fichier joint :"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.recent"
+msgstr "Récents"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.aria"
 msgstr "message"
@@ -981,6 +986,10 @@ msgid "Close modal overlay"
 msgstr "Fermer le fond de modal"
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "Collapse {title}"
+msgstr ""
+
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "collapse sidebar"
 msgstr "réduire la barre latérale"
 
@@ -1120,6 +1129,10 @@ msgstr "Sortie d'erreur"
 #: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Error:"
 msgstr "Erreur :"
+
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "Expand {title}"
+msgstr ""
 
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Expand by default"
@@ -1311,6 +1324,10 @@ msgstr "Aperçu de"
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Preview:"
 msgstr "Aperçu :"
+
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+#~ msgid "Recent"
+#~ msgstr ""
 
 #: src/pages/SearchPage.tsx
 msgid "Recent Chats"
