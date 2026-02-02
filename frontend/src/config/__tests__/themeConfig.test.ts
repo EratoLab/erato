@@ -7,7 +7,11 @@ vi.mock("@/app/env", () => ({
 
 // eslint-disable-next-line import/order
 import { env } from "@/app/env";
-import { defaultThemeConfig, loadThemeConfig } from "../themeConfig";
+import {
+  defaultThemeConfig,
+  loadThemeConfig,
+  resolveIconPaths,
+} from "../themeConfig";
 
 import type { Env } from "@/app/env";
 import type { CustomThemeConfig } from "@/utils/themeUtils";
@@ -560,6 +564,7 @@ describe("themeConfig", () => {
         getLogoPath: () => "/logo.svg",
         getAssistantAvatarPath: () => null,
         getSidebarLogoPath: () => null,
+        getFontsCssPath: () => null,
       };
 
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
@@ -571,6 +576,103 @@ describe("themeConfig", () => {
 
       expect(result).toEqual(mockTheme);
       expect(global.fetch).toHaveBeenCalledWith("/custom-config/theme.json");
+    });
+  });
+
+  describe("resolveIconPaths", () => {
+    it("should return empty object when iconMappings is undefined", () => {
+      const result = resolveIconPaths(undefined, "test-customer");
+      expect(result).toEqual({});
+    });
+
+    it("should resolve relative paths with customer name", () => {
+      const iconMappings = {
+        fileTypes: {
+          pdf: "./icons/custom-pdf.svg",
+          image: "MediaImage",
+        },
+      };
+
+      const result = resolveIconPaths(iconMappings, "trilux-test");
+
+      expect(result.fileTypes?.pdf).toBe(
+        "/custom-theme/trilux-test/icons/custom-pdf.svg",
+      );
+      expect(result.fileTypes?.image).toBe("MediaImage");
+    });
+
+    it("should use themePath env variable when available", () => {
+      mockEnv.mockReturnValue(
+        createMockEnv({ themePath: "/custom/theme/path" }),
+      );
+
+      const iconMappings = {
+        status: {
+          error: "./icons/error.svg",
+          success: "CheckCircle",
+        },
+      };
+
+      const result = resolveIconPaths(iconMappings, "customer");
+
+      expect(result.status?.error).toBe("/custom/theme/path/icons/error.svg");
+      expect(result.status?.success).toBe("CheckCircle");
+    });
+
+    it("should use themeCustomerName env variable when customerName is not provided", () => {
+      mockEnv.mockReturnValue(
+        createMockEnv({ themeCustomerName: "env-customer" }),
+      );
+
+      const iconMappings = {
+        actions: {
+          copy: "./icons/copy.svg",
+        },
+      };
+
+      const result = resolveIconPaths(iconMappings, undefined);
+
+      expect(result.actions?.copy).toBe(
+        "/custom-theme/env-customer/icons/copy.svg",
+      );
+    });
+
+    it("should handle absolute paths unchanged", () => {
+      const iconMappings = {
+        fileTypes: {
+          pdf: "/absolute/path/icon.svg",
+        },
+      };
+
+      const result = resolveIconPaths(iconMappings, "customer");
+
+      expect(result.fileTypes?.pdf).toBe("/absolute/path/icon.svg");
+    });
+
+    it("should handle all icon categories", () => {
+      const iconMappings = {
+        fileTypes: { pdf: "./pdf.svg" },
+        status: { error: "./error.svg" },
+        actions: { copy: "./copy.svg" },
+      };
+
+      const result = resolveIconPaths(iconMappings, "test");
+
+      expect(result.fileTypes?.pdf).toBe("/custom-theme/test/pdf.svg");
+      expect(result.status?.error).toBe("/custom-theme/test/error.svg");
+      expect(result.actions?.copy).toBe("/custom-theme/test/copy.svg");
+    });
+
+    it("should fallback to default path when no customer info", () => {
+      const iconMappings = {
+        fileTypes: {
+          video: "./icons/video.svg",
+        },
+      };
+
+      const result = resolveIconPaths(iconMappings, undefined);
+
+      expect(result.fileTypes?.video).toBe("/custom-theme/icons/video.svg");
     });
   });
 });

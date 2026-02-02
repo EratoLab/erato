@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import * as useBudgetStatusModule from "@/hooks/budget/useBudgetStatus";
 import * as useBudgetWarningModule from "@/hooks/budget/useBudgetWarning";
 
@@ -8,6 +9,12 @@ import { BudgetWarning } from "../BudgetWarning";
 
 import type { BudgetStatusResponse } from "@/hooks/budget/useBudgetStatus";
 import type { BudgetWarningResult } from "@/hooks/budget/useBudgetWarning";
+import type { ReactElement } from "react";
+
+// Helper to wrap component with ThemeProvider
+const renderWithTheme = (ui: ReactElement) => {
+  return render(<ThemeProvider>{ui}</ThemeProvider>);
+};
 
 // Mock the hooks
 vi.mock("@/hooks/budget/useBudgetStatus");
@@ -54,7 +61,7 @@ describe("BudgetWarning", () => {
 
     mockUseBudgetWarning.mockReturnValue(warningResult);
 
-    const { container } = render(<BudgetWarning />);
+    const { container } = renderWithTheme(<BudgetWarning />);
 
     expect(container.firstChild).toBeNull();
   });
@@ -86,7 +93,7 @@ describe("BudgetWarning", () => {
 
     mockUseBudgetWarning.mockReturnValue(warningResult);
 
-    const { container } = render(<BudgetWarning />);
+    const { container } = renderWithTheme(<BudgetWarning />);
 
     expect(container.firstChild).toBeNull();
   });
@@ -118,7 +125,7 @@ describe("BudgetWarning", () => {
 
     mockUseBudgetWarning.mockReturnValue(warningResult);
 
-    render(<BudgetWarning />);
+    renderWithTheme(<BudgetWarning />);
 
     // Check for warning title
     expect(screen.getByText(/Approaching Budget Limit/i)).toBeInTheDocument();
@@ -161,7 +168,7 @@ describe("BudgetWarning", () => {
 
     mockUseBudgetWarning.mockReturnValue(warningResult);
 
-    render(<BudgetWarning />);
+    renderWithTheme(<BudgetWarning />);
 
     // Check for error title
     expect(screen.getByText(/Budget Limit Reached/i)).toBeInTheDocument();
@@ -201,7 +208,7 @@ describe("BudgetWarning", () => {
 
     mockUseBudgetWarning.mockReturnValue(warningResult);
 
-    const { container } = render(
+    const { container } = renderWithTheme(
       // eslint-disable-next-line tailwindcss/no-custom-classname
       <BudgetWarning className="custom-class-name" />,
     );
@@ -238,7 +245,7 @@ describe("BudgetWarning", () => {
 
     mockUseBudgetWarning.mockReturnValue(warningResult);
 
-    render(<BudgetWarning />);
+    renderWithTheme(<BudgetWarning />);
 
     // Should not mention budget period
     expect(screen.queryByText(/-day/)).not.toBeInTheDocument();
@@ -271,7 +278,7 @@ describe("BudgetWarning", () => {
 
     mockUseBudgetWarning.mockReturnValue(warningResult);
 
-    render(<BudgetWarning />);
+    renderWithTheme(<BudgetWarning />);
 
     // Check for EUR formatting
     expect(screen.getByText(/€800\.00/)).toBeInTheDocument();
@@ -296,7 +303,7 @@ describe("BudgetWarning", () => {
 
     mockUseBudgetWarning.mockReturnValue(warningResult);
 
-    const { container } = render(<BudgetWarning />);
+    const { container } = renderWithTheme(<BudgetWarning />);
 
     expect(container.firstChild).toBeNull();
   });
