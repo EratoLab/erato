@@ -6,10 +6,15 @@
  */
 import { useEffect, useState } from "react";
 
+import { useSidebarFeature } from "../../providers/FeatureConfigProvider";
 import { useUIStore } from "../../state/uiStore";
 
 export function useSidebar() {
   const { isSidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
+  const { collapsedMode } = useSidebarFeature();
+
+  // Get responsive collapsed mode (forces hidden on mobile even if config is slim)
+  const effectiveCollapsedMode = useResponsiveCollapsedMode(collapsedMode);
 
   return {
     /**
@@ -26,6 +31,12 @@ export function useSidebar() {
      * Set the sidebar to a specific state
      */
     setOpen: setSidebarOpen,
+
+    /**
+     * Current effective collapsed mode (slim or hidden)
+     * Takes into account screen size - forces hidden on mobile
+     */
+    collapsedMode: effectiveCollapsedMode,
   };
 }
 
