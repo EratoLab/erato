@@ -114,7 +114,11 @@ export const Chat = ({
   initialModelOverride,
 }: ChatProps) => {
   // Use the sidebar context
-  const { isOpen: sidebarCollapsed, toggle: onToggleCollapse } = useSidebar();
+  const {
+    isOpen: sidebarCollapsed,
+    toggle: onToggleCollapse,
+    collapsedMode,
+  } = useSidebar();
 
   // Get chat data and actions from context provider
   const {
@@ -391,10 +395,15 @@ export const Chat = ({
           className={clsx(
             "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
             "sm:mt-0",
-            // Add left margin when sidebar is expanded on desktop to prevent overlap
+            // Add left margin based on sidebar state to prevent overlap with fixed sidebar
             // Transition margin to match sidebar animation (300ms)
             "transition-[margin] duration-300 ease-in-out motion-reduce:transition-none",
+            // When expanded: full width (320px)
             !sidebarCollapsed && "sm:ml-80",
+            // When collapsed in slim mode: narrow width (64px)
+            sidebarCollapsed && collapsedMode === "slim" && "sm:ml-16",
+            // When collapsed in hidden mode: no margin (sidebar is off-screen)
+            // (default, no class needed)
             className,
           )}
           role="region"

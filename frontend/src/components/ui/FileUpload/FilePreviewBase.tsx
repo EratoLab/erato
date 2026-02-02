@@ -1,9 +1,10 @@
 import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
-import { FILE_TYPES } from "@/utils/fileTypes";
+import { useTheme } from "@/components/providers/ThemeProvider";
+import { FILE_TYPES, getFileTypeIcon } from "@/utils/fileTypes";
 
-import { CloseIcon } from "../icons";
+import { CloseIcon, ResolvedIcon } from "../icons";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -150,6 +151,8 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
   removeButton,
   filenameTruncateLength = 30,
 }) => {
+  const { iconMappings } = useTheme();
+
   // Extract file information
   const filename = useMemo(() => getFileName(file), [file]);
   const fileSize = useMemo(
@@ -162,8 +165,11 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
     [filename, filenameTruncateLength],
   );
 
-  // Get the file type icon and display information
-  const FileIcon = useMemo(() => FILE_TYPES[fileType].icon, [fileType]);
+  // Get the file type icon ID (with theme override) and display information
+  const iconId = useMemo(
+    () => getFileTypeIcon(fileType, iconMappings?.fileTypes),
+    [fileType, iconMappings],
+  );
   const iconColor = useMemo(() => FILE_TYPES[fileType].iconColor, [fileType]);
   const typeDisplayName = useMemo(
     () => FILE_TYPES[fileType].displayName || t`File`,
@@ -188,10 +194,10 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
       data-filetype={fileType}
     >
       {/* File icon */}
-      <div className="mr-2 shrink-0">
-        <FileIcon
+      <div className="mr-2 shrink-0" style={{ color: iconColor }}>
+        <ResolvedIcon
+          iconId={iconId}
           className={FILE_PREVIEW_STYLES.icon}
-          style={{ color: iconColor }}
           aria-hidden="true"
         />
       </div>

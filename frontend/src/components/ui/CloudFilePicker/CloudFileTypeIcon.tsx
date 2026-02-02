@@ -7,16 +7,10 @@
 
 import { memo } from "react";
 
-import { FileTypeUtil } from "@/utils/fileTypes";
+import { useTheme } from "@/components/providers/ThemeProvider";
+import { FileTypeUtil, getFileTypeIcon } from "@/utils/fileTypes";
 
-import {
-  DocumentIcon,
-  FolderIcon,
-  ImageIcon,
-  SpreadsheetIcon,
-  PresentationIcon,
-  FileTextIcon,
-} from "../icons";
+import { ResolvedIcon } from "../icons";
 
 interface CloudFileTypeIconProps {
   isFolder: boolean;
@@ -26,13 +20,13 @@ interface CloudFileTypeIconProps {
 }
 
 /**
- * Get icon component based on file type
+ * Get icon ID based on file type
  */
-function getIconForFileType(mimeType?: string, fileName?: string) {
-  if (!mimeType && !fileName) {
-    return FileTextIcon;
-  }
-
+function getIconIdForFileType(
+  mimeType: string | undefined,
+  fileName: string | undefined,
+  iconMappings: Record<string, string> | undefined,
+): string {
   // Try to determine file type from mime type or filename
   let fileType = FileTypeUtil.getTypeFromMimeType(mimeType ?? "");
 
@@ -43,33 +37,30 @@ function getIconForFileType(mimeType?: string, fileName?: string) {
     }
   }
 
-  // Map file types to icons
-  switch (fileType) {
-    case "document":
-      return DocumentIcon;
-    case "spreadsheet":
-      return SpreadsheetIcon;
-    case "presentation":
-      return PresentationIcon;
-    case "image":
-      return ImageIcon;
-    case "pdf":
-      return DocumentIcon;
-    case "text":
-      return FileTextIcon;
-    default:
-      return FileTextIcon;
+  // Get the icon ID with theme override
+  if (fileType) {
+    return getFileTypeIcon(fileType, iconMappings);
   }
+
+  // Default fallback for unknown types
+  return getFileTypeIcon("text", iconMappings);
 }
 
 export const CloudFileTypeIcon = memo<CloudFileTypeIconProps>(
   ({ isFolder, mimeType, fileName, className = "size-5" }) => {
+    const { iconMappings } = useTheme();
+
     if (isFolder) {
-      return <FolderIcon className={className} />;
+      // eslint-disable-next-line lingui/no-unlocalized-strings
+      return <ResolvedIcon iconId="Folder" className={className} />;
     }
 
-    const IconComponent = getIconForFileType(mimeType, fileName);
-    return <IconComponent className={className} />;
+    const iconId = getIconIdForFileType(
+      mimeType,
+      fileName,
+      iconMappings?.fileTypes,
+    );
+    return <ResolvedIcon iconId={iconId} className={className} />;
   },
 );
 

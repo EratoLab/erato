@@ -5,7 +5,11 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 import { ThemeApplier } from "@/components/ui/ThemeApplier";
 import { defaultTheme, darkTheme } from "@/config/theme";
-import { loadThemeConfig, defaultThemeConfig } from "@/config/themeConfig";
+import {
+  loadThemeConfig,
+  defaultThemeConfig,
+  resolveIconPaths,
+} from "@/config/themeConfig";
 import { deepMerge, type CustomThemeConfig } from "@/utils/themeUtils";
 
 import type { Theme } from "@/config/theme";
@@ -22,6 +26,12 @@ type ThemeContextType = {
   isCustomTheme: boolean;
   customThemeName?: string;
   effectiveTheme: "light" | "dark"; // The actual theme being applied (for UI indicators)
+  iconMappings?: {
+    fileTypes?: Record<string, string>;
+    status?: Record<string, string>;
+    actions?: Record<string, string>;
+    navigation?: Record<string, string>;
+  };
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -69,6 +79,12 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const [customThemeConfig, setCustomThemeConfig] =
     useState<CustomThemeConfig | null>(null);
   const [isCustomTheme, setIsCustomTheme] = useState(false);
+  const [iconMappings, setIconMappings] = useState<{
+    fileTypes?: Record<string, string>;
+    status?: Record<string, string>;
+    actions?: Record<string, string>;
+    navigation?: Record<string, string>;
+  }>();
 
   // Initialize theme from saved settings and try to load custom theme
   useEffect(() => {
@@ -78,11 +94,65 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       if (themeConfig) {
         setCustomThemeConfig(themeConfig);
         setIsCustomTheme(true);
+
+        // Resolve icon paths from theme config
+        const resolvedIcons = resolveIconPaths(
+          themeConfig.icons,
+          themeConfig.name,
+        );
+        setIconMappings(resolvedIcons);
       }
     };
 
     void loadTheme();
   }, []);
+
+  // Load custom fonts.css when a custom theme is active
+  useEffect(() => {
+    if (!customThemeConfig) return;
+
+    // Get fonts.css path using theme configuration
+    const fontsCssPath = defaultThemeConfig.getFontsCssPath(
+      customThemeConfig.name,
+    );
+
+    // If no path returned, don't load fonts
+    if (!fontsCssPath) return;
+
+    // Check if fonts.css link already exists
+    const existingLink = document.querySelector(
+      'link[data-theme-fonts="true"]',
+    );
+
+    // If it exists with the same href, do nothing
+    if (existingLink && existingLink.getAttribute("href") === fontsCssPath) {
+      return;
+    }
+
+    // Remove old link if it exists
+    if (existingLink) {
+      existingLink.remove();
+    }
+
+    // Create and append new link element
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = fontsCssPath;
+    link.setAttribute("data-theme-fonts", "true");
+
+    // Add to head
+    document.head.appendChild(link);
+
+    // Cleanup function to remove the link when component unmounts or theme changes
+    return () => {
+      const linkToRemove = document.querySelector(
+        'link[data-theme-fonts="true"]',
+      );
+      if (linkToRemove) {
+        linkToRemove.remove();
+      }
+    };
+  }, [customThemeConfig]);
 
   // Listen for system preference changes when in system mode
   useEffect(() => {
@@ -271,6 +341,34 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
     // Focus ring
     root.style.setProperty("--theme-focus-ring", theme.colors.focus.ring);
+
+    // Typography (font families)
+    if (theme.typography?.fontFamily) {
+      if (theme.typography.fontFamily.body) {
+        root.style.setProperty(
+          "--theme-font-body",
+          theme.typography.fontFamily.body,
+        );
+      }
+      if (theme.typography.fontFamily.heading) {
+        root.style.setProperty(
+          "--theme-font-heading",
+          theme.typography.fontFamily.heading,
+        );
+      }
+      if (theme.typography.fontFamily.semibold) {
+        root.style.setProperty(
+          "--theme-font-semibold",
+          theme.typography.fontFamily.semibold,
+        );
+      }
+      if (theme.typography.fontFamily.headingBold) {
+        root.style.setProperty(
+          "--theme-font-heading-bold",
+          theme.typography.fontFamily.headingBold,
+        );
+      }
+    }
   }, [theme]);
 
   const toggleTheme = (mode: ThemeMode) => {
@@ -285,6 +383,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     isCustomTheme,
     customThemeName: customThemeConfig?.name,
     effectiveTheme,
+    iconMappings,
   };
 
   return (

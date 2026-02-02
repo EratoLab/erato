@@ -152,6 +152,14 @@ export type Theme = {
       gap: string;
     };
   };
+  typography?: {
+    fontFamily?: {
+      body?: string;
+      heading?: string;
+      semibold?: string;
+      headingBold?: string;
+    };
+  };
 };
 
 export const defaultTheme: Theme = {

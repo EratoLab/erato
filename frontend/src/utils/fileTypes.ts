@@ -1,13 +1,3 @@
-import {
-  Page,
-  MediaImage,
-  Archive,
-  Code,
-  MusicNote,
-  MediaVideo,
-  MultiplePages,
-} from "../components/ui/icons";
-
 import type { FileCapability } from "../lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -38,8 +28,8 @@ export interface FileTypeConfig {
   mimeTypes: string[];
   /** Max allowed file size in bytes */
   maxSize?: number;
-  /** Icon component to use for this file type */
-  icon: React.ElementType;
+  /** Icon ID - either an iconoir-react icon name or a custom SVG path */
+  iconId: string;
   /** Icon color - can be any valid CSS color */
   iconColor: string;
   /** Whether this file type is enabled in the application */
@@ -55,7 +45,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     extensions: ["pdf"],
     mimeTypes: ["application/pdf"],
     maxSize: 10 * 1024 * 1024, // 10MB
-    icon: MultiplePages,
+    iconId: "MultiplePages",
     iconColor: "rgb(244, 63, 94)", // rose-500
     enabled: true,
   },
@@ -74,7 +64,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     ],
     mimeTypes: ["image/*"],
     maxSize: 5 * 1024 * 1024, // 5MB
-    icon: MediaImage,
+    iconId: "MediaImage",
     iconColor: "rgb(59, 130, 246)", // blue-500
     enabled: true,
   },
@@ -88,7 +78,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/vnd.oasis.opendocument.text",
     ],
     maxSize: 20 * 1024 * 1024, // 20MB
-    icon: Page,
+    iconId: "Page",
     iconColor: "rgb(79, 70, 229)", // indigo-500
     enabled: true,
   },
@@ -102,7 +92,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/vnd.oasis.opendocument.spreadsheet",
     ],
     maxSize: 20 * 1024 * 1024, // 20MB
-    icon: Page,
+    iconId: "Page",
     iconColor: "rgb(16, 185, 129)", // emerald-500
     enabled: true,
   },
@@ -115,7 +105,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/vnd.oasis.opendocument.presentation",
     ],
     maxSize: 30 * 1024 * 1024, // 30MB
-    icon: MultiplePages,
+    iconId: "MultiplePages",
     iconColor: "rgb(245, 158, 11)", // amber-500
     enabled: true,
   },
@@ -124,7 +114,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     extensions: ["txt", "md", "markdown"],
     mimeTypes: ["text/plain", "text/markdown"],
     maxSize: 2 * 1024 * 1024, // 2MB
-    icon: Page,
+    iconId: "Page",
     iconColor: "rgb(107, 114, 128)", // gray-500
     enabled: true,
   },
@@ -149,7 +139,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     ],
     mimeTypes: ["text/javascript", "application/json", "text/html", "text/css"],
     maxSize: 2 * 1024 * 1024, // 2MB
-    icon: Code,
+    iconId: "Code",
     iconColor: "rgb(124, 58, 237)", // violet-600
     enabled: true,
   },
@@ -163,7 +153,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
       "application/gzip",
     ],
     maxSize: 50 * 1024 * 1024, // 50MB
-    icon: Archive,
+    iconId: "Archive",
     iconColor: "rgb(202, 138, 4)", // yellow-600
     enabled: true,
   },
@@ -172,7 +162,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     extensions: ["mp3", "wav", "ogg", "m4a", "flac"],
     mimeTypes: ["audio/*"],
     maxSize: 30 * 1024 * 1024, // 30MB
-    icon: MusicNote,
+    iconId: "MusicNote",
     iconColor: "rgb(219, 39, 119)", // pink-600
     enabled: true,
   },
@@ -181,7 +171,7 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     extensions: ["mp4", "avi", "mov", "webm", "mkv"],
     mimeTypes: ["video/*"],
     maxSize: 100 * 1024 * 1024, // 100MB
-    icon: MediaVideo,
+    iconId: "MediaVideo",
     iconColor: "rgb(220, 38, 38)", // red-600
     enabled: true,
   },
@@ -189,11 +179,24 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     displayName: "File",
     extensions: [],
     mimeTypes: [],
-    icon: Page,
+    iconId: "Page",
     iconColor: "rgb(107, 114, 128)", // gray-500
     enabled: true,
   },
 };
+
+/**
+ * Get the icon ID for a file type, with optional theme override
+ * @param fileType The file type to get the icon for
+ * @param iconMappings Optional icon mappings from theme
+ * @returns The icon ID (either from theme or default)
+ */
+export function getFileTypeIcon(
+  fileType: FileType,
+  iconMappings?: Record<string, string>,
+): string {
+  return iconMappings?.[fileType] ?? FILE_TYPES[fileType].iconId;
+}
 
 /**
  * Utility class for file type operations

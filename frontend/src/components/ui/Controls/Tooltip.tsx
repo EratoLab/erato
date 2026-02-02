@@ -113,7 +113,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
               left: `${tooltipPosition.left}px`,
             }}
           >
-            <div className="whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-white shadow-md">
+            <div className="whitespace-nowrap rounded bg-theme-bg-secondary px-2 py-1 text-xs text-theme-fg-primary shadow-md">
               {content}
             </div>
           </div>,

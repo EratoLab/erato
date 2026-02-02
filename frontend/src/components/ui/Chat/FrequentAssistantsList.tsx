@@ -2,11 +2,12 @@ import { t } from "@lingui/core/macro";
 import { memo } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useThemedIcon } from "@/hooks/ui/useThemedIcon";
 import { useFrequentAssistants } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { createLogger } from "@/utils/debugLogger";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
-import { EditIcon } from "../icons";
+import { ResolvedIcon, EditIcon } from "../icons";
 
 const logger = createLogger("UI", "FrequentAssistantsList");
 
@@ -43,35 +44,43 @@ AssistantItem.displayName = "AssistantItem";
 
 const AssistantsNavigationItem = memo<{
   onNavigate: () => void;
-}>(({ onNavigate }) => (
-  <div className="px-2 py-1">
-    <a
-      href="/assistants"
-      onClick={(e) => {
-        // Allow cmd/ctrl-click to open in new tab
-        if (e.metaKey || e.ctrlKey) {
-          return;
-        }
-        // Prevent default navigation for normal clicks
-        e.preventDefault();
-        logger.log(
-          "[ASSISTANTS_FLOW] Assistants navigation clicked in sidebar",
-        );
-        onNavigate();
-      }}
-      className="block"
-      aria-label={t`View all assistants`}
-    >
-      <InteractiveContainer
-        useDiv={true}
-        className="flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-theme-bg-hover"
+}>(({ onNavigate }) => {
+  const assistantsIconId = useThemedIcon("navigation", "assistants");
+
+  return (
+    <div className="px-2 py-1">
+      <a
+        href="/assistants"
+        onClick={(e) => {
+          // Allow cmd/ctrl-click to open in new tab
+          if (e.metaKey || e.ctrlKey) {
+            return;
+          }
+          // Prevent default navigation for normal clicks
+          e.preventDefault();
+          logger.log(
+            "[ASSISTANTS_FLOW] Assistants navigation clicked in sidebar",
+          );
+          onNavigate();
+        }}
+        className="block"
+        aria-label={t`View all assistants`}
       >
-        <EditIcon className="size-4 text-theme-fg-secondary" />
-        <span className="font-medium text-theme-fg-primary">{t`Assistants`}</span>
-      </InteractiveContainer>
-    </a>
-  </div>
-));
+        <InteractiveContainer
+          useDiv={true}
+          className="flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-theme-bg-hover"
+        >
+          <ResolvedIcon
+            iconId={assistantsIconId}
+            fallbackIcon={EditIcon}
+            className="size-4 text-theme-fg-secondary"
+          />
+          <span className="font-medium text-theme-fg-primary">{t`Assistants`}</span>
+        </InteractiveContainer>
+      </a>
+    </div>
+  );
+});
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 AssistantsNavigationItem.displayName = "AssistantsNavigationItem";

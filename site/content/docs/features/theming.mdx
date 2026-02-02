@@ -171,6 +171,115 @@ When displaying user messages, the system follows this priority:
 
 This allows personalization when user identity is known, while maintaining your brand's preferred formality level for anonymous users.
 
+## Custom Icons
+
+Erato allows you to customize icons throughout the application, including file type icons, status indicators, and action buttons. You can either select from the 1,300+ icons in the [iconoir](https://iconoir.com) library or provide your own custom SVG files.
+
+### Configuration
+
+Add an `icons` section to your `theme.json`:
+
+```json
+{
+  "name": "My Company Theme",
+  "theme": { ... },
+  "icons": {
+    "fileTypes": {
+      "pdf": "MultiplePages",
+      "image": "MediaImage",
+      "video": "./icons/custom-video.svg"
+    },
+    "status": {
+      "info": "InfoCircle",
+      "warning": "WarningCircle",
+      "error": "Xmark",
+      "success": "CheckCircle"
+    },
+    "actions": {
+      "copy": "Copy",
+      "edit": "EditPencil",
+      "delete": "Trash"
+    },
+    "navigation": {
+      "assistants": "PeopleTag",
+      "newChat": "EditPencil",
+      "search": "Search"
+    }
+  }
+}
+```
+
+### Icon Value Formats
+
+**Iconoir Icon Names** - Use the PascalCase name from [iconoir.com](https://iconoir.com):
+```json
+"pdf": "MultiplePages"
+```
+
+**Custom SVG Files** - Use relative paths to SVG files in your theme folder:
+```json
+"pdf": "./icons/company-pdf.svg"
+```
+
+Relative paths (starting with `./`) are resolved to `/custom-theme/your-company/icons/`.
+
+### Icon Categories
+
+| Category     | Purpose                                    | Keys                                                      |
+| ------------ | ------------------------------------------ | --------------------------------------------------------- |
+| `fileTypes`  | File type icons in upload and file preview | pdf, image, document, spreadsheet, presentation, text, code, archive, audio, video, other |
+| `status`     | Status indicators in alerts and tool calls | info, warning, error, success, in_progress                |
+| `actions`    | Action button icons (future extensibility) | copy, edit, delete, share, plus, close, check, refresh    |
+| `navigation` | Sidebar navigation menu item icons         | assistants, newChat, search                                |
+
+### File Structure with Custom Icons
+
+```
+public/custom-theme/my-company/
+├── theme.json
+├── logo.svg
+├── icons/                    # Custom icon SVG files
+│   ├── company-pdf.svg
+│   ├── company-video.svg
+│   └── custom-error.svg
+└── locales/
+```
+
+### Custom SVG Requirements
+
+When creating custom icons:
+- Design on a **24×24 pixel grid** to match iconoir icons
+- Use `currentColor` for fill/stroke to inherit theme colors:
+  ```svg
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path d="..." stroke-width="1.5"/>
+  </svg>
+  ```
+- Use clean, optimized SVG code
+
+### Example with Mixed Icons
+
+```json
+{
+  "icons": {
+    "fileTypes": {
+      "pdf": "./icons/brand-pdf.svg",
+      "image": "MediaImage",
+      "video": "./icons/brand-video.svg",
+      "document": "Page"
+    },
+    "status": {
+      "error": "./icons/brand-error.svg",
+      "success": "CheckCircle",
+      "warning": "WarningTriangle"
+    },
+    "navigation": {
+      "assistants": "PeopleTag"
+    }
+  }
+}
+```
+
 ## Custom Assistant Avatar
 
 You can customize the assistant's profile picture by adding an `assistant-avatar.svg` (or other image format) to your theme directory.

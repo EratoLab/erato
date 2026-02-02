@@ -1,14 +1,10 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 
+import { useThemedIcon } from "@/hooks/ui/useThemedIcon";
+
 import { Button } from "../Controls/Button";
-import {
-  CloseIcon,
-  WarningIcon,
-  InfoIcon,
-  WarningCircleIcon,
-  CheckCircleIcon,
-} from "../icons";
+import { CloseIcon, ResolvedIcon } from "../icons";
 
 import type React from "react";
 import type { ReactNode } from "react";
@@ -47,31 +43,39 @@ export const Alert: React.FC<AlertProps> = ({
   icon,
   "data-testid": dataTestId,
 }) => {
+  // Get themed icon IDs for each alert type
+  const errorIconId = useThemedIcon("status", "error");
+  const warningIconId = useThemedIcon("status", "warning");
+  const infoIconId = useThemedIcon("status", "info");
+  const successIconId = useThemedIcon("status", "success");
+
   // Define styles for different alert types
   const styles = {
     error: {
       container:
         "bg-theme-error-bg text-theme-error-fg border-theme-error-border",
-      icon: <WarningCircleIcon className="size-5" />,
+      iconId: errorIconId,
     },
     warning: {
       container:
         "bg-theme-warning-bg text-theme-warning-fg border-theme-warning-border",
-      icon: <WarningIcon className="size-5" />,
+      iconId: warningIconId,
     },
     info: {
       container: "bg-theme-info-bg text-theme-info-fg border-theme-info-border",
-      icon: <InfoIcon className="size-5" />,
+      iconId: infoIconId,
     },
     success: {
       container:
         "bg-theme-success-bg text-theme-success-fg border-theme-success-border",
-      icon: <CheckCircleIcon className="size-5" />,
+      iconId: successIconId,
     },
   };
 
   // Use provided icon or default for the alert type
-  const alertIcon = icon ?? styles[type].icon;
+  const alertIcon = icon ?? (
+    <ResolvedIcon iconId={styles[type].iconId} className="size-5" />
+  );
 
   return (
     <div

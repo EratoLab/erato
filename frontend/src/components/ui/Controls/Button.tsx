@@ -151,7 +151,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const buttonClasses = useMemo(
       () =>
         clsx(
-          "flex touch-manipulation items-center gap-2 rounded",
+          "flex touch-manipulation items-center gap-2 rounded-lg",
           "focus-ring",
           VARIANT_STYLES[variant],
           SIZE_STYLES[size],
