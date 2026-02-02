@@ -1220,6 +1220,7 @@ msgstr "Loading..."
 msgid "Locale Detection Test"
 msgstr "Locale Detection Test"
 
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/components/ui/Logo.tsx
 msgid "Logo"
 msgstr "Logo"

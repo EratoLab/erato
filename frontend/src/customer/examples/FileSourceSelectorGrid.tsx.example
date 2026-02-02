@@ -62,8 +62,8 @@ export const FileSourceSelectorGrid = memo<FileSourceSelectorProps>(
           <Upload className="size-5" />
           <span>
             {t({
-              id: "fileSourceSelector.gridUploadFiles",
-              message: "Upload files",
+              id: "fileSourceSelector.uploadFromComputer",
+              message: "Upload from Computer",
             })}
           </span>
         </button>
@@ -83,8 +83,8 @@ export const FileSourceSelectorGrid = memo<FileSourceSelectorProps>(
             <Cloud className="size-5" />
             <span>
               {t({
-                id: "fileSourceSelector.gridFromOneDrive",
-                message: "From OneDrive",
+                id: "fileSourceSelector.uploadFromOneDrive",
+                message: "Upload from OneDrive",
               })}
             </span>
           </button>
