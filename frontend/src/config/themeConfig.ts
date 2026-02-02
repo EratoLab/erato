@@ -41,6 +41,13 @@ export interface ThemeLocationConfig {
     themeName: string | undefined,
     isDark: boolean,
   ) => string | null;
+
+  /**
+   * Function to determine fonts.css path for custom theme fonts
+   * @param themeName The name of the loaded theme
+   * @returns Path to the fonts.css file, or null if not available
+   */
+  getFontsCssPath: (themeName: string | undefined) => string | null;
 }
 
 /**
@@ -135,6 +142,23 @@ export const defaultThemeConfig: ThemeLocationConfig = {
       isDark,
       hasDefault: false,
     }),
+
+  getFontsCssPath: (themeName) => {
+    const { themePath, themeCustomerName } = env();
+
+    // 1. Theme path override
+    if (themePath) {
+      return `${themePath}/fonts.css`;
+    }
+
+    // 2. Customer-specific subfolder
+    if (themeCustomerName) {
+      return `/custom-theme/${themeCustomerName}/fonts.css`;
+    }
+
+    // 3. Default to root custom-theme folder
+    return "/custom-theme/fonts.css";
+  },
 };
 
 /**

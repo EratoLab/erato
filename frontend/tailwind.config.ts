@@ -6,7 +6,14 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Geist Variable", ...defaultTheme.fontFamily.sans],
+        sans: [
+          "var(--theme-font-body, 'Geist Variable')",
+          ...defaultTheme.fontFamily.sans,
+        ],
+        heading: [
+          "var(--theme-font-heading, 'Geist Variable')",
+          ...defaultTheme.fontFamily.sans,
+        ],
         mono: ["Geist Mono Variable", ...defaultTheme.fontFamily.mono],
       },
       colors: {
