@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 import { CloseIcon } from "../icons";
 
@@ -68,7 +69,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
     return null;
   }
 
-  return (
+  const modalContent = (
     <div
       className={clsx(
         "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm",
@@ -119,6 +120,8 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
