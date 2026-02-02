@@ -19,9 +19,9 @@ RUN apt-get update && \
     libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN cargo chef cook --release --recipe-path recipe.json
-# Build application
+# Build application (only erato binary)
 COPY . .
-RUN cargo build --release
+RUN cargo build --release -p erato --bin erato
 
 # Pinned for security & build performance reasons
 FROM debian:trixie-slim@sha256:5cf544fad978371b3df255b61e209b373583cb88b733475c86e49faa15ac2104
