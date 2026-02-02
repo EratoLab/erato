@@ -654,6 +654,7 @@ describe("themeConfig", () => {
         fileTypes: { pdf: "./pdf.svg" },
         status: { error: "./error.svg" },
         actions: { copy: "./copy.svg" },
+        navigation: { assistants: "./assistants.svg" },
       };
 
       const result = resolveIconPaths(iconMappings, "test");
@@ -661,6 +662,9 @@ describe("themeConfig", () => {
       expect(result.fileTypes?.pdf).toBe("/custom-theme/test/pdf.svg");
       expect(result.status?.error).toBe("/custom-theme/test/error.svg");
       expect(result.actions?.copy).toBe("/custom-theme/test/copy.svg");
+      expect(result.navigation?.assistants).toBe(
+        "/custom-theme/test/assistants.svg",
+      );
     });
 
     it("should fallback to default path when no customer info", () => {

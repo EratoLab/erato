@@ -240,6 +240,7 @@ export function resolveIconPaths(
         fileTypes?: Record<string, string>;
         status?: Record<string, string>;
         actions?: Record<string, string>;
+        navigation?: Record<string, string>;
       }
     | undefined,
   customerName: string | undefined,
@@ -247,6 +248,7 @@ export function resolveIconPaths(
   fileTypes?: Record<string, string>;
   status?: Record<string, string>;
   actions?: Record<string, string>;
+  navigation?: Record<string, string>;
 } {
   if (!iconMappings) return {};
 
@@ -293,5 +295,6 @@ export function resolveIconPaths(
     fileTypes: resolveCategory(iconMappings.fileTypes),
     status: resolveCategory(iconMappings.status),
     actions: resolveCategory(iconMappings.actions),
+    navigation: resolveCategory(iconMappings.navigation),
   };
 }

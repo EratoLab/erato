@@ -23,6 +23,11 @@ const DEFAULT_ICONS = {
     check: "Check",
     refresh: "Refresh",
   },
+  navigation: {
+    assistants: "EditPencil",
+    newChat: "EditPencil",
+    search: "Search",
+  },
 } as const;
 /* eslint-enable lingui/no-unlocalized-strings */
 
@@ -30,10 +35,14 @@ const DEFAULT_ICONS = {
  * Get the default icon ID for a category and key
  */
 function getDefaultIcon(
-  category: "fileTypes" | "status" | "actions",
+  category: "fileTypes" | "status" | "actions" | "navigation",
   key: string,
 ): string | undefined {
-  if (category === "status" || category === "actions") {
+  if (
+    category === "status" ||
+    category === "actions" ||
+    category === "navigation"
+  ) {
     return DEFAULT_ICONS[category][
       key as keyof (typeof DEFAULT_ICONS)[typeof category]
     ];
@@ -43,7 +52,7 @@ function getDefaultIcon(
 
 /**
  * Hook to get a themed icon ID
- * @param category - The icon category (fileTypes, status, actions)
+ * @param category - The icon category (fileTypes, status, actions, navigation)
  * @param key - The icon key within that category
  * @returns The icon ID (either from theme or default)
  *
@@ -54,7 +63,7 @@ function getDefaultIcon(
  * ```
  */
 export function useThemedIcon(
-  category: "fileTypes" | "status" | "actions",
+  category: "fileTypes" | "status" | "actions" | "navigation",
   key: string,
 ): string | undefined {
   const { iconMappings } = useTheme();

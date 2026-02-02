@@ -30,6 +30,7 @@ type ThemeContextType = {
     fileTypes?: Record<string, string>;
     status?: Record<string, string>;
     actions?: Record<string, string>;
+    navigation?: Record<string, string>;
   };
 };
 
@@ -82,6 +83,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     fileTypes?: Record<string, string>;
     status?: Record<string, string>;
     actions?: Record<string, string>;
+    navigation?: Record<string, string>;
   }>();
 
   // Initialize theme from saved settings and try to load custom theme

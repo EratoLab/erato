@@ -24,6 +24,7 @@ export interface CustomThemeConfig {
     fileTypes?: Record<string, string>;
     status?: Record<string, string>;
     actions?: Record<string, string>;
+    navigation?: Record<string, string>;
   };
 }
 
