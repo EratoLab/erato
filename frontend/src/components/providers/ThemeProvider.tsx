@@ -5,7 +5,11 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 import { ThemeApplier } from "@/components/ui/ThemeApplier";
 import { defaultTheme, darkTheme } from "@/config/theme";
-import { loadThemeConfig, defaultThemeConfig } from "@/config/themeConfig";
+import {
+  loadThemeConfig,
+  defaultThemeConfig,
+  resolveIconPaths,
+} from "@/config/themeConfig";
 import { deepMerge, type CustomThemeConfig } from "@/utils/themeUtils";
 
 import type { Theme } from "@/config/theme";
@@ -22,6 +26,11 @@ type ThemeContextType = {
   isCustomTheme: boolean;
   customThemeName?: string;
   effectiveTheme: "light" | "dark"; // The actual theme being applied (for UI indicators)
+  iconMappings?: {
+    fileTypes?: Record<string, string>;
+    status?: Record<string, string>;
+    actions?: Record<string, string>;
+  };
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -69,6 +78,11 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const [customThemeConfig, setCustomThemeConfig] =
     useState<CustomThemeConfig | null>(null);
   const [isCustomTheme, setIsCustomTheme] = useState(false);
+  const [iconMappings, setIconMappings] = useState<{
+    fileTypes?: Record<string, string>;
+    status?: Record<string, string>;
+    actions?: Record<string, string>;
+  }>();
 
   // Initialize theme from saved settings and try to load custom theme
   useEffect(() => {
@@ -78,6 +92,13 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       if (themeConfig) {
         setCustomThemeConfig(themeConfig);
         setIsCustomTheme(true);
+
+        // Resolve icon paths from theme config
+        const resolvedIcons = resolveIconPaths(
+          themeConfig.icons,
+          themeConfig.name,
+        );
+        setIconMappings(resolvedIcons);
       }
     };
 
@@ -360,6 +381,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     isCustomTheme,
     customThemeName: customThemeConfig?.name,
     effectiveTheme,
+    iconMappings,
   };
 
   return (

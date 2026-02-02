@@ -10,3 +10,4 @@ export * from "./usePaginatedData";
 export * from "./useMessageListVirtualization";
 export * from "./useScrollEvents";
 export * from "./useFilePreviewModal";
+export * from "./useThemedIcon";
