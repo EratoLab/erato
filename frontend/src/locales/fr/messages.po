@@ -1193,6 +1193,10 @@ msgstr "Date invalide fournie à MessageTimestamp, utilisation de la date actuel
 msgid "Light mode"
 msgstr "Mode clair"
 
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Link"
+msgstr ""
+
 #: src/components/ui/Message/LoadMoreButton.tsx
 msgid "Load older messages"
 msgstr "Charger les messages plus anciens"
