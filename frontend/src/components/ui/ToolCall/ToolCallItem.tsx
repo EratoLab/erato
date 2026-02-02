@@ -2,7 +2,8 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState } from "react";
 
-import { CheckIcon, ErrorIcon, TimerIcon } from "@/components/ui/icons";
+import { ResolvedIcon } from "@/components/ui/icons";
+import { useThemedIcon } from "@/hooks/ui/useThemedIcon";
 
 import { ToolCallInput } from "./ToolCallInput";
 import { ToolCallOutput } from "./ToolCallOutput";
@@ -24,21 +25,28 @@ export const ToolCallItem: React.FC<ToolCallItemProps> = ({
 }) => {
   const [showDetails, setShowDetails] = useState(false);
 
+  // Get themed icons for tool call status
+  const successIconId = useThemedIcon("status", "success");
+  const errorIconId = useThemedIcon("status", "error");
+  // Use a timer/hourglass icon for in_progress - fallback to "Timer" if no theme override
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  const inProgressIconId = useThemedIcon("status", "in_progress") ?? "Timer";
+
   const statusConfig = {
     success: {
-      icon: <CheckIcon className="size-3" />,
+      icon: <ResolvedIcon iconId={successIconId} className="size-3" />,
       color: "text-green-600",
       bgColor: "bg-green-50",
       label: t`Success`,
     },
     error: {
-      icon: <ErrorIcon className="size-3" />,
+      icon: <ResolvedIcon iconId={errorIconId} className="size-3" />,
       color: "text-red-600",
       bgColor: "bg-red-50",
       label: t`Error`,
     },
     in_progress: {
-      icon: <TimerIcon className="size-3" />,
+      icon: <ResolvedIcon iconId={inProgressIconId} className="size-3" />,
       color: "text-yellow-600",
       bgColor: "bg-yellow-50",
       label: t`In Progress`,
