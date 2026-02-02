@@ -170,6 +170,16 @@ msgid "chat.conversation.aria"
 msgstr "Conversation de chat"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.facets.loadError"
+msgstr "Impossible de charger les outils pour cet espace de travail."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/FacetSelector.tsx
+msgid "chat.facetSelector.deselectFacet.title"
+msgstr "Désélectionner {facetDisplayName}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.file.error"
 msgstr "Erreur lors du chargement du fichier"
@@ -1114,6 +1124,10 @@ msgstr "Développer par défaut"
 msgid "expand sidebar"
 msgstr "développer la barre latérale"
 
+#: src/components/ui/Chat/FacetSelector.tsx
+msgid "facets.<facet-id>.displayName"
+msgstr "facets.<facet-id>.displayName"
+
 #: src/components/ui/ToolCall/ToolCallDisplay.tsx
 msgid "failed"
 msgstr "échoué"
@@ -1458,6 +1472,10 @@ msgstr "Les appels d'outils montrent comment l'assistant a utilisé des outils e
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Tool usage:"
 msgstr "Utilisation d'outils :"
+
+#: src/components/ui/Chat/FacetSelector.tsx
+msgid "Tools"
+msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallDisplay.tsx
 msgid "total"

@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
@@ -8,6 +8,7 @@ import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import { useFileDropzone } from "@/hooks/files";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useChatInputHandlers } from "@/hooks/ui";
+import { useFacets } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
 import {
   useUploadFeature,
@@ -18,6 +19,7 @@ import { createLogger } from "@/utils/debugLogger";
 
 import { ArrowUpIcon } from "../icons";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
+import { FacetSelector } from "./FacetSelector";
 import { ModelSelector } from "./ModelSelector";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
@@ -32,11 +34,20 @@ import type { FileType } from "@/utils/fileTypes";
 
 const logger = createLogger("UI", "ChatInput");
 
+function areFacetIdListsEqual(a: string[], b: string[]) {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((facetId, index) => facetId === b[index]);
+}
+
 interface ChatInputProps {
   onSendMessage: (
     message: string,
     inputFileIds?: string[],
     modelId?: string,
+    selectedFacetIds?: string[],
   ) => void;
   onRegenerate?: () => void;
   // Optional edit mode submit handler. When provided with mode="edit", submit will call this instead of onSendMessage
@@ -44,6 +55,7 @@ interface ChatInputProps {
     messageId: string,
     newContent: string,
     replaceInputFileIds?: string[],
+    selectedFacetIds?: string[],
   ) => void;
   // Optional cancel callback for edit mode
   onCancelEdit?: () => void;
@@ -75,6 +87,10 @@ interface ChatInputProps {
   editInitialContent?: ContentPart[];
   // Initial model to use for selection (typically from chat history)
   initialModel?: ChatModel | null;
+  // Initial facets to use for selection (typically from chat history)
+  initialSelectedFacetIds?: string[] | undefined;
+  // Optional callback whenever facet selection changes
+  onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
 }
 
 /**
@@ -103,6 +119,8 @@ export const ChatInput = ({
   editMessageId,
   editInitialContent,
   initialModel,
+  initialSelectedFacetIds,
+  onFacetSelectionChange,
 }: ChatInputProps) => {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -164,6 +182,18 @@ export const ChatInput = ({
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
 
+  const { data: facetsData, error: facetsError } = useFacets({});
+  const availableFacets = useMemo(() => facetsData?.facets ?? [], [facetsData]);
+  const globalFacetSettings = facetsData?.global_facet_settings;
+
+  const [selectedFacetIds, setSelectedFacetIds] = useState<string[]>([]);
+
+  const facetIdsByDefault = useMemo(() => {
+    return availableFacets
+      .filter((facet) => facet.default_enabled)
+      .map((facet) => facet.id);
+  }, [availableFacets]);
+
   useEffect(() => {
     if (uploadError) {
       setFileError(uploadError.message);
@@ -171,6 +201,54 @@ export const ChatInput = ({
       setFileError(null);
     }
   }, [uploadError, setFileError]);
+
+  useEffect(() => {
+    if (availableFacets.length === 0) {
+      setSelectedFacetIds((previousSelectedFacetIds) =>
+        previousSelectedFacetIds.length === 0 ? previousSelectedFacetIds : [],
+      );
+      onFacetSelectionChange?.([]);
+      return;
+    }
+
+    const availableFacetIdSet = new Set(
+      availableFacets.map((facet) => facet.id),
+    );
+    const hasExplicitInitialSelection = initialSelectedFacetIds !== undefined;
+    const initialSelection = hasExplicitInitialSelection
+      ? initialSelectedFacetIds
+      : facetIdsByDefault;
+
+    let nextSelectedFacetIds = initialSelection.filter((facetId) =>
+      availableFacetIdSet.has(facetId),
+    );
+
+    if (
+      globalFacetSettings?.only_single_facet &&
+      nextSelectedFacetIds.length > 1
+    ) {
+      nextSelectedFacetIds = nextSelectedFacetIds.slice(0, 1);
+    }
+
+    setSelectedFacetIds((previousSelectedFacetIds) =>
+      areFacetIdListsEqual(previousSelectedFacetIds, nextSelectedFacetIds)
+        ? previousSelectedFacetIds
+        : nextSelectedFacetIds,
+    );
+    if (
+      !hasExplicitInitialSelection ||
+      !areFacetIdListsEqual(initialSelectedFacetIds, nextSelectedFacetIds)
+    ) {
+      onFacetSelectionChange?.(nextSelectedFacetIds);
+    }
+  }, [
+    availableFacets,
+    chatId,
+    facetIdsByDefault,
+    globalFacetSettings?.only_single_facet,
+    initialSelectedFacetIds,
+    onFacetSelectionChange,
+  ]);
 
   // Log attachedFiles received from the hook
   logger.log("Received attachedFiles from hook:", attachedFiles);
@@ -205,14 +283,21 @@ export const ChatInput = ({
           (messageContent.length > 20 ? "..." : ""),
         files: inputFileIds,
         model: selectedModel?.chat_provider_id,
+        selectedFacetIds,
       });
       if (mode === "edit" && onEditMessage && editMessageId) {
-        onEditMessage(editMessageId, messageContent, inputFileIds);
+        onEditMessage(
+          editMessageId,
+          messageContent,
+          inputFileIds,
+          selectedFacetIds,
+        );
       } else {
         onSendMessage(
           messageContent,
           inputFileIds,
           selectedModel?.chat_provider_id,
+          selectedFacetIds,
         );
       }
     },
@@ -421,6 +506,24 @@ export const ChatInput = ({
                     }
                   />
                 )}
+                {availableFacets.length > 0 && (
+                  <FacetSelector
+                    facets={availableFacets}
+                    selectedFacetIds={selectedFacetIds}
+                    onSelectionChange={(nextSelectedFacetIds) => {
+                      setSelectedFacetIds(nextSelectedFacetIds);
+                      onFacetSelectionChange?.(nextSelectedFacetIds);
+                    }}
+                    onlySingleFacet={
+                      globalFacetSettings?.only_single_facet ?? false
+                    }
+                    showFacetIndicatorWithDisplayName={
+                      globalFacetSettings?.show_facet_indicator_with_display_name ??
+                      false
+                    }
+                    disabled={isDisabled}
+                  />
+                )}
               </>
             )}
           </div>
@@ -464,6 +567,14 @@ export const ChatInput = ({
             />
           </div>
         </div>
+        {facetsError && (
+          <Alert type="error" className="mb-1">
+            {t({
+              id: "chat.facets.loadError",
+              message: "Failed to load tools for this workspace.",
+            })}
+          </Alert>
+        )}
       </div>
     </form>
   );

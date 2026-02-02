@@ -383,11 +383,7 @@ pub async fn get_recent_chats(
                             .collect();
                         LastGenerationInfo {
                             provider_id: gp.generation_chat_provider_id,
-                            selected_facets: if selected_facets.is_empty() {
-                                None
-                            } else {
-                                Some(selected_facets)
-                            },
+                            selected_facets: Some(selected_facets),
                         }
                     })
                     .unwrap_or(LastGenerationInfo {

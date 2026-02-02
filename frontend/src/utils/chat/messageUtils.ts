@@ -98,6 +98,7 @@ export interface SubmitStreamRequestBody {
   input_files_ids?: string[];
   chat_provider_id?: string;
   assistant_id?: string;
+  selected_facet_ids?: string[];
 }
 
 /**
@@ -117,6 +118,7 @@ export function constructSubmitStreamRequestBody(
   currentChatId?: string | null, // Combined chatId or silentChatId
   modelId?: string,
   assistantId?: string,
+  selectedFacetIds?: string[],
 ): SubmitStreamRequestBody {
   const body: SubmitStreamRequestBody = {
     user_message: userMessageContent,
@@ -136,6 +138,9 @@ export function constructSubmitStreamRequestBody(
   }
   if (assistantId) {
     body.assistant_id = assistantId;
+  }
+  if (selectedFacetIds) {
+    body.selected_facet_ids = selectedFacetIds;
   }
 
   return body;
