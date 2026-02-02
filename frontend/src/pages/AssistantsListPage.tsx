@@ -224,6 +224,7 @@ export default function AssistantsListPage() {
                   }) => (
                     <div
                       key={assistant.id}
+                      data-testid="assistant-list-item"
                       className="block rounded-lg border border-theme-border bg-theme-bg-primary p-4 transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus:ring-2 focus:ring-theme-focus"
                     >
                       <div className="flex items-start gap-4">
