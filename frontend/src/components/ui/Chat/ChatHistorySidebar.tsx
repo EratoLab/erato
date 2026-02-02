@@ -9,7 +9,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { env } from "@/app/env";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { defaultThemeConfig } from "@/config/themeConfig";
-import { useResponsiveCollapsedMode } from "@/hooks/ui";
+import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
 import {
   useAssistantsFeature,
   useSidebarFeature,
@@ -22,7 +22,12 @@ import { FrequentAssistantsList } from "./FrequentAssistantsList";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
-import { SidebarToggleIcon, SearchIcon, EditIcon } from "../icons";
+import {
+  SidebarToggleIcon,
+  SearchIcon,
+  EditIcon,
+  ResolvedIcon,
+} from "../icons";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
@@ -167,57 +172,30 @@ ChatHistoryHeader.displayName = "ChatHistoryHeader";
 const NewChatItem = memo<{
   onNewChat?: () => void;
   isSlimMode?: boolean;
-}>(({ onNewChat, isSlimMode = false }) => (
-  <div className="px-2 py-1">
-    <InteractiveContainer
-      useDiv={true}
-      onClick={() => {
-        logger.log("[CHAT_FLOW] New chat item clicked");
-        if (onNewChat) void onNewChat();
-      }}
-      className={clsx(
-        "flex min-h-[44px] items-center rounded-lg text-left hover:bg-theme-bg-hover",
-        isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
-      )}
-      aria-label={t`New Chat`}
-      title={isSlimMode ? t`New Chat` : undefined}
-    >
-      <EditIcon className="size-4 shrink-0 text-theme-fg-secondary" />
-      <span
-        className={clsx(
-          "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
-          isSlimMode
-            ? "w-0 overflow-hidden opacity-0"
-            : "opacity-100 delay-150",
-        )}
-      >
-        {t`New Chat`}
-      </span>
-    </InteractiveContainer>
-  </div>
-));
+}>(({ onNewChat, isSlimMode = false }) => {
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifiers, not user-facing text
+  const newChatIconId = useThemedIcon("navigation", "newChat");
 
-// eslint-disable-next-line lingui/no-unlocalized-strings
-NewChatItem.displayName = "NewChatItem";
-
-const SearchNavigationItem = memo<{
-  onSearch?: () => void;
-  isOnSearchPage?: boolean;
-  isSlimMode?: boolean;
-}>(({ onSearch, isOnSearchPage, isSlimMode = false }) => (
-  <div className="px-2 py-1">
-    {isOnSearchPage ? (
+  return (
+    <div className="px-2 py-1">
       <InteractiveContainer
         useDiv={true}
-        interactive={false}
+        onClick={() => {
+          logger.log("[CHAT_FLOW] New chat item clicked");
+          onNewChat?.();
+        }}
         className={clsx(
-          "flex min-h-[44px] items-center rounded-lg text-left opacity-50",
+          "flex min-h-[44px] items-center rounded-lg text-left hover:bg-theme-bg-hover",
           isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
         )}
-        aria-label={t`Search`}
-        title={isSlimMode ? t`Search` : undefined}
+        aria-label={t`New Chat`}
+        title={isSlimMode ? t`New Chat` : undefined}
       >
-        <SearchIcon className="size-4 shrink-0 text-theme-fg-secondary" />
+        <ResolvedIcon
+          iconId={newChatIconId}
+          fallbackIcon={EditIcon}
+          className="size-4 shrink-0 text-theme-fg-secondary"
+        />
         <span
           className={clsx(
             "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
@@ -226,33 +204,41 @@ const SearchNavigationItem = memo<{
               : "opacity-100 delay-150",
           )}
         >
-          {t`Search`}
+          {t`New Chat`}
         </span>
       </InteractiveContainer>
-    ) : (
-      <a
-        href="/search"
-        onClick={(e) => {
-          // Allow cmd/ctrl-click to open in new tab
-          if (e.metaKey || e.ctrlKey) {
-            return;
-          }
-          // Prevent default navigation for normal clicks
-          e.preventDefault();
-          logger.log("[CHAT_FLOW] Search navigation item clicked");
-          if (onSearch) void onSearch();
-        }}
-        aria-label={t`Search`}
-        title={isSlimMode ? t`Search` : undefined}
-      >
+    </div>
+  );
+});
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+NewChatItem.displayName = "NewChatItem";
+
+const SearchNavigationItem = memo<{
+  onSearch?: () => void;
+  isOnSearchPage?: boolean;
+  isSlimMode?: boolean;
+}>(({ onSearch, isOnSearchPage, isSlimMode = false }) => {
+  const searchIconId = useThemedIcon("navigation", "search");
+
+  return (
+    <div className="px-2 py-1">
+      {isOnSearchPage ? (
         <InteractiveContainer
           useDiv={true}
+          interactive={false}
           className={clsx(
-            "flex min-h-[44px] items-center rounded-lg text-left hover:bg-theme-bg-hover",
+            "flex min-h-[44px] items-center rounded-lg text-left opacity-50",
             isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
           )}
+          aria-label={t`Search`}
+          title={isSlimMode ? t`Search` : undefined}
         >
-          <SearchIcon className="size-4 shrink-0 text-theme-fg-secondary" />
+          <ResolvedIcon
+            iconId={searchIconId}
+            fallbackIcon={SearchIcon}
+            className="size-4 shrink-0 text-theme-fg-secondary"
+          />
           <span
             className={clsx(
               "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
@@ -264,10 +250,50 @@ const SearchNavigationItem = memo<{
             {t`Search`}
           </span>
         </InteractiveContainer>
-      </a>
-    )}
-  </div>
-));
+      ) : (
+        <a
+          href="/search"
+          onClick={(e) => {
+            // Allow cmd/ctrl-click to open in new tab
+            if (e.metaKey || e.ctrlKey) {
+              return;
+            }
+            // Prevent default navigation for normal clicks
+            e.preventDefault();
+            logger.log("[CHAT_FLOW] Search navigation item clicked");
+            onSearch?.();
+          }}
+          aria-label={t`Search`}
+          title={isSlimMode ? t`Search` : undefined}
+        >
+          <InteractiveContainer
+            useDiv={true}
+            className={clsx(
+              "flex min-h-[44px] items-center rounded-lg text-left hover:bg-theme-bg-hover",
+              isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
+            )}
+          >
+            <ResolvedIcon
+              iconId={searchIconId}
+              fallbackIcon={SearchIcon}
+              className="size-4 shrink-0 text-theme-fg-secondary"
+            />
+            <span
+              className={clsx(
+                "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
+                isSlimMode
+                  ? "w-0 overflow-hidden opacity-0"
+                  : "opacity-100 delay-150",
+              )}
+            >
+              {t`Search`}
+            </span>
+          </InteractiveContainer>
+        </a>
+      )}
+    </div>
+  );
+});
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 SearchNavigationItem.displayName = "SearchNavigationItem";
