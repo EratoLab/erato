@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import * as reactQuery from "@tanstack/react-query";
+import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
 import { ShareIcon } from "@/components/ui/icons";
+import { usePageAlignment } from "@/hooks/ui";
 import {
   useAvailableModels,
   useGetAssistant,
@@ -24,6 +26,8 @@ export default function AssistantEditPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
+  const { containerClasses, horizontalPadding } =
+    usePageAlignment("assistants");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSharingDialogOpen, setIsSharingDialogOpen] = useState(false);
@@ -185,8 +189,8 @@ export default function AssistantEditPage() {
       />
 
       {/* Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-4xl p-6">
+      <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
+        <div className={clsx("py-6", containerClasses)}>
           {/* Share button - always shown since we only reach this code if can_edit is true */}
           <div className="mb-4 flex justify-end">
             <Button

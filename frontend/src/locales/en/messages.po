@@ -577,6 +577,11 @@ msgid "navigation.page.new_chat"
 msgstr "New chat"
 
 #. js-lingui-explicit-id
+#: src/pages/SearchPage.tsx
+msgid "search.page.subtitle"
+msgstr "Find conversations and messages across your chat history"
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
 msgid "sharing.action.share"
 msgstr "Share"

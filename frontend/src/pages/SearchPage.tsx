@@ -1,9 +1,12 @@
 import { t } from "@lingui/core/macro";
+import clsx from "clsx";
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useDebounce } from "use-debounce";
 
+import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { SearchIcon, CloseIcon } from "@/components/ui/icons";
+import { usePageAlignment } from "@/hooks/ui";
 import { useChatContext } from "@/providers/ChatProvider";
 import { useChatInputFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
@@ -29,6 +32,12 @@ export default function SearchPage() {
 
   // Get feature configurations
   const { autofocus: shouldAutofocus } = useChatInputFeature();
+
+  // Get alignment configuration for content
+  const {
+    containerClasses: contentContainerClasses,
+    horizontalPadding: contentHorizontalPadding,
+  } = usePageAlignment("search");
 
   // Debounce search query using use-debounce library for consistency
   const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
@@ -123,13 +132,16 @@ export default function SearchPage() {
 
   return (
     <div className="flex h-full flex-col bg-theme-bg-secondary">
-      {/* Centered Search Header */}
-      <div className="flex flex-col items-center border-b border-theme-border bg-theme-bg-primary px-4 py-8">
-        <div className="w-full max-w-2xl">
-          <h1 className="mb-6 text-center text-2xl font-semibold text-theme-fg-primary">
-            {t`Search Your Chats`}
-          </h1>
-
+      {/* Search Header */}
+      <PageHeader
+        title={t`Search Your Chats`}
+        subtitle={t({
+          id: "search.page.subtitle",
+          message: "Find conversations and messages across your chat history",
+        })}
+      >
+        {/* Match search input width to results width */}
+        <div className={clsx("w-full", contentContainerClasses)}>
           <div className="relative">
             <SearchIcon className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-theme-fg-muted" />
             <input
@@ -157,11 +169,11 @@ export default function SearchPage() {
             )}
           </div>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Search Results */}
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-4xl p-6">
+      <div className={clsx("flex-1 overflow-auto", contentHorizontalPadding)}>
+        <div className={clsx("py-6", contentContainerClasses)}>
           {isSearching && (
             <div className="flex items-center justify-center py-8">
               <div className="text-center">

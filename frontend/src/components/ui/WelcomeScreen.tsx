@@ -9,6 +9,7 @@ import Markdown from "react-markdown";
 import { env } from "@/app/env";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { Logo } from "@/components/ui/Logo";
+import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
 import { loadThemeFromPath } from "@/utils/themeUtils";
 
 export interface WelcomeScreenProps {
@@ -17,6 +18,8 @@ export interface WelcomeScreenProps {
 
 export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
   const { isCustomTheme } = useTheme();
+  const { textAlignment, flexAlignment, justifyAlignment } =
+    usePageAlignment("headers");
   const [branding, setBranding] = useState<{
     enabled: boolean;
     logoSize: "small" | "medium" | "large";
@@ -69,9 +72,9 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
 
   return (
     <div
-      className={`flex flex-col items-center justify-center p-12 text-center ${className}`}
+      className={`flex flex-col ${flexAlignment} ${justifyAlignment} p-12 ${className}`}
     >
-      <div className="mb-8">
+      <div className={`mb-8 ${flexAlignment}`}>
         <Logo
           width={logoSize.width}
           height={logoSize.height}
@@ -82,17 +85,19 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
         />
       </div>
 
-      <h1 className="mb-4 text-2xl font-bold text-theme-fg-primary">
+      <h1
+        className={`mb-4 text-2xl font-bold text-theme-fg-primary ${textAlignment}`}
+      >
         <Trans id="branding.welcomeScreen.title">Welcome to AI Assistant</Trans>
       </h1>
 
-      <h2 className="mb-6 text-xl text-theme-fg-secondary">
+      <h2 className={`mb-6 text-xl text-theme-fg-secondary ${textAlignment}`}>
         <Trans id="branding.welcomeScreen.subtitle">
           Get expert help with your questions
         </Trans>
       </h2>
 
-      <div className="max-w-2xl text-lg text-theme-fg-muted">
+      <div className={`text-lg text-theme-fg-muted ${textAlignment}`}>
         <Markdown
           components={{
             li: ({ ...props }) => <li className="list-disc" {...props} />,

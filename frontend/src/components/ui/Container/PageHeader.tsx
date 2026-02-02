@@ -1,5 +1,7 @@
 import clsx from "clsx";
 
+import { usePageAlignment } from "@/hooks/ui";
+
 import type React from "react";
 
 export interface PageHeaderProps {
@@ -16,7 +18,8 @@ export interface PageHeaderProps {
 /**
  * PageHeader component for consistent page headers
  *
- * Provides a centered header with title, optional subtitle, and custom content.
+ * Provides a header with title, optional subtitle, and custom content.
+ * Alignment is controlled by theme configuration.
  * Used across pages like Search, Assistants, etc. for consistent styling.
  *
  * @example
@@ -40,19 +43,30 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   children,
   className,
 }) => {
+  const { containerClasses, textAlignment, horizontalPadding } =
+    usePageAlignment("headers");
+
   return (
     <div
       className={clsx(
-        "flex flex-col items-center border-b border-theme-border bg-theme-bg-primary px-4 py-8",
+        "flex flex-col border-b border-theme-border bg-theme-bg-primary py-8",
+        horizontalPadding,
         className,
       )}
     >
-      <div className="w-full max-w-2xl">
-        <h1 className="mb-6 text-center text-2xl font-semibold text-theme-fg-primary">
+      <div className={clsx("w-full", containerClasses)}>
+        <h1
+          className={clsx(
+            "mb-6 text-2xl font-semibold text-theme-fg-primary",
+            textAlignment,
+          )}
+        >
           {title}
         </h1>
         {subtitle && (
-          <p className="mb-6 text-center text-theme-fg-secondary">{subtitle}</p>
+          <p className={clsx("mb-6 text-theme-fg-secondary", textAlignment)}>
+            {subtitle}
+          </p>
         )}
         {children}
       </div>

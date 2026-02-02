@@ -577,6 +577,11 @@ msgid "navigation.page.new_chat"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/pages/SearchPage.tsx
+msgid "search.page.subtitle"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantsListPage.tsx
 msgid "sharing.action.share"
 msgstr "Teilen"

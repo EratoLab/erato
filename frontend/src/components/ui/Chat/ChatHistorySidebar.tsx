@@ -426,7 +426,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     return (
       <ErrorBoundary FallbackComponent={ErrorDisplay}>
-        <div className="relative h-full">
+        <div className="relative h-auto">
           {/* Absolutely positioned toggle button when collapsed in hidden mode */}
           {isHiddenMode && (
             <div className="absolute left-2 top-2 z-30">

@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -15,6 +16,7 @@ import {
   LogOutIcon,
   ShareIcon,
 } from "@/components/ui/icons";
+import { usePageAlignment } from "@/hooks/ui";
 import {
   useListAssistants,
   useArchiveAssistant,
@@ -22,6 +24,8 @@ import {
 
 export default function AssistantsListPage() {
   const navigate = useNavigate();
+  const { containerClasses, horizontalPadding } =
+    usePageAlignment("assistants");
 
   // State for tab filtering
   const [selectedTab, setSelectedTab] = useState<
@@ -107,10 +111,10 @@ export default function AssistantsListPage() {
       />
 
       {/* Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-4xl p-6">
+      <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
+        <div className={clsx("py-6", containerClasses)}>
           {/* Tab control for filtering */}
-          <div className="mb-6 flex justify-center">
+          <div className="mb-6 flex">
             <SegmentedControl
               options={[
                 {

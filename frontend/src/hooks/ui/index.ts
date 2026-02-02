@@ -11,3 +11,4 @@ export * from "./useMessageListVirtualization";
 export * from "./useScrollEvents";
 export * from "./useFilePreviewModal";
 export * from "./useThemedIcon";
+export * from "./usePageAlignment";

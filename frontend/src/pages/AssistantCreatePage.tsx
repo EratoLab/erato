@@ -1,10 +1,12 @@
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
+import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
+import { usePageAlignment } from "@/hooks/ui";
 import {
   useAvailableModels,
   useCreateAssistant,
@@ -16,6 +18,8 @@ import type { AssistantFormData } from "@/components/ui/Assistant/AssistantForm"
 export default function AssistantCreatePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { containerClasses, horizontalPadding } =
+    usePageAlignment("assistants");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -86,8 +90,8 @@ export default function AssistantCreatePage() {
       />
 
       {/* Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-4xl p-6">
+      <div className={clsx("flex-1 overflow-auto", horizontalPadding)}>
+        <div className={clsx("py-6", containerClasses)}>
           <div className="rounded-lg border border-theme-border bg-theme-bg-primary p-8">
             <AssistantForm
               mode="create"
