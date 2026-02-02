@@ -158,6 +158,58 @@ enable_message_feedback = true
 message_feedback_edit_time_limit_seconds = 300  # 5 minutes
 ```
 
+#### `frontend.sidebar_collapsed_mode`
+
+Controls the behavior of the collapsed sidebar state.
+
+When set to `"slim"`, the collapsed sidebar shows icon-only navigation elements. When set to `"hidden"` (default), the sidebar is completely hidden when collapsed.
+
+**Default value:** `"hidden"`
+
+**Type:** `string`
+
+**Supported values:**
+- `"hidden"` - Sidebar is completely hidden when collapsed (default behavior)
+- `"slim"` - Sidebar shows icon-only navigation when collapsed
+
+**Example:**
+
+```toml
+[frontend]
+sidebar_collapsed_mode = "slim"
+```
+
+#### `frontend.sidebar_logo_path`
+
+Optional path to a sidebar-specific logo file. When provided, this logo is displayed in the sidebar header instead of the theme logo. Useful for showing a compact logo variant in the sidebar.
+
+**Default value:** `None` (uses theme logo)
+
+**Type:** `string | None`
+
+**Example:**
+
+```toml
+[frontend]
+sidebar_logo_path = "/custom-theme/my-company/sidebar-logo.svg"
+```
+
+#### `frontend.sidebar_logo_dark_path`
+
+Optional path to a sidebar-specific logo file for dark mode. When provided along with `sidebar_logo_path`, this logo is displayed in the sidebar when dark mode is active.
+
+**Default value:** `None` (uses `sidebar_logo_path` or theme logo)
+
+**Type:** `string | None`
+
+**Example:**
+
+```toml
+[frontend]
+sidebar_logo_path = "/custom-theme/my-company/sidebar-logo.svg"
+sidebar_logo_dark_path = "/custom-theme/my-company/sidebar-logo-dark.svg"
+```
+
 #### `frontend.additional_environment`
 
 Additional values to inject into the frontend environment as global variables.

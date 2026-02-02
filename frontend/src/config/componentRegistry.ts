@@ -20,6 +20,7 @@
  * git add src/config/componentRegistry.ts
  * ```
  */
+
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { ComponentType } from "react";
 

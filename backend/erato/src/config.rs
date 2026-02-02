@@ -989,6 +989,21 @@ pub struct FrontendConfig {
     // When not set (default), feedback can be edited at any time.
     #[serde(default)]
     pub message_feedback_edit_time_limit_seconds: Option<u64>,
+
+    // Sidebar collapsed behavior: "hidden" (default) or "slim" (icon-only)
+    // Defaults to `"hidden"`.
+    #[serde(default = "default_sidebar_collapsed_mode")]
+    pub sidebar_collapsed_mode: String,
+
+    // Optional sidebar-specific logo path (overrides theme logo for sidebar)
+    pub sidebar_logo_path: Option<String>,
+
+    // Optional sidebar-specific logo path for dark mode
+    pub sidebar_logo_dark_path: Option<String>,
+}
+
+fn default_sidebar_collapsed_mode() -> String {
+    "hidden".to_string()
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]

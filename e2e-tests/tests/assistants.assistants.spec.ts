@@ -411,15 +411,13 @@ test.describe.serial("Pirate Assistant Lifecycle", () => {
       // Navigate to the assistants page
       await page.goto("/assistants");
 
-      // Find the Pirate assistant card using the unique name
-      const assistantButton = page.getByRole("button", {
-        name: new RegExp(assistantName),
-      });
-      await expect(assistantButton).toBeVisible();
+      // Find the Pirate assistant card using data-testid and the unique name
+      const assistantCard = page
+        .getByTestId("assistant-list-item")
+        .filter({ hasText: assistantName });
+      await expect(assistantCard).toBeVisible();
 
       // Find the three dot menu button within the assistant card
-      // The menu button should be near the assistant button
-      const assistantCard = assistantButton.locator("..");
       const menuButton = assistantCard.getByRole("button", {
         name: /menu|more|options/i,
       });

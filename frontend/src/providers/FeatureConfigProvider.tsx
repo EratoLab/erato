@@ -68,6 +68,18 @@ interface MessageFeedbackFeatureConfig {
 }
 
 /**
+ * Configuration for sidebar feature
+ */
+interface SidebarFeatureConfig {
+  /** Behavior of the collapsed sidebar state: "hidden" or "slim" (icon-only) */
+  collapsedMode: "hidden" | "slim";
+  /** Optional path to sidebar-specific logo */
+  logoPath: string | null;
+  /** Optional path to sidebar-specific logo for dark mode */
+  logoDarkPath: string | null;
+}
+
+/**
  * Complete feature configuration interface
  */
 interface FeatureConfig {
@@ -83,6 +95,8 @@ interface FeatureConfig {
   cloudProviders: CloudProvidersFeatureConfig;
   /** Message feedback feature flags */
   messageFeedback: MessageFeedbackFeatureConfig;
+  /** Sidebar feature flags */
+  sidebar: SidebarFeatureConfig;
 }
 
 const FeatureConfigContext = createContext<FeatureConfig | null>(null);
@@ -159,6 +173,11 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
         enabled: environment.messageFeedbackEnabled,
         commentsEnabled: environment.messageFeedbackCommentsEnabled,
         editTimeLimitSeconds: environment.messageFeedbackEditTimeLimitSeconds,
+      },
+      sidebar: {
+        collapsedMode: environment.sidebarCollapsedMode,
+        logoPath: environment.sidebarLogoPath,
+        logoDarkPath: environment.sidebarLogoDarkPath,
       },
     };
   }, []); // Empty deps - only compute once
@@ -295,4 +314,21 @@ export function useCloudProvidersFeature(): CloudProvidersFeatureConfig {
 export function useMessageFeedbackFeature(): MessageFeedbackFeatureConfig {
   const config = useFeatureConfig();
   return config.messageFeedback;
+}
+
+/**
+ * Convenience hook for accessing sidebar feature configuration.
+ *
+ * @returns Sidebar feature configuration
+ * @throws {Error} If used outside of FeatureConfigProvider
+ *
+ * @example
+ * ```tsx
+ * const { collapsedMode, logoPath } = useSidebarFeature();
+ * const isSlimMode = collapsed && collapsedMode === "slim";
+ * ```
+ */
+export function useSidebarFeature(): SidebarFeatureConfig {
+  const config = useFeatureConfig();
+  return config.sidebar;
 }

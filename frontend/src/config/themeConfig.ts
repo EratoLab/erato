@@ -30,7 +30,60 @@ export interface ThemeLocationConfig {
    * @returns Path to the assistant avatar file, or null if not available
    */
   getAssistantAvatarPath: (themeName: string | undefined) => string | null;
+
+  /**
+   * Function to determine sidebar logo paths based on theme name and mode
+   * @param themeName The name of the loaded theme
+   * @param isDark Whether dark mode is active
+   * @returns Path to the sidebar logo file, or null if not available (falls back to regular logo)
+   */
+  getSidebarLogoPath: (
+    themeName: string | undefined,
+    isDark: boolean,
+  ) => string | null;
 }
+
+/**
+ * Resolves asset paths with priority fallback:
+ * 1. Environment variable override
+ * 2. Theme path override
+ * 3. Customer-specific path
+ * 4. Default path or null
+ */
+const resolveAssetPath = (options: {
+  envPaths: { light?: string | null; dark?: string | null };
+  baseFilename: string;
+  isDark?: boolean;
+  hasDefault?: boolean;
+}): string | null => {
+  const { envPaths, baseFilename, isDark = false, hasDefault = true } = options;
+  const { themePath, themeCustomerName } = env();
+
+  // 1. Environment variable override
+  const envPath = isDark ? envPaths.dark : envPaths.light;
+  if (envPath) return envPath;
+
+  // 2. Theme path override
+  if (themePath) {
+    return isDark
+      ? `${themePath}/${baseFilename}-dark.svg`
+      : `${themePath}/${baseFilename}.svg`;
+  }
+
+  // 3. Customer-specific subfolder
+  if (themeCustomerName) {
+    return isDark
+      ? `/custom-theme/${themeCustomerName}/${baseFilename}-dark.svg`
+      : `/custom-theme/${themeCustomerName}/${baseFilename}.svg`;
+  }
+
+  // 4. Default fallback or null
+  if (!hasDefault) return null;
+
+  return isDark
+    ? `/custom-theme/${baseFilename}-dark.svg`
+    : `/custom-theme/${baseFilename}.svg`;
+};
 
 /**
  * Default theme configuration
@@ -55,62 +108,33 @@ export const defaultThemeConfig: ThemeLocationConfig = {
   },
 
   getLogoPath: (themeName, isDark) => {
-    // 1. Check environment variables first for complete path override
-    const { themeLogoDarkPath, themeLogoPath, themePath, themeCustomerName } =
-      env();
-
-    if (isDark && themeLogoDarkPath) {
-      return themeLogoDarkPath;
-    }
-
-    if (!isDark && themeLogoPath) {
-      return themeLogoPath;
-    }
-
-    // 2. Check for theme path override
-    if (themePath) {
-      const path = isDark
-        ? `${themePath}/logo-dark.svg`
-        : `${themePath}/logo.svg`;
-      return path;
-    }
-
-    // 3. If a customer name is specified, use customer-specific subfolder
-    if (themeCustomerName) {
-      const path = isDark
-        ? `/custom-theme/${themeCustomerName}/logo-dark.svg`
-        : `/custom-theme/${themeCustomerName}/logo.svg`;
-      return path;
-    }
-
-    // 4. Default to the root custom-theme folder (no customer subfolder)
-    const defaultPath = isDark
-      ? "/custom-theme/logo-dark.svg"
-      : "/custom-theme/logo.svg";
-    return defaultPath;
+    const path = resolveAssetPath({
+      envPaths: { light: env().themeLogoPath, dark: env().themeLogoDarkPath },
+      baseFilename: "logo",
+      isDark,
+      hasDefault: true,
+    });
+    // Logo always has a default, so path will never be null
+    return path ?? "/custom-theme/logo.svg";
   },
 
-  getAssistantAvatarPath: (themeName) => {
-    // 1. Check environment variable for complete path override
-    const { themeAssistantAvatarPath, themePath, themeCustomerName } = env();
+  getAssistantAvatarPath: (themeName) =>
+    resolveAssetPath({
+      envPaths: { light: env().themeAssistantAvatarPath },
+      baseFilename: "assistant-avatar",
+      hasDefault: false,
+    }),
 
-    if (themeAssistantAvatarPath) {
-      return themeAssistantAvatarPath;
-    }
-
-    // 2. Check for theme path override
-    if (themePath) {
-      return `${themePath}/assistant-avatar.svg`;
-    }
-
-    // 3. If a customer name is specified, use customer-specific subfolder
-    if (themeCustomerName) {
-      return `/custom-theme/${themeCustomerName}/assistant-avatar.svg`;
-    }
-
-    // 4. No default fallback - return null if no custom avatar is configured
-    return null;
-  },
+  getSidebarLogoPath: (themeName, isDark) =>
+    resolveAssetPath({
+      envPaths: {
+        light: env().sidebarLogoPath,
+        dark: env().sidebarLogoDarkPath,
+      },
+      baseFilename: "sidebar-logo",
+      isDark,
+      hasDefault: false,
+    }),
 };
 
 /**

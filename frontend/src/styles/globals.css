@@ -252,7 +252,7 @@ body {
 }
 
 .theme-transition {
-  @apply transition-all duration-150 ease-in-out;
+  @apply transition-[background-color,border-color,color,fill,stroke,opacity,box-shadow,transform] duration-150 ease-in-out motion-reduce:transition-none;
 }
 
 /* Footnote reference styling - add square brackets and remove underline */
