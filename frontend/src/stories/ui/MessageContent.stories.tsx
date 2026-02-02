@@ -266,3 +266,33 @@ Another sentence without footnotes.
 `),
   },
 };
+
+export const ResolvedFileLinksInMarkdown: Story = {
+  args: {
+    content: textContent(
+      [
+        "Here are the documents you asked for:",
+        "",
+        "- [Quarterly Report](erato-file://file_123?page=4)",
+        "- [Design Spec](erato-file://file_abc#page=2)",
+        "",
+        "These should resolve to the file download URLs with the page anchors.",
+        "",
+        "Raw autolink example:",
+        "erato-file://file_123?page=7",
+      ].join("\n"),
+    ),
+    fileDownloadUrls: {
+      file_123: "https://files.example.com/downloads/quarterly-report.pdf",
+      file_abc: "https://files.example.com/downloads/design-spec.pdf",
+    },
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Demonstrates how `erato-file://` markdown links are resolved using the file download map.",
+      },
+    },
+  },
+};

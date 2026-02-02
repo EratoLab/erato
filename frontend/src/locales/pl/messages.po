@@ -1193,6 +1193,10 @@ msgstr "Podano nieprawidłową datę do MessageTimestamp, używam bieżącej dat
 msgid "Light mode"
 msgstr "Tryb jasny"
 
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Link"
+msgstr ""
+
 #: src/components/ui/Message/LoadMoreButton.tsx
 msgid "Load older messages"
 msgstr "Załaduj starsze wiadomości"

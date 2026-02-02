@@ -26,6 +26,23 @@ interface MessageContentProps {
   fileDownloadUrls?: Record<string, string>;
 }
 
+const autolinkEratoFiles = (text: string): string => {
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  if (!text.includes("erato-file://")) {
+    return text;
+  }
+
+  const urlRegex = /erato-file:\/\/[^\s)]+/g;
+
+  return text.replace(urlRegex, (match, offset) => {
+    const prevChar = text.charAt(offset - 1);
+    if (prevChar === "(") {
+      return match;
+    }
+    return `[${t`Link`}](${match})`;
+  });
+};
+
 export const MessageContent = memo(function MessageContent({
   content,
   isStreaming = false,
@@ -38,12 +55,13 @@ export const MessageContent = memo(function MessageContent({
 
   // Parse content efficiently in a single pass
   const { text: textContent, images } = parseContent(content);
+  const linkedTextContent = autolinkEratoFiles(textContent);
 
   // For streaming, still show cursor on text
   const displayText =
-    isStreaming && !textContent.endsWith("\n")
-      ? textContent + "▊"
-      : textContent;
+    isStreaming && !linkedTextContent.endsWith("\n")
+      ? linkedTextContent + "▊"
+      : linkedTextContent;
 
   // URL transform function to handle erato-file:// protocol
   const transformUrl = React.useCallback(
