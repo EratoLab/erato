@@ -8,6 +8,7 @@ test(
   async ({ page }) => {
     await page.goto("/");
     await chatIsReadyToChat(page);
+    await expect(page.getByTestId("file-upload-error")).toHaveCount(0);
 
     // Start waiting for file chooser before clicking the button
     const fileChooserPromise = page.waitForEvent("filechooser");
@@ -264,46 +265,113 @@ test(
 );
 
 // no-ci for right now, as sometimes the LLM doesn't accept that it has ability to analyze images
-test(
-  "Can upload an image and get AI response about its contents",
-  { tag: TAG_NO_CI },
-  async ({ page }) => {
-    await page.goto("/");
-    await chatIsReadyToChat(page);
+test.describe("Can upload a file and get an AI response about its contents", () => {
+  const uploadCases = [
+    {
+      title: "image_1.png",
+      filePath: "test-files/image_1.png",
+      message: "What animal can you see on this image?.",
+      tags: TAG_CI,
+      expectedText: ["cat"],
+      unexpectedText: [],
+    },
+    {
+      title: "Acme_Inc_Headcount_By_Department.csv",
+      filePath: "test-files/Acme_Inc_Headcount_By_Department.csv",
+      message: "How many employees did Engineering have in 2025?",
+      tags: TAG_CI,
+      expectedText: ["220"],
+      unexpectedText: [],
+    },
+    {
+      title: "Acme_Inc_Organizational_Data.xlsx",
+      filePath: "test-files/Acme_Inc_Organizational_Data.xlsx",
+      message: "Who is the head of the Engineering department?",
+      tags: TAG_CI,
+      expectedText: ["Alice", "Johnson"],
+      unexpectedText: [],
+    },
+    {
+      title: "Acme_Inc_Organizational_Data.docx",
+      filePath: "test-files/Acme_Inc_Organizational_Data.docx",
+      message: "Who is the head of the Engineering department?",
+      tags: TAG_CI,
+      expectedText: ["Alice", "Johnson"],
+      unexpectedText: [],
+    },
+    {
+      title: "Acme_Inc_Company_Overview.pptx",
+      filePath: "test-files/Acme_Inc_Company_Overview.pptx",
+      message: "Who is the head of the Engineering department?",
+      tags: TAG_CI,
+      expectedText: ["Alice", "Johnson"],
+      unexpectedText: [],
+    },
+    {
+      title: "sample-report-compressed.pdf",
+      filePath: "test-files/sample-report-compressed.pdf",
+      message: "What headings can you see on page 3?",
+      tags: TAG_CI,
+      expectedText: ["Introduction"],
+      unexpectedText: [],
+    },
+  ];
 
-    // Start waiting for file chooser before clicking the button
-    const fileChooserPromise = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Upload Files" }).click();
-    const fileChooser = await fileChooserPromise;
+  for (const {
+    title,
+    filePath,
+    message,
+    tags,
+    expectedText,
+    unexpectedText,
+  } of uploadCases) {
+    test(
+      `Can upload ${title} and get AI response about its contents`,
+      { tag: tags },
+      async ({ page }) => {
+        await page.goto("/");
+        await chatIsReadyToChat(page);
+        await expect(page.getByTestId("file-upload-error")).toHaveCount(0);
 
-    // Upload the test image
-    const filePath = "test-files/image_1.png";
-    await fileChooser.setFiles(filePath);
+        const fileName = filePath.split("/").pop() ?? filePath;
+        const fileChooserPromise = page.waitForEvent("filechooser");
+        await page.getByRole("button", { name: "Upload Files" }).click();
+        const fileChooser = await fileChooserPromise;
+        await fileChooser.setFiles(filePath);
 
-    // Verify the image file appears in the UI
-    await expect(page.getByText("image_1.png")).toBeVisible();
-    await expect(page.getByText("Attachments")).toBeVisible();
+        // Verify the file appears in the UI
+        const fileNamePrefix = fileName.slice(0, 10);
+        await expect(page.getByText(fileNamePrefix)).toBeVisible();
+        await expect(page.getByText("Attachments")).toBeVisible();
 
-    // Submit a message asking about the image contents
-    const textbox = page.getByRole("textbox", { name: "Type a message..." });
-    await expect(textbox).toBeVisible();
-    await textbox.fill(
-      "Can you please tell me what the contents of the image are?",
+        // Submit a message asking about the file contents
+        const textbox = page.getByRole("textbox", {
+          name: "Type a message...",
+        });
+        await expect(textbox).toBeVisible();
+        await textbox.fill(message);
+        await textbox.press("Enter");
+
+        // Wait for the assistant response
+        await chatIsReadyToChat(page, {
+          expectAssistantResponse: true,
+          loadingTimeoutMs: 30000,
+        });
+
+        // Get the assistant message content
+        const assistantMessage = page.getByTestId("message-assistant");
+        await expect(assistantMessage).toBeVisible();
+
+        const messageText = (await assistantMessage.textContent()) ?? "";
+        for (const snippet of expectedText) {
+          expect(messageText.toLowerCase()).toContain(snippet.toLowerCase());
+        }
+        for (const snippet of unexpectedText) {
+          expect(messageText.toLowerCase()).not.toContain(
+            snippet.toLowerCase(),
+          );
+        }
+      },
     );
-    await textbox.press("Enter");
-
-    // Wait for the assistant response
-    await chatIsReadyToChat(page, {
-      expectAssistantResponse: true,
-      loadingTimeoutMs: 30000,
-    });
-
-    // Get the assistant message content
-    const assistantMessage = page.getByTestId("message-assistant");
-    await expect(assistantMessage).toBeVisible();
-
-    // Verify that the response mentions "cat" (case-insensitive)
-    const messageText = await assistantMessage.textContent();
-    expect(messageText?.toLowerCase()).toContain("cat");
-  },
-);
+  }
+});

@@ -10,7 +10,7 @@ use crate::services::file_processing_cached;
 use crate::services::file_storage::SharepointContext;
 use crate::state::AppState;
 use async_trait::async_trait;
-use eyre::{ContextCompat, OptionExt, Report};
+use eyre::{Context, ContextCompat, OptionExt, Report};
 use sea_orm::prelude::Uuid;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
@@ -93,7 +93,7 @@ impl<'a> FileResolver for AppStateFileResolver<'a> {
         let file_bytes = file_storage
             .read_file_to_bytes_with_context(&file.file_storage_path, sharepoint_ctx.as_ref())
             .await
-            .map_err(|e| eyre::eyre!("Failed to read file from storage: {}", e))?;
+            .wrap_err("Failed to read file from storage")?;
 
         // Parse the file to extract text
         let text = self
@@ -101,7 +101,7 @@ impl<'a> FileResolver for AppStateFileResolver<'a> {
             .file_processor
             .parse_file(file_bytes)
             .await
-            .map_err(|e| eyre::eyre!("Failed to parse file: {}", e))?;
+            .wrap_err("Failed to parse file")?;
 
         // Remove null characters (for Postgres compatibility)
         let text = remove_null_characters(&text);
