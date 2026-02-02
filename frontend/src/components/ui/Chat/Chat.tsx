@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useChatActions } from "@/hooks/chat";
@@ -158,6 +158,23 @@ export const Chat = ({
     ? !!chatHistory.find((c) => c.id === (currentChatId ?? ""))?.can_edit
     : false;
 
+  const currentChatLastSelectedFacets = useMemo(() => {
+    if (!Array.isArray(chatHistory)) {
+      return undefined;
+    }
+
+    return chatHistory.find((chat) => chat.id === (currentChatId ?? ""))
+      ?.last_selected_facets;
+  }, [chatHistory, currentChatId]);
+
+  const [activeSelectedFacetIds, setActiveSelectedFacetIds] = useState<
+    string[]
+  >(currentChatLastSelectedFacets ?? []);
+
+  useEffect(() => {
+    setActiveSelectedFacetIds(currentChatLastSelectedFacets ?? []);
+  }, [currentChatId, currentChatLastSelectedFacets]);
+
   // Use chat actions hook for handlers
   const { handleSendMessage: baseHandleSendMessage, handleMessageAction } =
     useChatActions({
@@ -168,14 +185,26 @@ export const Chat = ({
 
   // Enhanced sendMessage handler that refreshes the sidebar after sending
   const handleSendMessage = useCallback(
-    (message: string, inputFileIds?: string[], modelId?: string) => {
+    (
+      message: string,
+      inputFileIds?: string[],
+      modelId?: string,
+      selectedFacetIds?: string[],
+    ) => {
       logger.log("[CHAT_FLOW] Chat - handleSendMessage called", {
         files: inputFileIds,
         model: modelId,
         assistantId,
+        selectedFacetIds,
       });
 
-      baseHandleSendMessage(message, inputFileIds, modelId, assistantId)
+      baseHandleSendMessage(
+        message,
+        inputFileIds,
+        modelId,
+        assistantId,
+        selectedFacetIds,
+      )
         .then(() => {
           logger.log("[CHAT_FLOW] Message sent, refreshing chats");
           return refreshChats();
@@ -201,21 +230,29 @@ export const Chat = ({
   const cancelEdit = useCallback(() => setEditState({ mode: "compose" }), []);
 
   const handleEditSubmit = useCallback(
-    (messageId: string, newContent: string, replaceInputFileIds?: string[]) => {
-      void editMessage(messageId, newContent, replaceInputFileIds).finally(
-        () => {
-          setEditState({ mode: "compose" });
-        },
-      );
+    (
+      messageId: string,
+      newContent: string,
+      replaceInputFileIds?: string[],
+      selectedFacetIds?: string[],
+    ) => {
+      void editMessage(
+        messageId,
+        newContent,
+        replaceInputFileIds,
+        selectedFacetIds,
+      ).finally(() => {
+        setEditState({ mode: "compose" });
+      });
     },
     [editMessage],
   );
 
   const handleRegenerate = useCallback(
     (assistantMessageId: string) => {
-      void regenerateMessage(assistantMessageId);
+      void regenerateMessage(assistantMessageId, activeSelectedFacetIds);
     },
-    [regenerateMessage],
+    [activeSelectedFacetIds, regenerateMessage],
   );
 
   // Handler for when the error boundary resets
@@ -473,6 +510,8 @@ export const Chat = ({
               editState.mode === "edit" ? editState.initialContent : undefined
             }
             initialModel={initialModelOverride ?? currentChatLastModel}
+            initialSelectedFacetIds={currentChatLastSelectedFacets}
+            onFacetSelectionChange={setActiveSelectedFacetIds}
           />
         </div>
       </ChatErrorBoundary>

@@ -267,3 +267,5 @@ export {
 
 // Export the IconProps type for use in other components
 export type { IconProps };
+
+export { ResolvedIcon } from "./ResolvedIcon";

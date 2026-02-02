@@ -13,6 +13,7 @@ interface UseChatActionsProps {
     inputFileIds?: string[],
     modelId?: string,
     assistantId?: string,
+    selectedFacetIds?: string[],
   ) => Promise<string | undefined>;
   onMessageAction?: (action: MessageAction) => Promise<boolean>;
 }
@@ -55,9 +56,16 @@ export function useChatActions({
       inputFileIds?: string[],
       modelId?: string,
       assistantId?: string,
+      selectedFacetIds?: string[],
     ) => {
       if (message.trim() || (inputFileIds && inputFileIds.length > 0)) {
-        return sendMessage(message, inputFileIds, modelId, assistantId);
+        return sendMessage(
+          message,
+          inputFileIds,
+          modelId,
+          assistantId,
+          selectedFacetIds,
+        );
       }
       return Promise.resolve(undefined);
     },

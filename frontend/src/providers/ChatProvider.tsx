@@ -63,13 +63,18 @@ interface ChatContextValue {
     inputFileIds?: string[],
     modelId?: string,
     assistantId?: string,
+    selectedFacetIds?: string[],
   ) => Promise<string | undefined>;
   editMessage: (
     messageId: string,
     newContent: string,
     replaceInputFileIds?: string[],
+    selectedFacetIds?: string[],
   ) => Promise<void>;
-  regenerateMessage: (currentMessageId: string) => Promise<void>;
+  regenerateMessage: (
+    currentMessageId: string,
+    selectedFacetIds?: string[],
+  ) => Promise<void>;
   cancelMessage: () => void;
   refetchMessages: () => Promise<unknown>;
 

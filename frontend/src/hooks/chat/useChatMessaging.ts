@@ -720,6 +720,7 @@ export function useChatMessaging(
       inputFileIds?: string[],
       modelId?: string,
       assistantId?: string,
+      selectedFacetIds?: string[],
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingRef.current) {
@@ -836,6 +837,7 @@ export function useChatMessaging(
           effectiveChatIdForRequest,
           modelId,
           assistantId,
+          selectedFacetIds,
         );
 
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {
@@ -1022,6 +1024,7 @@ export function useChatMessaging(
       messageId: string,
       newContent: string,
       replaceInputFileIds?: string[],
+      selectedFacetIds?: string[],
     ): Promise<void> => {
       if (isSubmittingRef.current) {
         logger.warn("[DEBUG_STREAMING] Preventing duplicate edit submission");
@@ -1044,6 +1047,7 @@ export function useChatMessaging(
           ...(replaceInputFileIds && replaceInputFileIds.length > 0
             ? { replace_input_files_ids: replaceInputFileIds }
             : {}),
+          ...(selectedFacetIds ? { selected_facet_ids: selectedFacetIds } : {}),
         } as const;
 
         // eslint-disable-next-line lingui/no-unlocalized-strings
@@ -1114,7 +1118,10 @@ export function useChatMessaging(
 
   // Regenerate an assistant response for an existing message
   const regenerateMessage = useCallback(
-    async (currentMessageId: string): Promise<void> => {
+    async (
+      currentMessageId: string,
+      selectedFacetIds?: string[],
+    ): Promise<void> => {
       if (isSubmittingRef.current) {
         logger.warn(
           "[DEBUG_STREAMING] Preventing duplicate regenerate submission",
@@ -1134,6 +1141,7 @@ export function useChatMessaging(
       try {
         const requestBody = {
           current_message_id: currentMessageId,
+          ...(selectedFacetIds ? { selected_facet_ids: selectedFacetIds } : {}),
         };
 
         // eslint-disable-next-line lingui/no-unlocalized-strings

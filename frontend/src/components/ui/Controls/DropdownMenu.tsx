@@ -37,6 +37,8 @@ export interface DropdownMenuProps {
     vertical: "top" | "bottom";
     horizontal: "left" | "right";
   };
+  matchContentWidth?: boolean;
+  noWrapItems?: boolean;
   /** Callback fired when dropdown open state changes */
   onOpenChange?: (isOpen: boolean) => void;
 }
@@ -50,9 +52,11 @@ const MenuItem = memo(
   ({
     item,
     onSelect,
+    noWrap = false,
   }: {
     item: DropdownMenuItem;
     onSelect: (e: React.MouseEvent) => void;
+    noWrap?: boolean;
   }) => (
     <button
       className={clsx(
@@ -61,6 +65,7 @@ const MenuItem = memo(
         "theme-transition",
         "disabled:cursor-not-allowed disabled:opacity-50",
         "focus:outline-none focus-visible:bg-theme-bg-accent",
+        noWrap && "whitespace-nowrap",
         item.variant === "danger"
           ? "text-theme-error-fg hover:bg-theme-error-bg"
           : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary",
@@ -76,7 +81,9 @@ const MenuItem = memo(
           {item.icon}
         </span>
       )}
-      <span className="flex-1">{item.label}</span>
+      <span className={clsx("flex-1", noWrap && "whitespace-nowrap")}>
+        {item.label}
+      </span>
       {item.shortcut && (
         <span className="ml-auto text-xs text-theme-fg-muted">
           {item.shortcut}
@@ -102,6 +109,8 @@ export const DropdownMenu = memo(
     triggerIcon = <MoreVertical className="size-4" />,
     id,
     preferredOrientation,
+    matchContentWidth = false,
+    noWrapItems = false,
     onOpenChange,
   }: DropdownMenuProps) => {
     const [isOpen, setIsOpenState] = useState(false);
@@ -297,7 +306,8 @@ export const DropdownMenu = memo(
           ref={menuRef}
           id={menuId}
           className={clsx(
-            "fixed w-48 rounded-md shadow-lg",
+            "fixed rounded-md shadow-lg",
+            matchContentWidth ? "w-max min-w-48" : "w-48",
             "border border-theme-border bg-theme-bg-primary",
             "z-[9999]",
             "theme-transition",
@@ -335,6 +345,7 @@ export const DropdownMenu = memo(
               <MenuItem
                 key={`${item.label}-${index}`}
                 item={item}
+                noWrap={noWrapItems}
                 onSelect={(e: React.MouseEvent) => handleMenuItemClick(item, e)}
               />
             ))}
