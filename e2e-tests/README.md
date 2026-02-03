@@ -47,7 +47,7 @@ pnpm exec playwright test --headed
 #### Run specific test file
 
 ```bash
-pnpm exec playwright test tests/chat.spec.ts
+pnpm exec playwright test tests/chat.basic.spec.ts
 ```
 
 #### Run only CI-tagged tests
@@ -199,7 +199,7 @@ Traces are automatically captured on first retry when tests fail.
 ### Debug specific test
 
 ```bash
-pnpm exec playwright test tests/chat.spec.ts --debug
+pnpm exec playwright test tests/chat.basic.spec.ts --debug
 ```
 
 ### View last HTML report
