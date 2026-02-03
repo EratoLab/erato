@@ -244,6 +244,7 @@ postgresql:
     size: 2Gi
 
 seaweedfs:
+  enabled: false
   master:
     replicas: 1
     raftHashicorp: true
@@ -272,3 +273,27 @@ seaweedfs:
     enabled: true
     replicas: 1
     port: 8333
+
+seaweedMini:
+  enabled: true
+  image:
+    repository: chrislusf/seaweedfs
+    tag: "4.08"
+    pullPolicy: IfNotPresent
+  serviceName: seaweedfs-s3
+  ports:
+    master: 9333
+    masterGrpc: 9340
+    filer: 8888
+    s3: 8333
+    filerGrpc: 7333
+    volumeGrpc: 23646
+  storage:
+    type: emptyDir
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

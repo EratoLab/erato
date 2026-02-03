@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use eyre::Report;
+use eyre::{Context, Report};
 use kreuzberg::detect_mime_type_from_bytes;
 use std::sync::Arc;
 use tracing::Instrument;
@@ -13,6 +13,18 @@ pub trait FileProcessor: Send + Sync {
 /// Kreuzberg-based file processor with page-aware markdown extraction
 pub struct KreuzbergProcessor;
 
+fn looks_like_docx(file_bytes: &[u8]) -> bool {
+    const ZIP_HEADER: [u8; 4] = [0x50, 0x4b, 0x03, 0x04];
+    if !file_bytes.starts_with(&ZIP_HEADER) {
+        return false;
+    }
+
+    let needle = b"word/document.xml";
+    file_bytes
+        .windows(needle.len())
+        .any(|window| window == needle)
+}
+
 #[async_trait]
 impl FileProcessor for KreuzbergProcessor {
     async fn parse_file(&self, file_bytes: Vec<u8>) -> Result<String, Report> {
@@ -24,7 +36,16 @@ impl FileProcessor for KreuzbergProcessor {
                     return Ok(String::new());
                 }
 
-                let mime_type = detect_mime_type_from_bytes(&file_bytes)?;
+                let mut mime_type = detect_mime_type_from_bytes(&file_bytes)?;
+                tracing::debug!("Detected MIME type from bytes: {:?}", &mime_type);
+                if matches!(
+                    mime_type.as_str(),
+                    "application/zip" | "application/x-zip-compressed"
+                ) && looks_like_docx(&file_bytes)
+                {
+                    mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
+                }
+                tracing::debug!("Final decided MIME type: {:?}", &mime_type);
                 // Configure kreuzberg for page-aware markdown extraction
                 let page_config = kreuzberg::PageConfig {
                     extract_pages: true,
@@ -41,7 +62,7 @@ impl FileProcessor for KreuzbergProcessor {
                 // Extract content using kreuzberg
                 // Note: mime_type is auto-detected, so we pass an empty string
                 let result = kreuzberg::extract_bytes_sync(&file_bytes, &mime_type, &config)
-                    .map_err(|e| eyre::eyre!("Kreuzberg extraction failed: {}", e))?;
+                    .wrap_err("Kreuzberg extraction failed")?;
 
                 Ok(result.content)
             })

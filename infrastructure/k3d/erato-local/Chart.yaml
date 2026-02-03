@@ -25,5 +25,6 @@ appVersion: "1.16.0"
 
 dependencies:
   - name: seaweedfs
-    version: "4.0.400"
+    version: "4.0.408"
     repository: https://seaweedfs.github.io/seaweedfs/helm
+    condition: seaweedfs.enabled

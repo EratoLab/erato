@@ -2240,6 +2240,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "filetime"
+version = "0.2.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f98844151eee8917efc50bd9e8318cb963ae8b297431495d3f758616ea5c57db"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "libredox",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2936,10 +2947,11 @@ dependencies = [
 
 [[package]]
 name = "html-to-markdown-rs"
-version = "2.23.4"
+version = "2.24.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffbf49450676163bdf69fac2acf72674fcf2d2aaf690aa247368c567cc9afb2a"
+checksum = "fd0940e15a42f085d4a4ed3ac20c8278af7f8d06cd44f6b7a18148e9347c68db"
 dependencies = [
+ "ahash 0.8.12",
  "astral-tl",
  "base64 0.22.1",
  "html-escape",
@@ -3607,9 +3619,9 @@ dependencies = [
 
 [[package]]
 name = "kreuzberg"
-version = "4.2.0"
+version = "4.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a5071d46b207904a48af2d7063561503350fc44f7f34b8928128347d843eb51"
+checksum = "edec5fa170c113d89f41f0e7c654704c5841c6103e19a2eff2fd28b39d9da4f9"
 dependencies = [
  "ahash 0.8.12",
  "async-trait",
@@ -3617,6 +3629,7 @@ dependencies = [
  "base64-simd",
  "biblatex",
  "bitvec",
+ "bytes",
  "calamine",
  "dashmap",
  "dirs",
@@ -3633,6 +3646,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "lopdf",
+ "lzma-rust2",
  "memchr",
  "mime_guess",
  "num_cpus",
@@ -3653,8 +3667,10 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml_ng",
+ "sevenz-rust2",
  "simdutf8",
  "smartcore",
+ "tar",
  "thiserror 2.0.18",
  "tokio",
  "toml 0.9.11+spec-1.1.0",
@@ -7445,6 +7461,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "sevenz-rust2"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65126b94d6f5a6d727b1e35b0a796685a79062ceaf5fa45321315e62b65251a2"
+dependencies = [
+ "aes",
+ "bzip2",
+ "cbc",
+ "crc32fast",
+ "getrandom 0.3.4",
+ "js-sys",
+ "lzma-rust2",
+ "ppmd-rust",
+ "sha2",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8105,6 +8139,17 @@ name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
+
+[[package]]
+name = "tar"
+version = "0.4.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d863878d212c87a19c1a610eb53bb01fe12951c0501cf5a0d65f724914a667a"
+dependencies = [
+ "filetime",
+ "libc",
+ "xattr",
+]
 
 [[package]]
 name = "tempfile"
@@ -9762,6 +9807,16 @@ dependencies = [
  "rusticata-macros",
  "thiserror 1.0.69",
  "time",
+]
+
+[[package]]
+name = "xattr"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af3a19837351dc82ba89f8a125e22a3c475f05aba604acc023d62b2739ae2909"
+dependencies = [
+ "libc",
+ "rustix",
 ]
 
 [[package]]
