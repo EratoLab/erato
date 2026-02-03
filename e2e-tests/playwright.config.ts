@@ -22,6 +22,54 @@ const buildBaseUrl = async () => {
 
 const baseUrl = await buildBaseUrl();
 
+const browsers = [
+  { name: "chromium", device: devices["Desktop Chrome"] },
+  { name: "firefox", device: devices["Desktop Firefox"] },
+];
+
+const standardScenarios = [
+  { name: "basic", storageState: "playwright/.auth/user.json" },
+  { name: "tight-budget", storageState: "playwright/.auth/user.json" },
+  { name: "assistants", storageState: "playwright/.auth/user.json" },
+];
+
+const entraIdScenario = {
+  name: "entra-id",
+  storageState: "playwright/.auth/entra-id.json",
+  setupDependency: "setup-entra-id",
+};
+
+const buildScenarioSetupProjects = (
+  scenarios: Array<{ name: string; storageState: string }>,
+) =>
+  scenarios.map((scenario) => ({
+    name: `setup-${scenario.name}`,
+    testMatch: new RegExp(`${scenario.name}\\.setup\\.ts`),
+    use: {
+      storageState: scenario.storageState,
+    },
+    dependencies: ["setup"],
+  }));
+
+const buildScenarioProjects = ({
+  scenarioName,
+  storageState,
+  setupDependency,
+}: {
+  scenarioName: string;
+  storageState: string;
+  setupDependency: string;
+}) =>
+  browsers.map((browser) => ({
+    name: `${browser.name}-${scenarioName}`,
+    testMatch: new RegExp(`.*\\.${scenarioName}\\.spec\\.ts$`),
+    use: {
+      ...browser.device,
+      storageState,
+    },
+    dependencies: [setupDependency],
+  }));
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -61,30 +109,7 @@ export default defineConfig({
     { name: "setup", testMatch: /\/auth\.setup\.ts/ },
 
     // Scenario setup projects
-    {
-      name: "setup-basic",
-      testMatch: /basic\.setup\.ts/,
-      use: {
-        storageState: "playwright/.auth/user.json",
-      },
-      dependencies: ["setup"],
-    },
-    {
-      name: "setup-tight-budget",
-      testMatch: /tight-budget\.setup\.ts/,
-      use: {
-        storageState: "playwright/.auth/user.json",
-      },
-      dependencies: ["setup"],
-    },
-    {
-      name: "setup-assistants",
-      testMatch: /assistants\.setup\.ts/,
-      use: {
-        storageState: "playwright/.auth/user.json",
-      },
-      dependencies: ["setup"],
-    },
+    ...buildScenarioSetupProjects(standardScenarios),
 
     // Entra ID authentication setup - runs independently using Entra ID credentials
     { name: "setup-entra-id-auth", testMatch: /entra-id\.auth\.setup\.ts/ },
@@ -99,102 +124,18 @@ export default defineConfig({
       dependencies: ["setup-entra-id-auth"],
     },
 
-    // Chromium - Basic scenario tests
-    {
-      name: "chromium-basic",
-      testIgnore: [
-        /.*\.assistants\.spec\.ts$/,
-        /.*\.entra-id\.spec\.ts$/,
-        /.*\.tight-budget\.spec\.ts$/,
-      ],
-      use: {
-        ...devices["Desktop Chrome"],
-        storageState: "playwright/.auth/user.json",
-      },
-      dependencies: ["setup-basic"],
-    },
-
-    // Chromium - Tight-budget scenario tests
-    {
-      name: "chromium-tight-budget",
-      testMatch: /.*\.tight-budget\.spec\.ts$/,
-      use: {
-        ...devices["Desktop Chrome"],
-        storageState: "playwright/.auth/user.json",
-      },
-      dependencies: ["setup-tight-budget"],
-    },
-
-    // Chromium - Assistants scenario tests
-    {
-      name: "chromium-assistants",
-      testMatch: /.*\.assistants\.spec\.ts$/,
-      use: {
-        ...devices["Desktop Chrome"],
-        storageState: "playwright/.auth/user.json",
-      },
-      dependencies: ["setup-assistants"],
-    },
-
-    // Firefox - Basic scenario tests
-    {
-      name: "firefox-basic",
-
-      testIgnore: [
-        /.*\.assistants\.spec\.ts$/,
-        /.*\.entra-id\.spec\.ts$/,
-        /.*\.tight-budget\.spec\.ts$/,
-      ],
-      use: {
-        ...devices["Desktop Firefox"],
-        storageState: "playwright/.auth/user.json",
-      },
-      dependencies: ["setup-basic"],
-    },
-
-    // Firefox - Tight-budget scenario tests
-    {
-      name: "firefox-tight-budget",
-      testMatch: /.*\.tight-budget\.spec\.ts$/,
-      use: {
-        ...devices["Desktop Firefox"],
-        storageState: "playwright/.auth/user.json",
-      },
-      dependencies: ["setup-tight-budget"],
-    },
-
-    // Firefox - Assistants scenario tests
-    {
-      name: "firefox-assistants",
-      testMatch: /.*\.assistants\.spec\.ts$/,
-      use: {
-        ...devices["Desktop Firefox"],
-        storageState: "playwright/.auth/user.json",
-      },
-      dependencies: ["setup-assistants"],
-    },
-
-    // Chromium - Entra ID scenario tests
-    {
-      name: "chromium-entra-id",
-      testMatch: /.*\.entra-id\.spec\.ts$/,
-      use: {
-        ...devices["Desktop Chrome"],
-        storageState: "playwright/.auth/entra-id.json",
-      },
-      dependencies: ["setup-entra-id"],
-    },
-
-    // Firefox - Entra ID scenario tests
-    {
-      name: "firefox-entra-id",
-      testMatch: /.*\.entra-id\.spec\.ts$/,
-      use: {
-        ...devices["Desktop Firefox"],
-        storageState: "playwright/.auth/entra-id.json",
-      },
-      dependencies: ["setup-entra-id"],
-    },
+    ...standardScenarios.flatMap((scenario) =>
+      buildScenarioProjects({
+        scenarioName: scenario.name,
+        storageState: scenario.storageState,
+        setupDependency: `setup-${scenario.name}`,
+      }),
+    ),
+    ...buildScenarioProjects({
+      scenarioName: entraIdScenario.name,
+      storageState: entraIdScenario.storageState,
+      setupDependency: entraIdScenario.setupDependency,
+    }),
 
     // TODO: Currently deactivated, because there are issues with using `0.0.0.0` as host during auth flow
     // {
