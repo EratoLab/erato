@@ -361,6 +361,19 @@ pub struct Message {
     pub content: Option<Value>,
 }
 
+/// Image generation mock configuration
+#[derive(Debug, Clone)]
+pub struct ImageMock {
+    /// Name of the mock for identification
+    pub name: String,
+    /// Description of what this mock does
+    pub description: String,
+    /// Pattern to match in the prompt (case-insensitive substring matching)
+    pub pattern: String,
+    /// Base64 encoded image data to return
+    pub image_base64: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

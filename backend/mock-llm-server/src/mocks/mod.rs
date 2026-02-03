@@ -1,5 +1,6 @@
+use crate::image_data;
 use crate::matcher::{
-    ErrorResponseConfig, MatchRule, MatchRuleLastMessageIsUserWithPattern,
+    ErrorResponseConfig, ImageMock, MatchRule, MatchRuleLastMessageIsUserWithPattern,
     MatchRuleUserMessagePattern, Mock, ResponseConfig, StaticResponseConfig, ToolCallDef,
     ToolCallResponseConfig, ToolCallsResponseConfig,
 };
@@ -293,6 +294,16 @@ pub fn get_default_mocks() -> Vec<Mock> {
     ]
 }
 
+/// Get the default set of configured image mocks
+pub fn get_default_image_mocks() -> Vec<ImageMock> {
+    vec![ImageMock {
+        name: "Cat Image".to_string(),
+        description: "Returns a cat image when prompt contains 'cat'".to_string(),
+        pattern: "cat".to_string(),
+        image_base64: image_data::CAT_IMAGE_BASE64.to_string(),
+    }]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,6 +320,22 @@ mod tests {
             assert!(!mock.name.is_empty());
             assert!(!mock.description.is_empty());
             assert!(!mock.match_rules.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_default_image_mocks_count() {
+        let image_mocks = get_default_image_mocks();
+
+        // Verify we have the expected number of image mocks
+        assert_eq!(image_mocks.len(), 1);
+
+        // Verify all image mocks have names
+        for mock in &image_mocks {
+            assert!(!mock.name.is_empty());
+            assert!(!mock.description.is_empty());
+            assert!(!mock.pattern.is_empty());
+            assert!(!mock.image_base64.is_empty());
         }
     }
 }

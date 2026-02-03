@@ -5,7 +5,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{log, request_id::RequestId, responses::build_image_generation_response};
+use crate::{
+    log, matcher::ImageMock, request_id::RequestId, responses::build_image_generation_response,
+};
 
 /// Request structure for image generation endpoint
 #[derive(Debug, Deserialize)]
@@ -47,6 +49,19 @@ pub struct ImageData {
     pub revised_prompt: String,
 }
 
+/// Match image request against mocks
+fn match_image_mock(prompt: &str, mocks: &[ImageMock]) -> Option<String> {
+    let prompt_lower = prompt.to_lowercase();
+
+    for mock in mocks {
+        if prompt_lower.contains(&mock.pattern.to_lowercase()) {
+            return Some(mock.image_base64.clone());
+        }
+    }
+
+    None
+}
+
 /// Handler for image generation endpoint
 pub async fn generate_images(
     Extension(request_id): Extension<RequestId>,
@@ -77,7 +92,33 @@ pub async fn generate_images(
 
     log::log_response_start(request_id.as_str(), "image generation");
 
-    let response = build_image_generation_response(&image_request.prompt, image_request.n);
+    // Check for matching image mock
+    let image_mocks = crate::mocks::get_default_image_mocks();
+    let response =
+        if let Some(matched_image) = match_image_mock(&image_request.prompt, &image_mocks) {
+            log::log_with_id(
+                request_id.as_str(),
+                &format!("Matched image mock for prompt: {}", image_request.prompt),
+            );
+
+            // Build response with the matched image
+            serde_json::json!({
+                "created": 1234567890u64,
+                "data": vec![
+                    serde_json::json!({
+                        "b64_json": matched_image,
+                        "revised_prompt": image_request.prompt
+                    });
+                    image_request.n
+                ]
+            })
+        } else {
+            log::log_with_id(
+                request_id.as_str(),
+                "No image mock matched, using default response",
+            );
+            build_image_generation_response(&image_request.prompt, image_request.n)
+        };
 
     log::log_response_complete(request_id.as_str());
 
