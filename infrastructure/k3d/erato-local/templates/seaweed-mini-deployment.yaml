@@ -1,0 +1,59 @@
+{{- if .Values.seaweedMini.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "erato-local.fullname" . }}-seaweed-mini
+  labels:
+    app.kubernetes.io/name: seaweed-mini
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: seaweed-mini
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: seaweed-mini
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: seaweed-mini
+          image: "{{ .Values.seaweedMini.image.repository }}:{{ .Values.seaweedMini.image.tag }}"
+          imagePullPolicy: {{ .Values.seaweedMini.image.pullPolicy }}
+          args:
+            - mini
+            - -dir=/data
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              value: admin
+            - name: AWS_SECRET_ACCESS_KEY
+              value: admin
+          ports:
+            - name: master
+              containerPort: {{ .Values.seaweedMini.ports.master }}
+            - name: master-grpc
+              containerPort: {{ .Values.seaweedMini.ports.masterGrpc }}
+            - name: filer
+              containerPort: {{ .Values.seaweedMini.ports.filer }}
+            - name: s3
+              containerPort: {{ .Values.seaweedMini.ports.s3 }}
+            - name: filer-grpc
+              containerPort: {{ .Values.seaweedMini.ports.filerGrpc }}
+            - name: volume-grpc
+              containerPort: {{ .Values.seaweedMini.ports.volumeGrpc }}
+          volumeMounts:
+            - name: seaweed-data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.seaweedMini.resources | nindent 12 }}
+      volumes:
+        - name: seaweed-data
+          {{- if eq .Values.seaweedMini.storage.type "emptyDir" }}
+          emptyDir: {}
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ include "erato-local.fullname" . }}-seaweed-mini
+          {{- end }}
+{{- end }}

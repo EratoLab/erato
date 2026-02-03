@@ -1,0 +1,18 @@
+{{- if .Values.seaweedMini.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.seaweedMini.serviceName }}
+  labels:
+    app.kubernetes.io/name: seaweed-mini
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: seaweed-mini
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: s3
+      port: {{ .Values.seaweedMini.ports.s3 }}
+      targetPort: s3
+{{- end }}
