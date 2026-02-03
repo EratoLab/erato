@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Controls/Button";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { EditIcon } from "@/components/ui/icons";
+import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 
 import type { AssistantWithFiles } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -41,6 +42,8 @@ export function AssistantWelcomeScreen({
   className = "",
 }: AssistantWelcomeScreenProps) {
   const navigate = useNavigate();
+  const { textAlignment, flexAlignment, justifyAlignment } =
+    usePageAlignment("headers");
 
   const handleChatSelect = (chatId: string) => {
     navigate(getChatUrl(chatId, assistant.id));
@@ -52,27 +55,31 @@ export function AssistantWelcomeScreen({
 
   return (
     <div
-      className={`flex flex-col items-center justify-center p-12 text-center ${className}`}
+      className={`flex flex-col ${flexAlignment} ${justifyAlignment} p-12 ${className}`}
     >
       {/* Assistant Icon/Badge */}
-      <div className="mb-6 flex size-20 items-center justify-center rounded-full bg-theme-bg-accent">
-        <EditIcon className="size-10 text-theme-fg-secondary" />
+      <div className={`mb-6 flex ${justifyAlignment}`}>
+        <div className="flex size-20 items-center justify-center rounded-full bg-theme-bg-accent">
+          <EditIcon className="size-10 text-theme-fg-secondary" />
+        </div>
       </div>
 
       {/* Assistant Name */}
-      <h1 className="mb-2 text-2xl font-bold text-theme-fg-primary">
+      <h1
+        className={`mb-2 text-2xl font-bold text-theme-fg-primary ${textAlignment}`}
+      >
         {assistant.name}
       </h1>
 
       {/* Assistant Description */}
       {assistant.description && (
-        <p className="mb-6 max-w-2xl text-lg text-theme-fg-secondary">
+        <p className={`mb-6 text-lg text-theme-fg-secondary ${textAlignment}`}>
           {assistant.description}
         </p>
       )}
 
       {/* Assistant Details */}
-      <div className="mb-8 w-full max-w-2xl rounded-lg border border-theme-border bg-theme-bg-primary p-6 text-left">
+      <div className="mb-8 w-full rounded-lg border border-theme-border bg-theme-bg-primary p-6 text-left">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-theme-fg-muted">
           {t`Configuration`}
         </h2>
@@ -126,8 +133,10 @@ export function AssistantWelcomeScreen({
 
       {/* Past Conversations Section */}
       {!isLoadingChats && pastChats.length > 0 && (
-        <div className="w-full max-w-2xl">
-          <h2 className="mb-4 text-left text-lg font-semibold text-theme-fg-primary">
+        <div className="w-full">
+          <h2
+            className={`mb-4 text-lg font-semibold text-theme-fg-primary ${textAlignment}`}
+          >
             {t`Your conversations with this assistant`}
           </h2>
           <div className="space-y-2">
@@ -157,7 +166,7 @@ export function AssistantWelcomeScreen({
           </div>
 
           {pastChats.length > 5 && (
-            <p className="mt-4 text-sm text-theme-fg-muted">
+            <p className={`mt-4 text-sm text-theme-fg-muted ${textAlignment}`}>
               {t`And`} {pastChats.length - 5} {t`more conversations...`}
             </p>
           )}
@@ -166,15 +175,15 @@ export function AssistantWelcomeScreen({
 
       {/* Loading State */}
       {isLoadingChats && (
-        <div className="w-full max-w-2xl">
-          <div className="flex justify-center py-4">
+        <div className="w-full">
+          <div className={`flex ${justifyAlignment} py-4`}>
             <div className="size-6 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
           </div>
         </div>
       )}
 
       {/* Start New Conversation Hint */}
-      <div className="mt-8 text-theme-fg-muted">
+      <div className={`mt-8 text-theme-fg-muted ${textAlignment}`}>
         <p className="text-sm">{t`Start typing below to begin a new conversation`}</p>
       </div>
     </div>

@@ -280,6 +280,130 @@ When creating custom icons:
 }
 ```
 
+## Page Layout Configuration
+
+Control the horizontal alignment and maximum width of page content through your theme configuration. This applies to Assistant pages (list, create, edit) and the Search page.
+
+### Configuration
+
+Add a `layout` section to your `theme.json`:
+
+```json
+{
+  "name": "My Company Theme",
+  "theme": { ... },
+  "layout": {
+    "pages": {
+      "assistants": {
+        "alignment": "center",
+        "maxWidth": "4xl"
+      },
+      "search": {
+        "alignment": "center",
+        "maxWidth": "4xl"
+      },
+      "headers": {
+        "alignment": "center",
+        "maxWidth": "2xl"
+      }
+    }
+  }
+}
+```
+
+### Alignment Options
+
+| Value      | Description                                       |
+| ---------- | ------------------------------------------------- |
+| `"left"`   | Content aligns to the left of the available space |
+| `"center"` | Content centers horizontally (default)            |
+| `"right"`  | Content aligns to the right of the available space |
+
+### Max Width Options
+
+| Value    | Pixel Width | Description                           |
+| -------- | ----------- | ------------------------------------- |
+| `"2xl"`  | 672px       | Narrow width (default for headers)    |
+| `"4xl"`  | 896px       | Standard width (default for pages)    |
+| `"6xl"`  | 1152px      | Wide width                            |
+| `"full"` | 100%        | Full available width (minus padding)  |
+
+### Page Types
+
+| Page Type    | Controls                                      |
+| ------------ | --------------------------------------------- |
+| `assistants` | Assistant list, create, and edit pages        |
+| `search`     | Search page results                           |
+| `headers`    | Page header sections (titles and subtitles)   |
+
+### Examples
+
+**Left-aligned with wide content:**
+
+```json
+{
+  "layout": {
+    "pages": {
+      "assistants": {
+        "alignment": "left",
+        "maxWidth": "6xl"
+      },
+      "search": {
+        "alignment": "left",
+        "maxWidth": "6xl"
+      },
+      "headers": {
+        "alignment": "left",
+        "maxWidth": "4xl"
+      }
+    }
+  }
+}
+```
+
+**Full-width layout:**
+
+```json
+{
+  "layout": {
+    "pages": {
+      "assistants": {
+        "alignment": "center",
+        "maxWidth": "full"
+      }
+    }
+  }
+}
+```
+
+**Mixed configuration:**
+
+```json
+{
+  "layout": {
+    "pages": {
+      "assistants": {
+        "alignment": "left",
+        "maxWidth": "6xl"
+      },
+      "search": {
+        "alignment": "center",
+        "maxWidth": "4xl"
+      }
+    }
+  }
+}
+```
+
+### Default Behavior
+
+If no `layout` configuration is provided, the system uses these defaults:
+- **Alignment:** `center`
+- **Headers max-width:** `2xl` (672px)
+- **Pages max-width:** `4xl` (896px)
+
+This ensures backward compatibility with existing themes.
+
 ## Custom Assistant Avatar
 
 You can customize the assistant's profile picture by adding an `assistant-avatar.svg` (or other image format) to your theme directory.

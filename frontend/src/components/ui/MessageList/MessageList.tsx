@@ -479,7 +479,7 @@ export const MessageList = memo<MessageListProps>(
         data-testid="message-list"
       >
         {renderMessageListHeader}
-        <div className={clsx("mx-auto w-full sm:w-5/6 md:w-4/5")}>
+        <div className={clsx("mx-auto w-full max-w-4xl")}>
           {showEmptyState && emptyStateComponent ? (
             <div className="flex h-full min-h-[300px] items-center justify-center">
               {emptyStateComponent}

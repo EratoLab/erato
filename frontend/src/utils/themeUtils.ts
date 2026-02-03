@@ -2,6 +2,36 @@
 import type { Theme } from "@/config/theme";
 
 /**
+ * Page alignment options
+ */
+export type PageAlignment = "left" | "center" | "right";
+
+/**
+ * Page max-width options (maps to Tailwind max-w-* classes)
+ */
+export type PageMaxWidth = "2xl" | "4xl" | "6xl" | "full";
+
+/**
+ * Layout configuration for pages
+ */
+export interface LayoutConfig {
+  pages?: {
+    assistants?: {
+      alignment?: PageAlignment;
+      maxWidth?: PageMaxWidth;
+    };
+    search?: {
+      alignment?: PageAlignment;
+      maxWidth?: PageMaxWidth;
+    };
+    headers?: {
+      alignment?: PageAlignment;
+      maxWidth?: PageMaxWidth;
+    };
+  };
+}
+
+/**
  * Custom theme configuration interface
  */
 export interface CustomThemeConfig {
@@ -26,6 +56,7 @@ export interface CustomThemeConfig {
     actions?: Record<string, string>;
     navigation?: Record<string, string>;
   };
+  layout?: LayoutConfig;
 }
 
 /**

@@ -25,6 +25,7 @@ type ThemeContextType = {
   setThemeMode: (mode: ThemeMode) => void;
   isCustomTheme: boolean;
   customThemeName?: string;
+  customThemeConfig?: CustomThemeConfig | null;
   effectiveTheme: "light" | "dark"; // The actual theme being applied (for UI indicators)
   iconMappings?: {
     fileTypes?: Record<string, string>;
@@ -382,6 +383,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setThemeMode: toggleTheme,
     isCustomTheme,
     customThemeName: customThemeConfig?.name,
+    customThemeConfig,
     effectiveTheme,
     iconMappings,
   };

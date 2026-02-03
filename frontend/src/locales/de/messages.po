@@ -195,6 +195,11 @@ msgid "chat.file.preview.aria"
 msgstr "Angehängte Datei anzeigen:"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "chat.history.recent"
+msgstr "Kürzlich"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.aria"
 msgstr "Nachricht"
@@ -574,6 +579,11 @@ msgstr "Zur Startseite"
 #. js-lingui-explicit-id
 #: src/pages/NewChatPage.tsx
 msgid "navigation.page.new_chat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/SearchPage.tsx
+msgid "search.page.subtitle"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -976,6 +986,10 @@ msgid "Close modal overlay"
 msgstr "Dialog-Overlay schließen"
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "Collapse {title}"
+msgstr ""
+
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "collapse sidebar"
 msgstr "Seitenleiste einklappen"
 
@@ -1115,6 +1129,10 @@ msgstr "Fehlerausgabe"
 #: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Error:"
 msgstr "Fehler:"
+
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "Expand {title}"
+msgstr ""
 
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Expand by default"
@@ -1306,6 +1324,10 @@ msgstr "Vorschau von"
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Preview:"
 msgstr "Vorschau:"
+
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+#~ msgid "Recent"
+#~ msgstr ""
 
 #: src/pages/SearchPage.tsx
 msgid "Recent Chats"

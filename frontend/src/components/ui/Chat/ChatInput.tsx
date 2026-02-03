@@ -392,7 +392,7 @@ export const ChatInput = ({
 
   return (
     <form
-      className={clsx("mx-auto mb-4 w-full sm:w-5/6 md:w-4/5", className)}
+      className={clsx("mx-auto mb-4 w-full max-w-4xl", className)}
       onSubmit={handleSubmit}
     >
       {/* Token usage warnings */}
