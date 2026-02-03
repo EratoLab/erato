@@ -5,8 +5,8 @@ fetch_json_schema:
     mkdir -p ./tests_schema
     curl https://raw.githubusercontent.com/helm-unittest/helm-unittest/refs/tags/v1.0.1/schema/helm-testsuite.json --output ./tests_schema/helm-testsuite.json
 
-# Run all tests (unit tests + linting)
-test: validate_schema unittest lint
+# Run all tests (unit tests + linting + docs check)
+test: validate_schema unittest lint docs_check
 
 # Run helm unit tests
 unittest:
@@ -22,3 +22,11 @@ validate_schema:
 # Install/update chart dependencies
 deps:
     helm dependency update
+
+# Generate README.md from values.yaml and README.md.gotmpl using helm-docs
+docs:
+    helm-docs .
+
+# Check if README.md is up-to-date with values.yaml (for CI)
+docs_check:
+    ./check-docs.sh
