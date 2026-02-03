@@ -5,3 +5,11 @@
 
 [frontend.additional_environment]
 K3D_TEST_SCENARIO = "entra_id"
+
+[experimental_assistants]
+# Whether to enable the experimental assistants feature in the frontend (default: false)
+enabled = true
+
+[integrations.experimental_entra_id]
+enabled = true
+auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)
