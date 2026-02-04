@@ -19,7 +19,7 @@ testScenarioConfig:
 # These are created by running: ../../scripts/setup-e2e-secrets apply
 scenarioSecretsConfig:
   enabled: false  # Enabled automatically by setup-dev when .auto.toml files exist
-  scenario: "basic"  # Which scenario secret to mount (basic, tight-budget, assistants)
+  scenario: "basic"  # Which scenario secret to mount (basic, tight-budget, assistants, many-models)
 
 erato:
   commonAnnotations:
@@ -61,6 +61,7 @@ erato:
 
       # Hostname of the app. Structure <release_name>-erato-app
       upstreams = ["http://erato-local-erato-app:3130"]
+      scope="openid profile email offline_access"
       email_domains = ["*"]
       cookie_secret = "0123456789abcdef0123456789abcdef"  # Replace in production
       cookie_secure = false

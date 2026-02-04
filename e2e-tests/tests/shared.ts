@@ -518,11 +518,16 @@ export async function getScenarioData(
  * If in k3d but wrong scenario, switches to the required scenario.
  *
  * @param page - The Playwright page object (used to get browser context)
- * @param requiredScenario - The scenario that this test requires ('basic', 'tight-budget', 'assistants', or 'entra_id')
+ * @param requiredScenario - The scenario that this test requires ('basic', 'tight-budget', 'assistants', 'many-models', or 'entra_id')
  */
 export async function ensureTestScenario(
   page: Page,
-  requiredScenario: "basic" | "tight-budget" | "assistants" | "entra_id",
+  requiredScenario:
+    | "basic"
+    | "tight-budget"
+    | "assistants"
+    | "many-models"
+    | "entra_id",
 ): Promise<void> {
   await test.step(`Ensure test scenario: ${requiredScenario}`, async () => {
     // Create a new page for scenario detection/switching, independent of current page state

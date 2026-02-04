@@ -22,6 +22,12 @@ Configures budget tracking with an extremely low budget limit and artificially h
 
 Enables the experimental assistants feature. This allows testing assistant creation, management, and usage workflows including file attachments and assistant-specific chat contexts.
 
+### `many-models` - Model Selector Testing
+
+**Configuration File:** `config/erato.scenario-many-models.toml`
+
+Configures a large set of chat models to validate model selector behavior (menu size, scrolling, selection) in the UI.
+
 ## Scenario Infrastructure
 
 ### Directory Structure
@@ -32,7 +38,8 @@ infrastructure/k3d/erato-local/
 │   ├── erato.toml                          # Base configuration
 │   ├── erato.scenario-basic.toml           # Basic scenario config
 │   ├── erato.scenario-tight-budget.toml    # Tight-budget scenario config
-│   └── erato.scenario-assistants.toml      # Assistants scenario config
+│   ├── erato.scenario-assistants.toml      # Assistants scenario config
+│   └── erato.scenario-many-models.toml     # Many-models scenario config
 ├── templates/
 │   └── erato-test-scenario-configmap.yaml  # Mounts scenario TOML as ConfigMap
 ├── Chart.yaml
@@ -48,7 +55,7 @@ Scenarios can be switched using the `switch-test-scenario` script:
 infrastructure/scripts/switch-test-scenario --scenario <scenario-name>
 ```
 
-Valid scenario names: `basic`, `tight-budget`, `assistants`
+Valid scenario names: `basic`, `tight-budget`, `assistants`, `many-models`
 
 The script:
 1. Validates the scenario name
@@ -64,10 +71,12 @@ The test setup files handle scenario switching:
 - `tests/basic.setup.ts` - Switches to basic scenario
 - `tests/tight-budget.setup.ts` - Switches to tight-budget scenario
 - `tests/assistants.setup.ts` - Switches to assistants scenario
+- `tests/many-models.setup.ts` - Switches to many-models scenario
 
 Tests are organized by scenario using Playwright project dependencies:
 - Tests matching `*.tight-budget.spec.ts` depend on `setup-tight-budget`
 - Tests matching `*.assistants.spec.ts` depend on `setup-assistants`
+- Tests matching `*.many-models.spec.ts` depend on `setup-many-models`
 - All other tests depend on `setup-basic`
 
 ## Adding a New Scenario

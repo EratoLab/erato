@@ -321,6 +321,8 @@ jobs:
             projects: "--project chromium-tight-budget --project firefox-tight-budget"
           - scenario: assistants
             projects: "--project chromium-assistants --project firefox-assistants"
+          - scenario: many-models
+            projects: "--project chromium-many-models --project firefox-many-models"
           - scenario: entra_id
             projects: "--project chromium-entra-id --project firefox-entra-id"
     permissions:
