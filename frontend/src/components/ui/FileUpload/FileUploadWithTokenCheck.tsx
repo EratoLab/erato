@@ -42,6 +42,8 @@ interface FileUploadWithTokenCheckProps {
   message: string;
   /** Current chat ID */
   chatId?: string | null;
+  /** Optional assistant ID to associate with a silently created chat */
+  assistantId?: string;
   /** Previous message ID */
   previousMessageId?: string | null;
   /** Callback when files are successfully uploaded */
@@ -75,6 +77,7 @@ export const FileUploadWithTokenCheck: React.FC<
 > = ({
   message,
   chatId,
+  assistantId,
   previousMessageId,
   onFilesUploaded,
   onTokenLimitExceeded,
@@ -117,6 +120,7 @@ export const FileUploadWithTokenCheck: React.FC<
   } = useFileUploadWithTokenCheck({
     message,
     chatId,
+    assistantId,
     previousMessageId,
     onFilesUploaded,
     acceptedFileTypes,
@@ -198,7 +202,7 @@ export const FileUploadWithTokenCheck: React.FC<
           // If no chatId exists, create one silently first
           if (!linkChatId) {
             const createChatResult = await createChatMutation.mutateAsync({
-              body: {},
+              body: assistantId ? { assistant_id: assistantId } : {},
             });
             linkChatId = createChatResult.chat_id;
             // Set the silentChatId in the store
@@ -251,6 +255,7 @@ export const FileUploadWithTokenCheck: React.FC<
       selectedCloudProvider,
       onFilesUploaded,
       chatId,
+      assistantId,
       createChatMutation,
       setSilentChatId,
     ],

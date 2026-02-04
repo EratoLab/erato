@@ -23,6 +23,8 @@ interface UseFileUploadWithTokenCheckOptions {
   message: string;
   /** Current chat ID */
   chatId?: string | null;
+  /** Optional assistant ID to associate with a silently created chat */
+  assistantId?: string;
   /** Previous message ID */
   previousMessageId?: string | null;
   /** Callback when files are successfully uploaded */
@@ -62,6 +64,7 @@ interface UseFileUploadWithTokenCheckResult {
 export function useFileUploadWithTokenCheck({
   message,
   chatId,
+  assistantId,
   previousMessageId,
   onFilesUploaded,
   acceptedFileTypes = [],
@@ -86,6 +89,7 @@ export function useFileUploadWithTokenCheck({
     disabled,
     onFilesUploaded,
     chatId,
+    assistantId,
   });
 
   // Use the token usage estimation hook

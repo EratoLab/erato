@@ -508,6 +508,7 @@ export const Chat = ({
             onFilePreview={openPreviewModal}
             handleFileAttachments={handleFileAttachments}
             chatId={currentChatId}
+            assistantId={assistantId}
             className="p-2 sm:p-4"
             isLoading={chatLoading}
             showControls

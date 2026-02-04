@@ -77,6 +77,8 @@ interface ChatInputProps {
   onFilePreview?: (file: FileUploadItem) => void;
   // Add prop for current chat ID
   chatId?: string | null;
+  // Optional assistant ID for silent chat creation during uploads
+  assistantId?: string;
   // Add prop for previous message ID
   previousMessageId?: string | null;
   // Control whether the input is editing an existing message or composing a new one
@@ -114,6 +116,7 @@ export const ChatInput = ({
   // Destructure the new props
   onFilePreview,
   chatId,
+  assistantId,
   previousMessageId,
   mode = "compose",
   editMessageId,
@@ -168,6 +171,7 @@ export const ChatInput = ({
       disabled,
       onFilesUploaded: handleFileAttachments,
       chatId: chatId,
+      assistantId,
     },
   );
 
@@ -487,6 +491,7 @@ export const ChatInput = ({
                   <FileUploadWithTokenCheck
                     message={message}
                     chatId={chatId}
+                    assistantId={assistantId}
                     previousMessageId={previousMessageId}
                     onFilesUploaded={handleFilesUploaded}
                     onTokenLimitExceeded={handleFileTokenLimitExceeded}

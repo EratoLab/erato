@@ -43,6 +43,8 @@ interface UseFileDropzoneProps {
   onFilesUploaded?: (files: FileUploadItem[]) => void;
   /** Existing chat ID to use for uploads, if any */
   chatId?: string | null;
+  /** Optional assistant ID to associate with a silently created chat */
+  assistantId?: string;
   /** Called when a chat is silently created for file uploads */
   onSilentChatCreated?: (newChatId: string) => void;
 }
@@ -82,6 +84,7 @@ export function useFileDropzone({
   disabled = false,
   onFilesUploaded,
   chatId = null,
+  assistantId,
   // onSilentChatCreated,
 }: UseFileDropzoneProps): UseFileDropzoneResult {
   // Check if upload feature is enabled
@@ -177,7 +180,7 @@ export function useFileDropzone({
         if (!uploadChatId) {
           logger.log("Creating silent chat for file uploads");
           const createChatResult = await createChatMutation.mutateAsync({
-            body: {},
+            body: assistantId ? { assistant_id: assistantId } : {},
           });
           logger.log("Silent chat creation result:", createChatResult);
           uploadChatId = createChatResult.chat_id;
@@ -253,6 +256,7 @@ export function useFileDropzone({
       multiple,
       maxFiles,
       chatId,
+      assistantId,
       // onSilentChatCreated,
       addFiles,
       onFilesUploaded,
