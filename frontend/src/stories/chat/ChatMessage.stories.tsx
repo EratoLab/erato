@@ -121,3 +121,23 @@ The hover effect is now properly aligned with the theme's color scale, providing
     },
   },
 };
+
+const imageMessage = ChatMessageFactory.createBotMessage({
+  content: [
+    {
+      content_type: "text",
+      text: "Here's the image you requested. To view with advisory, switch to the `en_tooltip` locale in Storybook",
+    },
+    {
+      content_type: "image",
+      base64_data:
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==",
+    },
+  ],
+});
+
+export const ImageAdvisoryWithoutTranslation: Story = {
+  args: {
+    message: imageMessage,
+  },
+};

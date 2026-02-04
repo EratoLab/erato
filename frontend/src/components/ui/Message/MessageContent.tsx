@@ -9,6 +9,7 @@ import {
 import remarkGfm from "remark-gfm";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
+import { useOptionalTranslation } from "@/hooks/i18n";
 import { parseContent } from "@/utils/adapters/contentPartAdapter";
 
 import { ImageContentDisplay } from "./ImageContentDisplay";
@@ -52,6 +53,7 @@ export const MessageContent = memo(function MessageContent({
 }: MessageContentProps) {
   const { effectiveTheme } = useTheme();
   const isDarkMode = effectiveTheme === "dark";
+  const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
 
   // Parse content efficiently in a single pass
   const { text: textContent, images } = parseContent(content);
@@ -386,7 +388,12 @@ export const MessageContent = memo(function MessageContent({
 
       {/* Render images */}
       {images.length > 0 && (
-        <ImageContentDisplay images={images} onImageClick={onImageClick} />
+        <>
+          <ImageContentDisplay images={images} onImageClick={onImageClick} />
+          {imageAdvisory && (
+            <p className="mt-2 text-xs text-theme-fg-muted">{imageAdvisory}</p>
+          )}
+        </>
       )}
     </article>
   );
