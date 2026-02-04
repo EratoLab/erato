@@ -97,7 +97,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
       ref={triggerRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className="relative inline-block"
+      className="relative inline-flex"
     >
       {/* Clone the child element */}
       {React.cloneElement(children)}
