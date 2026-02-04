@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 
 import { Chat } from "@/components/ui/Chat/Chat";
@@ -10,6 +10,15 @@ import { createLogger } from "@/utils/debugLogger";
 import type { MessageAction } from "@/types/message-controls";
 
 const logger = createLogger("UI", "ChatPageStructure");
+
+// Memoize static objects to prevent re-renders
+const CONTROLS_CONTEXT = {
+  currentUserId: "user1",
+  dialogOwnerId: "user1",
+  isSharedDialog: false,
+} as const;
+
+const EMPTY_STATE = <WelcomeScreen />;
 
 // This component contains the actual UI and logic that uses chat context
 export default function ChatPageStructure({
@@ -39,6 +48,38 @@ export default function ChatPageStructure({
   const displayMessages = contextMessages;
   const displayMessageOrder = contextMessageOrder;
 
+  // Memoize the message action handler to prevent re-creating it on every render
+  const handleMessageAction = useCallback(
+    async (action: MessageAction) => {
+      logger.log("Handling message action in ChatPageStructure:", action);
+      if (action.type === "copy") {
+        const messageToCopy = displayMessages[action.messageId];
+        const textContent = extractTextFromContent(messageToCopy.content);
+        if (textContent) {
+          try {
+            await navigator.clipboard.writeText(textContent);
+            if (typeof navigator.vibrate === "function") {
+              navigator.vibrate(50);
+            }
+            return true;
+          } catch (err) {
+            console.error("Failed to copy message content:", err);
+            return false;
+          }
+        } else {
+          console.warn(
+            "Could not find message content to copy for id:",
+            action.messageId,
+          );
+          return false;
+        }
+      }
+      logger.log(`Unhandled message action type: ${action.type}`);
+      return false;
+    },
+    [displayMessages],
+  );
+
   logger.log(
     `ChatPageStructure render. Path: ${pathname}, currentChatId: ${currentChatId ?? "null"}`,
   );
@@ -49,44 +90,14 @@ export default function ChatPageStructure({
         key={mountKey}
         messages={displayMessages}
         messageOrder={displayMessageOrder}
-        controlsContext={{
-          currentUserId: "user1",
-          dialogOwnerId: "user1",
-          isSharedDialog: false,
-        }}
+        controlsContext={CONTROLS_CONTEXT}
         className="h-full"
         showAvatars={true}
         showTimestamps={true}
         layout="default"
         maxWidth={768}
-        emptyStateComponent={<WelcomeScreen />}
-        onMessageAction={async (action: MessageAction) => {
-          logger.log("Handling message action in ChatPageStructure:", action);
-          if (action.type === "copy") {
-            const messageToCopy = displayMessages[action.messageId];
-            const textContent = extractTextFromContent(messageToCopy.content);
-            if (textContent) {
-              try {
-                await navigator.clipboard.writeText(textContent);
-                if (typeof navigator.vibrate === "function") {
-                  navigator.vibrate(50);
-                }
-                return true;
-              } catch (err) {
-                console.error("Failed to copy message content:", err);
-                return false;
-              }
-            } else {
-              console.warn(
-                "Could not find message content to copy for id:",
-                action.messageId,
-              );
-              return false;
-            }
-          }
-          logger.log(`Unhandled message action type: ${action.type}`);
-          return false;
-        }}
+        emptyStateComponent={EMPTY_STATE}
+        onMessageAction={handleMessageAction}
       />
       {/* Page specific content (new/page.tsx or [id]/page.tsx) will be minimal and rendered invisibly if not needed */}
       <div style={{ display: "none" }}>{children}</div>

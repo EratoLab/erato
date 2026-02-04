@@ -1,7 +1,14 @@
 /* eslint-disable lingui/no-unlocalized-strings */
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { ThemeApplier } from "@/components/ui/ThemeApplier";
 import { defaultTheme, darkTheme } from "@/config/theme";
@@ -372,21 +379,34 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     }
   }, [theme]);
 
-  const toggleTheme = (mode: ThemeMode) => {
+  // Memoize the toggle function to prevent re-creating it on every render
+  const toggleTheme = useCallback((mode: ThemeMode) => {
     localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, mode);
     setThemeMode(mode);
-  };
+  }, []);
 
-  const contextValue: ThemeContextType = {
-    theme,
-    themeMode,
-    setThemeMode: toggleTheme,
-    isCustomTheme,
-    customThemeName: customThemeConfig?.name,
-    customThemeConfig,
-    effectiveTheme,
-    iconMappings,
-  };
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  const contextValue: ThemeContextType = useMemo(
+    () => ({
+      theme,
+      themeMode,
+      setThemeMode: toggleTheme,
+      isCustomTheme,
+      customThemeName: customThemeConfig?.name,
+      customThemeConfig,
+      effectiveTheme,
+      iconMappings,
+    }),
+    [
+      theme,
+      themeMode,
+      toggleTheme,
+      isCustomTheme,
+      customThemeConfig,
+      effectiveTheme,
+      iconMappings,
+    ],
+  );
 
   return (
     <ThemeContext.Provider value={contextValue}>

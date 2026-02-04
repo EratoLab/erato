@@ -1,4 +1,30 @@
-pnpm-lock.yaml
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+/out
+/build
+/.next
+
+# Generated files
+src/locales/**/*.ts
+src/locales/**/*.json
 src/lib/generated
-src/locales
+public/custom-theme/**/locales/**/*.ts
+public/custom-theme/**/locales/**/*.json
+
+# Coverage
+coverage
+
+# Misc
+*.log
+.DS_Store
+.env
+.env.local
+
+# Storybook
+storybook-static
+
+# PNPM store
 .pnpm-store
