@@ -1,0 +1,5 @@
+# Many models test scenario - provides a large model list for selector testing
+# This scenario is used to test model selector behavior with many models
+
+[frontend.additional_environment]
+K3D_TEST_SCENARIO = "many-models"

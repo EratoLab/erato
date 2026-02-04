@@ -3,7 +3,14 @@
 from typing import List
 
 # Valid scenario names
-VALID_SCENARIOS = ["basic", "tight-budget", "assistants", "entra_id", "nginx-auth"]
+VALID_SCENARIOS = [
+    "basic",
+    "tight-budget",
+    "assistants",
+    "entra_id",
+    "many-models",
+    "nginx-auth",
+]
 
 
 def get_scenario_source_file(scenario: str) -> str:
@@ -47,4 +54,3 @@ def get_helm_scenario_args(scenario: str) -> List[str]:
     
     source_file = get_scenario_source_file(scenario)
     return ["--set", f"testScenarioConfig.sourceFile={source_file}"]
-

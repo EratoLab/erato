@@ -31,6 +31,7 @@ const standardScenarios = [
   { name: "basic", storageState: "playwright/.auth/user.json" },
   { name: "tight-budget", storageState: "playwright/.auth/user.json" },
   { name: "assistants", storageState: "playwright/.auth/user.json" },
+  { name: "many-models", storageState: "playwright/.auth/user.json" },
 ];
 
 const entraIdScenario = {
