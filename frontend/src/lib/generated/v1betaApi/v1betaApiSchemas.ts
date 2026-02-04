@@ -397,7 +397,7 @@ export type CreateChatRequest = {
   /**
    * Optional assistant ID to base this chat on
    */
-  assistant_id?: null | undefined;
+  assistant_id?: string;
 };
 
 /**
@@ -531,7 +531,7 @@ export type EditMessageRequest = {
    *
    * @example primary
    */
-  chat_provider_id?: null | undefined;
+  chat_provider_id?: string;
   /**
    * The ID of the message that should be edited with a new response. It will be considered a sibling message to the new message.
    *
@@ -848,13 +848,13 @@ export type MessageSubmitRequest = {
    * @format uuid
    * @example 00000000-0000-0000-0000-000000000000
    */
-  assistant_id?: null | undefined;
+  assistant_id?: string;
   /**
    * The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
    *
    * @example primary
    */
-  chat_provider_id?: null | undefined;
+  chat_provider_id?: string;
   /**
    * The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
    * This is useful for scenarios where you have created a chat first (e.g. for file uploads) before sending the first message.
@@ -1193,7 +1193,7 @@ export type RegenerateMessageRequest = {
    *
    * @example primary
    */
-  chat_provider_id?: null | undefined;
+  chat_provider_id?: string;
   /**
    * The ID of the message that should have a replacement response generated.
    *
@@ -1327,7 +1327,7 @@ export type TokenUsageRequest = {
    *
    * @example gpt-4o
    */
-  chat_provider_id?: null | undefined;
+  chat_provider_id?: string;
   /**
    * The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.
    *

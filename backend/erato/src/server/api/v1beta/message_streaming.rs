@@ -227,10 +227,12 @@ pub struct MessageSubmitRequest {
     input_files_ids: Vec<Uuid>,
     #[schema(example = "primary")]
     /// The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
+    #[schema(nullable = false)]
     chat_provider_id: Option<String>,
     #[schema(example = "00000000-0000-0000-0000-000000000000")]
     /// Optional assistant ID to associate with the chat when creating a new chat.
     /// If provided with an existing_chat_id, this field is ignored.
+    #[schema(nullable = false)]
     assistant_id: Option<Uuid>,
     /// IDs of facets selected by the user for this generation.
     #[serde(default)]
@@ -591,6 +593,7 @@ pub struct RegenerateMessageRequest {
     current_message_id: Uuid,
     #[schema(example = "primary")]
     /// The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
+    #[schema(nullable = false)]
     chat_provider_id: Option<String>,
     /// IDs of facets selected by the user for this generation.
     #[serde(default)]
@@ -699,6 +702,7 @@ pub struct EditMessageRequest {
     replace_input_files_ids: Vec<Uuid>,
     #[schema(example = "primary")]
     /// The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
+    #[schema(nullable = false)]
     chat_provider_id: Option<String>,
     /// IDs of facets selected by the user for this generation.
     #[serde(default)]
