@@ -20,6 +20,8 @@ use eyre::Report;
 use sea_orm::prelude::Uuid;
 use std::collections::HashMap;
 
+const DEFAULT_FACET_PROMPT_TEMPLATE: &str = "The user has requested the use of the \"{{facet_display_name}}\" feature.\n\nPrioritize the use of the following tools:\n{{facet_tools_list}}";
+
 /// Phase 1: Build the abstract sequence of chat messages.
 /// This phase determines the logical structure and ordering without performing any I/O.
 ///
@@ -131,13 +133,15 @@ pub async fn build_abstract_sequence(
             continue;
         };
 
-        if let Some(template) = &experimental_facets.facet_prompt_template
-            && !template.is_empty()
-            && !facet.disable_facet_prompt_template
-        {
+        let template = experimental_facets
+            .facet_prompt_template
+            .as_deref()
+            .unwrap_or(DEFAULT_FACET_PROMPT_TEMPLATE);
+
+        if !template.is_empty() && !facet.disable_facet_prompt_template {
             sequence.push(AbstractChatSequencePart::FacetPromptTemplate {
                 spec: PromptSpec::Static {
-                    content: template.clone(),
+                    content: template.to_string(),
                 },
                 facet_id: facet_id.clone(),
                 facet_display_name: facet.display_name.clone(),
