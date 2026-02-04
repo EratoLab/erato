@@ -21,7 +21,9 @@
  * ```
  */
 
+import type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
+import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
 import type { ComponentType } from "react";
 
 /**
@@ -46,10 +48,49 @@ export interface ComponentRegistry {
    */
   ChatFileSourceSelector: ComponentType<FileSourceSelectorProps> | null;
 
+  /**
+   * Override for the default chat welcome/empty state component.
+   * Used when a chat has no messages.
+   */
+  ChatWelcomeScreen: ComponentType<WelcomeScreenProps> | null;
+
+  /**
+   * Override for the assistant chat welcome/empty state component.
+   * Used when opening an assistant chat with no messages.
+   */
+  AssistantWelcomeScreen: ComponentType<AssistantWelcomeScreenProps> | null;
+
   // Future extension points can be added here:
-  // WelcomeScreen: ComponentType<WelcomeScreenProps> | null;
   // MessageControls: ComponentType<MessageControlsProps> | null;
 }
+
+export const resolveComponentOverride = <TProps>(
+  override: ComponentType<TProps> | null,
+  fallback: ComponentType<TProps>,
+): ComponentType<TProps> => override ?? fallback;
+
+const getE2EComponentVariant = () => {
+  if (typeof window === "undefined") return null;
+  return window.__E2E_COMPONENT_VARIANT__ ?? null;
+};
+
+const applyE2EOverrides = (registry: ComponentRegistry): ComponentRegistry => {
+  const variant = getE2EComponentVariant();
+  if (variant === "welcome-screen-example") {
+    return {
+      ...registry,
+      ChatWelcomeScreen: registry.ChatWelcomeScreen ?? WelcomeScreenExample,
+      AssistantWelcomeScreen:
+        registry.AssistantWelcomeScreen ?? AssistantWelcomeScreenExample,
+      ChatFileSourceSelector:
+        registry.ChatFileSourceSelector ?? FileSourceSelectorGrid,
+      AssistantFileSourceSelector:
+        registry.AssistantFileSourceSelector ?? FileSourceSelectorGrid,
+    };
+  }
+
+  return registry;
+};
 
 /**
  * The component registry instance.
@@ -57,7 +98,9 @@ export interface ComponentRegistry {
  * In the main repo, all values are null (use defaults).
  * Customer forks modify this file to provide custom implementations.
  */
-export const componentRegistry: ComponentRegistry = {
+export const componentRegistry: ComponentRegistry = applyE2EOverrides({
   AssistantFileSourceSelector: null,
   ChatFileSourceSelector: null,
-};
+  ChatWelcomeScreen: null,
+  AssistantWelcomeScreen: null,
+});

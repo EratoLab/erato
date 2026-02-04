@@ -10,7 +10,8 @@ This folder contains examples and a workspace for customer-specific component ov
 /src/customer/
 ├── README.md              # This file (committed)
 ├── examples/              # Example implementations (committed)
-│   └── FileSourceSelectorGrid.tsx.example
+│   ├── FileSourceSelectorGrid.example.tsx
+│   └── WelcomeScreens.example.tsx
 └── components/            # Your custom components (gitignored)
     └── .gitkeep
 ```
@@ -23,7 +24,7 @@ This folder contains examples and a workspace for customer-specific component ov
 ### 1. Copy an Example
 
 ```bash
-cp src/customer/examples/FileSourceSelectorGrid.tsx.example \
+cp src/customer/examples/FileSourceSelectorGrid.example.tsx \
    src/customer/components/FileSourceSelectorGrid.tsx
 ```
 
@@ -63,3 +64,5 @@ In a customer fork:
 | ----------------------------- | -------------- | -------------------------------------- |
 | `AssistantFileSourceSelector` | Assistant form | File source selector for default files |
 | `ChatFileSourceSelector`      | Chat input     | File source selector for chat uploads  |
+| `ChatWelcomeScreen`           | Chat           | Default chat empty state component     |
+| `AssistantWelcomeScreen`      | Assistant chat | Assistant chat empty state component   |

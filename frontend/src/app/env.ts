@@ -46,6 +46,7 @@ declare global {
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
+    __E2E_COMPONENT_VARIANT__?: string;
   }
 }
 

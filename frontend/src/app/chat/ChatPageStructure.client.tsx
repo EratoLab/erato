@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 
 import { Chat } from "@/components/ui/Chat/Chat";
-import { WelcomeScreen } from "@/components/ui/WelcomeScreen";
+import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
 import { useChatContext } from "@/providers/ChatProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
@@ -59,7 +59,7 @@ export default function ChatPageStructure({
         showTimestamps={true}
         layout="default"
         maxWidth={768}
-        emptyStateComponent={<WelcomeScreen />}
+        emptyStateComponent={<ChatEmptyState variant="chat" />}
         onMessageAction={async (action: MessageAction) => {
           logger.log("Handling message action in ChatPageStructure:", action);
           if (action.type === "copy") {
