@@ -114,7 +114,7 @@ chat_provider_ids = ["test-token-limit"]
 # priority_order = ["extended_thinking", "web_search"]
 # # Global tool allowlist applied regardless of selected facets
 # tool_call_allowlist = ["web-search-mcp/*"]
-# # Global facet prompt template (optional; empty string disables)
+# # Global facet prompt template (optional; empty string disables; default is built-in)
 # facet_prompt_template = ""
 # # Facets that should be selected by default in the frontend
 # default_selected_facets = ["web_search"]
