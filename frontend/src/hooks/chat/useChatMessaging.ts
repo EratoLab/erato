@@ -58,7 +58,7 @@ function handleNullChatIdScenario(
   userMessages: Record<string, Message>,
   logContext: string,
 ): {
-  scenario: "new_chat" | "post_archive";
+  scenario: "new_chat" | "post_archive" | "navigating_back";
   shouldClearMessages: boolean;
   hasLocalMessages: boolean;
 } {
@@ -77,17 +77,38 @@ function handleNullChatIdScenario(
       shouldClearMessages: true,
       hasLocalMessages,
     };
-  } else {
-    // New chat scenario: has local optimistic messages, preserve them
+  }
+
+  // Check if any message is still "sending" - indicates actual new chat in progress
+  const hasSendingMessages = Object.values(userMessages).some(
+    (msg) => msg.status === "sending",
+  );
+
+  if (hasSendingMessages) {
+    // New chat scenario: user waiting for response, preserve optimistic messages
     if (process.env.NODE_ENV === "development") {
       logger.log(
-        `[DEBUG_STORE] ${logContext}: Null chatId with local messages - new chat scenario, preserving optimistic messages. Count: ${Object.keys(userMessages).length}`,
+        `[DEBUG_STORE] ${logContext}: Null chatId with sending messages - new chat scenario, preserving optimistic messages. Count: ${Object.keys(userMessages).length}`,
       );
     }
     return {
       // eslint-disable-next-line lingui/no-unlocalized-strings
       scenario: "new_chat",
       shouldClearMessages: false,
+      hasLocalMessages,
+    };
+  } else {
+    // Navigating back scenario: all messages complete, user returned to landing page
+    // Clear messages for clean state (they'll be fetched when user opens that chat)
+    if (process.env.NODE_ENV === "development") {
+      logger.log(
+        `[DEBUG_STORE] ${logContext}: Null chatId with completed messages - navigating back scenario, clearing stale state. Count: ${Object.keys(userMessages).length}`,
+      );
+    }
+    return {
+      // eslint-disable-next-line lingui/no-unlocalized-strings
+      scenario: "navigating_back",
+      shouldClearMessages: true,
       hasLocalMessages,
     };
   }
@@ -449,7 +470,8 @@ export function useChatMessaging(
         "combinedMessages",
       );
 
-      if (scenario === "post_archive") {
+      if (scenario === "post_archive" || scenario === "navigating_back") {
+        // Clear state - no messages to show
         return {};
       } else {
         // New chat scenario: show optimistic user messages even without chatId
