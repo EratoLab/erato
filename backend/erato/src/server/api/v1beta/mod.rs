@@ -1878,13 +1878,20 @@ pub async fn prompt_optimizer(
         StatusCode::UNAUTHORIZED
     })?;
 
-    let system_prompt = app_state
+    let prompt_spec = app_state
         .config
         .prompt_optimizer
         .prompt
-        .as_deref()
+        .as_ref()
         .ok_or_else(|| {
             tracing::error!("Prompt optimizer is enabled but no system prompt configured");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    let system_prompt = app_state
+        .resolve_prompt_source(prompt_spec)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to resolve prompt optimizer system prompt: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
@@ -1900,7 +1907,7 @@ pub async fn prompt_optimizer(
 
     let chat_options = build_chat_options_for_completion(&chat_provider_config.model_settings);
     let mut chat_request: ChatRequest = Default::default();
-    chat_request = chat_request.append_message(GenAiChatMessage::system(system_prompt.to_string()));
+    chat_request = chat_request.append_message(GenAiChatMessage::system(system_prompt));
     chat_request = chat_request.append_message(GenAiChatMessage::user(request.prompt));
 
     let optimized_completion = app_state

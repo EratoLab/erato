@@ -1,7 +1,7 @@
 use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment};
 use eyre::{OptionExt, Report, eyre};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de};
 use std::collections::HashMap;
 use utoipa::ToSchema;
 
@@ -31,6 +31,98 @@ Non-interactive mode requirements:
 Output format:
 - Return only the optimized prompt as plain text.
 - No headings, no bullet points, no quotes, no explanations."#;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PromptSourceSpecification {
+    Static {
+        content: String,
+    },
+    Langfuse {
+        prompt_name: String,
+        label: Option<String>,
+        fallback: Option<String>,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum PromptSourceSpecificationInput {
+    String(String),
+    Object(PromptSourceSpecificationObject),
+}
+
+#[derive(Debug, Deserialize)]
+struct PromptSourceSpecificationObject {
+    source: String,
+    prompt_name: Option<String>,
+    label: Option<String>,
+    prompt: Option<String>,
+    fallback: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for PromptSourceSpecification {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        let input = PromptSourceSpecificationInput::deserialize(deserializer)?;
+        match input {
+            PromptSourceSpecificationInput::String(content) => Ok(Self::Static { content }),
+            PromptSourceSpecificationInput::Object(obj) => match obj.source.as_str() {
+                "static" => {
+                    let content = obj.prompt.ok_or_else(|| {
+                        de::Error::missing_field("prompt (required when source = \"static\")")
+                    })?;
+                    if obj.prompt_name.is_some() {
+                        return Err(de::Error::custom(
+                            "`prompt_name` is not supported for source = \"static\"",
+                        ));
+                    }
+                    if obj.label.is_some() {
+                        return Err(de::Error::custom(
+                            "`label` is not supported for source = \"static\"",
+                        ));
+                    }
+                    if obj.fallback.is_some() {
+                        return Err(de::Error::custom(
+                            "`fallback` is not supported for source = \"static\"",
+                        ));
+                    }
+                    Ok(Self::Static { content })
+                }
+                "langfuse" => {
+                    let prompt_name = obj.prompt_name.ok_or_else(|| {
+                        de::Error::missing_field(
+                            "prompt_name (required when source = \"langfuse\")",
+                        )
+                    })?;
+                    Ok(Self::Langfuse {
+                        prompt_name,
+                        label: obj.label,
+                        fallback: obj.fallback,
+                    })
+                }
+                other => Err(de::Error::custom(format!(
+                    "Unsupported prompt source '{}'",
+                    other
+                ))),
+            },
+        }
+    }
+}
+
+impl PromptSourceSpecification {
+    pub fn uses_langfuse(&self) -> bool {
+        matches!(self, PromptSourceSpecification::Langfuse { .. })
+    }
+
+    pub fn static_content(&self) -> Option<&str> {
+        match self {
+            PromptSourceSpecification::Static { content } => Some(content),
+            PromptSourceSpecification::Langfuse { .. } => None,
+        }
+    }
+}
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone)]
 pub struct AppConfig {
@@ -282,9 +374,9 @@ impl AppConfig {
         }
 
         // Validate that Langfuse is configured if any chat provider uses it
-        if config.any_chat_provider_uses_langfuse() && !config.integrations.langfuse.enabled {
+        if config.any_prompt_source_uses_langfuse() && !config.integrations.langfuse.enabled {
             panic!(
-                "Chat provider uses Langfuse system prompts but Langfuse integration is not enabled. Please set integrations.langfuse.enabled = true and configure the required Langfuse settings."
+                "Langfuse prompt sources are configured but Langfuse integration is not enabled. Please set integrations.langfuse.enabled = true and configure the required Langfuse settings."
             );
         }
 
@@ -302,7 +394,10 @@ impl AppConfig {
                 );
 
                 let mut providers = HashMap::new();
-                providers.insert("default".to_string(), chat_provider.clone());
+                providers.insert(
+                    "default".to_string(),
+                    chat_provider.clone().migrate_legacy_system_prompt(),
+                );
 
                 self.chat_providers = Some(ChatProvidersConfig {
                     priority_order: vec!["default".to_string()],
@@ -324,6 +419,12 @@ impl AppConfig {
         // and apply default model capabilities
         if let Some(chat_providers) = &mut self.chat_providers {
             for (provider_id, provider_config) in &mut chat_providers.providers {
+                if provider_config.system_prompt_langfuse.is_some() {
+                    tracing::warn!(
+                        "Config key `system_prompt_langfuse` is deprecated. Please use `system_prompt` with a prompt source specification instead."
+                    );
+                    *provider_config = provider_config.clone().migrate_legacy_system_prompt();
+                }
                 if provider_config.provider_kind == "azure_openai" {
                     match provider_config.clone().migrate_azure_openai_to_openai() {
                         Ok(migrated_config) => {
@@ -404,8 +505,12 @@ impl AppConfig {
             return Ok(());
         }
 
-        let prompt = self.prompt_optimizer.prompt.as_deref().unwrap_or("");
-        if prompt.trim().is_empty() {
+        let prompt = self.prompt_optimizer.prompt.as_ref().ok_or_else(|| {
+            eyre!("Prompt optimizer enabled but `prompt_optimizer.prompt` is not set")
+        })?;
+        if let Some(content) = prompt.static_content()
+            && content.trim().is_empty()
+        {
             return Err(eyre!(
                 "Prompt optimizer enabled but `prompt_optimizer.prompt` is not set"
             ));
@@ -610,6 +715,35 @@ impl AppConfig {
         }
     }
 
+    /// Returns true if any configured prompt source uses Langfuse.
+    pub fn any_prompt_source_uses_langfuse(&self) -> bool {
+        if self.any_chat_provider_uses_langfuse() {
+            return true;
+        }
+
+        if let Some(prompt) = &self.prompt_optimizer.prompt
+            && prompt.uses_langfuse()
+        {
+            return true;
+        }
+
+        if let Some(template) = &self.experimental_facets.facet_prompt_template
+            && template.uses_langfuse()
+        {
+            return true;
+        }
+
+        for facet in self.experimental_facets.facets.values() {
+            if let Some(prompt) = &facet.additional_system_prompt
+                && prompt.uses_langfuse()
+            {
+                return true;
+            }
+        }
+
+        false
+    }
+
     /// Returns the Sentry DSN from either the new location (integrations.sentry.sentry_dsn)
     /// or the old deprecated location (sentry_dsn) for backward compatibility.
     #[allow(deprecated)]
@@ -653,7 +787,7 @@ pub struct PromptOptimizerConfig {
     // The chat provider ID to use for prompt optimization.
     pub chat_provider_id: Option<String>,
     // The system prompt to use for prompt optimization.
-    pub prompt: Option<String>,
+    pub prompt: Option<PromptSourceSpecification>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone)]
@@ -697,7 +831,7 @@ pub struct ChatProviderConfig {
     // E.g. 'api-key=XYZ'
     pub additional_request_headers: Option<Vec<String>>,
     // Optional system prompt to use with the chat provider.
-    pub system_prompt: Option<String>,
+    pub system_prompt: Option<PromptSourceSpecification>,
     // Optional Langfuse system prompt configuration.
     // Mutually exclusive with system_prompt.
     pub system_prompt_langfuse: Option<LangfuseSystemPromptConfig>,
@@ -812,9 +946,27 @@ impl ChatProviderConfig {
         Ok(())
     }
 
+    pub fn migrate_legacy_system_prompt(mut self) -> Self {
+        if self.system_prompt.is_none()
+            && let Some(langfuse_config) = &self.system_prompt_langfuse
+        {
+            self.system_prompt = Some(PromptSourceSpecification::Langfuse {
+                prompt_name: langfuse_config.prompt_name.clone(),
+                label: None,
+                fallback: None,
+            });
+        }
+        self.system_prompt_langfuse = None;
+        self
+    }
+
     /// Returns true if this chat provider uses Langfuse for system prompts.
     pub fn uses_langfuse_system_prompt(&self) -> bool {
         self.system_prompt_langfuse.is_some()
+            || matches!(
+                self.system_prompt,
+                Some(PromptSourceSpecification::Langfuse { .. })
+            )
     }
 
     /// Returns the display name for the model, falling back to model_name if not set.
@@ -1030,7 +1182,7 @@ pub struct ExperimentalFacetsConfig {
 
     // Global facet prompt template (optional).
     #[serde(default)]
-    pub facet_prompt_template: Option<String>,
+    pub facet_prompt_template: Option<PromptSourceSpecification>,
 
     // Whether only a single facet can be selected at the same time.
     // Defaults to `false`.
@@ -1056,7 +1208,7 @@ pub struct FacetConfig {
     pub icon: Option<String>,
 
     // Additional system prompt to inject when this facet is selected.
-    pub additional_system_prompt: Option<String>,
+    pub additional_system_prompt: Option<PromptSourceSpecification>,
 
     // Allowlist of tools for this facet.
     #[serde(default)]

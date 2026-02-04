@@ -3,7 +3,9 @@
 use axum::Router;
 use axum::http;
 use axum_test::TestServer;
-use erato::config::{ExperimentalFacetsConfig, FacetConfig, ModelSettings};
+use erato::config::{
+    ExperimentalFacetsConfig, FacetConfig, ModelSettings, PromptSourceSpecification,
+};
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
@@ -183,9 +185,9 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
         FacetConfig {
             display_name: "Web search".to_string(),
             icon: Some("iconoir-globe".to_string()),
-            additional_system_prompt: Some(
-                "Please execute one or multiple web searches.".to_string(),
-            ),
+            additional_system_prompt: Some(PromptSourceSpecification::Static {
+                content: "Please execute one or multiple web searches.".to_string(),
+            }),
             tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
             model_settings: ModelSettings::default(),
             disable_facet_prompt_template: false,
@@ -331,7 +333,9 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
         FacetConfig {
             display_name: "Web search".to_string(),
             icon: Some("iconoir-globe".to_string()),
-            additional_system_prompt: Some("Use web search now.".to_string()),
+            additional_system_prompt: Some(PromptSourceSpecification::Static {
+                content: "Use web search now.".to_string(),
+            }),
             tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
             model_settings: ModelSettings::default(),
             disable_facet_prompt_template: false,
@@ -342,7 +346,9 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
         FacetConfig {
             display_name: "Extended thinking".to_string(),
             icon: Some("iconoir-lightbulb".to_string()),
-            additional_system_prompt: Some("Use extended thinking now.".to_string()),
+            additional_system_prompt: Some(PromptSourceSpecification::Static {
+                content: "Use extended thinking now.".to_string(),
+            }),
             tool_call_allowlist: vec![],
             model_settings: ModelSettings::default(),
             disable_facet_prompt_template: true,
@@ -352,9 +358,9 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
         facets,
         priority_order: vec!["web_search".to_string(), "extended_thinking".to_string()],
         tool_call_allowlist: vec![],
-        facet_prompt_template: Some(
-            "Facet {{facet_display_name}} tools:\n{{facet_tools_list}}".to_string(),
-        ),
+        facet_prompt_template: Some(PromptSourceSpecification::Static {
+            content: "Facet {{facet_display_name}} tools:\n{{facet_tools_list}}".to_string(),
+        }),
         only_single_facet: false,
         show_facet_indicator_with_display_name: true,
         default_selected_facets: vec![],

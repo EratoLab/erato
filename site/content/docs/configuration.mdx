@@ -304,11 +304,11 @@ The API key for the chat provider.
 
 #### `chat_provider.system_prompt`
 
-A static system prompt to use with the chat provider. This sets the behavior and personality of the AI assistant.
+A system prompt specification to use with the chat provider. This sets the behavior and personality of the AI assistant.
 
-**Type:** `string | None`
+**Type:** `string | object | None`
 
-**Note:** This option is mutually exclusive with `system_prompt_langfuse`.
+**Note:** This option is mutually exclusive with `system_prompt_langfuse` (deprecated). Requires the [Langfuse integration](./integrations/langfuse) to be enabled when using `source = "langfuse"`.
 
 **Example:**
 
@@ -319,32 +319,31 @@ model_name = "gpt-4"
 system_prompt = "You are a helpful assistant that provides concise and accurate answers."
 ```
 
-#### `chat_provider.system_prompt_langfuse`
-
-Configuration for using a system prompt from [Langfuse](./integrations/langfuse) prompt management instead of a static prompt.
-
-**Type:** `object | None`
-
-**Note:** This option is mutually exclusive with `system_prompt`. Requires the [Langfuse integration](./integrations/langfuse) to be enabled.
-
-**Properties:**
-
-- `prompt_name` (string): The name of the prompt in [Langfuse](./integrations/langfuse) to use
-
-**Example:**
+Using Langfuse:
 
 ```toml
 [chat_provider]
 provider_kind = "openai"
 model_name = "gpt-4"
-system_prompt_langfuse = { prompt_name = "assistant-prompt-v1" }
-
-[integrations.langfuse]
-enabled = true
-base_url = "https://cloud.langfuse.com"
-public_key = "pk-lf-..."
-secret_key = "sk-lf-..."
+system_prompt = { source = "langfuse", prompt_name = "assistant-prompt-v1", label = "production", fallback = "You are a helpful assistant." }
 ```
+
+Using a static object:
+
+```toml
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4"
+system_prompt = { source = "static", prompt = "You are a helpful assistant that provides concise and accurate answers." }
+```
+
+#### `chat_provider.system_prompt_langfuse`
+
+Configuration for using a system prompt from [Langfuse](./integrations/langfuse) prompt management instead of a static prompt.
+
+**Deprecated:** Use `chat_provider.system_prompt` with a prompt source specification instead.
+
+**Note:** This option is mutually exclusive with `system_prompt`. Requires the [Langfuse integration](./integrations/langfuse) to be enabled.
 
 ### `chat_providers`
 
@@ -410,8 +409,8 @@ Each provider in `chat_providers.providers` supports the following fields:
 - **`model_name_langfuse`** - Optional model name for Langfuse reporting (falls back to `model_name`)
 - **`api_key`** - Optional API key for authentication
 - **`base_url`** - Optional custom base URL for the provider API
-- **`system_prompt`** - Optional static system prompt
-- **`system_prompt_langfuse`** - Optional Langfuse prompt configuration (mutually exclusive with `system_prompt`)
+- **`system_prompt`** - Optional prompt source specification (string or object)
+- **`system_prompt_langfuse`** - Optional Langfuse prompt configuration (deprecated, mutually exclusive with `system_prompt`)
 - **`additional_request_parameters`** - Optional array of additional request parameters
 - **`additional_request_headers`** - Optional array of additional request headers
 - **`model_capabilities`** - Optional configuration for model capabilities and limitations
@@ -1387,7 +1386,7 @@ The chat provider ID to use for prompt optimization. Must match a provider confi
 
 System prompt used by the prompt optimizer. If omitted, a built-in non-interactive default prompt is used.
 
-**Type:** `string | None`
+**Type:** `string | object | None`
 
 **Example:**
 
@@ -1397,6 +1396,24 @@ enabled = true
 chat_provider_id = "gpt-4o-mini"
 # Optional override:
 # prompt = "Rewrite the user's prompt to be clearer, more specific, and action-oriented. Return only the improved prompt."
+```
+
+Using Langfuse:
+
+```toml
+[prompt_optimizer]
+enabled = true
+chat_provider_id = "gpt-4o-mini"
+prompt = { source = "langfuse", prompt_name = "prompt-optimizer", label = "production", fallback = "Rewrite the user's prompt to be clearer, more specific, and action-oriented. Return only the improved prompt." }
+```
+
+Using a static object:
+
+```toml
+[prompt_optimizer]
+enabled = true
+chat_provider_id = "gpt-4o-mini"
+prompt = { source = "static", prompt = "Rewrite the user's prompt to be clearer, more specific, and action-oriented. Return only the improved prompt." }
 ```
 
 ### `experimental_assistants`
@@ -1457,6 +1474,26 @@ tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
 additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."
 ```
 
+Using Langfuse:
+
+```toml
+[experimental_facets.facets.web_search]
+display_name = "Web search"
+icon = "iconoir-globe"
+tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
+additional_system_prompt = { source = "langfuse", prompt_name = "facet-web-search", label = "production", fallback = "Please execute one or multiple web searches to answer the user's question." }
+```
+
+Using a static object:
+
+```toml
+[experimental_facets.facets.web_search]
+display_name = "Web search"
+icon = "iconoir-globe"
+tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
+additional_system_prompt = { source = "static", prompt = "Please execute one or multiple web searches to answer the user's question." }
+```
+
 #### `experimental_facets.priority_order`
 
 List of facet IDs in the order they should be displayed.
@@ -1491,7 +1528,7 @@ tool_call_allowlist = ["web-search-mcp/*"]
 
 Optional global prompt template injected when facets are selected. Set to an empty string to disable.
 
-**Type:** `string | None`
+**Type:** `string | object | None`
 
 **Default value:** `The user has requested the use of the "{{facet_display_name}}" feature.\n\nPrioritize the use of the following tools:\n{{facet_tools_list}}`
 
@@ -1500,6 +1537,20 @@ Optional global prompt template injected when facets are selected. Set to an emp
 ```toml
 [experimental_facets]
 facet_prompt_template = ""
+```
+
+Using Langfuse:
+
+```toml
+[experimental_facets]
+facet_prompt_template = { source = "langfuse", prompt_name = "facet-template", label = "production", fallback = "The user has requested the use of the \"{{facet_display_name}}\" feature.\n\nPrioritize the use of the following tools:\n{{facet_tools_list}}" }
+```
+
+Using a static object:
+
+```toml
+[experimental_facets]
+facet_prompt_template = { source = "static", prompt = "The user has requested the use of the \"{{facet_display_name}}\" feature.\n\nPrioritize the use of the following tools:\n{{facet_tools_list}}" }
 ```
 
 #### `experimental_facets.only_single_facet`

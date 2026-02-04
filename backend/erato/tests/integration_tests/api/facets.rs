@@ -2,7 +2,9 @@
 
 use axum::Router;
 use axum_test::TestServer;
-use erato::config::{ExperimentalFacetsConfig, FacetConfig, ModelSettings};
+use erato::config::{
+    ExperimentalFacetsConfig, FacetConfig, ModelSettings, PromptSourceSpecification,
+};
 use erato::server::router::router;
 use serde_json::Value;
 use sqlx::Pool;
@@ -40,9 +42,9 @@ async fn test_facets_endpoint(pool: Pool<Postgres>) {
         FacetConfig {
             display_name: "Web search".to_string(),
             icon: Some("iconoir-globe".to_string()),
-            additional_system_prompt: Some(
-                "Please execute one or multiple web searches.".to_string(),
-            ),
+            additional_system_prompt: Some(PromptSourceSpecification::Static {
+                content: "Please execute one or multiple web searches.".to_string(),
+            }),
             tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
             model_settings: ModelSettings::default(),
             disable_facet_prompt_template: false,

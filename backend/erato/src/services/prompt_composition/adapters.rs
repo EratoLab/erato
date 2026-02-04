@@ -1,5 +1,5 @@
 use super::traits::{FileResolver, MessageRepository, PromptProvider};
-use crate::config::ChatProviderConfig;
+use crate::config::{ChatProviderConfig, PromptSourceSpecification};
 use crate::db::entity::prelude::*;
 use crate::db::entity::{chats, messages};
 use crate::models::assistant::AssistantWithFiles;
@@ -259,6 +259,13 @@ impl<'a> PromptProvider for AppStatePromptProvider<'a> {
             chat,
         )
         .await
+    }
+
+    async fn resolve_prompt_source(
+        &self,
+        spec: &PromptSourceSpecification,
+    ) -> Result<String, Report> {
+        self.app_state.resolve_prompt_source(spec).await
     }
 }
 

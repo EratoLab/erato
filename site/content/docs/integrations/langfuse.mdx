@@ -64,14 +64,15 @@ For detailed configuration options and examples, see the [Configuration Referenc
 
 ### System Prompt Management
 
-To use Langfuse for system prompt management, configure your chat provider with `system_prompt_langfuse` instead of `system_prompt`:
+To use Langfuse for system prompt management, configure your chat provider with `system_prompt` using a prompt source specification.
+`system_prompt_langfuse` is deprecated.
 
 ```toml filename="erato.toml"
 [chat_provider]
 provider_kind = "openai"
 model_name = "gpt-4"
 # Use Langfuse prompt management instead of static prompt
-system_prompt_langfuse = { prompt_name = "assistant-prompt-v1" }
+system_prompt = { source = "langfuse", prompt_name = "assistant-prompt-v1", label = "production", fallback = "You are a helpful assistant." }
 
 [integrations.langfuse]
 enabled = true
@@ -80,7 +81,7 @@ public_key = "pk-lf-..."
 secret_key = "sk-lf-..."
 ```
 
-For detailed information about the `system_prompt_langfuse` configuration option, see the [Chat Provider Configuration](../configuration#chat_providersystem_prompt_langfuse) documentation.
+For detailed information about the `system_prompt` configuration option, see the [Chat Provider Configuration](../configuration#chat_providersystem_prompt) documentation.
 
 ## Prompt Format Support
 
@@ -145,8 +146,8 @@ Chat-format prompts with multiple messages. Erato will extract the system messag
 
 **"Cannot specify both system_prompt and system_prompt_langfuse"**
 
-- Remove either `system_prompt` or `system_prompt_langfuse` from your chat provider configuration
+- Remove either `system_prompt` or `system_prompt_langfuse` from your chat provider configuration. Prefer `system_prompt` with a prompt source specification.
 
 **"Chat provider uses Langfuse system prompts but Langfuse integration is not enabled"**
 
-- Set `integrations.langfuse.enabled = true` when using `system_prompt_langfuse`
+- Set `integrations.langfuse.enabled = true` when using Langfuse prompt sources.

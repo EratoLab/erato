@@ -1,4 +1,4 @@
-use crate::config::ChatProviderConfig;
+use crate::config::{ChatProviderConfig, PromptSourceSpecification};
 use crate::db::entity::chats;
 use crate::db::entity::messages;
 use crate::models::assistant::AssistantWithFiles;
@@ -58,6 +58,12 @@ pub trait PromptProvider: Send + Sync {
         chat_provider_config: &ChatProviderConfig,
         preferred_language: Option<&str>,
     ) -> Result<Option<String>, Report>;
+
+    /// Resolve a prompt source specification into a concrete prompt string.
+    async fn resolve_prompt_source(
+        &self,
+        spec: &PromptSourceSpecification,
+    ) -> Result<String, Report>;
 
     /// Get the assistant configuration for a chat, if any.
     async fn get_assistant_config(

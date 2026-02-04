@@ -1,5 +1,5 @@
 use crate::actors::manager::ActorManager;
-use crate::config::{AppConfig, ChatProviderConfig};
+use crate::config::{AppConfig, ChatProviderConfig, PromptSourceSpecification};
 use crate::policy::engine::PolicyEngine;
 use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
@@ -521,38 +521,36 @@ impl AppState {
     ) -> Result<Option<String>, Report> {
         let ctx = RenderContext { preferred_language };
 
-        // If a static system prompt is configured, render and return it
+        // If a system prompt is configured, resolve, render, and return it
         if let Some(system_prompt) = &config.system_prompt {
-            let rendered_prompt = self.system_prompt_renderer.render(system_prompt, &ctx);
+            let resolved_prompt = self.resolve_prompt_source(system_prompt).await?;
+            let rendered_prompt = self.system_prompt_renderer.render(&resolved_prompt, &ctx);
             tracing::debug!(
-                original_length = system_prompt.len(),
+                original_length = resolved_prompt.len(),
                 rendered_length = rendered_prompt.len(),
-                "Using static system prompt (rendered)"
+                "Using system prompt (rendered)"
             );
             return Ok(Some(rendered_prompt));
         }
 
         // If Langfuse system prompt is configured, retrieve and render it
         if let Some(langfuse_config) = &config.system_prompt_langfuse {
+            tracing::warn!(
+                "Config key `system_prompt_langfuse` is deprecated. Please use `system_prompt` with a prompt source specification instead."
+            );
             tracing::debug!(
                 prompt_name = %langfuse_config.prompt_name,
                 "Retrieving system prompt from Langfuse"
             );
 
-            let langfuse_prompt = self
-                .langfuse_client
-                .get_prompt(&langfuse_config.prompt_name)
+            let system_prompt = self
+                .resolve_prompt_source(&PromptSourceSpecification::Langfuse {
+                    prompt_name: langfuse_config.prompt_name.clone(),
+                    label: None,
+                    fallback: None,
+                })
                 .await?;
-
-            let system_prompt = extract_system_prompt_from_langfuse_prompt(&langfuse_prompt)?;
             let rendered_prompt = self.system_prompt_renderer.render(&system_prompt, &ctx);
-
-            tracing::debug!(
-                prompt_name = %langfuse_config.prompt_name,
-                original_length = system_prompt.len(),
-                rendered_length = rendered_prompt.len(),
-                "Successfully retrieved and rendered system prompt from Langfuse"
-            );
 
             return Ok(Some(rendered_prompt));
         }
@@ -560,6 +558,52 @@ impl AppState {
         // No system prompt configured
         tracing::debug!("No system prompt configured");
         Ok(None)
+    }
+
+    /// Resolve a prompt source specification into a concrete prompt string.
+    pub async fn resolve_prompt_source(
+        &self,
+        spec: &PromptSourceSpecification,
+    ) -> Result<String, Report> {
+        match spec {
+            PromptSourceSpecification::Static { content } => Ok(content.clone()),
+            PromptSourceSpecification::Langfuse {
+                prompt_name,
+                label,
+                fallback,
+            } => {
+                let resolved_prompt = if let Some(label) = label {
+                    if let Some(prompt) = self
+                        .langfuse_client
+                        .get_prompt_with_label(prompt_name, Some(label))
+                        .await?
+                    {
+                        Some(prompt)
+                    } else {
+                        self.langfuse_client
+                            .get_prompt_with_label(prompt_name, Some("production"))
+                            .await?
+                    }
+                } else {
+                    self.langfuse_client
+                        .get_prompt_with_label(prompt_name, None)
+                        .await?
+                };
+
+                if let Some(prompt) = resolved_prompt {
+                    return extract_system_prompt_from_langfuse_prompt(&prompt);
+                }
+
+                if let Some(fallback) = fallback {
+                    return Ok(fallback.clone());
+                }
+
+                Err(eyre::eyre!(
+                    "Failed to retrieve Langfuse prompt '{}' and no fallback was provided",
+                    prompt_name
+                ))
+            }
+        }
     }
 }
 
