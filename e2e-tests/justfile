@@ -4,15 +4,30 @@ default:
 install:
     pnpm install
 
-test:
+# Check all prerequisites before running tests
+[no-exit-message]
+check:
+    ./scripts/check_prerequisites.sh
+
+# Check configuration alignment using Claude Code (requires claude CLI)
+[no-exit-message]
+check-config:
+    ./scripts/check_config_alignment.sh
+
+# Generate required test files
+generate-test-files:
+    ./scripts/generate_test_files.sh
+
+# Run tests (checks prerequisites first)
+test: check
     pnpm exec playwright test
 
 # Opens the Playwright test runner UI
-test_interactive:
+test_interactive: check
     pnpm exec playwright test --ui
 
 # Opens the Playwright recorder
-record_interactions:
+record_interactions: check
     pnpm exec playwright codegen
 
 format:
