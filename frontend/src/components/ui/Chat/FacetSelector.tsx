@@ -158,6 +158,7 @@ export const FacetSelector = ({
               disabled={disabled}
               onClick={() => toggleFacetSelection(facet.id)}
               icon={<ResolvedIcon iconId={facet.icon} className="size-4" />}
+              data-testid={`selected-facet-${facet.id}`}
               aria-label={t({
                 id: "chat.facetSelector.deselectFacet.title",
                 message: `Deselect ${facetDisplayName}`,

@@ -523,6 +523,14 @@ const eslintConfig = [
     },
   },
 
+  // Customer examples - allow hardcoded strings without Lingui
+  {
+    files: ["src/customer/examples/**/*"],
+    rules: {
+      "lingui/no-unlocalized-strings": "off",
+    },
+  },
+
   // Test files configuration - more lenient rules for testing needs
   {
     files: [

@@ -16,7 +16,7 @@
  *   AssistantFileSourceSelector: FileSourceSelectorGrid,
  * };
  */
-import { t } from "@lingui/core/macro";
+
 import { Cloud, Upload } from "iconoir-react";
 import { memo } from "react";
 
@@ -54,18 +54,10 @@ export const FileSourceSelectorGrid = memo<FileSourceSelectorProps>(
           onClick={onSelectDisk}
           disabled={disabled}
           className={buttonBaseClasses}
-          aria-label={t({
-            id: "fileSourceSelector.uploadFromComputer",
-            message: "Upload from Computer",
-          })}
+          aria-label="Upload from Computer"
         >
           <Upload className="size-5" />
-          <span>
-            {t({
-              id: "fileSourceSelector.uploadFromComputer",
-              message: "Upload from Computer",
-            })}
-          </span>
+          <span>Upload from Computer</span>
         </button>
 
         {/* OneDrive/SharePoint button */}
@@ -75,18 +67,10 @@ export const FileSourceSelectorGrid = memo<FileSourceSelectorProps>(
             onClick={() => onSelectCloud("sharepoint")}
             disabled={disabled}
             className={buttonBaseClasses}
-            aria-label={t({
-              id: "fileSourceSelector.uploadFromOneDrive",
-              message: "Upload from OneDrive",
-            })}
+            aria-label="Upload from OneDrive"
           >
             <Cloud className="size-5" />
-            <span>
-              {t({
-                id: "fileSourceSelector.uploadFromOneDrive",
-                message: "Upload from OneDrive",
-              })}
-            </span>
+            <span>Upload from OneDrive</span>
           </button>
         )}
 
@@ -99,12 +83,7 @@ export const FileSourceSelectorGrid = memo<FileSourceSelectorProps>(
             className={buttonBaseClasses}
           >
             <Cloud className="size-5" />
-            <span>
-              {t({
-                id: "fileSourceSelector.gridFromGoogleDrive",
-                message: "From Google Drive",
-              })}
-            </span>
+            <span>From Google Drive</span>
           </button>
         )} */}
       </div>
@@ -112,5 +91,4 @@ export const FileSourceSelectorGrid = memo<FileSourceSelectorProps>(
   },
 );
 
-// eslint-disable-next-line lingui/no-unlocalized-strings
 FileSourceSelectorGrid.displayName = "FileSourceSelectorGrid";
