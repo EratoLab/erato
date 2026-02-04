@@ -646,4 +646,68 @@ describe("useChatMessaging", () => {
     expect(Object.keys(result.current.messages)).toHaveLength(0);
     expect(result.current.messageOrder).toHaveLength(0);
   });
+
+  it("should clear completed messages when navigating back to assistant landing (chatId becomes null)", () => {
+    // This test validates the fix for the bug where navigating from /a/:assistantId/:chatId
+    // back to /a/:assistantId would show the optimistic user message but not the assistant response
+
+    // First, render hook with a real chatId (simulating being on a specific chat)
+    mockUseChatMessages.mockReturnValueOnce({
+      data: {
+        messages: [
+          {
+            id: "msg-user-1",
+            content: [{ content_type: "text", text: "Hello assistant" }],
+            role: "user",
+            created_at: "2023-01-01T12:00:00.000Z",
+            previous_message_id: null,
+            sibling_message_id: null,
+            is_message_in_active_thread: true,
+          },
+          {
+            id: "msg-asst-1",
+            content: [{ content_type: "text", text: "Hello! How can I help?" }],
+            role: "assistant",
+            created_at: "2023-01-01T12:01:00.000Z",
+            previous_message_id: "msg-user-1",
+            sibling_message_id: null,
+            is_message_in_active_thread: true,
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    const { result, rerender } = renderHook(
+      ({ chatId }: { chatId: string | null }) => useChatMessaging(chatId),
+      {
+        wrapper: TestWrapper,
+        initialProps: { chatId: "chat-123" as string | null },
+      },
+    );
+
+    // Should have both messages from API
+    expect(Object.keys(result.current.messages)).toHaveLength(2);
+
+    // Now simulate navigation back to assistant landing page (chatId becomes null)
+    // Mock the API response for null chatId (no data)
+    mockUseChatMessages.mockReturnValueOnce({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    // Rerender with null chatId (navigating back to assistant landing)
+    act(() => {
+      rerender({ chatId: null });
+    });
+
+    // Should have no messages - the completed messages should be cleared
+    // This fixes the bug where user messages were showing but assistant messages were not
+    expect(Object.keys(result.current.messages)).toHaveLength(0);
+    expect(result.current.messageOrder).toHaveLength(0);
+  });
 });
