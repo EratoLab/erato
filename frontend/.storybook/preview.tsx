@@ -28,10 +28,28 @@ declare module "@storybook/react" {
 // Supported locales for Storybook
 const SUPPORTED_LOCALES = {
   en: "English",
+  "en-tooltips": "English (with tooltips)",
   de: "Deutsch",
   fr: "Français",
   pl: "Polski",
   es: "Español",
+};
+
+const TOOLTIP_EN_MESSAGES: Record<string, string> = {
+  "assistant.form.systemPrompt.tooltip":
+    "Optional: Include constraints or special behavior for this assistant.",
+  "assistant.form.defaultModel.tooltip":
+    "Optional: Select a default model to use for this assistant.",
+  "assistant.form.defaultFiles.tooltip":
+    "Optional: These files are always available to the assistant.",
+};
+
+const normalizeLocale = (locale: string) => {
+  if (locale === "en-tooltips") {
+    return { baseLocale: "en", extraMessages: TOOLTIP_EN_MESSAGES };
+  }
+
+  return { baseLocale: locale, extraMessages: null };
 };
 
 // Mock navigator.language for Storybook
@@ -63,17 +81,21 @@ const I18nProviderWrapper: React.FC<{
       setIsLoading(true);
 
       // Mock navigator.language for the selected locale
-      mockNavigatorLanguage(locale);
+      const { baseLocale, extraMessages } = normalizeLocale(locale);
+      mockNavigatorLanguage(baseLocale);
 
       try {
         // Load the selected locale messages (compiled .ts files)
         const { messages } = await import(
-          /* @vite-ignore */ `../src/locales/${locale}/messages`
+          /* @vite-ignore */ `../src/locales/${baseLocale}/messages`
         );
-        i18n.load(locale, messages);
-        i18n.activate(locale);
+        const mergedMessages = extraMessages
+          ? { ...messages, ...extraMessages }
+          : messages;
+        i18n.load(baseLocale, mergedMessages);
+        i18n.activate(baseLocale);
       } catch {
-        console.warn(`Failed to load locale ${locale}, falling back to en`);
+        console.warn(`Failed to load locale ${baseLocale}, falling back to en`);
         try {
           const { messages } = await import(
             /* @vite-ignore */ `../src/locales/en/messages`
@@ -281,6 +303,7 @@ const preview: Preview = {
         icon: "globe",
         items: [
           { value: "en", title: "🇺🇸 English" },
+          { value: "en-tooltips", title: "🇺🇸 English (tooltips)" },
           { value: "de", title: "🇩🇪 Deutsch" },
           { value: "fr", title: "🇫🇷 Français" },
           { value: "pl", title: "🇵🇱 Polski" },

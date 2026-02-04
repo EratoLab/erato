@@ -408,38 +408,38 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
           error={touched.prompt ? errors.prompt : undefined}
           helpText={t`Define how the assistant should behave and respond`}
           htmlFor="assistant-prompt"
+          labelInlineAction={
+            <InfoTooltip translationId="assistant.form.systemPrompt.tooltip" />
+          }
           labelAction={
-            <>
-              {isPromptOptimizerEnabled && (
-                <Button
-                  type="button"
-                  variant="icon-only"
-                  size="sm"
-                  icon={
-                    isOptimizingPrompt ? (
-                      <SpinnerIcon size="sm" />
-                    ) : (
-                      <MagicWand className="size-4" />
-                    )
-                  }
-                  disabled={
-                    isSubmitting ||
-                    isOptimizingPrompt ||
-                    formData.prompt.trim().length === 0
-                  }
-                  onClick={() => void handleOptimizePrompt()}
-                  aria-label={t({
-                    id: "assistant.form.prompt-optimizer.tooltip",
-                    message: "Optimize prompt",
-                  })}
-                  title={t({
-                    id: "assistant.form.prompt-optimizer.tooltip",
-                    message: "Optimize prompt",
-                  })}
-                />
-              )}
-              <InfoTooltip translationId="assistant.form.systemPrompt.tooltip" />
-            </>
+            isPromptOptimizerEnabled ? (
+              <Button
+                type="button"
+                variant="icon-only"
+                size="sm"
+                icon={
+                  isOptimizingPrompt ? (
+                    <SpinnerIcon size="sm" />
+                  ) : (
+                    <MagicWand className="size-4" />
+                  )
+                }
+                disabled={
+                  isSubmitting ||
+                  isOptimizingPrompt ||
+                  formData.prompt.trim().length === 0
+                }
+                onClick={() => void handleOptimizePrompt()}
+                aria-label={t({
+                  id: "assistant.form.prompt-optimizer.tooltip",
+                  message: "Optimize prompt",
+                })}
+                title={t({
+                  id: "assistant.form.prompt-optimizer.tooltip",
+                  message: "Optimize prompt",
+                })}
+              />
+            ) : undefined
           }
         >
           <Textarea
@@ -469,7 +469,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
                 "Optional: Choose which model this assistant should use by default",
             })}
             htmlFor="assistant-model"
-            labelAction={
+            labelInlineAction={
               <InfoTooltip translationId="assistant.form.defaultModel.tooltip" />
             }
           >
@@ -491,7 +491,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
               "Optional: Upload files from your computer or OneDrive that will be available to this assistant in every chat",
           })}
           htmlFor="assistant-files"
-          labelAction={
+          labelInlineAction={
             <InfoTooltip translationId="assistant.form.defaultFiles.tooltip" />
           }
         >
