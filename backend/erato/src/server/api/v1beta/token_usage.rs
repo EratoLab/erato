@@ -30,6 +30,7 @@ pub struct TokenUsageRequest {
     input_files_ids: Vec<Uuid>,
     #[schema(example = "gpt-4o")]
     /// Optional chat provider ID to use for token estimation. If not provided, uses the default provider.
+    #[schema(nullable = false)]
     chat_provider_id: Option<String>,
 }
 

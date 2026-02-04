@@ -1599,6 +1599,7 @@ pub async fn frequent_assistants(
 pub struct CreateChatRequest {
     /// Optional assistant ID to base this chat on
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     assistant_id: Option<String>,
 }
 

@@ -64,7 +64,7 @@ export const AssistantFileUploadSelector: React.FC<
 > = ({
   onFilesUploaded,
   acceptedFileTypes = [],
-  multiple = false,
+  multiple = true,
   label = t({ id: "fileUpload.uploadFiles", message: "Upload Files" }),
   iconOnly = false,
   maxFiles = 5,

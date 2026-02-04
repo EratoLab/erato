@@ -10,6 +10,9 @@ import {
 } from "@/hooks/chat";
 import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
+import { getSupportedFileTypes } from "@/utils/capabilitiesToFileTypes";
+
+import { useFileCapabilitiesContext } from "./FileCapabilitiesProvider";
 
 import type {
   ChatsError,
@@ -112,13 +115,28 @@ export const useChatContext = () => {
 
 interface ChatProviderProps {
   children: ReactNode;
+  /**
+   * Optional override for accepted file types.
+   * If not provided, will derive from backend file capabilities.
+   */
   acceptedFileTypes?: FileType[];
 }
 
 export function ChatProvider({
   children,
-  acceptedFileTypes = [],
+  acceptedFileTypes: acceptedFileTypesProp,
 }: ChatProviderProps) {
+  // Get file capabilities to derive accepted types
+  const { capabilities } = useFileCapabilitiesContext();
+
+  // Use provided types or derive from capabilities
+  const acceptedFileTypes = useMemo(() => {
+    if (acceptedFileTypesProp) {
+      return acceptedFileTypesProp;
+    }
+    return getSupportedFileTypes(capabilities);
+  }, [acceptedFileTypesProp, capabilities]);
+
   // Get the chat history functionality
   const {
     chats,

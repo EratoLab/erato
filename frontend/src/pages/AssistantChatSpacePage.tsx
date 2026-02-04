@@ -16,17 +16,8 @@ import { createLogger } from "@/utils/debugLogger";
 
 import type { ChatSession } from "@/types/chat";
 import type { MessageAction } from "@/types/message-controls";
-import type { FileType } from "@/utils/fileTypes";
 
 const logger = createLogger("UI", "AssistantChatSpacePage");
-
-const ACCEPTED_FILE_TYPES: FileType[] = [
-  "pdf",
-  "document",
-  "text",
-  "spreadsheet",
-  "image",
-];
 
 export default function AssistantChatSpacePage() {
   const { assistantId, chatId } = useParams<{
@@ -195,7 +186,6 @@ export default function AssistantChatSpacePage() {
           />
         }
         onMessageAction={handleMessageAction}
-        acceptedFileTypes={ACCEPTED_FILE_TYPES}
         // Only pass assistantId when creating a NEW chat (no chatId in URL)
         // For existing chats, the assistant context is already stored in the chat
         assistantId={chatId ? undefined : assistantId}

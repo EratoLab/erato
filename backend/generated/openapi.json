@@ -2303,10 +2303,7 @@
         "description": "Request to create a new chat without an initial message",
         "properties": {
           "assistant_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "Optional assistant ID to base this chat on"
           }
         }
@@ -2484,10 +2481,7 @@
         ],
         "properties": {
           "chat_provider_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
             "example": "primary"
           },
@@ -3163,19 +3157,13 @@
         ],
         "properties": {
           "assistant_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "format": "uuid",
             "description": "Optional assistant ID to associate with the chat when creating a new chat.\nIf provided with an existing_chat_id, this field is ignored.",
             "example": "00000000-0000-0000-0000-000000000000"
           },
           "chat_provider_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
             "example": "primary"
           },
@@ -3858,10 +3846,7 @@
         ],
         "properties": {
           "chat_provider_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
             "example": "primary"
           },
@@ -4166,10 +4151,7 @@
         ],
         "properties": {
           "chat_provider_id": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "Optional chat provider ID to use for token estimation. If not provided, uses the default provider.",
             "example": "gpt-4o"
           },
