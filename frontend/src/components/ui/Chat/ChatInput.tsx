@@ -7,6 +7,7 @@ import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadW
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import { useFileDropzone } from "@/hooks/files";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
+import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { useFacets } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
@@ -141,6 +142,13 @@ export const ChatInput = ({
   // Get feature configurations
   const { enabled: uploadEnabled } = useUploadFeature();
   const { autofocus: shouldAutofocus } = useChatInputFeature();
+  // Dummy for i18n:extract
+  const _aiUsageAdvisoryDefault = t({
+    id: "chat.ai_usage_advisory",
+    message:
+      "You are interacting with an AI chatbot. Generated answers may contain factual errors and should be verified before use.",
+  });
+  const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
 
   // Use local model selection hook
   const {
@@ -395,192 +403,203 @@ export const ChatInput = ({
   }, [uploadError, fileError]);
 
   return (
-    <form
-      className={clsx("mx-auto mb-4 w-full max-w-4xl", className)}
-      onSubmit={handleSubmit}
-    >
-      {/* Token usage warnings */}
-      <ChatInputTokenUsage
-        message={message}
-        attachedFiles={attachedFiles}
-        chatId={chatId}
-        previousMessageId={previousMessageId}
-        disabled={isDisabled}
-        onLimitExceeded={handleMessageTokenLimitExceeded}
-      />
-
-      {/* Budget warning - shows when user approaches spending limit */}
-      <BudgetWarning />
-
-      {/* File previews using our new component */}
-      <FileAttachmentsPreview
-        attachedFiles={attachedFiles}
-        maxFiles={maxFiles}
-        onRemoveFile={handleRemoveFileById}
-        onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
-        onFilePreview={onFilePreview}
-        disabled={isDisabled}
-        showFileTypes={showFileTypes}
-      />
-
-      {/* File error message */}
-      {fileError && (
-        <Alert
-          type="error"
-          dismissible
-          onDismiss={() => setFileError(null)}
-          className="mb-2"
-          data-testid="file-upload-error"
-        >
-          {getFileErrorMessage()}
-        </Alert>
-      )}
-
-      <div
-        className={clsx(
-          "w-full rounded-2xl bg-[var(--theme-bg-tertiary)]",
-          "p-2 sm:p-3",
-          "shadow-[0_0_15px_rgba(0,0,0,0.1)]",
-          "border border-[var(--theme-border)]",
-          "theme-transition focus-within:border-[var(--theme-border-focus)]",
-          "flex flex-col gap-2 sm:gap-3",
-        )}
+    <div className="mx-auto w-full max-w-4xl">
+      <form
+        className={clsx("w-full ", className, {
+          "pb-0 sm:pb-0": aiUsageAdvisory,
+        })}
+        onSubmit={handleSubmit}
       >
-        <textarea
-          ref={textareaRef}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSubmit(e);
-            }
-          }}
-          placeholder={
-            isAnyTokenLimitExceeded
-              ? t`Message exceeds token limit. Please reduce length or remove files.`
-              : mode === "edit"
-                ? t`Edit your message...`
-                : placeholder
-          }
-          rows={1}
-          disabled={isLoading || isPendingResponse || disabled || isUploading}
-          tabIndex={0}
-          autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
-          className={clsx(
-            "w-full resize-none overflow-y-auto",
-            "p-2 sm:px-3",
-            "bg-transparent",
-            "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
-            "focus:outline-none",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-            "max-h-[200px] min-h-[32px]",
-            "text-base",
-            "scrollbar-auto-hide",
-            isAnyTokenLimitExceeded &&
-              "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
-          )}
+        {/* Token usage warnings */}
+        <ChatInputTokenUsage
+          message={message}
+          attachedFiles={attachedFiles}
+          chatId={chatId}
+          previousMessageId={previousMessageId}
+          disabled={isDisabled}
+          onLimitExceeded={handleMessageTokenLimitExceeded}
         />
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 sm:gap-2">
-            {showControls && (
-              <>
-                {/* File Upload Button with Token Check */}
-                {handleFileAttachments && uploadEnabled && (
-                  <FileUploadWithTokenCheck
-                    message={message}
-                    chatId={chatId}
-                    assistantId={assistantId}
-                    previousMessageId={previousMessageId}
-                    onFilesUploaded={handleFilesUploaded}
-                    onTokenLimitExceeded={handleFileTokenLimitExceeded}
-                    // Pass the callback for processing state
-                    onProcessingChange={handleFileButtonProcessingChange}
-                    acceptedFileTypes={acceptedFileTypes}
-                    multiple={maxFiles > 1}
-                    iconOnly
-                    className="p-1"
-                    disabled={
-                      attachedFiles.length >= maxFiles ||
-                      isLoading ||
-                      isPendingResponse ||
-                      disabled ||
-                      isUploading || // isUploading from context (drag & drop)
-                      isFileButtonProcessing // Add button processing state
-                    }
-                  />
-                )}
-                {availableFacets.length > 0 && (
-                  <FacetSelector
-                    facets={availableFacets}
-                    selectedFacetIds={selectedFacetIds}
-                    onSelectionChange={(nextSelectedFacetIds) => {
-                      setSelectedFacetIds(nextSelectedFacetIds);
-                      onFacetSelectionChange?.(nextSelectedFacetIds);
-                    }}
-                    onlySingleFacet={
-                      globalFacetSettings?.only_single_facet ?? false
-                    }
-                    showFacetIndicatorWithDisplayName={
-                      globalFacetSettings?.show_facet_indicator_with_display_name ??
-                      false
-                    }
-                    disabled={isDisabled}
-                  />
-                )}
-              </>
-            )}
-          </div>
+        {/* Budget warning - shows when user approaches spending limit */}
+        <BudgetWarning />
 
-          <div className="flex items-center gap-2">
-            {mode === "edit" && onCancelEdit && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onCancelEdit}
-                data-testid="chat-input-cancel-edit"
-              >
-                {t`Cancel`}
-              </Button>
-            )}
-            <ModelSelector
-              availableModels={_availableModels}
-              selectedModel={selectedModel}
-              onModelChange={_setSelectedModel}
-              disabled={!_isSelectionReady}
-            />
-            <Button
-              type="submit"
-              variant="secondary"
-              size="sm"
-              icon={<ArrowUpIcon className="size-5" />}
-              disabled={!canSendMessage || isSendDisabled}
-              data-testid={
-                mode === "edit"
-                  ? "chat-input-save-edit"
-                  : "chat-input-send-message"
-              }
-              aria-label={
-                isAnyTokenLimitExceeded
-                  ? t`Cannot send: Token limit exceeded`
-                  : mode === "edit"
-                    ? t`Save edit`
-                    : t`Send message`
-              }
-            />
-          </div>
-        </div>
-        {facetsError && (
-          <Alert type="error" className="mb-1">
-            {t({
-              id: "chat.facets.loadError",
-              message: "Failed to load tools for this workspace.",
-            })}
+        {/* File previews using our new component */}
+        <FileAttachmentsPreview
+          attachedFiles={attachedFiles}
+          maxFiles={maxFiles}
+          onRemoveFile={handleRemoveFileById}
+          onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
+          onFilePreview={onFilePreview}
+          disabled={isDisabled}
+          showFileTypes={showFileTypes}
+        />
+
+        {/* File error message */}
+        {fileError && (
+          <Alert
+            type="error"
+            dismissible
+            onDismiss={() => setFileError(null)}
+            className="mb-2"
+            data-testid="file-upload-error"
+          >
+            {getFileErrorMessage()}
           </Alert>
         )}
-      </div>
-    </form>
+
+        <div
+          className={clsx(
+            "w-full rounded-2xl bg-[var(--theme-bg-tertiary)]",
+            "p-2 sm:p-3",
+            "shadow-[0_0_15px_rgba(0,0,0,0.1)]",
+            "border border-[var(--theme-border)]",
+            "theme-transition focus-within:border-[var(--theme-border-focus)]",
+            "flex flex-col gap-2 sm:gap-3",
+          )}
+        >
+          <textarea
+            ref={textareaRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
+            placeholder={
+              isAnyTokenLimitExceeded
+                ? t`Message exceeds token limit. Please reduce length or remove files.`
+                : mode === "edit"
+                  ? t`Edit your message...`
+                  : placeholder
+            }
+            rows={1}
+            disabled={isLoading || isPendingResponse || disabled || isUploading}
+            tabIndex={0}
+            autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
+            className={clsx(
+              "w-full resize-none overflow-y-auto",
+              "p-2 sm:px-3",
+              "bg-transparent",
+              "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
+              "focus:outline-none",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+              "max-h-[200px] min-h-[32px]",
+              "text-base",
+              "scrollbar-auto-hide",
+              isAnyTokenLimitExceeded &&
+                "border-[var(--theme-error)] placeholder:text-[var(--theme-error-fg)]",
+            )}
+          />
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1 sm:gap-2">
+              {showControls && (
+                <>
+                  {/* File Upload Button with Token Check */}
+                  {handleFileAttachments && uploadEnabled && (
+                    <FileUploadWithTokenCheck
+                      message={message}
+                      chatId={chatId}
+                      assistantId={assistantId}
+                      previousMessageId={previousMessageId}
+                      onFilesUploaded={handleFilesUploaded}
+                      onTokenLimitExceeded={handleFileTokenLimitExceeded}
+                      // Pass the callback for processing state
+                      onProcessingChange={handleFileButtonProcessingChange}
+                      acceptedFileTypes={acceptedFileTypes}
+                      multiple={maxFiles > 1}
+                      iconOnly
+                      className="p-1"
+                      disabled={
+                        attachedFiles.length >= maxFiles ||
+                        isLoading ||
+                        isPendingResponse ||
+                        disabled ||
+                        isUploading || // isUploading from context (drag & drop)
+                        isFileButtonProcessing // Add button processing state
+                      }
+                    />
+                  )}
+                  {availableFacets.length > 0 && (
+                    <FacetSelector
+                      facets={availableFacets}
+                      selectedFacetIds={selectedFacetIds}
+                      onSelectionChange={(nextSelectedFacetIds) => {
+                        setSelectedFacetIds(nextSelectedFacetIds);
+                        onFacetSelectionChange?.(nextSelectedFacetIds);
+                      }}
+                      onlySingleFacet={
+                        globalFacetSettings?.only_single_facet ?? false
+                      }
+                      showFacetIndicatorWithDisplayName={
+                        globalFacetSettings?.show_facet_indicator_with_display_name ??
+                        false
+                      }
+                      disabled={isDisabled}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {mode === "edit" && onCancelEdit && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onCancelEdit}
+                  data-testid="chat-input-cancel-edit"
+                >
+                  {t`Cancel`}
+                </Button>
+              )}
+              <ModelSelector
+                availableModels={_availableModels}
+                selectedModel={selectedModel}
+                onModelChange={_setSelectedModel}
+                disabled={!_isSelectionReady}
+              />
+              <Button
+                type="submit"
+                variant="secondary"
+                size="sm"
+                icon={<ArrowUpIcon className="size-5" />}
+                disabled={!canSendMessage || isSendDisabled}
+                data-testid={
+                  mode === "edit"
+                    ? "chat-input-save-edit"
+                    : "chat-input-send-message"
+                }
+                aria-label={
+                  isAnyTokenLimitExceeded
+                    ? t`Cannot send: Token limit exceeded`
+                    : mode === "edit"
+                      ? t`Save edit`
+                      : t`Send message`
+                }
+              />
+            </div>
+          </div>
+          {facetsError && (
+            <Alert type="error" className="mb-1">
+              {t({
+                id: "chat.facets.loadError",
+                message: "Failed to load tools for this workspace.",
+              })}
+            </Alert>
+          )}
+        </div>
+      </form>
+      {aiUsageAdvisory && (
+        <div className="relative h-10">
+          <p className="absolute inset-0 flex items-center justify-center text-center text-xs text-theme-fg-muted">
+            {aiUsageAdvisory}
+          </p>
+        </div>
+      )}
+    </div>
   );
 };
