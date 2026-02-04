@@ -1,6 +1,6 @@
 //! Configuration parsing and validation tests.
 
-use erato::config::{AppConfig, ModelReasoningEffort, ModelVerbosity};
+use erato::config::{AppConfig, ModelReasoningEffort, ModelVerbosity, PromptSourceSpecification};
 use std::io::Write;
 use tempfile::Builder;
 use test_log::test;
@@ -144,7 +144,9 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     );
     assert_eq!(
         chat_provider.system_prompt,
-        Some("You are a helpful assistant.".to_string())
+        Some(PromptSourceSpecification::Static {
+            content: "You are a helpful assistant.".to_string()
+        })
     );
 
     // Verify custom values override defaults
@@ -1471,7 +1473,12 @@ additional_system_prompt = "Please execute one or multiple web searches to answe
         facets.tool_call_allowlist,
         vec!["web-search-mcp/*".to_string()]
     );
-    assert_eq!(facets.facet_prompt_template, Some("".to_string()));
+    assert_eq!(
+        facets.facet_prompt_template,
+        Some(PromptSourceSpecification::Static {
+            content: "".to_string()
+        })
+    );
     assert_eq!(
         facets.default_selected_facets,
         vec!["web_search".to_string()]
@@ -1505,9 +1512,9 @@ additional_system_prompt = "Please execute one or multiple web searches to answe
     );
     assert_eq!(
         web_search.additional_system_prompt,
-        Some(
-            "Please execute one or multiple web searches to answer the user's question."
+        Some(PromptSourceSpecification::Static {
+            content: "Please execute one or multiple web searches to answer the user's question."
                 .to_string()
-        )
+        })
     );
 }

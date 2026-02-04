@@ -133,27 +133,29 @@ pub async fn build_abstract_sequence(
             continue;
         };
 
-        let template = experimental_facets
-            .facet_prompt_template
-            .as_deref()
-            .unwrap_or(DEFAULT_FACET_PROMPT_TEMPLATE);
+        if !facet.disable_facet_prompt_template {
+            let template = if let Some(spec) = &experimental_facets.facet_prompt_template {
+                prompt_provider.resolve_prompt_source(spec).await?
+            } else {
+                DEFAULT_FACET_PROMPT_TEMPLATE.to_string()
+            };
 
-        if !template.is_empty() && !facet.disable_facet_prompt_template {
-            sequence.push(AbstractChatSequencePart::FacetPromptTemplate {
-                spec: PromptSpec::Static {
-                    content: template.to_string(),
-                },
-                facet_id: facet_id.clone(),
-                facet_display_name: facet.display_name.clone(),
-                facet_tools_list: facet.tool_call_allowlist.clone(),
-            });
+            if !template.is_empty() {
+                sequence.push(AbstractChatSequencePart::FacetPromptTemplate {
+                    spec: PromptSpec::Static {
+                        content: template.to_string(),
+                    },
+                    facet_id: facet_id.clone(),
+                    facet_display_name: facet.display_name.clone(),
+                    facet_tools_list: facet.tool_call_allowlist.clone(),
+                });
+            }
         }
 
         if let Some(prompt) = &facet.additional_system_prompt {
+            let prompt = prompt_provider.resolve_prompt_source(prompt).await?;
             sequence.push(AbstractChatSequencePart::FacetAdditionalSystemPrompt {
-                spec: PromptSpec::Static {
-                    content: prompt.clone(),
-                },
+                spec: PromptSpec::Static { content: prompt },
                 facet_id: facet_id.clone(),
             });
         }

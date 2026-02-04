@@ -422,25 +422,52 @@ impl LangfuseClient {
 
     /// Get a prompt from Langfuse by name
     pub async fn get_prompt(&self, prompt_name: &str) -> Result<LangfusePrompt> {
+        let prompt = self
+            .get_prompt_with_label(prompt_name, None)
+            .await?
+            .ok_or_else(|| {
+                eyre!(
+                    "Failed to retrieve prompt '{}' from Langfuse: prompt not found",
+                    prompt_name
+                )
+            })?;
+        Ok(prompt)
+    }
+
+    /// Get a prompt from Langfuse by name and optional label.
+    /// Returns Ok(None) when the prompt or label is not found (HTTP 404).
+    pub async fn get_prompt_with_label(
+        &self,
+        prompt_name: &str,
+        label: Option<&str>,
+    ) -> Result<Option<LangfusePrompt>> {
         if !self.enabled {
             return Err(eyre!("Langfuse client is disabled"));
         }
 
         tracing::debug!(
             prompt_name = %prompt_name,
+            label = ?label,
             "Retrieving prompt from Langfuse"
         );
 
-        let url = format!("{}/api/public/v2/prompts/{}", self.base_url, prompt_name);
+        let mut url = reqwest::Url::parse(&format!(
+            "{}/api/public/v2/prompts/{}",
+            self.base_url, prompt_name
+        ))
+        .map_err(|e| eyre!("Failed to build Langfuse prompt URL: {}", e))?;
+        if let Some(label) = label {
+            url.query_pairs_mut().append_pair("label", label);
+        }
 
         tracing::debug!(
-            url = %url,
+            url = %url.as_str(),
             "Sending request to Langfuse prompts endpoint"
         );
 
         let response = self
             .client
-            .get(&url)
+            .get(url.clone())
             .basic_auth(&self.public_key, Some(&self.secret_key))
             .header("Content-Type", "application/json")
             .send()
@@ -448,7 +475,7 @@ impl LangfuseClient {
             .map_err(|e| {
                 tracing::error!(
                     error = %e,
-                    url = %url,
+                    url = %url.as_str(),
                     prompt_name = %prompt_name,
                     "Failed to send HTTP request to Langfuse prompts endpoint"
                 );
@@ -463,6 +490,15 @@ impl LangfuseClient {
             "Received response from Langfuse prompts endpoint"
         );
 
+        if status == reqwest::StatusCode::NOT_FOUND {
+            tracing::warn!(
+                prompt_name = %prompt_name,
+                label = ?label,
+                "Langfuse prompt not found"
+            );
+            return Ok(None);
+        }
+
         if !status.is_success() {
             let body = response
                 .text()
@@ -472,7 +508,7 @@ impl LangfuseClient {
             tracing::error!(
                 status = %status,
                 response_body = %body,
-                url = %url,
+                url = %url.as_str(),
                 prompt_name = %prompt_name,
                 "Langfuse prompt retrieval failed"
             );
@@ -500,7 +536,7 @@ impl LangfuseClient {
             "Successfully retrieved prompt from Langfuse"
         );
 
-        Ok(prompt)
+        Ok(Some(prompt))
     }
 
     /// Send an ingestion batch to Langfuse

@@ -28,99 +28,95 @@ test.describe.serial("Assistant Sharing between Entra ID Users", () => {
   let assistantName: string | null = null;
   let user2DisplayName: string | null = null;
 
-  test(
-    "User 1 creates an assistant",
-    { tag: TAG_CI },
-    async ({ browser }) => {
-      // Create context for user1
-      const context1 = await browser.newContext({
-        storageState: { cookies: [], origins: [] },
+  test("User 1 creates an assistant", { tag: TAG_CI }, async ({ browser }) => {
+    // Create context for user1
+    const context1 = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    const page1 = await context1.newPage();
+
+    try {
+      // Navigate to the app
+      await page1.goto("/");
+
+      // Get scenario data containing test user credentials
+      const scenarioData = await getScenarioData(page1);
+      expect(scenarioData).toBeTruthy();
+      expect(scenarioData?.entraid_user1_email).toBeTruthy();
+      expect(scenarioData?.entraid_user1_password).toBeTruthy();
+
+      console.log(
+        `[ASSISTANT_SHARING] Logging in with user1: ${scenarioData!.entraid_user1_email}`,
+      );
+
+      // Perform Entra ID login for user1
+      await loginWithEntraId(
+        page1,
+        scenarioData!.entraid_user1_email,
+        scenarioData!.entraid_user1_password,
+      );
+
+      // Verify successful login
+      await expect(
+        page1.getByRole("textbox", { name: "Type a message..." }),
+      ).toBeVisible({ timeout: 15000 });
+
+      console.log("[ASSISTANT_SHARING] ✅ User 1 logged in successfully");
+
+      // Generate a unique name for the assistant
+      const randomSuffix = Math.floor(Math.random() * 16777215)
+        .toString(16)
+        .padStart(6, "0");
+      assistantName = `Shared Assistant-${randomSuffix}`;
+
+      // Navigate to assistants page
+      await page1.goto("/assistants");
+      await page1.waitForTimeout(500);
+
+      // Create the assistant
+      const createButton = page1.getByRole("button", {
+        name: /create.*assistant|new.*assistant/i,
       });
-      const page1 = await context1.newPage();
+      await expect(createButton).toBeVisible();
+      await createButton.click();
 
-      try {
-        // Navigate to the app
-        await page1.goto("/");
+      // Wait for the form to load
+      await expect(
+        page1.getByRole("heading", { name: /create assistant/i }),
+      ).toBeVisible();
 
-        // Get scenario data containing test user credentials
-        const scenarioData = await getScenarioData(page1);
-        expect(scenarioData).toBeTruthy();
-        expect(scenarioData?.entraid_user1_email).toBeTruthy();
-        expect(scenarioData?.entraid_user1_password).toBeTruthy();
+      // Fill in basic fields
+      await page1.getByLabel(/name/i).fill(assistantName);
+      await page1
+        .getByLabel(/description/i)
+        .fill("An assistant for testing sharing between users");
+      await page1
+        .getByLabel(/system prompt/i)
+        .fill("You are a helpful assistant for testing sharing.");
 
-        console.log(
-          `[ASSISTANT_SHARING] Logging in with user1: ${scenarioData!.entraid_user1_email}`,
-        );
+      // Submit the form
+      await page1.getByRole("button", { name: /create assistant/i }).click();
 
-        // Perform Entra ID login for user1
-        await loginWithEntraId(
-          page1,
-          scenarioData!.entraid_user1_email,
-          scenarioData!.entraid_user1_password,
-        );
+      // Wait for success message and redirect
+      await expect(
+        page1.getByText(/assistant created successfully/i),
+      ).toBeVisible({ timeout: 5000 });
 
-        // Verify successful login
-        await expect(
-          page1.getByRole("textbox", { name: "Type a message..." }),
-        ).toBeVisible({ timeout: 15000 });
+      // Should redirect to assistants list
+      await page1.waitForURL("/assistants", { timeout: 5000 });
 
-        console.log("[ASSISTANT_SHARING] ✅ User 1 logged in successfully");
+      // Verify the assistant appears in the list
+      await expect(
+        page1.getByRole("heading", { name: assistantName }),
+      ).toBeVisible();
 
-        // Generate a unique name for the assistant
-        const randomSuffix = Math.floor(Math.random() * 16777215)
-          .toString(16)
-          .padStart(6, "0");
-        assistantName = `Shared Assistant-${randomSuffix}`;
-
-        // Navigate to assistants page
-        await page1.goto("/assistants");
-        await page1.waitForTimeout(500);
-
-        // Create the assistant
-        const createButton = page1.getByRole("button", {
-          name: /create.*assistant|new.*assistant/i,
-        });
-        await expect(createButton).toBeVisible();
-        await createButton.click();
-
-        // Wait for the form to load
-        await expect(
-          page1.getByRole("heading", { name: /create assistant/i }),
-        ).toBeVisible();
-
-        // Fill in basic fields
-        await page1.getByLabel(/name/i).fill(assistantName);
-        await page1
-          .getByLabel(/description/i)
-          .fill("An assistant for testing sharing between users");
-        await page1
-          .getByLabel(/system prompt/i)
-          .fill("You are a helpful assistant for testing sharing.");
-
-        // Submit the form
-        await page1.getByRole("button", { name: /create assistant/i }).click();
-
-        // Wait for success message and redirect
-        await expect(
-          page1.getByText(/assistant created successfully/i),
-        ).toBeVisible({ timeout: 5000 });
-
-        // Should redirect to assistants list
-        await page1.waitForURL("/assistants", { timeout: 5000 });
-
-        // Verify the assistant appears in the list
-        await expect(
-          page1.getByRole("heading", { name: assistantName }),
-        ).toBeVisible();
-
-        console.log(
-          `[ASSISTANT_SHARING] ✅ User 1 created assistant: ${assistantName}`,
-        );
-      } finally {
-        await context1.close();
-      }
-    },
-  );
+      console.log(
+        `[ASSISTANT_SHARING] ✅ User 1 created assistant: ${assistantName}`,
+      );
+    } finally {
+      await context1.close();
+    }
+  });
 
   test(
     "User 2 cannot see the assistant yet",
@@ -135,13 +131,17 @@ test.describe.serial("Assistant Sharing between Entra ID Users", () => {
       try {
         // Intercept the profile API call to capture user2's display name
         let profileResponse: any = null;
-        const profilePromise = page2.waitForResponse(
-          (resp) => resp.url().includes("/api/v1beta/me/profile") && resp.status() === 200,
-          { timeout: 30000 }
-        ).then(async (resp) => {
-          profileResponse = await resp.json();
-          return resp;
-        });
+        const profilePromise = page2
+          .waitForResponse(
+            (resp) =>
+              resp.url().includes("/api/v1beta/me/profile") &&
+              resp.status() === 200,
+            { timeout: 30000 },
+          )
+          .then(async (resp) => {
+            profileResponse = await resp.json();
+            return resp;
+          });
 
         // Navigate to the app
         await page2.goto("/");
@@ -259,9 +259,9 @@ test.describe.serial("Assistant Sharing between Entra ID Users", () => {
         await shareOption.click();
 
         // Wait for sharing dialog to appear
-        await expect(
-          page1.getByRole("dialog", { name: /share/i }),
-        ).toBeVisible({ timeout: 5000 });
+        await expect(page1.getByRole("dialog", { name: /share/i })).toBeVisible(
+          { timeout: 5000 },
+        );
 
         console.log("[ASSISTANT_SHARING] ✅ Sharing dialog opened");
 
@@ -327,7 +327,10 @@ test.describe.serial("Assistant Sharing between Entra ID Users", () => {
 
           if (userRowCount > 0) {
             // Click the first matching user row's checkbox
-            const firstCheckbox = userRows.first().locator('input[type="checkbox"]').nth(0);
+            const firstCheckbox = userRows
+              .first()
+              .locator('input[type="checkbox"]')
+              .nth(0);
             await firstCheckbox.check();
             user2Found = true;
             console.log(
@@ -357,7 +360,9 @@ test.describe.serial("Assistant Sharing between Entra ID Users", () => {
         await page1.waitForTimeout(2000);
 
         // Check for success message (it's optional, so we just log if we see it)
-        const successAlert = sharingDialog.getByText(/access granted|granted successfully/i);
+        const successAlert = sharingDialog.getByText(
+          /access granted|granted successfully/i,
+        );
         const alertVisible = await successAlert.isVisible().catch(() => false);
 
         if (alertVisible) {
@@ -370,9 +375,7 @@ test.describe.serial("Assistant Sharing between Entra ID Users", () => {
           );
         }
 
-        console.log(
-          `[ASSISTANT_SHARING] ✅ Completed sharing operation`,
-        );
+        console.log(`[ASSISTANT_SHARING] ✅ Completed sharing operation`);
 
         // Close the sharing dialog
         const closeButton = page1.getByRole("button", { name: /close|done/i });

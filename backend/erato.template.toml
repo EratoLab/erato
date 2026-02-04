@@ -46,7 +46,10 @@ chat_provider_ids = ["test-token-limit"]
 # [prompt_optimizer]
 # enabled = false
 # chat_provider_id = "test-token-limit"
-# prompt = "Optional override. If omitted, a default non-interactive prompt-optimizer system prompt is used."
+# # prompt can be a string or an object:
+# # prompt = "Optional override. If omitted, a default non-interactive prompt-optimizer system prompt is used."
+# # prompt = { source = "langfuse", prompt_name = "prompt-optimizer", label = "production", fallback = "Optional fallback" }
+# # prompt = { source = "static", prompt = "Explicit static prompt content" }
 
 # From ./run_mcp_server.sh
 # [mcp_servers.file_provider]
@@ -129,4 +132,7 @@ chat_provider_ids = ["test-token-limit"]
 # display_name = "Web search"
 # icon = "iconoir-globe"
 # tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
-# additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."
+# # additional_system_prompt can be a string or an object:
+# # additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."
+# # additional_system_prompt = { source = "langfuse", prompt_name = "facet-web-search", label = "production", fallback = "Please execute one or multiple web searches to answer the user's question." }
+# # additional_system_prompt = { source = "static", prompt = "Please execute one or multiple web searches to answer the user's question." }

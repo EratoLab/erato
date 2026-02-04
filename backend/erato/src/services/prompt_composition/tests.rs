@@ -3,13 +3,13 @@ mod test_cases {
     use super::super::traits::{FileResolver, MessageRepository, PromptProvider};
     use super::super::transforms::{build_abstract_sequence, resolve_sequence};
     use super::super::types::{AbstractChatSequencePart, PromptSpec};
-    use crate::config::{ChatProviderConfig, ExperimentalFacetsConfig};
+    use crate::config::{ChatProviderConfig, ExperimentalFacetsConfig, PromptSourceSpecification};
     use crate::db::entity::{chats, messages};
     use crate::models::assistant::{AssistantWithFiles, FileInfo};
     use crate::models::message::{ContentPart, ContentPartText, MessageRole, MessageSchema};
     use crate::server::api::v1beta::message_streaming::{FileContent, FileContentsForGeneration};
     use async_trait::async_trait;
-    use eyre::{OptionExt, Report};
+    use eyre::{OptionExt, Report, eyre};
     use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
     use std::collections::HashMap;
 
@@ -243,6 +243,19 @@ mod test_cases {
             _chat: &chats::Model,
         ) -> Result<Option<AssistantWithFiles>, Report> {
             Ok(self.assistant_config.clone())
+        }
+
+        async fn resolve_prompt_source(
+            &self,
+            spec: &PromptSourceSpecification,
+        ) -> Result<String, Report> {
+            match spec {
+                PromptSourceSpecification::Static { content } => Ok(content.clone()),
+                PromptSourceSpecification::Langfuse { prompt_name, .. } => Err(eyre!(
+                    "Langfuse prompt '{}' not supported in MockPromptProvider",
+                    prompt_name
+                )),
+            }
         }
     }
 
