@@ -499,13 +499,6 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
             <AssistantFileUploadSelector
               onFilesUploaded={handleFilesUploaded}
               disabled={isSubmitting}
-              acceptedFileTypes={[
-                "pdf",
-                "document",
-                "text",
-                "spreadsheet",
-                "image",
-              ]}
               maxFiles={5}
             />
             {formData.files.length > 0 && (

@@ -9,6 +9,10 @@ import type { ReactNode } from "react";
 
 interface RootProviderProps {
   children: ReactNode;
+  /**
+   * Optional override for accepted file types.
+   * If not provided, will derive from backend file capabilities.
+   */
   acceptedFileTypes?: FileType[];
 }
 
@@ -17,10 +21,14 @@ interface RootProviderProps {
  *
  * This component wraps the entire application with all necessary providers
  * in the correct order based on dependencies between them.
+ *
+ * File type handling:
+ * - If acceptedFileTypes is provided, uses those types
+ * - If not provided, ChatProvider will derive types from FileCapabilitiesProvider
  */
 export function RootProvider({
   children,
-  acceptedFileTypes = [],
+  acceptedFileTypes,
 }: RootProviderProps) {
   return (
     <ProfileProvider>

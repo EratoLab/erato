@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 import { useFileCapabilities } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
@@ -28,14 +28,21 @@ export function FileCapabilitiesProvider({
     },
   );
 
+  // Memoize capabilities array to prevent creating new array on every render
+  const capabilities = useMemo(() => data ?? [], [data]);
+
+  // Memoize context value to prevent unnecessary rerenders of consumers
+  const value = useMemo(
+    () => ({
+      capabilities,
+      isLoading,
+      error,
+    }),
+    [capabilities, isLoading, error],
+  );
+
   return (
-    <FileCapabilitiesContext.Provider
-      value={{
-        capabilities: data ?? [],
-        isLoading,
-        error,
-      }}
-    >
+    <FileCapabilitiesContext.Provider value={value}>
       {children}
     </FileCapabilitiesContext.Provider>
   );
