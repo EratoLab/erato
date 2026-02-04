@@ -42,6 +42,8 @@ const TOOLTIP_EN_MESSAGES: Record<string, string> = {
     "Optional: Select a default model to use for this assistant.",
   "assistant.form.defaultFiles.tooltip":
     "Optional: These files are always available to the assistant.",
+  "chat.message.image_advisory":
+    "Please ensure that your usage of the generated image complies with legal and company guideline regarding e.g. intellectual property usage.",
 };
 
 const normalizeLocale = (locale: string) => {
