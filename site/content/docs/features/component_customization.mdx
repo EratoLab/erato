@@ -13,32 +13,18 @@ The component registry pattern provides:
 
 ## How It Works
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       Main Repository                        │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  componentRegistry.ts                                │    │
-│  │  ─────────────────────                               │    │
-│  │  AssistantFileSourceSelector: null  (use default)    │    │
-│  │  ChatFileSourceSelector: null       (use default)    │    │
-│  └─────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+  subgraph MainRepo[Main Repository]
+    MainRegistry[componentRegistry.ts<br/>AssistantFileSourceSelector: null<br/>ChatFileSourceSelector: null]
+  end
 
-┌─────────────────────────────────────────────────────────────┐
-│                      Customer Fork                           │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  componentRegistry.ts                                │    │
-│  │  ─────────────────────                               │    │
-│  │  AssistantFileSourceSelector: FileSourceSelectorGrid │    │
-│  │  ChatFileSourceSelector: null       (use default)    │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                              │                               │
-│                              ▼                               │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  /src/customer/components/FileSourceSelectorGrid.tsx │    │
-│  │  (Custom implementation)                             │    │
-│  └─────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
+  subgraph CustomerFork[Customer Fork]
+    ForkRegistry[componentRegistry.ts<br/>AssistantFileSourceSelector: FileSourceSelectorGrid<br/>ChatFileSourceSelector: null]
+    CustomComponent["src/customer/components/FileSourceSelectorGrid.tsx<br/>Custom implementation"]
+  end
+
+  ForkRegistry --> CustomComponent
 ```
 
 ## Available Override Points

@@ -1,7 +1,8 @@
 export default {
   index: "",
-  deployment: "",
-  configuration: "",
   features: "",
+  configuration: "",
   integrations: "",
+  deployment: "",
+  architecture: "",
 };

@@ -212,11 +212,13 @@ Add an `icons` section to your `theme.json`:
 ### Icon Value Formats
 
 **Iconoir Icon Names** - Use the PascalCase name from [iconoir.com](https://iconoir.com):
+
 ```json
 "pdf": "MultiplePages"
 ```
 
 **Custom SVG Files** - Use relative paths to SVG files in your theme folder:
+
 ```json
 "pdf": "./icons/company-pdf.svg"
 ```
@@ -225,12 +227,12 @@ Relative paths (starting with `./`) are resolved to `/custom-theme/your-company/
 
 ### Icon Categories
 
-| Category     | Purpose                                    | Keys                                                      |
-| ------------ | ------------------------------------------ | --------------------------------------------------------- |
+| Category     | Purpose                                    | Keys                                                                                      |
+| ------------ | ------------------------------------------ | ----------------------------------------------------------------------------------------- |
 | `fileTypes`  | File type icons in upload and file preview | pdf, image, document, spreadsheet, presentation, text, code, archive, audio, video, other |
-| `status`     | Status indicators in alerts and tool calls | info, warning, error, success, in_progress                |
-| `actions`    | Action button icons (future extensibility) | copy, edit, delete, share, plus, close, check, refresh    |
-| `navigation` | Sidebar navigation menu item icons         | assistants, newChat, search                                |
+| `status`     | Status indicators in alerts and tool calls | info, warning, error, success, in_progress                                                |
+| `actions`    | Action button icons (future extensibility) | copy, edit, delete, share, plus, close, check, refresh                                    |
+| `navigation` | Sidebar navigation menu item icons         | assistants, newChat, search                                                               |
 
 ### File Structure with Custom Icons
 
@@ -248,6 +250,7 @@ public/custom-theme/my-company/
 ### Custom SVG Requirements
 
 When creating custom icons:
+
 - Design on a **24×24 pixel grid** to match iconoir icons
 - Use `currentColor` for fill/stroke to inherit theme colors:
   ```svg
@@ -313,28 +316,28 @@ Add a `layout` section to your `theme.json`:
 
 ### Alignment Options
 
-| Value      | Description                                       |
-| ---------- | ------------------------------------------------- |
-| `"left"`   | Content aligns to the left of the available space |
-| `"center"` | Content centers horizontally (default)            |
+| Value      | Description                                        |
+| ---------- | -------------------------------------------------- |
+| `"left"`   | Content aligns to the left of the available space  |
+| `"center"` | Content centers horizontally (default)             |
 | `"right"`  | Content aligns to the right of the available space |
 
 ### Max Width Options
 
-| Value    | Pixel Width | Description                           |
-| -------- | ----------- | ------------------------------------- |
-| `"2xl"`  | 672px       | Narrow width (default for headers)    |
-| `"4xl"`  | 896px       | Standard width (default for pages)    |
-| `"6xl"`  | 1152px      | Wide width                            |
-| `"full"` | 100%        | Full available width (minus padding)  |
+| Value    | Pixel Width | Description                          |
+| -------- | ----------- | ------------------------------------ |
+| `"2xl"`  | 672px       | Narrow width (default for headers)   |
+| `"4xl"`  | 896px       | Standard width (default for pages)   |
+| `"6xl"`  | 1152px      | Wide width                           |
+| `"full"` | 100%        | Full available width (minus padding) |
 
 ### Page Types
 
-| Page Type    | Controls                                      |
-| ------------ | --------------------------------------------- |
-| `assistants` | Assistant list, create, and edit pages        |
-| `search`     | Search page results                           |
-| `headers`    | Page header sections (titles and subtitles)   |
+| Page Type    | Controls                                    |
+| ------------ | ------------------------------------------- |
+| `assistants` | Assistant list, create, and edit pages      |
+| `search`     | Search page results                         |
+| `headers`    | Page header sections (titles and subtitles) |
 
 ### Examples
 
@@ -398,6 +401,7 @@ Add a `layout` section to your `theme.json`:
 ### Default Behavior
 
 If no `layout` configuration is provided, the system uses these defaults:
+
 - **Alignment:** `center`
 - **Headers max-width:** `2xl` (672px)
 - **Pages max-width:** `4xl` (896px)
