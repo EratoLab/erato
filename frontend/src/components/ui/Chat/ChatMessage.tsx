@@ -317,6 +317,14 @@ const getErrorDescription = (errorType: string) => {
     });
   }
 
+  if (errorType === "rate_limit") {
+    return t({
+      id: "chat.message.error.variant.rate_limit",
+      message:
+        "Rate limit or quota exceeded. This can also happen if your input is too large.",
+    });
+  }
+
   return t({
     id: "chat.message.error.variant.default",
     message: "The assistant was unable to respond.",
@@ -329,6 +337,14 @@ const getErrorCta = (errorType: string) => {
       id: "chat.message.error.variant.content_filter.cta",
       message:
         "Please try again with a different message that avoids the filtered categories.",
+    });
+  }
+
+  if (errorType === "rate_limit") {
+    return t({
+      id: "chat.message.error.variant.rate_limit.cta",
+      message:
+        "Please try again in a minute, and reduce the length or number of attachments.",
     });
   }
 

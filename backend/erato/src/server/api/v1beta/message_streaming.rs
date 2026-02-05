@@ -349,14 +349,14 @@ fn parse_error_body(
     status_code: Option<u16>,
 ) -> Option<MessageSubmitStreamingResponseError> {
     let error_obj = body.get("error")?;
-    if let Some(code) = error_obj.get("code").and_then(|c| c.as_str())
-        && code == "content_filter"
-    {
-        let error_message = error_obj
-            .get("message")
-            .and_then(|m| m.as_str())
-            .unwrap_or("Content was filtered by the provider's content policy");
+    let error_code = error_obj.get("code").and_then(|c| c.as_str());
+    let error_message = error_obj
+        .get("message")
+        .and_then(|m| m.as_str())
+        .unwrap_or("Provider returned an error response");
+    let message_is_rate_limit = error_message.to_lowercase().contains("rate limit");
 
+    if error_code == Some("content_filter") {
         let filter_details = error_obj
             .get("innererror")
             .and_then(|ie| ie.get("content_filter_result"))
@@ -371,14 +371,19 @@ fn parse_error_body(
         });
     }
 
+    if error_code == Some("429") || status_code == Some(429) || message_is_rate_limit {
+        return Some(MessageSubmitStreamingResponseError {
+            message_id: Some(message_id),
+            error: GenerationErrorType::RateLimit {
+                error_description: error_message.to_string(),
+            },
+        });
+    }
+
     Some(MessageSubmitStreamingResponseError {
         message_id: Some(message_id),
         error: GenerationErrorType::ProviderError {
-            error_description: error_obj
-                .get("message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("Provider returned an error response")
-                .to_string(),
+            error_description: error_message.to_string(),
             status_code,
         },
     })
@@ -405,6 +410,14 @@ async fn parse_streaming_error(
                         parse_error_body(&body_json, message_id, Some(status.as_u16()))
                 {
                     return parsed;
+                }
+                if status.as_u16() == 429 {
+                    return MessageSubmitStreamingResponseError {
+                        message_id: Some(message_id),
+                        error: GenerationErrorType::RateLimit {
+                            error_description: body.clone(),
+                        },
+                    };
                 }
                 return MessageSubmitStreamingResponseError {
                     message_id: Some(message_id),

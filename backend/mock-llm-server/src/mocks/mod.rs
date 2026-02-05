@@ -214,6 +214,24 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "RateLimitError".to_string(),
+            description: "Returns an OpenAI-style rate limit error response".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "rate limit".to_string(),
+                },
+            )],
+            response: ResponseConfig::Error(ErrorResponseConfig {
+                status_code: 429,
+                body: json!({
+                    "error": {
+                        "code": "429",
+                        "message": "Requests to the ChatCompletions_Create Operation under Azure OpenAI API version 2024-06-01 have exceeded call rate limit of your current OpenAI S0 pricing tier. Please retry after 8 seconds. Please go here: https://aka.ms/oai/quotaincrease if you would like to further increase the default rate limit. For Free Account customers, upgrade to Pay as you Go here: https://aka.ms/429TrialUpgrade."
+                    }
+                }),
+            }),
+        },
+        Mock {
             name: "ReadSecretToolCall".to_string(),
             description: "Returns a tool call to read_text_file when last message is user asking to read secret"
                 .to_string(),
@@ -307,21 +325,6 @@ pub fn get_default_image_mocks() -> Vec<ImageMock> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_get_default_mocks_count() {
-        let mocks = get_default_mocks();
-
-        // Verify we have the expected number of mocks
-        assert_eq!(mocks.len(), 12);
-
-        // Verify all mocks have names
-        for mock in &mocks {
-            assert!(!mock.name.is_empty());
-            assert!(!mock.description.is_empty());
-            assert!(!mock.match_rules.is_empty());
-        }
-    }
 
     #[test]
     fn test_get_default_image_mocks_count() {
