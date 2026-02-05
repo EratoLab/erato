@@ -1227,12 +1227,13 @@ pub async fn chat_messages(
     // Fetch all file uploads with their download URLs
     let mut file_uploads_map = std::collections::HashMap::new();
     for file_id in all_file_ids {
-        if let Ok(file_upload) = models::file_upload::get_file_upload_with_url(
+        if let Ok(file_upload) = models::file_upload::get_file_upload_with_url_and_token(
             &app_state.db,
             &policy,
             &me_user.to_subject(),
             &file_id,
             &app_state.file_storage_providers,
+            me_user.access_token.as_deref(),
         )
         .await
         {
@@ -1724,12 +1725,13 @@ pub async fn get_file(
     let all_capabilities = get_file_capabilities(supports_image_understanding);
 
     // Get the file upload record with its download URL
-    let file_upload = models::file_upload::get_file_upload_with_url(
+    let file_upload = models::file_upload::get_file_upload_with_url_and_token(
         &app_state.db,
         &policy,
         &me_user.to_subject(),
         &file_id,
         &app_state.file_storage_providers,
+        me_user.access_token.as_deref(),
     )
     .await
     .map_err(|e| {
