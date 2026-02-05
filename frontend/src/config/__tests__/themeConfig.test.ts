@@ -41,6 +41,7 @@ describe("themeConfig", () => {
     messageFeedbackEditTimeLimitSeconds: null,
     maxUploadSizeBytes: 20971520,
     sidebarCollapsedMode: "hidden",
+    sidebarChatHistoryShowMetadata: true,
     ...overrides,
   });
 

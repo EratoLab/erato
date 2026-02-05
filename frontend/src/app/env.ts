@@ -19,6 +19,7 @@ export type Env = {
   sidebarCollapsedMode: "hidden" | "slim";
   sidebarLogoPath: string | null;
   sidebarLogoDarkPath: string | null;
+  sidebarChatHistoryShowMetadata: boolean;
 };
 
 declare global {
@@ -44,6 +45,7 @@ declare global {
     SIDEBAR_COLLAPSED_MODE?: string;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
+    SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
   }
 }
 
@@ -148,6 +150,11 @@ export const env = (): Env => {
     sidebarLogoDarkPath = null;
   }
 
+  const sidebarChatHistoryShowMetadata =
+    import.meta.env.VITE_SIDEBAR_CHAT_HISTORY_SHOW_METADATA === "false"
+      ? false
+      : (window.SIDEBAR_CHAT_HISTORY_SHOW_METADATA ?? true);
+
   return {
     apiRootUrl,
     themeCustomerName: customerName,
@@ -169,5 +176,6 @@ export const env = (): Env => {
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",
     sidebarLogoPath,
     sidebarLogoDarkPath,
+    sidebarChatHistoryShowMetadata,
   };
 };

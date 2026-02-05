@@ -101,7 +101,34 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
         <Markdown
           components={{
             li: ({ ...props }) => <li className="list-disc" {...props} />,
-            p: ({ ...props }) => <p className="mt-4" {...props} />,
+            p: ({ ...props }) => <p className="mb-4 first:mt-0" {...props} />,
+            h1: ({ children, ...props }) => (
+              <h1
+                className="mb-3 mt-6 text-2xl font-bold text-theme-fg-primary first:mt-0"
+                {...props}
+              >
+                {children}
+              </h1>
+            ),
+            h2: ({ children, ...props }) => (
+              <h2
+                className="mb-3 mt-6 text-xl font-semibold text-theme-fg-primary first:mt-0"
+                {...props}
+              >
+                {children}
+              </h2>
+            ),
+            h3: ({ children, ...props }) => (
+              <h3
+                className="mb-2 mt-4 text-lg font-semibold text-theme-fg-secondary first:mt-0"
+                {...props}
+              >
+                {children}
+              </h3>
+            ),
+            hr: ({ ...props }) => (
+              <hr className="my-4 border-t border-theme-border" {...props} />
+            ),
             a: ({ href, children, ...props }) => (
               <a
                 href={href}

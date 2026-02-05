@@ -4,16 +4,36 @@ import clsx from "clsx";
 import { memo, useEffect } from "react";
 
 import { MessageTimestamp } from "@/components/ui";
+import { useThemedIcon } from "@/hooks/ui";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
-import { LogOutIcon } from "../icons";
+import { LogOutIcon, ResolvedIcon, MultiplePagesIcon } from "../icons";
 
 import type { ChatSession } from "@/types/chat";
 
 const logger = createLogger("UI", "ChatHistoryList");
+
+const ChatItemIcon = memo(() => {
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifier, not user-facing text
+  const chatItemIconId = useThemedIcon("navigation", "chatItem");
+
+  // Only render if theme provides a custom icon
+  if (!chatItemIconId) return null;
+
+  return (
+    <ResolvedIcon
+      iconId={chatItemIconId}
+      fallbackIcon={MultiplePagesIcon}
+      className="size-4 shrink-0 text-theme-fg-secondary"
+    />
+  );
+});
+
+// eslint-disable-next-line lingui/no-unlocalized-strings -- Component display name, not user-facing text
+ChatItemIcon.displayName = "ChatItemIcon";
 
 export interface ChatHistoryListProps {
   sessions: ChatSession[];
@@ -82,12 +102,15 @@ const ChatHistoryListItem = memo<{
         data-chat-id={session.id}
       >
         <div className="flex items-center justify-between gap-2">
-          <span
-            className="truncate font-medium"
-            title={session.title || t`New Chat`}
-          >
-            {session.title || t`New Chat`}
-          </span>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <ChatItemIcon />
+            <span
+              className="truncate font-medium"
+              title={session.title || t`New Chat`}
+            >
+              {session.title || t`New Chat`}
+            </span>
+          </div>
           {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
           <div
             onClick={(e) => {
@@ -109,7 +132,7 @@ const ChatHistoryListItem = memo<{
             />
           </div>
         </div>
-        {layout !== "compact" && (
+        {layout !== "compact" && showTimestamps && (
           <>
             <p
               className={clsx(
@@ -133,7 +156,7 @@ const ChatHistoryListItem = memo<{
                 other="# files"
               />
             </p>
-            {showTimestamps && session.updatedAt && (
+            {session.updatedAt && (
               <p className="text-xs text-theme-fg-secondary">
                 <MessageTimestamp createdAt={new Date(session.updatedAt)} />
               </p>

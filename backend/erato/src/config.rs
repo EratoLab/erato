@@ -1152,10 +1152,19 @@ pub struct FrontendConfig {
 
     // Optional sidebar-specific logo path for dark mode
     pub sidebar_logo_dark_path: Option<String>,
+
+    // Whether to show metadata (timestamps and file count) in sidebar chat history items.
+    // Defaults to `true`.
+    #[serde(default = "default_sidebar_chat_history_show_metadata")]
+    pub sidebar_chat_history_show_metadata: bool,
 }
 
 fn default_sidebar_collapsed_mode() -> String {
     "hidden".to_string()
+}
+
+fn default_sidebar_chat_history_show_metadata() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
