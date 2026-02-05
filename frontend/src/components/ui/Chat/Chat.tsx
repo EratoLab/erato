@@ -10,6 +10,7 @@ import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { chatMessagesQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
+import { useSidebarFeature } from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -138,6 +139,9 @@ export const Chat = ({
   } = useChatContext();
 
   const { profile } = useProfile();
+
+  // Get sidebar feature configuration
+  const { chatHistoryShowMetadata } = useSidebarFeature();
 
   // Convert the chat history data to the format expected by the sidebar
   const sessions: ChatSession[] = Array.isArray(chatHistory)
@@ -385,7 +389,7 @@ export const Chat = ({
         currentSessionId={currentChatId ?? ""}
         onSessionSelect={handleSessionSelectWrapper}
         onSessionArchive={handleArchiveSession}
-        showTimestamps={showTimestamps}
+        showTimestamps={chatHistoryShowMetadata}
         isLoading={chatHistoryLoading}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
         userProfile={profile}

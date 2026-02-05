@@ -27,6 +27,7 @@ const DEFAULT_ICONS = {
     assistants: "EditPencil",
     newChat: "EditPencil",
     search: "Search",
+    chatItem: "ChatBubble",
   },
 } as const;
 /* eslint-enable lingui/no-unlocalized-strings */

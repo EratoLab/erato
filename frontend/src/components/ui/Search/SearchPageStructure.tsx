@@ -7,6 +7,7 @@ import { ChatHistorySidebar } from "@/components/ui/Chat/ChatHistorySidebar";
 import { useSidebar } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
+import { useSidebarFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 import type { ChatSession } from "@/types/chat";
@@ -34,6 +35,7 @@ export default function SearchPageStructure({
     toggle: onToggleCollapse,
     collapsedMode,
   } = useSidebar();
+  const { chatHistoryShowMetadata } = useSidebarFeature();
   const location = useLocation();
   const pathname = location.pathname;
   const prevPathnameRef = useRef<string>(pathname);
@@ -102,7 +104,7 @@ export default function SearchPageStructure({
         currentSessionId={currentChatId ?? ""}
         onSessionSelect={handleSessionSelect}
         onSessionArchive={handleArchiveSession}
-        showTimestamps={true}
+        showTimestamps={chatHistoryShowMetadata}
         isLoading={chatHistoryLoading}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
         userProfile={profile}

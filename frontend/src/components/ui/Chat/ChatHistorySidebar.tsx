@@ -539,6 +539,16 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 </div>
               )}
 
+              {/* Divider separating assistants from chat history */}
+              {assistantsEnabled && (
+                <div
+                  className={clsx(
+                    "mx-2 my-1 border-t border-theme-border transition-opacity duration-200",
+                    isSlimMode && "pointer-events-none opacity-0",
+                  )}
+                />
+              )}
+
               {/* Chat History - fade in/out with staggered timing */}
               <div
                 className={clsx(

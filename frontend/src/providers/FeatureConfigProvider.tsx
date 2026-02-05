@@ -77,6 +77,8 @@ interface SidebarFeatureConfig {
   logoPath: string | null;
   /** Optional path to sidebar-specific logo for dark mode */
   logoDarkPath: string | null;
+  /** Whether to show metadata (timestamps and file count) in chat history items */
+  chatHistoryShowMetadata: boolean;
 }
 
 /**
@@ -178,6 +180,7 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
         collapsedMode: environment.sidebarCollapsedMode,
         logoPath: environment.sidebarLogoPath,
         logoDarkPath: environment.sidebarLogoDarkPath,
+        chatHistoryShowMetadata: environment.sidebarChatHistoryShowMetadata,
       },
     };
   }, []); // Empty deps - only compute once

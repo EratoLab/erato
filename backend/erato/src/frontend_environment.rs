@@ -33,6 +33,8 @@ const FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES: &str = "MAX_UPLOAD_SIZE_BYTES";
 const FRONTEND_ENV_KEY_SIDEBAR_COLLAPSED_MODE: &str = "SIDEBAR_COLLAPSED_MODE";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_PATH: &str = "SIDEBAR_LOGO_PATH";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_DARK_PATH: &str = "SIDEBAR_LOGO_DARK_PATH";
+const FRONTEND_ENV_KEY_SIDEBAR_CHAT_HISTORY_SHOW_METADATA: &str =
+    "SIDEBAR_CHAT_HISTORY_SHOW_METADATA";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -133,6 +135,11 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
             Value::String(path.clone()),
         );
     }
+
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_SIDEBAR_CHAT_HISTORY_SHOW_METADATA.to_string(),
+        Value::Bool(config.frontend.sidebar_chat_history_show_metadata),
+    );
 
     // Inject pairs from frontend.additional_environment
     for (key, value) in &config.additional_frontend_environment() {
