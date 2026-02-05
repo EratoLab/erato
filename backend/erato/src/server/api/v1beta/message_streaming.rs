@@ -1,5 +1,4 @@
 use crate::config::ExperimentalFacetsConfig;
-use crate::db::entity::prelude::*;
 use crate::db::entity_ext::{chats, messages};
 use crate::models::chat::{
     ChatCreationStatus, get_chat_by_message_id, get_or_create_chat,
@@ -14,6 +13,7 @@ use crate::models::message::{
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::server::api::v1beta::ChatMessage;
+use crate::server::api::v1beta::file_resolution::resolve_file_pointers_in_generation_input;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming_file_extraction::post_process_mcp_tool_result;
 use crate::services::background_tasks::{
@@ -26,6 +26,9 @@ use crate::services::genai_langfuse::{
 };
 use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::convert_mcp_tools_to_genai_tools;
+use crate::services::prompt_composition::traits::{
+    FileResolver, MessageRepository, PromptProvider,
+};
 use crate::services::prompt_composition::{
     AppStateFileResolver, AppStatePromptProvider, DatabaseMessageRepository,
     PromptCompositionUserInput, compose_prompt_messages,
@@ -46,7 +49,6 @@ use genai::chat::{
     ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatRole, ChatStreamEvent,
     MessageContent, StreamChunk, StreamEnd,
 };
-use sea_orm::EntityTrait;
 use sea_orm::JsonValue;
 use sea_orm::prelude::Uuid;
 use serde::Serialize;
@@ -934,245 +936,6 @@ async fn download_and_store_generated_image(
     Ok((file_upload.id, download_url))
 }
 
-/// Format an error message for files that cannot be retrieved
-fn format_file_error_message(filename: &str, file_id: Uuid, is_parsing_error: bool) -> String {
-    let mut content = String::new();
-    content.push_str("File:\n");
-    content.push_str(&format!("file name: {}\n", filename));
-    content.push_str(&format!("file_id: erato_file_id:{}\n", file_id));
-
-    if is_parsing_error {
-        content.push_str(
-            "No file contents available as the file was not parseable. This info should be returned to the user."
-        );
-    } else {
-        content.push_str(
-            "Unable to retrieve file contents due to an unknown error. Please contact support if this issue persists."
-        );
-    }
-
-    content
-}
-
-/// Format successful file content with metadata header
-fn format_successful_file_content(filename: &str, file_id: Uuid, text: &str) -> String {
-    let mut content = String::new();
-    content.push_str("File:\n");
-    content.push_str(&format!("file name: {}\n", filename));
-    content.push_str(&format!("file_id: erato_file_id:{}\n", file_id));
-    content.push_str("File contents\n");
-    content.push_str("---\n");
-    content.push_str(text);
-    content.push_str("\n---");
-
-    content
-}
-
-/// Resolve TextFilePointer and ImageFilePointer content parts in generation input messages by extracting file contents JIT.
-/// This prevents storing duplicate file contents in the database.
-async fn resolve_file_pointers_in_generation_input(
-    app_state: &AppState,
-    generation_input_messages: GenerationInputMessages,
-    access_token: Option<&str>,
-) -> Result<GenerationInputMessages, Report> {
-    use crate::services::file_storage::SharepointContext;
-
-    // Build the context for Sharepoint (will be ignored by other providers)
-    let sharepoint_ctx = access_token.map(|token| SharepointContext {
-        access_token: token,
-    });
-
-    let mut resolved_messages = Vec::new();
-
-    for input_message in generation_input_messages.messages {
-        let resolved_content = match input_message.content {
-            ContentPart::TextFilePointer(ref file_pointer) => {
-                // Extract file content from the pointer JIT using cached version
-                let file_upload_id = file_pointer.file_upload_id;
-                let is_image_pointer = false;
-
-                resolve_file_pointer(
-                    app_state,
-                    file_upload_id,
-                    is_image_pointer,
-                    sharepoint_ctx.as_ref(),
-                )
-                .await
-            }
-            ContentPart::ImageFilePointer(ref file_pointer) => {
-                // Extract file content from the pointer JIT using cached version
-                let file_upload_id = file_pointer.file_upload_id;
-                let is_image_pointer = true;
-
-                resolve_file_pointer(
-                    app_state,
-                    file_upload_id,
-                    is_image_pointer,
-                    sharepoint_ctx.as_ref(),
-                )
-                .await
-            }
-            // Pass through other content parts unchanged
-            other => other,
-        };
-
-        resolved_messages.push(crate::models::message::InputMessage {
-            role: input_message.role,
-            content: resolved_content,
-        });
-    }
-
-    Ok(GenerationInputMessages {
-        messages: resolved_messages,
-    })
-}
-
-/// Helper function to resolve a file pointer (text or image) to its actual content
-async fn resolve_file_pointer(
-    app_state: &AppState,
-    file_upload_id: Uuid,
-    is_image_pointer: bool,
-    sharepoint_ctx: Option<&crate::services::file_storage::SharepointContext<'_>>,
-) -> ContentPart {
-    use crate::services::file_processing_cached::get_file_cached;
-
-    // Get the file upload record - use entity directly since we're reading from generation_input_messages
-    // which already went through authorization when it was created
-    let file_upload_result = FileUploads::find_by_id(file_upload_id)
-        .one(&app_state.db)
-        .await;
-
-    match file_upload_result {
-        Ok(Some(file)) => {
-            // Get the file storage provider
-            let file_storage = app_state
-                .file_storage_providers
-                .get(&file.file_storage_provider_id);
-
-            if let Some(file_storage) = file_storage {
-                // Use unified get_file_cached
-                match get_file_cached(
-                    app_state,
-                    &file_upload_id,
-                    file_storage,
-                    &file.file_storage_path,
-                    &file.filename,
-                    sharepoint_ctx,
-                )
-                .await
-                {
-                    Ok(file_contents) => {
-                        // Route based on expected pointer type and actual content
-                        match (&file_contents.content, is_image_pointer) {
-                            (FileContent::Text(text), false) => {
-                                // TextFilePointer → Text content (expected case)
-                                tracing::debug!(
-                                    "Successfully extracted text from file pointer {}: {} (text length: {})",
-                                    file.filename,
-                                    file_upload_id,
-                                    text.len()
-                                );
-
-                                let content = format_successful_file_content(
-                                    &file.filename,
-                                    file_upload_id,
-                                    text,
-                                );
-                                ContentPart::Text(ContentPartText { text: content })
-                            }
-                            (FileContent::Image { .. }, true) => {
-                                // ImageFilePointer → Image content (expected case)
-                                if let Some(image) = file_contents.as_base64_image() {
-                                    tracing::debug!(
-                                        "Successfully encoded image: {} ({} bytes, {})",
-                                        file.filename,
-                                        image.base64_data.len(),
-                                        image.content_type
-                                    );
-                                    ContentPart::Image(image)
-                                } else {
-                                    unreachable!(
-                                        "as_base64_image should always succeed for Image variant"
-                                    )
-                                }
-                            }
-                            (FileContent::Text(_), true) => {
-                                // ImageFilePointer → Text content (mismatch)
-                                tracing::warn!(
-                                    "ImageFilePointer resolved to text file: {}",
-                                    file_upload_id
-                                );
-                                let content = format_file_error_message(
-                                    &file.filename,
-                                    file_upload_id,
-                                    false,
-                                );
-                                ContentPart::Text(ContentPartText { text: content })
-                            }
-                            (FileContent::Image { .. }, false) => {
-                                // TextFilePointer → Image content (mismatch)
-                                tracing::warn!(
-                                    "TextFilePointer resolved to image file: {}",
-                                    file_upload_id
-                                );
-                                let content = format_file_error_message(
-                                    &file.filename,
-                                    file_upload_id,
-                                    false,
-                                );
-                                ContentPart::Text(ContentPartText { text: content })
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        // Check if it's a parsing error by examining the error message
-                        let is_parsing_error =
-                            err.to_string().contains("parse") || err.to_string().contains("Parse");
-
-                        tracing::warn!(
-                            "Failed to get file contents for {}: {} - Error: {}, using placeholder text",
-                            file.filename,
-                            file_upload_id,
-                            err
-                        );
-                        let content = format_file_error_message(
-                            &file.filename,
-                            file_upload_id,
-                            is_parsing_error,
-                        );
-                        ContentPart::Text(ContentPartText { text: content })
-                    }
-                }
-            } else {
-                tracing::warn!(
-                    "File storage provider {} not found for file {}, using placeholder text",
-                    file.file_storage_provider_id,
-                    file_upload_id
-                );
-                let content = format_file_error_message(&file.filename, file_upload_id, false);
-                ContentPart::Text(ContentPartText { text: content })
-            }
-        }
-        Ok(None) => {
-            tracing::warn!(
-                "File upload {} referenced in file pointer not found, using placeholder text",
-                file_upload_id
-            );
-            let content = format_file_error_message("Unknown", file_upload_id, false);
-            ContentPart::Text(ContentPartText { text: content })
-        }
-        Err(err) => {
-            tracing::error!(
-                "Database error fetching file upload {}: {}, using placeholder text",
-                file_upload_id,
-                err
-            );
-            let content = format_file_error_message("Unknown", file_upload_id, false);
-            ContentPart::Text(ContentPartText { text: content })
-        }
-    }
-}
-
 pub struct PreparedChatRequest {
     // Our internal abstract structure of the message chain
     generation_input_messages: GenerationInputMessages,
@@ -1182,6 +945,12 @@ pub struct PreparedChatRequest {
     chat_request: ChatRequest,
     // Prepared `genai` `ChatOptions` (e.g. reasoning effort)
     chat_options: ChatOptions,
+}
+
+impl PreparedChatRequest {
+    pub(crate) fn chat_request(&self) -> &ChatRequest {
+        &self.chat_request
+    }
 }
 
 fn build_selected_facets(
@@ -1248,91 +1017,113 @@ fn prepare_chat_request<'a>(
         )
         .await?;
 
-        // Determine the chat provider to use
-        let requested_chat_provider_id = user_input.requested_chat_provider_id.as_deref();
-        let effective_chat_provider_id = requested_chat_provider_id.or_else(|| {
-            assistant_config
-                .as_ref()
-                .and_then(|a| a.default_chat_provider.as_deref())
-        });
-
-        // Resolve chat provider configuration
-        let ChatProviderConfigWithId {
-            chat_provider_config,
-            chat_provider_id,
-        } = app_state.chat_provider_for_chatcompletion(
-            effective_chat_provider_id,
-            me_profile_input.user_groups,
-        )?;
-
-        // Use the new prompt composition service
-        let generation_input_messages = compose_prompt_messages(
+        prepare_chat_request_with_adapters(
+            app_state,
+            chat,
+            user_input,
+            me_profile_input,
+            assistant_config,
             &message_repo,
             &file_resolver,
             &prompt_provider,
-            chat,
-            &user_input,
-            &chat_provider_config,
-            &app_state.config.experimental_facets,
-            Some(me_profile_input.preferred_language),
         )
-        .await?;
+        .await
+    })
+}
 
-        // Resolve TextFilePointer to Text by extracting file contents JIT
-        let resolved_generation_input_messages = resolve_file_pointers_in_generation_input(
-            app_state,
-            generation_input_messages.clone(),
-            me_profile_input.access_token,
-        )
-        .await?;
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn prepare_chat_request_with_adapters(
+    app_state: &AppState,
+    chat: &chats::Model,
+    user_input: PromptCompositionUserInput,
+    me_profile_input: &MeProfileChatRequestInput<'_>,
+    assistant_config: Option<crate::models::assistant::AssistantWithFiles>,
+    message_repo: &impl MessageRepository,
+    file_resolver: &impl FileResolver,
+    prompt_provider: &impl PromptProvider,
+) -> Result<PreparedChatRequest, Report> {
+    // Determine the chat provider to use
+    let requested_chat_provider_id = user_input.requested_chat_provider_id.as_deref();
+    let effective_chat_provider_id = requested_chat_provider_id.or_else(|| {
+        assistant_config
+            .as_ref()
+            .and_then(|a| a.default_chat_provider.as_deref())
+    });
 
-        // Get all MCP server tools and filter by assistant configuration and facets
-        let all_mcp_server_tools = app_state.mcp_servers.list_tools(chat.id).await;
-        let filtered_mcp_tools =
-            filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
-        let facet_allowlist = build_mcp_tool_allowlist(
+    // Resolve chat provider configuration
+    let ChatProviderConfigWithId {
+        chat_provider_config,
+        chat_provider_id,
+    } = app_state.chat_provider_for_chatcompletion(
+        effective_chat_provider_id,
+        me_profile_input.user_groups,
+    )?;
+
+    // Use the new prompt composition service
+    let generation_input_messages = compose_prompt_messages(
+        message_repo,
+        file_resolver,
+        prompt_provider,
+        chat,
+        &user_input,
+        &chat_provider_config,
+        &app_state.config.experimental_facets,
+        Some(me_profile_input.preferred_language),
+    )
+    .await?;
+
+    // Resolve TextFilePointer to Text by extracting file contents JIT
+    let resolved_generation_input_messages = resolve_file_pointers_in_generation_input(
+        app_state,
+        generation_input_messages.clone(),
+        me_profile_input.access_token,
+    )
+    .await?;
+
+    // Get all MCP server tools and filter by assistant configuration and facets
+    let all_mcp_server_tools = app_state.mcp_servers.list_tools(chat.id).await;
+    let filtered_mcp_tools =
+        filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
+    let facet_allowlist = build_mcp_tool_allowlist(
+        &app_state.config.experimental_facets,
+        &user_input.selected_facet_ids,
+    );
+    let generation_mcp_tools =
+        filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
+
+    // Build genai ChatRequest (messages + tools) + ChatOptions
+    let mut chat_request = resolved_generation_input_messages
+        .clone()
+        .into_chat_request();
+    let chat_request_tools = convert_mcp_tools_to_genai_tools(generation_mcp_tools);
+    if !chat_request_tools.is_empty() {
+        chat_request.tools = Some(chat_request_tools);
+    } else {
+        tracing::trace!("Not adding empty list of tools, as that may lead to hallucinated tools");
+    }
+    let effective_model_settings = build_model_settings_for_facets(
+        &chat_provider_config.model_settings,
+        &app_state.config.experimental_facets,
+        &user_input.selected_facet_ids,
+    );
+    let chat_options = build_chat_options_for_completion(&effective_model_settings);
+
+    // Create generation parameters with the determined chat provider ID
+    let generation_parameters = GenerationParameters {
+        generation_chat_provider_id: Some(chat_provider_id),
+        selected_facets: build_selected_facets(
             &app_state.config.experimental_facets,
             &user_input.selected_facet_ids,
-        );
-        let generation_mcp_tools =
-            filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
+        ),
+    };
 
-        // Build genai ChatRequest (messages + tools) + ChatOptions
-        let mut chat_request = resolved_generation_input_messages
-            .clone()
-            .into_chat_request();
-        let chat_request_tools = convert_mcp_tools_to_genai_tools(generation_mcp_tools);
-        if !chat_request_tools.is_empty() {
-            chat_request.tools = Some(chat_request_tools);
-        } else {
-            tracing::trace!(
-                "Not adding empty list of tools, as that may lead to hallucinated tools"
-            );
-        }
-        let effective_model_settings = build_model_settings_for_facets(
-            &chat_provider_config.model_settings,
-            &app_state.config.experimental_facets,
-            &user_input.selected_facet_ids,
-        );
-        let chat_options = build_chat_options_for_completion(&effective_model_settings);
-
-        // Create generation parameters with the determined chat provider ID
-        let generation_parameters = GenerationParameters {
-            generation_chat_provider_id: Some(chat_provider_id),
-            selected_facets: build_selected_facets(
-                &app_state.config.experimental_facets,
-                &user_input.selected_facet_ids,
-            ),
-        };
-
-        // Return the unresolved version for saving to DB (to avoid duplicating file contents)
-        // The resolved version is already used in chat_request
-        Ok(PreparedChatRequest {
-            generation_input_messages,
-            generation_parameters,
-            chat_request,
-            chat_options,
-        })
+    // Return the unresolved version for saving to DB (to avoid duplicating file contents)
+    // The resolved version is already used in chat_request
+    Ok(PreparedChatRequest {
+        generation_input_messages,
+        generation_parameters,
+        chat_request,
+        chat_options,
     })
 }
 
