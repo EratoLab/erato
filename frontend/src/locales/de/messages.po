@@ -275,6 +275,16 @@ msgid "chat.message.error.variant.default"
 msgstr "Der Assistent konnte nicht antworten."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.rate_limit"
+msgstr "Anfragelimit oder Kontingent überschritten. Das kann auch passieren, wenn deine Eingabe zu groß ist."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatMessage.tsx
+msgid "chat.message.error.variant.rate_limit.cta"
+msgstr "Bitte versuche es in einer Minute erneut und reduziere die Länge oder Anzahl der Anhänge."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.newChat.title"
 msgstr "Neuer Chat"

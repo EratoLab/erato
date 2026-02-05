@@ -225,3 +225,18 @@ export const ContentFilterError: Story = {
     },
   },
 };
+
+export const RateLimitError: Story = {
+  args: {
+    message: ChatMessageFactory.samples.assistantRateLimitError,
+    controlsContext: defaultControlsContext,
+    onMessageAction: async () => true,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: "Assistant message with a rate limit error state.",
+      },
+    },
+  },
+};

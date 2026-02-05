@@ -107,5 +107,19 @@ export const ChatMessageFactory = {
         },
       },
     }),
+    assistantRateLimitError: createChatMessage({
+      id: "019cc6d2-5a6b-7f1f-9a7f-1d02de3b8f11",
+      content: [],
+      sender: "assistant",
+      createdAt: "2026-02-05T16:28:00.000Z",
+      previous_message_id: "019cc6d2-5a5a-7ddc-8e04-6f6ed3e1ab3c",
+      is_message_in_active_thread: true,
+      input_files_ids: [],
+      error: {
+        error_description:
+          "Requests to the ChatCompletions_Create Operation under Azure OpenAI API version 2024-06-01 have exceeded call rate limit of your current OpenAI S0 pricing tier. Please retry after 8 seconds.",
+        error_type: "rate_limit",
+      },
+    }),
   },
 };
