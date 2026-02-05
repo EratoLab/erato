@@ -244,28 +244,6 @@ pub struct FileUploadWithUrl {
 
 /// Get a specific file upload by ID, including a pre-signed download URL.
 ///
-/// For Sharepoint files, an access token must be provided to generate the download URL.
-/// If no access token is provided for a Sharepoint file, a placeholder URL is returned.
-pub async fn get_file_upload_with_url(
-    conn: &DatabaseConnection,
-    policy: &PolicyEngine,
-    subject: &Subject,
-    file_upload_id: &Uuid,
-    file_storage_providers: &HashMap<String, FileStorage>,
-) -> Result<FileUploadWithUrl, Report> {
-    get_file_upload_with_url_and_token(
-        conn,
-        policy,
-        subject,
-        file_upload_id,
-        file_storage_providers,
-        None,
-    )
-    .await
-}
-
-/// Get a specific file upload by ID, including a pre-signed download URL.
-///
 /// For Sharepoint files, the access token is used to generate the download URL.
 pub async fn get_file_upload_with_url_and_token(
     conn: &DatabaseConnection,
