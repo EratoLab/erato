@@ -2,6 +2,7 @@
 pub mod assistants;
 pub mod budget;
 pub mod entra_id;
+mod file_resolution;
 pub mod me_profile_middleware;
 pub mod message_streaming;
 mod message_streaming_file_extraction;

@@ -754,6 +754,283 @@ async fn test_token_usage_estimate_with_file(pool: Pool<Postgres>) {
     );
 }
 
+/// Test token usage estimate increases when a file is attached.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_token_usage_estimate_increases_with_file_over_prompt_only(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let message_request = json!({
+        "previous_message_id": null,
+        "user_message": "Test message to create a chat for token usage test"
+    });
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+
+    response.assert_status_ok();
+
+    let body = response.as_bytes();
+    let body_str = String::from_utf8_lossy(body);
+    let lines: Vec<&str> = body_str.lines().collect();
+
+    let mut user_message_id = String::new();
+    let mut chat_id = String::new();
+
+    for i in 0..lines.len() - 1 {
+        if lines[i] == "event: user_message_saved" {
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse user_message_saved data");
+                user_message_id = data_json["message_id"]
+                    .as_str()
+                    .expect("Expected message_id to be a string")
+                    .to_string();
+            }
+        } else if lines[i] == "event: chat_created" {
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse chat_created data");
+                chat_id = data_json["chat_id"]
+                    .as_str()
+                    .expect("Expected chat_id to be a string")
+                    .to_string();
+            }
+        }
+    }
+
+    let baseline_request = json!({
+        "previous_message_id": user_message_id,
+        "user_message": "Can you analyze this text for me?",
+        "input_files_ids": []
+    });
+
+    let baseline_response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&baseline_request)
+        .await;
+
+    baseline_response.assert_status_ok();
+    let baseline_usage: Value = baseline_response.json();
+    let baseline_total = baseline_usage["stats"]["total_tokens"]
+        .as_u64()
+        .expect("Expected baseline total_tokens");
+
+    let file_content = "This is a test file for token usage estimation.\nIt contains some text that should be tokenized by the service.\nThe goal is to test that the token usage endpoint correctly counts tokens for files.";
+    let file_bytes = file_content.as_bytes().to_vec();
+    let multipart_form = axum_test::multipart::MultipartForm::new().add_part(
+        "file",
+        axum_test::multipart::Part::bytes(file_bytes)
+            .file_name("test_token_count.txt")
+            .mime_type("text/plain"),
+    );
+
+    let response = server
+        .post(&format!("/api/v1beta/me/files?chat_id={}", chat_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(multipart_form)
+        .await;
+
+    response.assert_status_ok();
+    let response_json: Value = response.json();
+    let file_id = response_json["files"][0]["id"]
+        .as_str()
+        .expect("Expected file ID")
+        .to_string();
+
+    let with_file_request = json!({
+        "previous_message_id": user_message_id,
+        "user_message": "Can you analyze this text for me?",
+        "input_files_ids": [file_id]
+    });
+
+    let with_file_response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&with_file_request)
+        .await;
+
+    with_file_response.assert_status_ok();
+    let with_file_usage: Value = with_file_response.json();
+    let with_file_total = with_file_usage["stats"]["total_tokens"]
+        .as_u64()
+        .expect("Expected with-file total_tokens");
+
+    assert!(
+        with_file_total > baseline_total,
+        "Expected total tokens to increase when a file is attached"
+    );
+}
+
+/// Test token usage estimate increases when an assistant has a file.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_token_usage_estimate_includes_assistant_file(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let file_content = json!({
+        "name": "assistant_doc",
+        "content": "This is a test file for the assistant."
+    })
+    .to_string();
+    let file_bytes = file_content.into_bytes();
+    let multipart_form = axum_test::multipart::MultipartForm::new().add_part(
+        "file",
+        axum_test::multipart::Part::bytes(file_bytes)
+            .file_name("assistant_doc.json")
+            .mime_type("application/json"),
+    );
+
+    let upload_response = server
+        .post("/api/v1beta/me/files")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(multipart_form)
+        .await;
+
+    upload_response.assert_status_ok();
+    let upload_json: Value = upload_response.json();
+    let file_id = upload_json["files"][0]["id"]
+        .as_str()
+        .expect("Expected file id in upload response");
+
+    let assistant_request_no_file = json!({
+        "name": "No File Assistant",
+        "description": "Assistant without files",
+        "prompt": "You are a helpful test assistant.",
+        "mcp_server_ids": null,
+        "default_chat_provider": null,
+        "file_ids": []
+    });
+
+    let assistant_no_file_response = server
+        .post("/api/v1beta/assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&assistant_request_no_file)
+        .await;
+
+    assistant_no_file_response.assert_status(http::StatusCode::CREATED);
+    let assistant_no_file_json: Value = assistant_no_file_response.json();
+    let assistant_no_file_id = assistant_no_file_json["id"]
+        .as_str()
+        .expect("Expected assistant id in response");
+
+    let assistant_request_with_file = json!({
+        "name": "File Assistant",
+        "description": "Assistant with a file",
+        "prompt": "You are a helpful test assistant.",
+        "mcp_server_ids": null,
+        "default_chat_provider": null,
+        "file_ids": [file_id]
+    });
+
+    let assistant_with_file_response = server
+        .post("/api/v1beta/assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&assistant_request_with_file)
+        .await;
+
+    assistant_with_file_response.assert_status(http::StatusCode::CREATED);
+    let assistant_with_file_json: Value = assistant_with_file_response.json();
+    let assistant_with_file_id = assistant_with_file_json["id"]
+        .as_str()
+        .expect("Expected assistant id in response");
+
+    let chat_no_file_response = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({ "assistant_id": assistant_no_file_id }))
+        .await;
+    chat_no_file_response.assert_status_ok();
+    let chat_no_file_json: Value = chat_no_file_response.json();
+    let chat_no_file_id = chat_no_file_json["chat_id"]
+        .as_str()
+        .expect("Expected chat_id in response");
+
+    let chat_with_file_response = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({ "assistant_id": assistant_with_file_id }))
+        .await;
+    chat_with_file_response.assert_status_ok();
+    let chat_with_file_json: Value = chat_with_file_response.json();
+    let chat_with_file_id = chat_with_file_json["chat_id"]
+        .as_str()
+        .expect("Expected chat_id in response");
+
+    let no_file_request = json!({
+        "existing_chat_id": chat_no_file_id,
+        "user_message": "Hello there"
+    });
+    let no_file_response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&no_file_request)
+        .await;
+    no_file_response.assert_status_ok();
+    let no_file_usage: Value = no_file_response.json();
+    let no_file_total = no_file_usage["stats"]["total_tokens"]
+        .as_u64()
+        .expect("Expected total_tokens for assistant without file");
+
+    let with_file_request = json!({
+        "existing_chat_id": chat_with_file_id,
+        "user_message": "Hello there"
+    });
+    let with_file_response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&with_file_request)
+        .await;
+    with_file_response.assert_status_ok();
+    let with_file_usage: Value = with_file_response.json();
+    let with_file_total = with_file_usage["stats"]["total_tokens"]
+        .as_u64()
+        .expect("Expected total_tokens for assistant with file");
+
+    assert!(
+        with_file_total > no_file_total,
+        "Expected assistant file to increase total token estimate"
+    );
+}
+
 /// Test message submission with invalid previous_message_id (non-existent UUID).
 ///
 /// # Test Categories
