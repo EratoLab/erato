@@ -24,7 +24,6 @@
  * };
  */
 
-import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState, useEffect, useCallback } from "react";
 
@@ -196,9 +195,7 @@ export const MessageControls = ({
 
   const dropdownItems: DropdownMenuItem[] = [
     {
-      label: showRawMarkdown
-        ? t({ id: "message.showFormatted", message: "Show Formatted" })
-        : t({ id: "message.showRaw", message: "Show Raw Markdown" }),
+      label: showRawMarkdown ? "Show Formatted" : "Show Raw Markdown",
       icon: <CodeIcon />,
       onClick: () => {
         onToggleRawMarkdown?.();
@@ -206,7 +203,7 @@ export const MessageControls = ({
       checked: showRawMarkdown,
     },
     {
-      label: t({ id: "message.share", message: "Share Message" }),
+      label: "Share Message",
       icon: <ShareIcon />,
       onClick: () => {
         logger.log(`Share clicked for message ${messageId}`);
@@ -215,10 +212,7 @@ export const MessageControls = ({
       },
     },
     {
-      label: t({
-        id: "message.branch",
-        message: "Branch from here",
-      }),
+      label: "Branch from here",
       icon: (
         <svg className="size-4" viewBox="0 0 24 24" fill="none">
           <path
@@ -235,7 +229,7 @@ export const MessageControls = ({
       disabled: true,
     },
     {
-      label: t({ id: "message.delete", message: "Delete Message" }),
+      label: "Delete Message",
       icon: (
         <svg className="size-4" viewBox="0 0 24 24" fill="none">
           <path
@@ -322,16 +316,8 @@ export const MessageControls = ({
             )
           }
           size="sm"
-          aria-label={
-            isCopied
-              ? t({ id: "message.copied", message: "Copied" })
-              : t({ id: "message.copy.aria", message: "Copy message" })
-          }
-          title={
-            isCopied
-              ? t({ id: "message.copied", message: "Copied" })
-              : t({ id: "message.copy.aria", message: "Copy message" })
-          }
+          aria-label={isCopied ? "Copied" : "Copy message"}
+          title={isCopied ? "Copied" : "Copy message"}
         />
 
         {isUserMessage && canEditChat && !context.isSharedDialog && (
@@ -342,8 +328,8 @@ export const MessageControls = ({
             variant="icon-only"
             icon={<EditIcon />}
             size="sm"
-            aria-label={t({ id: "message.edit.aria", message: "Edit message" })}
-            title={t({ id: "message.edit.aria", message: "Edit message" })}
+            aria-label="Edit message"
+            title="Edit message"
           />
         )}
 
@@ -371,14 +357,8 @@ export const MessageControls = ({
               </svg>
             }
             size="sm"
-            aria-label={t({
-              id: "message.regenerate.aria",
-              message: "Regenerate response",
-            })}
-            title={t({
-              id: "message.regenerate.aria",
-              message: "Regenerate response",
-            })}
+            aria-label="Regenerate response"
+            title="Regenerate response"
           />
         )}
 
@@ -395,10 +375,7 @@ export const MessageControls = ({
           {metadata.model && (
             <span
               className="rounded-full border border-theme-border-primary bg-theme-bg-secondary px-2 py-0.5"
-              title={t({
-                id: "message.metadata.model",
-                message: "Model used",
-              })}
+              title="Model used"
             >
               {metadata.model}
             </span>
@@ -407,10 +384,7 @@ export const MessageControls = ({
           {metadata.tokens !== undefined && metadata.tokens > 0 && (
             <span
               className="rounded-full border border-theme-border-primary bg-theme-bg-secondary px-2 py-0.5"
-              title={t({
-                id: "message.metadata.tokens",
-                message: "Tokens used",
-              })}
+              title="Tokens used"
             >
               {metadata.tokens.toLocaleString()} tokens
             </span>
@@ -420,10 +394,7 @@ export const MessageControls = ({
             metadata.processingTime > 0 && (
               <span
                 className="rounded-full border border-theme-border-primary bg-theme-bg-secondary px-2 py-0.5"
-                title={t({
-                  id: "message.metadata.time",
-                  message: "Processing time",
-                })}
+                title="Processing time"
               >
                 {metadata.processingTime.toFixed(1)}s
               </span>
@@ -432,10 +403,7 @@ export const MessageControls = ({
           {metadata.hasToolCalls && (
             <span
               className="rounded-full border border-blue-400 bg-blue-500/10 px-2 py-0.5 text-blue-600"
-              title={t({
-                id: "message.metadata.tools",
-                message: "Used tools",
-              })}
+              title="Used tools"
             >
               🔧 Tools
             </span>
@@ -444,10 +412,7 @@ export const MessageControls = ({
           {metadata.fileCount !== undefined && metadata.fileCount > 0 && (
             <span
               className="rounded-full border border-purple-400 bg-purple-500/10 px-2 py-0.5 text-purple-600"
-              title={t({
-                id: "message.metadata.files",
-                message: "File attachments",
-              })}
+              title="File attachments"
             >
               📎 {metadata.fileCount}
             </span>

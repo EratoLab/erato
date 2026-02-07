@@ -28,8 +28,6 @@
  * };
  */
 
-import { t } from "@lingui/core/macro";
-import { Trans } from "@lingui/react/macro";
 import clsx from "clsx";
 import { memo, useCallback, useState } from "react";
 
@@ -69,10 +67,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
   const isUser = message.role === "user";
 
   // Get user display name
-  const userDisplayName = isUser
-    ? (userProfile?.name ??
-      t({ id: "branding.user_form_of_address", message: "You" }))
-    : t({ id: "branding.assistant_name", message: "Assistant" });
+  const userDisplayName = isUser ? (userProfile?.name ?? "You") : "Assistant";
 
   // Streaming state for tool calls
   const { streaming } = useMessagingStore();
@@ -110,16 +105,14 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
         className={clsx("group flex w-full justify-end", className)}
         role="log"
         aria-live="polite"
-        aria-label={`${userDisplayName} ${t({ id: "chat.message.aria", message: "message" })}`}
+        aria-label={`${userDisplayName} message`}
         data-testid="message-user"
         data-message-id={message.id}
       >
         <div className="flex max-w-[80%] flex-col items-end">
           {/* Sender name */}
           <div className="mb-1 text-right text-xs font-medium text-theme-fg-muted">
-            {userProfile?.name ?? (
-              <Trans id="branding.user_form_of_address">You</Trans>
-            )}
+            {userProfile?.name ?? "You"}
           </div>
 
           {/* Bubble */}
@@ -217,7 +210,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
       )}
       role="log"
       aria-live="polite"
-      aria-label={`${userDisplayName} ${t({ id: "chat.message.aria", message: "message" })}`}
+      aria-label={`${userDisplayName} message`}
       data-testid="message-assistant"
       data-message-id={message.id}
     >
@@ -229,7 +222,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
 
       <div className="min-w-0 flex-1">
         <div className="mb-1 text-sm font-semibold text-theme-fg-primary">
-          <Trans id="branding.assistant_name">Assistant</Trans>
+          Assistant
         </div>
 
         {message.error && (
@@ -348,12 +341,7 @@ const renderContentFilterDetails = (
 
   return (
     <div className="mt-2 text-xs">
-      <div className="font-medium">
-        {t({
-          id: "chat.message.error.variant.content_filter.filtered_categories",
-          message: "Filtered categories",
-        })}
-      </div>
+      <div className="font-medium">Filtered categories</div>
       <ul className="mt-1 list-disc pl-5">
         {filteredCategories.map(({ category, severity }) => (
           <li key={category}>
@@ -371,50 +359,28 @@ const getErrorTitle = (errorType: string) => {
     return undefined;
   }
 
-  return t({
-    id: "chat.message.error.title",
-    message: "Assistant error",
-  });
+  return "Assistant error";
 };
 
 const getErrorDescription = (errorType: string) => {
   if (errorType === "content_filter") {
-    return t({
-      id: "chat.message.error.variant.content_filter",
-      message:
-        "The response was filtered due to the prompt triggering content management policy.",
-    });
+    return "The response was filtered due to the prompt triggering content management policy.";
   }
 
   if (errorType === "rate_limit") {
-    return t({
-      id: "chat.message.error.variant.rate_limit",
-      message:
-        "Rate limit or quota exceeded. This can also happen if your input is too large.",
-    });
+    return "Rate limit or quota exceeded. This can also happen if your input is too large.";
   }
 
-  return t({
-    id: "chat.message.error.variant.default",
-    message: "The assistant was unable to respond.",
-  });
+  return "The assistant was unable to respond.";
 };
 
 const getErrorCta = (errorType: string) => {
   if (errorType === "content_filter") {
-    return t({
-      id: "chat.message.error.variant.content_filter.cta",
-      message:
-        "Please try again with a different message that avoids the filtered categories.",
-    });
+    return "Please try again with a different message that avoids the filtered categories.";
   }
 
   if (errorType === "rate_limit") {
-    return t({
-      id: "chat.message.error.variant.rate_limit.cta",
-      message:
-        "Please try again in a minute, and reduce the length or number of attachments.",
-    });
+    return "Please try again in a minute, and reduce the length or number of attachments.";
   }
 
   return undefined;
@@ -423,25 +389,13 @@ const getErrorCta = (errorType: string) => {
 const getContentFilterCategoryLabel = (category: string) => {
   switch (category) {
     case "hate":
-      return t({
-        id: "chat.message.error.variant.content_filter.hate",
-        message: "Hate",
-      });
+      return "Hate";
     case "self_harm":
-      return t({
-        id: "chat.message.error.variant.content_filter.self_harm",
-        message: "Self harm",
-      });
+      return "Self harm";
     case "sexual":
-      return t({
-        id: "chat.message.error.variant.content_filter.sexual",
-        message: "Sexual",
-      });
+      return "Sexual";
     case "violence":
-      return t({
-        id: "chat.message.error.variant.content_filter.violence",
-        message: "Violence",
-      });
+      return "Violence";
     default:
       return formatFilterLabel(category);
   }
@@ -450,25 +404,13 @@ const getContentFilterCategoryLabel = (category: string) => {
 const getContentFilterSeverityLabel = (severity: string) => {
   switch (severity) {
     case "safe":
-      return t({
-        id: "chat.message.error.variant.content_filter.safe_severity",
-        message: "safe",
-      });
+      return "safe";
     case "low":
-      return t({
-        id: "chat.message.error.variant.content_filter.low_severity",
-        message: "low severity",
-      });
+      return "low severity";
     case "medium":
-      return t({
-        id: "chat.message.error.variant.content_filter.medium_severity",
-        message: "medium severity",
-      });
+      return "medium severity";
     case "high":
-      return t({
-        id: "chat.message.error.variant.content_filter.high_severity",
-        message: "high severity",
-      });
+      return "high severity";
     default:
       return formatFilterLabel(severity);
   }
@@ -495,19 +437,13 @@ const BubbleAttachedFile = ({
   } = useGetFile({ pathParams: { fileId } }, { staleTime: Infinity });
 
   if (isLoading) {
-    return (
-      <div className="text-xs opacity-70">
-        {t({ id: "chat.file.loading", message: "Loading file..." })}
-      </div>
-    );
+    return <div className="text-xs opacity-70">Loading file...</div>;
   }
 
   if (error || !fileData) {
     console.error(`Failed to load file ${fileId}:`, error);
     return (
-      <div className="text-xs text-theme-error-fg">
-        {t({ id: "chat.file.error", message: "Error loading file" })}
-      </div>
+      <div className="text-xs text-theme-error-fg">Error loading file</div>
     );
   }
 
@@ -563,7 +499,7 @@ const BubbleAttachedFile = ({
           window.open(fileData.download_url, "_blank", "noopener,noreferrer");
         }
       }}
-      aria-label={`${t({ id: "chat.file.preview.aria", message: "Preview attached file:" })} ${fileData.filename}`}
+      aria-label={`Preview attached file: ${fileData.filename}`}
       className="cursor-pointer"
       useDiv={true}
     >
