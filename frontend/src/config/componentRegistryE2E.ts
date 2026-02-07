@@ -16,8 +16,8 @@ import { ChatMessageBubble } from "@/customer/examples/ChatMessageBubble.example
 import { FileSourceSelectorGrid } from "@/customer/examples/FileSourceSelectorGrid.example";
 import { MessageControls } from "@/customer/examples/MessageControls.example";
 import {
-  AssistantWelcomeScreenExample,
-  WelcomeScreenExample,
+  AssistantWelcomeScreen,
+  WelcomeScreen,
 } from "@/customer/examples/WelcomeScreens.example";
 
 import { componentRegistry } from "./componentRegistry";
@@ -34,8 +34,8 @@ export const initE2EOverrides = () => {
   const variant = window.__E2E_COMPONENT_VARIANT__ ?? null;
   if (variant !== "welcome-screen-example") return;
 
-  componentRegistry.ChatWelcomeScreen ??= WelcomeScreenExample;
-  componentRegistry.AssistantWelcomeScreen ??= AssistantWelcomeScreenExample;
+  componentRegistry.ChatWelcomeScreen ??= WelcomeScreen;
+  componentRegistry.AssistantWelcomeScreen ??= AssistantWelcomeScreen;
   componentRegistry.ChatFileSourceSelector ??= FileSourceSelectorGrid;
   componentRegistry.AssistantFileSourceSelector ??= FileSourceSelectorGrid;
   componentRegistry.MessageControls ??= MessageControls;

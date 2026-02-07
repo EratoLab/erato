@@ -11,13 +11,13 @@
  * @example
  * // In componentRegistry.ts:
  * import {
- *   WelcomeScreenExample,
- *   AssistantWelcomeScreenExample,
+ *   WelcomeScreen,
+ *   AssistantWelcomeScreen,
  * } from "@/customer/components/WelcomeScreens";
  *
  * export const componentRegistry: ComponentRegistry = {
- *   ChatWelcomeScreen: WelcomeScreenExample,
- *   AssistantWelcomeScreen: AssistantWelcomeScreenExample,
+ *   ChatWelcomeScreen: WelcomeScreen,
+ *   AssistantWelcomeScreen: AssistantWelcomeScreen,
  * };
  */
 import { useChatInputControls } from "@/components/ui/Chat/ChatInputControlsContext";
@@ -75,7 +75,7 @@ const ExampleActions = ({ className = "" }: { className?: string }) => {
   );
 };
 
-export function WelcomeScreenExample({ className = "" }: WelcomeScreenProps) {
+export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
   return (
     <div
       className={`flex flex-col items-center justify-center gap-4 p-10 text-center ${className}`}
@@ -92,7 +92,7 @@ export function WelcomeScreenExample({ className = "" }: WelcomeScreenProps) {
   );
 }
 
-export function AssistantWelcomeScreenExample({
+export function AssistantWelcomeScreen({
   assistant,
   className = "",
 }: AssistantWelcomeScreenProps) {
