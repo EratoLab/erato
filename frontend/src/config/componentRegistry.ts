@@ -24,6 +24,7 @@
 import type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
+import type { MessageControlsProps } from "@/types/message-controls";
 import type { ComponentType } from "react";
 
 /**
@@ -60,8 +61,16 @@ export interface ComponentRegistry {
    */
   AssistantWelcomeScreen: ComponentType<AssistantWelcomeScreenProps> | null;
 
-  // Future extension points can be added here:
-  // MessageControls: ComponentType<MessageControlsProps> | null;
+  /**
+   * Override for message action controls (copy, edit, feedback buttons, etc.).
+   * Used for every message in the chat.
+   *
+   * Set to a custom component to:
+   * - Add custom actions (reactions, share, export, etc.)
+   * - Remove unwanted buttons (hide feedback, hide edit, etc.)
+   * - Change button styling or positioning
+   */
+  MessageControls: ComponentType<MessageControlsProps> | null;
 }
 
 export const resolveComponentOverride = <TProps>(
@@ -86,6 +95,7 @@ const applyE2EOverrides = (registry: ComponentRegistry): ComponentRegistry => {
         registry.ChatFileSourceSelector ?? FileSourceSelectorGrid,
       AssistantFileSourceSelector:
         registry.AssistantFileSourceSelector ?? FileSourceSelectorGrid,
+      MessageControls: registry.MessageControls ?? MessageControls,
     };
   }
 
@@ -103,4 +113,5 @@ export const componentRegistry: ComponentRegistry = applyE2EOverrides({
   ChatFileSourceSelector: null,
   ChatWelcomeScreen: null,
   AssistantWelcomeScreen: null,
+  MessageControls: null, // Temporarily enabled to showcase the creative example
 });

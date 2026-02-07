@@ -4,6 +4,10 @@ import clsx from "clsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
+import {
+  componentRegistry,
+  resolveComponentOverride,
+} from "@/config/componentRegistry";
 import { useChatActions } from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
@@ -23,6 +27,7 @@ import {
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
 import { FeedbackViewDialog } from "../Feedback/FeedbackViewDialog";
+import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 import { MessageList } from "../MessageList/MessageList";
 
 import type { ChatMessage } from "../MessageList/MessageList";
@@ -142,6 +147,17 @@ export const Chat = ({
       },
     }),
     [],
+  );
+
+  // Resolve message controls from registry if not explicitly provided
+  const resolvedMessageControls = useMemo(
+    () =>
+      (messageControls ??
+        resolveComponentOverride(
+          componentRegistry.MessageControls,
+          DefaultMessageControls,
+        )) as MessageControlsComponent,
+    [messageControls],
   );
 
   // Get chat data and actions from context provider
@@ -455,7 +471,7 @@ export const Chat = ({
               showTimestamps={showTimestamps}
               showAvatars={showAvatars}
               userProfile={profile}
-              controls={messageControls}
+              controls={resolvedMessageControls}
               controlsContext={{
                 ...controlsContext,
                 canEdit: canEditForCurrentChat,
