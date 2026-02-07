@@ -14,7 +14,9 @@
  * 3. The application will use your component instead of the default
  *
  * ## Merge strategy:
- * When pulling upstream changes, keep your version of this file:
+ * When pulling upstream changes, keep your version of this file.
+ * New upstream override keys will appear as `NewKey: null` — add
+ * them to your copy to satisfy the TypeScript interface:
  * ```
  * git checkout --ours src/config/componentRegistry.ts
  * git add src/config/componentRegistry.ts
@@ -22,6 +24,7 @@
  */
 
 import type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
+import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
 import type { MessageControlsProps } from "@/types/message-controls";
@@ -71,6 +74,20 @@ export interface ComponentRegistry {
    * - Change button styling or positioning
    */
   MessageControls: ComponentType<MessageControlsProps> | null;
+
+  /**
+   * Override for the entire chat message renderer.
+   * Replaces the full message layout: avatar, bubble, content, controls, etc.
+   *
+   * Set to a custom component to:
+   * - Change message alignment (e.g. right-align user messages)
+   * - Use chat bubbles instead of full-width rows
+   * - Rearrange avatar, name, content, and controls positioning
+   *
+   * The component receives the same props as the default ChatMessage,
+   * including the resolved `controls` component as a building block.
+   */
+  ChatMessageRenderer: ComponentType<ChatMessageProps> | null;
 }
 
 export const resolveComponentOverride = <TProps>(
@@ -78,40 +95,20 @@ export const resolveComponentOverride = <TProps>(
   fallback: ComponentType<TProps>,
 ): ComponentType<TProps> => override ?? fallback;
 
-const getE2EComponentVariant = () => {
-  if (typeof window === "undefined") return null;
-  return window.__E2E_COMPONENT_VARIANT__ ?? null;
-};
-
-const applyE2EOverrides = (registry: ComponentRegistry): ComponentRegistry => {
-  const variant = getE2EComponentVariant();
-  if (variant === "welcome-screen-example") {
-    return {
-      ...registry,
-      ChatWelcomeScreen: registry.ChatWelcomeScreen ?? WelcomeScreenExample,
-      AssistantWelcomeScreen:
-        registry.AssistantWelcomeScreen ?? AssistantWelcomeScreenExample,
-      ChatFileSourceSelector:
-        registry.ChatFileSourceSelector ?? FileSourceSelectorGrid,
-      AssistantFileSourceSelector:
-        registry.AssistantFileSourceSelector ?? FileSourceSelectorGrid,
-      MessageControls: registry.MessageControls ?? MessageControls,
-    };
-  }
-
-  return registry;
-};
-
 /**
  * The component registry instance.
  *
  * In the main repo, all values are null (use defaults).
  * Customer forks modify this file to provide custom implementations.
+ *
+ * E2E test overrides are applied at startup via `initE2EOverrides()`
+ * in `componentRegistryE2E.ts` (called from `main.tsx`).
  */
-export const componentRegistry: ComponentRegistry = applyE2EOverrides({
+export const componentRegistry: ComponentRegistry = {
   AssistantFileSourceSelector: null,
   ChatFileSourceSelector: null,
   ChatWelcomeScreen: null,
   AssistantWelcomeScreen: null,
-  MessageControls: null, // Temporarily enabled to showcase the creative example
-});
+  MessageControls: null,
+  ChatMessageRenderer: null,
+};

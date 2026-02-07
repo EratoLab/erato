@@ -24,6 +24,7 @@ import {
   ChatInputControlsProvider,
   type ChatInputControlsHandle,
 } from "./ChatInputControlsContext";
+import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
 import { FeedbackViewDialog } from "../Feedback/FeedbackViewDialog";
@@ -158,6 +159,16 @@ export const Chat = ({
           DefaultMessageControls,
         )) as MessageControlsComponent,
     [messageControls],
+  );
+
+  // Resolve message renderer from registry
+  const resolvedMessageRenderer = useMemo(
+    () =>
+      resolveComponentOverride(
+        componentRegistry.ChatMessageRenderer,
+        ChatMessageComponent,
+      ),
+    [],
   );
 
   // Get chat data and actions from context provider
@@ -472,6 +483,7 @@ export const Chat = ({
               showAvatars={showAvatars}
               userProfile={profile}
               controls={resolvedMessageControls}
+              messageRenderer={resolvedMessageRenderer}
               controlsContext={{
                 ...controlsContext,
                 canEdit: canEditForCurrentChat,

@@ -36,6 +36,7 @@ flowchart TB
 | `ChatWelcomeScreen`           | Chat empty state | `WelcomeScreenProps`           | Empty state shown when a chat has no messages                  |
 | `AssistantWelcomeScreen`      | Assistant chat   | `AssistantWelcomeScreenProps`  | Empty state shown when opening an assistant chat               |
 | `MessageControls`             | Every message    | `MessageControlsProps`         | Action buttons below each message (copy, edit, feedback, etc.) |
+| `ChatMessageRenderer`         | Every message    | `ChatMessageProps`             | Entire message layout (avatar, bubble, content, controls)      |
 
 Each example is available in `frontend/src/customer/examples/` and can be copied to `frontend/src/customer/components/` as a starting point.
 
@@ -160,6 +161,76 @@ The bundled example (`MessageControls.example.tsx`) demonstrates several advance
 
 ---
 
+## Chat Message Renderer
+
+The `ChatMessageRenderer` override replaces the entire message layout for every chat message. The default implementation renders a full-width row with avatar, name header, markdown content, tool calls, loading indicator, and controls. Custom implementations can change the visual structure entirely — for example, using chat bubbles with right-aligned user messages.
+
+> **Example:** `frontend/src/customer/examples/ChatMessageBubble.example.tsx`
+
+### Props Interface
+
+The custom renderer receives the same props as the default `ChatMessage` component:
+
+```tsx
+interface ChatMessageProps {
+  message: UiChatMessage;
+  className?: string;
+  maxWidth?: number;
+  showTimestamp?: boolean;
+  showAvatar?: boolean;
+  showControlsOnHover?: boolean;
+
+  // Controls component (default or custom, already resolved)
+  controls?: MessageControlsComponent;
+  controlsContext: MessageControlsContext;
+  onMessageAction: (action: MessageAction) => Promise<boolean>;
+
+  // Optional context
+  userProfile?: UserProfile;
+  onFilePreview?: (file: FileUploadItem) => void;
+  onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
+  allFileDownloadUrls?: Record<string, string>;
+}
+```
+
+The `controls` prop is the already-resolved controls component (either the default or a custom `MessageControls` override). Your renderer can render it wherever you like — below the bubble, on hover, in a popover, etc.
+
+### Registration
+
+```tsx
+// In src/config/componentRegistry.ts
+import { ChatMessageBubble } from "@/customer/components/ChatMessageBubble";
+
+export const componentRegistry: ComponentRegistry = {
+  // ...other overrides
+  ChatMessageRenderer: ChatMessageBubble,
+};
+```
+
+### Building Blocks
+
+Your custom renderer can import and reuse these components from the core codebase:
+
+| Component | Import | Purpose |
+|-----------|--------|---------|
+| `MessageContent` | `@/components/ui/Message/MessageContent` | Renders markdown, code blocks, images |
+| `LoadingIndicator` | `@/components/ui/Feedback/LoadingIndicator` | Shows streaming/thinking states |
+| `ToolCallDisplay` | `@/components/ui/ToolCall` | Renders tool call results |
+| `Avatar` | `@/components/ui/Feedback/Avatar` | User/assistant avatar |
+| `ImageLightbox` | `@/components/ui/Message/ImageLightbox` | Full-size image modal |
+| `Alert` | `@/components/ui/Feedback/Alert` | Error display |
+
+### What the Example Demonstrates
+
+The bundled example (`ChatMessageBubble.example.tsx`) creates a hybrid layout:
+
+- **Right-aligned user messages** as compact chat bubbles with a primary-colored background and asymmetric rounded corners (`rounded-2xl rounded-br-sm`)
+- **Full-width assistant messages** with an avatar, neutral background, and plenty of room for code blocks, tables, and long markdown
+- **Hover shadow** on user bubbles for subtle depth on interaction
+- **Full feature parity** — errors, file attachments, tool calls, streaming, and image lightbox all work correctly
+
+---
+
 ## File Source Selector
 
 The `AssistantFileSourceSelector` and `ChatFileSourceSelector` overrides replace the file upload dropdowns in the assistant form and chat input respectively.
@@ -222,6 +293,7 @@ A complete `componentRegistry.ts` with multiple overrides:
 
 ```tsx
 import { FileSourceSelectorGrid } from "@/customer/components/FileSourceSelectorGrid";
+import { ChatMessageBubble } from "@/customer/components/ChatMessageBubble";
 import { CustomMessageControls } from "@/customer/components/MessageControls";
 import { CustomWelcome } from "@/customer/components/WelcomeScreen";
 
@@ -233,6 +305,7 @@ export const componentRegistry: ComponentRegistry = {
   ChatWelcomeScreen: CustomWelcome,
   AssistantWelcomeScreen: null,          // Keep default
   MessageControls: CustomMessageControls,
+  ChatMessageRenderer: ChatMessageBubble,
 };
 ```
 

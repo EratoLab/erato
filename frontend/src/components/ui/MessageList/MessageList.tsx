@@ -15,6 +15,7 @@ import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
 // import { ConversationIndicator } from "../Message/ConversationIndicator";
 
+import type { ChatMessageProps } from "../Chat/ChatMessage";
 import type {
   ChatMessagesResponse,
   UserProfile,
@@ -28,6 +29,7 @@ import type {
   MessageControlsContext,
 } from "@/types/message-controls";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
+import type { ComponentType } from "react";
 import type React from "react";
 
 /**
@@ -109,6 +111,11 @@ export interface MessageListProps {
    * Message controls component
    */
   controls?: MessageControlsComponent;
+
+  /**
+   * Custom message renderer component (replaces the default ChatMessage layout)
+   */
+  messageRenderer?: ComponentType<ChatMessageProps>;
 
   /**
    * Context for message controls
@@ -265,6 +272,7 @@ export const MessageList = memo<MessageListProps>(
     showAvatars = false,
     userProfile,
     controls,
+    messageRenderer,
     controlsContext,
     onMessageAction,
     className,
@@ -496,6 +504,7 @@ export const MessageList = memo<MessageListProps>(
               showAvatars={showAvatars}
               userProfile={userProfile}
               controls={controls}
+              messageRenderer={messageRenderer}
               controlsContext={controlsContext}
               onMessageAction={onMessageAction}
               onFilePreview={onFilePreview}
@@ -513,6 +522,7 @@ export const MessageList = memo<MessageListProps>(
               showAvatars={showAvatars}
               userProfile={userProfile}
               controls={controls}
+              messageRenderer={messageRenderer}
               controlsContext={controlsContext}
               onMessageAction={onMessageAction}
               onFilePreview={onFilePreview}

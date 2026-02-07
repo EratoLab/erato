@@ -2,6 +2,7 @@ import { useCallback } from "react";
 
 import { MessageItem } from "./MessageItem";
 
+import type { ChatMessageProps } from "../Chat/ChatMessage";
 import type {
   UserProfile,
   FileUploadItem,
@@ -13,6 +14,7 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+import type { ComponentType } from "react";
 import type React from "react";
 
 interface VirtualizedMessageListProps {
@@ -26,6 +28,7 @@ interface VirtualizedMessageListProps {
   showAvatars?: boolean;
   userProfile?: UserProfile;
   controls?: MessageControlsComponent;
+  messageRenderer?: ComponentType<ChatMessageProps>;
   controlsContext: MessageControlsContext;
   onMessageAction: (action: MessageAction) => Promise<boolean>;
   onFilePreview?: (file: FileUploadItem) => void;
@@ -43,6 +46,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   showAvatars,
   userProfile,
   controls,
+  messageRenderer,
   controlsContext,
   onMessageAction,
   onFilePreview,
@@ -66,6 +70,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
           showAvatar={showAvatars}
           userProfile={userProfile}
           controls={controls}
+          messageRenderer={messageRenderer}
           controlsContext={controlsContext}
           onMessageAction={onMessageAction}
           onFilePreview={onFilePreview}
@@ -85,6 +90,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
     showAvatars,
     userProfile,
     controls,
+    messageRenderer,
     controlsContext,
     onMessageAction,
     onFilePreview,
