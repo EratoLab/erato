@@ -4,7 +4,7 @@
  * Provides interactive model selection functionality for input components.
  * Handles user selection state and provides ready state for UI interaction.
  */
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 
 import { useAvailableModels } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { createLogger } from "@/utils/debugLogger";
@@ -30,6 +30,9 @@ export function useActiveModelSelection({
   // Local selection state
   const [selectedModel, setSelectedModel] = useState<ChatModel | null>(null);
 
+  // undefined = never initialized, null = initialized with no initialModel.
+  const appliedInitialRef = useRef<string | null | undefined>(undefined);
+
   // Get the default model (highest priority = first in array)
   const defaultModel = useMemo(() => {
     return availableModels[0] ?? null;
@@ -37,13 +40,18 @@ export function useActiveModelSelection({
 
   // Initialize selection based on initial model or default
   useEffect(() => {
-    if (initialModel && availableModels.length > 0) {
-      // Validate initial model still exists in available models
+    if (availableModels.length === 0) return;
+
+    const initialId = initialModel?.chat_provider_id ?? null;
+
+    if (appliedInitialRef.current === initialId) return;
+
+    if (initialModel) {
       const modelExists = availableModels.find(
         (model) => model.chat_provider_id === initialModel.chat_provider_id,
       );
       if (modelExists) {
-        logger.log("Initializing with chat last model:", {
+        logger.log("Initializing with initial model:", {
           modelId: initialModel.chat_provider_id,
           modelName: initialModel.model_display_name,
         });
@@ -57,13 +65,15 @@ export function useActiveModelSelection({
         setSelectedModel(defaultModel);
       }
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    } else if (defaultModel) {
+    } else if (defaultModel && appliedInitialRef.current === undefined) {
       logger.log("Initializing with default model:", {
         modelId: defaultModel.chat_provider_id,
         modelName: defaultModel.model_display_name,
       });
       setSelectedModel(defaultModel);
     }
+
+    appliedInitialRef.current = initialId;
   }, [initialModel, availableModels, defaultModel]);
 
   // Determine if model selection is ready for user interaction
