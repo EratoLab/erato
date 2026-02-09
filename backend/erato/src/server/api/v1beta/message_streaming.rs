@@ -369,7 +369,11 @@ fn parse_error_body(
     status_code: Option<u16>,
 ) -> Option<MessageSubmitStreamingResponseError> {
     let error_obj = body.get("error")?;
-    let error_code = error_obj.get("code").and_then(|c| c.as_str());
+    let error_code = error_obj
+        .get("code")
+        .and_then(|c| c.as_str())
+        .or_else(|| error_obj.get("type").and_then(|t| t.as_str()))
+        .or_else(|| error_obj.get("error_type").and_then(|t| t.as_str()));
     let error_message = error_obj
         .get("message")
         .and_then(|m| m.as_str())
@@ -380,6 +384,7 @@ fn parse_error_body(
         let filter_details = error_obj
             .get("innererror")
             .and_then(|ie| ie.get("content_filter_result"))
+            .or_else(|| error_obj.get("content_filter_result"))
             .cloned();
 
         return Some(MessageSubmitStreamingResponseError {
@@ -409,11 +414,28 @@ fn parse_error_body(
     })
 }
 
+fn extract_embedded_json_payload(error_text: &str) -> Option<Value> {
+    // Some upstream errors include JSON body as text like:
+    // "... Status: 400 ... Body: {\"error\":{...}}"
+    let body_index = error_text.find("Body:")?;
+    let body_text = error_text.get(body_index + "Body:".len()..)?.trim();
+
+    if let Ok(value) = serde_json::from_str::<Value>(body_text) {
+        return Some(value);
+    }
+
+    let json_start = body_text.find('{')?;
+    let json_candidate = body_text.get(json_start..)?.trim();
+    serde_json::from_str::<Value>(json_candidate).ok()
+}
+
 /// Parse an error from the LLM streaming response and create an appropriate error type.
 async fn parse_streaming_error(
     err: genai::Error,
     message_id: Uuid,
 ) -> MessageSubmitStreamingResponseError {
+    let err_text = err.to_string();
+
     if let genai::Error::ChatResponse { body, .. } = &err
         && let Some(parsed) = parse_error_body(body, message_id, None)
     {
@@ -458,6 +480,12 @@ async fn parse_streaming_error(
             }
             _ => {}
         }
+    }
+
+    if let Some(payload_json) = extract_embedded_json_payload(&err_text)
+        && let Some(parsed) = parse_error_body(&payload_json, message_id, None)
+    {
+        return parsed;
     }
 
     MessageSubmitStreamingResponseError {

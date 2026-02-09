@@ -561,6 +561,114 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(primary_config.model_name, "gpt-4");
 }
 
+/// Tests Vertex AI provider migration to Gemini format.
+///
+/// # Test Categories
+/// - `config-only`
+///
+/// # Test Behavior
+/// Verifies that `vertex_ai` provider_kind is migrated to `gemini` and receives
+/// the Vertex AI base URL when no explicit base_url is configured.
+#[test]
+fn test_config_vertex_ai_migration_to_gemini() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["vertex_default", "vertex_regional", "vertex_custom", "vertex_custom_with_region", "gemini_primary"]
+
+[chat_providers.providers.vertex_default]
+provider_kind = "vertex_ai"
+model_name = "gemini-2.5-flash"
+api_key = "vertex-default-key"
+
+[chat_providers.providers.vertex_custom]
+provider_kind = "vertex_ai"
+model_name = "gemini-2.5-pro"
+base_url = "https://example.com/custom-vertex/"
+api_key = "vertex-custom-key"
+
+[chat_providers.providers.vertex_regional]
+provider_kind = "vertex_ai"
+model_name = "gemini-2.5-flash"
+region = "europe-west3"
+api_key = "vertex-regional-key"
+
+[chat_providers.providers.vertex_custom_with_region]
+provider_kind = "vertex_ai"
+model_name = "gemini-2.5-pro"
+base_url = "https://example.com/custom-vertex-with-region/"
+region = "europe-west3"
+api_key = "vertex-custom-with-region-key"
+
+[chat_providers.providers.gemini_primary]
+provider_kind = "gemini"
+model_name = "gemini-2.5-flash"
+api_key = "gemini-key"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+    config = config.migrate();
+
+    let chat_providers = config.chat_providers.as_ref().unwrap();
+    let vertex_default = chat_providers.providers.get("vertex_default").unwrap();
+    assert_eq!(vertex_default.provider_kind, "gemini");
+    assert_eq!(
+        vertex_default.base_url,
+        Some("https://aiplatform.googleapis.com/v1/publishers/google/".to_string())
+    );
+
+    let vertex_custom = chat_providers.providers.get("vertex_custom").unwrap();
+    assert_eq!(vertex_custom.provider_kind, "gemini");
+    assert_eq!(
+        vertex_custom.base_url,
+        Some("https://example.com/custom-vertex/".to_string())
+    );
+
+    let vertex_regional = chat_providers.providers.get("vertex_regional").unwrap();
+    assert_eq!(vertex_regional.provider_kind, "gemini");
+    assert_eq!(
+        vertex_regional.base_url,
+        Some("https://europe-west3-aiplatform.googleapis.com/v1/publishers/google/".to_string())
+    );
+
+    let vertex_custom_with_region = chat_providers
+        .providers
+        .get("vertex_custom_with_region")
+        .unwrap();
+    assert_eq!(vertex_custom_with_region.provider_kind, "gemini");
+    assert_eq!(
+        vertex_custom_with_region.base_url,
+        Some("https://example.com/custom-vertex-with-region/".to_string())
+    );
+
+    let gemini_primary = chat_providers.providers.get("gemini_primary").unwrap();
+    assert_eq!(gemini_primary.provider_kind, "gemini");
+    assert_eq!(gemini_primary.base_url, None);
+}
+
 /// Tests new Sentry integration configuration.
 ///
 /// # Test Categories
