@@ -2,7 +2,7 @@
 
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useState, useEffect, useCallback } from "react";
+import { memo, useState, useEffect, useCallback } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
@@ -17,27 +17,11 @@ import {
   CodeIcon,
 } from "../icons";
 
-import type { MessageFeedback } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type {
-  // MessageAction,
-  MessageControlsProps,
-} from "@/types/message-controls";
+import type { MessageControlsProps } from "@/types/message-controls";
 
 const logger = createLogger("UI", "DefaultMessageControls");
 
-interface ExtendedMessageControlsProps extends MessageControlsProps {
-  showFeedbackButtons?: boolean;
-  showFeedbackComments?: boolean;
-  showRawMarkdown?: boolean;
-  onToggleRawMarkdown?: () => void;
-  /** Initial feedback state from API (existing feedback for this message) */
-  initialFeedback?: MessageFeedback;
-  hasToolCalls?: boolean;
-  /** Callback when user clicks on filled feedback button to view/edit existing feedback */
-  onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
-}
-
-export const DefaultMessageControls = ({
+export const DefaultMessageControls = memo(function DefaultMessageControls({
   messageId,
   // messageType,
   authorId: _authorId,
@@ -54,7 +38,7 @@ export const DefaultMessageControls = ({
   initialFeedback,
   hasToolCalls = false,
   onViewFeedback,
-}: ExtendedMessageControlsProps) => {
+}: MessageControlsProps) {
   const [isCopied, setIsCopied] = useState(false);
 
   // Chat-level edit permission from context; default true if unspecified
@@ -293,7 +277,4 @@ export const DefaultMessageControls = ({
       <MessageTimestamp createdAt={safeCreatedAt} />
     </div>
   );
-};
-
-// eslint-disable-next-line lingui/no-unlocalized-strings
-DefaultMessageControls.displayName = "DefaultMessageControls";
+});

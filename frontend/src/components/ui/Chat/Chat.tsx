@@ -4,6 +4,10 @@ import clsx from "clsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
+import {
+  componentRegistry,
+  resolveComponentOverride,
+} from "@/config/componentRegistry";
 import { useChatActions } from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
@@ -16,9 +20,15 @@ import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
+import {
+  ChatInputControlsProvider,
+  type ChatInputControlsHandle,
+} from "./ChatInputControlsContext";
+import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
 import { FeedbackViewDialog } from "../Feedback/FeedbackViewDialog";
+import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 import { MessageList } from "../MessageList/MessageList";
 
 import type { ChatMessage } from "../MessageList/MessageList";
@@ -120,6 +130,46 @@ export const Chat = ({
     toggle: onToggleCollapse,
     collapsedMode,
   } = useSidebar();
+
+  const chatInputControlsRef = useRef<ChatInputControlsHandle | null>(null);
+  const chatInputControls = useMemo(
+    () => ({
+      setDraftMessage: (message: string, options?: { focus?: boolean }) => {
+        chatInputControlsRef.current?.setDraftMessage(message, options);
+      },
+      focusInput: () => {
+        chatInputControlsRef.current?.focusInput();
+      },
+      setSelectedFacetIds: (facetIds: string[]) => {
+        chatInputControlsRef.current?.setSelectedFacetIds(facetIds);
+      },
+      toggleFacetId: (facetId: string) => {
+        chatInputControlsRef.current?.toggleFacetId(facetId);
+      },
+    }),
+    [],
+  );
+
+  // Resolve message controls from registry if not explicitly provided
+  const resolvedMessageControls = useMemo(
+    () =>
+      (messageControls ??
+        resolveComponentOverride(
+          componentRegistry.MessageControls,
+          DefaultMessageControls,
+        )) as MessageControlsComponent,
+    [messageControls],
+  );
+
+  // Resolve message renderer from registry
+  const resolvedMessageRenderer = useMemo(
+    () =>
+      resolveComponentOverride(
+        componentRegistry.ChatMessageRenderer,
+        ChatMessageComponent,
+      ),
+    [],
+  );
 
   // Get chat data and actions from context provider
   const {
@@ -378,191 +428,197 @@ export const Chat = ({
   }
 
   return (
-    <div className="flex size-full flex-col sm:flex-row">
-      <ChatHistorySidebar
-        collapsed={sidebarCollapsed}
-        onNewChat={() => {
-          void handleNewChat();
-        }}
-        onToggleCollapse={onToggleCollapse}
-        sessions={sessions}
-        currentSessionId={currentChatId ?? ""}
-        onSessionSelect={handleSessionSelectWrapper}
-        onSessionArchive={handleArchiveSession}
-        showTimestamps={chatHistoryShowMetadata}
-        isLoading={chatHistoryLoading}
-        error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
-        userProfile={profile}
-      />
-      <ChatErrorBoundary onReset={handleErrorReset}>
-        <div
-          className={clsx(
-            "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
-            "sm:mt-0",
-            // Add left margin based on sidebar state to prevent overlap with fixed sidebar
-            // Transition margin to match sidebar animation (300ms)
-            "transition-[margin] duration-300 ease-in-out motion-reduce:transition-none",
-            // When expanded: full width (320px)
-            !sidebarCollapsed && "sm:ml-80",
-            // When collapsed in slim mode: narrow width (64px)
-            sidebarCollapsed && collapsedMode === "slim" && "sm:ml-16",
-            // When collapsed in hidden mode: no margin (sidebar is off-screen)
-            // (default, no class needed)
-            className,
-          )}
-          role="region"
-          aria-label={t({
-            id: "chat.conversation.aria",
-            message: "Chat conversation",
-          })}
-        >
-          {/* Use the MessageList component */}
-          <MessageList
-            messages={messages}
-            messageOrder={messageOrder}
-            loadOlderMessages={loadOlderMessages}
-            hasOlderMessages={hasOlderMessages}
-            isPending={chatLoading}
-            currentSessionId={currentChatId ?? ""}
-            pageSize={6}
-            maxWidth={maxWidth}
-            showTimestamps={showTimestamps}
-            showAvatars={showAvatars}
-            userProfile={profile}
-            controls={messageControls}
-            controlsContext={{
-              ...controlsContext,
-              canEdit: canEditForCurrentChat,
-            }}
-            onMessageAction={async (action: MessageAction) => {
-              // Intercept edit/regenerate here to route to local handlers
-              if (action.type === "edit") {
-                logger.log(
-                  `Edit action called with messageId: ${action.messageId}`,
-                );
-
-                // Find the message directly from the messages object
-                const messageToEdit = messages[action.messageId];
-                logger.log(`Available message keys:`, Object.keys(messages));
-                logger.log(`Looking up message:`, messageToEdit);
-
-                if (messageToEdit.role === "user") {
+    <ChatInputControlsProvider value={chatInputControls}>
+      <div className="flex size-full flex-col sm:flex-row">
+        <ChatHistorySidebar
+          collapsed={sidebarCollapsed}
+          onNewChat={() => {
+            void handleNewChat();
+          }}
+          onToggleCollapse={onToggleCollapse}
+          sessions={sessions}
+          currentSessionId={currentChatId ?? ""}
+          onSessionSelect={handleSessionSelectWrapper}
+          onSessionArchive={handleArchiveSession}
+          showTimestamps={chatHistoryShowMetadata}
+          isLoading={chatHistoryLoading}
+          error={
+            chatHistoryError instanceof Error ? chatHistoryError : undefined
+          }
+          userProfile={profile}
+        />
+        <ChatErrorBoundary onReset={handleErrorReset}>
+          <div
+            className={clsx(
+              "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
+              "sm:mt-0",
+              // Add left margin based on sidebar state to prevent overlap with fixed sidebar
+              // Transition margin to match sidebar animation (300ms)
+              "transition-[margin] duration-300 ease-in-out motion-reduce:transition-none",
+              // When expanded: full width (320px)
+              !sidebarCollapsed && "sm:ml-80",
+              // When collapsed in slim mode: narrow width (64px)
+              sidebarCollapsed && collapsedMode === "slim" && "sm:ml-16",
+              // When collapsed in hidden mode: no margin (sidebar is off-screen)
+              // (default, no class needed)
+              className,
+            )}
+            role="region"
+            aria-label={t({
+              id: "chat.conversation.aria",
+              message: "Chat conversation",
+            })}
+          >
+            {/* Use the MessageList component */}
+            <MessageList
+              messages={messages}
+              messageOrder={messageOrder}
+              loadOlderMessages={loadOlderMessages}
+              hasOlderMessages={hasOlderMessages}
+              isPending={chatLoading}
+              currentSessionId={currentChatId ?? ""}
+              pageSize={6}
+              maxWidth={maxWidth}
+              showTimestamps={showTimestamps}
+              showAvatars={showAvatars}
+              userProfile={profile}
+              controls={resolvedMessageControls}
+              messageRenderer={resolvedMessageRenderer}
+              controlsContext={{
+                ...controlsContext,
+                canEdit: canEditForCurrentChat,
+              }}
+              onMessageAction={async (action: MessageAction) => {
+                // Intercept edit/regenerate here to route to local handlers
+                if (action.type === "edit") {
                   logger.log(
-                    `Setting editState: messageId=${action.messageId}, content="${extractTextFromContent(messageToEdit.content)}"`,
+                    `Edit action called with messageId: ${action.messageId}`,
                   );
 
-                  // Use React's functional update to ensure we get the latest state
-                  setEditState(() => ({
-                    mode: "edit",
-                    messageId: action.messageId,
-                    initialContent: messageToEdit.content,
-                  }));
+                  // Find the message directly from the messages object
+                  const messageToEdit = messages[action.messageId];
+                  logger.log(`Available message keys:`, Object.keys(messages));
+                  logger.log(`Looking up message:`, messageToEdit);
 
-                  logger.log(`editState set successfully`);
-                } else {
-                  logger.log(
-                    `Cannot edit message ${action.messageId}: not found or not a user message`,
-                    {
-                      messageToEdit,
-                      role: messageToEdit.role,
-                      available: Object.keys(messages),
-                    },
+                  if (messageToEdit.role === "user") {
+                    logger.log(
+                      `Setting editState: messageId=${action.messageId}, content="${extractTextFromContent(messageToEdit.content)}"`,
+                    );
+
+                    // Use React's functional update to ensure we get the latest state
+                    setEditState(() => ({
+                      mode: "edit",
+                      messageId: action.messageId,
+                      initialContent: messageToEdit.content,
+                    }));
+
+                    logger.log(`editState set successfully`);
+                  } else {
+                    logger.log(
+                      `Cannot edit message ${action.messageId}: not found or not a user message`,
+                      {
+                        messageToEdit,
+                        role: messageToEdit.role,
+                        available: Object.keys(messages),
+                      },
+                    );
+                  }
+                  return true;
+                }
+                if (action.type === "regenerate") {
+                  handleRegenerate(action.messageId);
+                  return true;
+                }
+                // Handle like/dislike feedback actions
+                if (action.type === "like" || action.type === "dislike") {
+                  const sentiment =
+                    action.type === "like" ? "positive" : "negative";
+
+                  // Submit feedback immediately (cache invalidation handled by onFeedbackSuccess callback)
+                  const result = await handleFeedbackSubmit(
+                    action.messageId,
+                    sentiment,
                   );
+
+                  // If comments are enabled, open the dialog for additional comment
+                  if (result.success && feedbackConfig.commentsEnabled) {
+                    openFeedbackDialog(action.messageId, sentiment);
+                  }
+
+                  return result.success;
                 }
-                return true;
+                return handleMessageAction(action);
+              }}
+              className={layout}
+              useVirtualization={messageOrder.length > 30}
+              virtualizationThreshold={30}
+              onScrollToBottomRef={handleMessageListRef}
+              onFilePreview={openPreviewModal}
+              onViewFeedback={openFeedbackViewDialog}
+              emptyStateComponent={emptyStateComponent}
+            />
+
+            <ChatInput
+              ref={chatInputControlsRef}
+              onSendMessage={handleSendMessage}
+              onEditMessage={handleEditSubmit}
+              onCancelEdit={editState.mode === "edit" ? cancelEdit : undefined}
+              acceptedFileTypes={acceptedFileTypes}
+              onFilePreview={openPreviewModal}
+              handleFileAttachments={handleFileAttachments}
+              chatId={currentChatId}
+              assistantId={assistantId}
+              className="p-2 sm:p-4"
+              isLoading={chatLoading}
+              showControls
+              onRegenerate={onRegenerate}
+              showFileTypes={true}
+              initialFiles={[]}
+              mode={editState.mode}
+              editMessageId={
+                editState.mode === "edit" ? editState.messageId : undefined
               }
-              if (action.type === "regenerate") {
-                handleRegenerate(action.messageId);
-                return true;
+              editInitialContent={
+                editState.mode === "edit" ? editState.initialContent : undefined
               }
-              // Handle like/dislike feedback actions
-              if (action.type === "like" || action.type === "dislike") {
-                const sentiment =
-                  action.type === "like" ? "positive" : "negative";
+              initialModel={initialModelOverride ?? currentChatLastModel}
+              initialSelectedFacetIds={currentChatLastSelectedFacets}
+              onFacetSelectionChange={setActiveSelectedFacetIds}
+            />
+          </div>
+        </ChatErrorBoundary>
 
-                // Submit feedback immediately (cache invalidation handled by onFeedbackSuccess callback)
-                const result = await handleFeedbackSubmit(
-                  action.messageId,
-                  sentiment,
-                );
+        {/* Render the File Preview Modal */}
+        <FilePreviewModal
+          isOpen={isPreviewModalOpen}
+          onClose={closePreviewModal}
+          file={fileToPreview}
+        />
 
-                // If comments are enabled, open the dialog for additional comment
-                if (result.success && feedbackConfig.commentsEnabled) {
-                  openFeedbackDialog(action.messageId, sentiment);
-                }
+        {/* Render the Feedback View Dialog */}
+        <FeedbackViewDialog
+          isOpen={feedbackViewDialogState.isOpen}
+          onClose={closeFeedbackViewDialog}
+          onEdit={switchToEditMode}
+          feedback={feedbackViewDialogState.feedback}
+          canEdit={
+            feedbackViewDialogState.feedback
+              ? canEditFeedback(feedbackViewDialogState.feedback)
+              : false
+          }
+        />
 
-                return result.success;
-              }
-              return handleMessageAction(action);
-            }}
-            className={layout}
-            useVirtualization={messageOrder.length > 30}
-            virtualizationThreshold={30}
-            onScrollToBottomRef={handleMessageListRef}
-            onFilePreview={openPreviewModal}
-            onViewFeedback={openFeedbackViewDialog}
-            emptyStateComponent={emptyStateComponent}
-          />
-
-          <ChatInput
-            onSendMessage={handleSendMessage}
-            onEditMessage={handleEditSubmit}
-            onCancelEdit={editState.mode === "edit" ? cancelEdit : undefined}
-            acceptedFileTypes={acceptedFileTypes}
-            onFilePreview={openPreviewModal}
-            handleFileAttachments={handleFileAttachments}
-            chatId={currentChatId}
-            assistantId={assistantId}
-            className="p-2 sm:p-4"
-            isLoading={chatLoading}
-            showControls
-            onRegenerate={onRegenerate}
-            showFileTypes={true}
-            initialFiles={[]}
-            mode={editState.mode}
-            editMessageId={
-              editState.mode === "edit" ? editState.messageId : undefined
-            }
-            editInitialContent={
-              editState.mode === "edit" ? editState.initialContent : undefined
-            }
-            initialModel={initialModelOverride ?? currentChatLastModel}
-            initialSelectedFacetIds={currentChatLastSelectedFacets}
-            onFacetSelectionChange={setActiveSelectedFacetIds}
-          />
-        </div>
-      </ChatErrorBoundary>
-
-      {/* Render the File Preview Modal */}
-      <FilePreviewModal
-        isOpen={isPreviewModalOpen}
-        onClose={closePreviewModal}
-        file={fileToPreview}
-      />
-
-      {/* Render the Feedback View Dialog */}
-      <FeedbackViewDialog
-        isOpen={feedbackViewDialogState.isOpen}
-        onClose={closeFeedbackViewDialog}
-        onEdit={switchToEditMode}
-        feedback={feedbackViewDialogState.feedback}
-        canEdit={
-          feedbackViewDialogState.feedback
-            ? canEditFeedback(feedbackViewDialogState.feedback)
-            : false
-        }
-      />
-
-      {/* Render the Feedback Comment Dialog */}
-      <FeedbackCommentDialog
-        isOpen={feedbackDialogState.isOpen}
-        onClose={closeFeedbackDialog}
-        onSubmit={handleFeedbackDialogSubmit}
-        sentiment={feedbackDialogState.sentiment}
-        mode={feedbackDialogState.mode}
-        initialComment={feedbackDialogState.initialComment}
-        error={feedbackDialogState.error}
-      />
-    </div>
+        {/* Render the Feedback Comment Dialog */}
+        <FeedbackCommentDialog
+          isOpen={feedbackDialogState.isOpen}
+          onClose={closeFeedbackDialog}
+          onSubmit={handleFeedbackDialogSubmit}
+          sentiment={feedbackDialogState.sentiment}
+          mode={feedbackDialogState.mode}
+          initialComment={feedbackDialogState.initialComment}
+          error={feedbackDialogState.error}
+        />
+      </div>
+    </ChatInputControlsProvider>
   );
 };

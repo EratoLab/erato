@@ -1,6 +1,13 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+  useImperativeHandle,
+} from "react";
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
@@ -26,12 +33,14 @@ import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
 
+import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type {
   FileUploadItem,
   ChatModel,
   ContentPart,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
+import type { Ref } from "react";
 
 const logger = createLogger("UI", "ChatInput");
 
@@ -99,6 +108,10 @@ interface ChatInputProps {
 /**
  * ChatInput component with file attachment capabilities
  */
+type ChatInputPropsWithRef = ChatInputProps & {
+  ref?: Ref<ChatInputControlsHandle>;
+};
+
 export const ChatInput = ({
   onSendMessage,
   onRegenerate: _onRegenerate,
@@ -125,11 +138,13 @@ export const ChatInput = ({
   initialModel,
   initialSelectedFacetIds,
   onFacetSelectionChange,
-}: ChatInputProps) => {
+  ref,
+}: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
+  const pendingSelectedFacetIdsRef = useRef<string[] | null>(null);
 
   // Get necessary state from context instead of useChat()
   // isPendingResponse is true immediately when send is clicked (before streaming starts)
@@ -206,6 +221,84 @@ export const ChatInput = ({
       .map((facet) => facet.id);
   }, [availableFacets]);
 
+  const sanitizeFacetSelection = useCallback(
+    (facetIds: string[]) => {
+      const availableFacetIdSet = new Set(
+        availableFacets.map((facet) => facet.id),
+      );
+      let nextSelectedFacetIds = facetIds.filter((facetId) =>
+        availableFacetIdSet.has(facetId),
+      );
+      if (
+        globalFacetSettings?.only_single_facet &&
+        nextSelectedFacetIds.length
+      ) {
+        nextSelectedFacetIds = nextSelectedFacetIds.slice(0, 1);
+      }
+      return nextSelectedFacetIds;
+    },
+    [availableFacets, globalFacetSettings?.only_single_facet],
+  );
+
+  const applySelectedFacetIds = useCallback(
+    (nextSelectedFacetIds: string[]) => {
+      pendingSelectedFacetIdsRef.current = nextSelectedFacetIds;
+      if (availableFacets.length === 0) {
+        setSelectedFacetIds([]);
+        onFacetSelectionChange?.([]);
+        return;
+      }
+      const sanitizedSelectedFacetIds =
+        sanitizeFacetSelection(nextSelectedFacetIds);
+      pendingSelectedFacetIdsRef.current = null;
+      setSelectedFacetIds(sanitizedSelectedFacetIds);
+      onFacetSelectionChange?.(sanitizedSelectedFacetIds);
+    },
+    [availableFacets.length, onFacetSelectionChange, sanitizeFacetSelection],
+  );
+
+  const toggleFacetId = useCallback(
+    (facetId: string) => {
+      const isSelected = selectedFacetIds.includes(facetId);
+      const nextSelectedFacetIds = isSelected
+        ? selectedFacetIds.filter((id) => id !== facetId)
+        : globalFacetSettings?.only_single_facet
+          ? [facetId]
+          : [...selectedFacetIds, facetId];
+      applySelectedFacetIds(nextSelectedFacetIds);
+    },
+    [
+      applySelectedFacetIds,
+      globalFacetSettings?.only_single_facet,
+      selectedFacetIds,
+    ],
+  );
+
+  const setDraftMessage = useCallback(
+    (nextMessage: string, options?: { focus?: boolean }) => {
+      setMessage(nextMessage);
+      if (options?.focus ?? true) {
+        textareaRef.current?.focus();
+      }
+    },
+    [],
+  );
+
+  const focusInput = useCallback(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      setDraftMessage,
+      focusInput,
+      setSelectedFacetIds: applySelectedFacetIds,
+      toggleFacetId,
+    }),
+    [applySelectedFacetIds, focusInput, setDraftMessage, toggleFacetId],
+  );
+
   useEffect(() => {
     if (uploadError) {
       setFileError(uploadError.message);
@@ -223,30 +316,25 @@ export const ChatInput = ({
       return;
     }
 
-    const availableFacetIdSet = new Set(
-      availableFacets.map((facet) => facet.id),
-    );
     const hasExplicitInitialSelection = initialSelectedFacetIds !== undefined;
-    const initialSelection = hasExplicitInitialSelection
-      ? initialSelectedFacetIds
-      : facetIdsByDefault;
-
-    let nextSelectedFacetIds = initialSelection.filter((facetId) =>
-      availableFacetIdSet.has(facetId),
-    );
-
-    if (
-      globalFacetSettings?.only_single_facet &&
-      nextSelectedFacetIds.length > 1
-    ) {
-      nextSelectedFacetIds = nextSelectedFacetIds.slice(0, 1);
-    }
+    const hasPendingSelection = pendingSelectedFacetIdsRef.current !== null;
+    const initialSelection = hasPendingSelection
+      ? pendingSelectedFacetIdsRef.current
+      : hasExplicitInitialSelection
+        ? initialSelectedFacetIds
+        : facetIdsByDefault;
+    const nextSelectedFacetIds = sanitizeFacetSelection(initialSelection ?? []);
 
     setSelectedFacetIds((previousSelectedFacetIds) =>
       areFacetIdListsEqual(previousSelectedFacetIds, nextSelectedFacetIds)
         ? previousSelectedFacetIds
         : nextSelectedFacetIds,
     );
+    if (hasPendingSelection) {
+      pendingSelectedFacetIdsRef.current = null;
+      onFacetSelectionChange?.(nextSelectedFacetIds);
+      return;
+    }
     if (
       !hasExplicitInitialSelection ||
       !areFacetIdListsEqual(initialSelectedFacetIds, nextSelectedFacetIds)
@@ -257,9 +345,9 @@ export const ChatInput = ({
     availableFacets,
     chatId,
     facetIdsByDefault,
-    globalFacetSettings?.only_single_facet,
     initialSelectedFacetIds,
     onFacetSelectionChange,
+    sanitizeFacetSelection,
   ]);
 
   // Log attachedFiles received from the hook

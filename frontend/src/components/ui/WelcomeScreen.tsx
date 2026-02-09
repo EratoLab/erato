@@ -73,6 +73,7 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
   return (
     <div
       className={`flex flex-col ${flexAlignment} ${justifyAlignment} p-12 ${className}`}
+      data-testid="welcome-screen-default"
     >
       <div className={`mb-8 ${flexAlignment}`}>
         <Logo

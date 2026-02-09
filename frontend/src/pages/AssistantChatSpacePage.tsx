@@ -3,8 +3,8 @@ import * as reactQuery from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 
-import { AssistantWelcomeScreen } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 import { Chat } from "@/components/ui/Chat/Chat";
+import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import {
   useAvailableModels,
@@ -179,7 +179,8 @@ export default function AssistantChatSpacePage() {
         layout="default"
         maxWidth={768}
         emptyStateComponent={
-          <AssistantWelcomeScreen
+          <ChatEmptyState
+            variant="assistant"
             assistant={assistant}
             pastChats={assistantChats}
             isLoadingChats={false}

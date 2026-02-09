@@ -4,6 +4,7 @@ import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 
 import { ChatMessage } from "../Chat/ChatMessage";
 
+import type { ChatMessageProps } from "../Chat/ChatMessage";
 import type {
   UserProfile,
   FileUploadItem,
@@ -16,6 +17,7 @@ import type {
   MessageControlsContext,
 } from "@/types/message-controls";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
+import type { ComponentType } from "react";
 
 export interface MessageItemProps {
   messageId: string;
@@ -26,6 +28,7 @@ export interface MessageItemProps {
   showAvatar?: boolean;
   userProfile?: UserProfile;
   controls?: MessageControlsComponent;
+  messageRenderer?: ComponentType<ChatMessageProps>;
   controlsContext: MessageControlsContext;
   onMessageAction: (action: MessageAction) => Promise<boolean>;
   className?: string;
@@ -46,6 +49,7 @@ export const MessageItem = memo<MessageItemProps>(
     showAvatar,
     userProfile,
     controls: Controls,
+    messageRenderer: Renderer = ChatMessage,
     controlsContext,
     onMessageAction,
     className,
@@ -84,7 +88,7 @@ export const MessageItem = memo<MessageItemProps>(
 
     return (
       <div className={className}>
-        <ChatMessage
+        <Renderer
           key={messageId}
           message={mapMessageToUiMessage(message)}
           showTimestamp={showTimestamp}

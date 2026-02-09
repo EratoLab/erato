@@ -56,6 +56,7 @@ export function AssistantWelcomeScreen({
   return (
     <div
       className={`flex flex-col ${flexAlignment} ${justifyAlignment} p-12 ${className}`}
+      data-testid="assistant-welcome-screen-default"
     >
       {/* Assistant Icon/Badge */}
       <div className={`mb-6 flex ${justifyAlignment}`}>

@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import clsx from "clsx";
-import { memo, useState } from "react";
+import { memo, useCallback, useState } from "react";
 
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
 import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
@@ -102,6 +102,10 @@ export const ChatMessage = memo(function ChatMessage({
 
   // Local state for raw markdown toggle
   const [showRawMarkdown, setShowRawMarkdown] = useState(false);
+  const handleToggleRawMarkdown = useCallback(
+    () => setShowRawMarkdown((prev) => !prev),
+    [],
+  );
 
   // Use custom hook for image lightbox state management
   const lightbox = useImageLightbox();
@@ -212,37 +216,23 @@ export const ChatMessage = memo(function ChatMessage({
           )}
           {showTimestamp && (
             <div className="z-10">
-              {Controls === DefaultMessageControls ? (
-                <DefaultMessageControls
-                  messageId={message.id}
-                  messageType={message.sender}
-                  createdAt={message.createdAt}
-                  context={controlsContext}
-                  showOnHover={showControlsOnHover}
-                  onAction={onMessageAction}
-                  isUserMessage={isUser}
-                  showRawMarkdown={showRawMarkdown}
-                  onToggleRawMarkdown={() =>
-                    setShowRawMarkdown(!showRawMarkdown)
-                  }
-                  hasToolCalls={hasCompletedToolCalls}
-                  showFeedbackButtons={messageFeedbackConfig.enabled}
-                  showFeedbackComments={messageFeedbackConfig.commentsEnabled}
-                  initialFeedback={message.feedback}
-                  onViewFeedback={onViewFeedback}
-                />
-              ) : (
-                <Controls
-                  messageId={message.id}
-                  messageType={message.sender}
-                  createdAt={message.createdAt}
-                  context={controlsContext}
-                  showOnHover={showControlsOnHover}
-                  onAction={onMessageAction}
-                  className="z-10"
-                  isUserMessage={isUser}
-                />
-              )}
+              <Controls
+                messageId={message.id}
+                messageType={message.sender}
+                createdAt={message.createdAt}
+                context={controlsContext}
+                showOnHover={showControlsOnHover}
+                onAction={onMessageAction}
+                className="z-10"
+                isUserMessage={isUser}
+                showRawMarkdown={showRawMarkdown}
+                onToggleRawMarkdown={handleToggleRawMarkdown}
+                hasToolCalls={!!hasCompletedToolCalls}
+                showFeedbackButtons={messageFeedbackConfig.enabled}
+                showFeedbackComments={messageFeedbackConfig.commentsEnabled}
+                initialFeedback={message.feedback}
+                onViewFeedback={onViewFeedback}
+              />
             </div>
           )}
         </div>

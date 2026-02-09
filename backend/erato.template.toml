@@ -1,3 +1,6 @@
+# Specify which file storage provider is default
+default_file_storage_provider = "minio"
+
 [file_storage_providers.minio]
 provider_kind = "s3"
 config = { endpoint = "http://localhost:9000", bucket = "erato-storage", region = "us-east-1", access_key_id = "erato-app-user", secret_access_key = "erato-app-password" }

@@ -238,12 +238,24 @@ export default defineConfig({
     {
       path: "<rootDir>/src/locales/{locale}/messages",
       include: ["src"],
-      exclude: ["**/node_modules/**", "**/out/**", "**/.next/**", "**/test/**"],
+      exclude: [
+        "**/node_modules/**",
+        "**/out/**",
+        "**/.next/**",
+        "**/test/**",
+        "**/*.example.*",
+      ],
     },
     {
       path: "<rootDir>/public/custom-theme/{name}/locales/{locale}/messages",
       include: ["<rootDir>/public/custom-theme/{name}/"],
-      exclude: ["**/node_modules/**", "**/out/**", "**/.next/**", "**/test/**"],
+      exclude: [
+        "**/node_modules/**",
+        "**/out/**",
+        "**/.next/**",
+        "**/test/**",
+        "**/*.example.*",
+      ],
     },
   ],
   compileNamespace: "json", // Generate JSON files, as those can be more easily loaded dynamically for the custom-theme
