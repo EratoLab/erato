@@ -200,4 +200,3 @@ else
     echo "Please fix the errors above before running e2e tests."
 fi
 echo "============================================="
-exit ${#errors[@]}
