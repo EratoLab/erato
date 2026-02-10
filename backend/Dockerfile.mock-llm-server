@@ -7,39 +7,32 @@ WORKDIR /app
 
 FROM chef AS planner
 COPY . .
-RUN cargo chef prepare --bin erato --recipe-path recipe.json
+RUN cargo chef prepare --bin mock-llm-server --recipe-path recipe.json
 
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --bin erato --release --recipe-path recipe.json
+RUN cargo chef cook --bin mock-llm-server --release --recipe-path recipe.json
 
-# Build application (only erato binary)
+# Build application binary
 COPY . .
-RUN cargo build --release -p erato --bin erato
+RUN cargo build --locked --release -p mock-llm-server --bin mock-llm-server
 
 # Pinned for security & build performance reasons
 FROM debian:trixie-slim@sha256:5cf544fad978371b3df255b61e209b373583cb88b733475c86e49faa15ac2104
 
 WORKDIR /app
 
-# Install dependencies
-# ca-certificates -> Certificates for HTTPS
-# sqitch + libdbd-pg-perl + postgresql-client -> sqitch
+# Install only runtime certificates.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
-    sqitch \
-    libdbd-pg-perl \
-    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the binary from builder
-COPY --from=builder /app/target/release/erato /app/erato
-# Copy sqitch (migration) files from host
-COPY sqitch /app/sqitch
+COPY --from=builder /app/target/release/mock-llm-server /app/mock-llm-server
 
-EXPOSE 3130
+EXPOSE 44320
 
-ENV HTTP_HOST="0.0.0.0"
+ENV HOST="0.0.0.0"
+ENV PORT="44320"
 
-CMD ["./erato"]
+CMD ["./mock-llm-server"]
