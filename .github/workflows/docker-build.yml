@@ -36,6 +36,7 @@ on:
 env:
   REGISTRY: harbor.imassage.me
   BACKEND_IMAGE_NAME: erato/backend
+  MOCK_LLM_SERVER_IMAGE_NAME: erato/mock-llm-server
   FRONTEND_IMAGE_NAME: erato/frontend
   COMBINED_IMAGE_NAME: erato/app
   SHA_TAG: ${{ github.sha }}
@@ -82,7 +83,7 @@ jobs:
         uses: jbergstroem/hadolint-gh-action@v1.12.2
         if: success() || failure()
         with:
-          dockerfile: Dockerfile.combined backend/Dockerfile backend/ollama-smol/Dockerfile frontend/Dockerfile
+          dockerfile: Dockerfile.combined backend/Dockerfile backend/Dockerfile.mock-llm-server backend/ollama-smol/Dockerfile frontend/Dockerfile
           config_file: .hadolint.yaml
 
       - name: "rustfmt"
@@ -653,8 +654,102 @@ jobs:
               ${{ env.REGISTRY }}/${{ env.COMBINED_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-arm64
           fi
 
+  build-and-push-mock-llm-server-amd64:
+    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v3.6.0
+        with:
+          registry: harbor.imassage.me
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Mock LLM Server image
+        uses: docker/build-push-action@v6.15.0
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.mock-llm-server
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-amd64
+            ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-amd64', env.REGISTRY, env.MOCK_LLM_SERVER_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-amd64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-amd64-buildcache
+
+  build-and-push-mock-llm-server-arm64:
+    runs-on: ubuntu-24.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2404-arm
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v3.6.0
+        with:
+          registry: harbor.imassage.me
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Mock LLM Server image
+        uses: docker/build-push-action@v6.15.0
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.mock-llm-server
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-arm64
+            ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+            ${{ env.RELEASE_VERSION != '' && format('{0}/{1}:{2}-arm64', env.REGISTRY, env.MOCK_LLM_SERVER_IMAGE_NAME, env.RELEASE_VERSION) || '' }}
+          cache-from: type=registry,image-manifest=true,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-arm64-buildcache
+          cache-to: type=registry,image-manifest=true,mode=max,ref=${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-arm64-buildcache
+
+  create-manifests-mock-llm-server:
+    needs: [build-and-push-mock-llm-server-amd64, build-and-push-mock-llm-server-arm64]
+    runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Log in to Harbor registry
+        uses: docker/login-action@v3.6.0
+        with:
+          registry: harbor.imassage.me
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create and push Mock LLM Server manifests
+        run: |
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-amd64 \
+            ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:latest-arm64
+          docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.SHA_TAG }} \
+            ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.SHA_TAG }}-amd64 \
+            ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.SHA_TAG }}-arm64
+          if [[ "${{ env.RELEASE_VERSION }}" != "" ]]; then
+            docker buildx imagetools create -t ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.RELEASE_VERSION }} \
+              ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-amd64 \
+              ${{ env.REGISTRY }}/${{ env.MOCK_LLM_SERVER_IMAGE_NAME }}:${{ env.RELEASE_VERSION }}-arm64
+          fi
+
   create-github-release:
-    needs: [create-manifests]
+    needs: [create-manifests, create-manifests-mock-llm-server]
     runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
     if: github.ref_type == 'tag'
     permissions:
