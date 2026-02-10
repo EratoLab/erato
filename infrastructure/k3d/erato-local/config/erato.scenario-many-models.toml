@@ -1,5 +1,11 @@
 # Many models test scenario - provides a large model list for selector testing
 # This scenario is used to test model selector behavior with many models
 
+[chat_providers.providers.mock-llm-openai]
+provider_kind = "openai"
+model_name = "placeholder"
+model_display_name = "Mock-LLM"
+base_url = "http://erato-local-mock-llm-server:44320/base-openai/v1/placeholder"
+
 [frontend.additional_environment]
 K3D_TEST_SCENARIO = "many-models"
