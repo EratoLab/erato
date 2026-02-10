@@ -18,9 +18,6 @@ test(
     const menu = page.locator("#model-selector-dropdown");
     await expect(menu).toBeVisible();
 
-    const menuItems = menu.getByRole("menuitem");
-    await expect(menuItems).toHaveCount(4);
-
     const targetModel = "GPT-4.1 Mini";
     await page.getByRole("menuitem", { name: targetModel }).click();
     await expect(modelSelectorButton).toContainText(targetModel);
@@ -42,6 +39,11 @@ test.describe("Can chat with different models", () => {
     {
       modelName: "GPT-4o Mini",
       prompt: "Please give one concise sentence about software testing.",
+      tags: [TAG_CI],
+    },
+    {
+      modelName: "Mock-LLM",
+      prompt: "Test",
       tags: [TAG_CI],
     },
   ] as const;

@@ -97,6 +97,23 @@ erato:
             name: erato-local-postgres-app
             key: uri
 
+mockLlmServer:
+  enabled: true
+  image:
+    repository: harbor.imassage.me/erato/mock-llm-server
+    tag: "adff59a50e3b78d0221a8a5bbb818a249fffb45a"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 44320
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 dex:
   enabled: true
   image:
