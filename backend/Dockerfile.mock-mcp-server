@@ -1,0 +1,38 @@
+# cargo-chef version = 0.1.73
+# Rust version = 1.91.1 - Should be kept up-to-date with rust-toolchain.toml
+# Trixie = Debian 13 -> LTS support until 2030
+# Pinned for security & build performance reasons
+FROM lukemathwalker/cargo-chef:0.1.73-rust-1.91.1-trixie@sha256:0952ecbcded4600a826cb52277fb662df5c56abecc3acd5475988f88f015e7aa AS chef
+WORKDIR /app
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --bin mock-mcp-server --recipe-path recipe.json
+
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --bin mock-mcp-server --release --recipe-path recipe.json
+
+# Build application binary
+COPY . .
+RUN cargo build --locked --release -p mock-mcp-server --bin mock-mcp-server
+
+# Pinned for security & build performance reasons
+FROM debian:trixie-slim@sha256:5cf544fad978371b3df255b61e209b373583cb88b733475c86e49faa15ac2104
+
+WORKDIR /app
+
+# Install only runtime certificates.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/mock-mcp-server /app/mock-mcp-server
+
+EXPOSE 44321
+
+ENV HOST="0.0.0.0"
+ENV PORT="44321"
+
+CMD ["./mock-mcp-server"]

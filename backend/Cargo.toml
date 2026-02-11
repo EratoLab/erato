@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["erato", "mock-llm-server"]
+members = ["erato", "mock-llm-server", "mock-mcp-server"]
 
 [profile.dev]
 split-debuginfo = "packed"
@@ -9,4 +9,3 @@ split-debuginfo = "packed"
 # Better stack traces in production deployments
 debug = "full"
 split-debuginfo = "packed"
-

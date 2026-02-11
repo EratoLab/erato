@@ -4074,6 +4074,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mock-mcp-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "colored",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "mocktail"
 version = "0.3.0"
 source = "git+https://github.com/EratoLab/mocktail.git?rev=4a99543bcfe0511db6eea524a037a670b96a6faf#4a99543bcfe0511db6eea524a037a670b96a6faf"
@@ -6595,11 +6609,15 @@ checksum = "38b18323edc657390a6ed4d7a9110b0dec2dc3ed128eb2a123edfbafabdbddc5"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
+ "bytes",
  "chrono",
  "futures",
  "http 1.4.0",
+ "http-body",
+ "http-body-util",
  "pastey 0.2.1",
  "pin-project-lite",
+ "rand 0.9.2",
  "reqwest 0.12.28",
  "rmcp-macros",
  "schemars 1.2.0",
@@ -6610,7 +6628,9 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tower-service",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

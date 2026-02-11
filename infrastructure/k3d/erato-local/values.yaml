@@ -114,6 +114,23 @@ mockLlmServer:
       cpu: 250m
       memory: 256Mi
 
+mockMcpServer:
+  enabled: true
+  image:
+    repository: harbor.imassage.me/erato/mock-mcp-server
+    tag: "adff59a50e3b78d0221a8a5bbb818a249fffb45a"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 44321
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 dex:
   enabled: true
   image:
