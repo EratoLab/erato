@@ -26,6 +26,7 @@ class ScriptConfig(BaseModel):
     erato_image_repository: str = "harbor.imassage.me/erato/app"
     erato_image_tag: Optional[str] = None
     mock_llm_server_image_tag: Optional[str] = None
+    mock_mcp_server_image_tag: Optional[str] = None
     build_local: bool = False
     helm_set_args: list[str] = Field(default_factory=list)
     chart_dep_update: bool = False
@@ -300,6 +301,28 @@ def configure_mock_llm_server_helm_args(config: ScriptConfig) -> list[str]:
     return helm_args
 
 
+def configure_mock_mcp_server_helm_args(config: ScriptConfig) -> list[str]:
+    """Configure mock-mcp-server image values.
+
+    The mock image tag can be set independently. If unset, it falls back to the
+    main erato image tag when that is provided.
+    """
+    helm_args: list[str] = []
+
+    mock_repo = None
+    if config.erato_image_repository.endswith("/app"):
+        mock_repo = f"{config.erato_image_repository[:-4]}/mock-mcp-server"
+
+    if mock_repo:
+        helm_args.extend(["--set", f"mockMcpServer.image.repository={mock_repo}"])
+
+    effective_mock_tag = config.mock_mcp_server_image_tag or config.erato_image_tag
+    if effective_mock_tag:
+        helm_args.extend(["--set", f"mockMcpServer.image.tag={effective_mock_tag}"])
+
+    return helm_args
+
+
 def perform_local_build(config: ScriptConfig) -> list[str]:
     """Perform local build and return Helm arguments."""
     project_root = Path(__file__).resolve().parent.parent.parent
@@ -563,6 +586,14 @@ def main():
         )
     )
     parser.add_argument(
+        "--mock-mcp-server-image-tag",
+        default=None,
+        help=(
+            "Mock MCP server image tag. If omitted, falls back to --erato-image-tag "
+            "when that is set."
+        )
+    )
+    parser.add_argument(
         "--chart-dep-update",
         action="store_true",
         help="Update Helm chart dependencies"
@@ -598,6 +629,7 @@ def main():
         erato_image_repository=args.erato_image_repository,
         erato_image_tag=args.erato_image_tag,
         mock_llm_server_image_tag=args.mock_llm_server_image_tag,
+        mock_mcp_server_image_tag=args.mock_mcp_server_image_tag,
         build_local=args.build_local,
         chart_dep_update=args.chart_dep_update,
         with_telepresence=args.with_telepresence,
@@ -610,6 +642,8 @@ def main():
         config.erato_image_tag = fetch_latest_main_commit()
     if config.mock_llm_server_image_tag == "fetch-latest-main":
         config.mock_llm_server_image_tag = fetch_latest_main_commit()
+    if config.mock_mcp_server_image_tag == "fetch-latest-main":
+        config.mock_mcp_server_image_tag = fetch_latest_main_commit()
 
     cluster_config = ClusterConfig()
 
@@ -782,6 +816,9 @@ def main():
 
     # Configure mock-llm-server image values
     helm_args.extend(configure_mock_llm_server_helm_args(config))
+
+    # Configure mock-mcp-server image values
+    helm_args.extend(configure_mock_mcp_server_helm_args(config))
     
     # Handle test scenario
     scenario_args = get_helm_scenario_args(config.test_scenario)
