@@ -1,6 +1,7 @@
 use crate::image_data;
 use crate::matcher::{
-    ErrorResponseConfig, ImageMock, MatchRule, MatchRuleLastMessageIsUserWithPattern,
+    CiteFilesResponseConfig, ErrorResponseConfig, ImageMock, MatchRule,
+    MatchRuleAnyUserMessageInCurrentTurnWithPattern, MatchRuleLastMessageIsUserWithPattern,
     MatchRuleUserMessagePattern, Mock, ResponseConfig, StaticResponseConfig, ToolCallDef,
     ToolCallResponseConfig, ToolCallsResponseConfig,
 };
@@ -24,6 +25,18 @@ fn generate_long_running_chunks(seconds: usize) -> Vec<String> {
 /// Get the default set of configured mocks
 pub fn get_default_mocks() -> Vec<Mock> {
     vec![
+        Mock {
+            name: "CiteFiles".to_string(),
+            description:
+                "Lists erato-file links from all request messages when any user message in the current turn asks to cite files"
+                    .to_string(),
+            match_rules: vec![MatchRule::AnyUserMessageInCurrentTurnWithPattern(
+                MatchRuleAnyUserMessageInCurrentTurnWithPattern {
+                    pattern: "cite files".to_string(),
+                },
+            )],
+            response: ResponseConfig::CiteFiles(CiteFilesResponseConfig { delay_ms: 50 }),
+        },
         Mock {
             name: "Greeting".to_string(),
             description: "Responds to hello messages with a friendly greeting".to_string(),
