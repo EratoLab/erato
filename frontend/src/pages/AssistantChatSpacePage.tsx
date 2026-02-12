@@ -191,6 +191,7 @@ export default function AssistantChatSpacePage() {
         // For existing chats, the assistant context is already stored in the chat
         assistantId={chatId ? undefined : assistantId}
         initialModelOverride={assistantDefaultModel}
+        assistantFiles={assistant.files}
       />
     </div>
   );

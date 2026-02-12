@@ -153,6 +153,11 @@ export interface MessageListProps {
   onFilePreview?: (file: FileUploadItem) => void;
 
   /**
+   * Assistant default files available in this chat context
+   */
+  assistantFiles?: FileUploadItem[];
+
+  /**
    * Callback to view existing feedback
    */
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
@@ -280,6 +285,7 @@ export const MessageList = memo<MessageListProps>(
     virtualizationThreshold = 30,
     onScrollToBottomRef,
     onFilePreview,
+    assistantFiles = [],
     onViewFeedback,
     isTransitioning,
     emptyStateComponent,
@@ -418,9 +424,17 @@ export const MessageList = memo<MessageListProps>(
       handleLoadMore,
     });
 
-    // Collect all file download URLs from all messages for erato-file:// link resolution
+    // Collect all file download URLs from message files and assistant default files
+    // for erato-file:// link resolution.
     const allFileDownloadUrls = useMemo(() => {
       const urlMap: Record<string, string> = {};
+
+      // Assistant files are available even before they appear in message payloads.
+      assistantFiles.forEach((file) => {
+        urlMap[file.id] = file.download_url;
+      });
+
+      // Message files override assistant URLs, preserving freshest data from chat API.
       messageOrder.forEach((messageId) => {
         const message = messages[messageId] as UiChatMessage;
         (message.files ?? []).forEach((file) => {
@@ -428,7 +442,7 @@ export const MessageList = memo<MessageListProps>(
         });
       });
       return urlMap;
-    }, [messageOrder, messages]);
+    }, [assistantFiles, messageOrder, messages]);
 
     // Check if there are no messages to display
     const showEmptyState = messageOrder.length === 0 && !isPending;

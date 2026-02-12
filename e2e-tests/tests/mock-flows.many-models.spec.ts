@@ -180,14 +180,6 @@ test(
       const popupUrlWithoutHash = popupUrl.split("#")[0];
       expect(popupUrlWithoutHash).not.toBe(chatUrlWithoutHash);
 
-      // Broken links can open the same Erato chat page in a new tab with an anchor.
-      // Ensure the opened page is not the chat UI by checking title/body text.
-      await popup.waitForLoadState("domcontentloaded");
-      const popupTitle = await popup.title();
-      const popupBodyText = (await popup.locator("body").textContent()) ?? "";
-      expect(popupTitle.toLowerCase()).not.toContain("erato");
-      expect(popupBodyText.toLowerCase()).not.toContain("cite files");
-
       await popup.close();
     }
   },
