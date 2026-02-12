@@ -332,6 +332,9 @@ pub async fn stream_response(
                 tool_calls_config.delay_ms,
             )
         }
+        ResponseConfig::CiteFiles(_) => {
+            unreachable!("CiteFiles responses should be resolved into Static in matcher")
+        }
     };
 
     futures::stream::iter(actions).then(|action| async move {

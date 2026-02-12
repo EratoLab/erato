@@ -118,6 +118,9 @@ pub async fn chat_completions(
                 tool_calls_config.delay_ms,
             )
         }
+        crate::matcher::ResponseConfig::CiteFiles(_) => {
+            unreachable!("CiteFiles responses should be resolved into Static in matcher")
+        }
     };
 
     // Log that we're starting the stream

@@ -96,6 +96,8 @@ export interface ChatProps {
   assistantId?: string;
   /** Optional initial model to use (overrides chat history model) */
   initialModelOverride?: ChatModel | null;
+  /** Optional assistant default files to include for erato-file link resolution */
+  assistantFiles?: FileUploadItem[];
 }
 
 /**
@@ -123,6 +125,7 @@ export const Chat = ({
   emptyStateComponent,
   assistantId,
   initialModelOverride,
+  assistantFiles = [],
 }: ChatProps) => {
   // Use the sidebar context
   const {
@@ -556,6 +559,7 @@ export const Chat = ({
               onFilePreview={openPreviewModal}
               onViewFeedback={openFeedbackViewDialog}
               emptyStateComponent={emptyStateComponent}
+              assistantFiles={assistantFiles}
             />
 
             <ChatInput

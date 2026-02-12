@@ -1,6 +1,7 @@
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 
 /// Static response configuration with chunks and delay
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -55,6 +56,18 @@ pub struct ErrorResponseConfig {
     pub body: Value,
 }
 
+/// Cite files response configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CiteFilesResponseConfig {
+    /// Delay between chunks in milliseconds
+    #[serde(default = "default_cite_files_delay_ms")]
+    pub delay_ms: u64,
+}
+
+fn default_cite_files_delay_ms() -> u64 {
+    50
+}
+
 /// Configuration for a response to return when a pattern matches
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResponseConfig {
@@ -66,6 +79,8 @@ pub enum ResponseConfig {
     ToolCalls(ToolCallsResponseConfig),
     /// Error response with status code and JSON body
     Error(ErrorResponseConfig),
+    /// Dynamic response listing erato-file links in request messages
+    CiteFiles(CiteFilesResponseConfig),
 }
 
 /// Match rule that checks user message pattern using substring matching
@@ -82,11 +97,20 @@ pub struct MatchRuleLastMessageIsUserWithPattern {
     pub pattern: String,
 }
 
+/// Match rule that checks all user messages since the last assistant message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchRuleAnyUserMessageInCurrentTurnWithPattern {
+    /// Pattern to match (substring matching)
+    pub pattern: String,
+}
+
 /// A rule that matches incoming messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MatchRule {
     /// Match based on user message pattern (looks at last user message anywhere in conversation)
     UserMessagePattern(MatchRuleUserMessagePattern),
+    /// Match based on any user message since the last assistant message
+    AnyUserMessageInCurrentTurnWithPattern(MatchRuleAnyUserMessageInCurrentTurnWithPattern),
     /// Match when the last message in the conversation is a tool result
     LastMessageIsToolResult,
     /// Match when the last message is a user message with a specific pattern
@@ -120,6 +144,12 @@ impl Mock {
                     MatchRule::UserMessagePattern(pattern_rule) => {
                         println!("contains text \"{}\"", pattern_rule.pattern);
                     }
+                    MatchRule::AnyUserMessageInCurrentTurnWithPattern(pattern_rule) => {
+                        println!(
+                            "any user message since last assistant contains text \"{}\"",
+                            pattern_rule.pattern
+                        );
+                    }
                     MatchRule::LastMessageIsToolResult => {
                         println!("last message is a tool result");
                     }
@@ -137,6 +167,12 @@ impl Mock {
                 match rule {
                     MatchRule::UserMessagePattern(pattern_rule) => {
                         println!("      - contains text \"{}\"", pattern_rule.pattern);
+                    }
+                    MatchRule::AnyUserMessageInCurrentTurnWithPattern(pattern_rule) => {
+                        println!(
+                            "      - any user message since last assistant contains text \"{}\"",
+                            pattern_rule.pattern
+                        );
                     }
                     MatchRule::LastMessageIsToolResult => {
                         println!("      - last message is a tool result");
@@ -197,6 +233,13 @@ impl Mock {
                     config.status_code
                 );
             }
+            ResponseConfig::CiteFiles(config) => {
+                println!(
+                    "    {}: list erato-file links from request messages with {}ms delay",
+                    "Response".bold(),
+                    config.delay_ms
+                );
+            }
         }
         println!();
     }
@@ -243,12 +286,41 @@ impl Matcher {
         for mock in &self.mocks {
             if self.matches_any_rule(&mock.match_rules, request) {
                 crate::log::log_with_id(request_id, &format!("Matched mock: {}", mock.name));
-                return mock.response.clone();
+                return self.resolve_response(&mock.response, request);
             }
         }
 
         crate::log::log_with_id(request_id, "No match found, using default response");
         self.default_response.clone()
+    }
+
+    fn resolve_response(
+        &self,
+        response: &ResponseConfig,
+        request: &ChatCompletionRequest,
+    ) -> ResponseConfig {
+        match response {
+            ResponseConfig::CiteFiles(config) => {
+                let links = self.extract_erato_file_links_from_messages(request);
+                let text = if links.is_empty() {
+                    "No `erato-file://<uuid>` links found in request messages.".to_string()
+                } else {
+                    let list = links
+                        .iter()
+                        .map(|link| format!("- {}", link))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    format!("Found these file links from request messages:\n{}", list)
+                };
+
+                ResponseConfig::Static(StaticResponseConfig {
+                    chunks: vec![text],
+                    delay_ms: config.delay_ms,
+                    ..Default::default()
+                })
+            }
+            _ => response.clone(),
+        }
     }
 
     /// Check if any of the match rules match the request
@@ -263,6 +335,16 @@ impl Matcher {
                         {
                             return true;
                         }
+                    }
+                }
+                MatchRule::AnyUserMessageInCurrentTurnWithPattern(pattern_rule) => {
+                    let pattern = pattern_rule.pattern.to_lowercase();
+                    if self
+                        .extract_user_messages_since_last_assistant(request)
+                        .iter()
+                        .any(|message| message.to_lowercase().contains(&pattern))
+                    {
+                        return true;
                     }
                 }
                 MatchRule::LastMessageIsToolResult => {
@@ -318,6 +400,26 @@ impl Matcher {
         None
     }
 
+    /// Extract all user messages that appear after the most recent assistant message.
+    /// If there is no assistant message, all user messages are included.
+    fn extract_user_messages_since_last_assistant(
+        &self,
+        request: &ChatCompletionRequest,
+    ) -> Vec<String> {
+        let start_index = request
+            .messages
+            .iter()
+            .rposition(|message| message.role == "assistant")
+            .map_or(0, |idx| idx + 1);
+
+        request.messages[start_index..]
+            .iter()
+            .filter(|message| message.role == "user")
+            .filter_map(|message| message.content.as_ref())
+            .map(|content| self.extract_content_text(content))
+            .collect()
+    }
+
     /// Extract text content from a message content field
     /// Handles both string and array formats
     fn extract_content_text(&self, content: &Value) -> String {
@@ -340,6 +442,131 @@ impl Matcher {
             }
             _ => String::new(),
         }
+    }
+
+    /// Extract unique erato-file links from all request messages (including trigger message).
+    fn extract_erato_file_links_from_messages(
+        &self,
+        request: &ChatCompletionRequest,
+    ) -> Vec<String> {
+        let mut links = Vec::new();
+        let mut seen = HashSet::new();
+
+        for message in &request.messages {
+            if let Some(content) = &message.content {
+                Self::collect_links_from_value(content, &mut links, &mut seen);
+            }
+        }
+
+        links
+    }
+
+    fn collect_links_from_value(
+        value: &Value,
+        links: &mut Vec<String>,
+        seen: &mut HashSet<String>,
+    ) {
+        match value {
+            Value::String(s) => {
+                for link in Self::extract_erato_file_links_from_text(s) {
+                    if seen.insert(link.clone()) {
+                        links.push(link);
+                    }
+                }
+            }
+            Value::Array(arr) => {
+                for item in arr {
+                    Self::collect_links_from_value(item, links, seen);
+                }
+            }
+            Value::Object(map) => {
+                for item in map.values() {
+                    Self::collect_links_from_value(item, links, seen);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn extract_erato_file_links_from_text(text: &str) -> Vec<String> {
+        let mut links = Vec::new();
+        links.extend(Self::extract_erato_file_links_with_prefix(
+            text,
+            "erato-file://",
+            false,
+        ));
+        links.extend(Self::extract_erato_file_links_with_prefix(
+            text,
+            "erato_file_id:",
+            true,
+        ));
+
+        links
+    }
+
+    fn looks_like_uuid_link(link: &str) -> bool {
+        const PREFIX: &str = "erato-file://";
+        let Some(uuid) = link.strip_prefix(PREFIX) else {
+            return false;
+        };
+        Self::looks_like_uuid(uuid)
+    }
+
+    fn looks_like_uuid(uuid: &str) -> bool {
+        // Canonical UUID format: 8-4-4-4-12
+        let mut parts = uuid.split('-');
+        let expected = [8, 4, 4, 4, 12];
+        for length in expected {
+            let Some(part) = parts.next() else {
+                return false;
+            };
+            if part.len() != length || !part.chars().all(|c| c.is_ascii_hexdigit()) {
+                return false;
+            }
+        }
+        parts.next().is_none()
+    }
+
+    fn extract_erato_file_links_with_prefix(
+        text: &str,
+        prefix: &str,
+        normalize_to_erato_file_link: bool,
+    ) -> Vec<String> {
+        let mut links = Vec::new();
+        let mut cursor = 0;
+
+        while let Some(found_at) = text[cursor..].find(prefix) {
+            let start = cursor + found_at;
+            let mut pos = start + prefix.len();
+
+            while let Some(ch) = text[pos..].chars().next() {
+                if ch.is_ascii_hexdigit() || ch == '-' {
+                    pos += ch.len_utf8();
+                } else {
+                    break;
+                }
+            }
+
+            let candidate = &text[start..pos];
+
+            if normalize_to_erato_file_link {
+                if let Some(uuid) = candidate.strip_prefix(prefix) {
+                    if Self::looks_like_uuid(uuid) {
+                        links.push(format!("erato-file://{}", uuid));
+                    }
+                }
+            } else if Self::looks_like_uuid_link(candidate) {
+                links.push(candidate.to_string());
+            }
+
+            if pos <= start {
+                cursor = start + prefix.len();
+            } else {
+                cursor = pos;
+            }
+        }
+
+        links
     }
 }
 
@@ -499,6 +726,141 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_user_messages_since_last_assistant() {
+        let matcher = Matcher::new(vec![]);
+
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {"role": "user", "content": "Old message"},
+                {"role": "assistant", "content": "Assistant response"},
+                {"role": "user", "content": "Current turn part 1"},
+                {"role": "user", "content": "Current turn part 2"}
+            ]
+        }))
+        .unwrap();
+
+        let messages = matcher.extract_user_messages_since_last_assistant(&request);
+        assert_eq!(
+            messages,
+            vec![
+                "Current turn part 1".to_string(),
+                "Current turn part 2".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_user_message_pattern_matches_any_user_message_since_last_assistant() {
+        let mocks = vec![Mock {
+            name: "Test".to_string(),
+            description: "Test mock".to_string(),
+            match_rules: vec![MatchRule::AnyUserMessageInCurrentTurnWithPattern(
+                MatchRuleAnyUserMessageInCurrentTurnWithPattern {
+                    pattern: "needle".to_string(),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec!["Matched".to_string()],
+                delay_ms: 100,
+                ..Default::default()
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {"role": "user", "content": "needle in old turn"},
+                {"role": "assistant", "content": "Assistant response"},
+                {"role": "user", "content": "first user message in turn"},
+                {"role": "user", "content": "has the needle now"}
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0008");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_eq!(config.chunks, vec!["Matched"]);
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
+    fn test_user_message_pattern_ignores_messages_before_last_assistant() {
+        let mocks = vec![Mock {
+            name: "Test".to_string(),
+            description: "Test mock".to_string(),
+            match_rules: vec![MatchRule::AnyUserMessageInCurrentTurnWithPattern(
+                MatchRuleAnyUserMessageInCurrentTurnWithPattern {
+                    pattern: "needle".to_string(),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec!["Matched".to_string()],
+                delay_ms: 100,
+                ..Default::default()
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {"role": "user", "content": "needle in old turn"},
+                {"role": "assistant", "content": "Assistant response"},
+                {"role": "user", "content": "current turn without pattern"}
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0009");
+        match response {
+            ResponseConfig::Static(config) => {
+                // Falls back to default response
+                assert_ne!(config.chunks, vec!["Matched"]);
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
+    fn test_user_message_pattern_only_checks_last_user_message() {
+        let mocks = vec![Mock {
+            name: "Test".to_string(),
+            description: "Test mock".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: "needle".to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec!["Matched".to_string()],
+                delay_ms: 100,
+                ..Default::default()
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {"role": "user", "content": "needle in first current-turn message"},
+                {"role": "user", "content": "last user message without pattern"}
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0010");
+        match response {
+            ResponseConfig::Static(config) => {
+                // Falls back to default response because only the last user message is checked
+                assert_ne!(config.chunks, vec!["Matched"]);
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
     fn test_mock_with_multiple_match_rules() {
         let mocks = vec![Mock {
             name: "Greeting".to_string(),
@@ -611,6 +973,66 @@ mod tests {
                 assert_eq!(pattern_rule.pattern, "test");
             }
             _ => panic!("Expected UserMessagePattern"),
+        }
+    }
+
+    #[test]
+    fn test_extract_erato_file_links_from_text() {
+        let input = "a erato-file://11111111-2222-3333-4444-555555555555 and \
+                     erato-file://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee and \
+                     file_id: erato_file_id:ffffffff-ffff-ffff-ffff-ffffffffffff.";
+        let links = Matcher::extract_erato_file_links_from_text(input);
+        assert_eq!(
+            links,
+            vec![
+                "erato-file://11111111-2222-3333-4444-555555555555",
+                "erato-file://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "erato-file://ffffffff-ffff-ffff-ffff-ffffffffffff",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_cite_files_includes_trigger_message() {
+        let mocks = vec![Mock {
+            name: "CiteFiles".to_string(),
+            description: "Cites files".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "cite files".to_string(),
+                },
+            )],
+            response: ResponseConfig::CiteFiles(CiteFilesResponseConfig { delay_ms: 10 }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "refs erato-file://11111111-2222-3333-4444-555555555555"},
+                        {"type": "image_url", "image_url": {"url": "erato-file://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}}
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": "please cite files and include erato-file://ffffffff-ffff-ffff-ffff-ffffffffffff"
+                }
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0007");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_eq!(config.delay_ms, 10);
+                let combined = config.chunks.join("");
+                assert!(combined.contains("erato-file://11111111-2222-3333-4444-555555555555"));
+                assert!(combined.contains("erato-file://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
+                assert!(combined.contains("erato-file://ffffffff-ffff-ffff-ffff-ffffffffffff"));
+            }
+            _ => panic!("Expected Static response"),
         }
     }
 
