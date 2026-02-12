@@ -438,6 +438,9 @@ impl AppConfig {
                         }
                     }
                 }
+                if provider_config.provider_kind == "vertex_ai" {
+                    *provider_config = provider_config.clone().migrate_vertex_ai_to_gemini();
+                }
             }
         }
 
@@ -796,6 +799,8 @@ pub struct ChatProviderConfig {
     // - "openai" (applicable for both OpenAI and AzureGPT)
     // - "azure_openai" (will be automatically converted to "openai" format during config loading)
     // - "ollama"
+    // - "gemini"
+    // - "vertex_ai" (will be automatically converted to "gemini" during config loading)
     pub provider_kind: String,
     // The model name to use for the chat provider.
     //
@@ -844,6 +849,8 @@ pub struct ChatProviderConfig {
 }
 
 impl ChatProviderConfig {
+    pub const VERTEX_AI_BASE_URL: &str = "https://aiplatform.googleapis.com/v1/publishers/google/";
+
     /// Parses the additional_request_parameters into a HashMap of key-value pairs
     pub fn additional_request_parameters_map(&self) -> HashMap<String, String> {
         let mut params = HashMap::new();
@@ -934,6 +941,19 @@ impl ChatProviderConfig {
             model_capabilities: self.model_capabilities,
             model_settings: self.model_settings,
         })
+    }
+
+    /// Migrates vertex_ai configuration to gemini format.
+    pub fn migrate_vertex_ai_to_gemini(mut self) -> Self {
+        if self.provider_kind != "vertex_ai" {
+            return self;
+        }
+
+        self.provider_kind = "gemini".to_string();
+        if self.base_url.is_none() {
+            self.base_url = Some(Self::VERTEX_AI_BASE_URL.to_string());
+        }
+        self
     }
 
     /// Validates that system_prompt and system_prompt_langfuse are mutually exclusive.
