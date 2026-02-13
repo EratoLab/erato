@@ -25,11 +25,17 @@ struct McpSession {
     tools: Vec<Tool>,
     /// Timestamp of last activity (tool call or tool list request)
     last_activity: SystemTime,
+    /// Maximum idle time before this session is evicted
+    max_idle_duration: Duration,
 }
 
 impl McpSession {
     /// Create a new session by connecting to the MCP server
-    async fn new(server_id: String, config: &McpServerConfig) -> Result<Self, Report> {
+    async fn new(
+        server_id: String,
+        config: &McpServerConfig,
+        default_max_idle_seconds: u64,
+    ) -> Result<Self, Report> {
         debug!(
             server_id = %server_id,
             transport_type = %config.transport_type,
@@ -66,6 +72,11 @@ impl McpSession {
             server_id,
             tools: tools_result.tools,
             last_activity: SystemTime::now(),
+            max_idle_duration: Duration::from_secs(
+                config
+                    .max_session_idle_seconds
+                    .unwrap_or(default_max_idle_seconds),
+            ),
         })
     }
 
@@ -75,9 +86,9 @@ impl McpSession {
     }
 
     /// Check if this session has been inactive for longer than the given duration
-    fn is_inactive(&self, duration: Duration) -> bool {
+    fn is_inactive(&self) -> bool {
         if let Ok(elapsed) = self.last_activity.elapsed() {
-            elapsed > duration
+            elapsed > self.max_idle_duration
         } else {
             false
         }
@@ -119,6 +130,8 @@ pub struct McpSessionManager {
     sessions: Arc<RwLock<HashMap<SessionKey, McpSession>>>,
     /// Server configurations from the app config
     server_configs: HashMap<String, McpServerConfig>,
+    /// Global default max idle time for MCP sessions (seconds)
+    default_max_idle_seconds: u64,
     /// Handle to the background cleanup task
     _cleanup_task: JoinHandle<()>,
 }
@@ -127,6 +140,10 @@ impl McpSessionManager {
     /// Create a new session manager with the given configuration
     pub fn new(config: &AppConfig) -> Self {
         let server_configs = config.mcp_servers.clone();
+        let default_max_idle_seconds = config
+            .mcp_servers_global
+            .max_session_idle_seconds
+            .unwrap_or(60 * 60);
         let sessions = Arc::new(RwLock::new(HashMap::new()));
 
         // Spawn background cleanup task
@@ -140,14 +157,14 @@ impl McpSessionManager {
         Self {
             sessions,
             server_configs,
+            default_max_idle_seconds,
             _cleanup_task: cleanup_task,
         }
     }
 
     /// Background task that periodically cleans up inactive sessions
     async fn run_cleanup_task(sessions: Arc<RwLock<HashMap<SessionKey, McpSession>>>) {
-        let mut interval = tokio::time::interval(Duration::from_secs(5 * 60)); // Run every 5 minutes
-        let inactivity_threshold = Duration::from_secs(60 * 60); // 1 hour
+        let mut interval = tokio::time::interval(Duration::from_secs(60)); // Run every 60 seconds
 
         loop {
             interval.tick().await;
@@ -157,7 +174,7 @@ impl McpSessionManager {
 
             // Remove inactive sessions
             sessions_guard.retain(|(chat_id, server_id), session| {
-                let should_keep = !session.is_inactive(inactivity_threshold);
+                let should_keep = !session.is_inactive();
                 if !should_keep {
                     info!(
                         chat_id = %chat_id,
@@ -203,7 +220,8 @@ impl McpSessionManager {
             "Creating new MCP session"
         );
 
-        let session = McpSession::new(server_id.to_string(), config).await?;
+        let session =
+            McpSession::new(server_id.to_string(), config, self.default_max_idle_seconds).await?;
 
         let mut sessions_guard = self.sessions.write().await;
         sessions_guard.insert(key, session);
@@ -420,6 +438,9 @@ impl McpSessionManager {
                     );
                 }
             }
+
+            // Drop the startup connectivity-check session immediately.
+            self.invalidate_session(test_chat_id, server_id).await;
         }
 
         info!("MCP server connectivity checks complete");

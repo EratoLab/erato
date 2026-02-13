@@ -152,6 +152,9 @@ pub struct AppConfig {
     // A list of MCP servers that may be used in conjunction with the LLM providers.
     #[serde(default)]
     pub mcp_servers: HashMap<String, McpServerConfig>,
+    // Global settings for MCP servers.
+    #[serde(default)]
+    pub mcp_servers_global: McpServersGlobalConfig,
 
     #[serde(default)]
     pub frontend: FrontendConfig,
@@ -1093,6 +1096,19 @@ pub struct McpServerConfig {
     // Optional static HTTP headers to be sent with every request.
     // This is useful for authentication or API keys.
     pub http_headers: Option<HashMap<String, String>>,
+    // Maximum idle time (in seconds) for sessions created for this server.
+    // When omitted, the global `mcp_servers_global.max_session_idle_seconds` is used.
+    #[serde(default)]
+    pub max_session_idle_seconds: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct McpServersGlobalConfig {
+    // Global default maximum idle time (in seconds) before MCP sessions are evicted.
+    // Individual MCP servers can override this via `mcp_servers.<id>.max_session_idle_seconds`.
+    // Defaults to 3600 seconds (1 hour) when not set.
+    #[serde(default)]
+    pub max_session_idle_seconds: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
