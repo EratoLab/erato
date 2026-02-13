@@ -29,14 +29,14 @@ flowchart TB
 
 ## Available Override Points
 
-| Registry Key                  | Location         | Props Interface                | Description                                                    |
-| ----------------------------- | ---------------- | ------------------------------ | -------------------------------------------------------------- |
-| `AssistantFileSourceSelector` | Assistant form   | `FileSourceSelectorProps`      | File source selector when adding default files to an assistant |
-| `ChatFileSourceSelector`      | Chat input       | `FileSourceSelectorProps`      | File source selector when uploading files to a conversation    |
-| `ChatWelcomeScreen`           | Chat empty state | `WelcomeScreenProps`           | Empty state shown when a chat has no messages                  |
-| `AssistantWelcomeScreen`      | Assistant chat   | `AssistantWelcomeScreenProps`  | Empty state shown when opening an assistant chat               |
-| `MessageControls`             | Every message    | `MessageControlsProps`         | Action buttons below each message (copy, edit, feedback, etc.) |
-| `ChatMessageRenderer`         | Every message    | `ChatMessageProps`             | Entire message layout (avatar, bubble, content, controls)      |
+| Registry Key                  | Location         | Props Interface               | Description                                                    |
+| ----------------------------- | ---------------- | ----------------------------- | -------------------------------------------------------------- |
+| `AssistantFileSourceSelector` | Assistant form   | `FileSourceSelectorProps`     | File source selector when adding default files to an assistant |
+| `ChatFileSourceSelector`      | Chat input       | `FileSourceSelectorProps`     | File source selector when uploading files to a conversation    |
+| `ChatWelcomeScreen`           | Chat empty state | `WelcomeScreenProps`          | Empty state shown when a chat has no messages                  |
+| `AssistantWelcomeScreen`      | Assistant chat   | `AssistantWelcomeScreenProps` | Empty state shown when opening an assistant chat               |
+| `MessageControls`             | Every message    | `MessageControlsProps`        | Action buttons below each message (copy, edit, feedback, etc.) |
+| `ChatMessageRenderer`         | Every message    | `ChatMessageProps`            | Entire message layout (avatar, bubble, content, controls)      |
 
 Each example is available in `frontend/src/customer/examples/` and can be copied to `frontend/src/customer/components/` as a starting point.
 
@@ -97,8 +97,14 @@ The `onAction` callback handles standard actions. Call it with a `MessageAction`
 ```tsx
 // Supported action types:
 type MessageActionType =
-  | "copy" | "delete" | "edit" | "regenerate"
-  | "share" | "flag" | "like" | "dislike";
+  | "copy"
+  | "delete"
+  | "edit"
+  | "regenerate"
+  | "share"
+  | "flag"
+  | "like"
+  | "dislike";
 ```
 
 ### Minimal Example
@@ -122,9 +128,8 @@ export const MinimalControls = ({
     if (ok) setCopied(true);
   }, [onAction, messageId]);
 
-  const safeDate = createdAt instanceof Date
-    ? createdAt
-    : new Date(createdAt ?? Date.now());
+  const safeDate =
+    createdAt instanceof Date ? createdAt : new Date(createdAt ?? Date.now());
 
   return (
     <div className="flex items-center gap-2">
@@ -211,14 +216,14 @@ export const componentRegistry: ComponentRegistry = {
 
 Your custom renderer can import and reuse these components from the core codebase:
 
-| Component | Import | Purpose |
-|-----------|--------|---------|
-| `MessageContent` | `@/components/ui/Message/MessageContent` | Renders markdown, code blocks, images |
-| `LoadingIndicator` | `@/components/ui/Feedback/LoadingIndicator` | Shows streaming/thinking states |
-| `ToolCallDisplay` | `@/components/ui/ToolCall` | Renders tool call results |
-| `Avatar` | `@/components/ui/Feedback/Avatar` | User/assistant avatar |
-| `ImageLightbox` | `@/components/ui/Message/ImageLightbox` | Full-size image modal |
-| `Alert` | `@/components/ui/Feedback/Alert` | Error display |
+| Component          | Import                                      | Purpose                               |
+| ------------------ | ------------------------------------------- | ------------------------------------- |
+| `MessageContent`   | `@/components/ui/Message/MessageContent`    | Renders markdown, code blocks, images |
+| `LoadingIndicator` | `@/components/ui/Feedback/LoadingIndicator` | Shows streaming/thinking states       |
+| `ToolCallDisplay`  | `@/components/ui/ToolCall`                  | Renders tool call results             |
+| `Avatar`           | `@/components/ui/Feedback/Avatar`           | User/assistant avatar                 |
+| `ImageLightbox`    | `@/components/ui/Message/ImageLightbox`     | Full-size image modal                 |
+| `Alert`            | `@/components/ui/Feedback/Alert`            | Error display                         |
 
 ### What the Example Demonstrates
 
@@ -257,7 +262,7 @@ import { FileSourceSelectorGrid } from "@/customer/components/FileSourceSelector
 
 export const componentRegistry: ComponentRegistry = {
   AssistantFileSourceSelector: FileSourceSelectorGrid, // Grid in assistant form
-  ChatFileSourceSelector: null,                        // Keep default in chat
+  ChatFileSourceSelector: null, // Keep default in chat
   // ...other overrides
 };
 ```
@@ -301,9 +306,9 @@ import type { ComponentRegistry } from "@/config/componentRegistry";
 
 export const componentRegistry: ComponentRegistry = {
   AssistantFileSourceSelector: FileSourceSelectorGrid,
-  ChatFileSourceSelector: null,          // Keep default
+  ChatFileSourceSelector: null, // Keep default
   ChatWelcomeScreen: CustomWelcome,
-  AssistantWelcomeScreen: null,          // Keep default
+  AssistantWelcomeScreen: null, // Keep default
   MessageControls: CustomMessageControls,
   ChatMessageRenderer: ChatMessageBubble,
 };

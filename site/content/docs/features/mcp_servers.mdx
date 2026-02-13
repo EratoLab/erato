@@ -57,10 +57,15 @@ MCP servers are configured in your `erato.toml` file under the `[mcp_servers]` s
 2. Transport type specification
 3. Server URL endpoint
 4. Optional authentication headers
+5. Optional per-server idle timeout override
 
 **Example:**
 
 ```toml
+# Optional global default for MCP session idle timeout (seconds)
+[mcp_servers_global]
+max_session_idle_seconds = 1200
+
 [mcp_servers.file_provider]
 transport_type = "sse"
 url = "http://127.0.0.1:63490/sse"
@@ -69,6 +74,7 @@ url = "http://127.0.0.1:63490/sse"
 transport_type = "sse"
 url = "https://api.example.com/mcp/sse"
 http_headers = { "Authorization" = "Bearer your-api-token" }
+max_session_idle_seconds = 600
 
 [mcp_servers.advanced_service]
 transport_type = "streamable_http"
@@ -77,6 +83,8 @@ http_headers = { "Authorization" = "Bearer your-api-token" }
 ```
 
 See the [Configuration Reference](../configuration#mcp_servers) for detailed configuration options.
+
+**Session timeout guidance:** If an MCP server allocates a lot of resources per session, set `mcp_servers_global.max_session_idle_seconds` (or that server's `max_session_idle_seconds`) to a low value so idle sessions are cleaned up quickly.
 
 ## Deployment Considerations
 
