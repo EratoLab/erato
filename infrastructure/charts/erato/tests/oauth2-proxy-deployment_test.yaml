@@ -51,6 +51,15 @@ tests:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: Always
 
+  - it: should set oauth2-proxy deployment strategy when configured
+    set:
+      oauth2Proxy.deploymentStrategy:
+        type: Recreate
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+
   - it: should include config file argument
     asserts:
       - contains:

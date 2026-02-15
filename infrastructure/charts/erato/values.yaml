@@ -70,6 +70,14 @@ oauth2Proxy:
     # skip_auth_regex = ["^/health", "^/metrics"]
   # -- Annotations to add to the oauth2-proxy deployment
   deploymentAnnotations: {}
+  # -- Optional deployment strategy for oauth2-proxy (e.g., RollingUpdate/Recreate).
+  # Example:
+  # deploymentStrategy:
+  #   type: RollingUpdate
+  #   rollingUpdate:
+  #     maxUnavailable: 25%
+  #     maxSurge: 25%
+  deploymentStrategy: {}
   # -- Annotations to add to the oauth2-proxy pod
   podAnnotations: {}
   resources:
@@ -177,6 +185,14 @@ backend:
   extraVolumeMounts: []
   # -- Annotations to add to the backend deployment
   deploymentAnnotations: {}
+  # -- Optional deployment strategy for backend rollout (e.g., RollingUpdate/Recreate).
+  # Example:
+  # deploymentStrategy:
+  #   type: RollingUpdate
+  #   rollingUpdate:
+  #     maxUnavailable: 25%
+  #     maxSurge: 25%
+  deploymentStrategy: {}
   # -- Annotations to add to the backend pod
   podAnnotations: {}
   configFile:

@@ -163,6 +163,7 @@ ingress:
 | backend.configFile.secretKey | string | `""` | Key in the secret that contains the erato.toml content |
 | backend.configFile.secretName | string | `""` | Name of the secret containing the erato.toml file |
 | backend.deploymentAnnotations | object | `{}` | Annotations to add to the backend deployment |
+| backend.deploymentStrategy | object | `{}` | Optional deployment strategy for backend rollout (e.g., RollingUpdate/Recreate). Example: deploymentStrategy:   type: RollingUpdate   rollingUpdate:     maxUnavailable: 25%     maxSurge: 25% |
 | backend.deploymentVersion | string | `""` | Optional deployment version for cache headers on static files (falls back to image tag if not set) |
 | backend.envSecrets | list | `[]` | Array of secret names to load as environment variables |
 | backend.extraConfigFiles | list | `[]` | Optional list of additional config files to mount (e.g., *.auto.erato.toml files) Example: extraConfigFiles:   - name: mcp-servers     secretName: mcp-config-secret     secretKey: mcp-servers.toml   - name: additional-config     configMapName: additional-config-cm     configMapKey: additional.toml   - name: inline-config     inlineContent: |       [mcp_servers.example]       ... |
@@ -215,6 +216,7 @@ ingress:
 | nameOverride | string | `""` | String to partially override common.names.fullname |
 | oauth2Proxy.config | string | `"# Example configuration - replace with your own\n# http_address = \"0.0.0.0:4180\"\n# upstreams = [\"http://localhost:8080\"]\n# email_domains = [\"*\"]\n# cookie_secret = \"\"\n# cookie_secure = true\n# skip_auth_regex = [\"^/health\", \"^/metrics\"]\n"` | Full configuration file content for oauth2-proxy |
 | oauth2Proxy.deploymentAnnotations | object | `{}` | Annotations to add to the oauth2-proxy deployment |
+| oauth2Proxy.deploymentStrategy | object | `{}` | Optional deployment strategy for oauth2-proxy (e.g., RollingUpdate/Recreate). Example: deploymentStrategy:   type: RollingUpdate   rollingUpdate:     maxUnavailable: 25%     maxSurge: 25% |
 | oauth2Proxy.enabled | bool | `true` | Enable OAuth2 Proxy for authentication |
 | oauth2Proxy.extraEnvVars | list | `[]` | Array with extra environment variables to add to oauth2-proxy |
 | oauth2Proxy.extraEnvVarsCM | string | `""` | Name of existing ConfigMap containing extra env vars for oauth2-proxy |

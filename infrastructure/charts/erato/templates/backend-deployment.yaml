@@ -10,6 +10,10 @@ metadata:
   {{- end }}
 spec:
   replicas: {{ .Values.backend.replicaCount }}
+  {{- with .Values.backend.deploymentStrategy }}
+  strategy:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
       app.kubernetes.io/component: erato-app
