@@ -8,7 +8,9 @@ use erato::config::{
 };
 use erato::db::entity::{chats, messages};
 use erato::server::router::router;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, prelude::Uuid};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, prelude::Uuid,
+};
 use serde_json::{Value, json};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
@@ -224,6 +226,14 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
             "Chat is missing 'title_by_summary' field"
         );
         assert!(
+            chat.get("title_by_user_provided").is_some(),
+            "Chat is missing 'title_by_user_provided' field"
+        );
+        assert!(
+            chat.get("title_resolved").is_some(),
+            "Chat is missing 'title_resolved' field"
+        );
+        assert!(
             chat.get("last_message_at").is_some(),
             "Chat is missing 'last_message_at' field"
         );
@@ -360,6 +370,262 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
         );
         assert!(chat.get("can_edit").unwrap().as_bool().unwrap());
     }
+}
+
+/// Test that recent chats resolve title with `title_by_user_provided` precedence.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_recent_chats_prefers_title_by_user_provided(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let issuer = TEST_USER_ISSUER;
+    let subject = "test-subject-custom-display-name";
+    let _user = erato::models::user::get_or_create_user(&app_state.db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create chat 1 without custom display name.
+    let response_1 = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "user_message": "chat one",
+            "selected_facet_ids": []
+        }))
+        .await;
+    response_1.assert_status_ok();
+
+    // Create chat 2 with custom display name.
+    let response_2 = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "user_message": "chat two",
+            "title_by_user_provided": "User Override Name",
+            "selected_facet_ids": []
+        }))
+        .await;
+    response_2.assert_status_ok();
+
+    fn extract_chat_id(sse_response: &str) -> String {
+        let lines: Vec<&str> = sse_response.lines().collect();
+        for i in 0..lines.len().saturating_sub(1) {
+            if lines[i] == "event: chat_created" && lines[i + 1].starts_with("data: ") {
+                let payload: Value =
+                    serde_json::from_str(&lines[i + 1][6..]).expect("Invalid chat_created JSON");
+                return payload["chat_id"]
+                    .as_str()
+                    .expect("Missing chat_id")
+                    .to_string();
+            }
+        }
+        panic!("chat_created event not found in SSE response");
+    }
+
+    let chat_1_id = extract_chat_id(&response_1.text());
+    let chat_2_id = extract_chat_id(&response_2.text());
+
+    // Set deterministic auto-generated summaries for both chats.
+    let chat_1_uuid = Uuid::parse_str(&chat_1_id).expect("Invalid chat UUID for chat_1");
+    let chat_2_uuid = Uuid::parse_str(&chat_2_id).expect("Invalid chat UUID for chat_2");
+
+    let chat_1 = chats::Entity::find_by_id(chat_1_uuid)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to query chat_1")
+        .expect("chat_1 should exist");
+    let mut chat_1_active: chats::ActiveModel = chat_1.into();
+    chat_1_active.title_by_summary = ActiveValue::Set(Some("Auto Name 1".to_string()));
+    chat_1_active.title_by_user_provided = ActiveValue::Set(None);
+    chat_1_active
+        .update(&app_state.db)
+        .await
+        .expect("Failed to update chat_1");
+
+    let chat_2 = chats::Entity::find_by_id(chat_2_uuid)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to query chat_2")
+        .expect("chat_2 should exist");
+    let mut chat_2_active: chats::ActiveModel = chat_2.into();
+    chat_2_active.title_by_summary = ActiveValue::Set(Some("Auto Name 2".to_string()));
+    chat_2_active.title_by_user_provided = ActiveValue::Set(Some("User Override Name".to_string()));
+    chat_2_active
+        .update(&app_state.db)
+        .await
+        .expect("Failed to update chat_2");
+
+    let response = server
+        .get("/api/v1beta/me/recent_chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+
+    let body: Value = response.json();
+    let chats = body["chats"].as_array().expect("Expected chats array");
+
+    let chat_1_item = chats
+        .iter()
+        .find(|c| c["id"].as_str() == Some(chat_1_id.as_str()))
+        .expect("chat_1 missing from response");
+    let chat_2_item = chats
+        .iter()
+        .find(|c| c["id"].as_str() == Some(chat_2_id.as_str()))
+        .expect("chat_2 missing from response");
+
+    assert_eq!(
+        chat_1_item["title_by_summary"].as_str(),
+        Some("Auto Name 1")
+    );
+    assert!(chat_1_item["title_by_user_provided"].is_null());
+    assert_eq!(chat_1_item["title_resolved"].as_str(), Some("Auto Name 1"));
+
+    assert_eq!(
+        chat_2_item["title_by_summary"].as_str(),
+        Some("Auto Name 2")
+    );
+    assert_eq!(
+        chat_2_item["title_by_user_provided"].as_str(),
+        Some("User Override Name")
+    );
+    assert_eq!(
+        chat_2_item["title_resolved"].as_str(),
+        Some("User Override Name")
+    );
+}
+
+/// Test updating and removing title_by_user_provided via chat update endpoint.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_update_chat_title_by_user_provided(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let issuer = TEST_USER_ISSUER;
+    let subject = "test-subject-update-chat-title";
+    let _user = erato::models::user::get_or_create_user(&app_state.db, issuer, subject, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Create a chat with an initial user-provided title.
+    let create_response = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "title_by_user_provided": "Initial Title"
+        }))
+        .await;
+    create_response.assert_status_ok();
+    let create_json: Value = create_response.json();
+    let chat_id = create_json["chat_id"]
+        .as_str()
+        .expect("Expected chat_id in create response")
+        .to_string();
+
+    // Update title_by_user_provided to a new value.
+    let update_response = server
+        .put(&format!("/api/v1beta/me/chats/{}", chat_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "title_by_user_provided": "Updated Title"
+        }))
+        .await;
+    update_response.assert_status_ok();
+    let update_json: Value = update_response.json();
+    assert_eq!(
+        update_json["title_by_user_provided"].as_str(),
+        Some("Updated Title")
+    );
+    assert_eq!(
+        update_json["title_resolved"].as_str(),
+        Some("Updated Title")
+    );
+
+    // Set a summary title directly in DB so we can verify fallback when user title is removed.
+    let chat_uuid = Uuid::parse_str(&chat_id).expect("Invalid chat UUID");
+    let chat = chats::Entity::find_by_id(chat_uuid)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to query chat")
+        .expect("Chat should exist");
+    let mut chat_active: chats::ActiveModel = chat.into();
+    chat_active.title_by_summary = ActiveValue::Set(Some("Auto Summary".to_string()));
+    chat_active
+        .update(&app_state.db)
+        .await
+        .expect("Failed to set chat summary");
+
+    // Remove title_by_user_provided by setting it to null.
+    let remove_response = server
+        .put(&format!("/api/v1beta/me/chats/{}", chat_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "title_by_user_provided": null
+        }))
+        .await;
+    remove_response.assert_status_ok();
+    let remove_json: Value = remove_response.json();
+    assert!(remove_json["title_by_user_provided"].is_null());
+    assert_eq!(
+        remove_json["title_by_summary"].as_str(),
+        Some("Auto Summary")
+    );
+    assert_eq!(remove_json["title_resolved"].as_str(), Some("Auto Summary"));
+
+    // Add one message so this chat is included in /me/recent_chats.
+    let submit_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "existing_chat_id": chat_id,
+            "user_message": "hello",
+            "selected_facet_ids": []
+        }))
+        .await;
+    submit_response.assert_status_ok();
+
+    // Verify recent chats reflects resolved title and individual values.
+    let recent_response = server
+        .get("/api/v1beta/me/recent_chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    recent_response.assert_status_ok();
+    let recent_json: Value = recent_response.json();
+    let chats = recent_json["chats"]
+        .as_array()
+        .expect("Expected chats array in recent chats response");
+    let chat_item = chats
+        .iter()
+        .find(|c| c["id"].as_str() == Some(chat_id.as_str()))
+        .expect("Chat missing from recent chats response");
+    assert!(chat_item["title_by_user_provided"].is_null());
+    assert_eq!(chat_item["title_by_summary"].as_str(), Some("Auto Summary"));
+    assert_eq!(chat_item["title_resolved"].as_str(), Some("Auto Summary"));
 }
 
 /// Test retrieving all messages from a specific chat.

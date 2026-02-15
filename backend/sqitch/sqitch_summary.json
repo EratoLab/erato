@@ -14,7 +14,8 @@
     "deploy/0012_migrate_file_uploads_relation_to_own_table.sql",
     "deploy/0013_add_assistants_table.sql",
     "deploy/0014_add_share_grants_table.sql",
-    "deploy/0015_add_message_feedbacks_table.sql"
+    "deploy/0015_add_message_feedbacks_table.sql",
+    "deploy/0016_add_title_by_user_provided_to_chats.sql"
   ],
-  "latest_change": "ca6792531af75a5f46c7bd38c6e1a5b1b7bea94e"
+  "latest_change": "0f132fe5c5d3078c5943abd11186bde733fb3646"
 }

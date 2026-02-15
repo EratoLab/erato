@@ -159,7 +159,8 @@ CREATE TABLE public.chats (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     title_by_summary text,
-    archived_at timestamp with time zone
+    archived_at timestamp with time zone,
+    title_by_user_provided text
 );
 
 
@@ -444,4 +445,3 @@ ALTER TABLE ONLY public.messages
 --
 
 \unrestrict ZYd2o8gFqKpVzywpGAsPpFAklWbPQh49utAY3n4O8iy8pTzoRAIGDbKARplWNoP
-
