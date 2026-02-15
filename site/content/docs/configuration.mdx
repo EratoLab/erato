@@ -1213,6 +1213,34 @@ The service name to identify this application in traces.
 
 **Type:** `string`
 
+#### `integrations.prometheus`
+
+Configuration for [Prometheus](./integrations/prometheus) metrics export.
+
+##### `integrations.prometheus.enabled`
+
+Whether the Prometheus metrics endpoint is enabled.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+##### `integrations.prometheus.host`
+
+Host interface for the Prometheus metrics listener.
+
+**Default value:** `"127.0.0.1"`
+
+**Type:** `string`
+
+##### `integrations.prometheus.port`
+
+Port for the Prometheus metrics listener. This must be different from `http_port`.
+
+**Default value:** `3131`
+
+**Type:** `integer`
+
 #### `integrations.experimental_sharepoint`
 
 Configuration for the experimental [SharePoint/OneDrive](./integrations/sharepoint) integration. This allows users to attach files from their Microsoft cloud storage directly to chats.

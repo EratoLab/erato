@@ -28,6 +28,7 @@ async fn main() -> Result<(), Report> {
 
     // initialize tracing
     let _telemetry_guard = erato::telemetry::init_telemetry(&config)?;
+    erato::metrics::init_prometheus_metrics(&config)?;
 
     let mut _sentry_guard = None;
     setup_sentry(

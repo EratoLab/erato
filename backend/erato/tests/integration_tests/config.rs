@@ -627,6 +627,88 @@ sentry_dsn = "https://test-key@sentry.io/12345"
     assert_eq!(config.sentry_dsn, None);
 }
 
+#[test]
+fn test_config_with_default_prometheus_integration() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert!(!config.integrations.prometheus.enabled);
+    assert_eq!(config.integrations.prometheus.host, "127.0.0.1");
+    assert_eq!(config.integrations.prometheus.port, 3131);
+}
+
+#[test]
+#[should_panic(expected = "Invalid Prometheus configuration")]
+fn test_config_prometheus_port_must_differ_from_http_port() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+http_port = 3130
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.prometheus]
+enabled = true
+host = "127.0.0.1"
+port = 3130
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    let _ = config.migrate();
+}
+
 /// Tests backward compatibility with deprecated Sentry DSN field.
 ///
 /// # Test Categories

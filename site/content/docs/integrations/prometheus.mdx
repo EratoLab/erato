@@ -1,0 +1,31 @@
+# Prometheus
+
+Erato provides a Prometheus endpoint based on `metrics.rs`.
+
+## What it exposes
+
+- **Tokio runtime metrics** via `tokio-metrics` + `metrics-rs` integration
+- **`erato_info`** gauge with labels:
+  - `version`
+  - `environment`
+  - `service`
+  - `deployment_version`
+
+## Configuration
+
+Enable the integration in `erato.toml`:
+
+```toml filename="erato.toml"
+[integrations.prometheus]
+enabled = true
+host = "127.0.0.1"
+port = 3131
+```
+
+When enabled, Erato starts a dedicated listener and prints the metrics URL at startup:
+
+`http://<host>:<port>/metrics`
+
+`integrations.prometheus.port` must be different from `http_port`.
+
+For all configuration fields, see [Configuration Reference](../configuration#integrationsprometheus).

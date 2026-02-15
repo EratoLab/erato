@@ -63,6 +63,9 @@ opentelemetry-otlp = { version = "0.31.0", default-features = false, features = 
 opentelemetry-semantic-conventions = "0.29.0"
 tracing-opentelemetry = "0.32.0"
 axum-tracing-opentelemetry = "0.32.2"
+metrics = "0.24"
+metrics-exporter-prometheus = "0.17.2"
+tokio-metrics = { version = "0.4.7", features = ["metrics-rs-integration"] }
 base64 = "0.22.1"
 # Tokio console for async debugging
 console-subscriber = { version = "0.5.0", optional = true }
