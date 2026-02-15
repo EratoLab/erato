@@ -42,6 +42,36 @@ pub async fn build_abstract_sequence(
     selected_facet_ids: &[String],
     preferred_language: Option<&str>,
 ) -> Result<AbstractChatSequence, Report> {
+    build_abstract_sequence_with_facet_tool_expansions(
+        message_repo,
+        prompt_provider,
+        chat,
+        previous_message_id,
+        new_input_file_ids,
+        chat_provider_config,
+        experimental_facets,
+        selected_facet_ids,
+        preferred_language,
+        None,
+    )
+    .await
+}
+
+/// Same as `build_abstract_sequence` but allows overriding tool lists rendered
+/// in facet prompt templates (e.g. wildcard expansion to concrete tools).
+#[allow(clippy::too_many_arguments)]
+pub async fn build_abstract_sequence_with_facet_tool_expansions(
+    message_repo: &impl MessageRepository,
+    prompt_provider: &impl PromptProvider,
+    chat: &chats::Model,
+    previous_message_id: &Uuid,
+    new_input_file_ids: Vec<Uuid>,
+    chat_provider_config: &ChatProviderConfig,
+    experimental_facets: &ExperimentalFacetsConfig,
+    selected_facet_ids: &[String],
+    preferred_language: Option<&str>,
+    facet_tool_expansions: Option<&HashMap<String, Vec<String>>>,
+) -> Result<AbstractChatSequence, Report> {
     let mut sequence = AbstractChatSequence::new();
 
     // 1. Check if this is the first message
@@ -147,7 +177,10 @@ pub async fn build_abstract_sequence(
                     },
                     facet_id: facet_id.clone(),
                     facet_display_name: facet.display_name.clone(),
-                    facet_tools_list: facet.tool_call_allowlist.clone(),
+                    facet_tools_list: facet_tool_expansions
+                        .and_then(|expansions| expansions.get(facet_id))
+                        .cloned()
+                        .unwrap_or_else(|| facet.tool_call_allowlist.clone()),
                 });
             }
         }

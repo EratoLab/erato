@@ -1,10 +1,11 @@
 use crate::config::{AppConfig, McpServerConfig};
 use crate::services::mcp_transports::{EmptyClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
+use futures::future::join_all;
 use rmcp::model::{CallToolRequestParam, CallToolResult, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
 use sea_orm::prelude::Uuid;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
@@ -250,11 +251,38 @@ impl McpSessionManager {
 
     /// List all available tools for a chat across all configured MCP servers
     pub async fn list_tools(&self, chat_id: Uuid) -> Vec<ManagedTool> {
-        let mut all_tools = Vec::new();
+        self.list_tools_for_server_ids(chat_id, None).await
+    }
 
-        for server_id in self.server_configs.keys() {
-            // Ensure session exists
-            if let Err(e) = self.get_or_create_session(chat_id, server_id).await {
+    /// List all available tools for a chat, optionally restricted to a set of server IDs.
+    pub async fn list_tools_for_server_ids(
+        &self,
+        chat_id: Uuid,
+        server_id_filter: Option<&HashSet<String>>,
+    ) -> Vec<ManagedTool> {
+        let mut all_tools = Vec::new();
+        let server_ids: Vec<String> = self
+            .server_configs
+            .keys()
+            .filter(|server_id| {
+                server_id_filter
+                    .map(|filter| filter.contains(*server_id))
+                    .unwrap_or(true)
+            })
+            .cloned()
+            .collect();
+
+        let creation_results = join_all(server_ids.iter().map(|server_id| async move {
+            (
+                server_id.clone(),
+                self.get_or_create_session(chat_id, server_id).await,
+            )
+        }))
+        .await;
+
+        let sessions_guard = self.sessions.read().await;
+        for (server_id, creation_result) in creation_results {
+            if let Err(e) = creation_result {
                 warn!(
                     chat_id = %chat_id,
                     server_id = %server_id,
@@ -264,10 +292,7 @@ impl McpSessionManager {
                 continue;
             }
 
-            // Get tools from the session
-            let sessions_guard = self.sessions.read().await;
             let key = (chat_id, server_id.clone());
-
             if let Some(session) = sessions_guard.get(&key) {
                 for tool in &session.tools {
                     all_tools.push(ManagedTool {

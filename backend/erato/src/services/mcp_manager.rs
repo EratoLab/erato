@@ -5,6 +5,7 @@ use genai::chat::Tool as GenaiTool;
 use genai::chat::ToolCall as GenaiToolCall;
 use rmcp::model::CallToolRequestParam;
 use sea_orm::prelude::Uuid;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 /// Wrapper struct that provides a high-level API for MCP operations
@@ -48,6 +49,17 @@ impl McpServers {
     /// List all available tools for a specific chat
     pub async fn list_tools(&self, chat_id: Uuid) -> Vec<ManagedTool> {
         self.session_manager.list_tools(chat_id).await
+    }
+
+    /// List tools for a chat, optionally restricted to a set of server IDs.
+    pub async fn list_tools_for_server_ids(
+        &self,
+        chat_id: Uuid,
+        server_ids: Option<&HashSet<String>>,
+    ) -> Vec<ManagedTool> {
+        self.session_manager
+            .list_tools_for_server_ids(chat_id, server_ids)
+            .await
     }
 
     /// Convert a GenAI tool call to a managed tool call by finding the server that provides the tool
