@@ -200,9 +200,50 @@ msgid "chat.file.preview.aria"
 msgstr "Vista previa del archivo adjunto:"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.history.menu.rename"
+msgstr "Renombrar"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "chat.history.recent"
 msgstr "Recientes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/EditChatTitleDialog.tsx
+msgid "chat.history.rename.dialog.title"
+msgstr "Renombrar chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+#: src/components/ui/Chat/EditChatTitleDialog.tsx
+msgid "chat.history.rename.generated.fallback"
+msgstr "Chat sin título"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/EditChatTitleDialog.tsx
+msgid "chat.history.rename.generated.label"
+msgstr "Título generado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/EditChatTitleDialog.tsx
+msgid "chat.history.rename.save"
+msgstr "Renombrar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/EditChatTitleDialog.tsx
+msgid "chat.history.rename.saving"
+msgstr "Guardando..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/EditChatTitleDialog.tsx
+msgid "chat.history.rename.userProvided.label"
+msgstr "Título personalizado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/EditChatTitleDialog.tsx
+msgid "chat.history.rename.userProvided.placeholder"
+msgstr "Déjelo vacío para usar el título generado"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
@@ -960,6 +1001,7 @@ msgid "Cancel"
 msgstr "Cancelar"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/EditChatTitleDialog.tsx
 #: src/components/ui/Feedback/FeedbackCommentDialog.tsx
 msgid "Cancel"
 msgstr "Cancelar"
@@ -1282,12 +1324,9 @@ msgstr ""
 msgid "Name"
 msgstr ""
 
-#: src/components/ui/Assistant/AssistantsPageStructure.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
-#: src/components/ui/Search/SearchPageStructure.tsx
 #: src/pages/AssistantsListPage.tsx
-#: src/pages/SearchPage.tsx
 msgid "New Chat"
 msgstr "Nuevo chat"
 
@@ -1536,7 +1575,6 @@ msgid "Type a message..."
 msgstr "Escriba un mensaje..."
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
-#: src/pages/AssistantChatSpacePage.tsx
 msgid "Untitled Chat"
 msgstr ""
 

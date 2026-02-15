@@ -16,3 +16,4 @@
 0013_add_assistants_table 2025-11-12T23:15:53Z System Administrator <root@Maxs-Laptop.local> # Add assistants table
 0014_add_share_grants_table 2025-12-07T20:29:00Z System Administrator <root@Maxs-Laptop.lan> # add_share_grants_table
 0015_add_message_feedbacks_table 2025-12-11T17:47:26Z System Administrator <root@Maxs-Laptop.lan> # Add message_feedbacks table
+0016_add_title_by_user_provided_to_chats 2026-02-15T00:00:00Z System Administrator <root@localhost> # Add title_by_user_provided to chats

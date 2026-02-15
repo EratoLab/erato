@@ -236,6 +236,10 @@ pub struct MessageSubmitRequest {
     /// If provided with an existing_chat_id, this field is ignored.
     #[schema(nullable = false)]
     assistant_id: Option<Uuid>,
+    /// Optional user-specified display name for a newly created chat.
+    /// Ignored when existing_chat_id is provided.
+    #[schema(nullable = false)]
+    title_by_user_provided: Option<String>,
     /// IDs of facets selected by the user for this generation.
     #[serde(default)]
     selected_facet_ids: Vec<String>,
@@ -2658,6 +2662,7 @@ pub async fn message_submit_sse(
             request.previous_message_id.as_ref(),
             &me_user.id,
             request.assistant_id.as_ref(),
+            request.title_by_user_provided.clone(),
         )
         .await
         .map_err(|e| {
@@ -2797,6 +2802,7 @@ async fn run_message_submit_task(
         &me_user.to_subject(),
         Some(&chat_id),
         &me_user.id,
+        None,
         None,
     )
     .await
@@ -3562,6 +3568,7 @@ pub async fn resume_message_sse(
         &me_user.to_subject(),
         Some(&request.chat_id),
         &me_user.id,
+        None,
         None,
     )
     .await

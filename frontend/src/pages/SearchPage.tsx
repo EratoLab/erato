@@ -51,9 +51,9 @@ export default function SearchPage() {
         (chat): SearchResult => ({
           id: chat.id,
           chatId: chat.id,
-          chatTitle: chat.title_by_summary || t`New Chat`,
-          messageContent: chat.title_by_summary || t`New Chat`,
-          timestamp: chat.last_message_at || new Date().toISOString(),
+          chatTitle: chat.title_resolved,
+          messageContent: chat.title_resolved,
+          timestamp: chat.last_message_at,
         }),
       )
       .sort(

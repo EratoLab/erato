@@ -1,4 +1,3 @@
-import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -56,13 +55,13 @@ export default function AssistantsPageStructure({
   const sessions: ChatSession[] = Array.isArray(chatHistory)
     ? chatHistory.map((chat) => ({
         id: chat.id,
-        title: chat.title_by_summary || t`New Chat`,
-        updatedAt: chat.last_message_at || new Date().toISOString(),
+        title: chat.title_resolved,
+        updatedAt: chat.last_message_at,
         messages: [],
         metadata: {
           lastMessage: {
-            content: chat.title_by_summary || "",
-            timestamp: chat.last_message_at || new Date().toISOString(),
+            content: chat.title_resolved,
+            timestamp: chat.last_message_at,
           },
           fileCount: chat.file_uploads.length,
         },

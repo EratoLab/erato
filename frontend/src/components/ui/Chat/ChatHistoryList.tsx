@@ -40,6 +40,7 @@ export interface ChatHistoryListProps {
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void;
+  onSessionEditTitle?: (sessionId: string) => void;
   onShowDetails?: (sessionId: string) => void;
   className?: string;
   /**
@@ -65,6 +66,8 @@ const ChatHistoryListItem = memo<{
   layout: "default" | "compact";
   onSelect: () => void;
   onArchive?: () => void;
+  onEditTitle?: () => void;
+  canEdit?: boolean;
   onShowDetails?: () => void;
   showTimestamps?: boolean;
 }>(
@@ -74,6 +77,8 @@ const ChatHistoryListItem = memo<{
     layout,
     onSelect,
     onArchive,
+    onEditTitle,
+    canEdit = true,
     onShowDetails,
     showTimestamps = true,
   }) => (
@@ -120,6 +125,19 @@ const ChatHistoryListItem = memo<{
           >
             <DropdownMenu
               items={[
+                ...(onEditTitle
+                  ? [
+                      {
+                        label: t({
+                          id: "chat.history.menu.rename",
+                          message: "Rename",
+                        }),
+                        icon: <MultiplePagesIcon className="size-4" />,
+                        onClick: onEditTitle,
+                        disabled: !canEdit,
+                      },
+                    ]
+                  : []),
                 {
                   label: t`Remove`,
                   icon: <LogOutIcon className="size-4" />,
@@ -177,6 +195,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     currentSessionId,
     onSessionSelect,
     onSessionArchive,
+    onSessionEditTitle,
     onShowDetails,
     className,
     layout = "default",
@@ -220,6 +239,12 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
             onArchive={
               onSessionArchive ? () => onSessionArchive(session.id) : undefined
             }
+            onEditTitle={
+              onSessionEditTitle
+                ? () => onSessionEditTitle(session.id)
+                : undefined
+            }
+            canEdit={session.canEdit}
             onShowDetails={
               onShowDetails ? () => onShowDetails(session.id) : undefined
             }

@@ -54,6 +54,10 @@ export interface ChatSessionMetadata {
 export interface ChatSession {
   id: string;
   title: string;
+  titleResolved?: string;
+  titleBySummary?: string | null;
+  titleByUserProvided?: string | null;
+  canEdit?: boolean;
   updatedAt: string;
   messages: Message[];
   metadata?: ChatSessionMetadata;

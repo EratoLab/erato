@@ -1375,6 +1375,66 @@ export const useCreateChat = (
   });
 };
 
+export type UpdateChatPathParams = {
+  /**
+   * The ID of the chat to update
+   */
+  chatId: string;
+};
+
+export type UpdateChatError = Fetcher.ErrorWrapper<undefined>;
+
+export type UpdateChatVariables = {
+  body?: Schemas.UpdateChatRequest;
+  pathParams: UpdateChatPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * Currently supports updating only `title_by_user_provided`.
+ */
+export const fetchUpdateChat = (
+  variables: UpdateChatVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.UpdateChatResponse,
+    UpdateChatError,
+    Schemas.UpdateChatRequest,
+    {},
+    {},
+    UpdateChatPathParams
+  >({
+    url: "/api/v1beta/me/chats/{chatId}",
+    method: "put",
+    ...variables,
+    signal,
+  });
+
+/**
+ * Currently supports updating only `title_by_user_provided`.
+ */
+export const useUpdateChat = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.UpdateChatResponse,
+      UpdateChatError,
+      UpdateChatVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.UpdateChatResponse,
+    UpdateChatError,
+    UpdateChatVariables
+  >({
+    mutationFn: (variables: UpdateChatVariables) =>
+      fetchUpdateChat(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type FacetsError = Fetcher.ErrorWrapper<undefined>;
 
 export type FacetsVariables = V1betaApiContext["fetcherOptions"];

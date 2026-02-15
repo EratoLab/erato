@@ -89,7 +89,9 @@ export const handlers = [
       chats: [
         {
           id: "recent-chat-1",
-          title_by_summary: "Recent Chat 1 Title",
+          title_by_summary: null,
+          title_by_user_provided: null,
+          title_resolved: "Recent Chat 1 Title",
           last_message_at: new Date().toISOString(),
           file_uploads: [],
           can_edit: true,
