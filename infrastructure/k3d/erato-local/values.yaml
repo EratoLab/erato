@@ -64,8 +64,16 @@ erato:
 
   oauth2Proxy:
     enabled: true
+    metrics:
+      enabled: true
+      port: 44180
+      service:
+        enabled: true
+        type: ClusterIP
+        port: 44180
     config: |
       http_address = "0.0.0.0:4180"
+      metrics_address = "0.0.0.0:44180"
 
       # Hostname of the app. Structure <release_name>-erato-app
       upstreams = ["http://erato-local-erato-app:3130"]

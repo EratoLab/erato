@@ -1,0 +1,35 @@
+{{- if and .Values.oauth2Proxy.enabled .Values.oauth2Proxy.metrics.enabled .Values.oauth2Proxy.metrics.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-oauth2-proxy-metrics
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: oauth2-proxy
+    erato.ai/scrape-metrics: "true"
+    {{- with .Values.oauth2Proxy.metrics.service.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if or .Values.oauth2Proxy.metrics.service.addPrometheusAnnotations .Values.oauth2Proxy.metrics.service.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- if .Values.oauth2Proxy.metrics.service.addPrometheusAnnotations }}
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: {{ .Values.oauth2Proxy.metrics.service.port | quote }}
+    {{- end }}
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.oauth2Proxy.metrics.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  type: {{ .Values.oauth2Proxy.metrics.service.type }}
+  ports:
+    - port: {{ .Values.oauth2Proxy.metrics.service.port }}
+      targetPort: {{ .Values.oauth2Proxy.metrics.port }}
+      protocol: TCP
+      name: metrics
+  selector: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: oauth2-proxy
+{{- end }}
