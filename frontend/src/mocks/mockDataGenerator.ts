@@ -111,8 +111,9 @@ export class MockDataGenerator {
 
     return {
       id: chatId,
-      title_by_summary:
-        overrides?.title_by_summary ?? faker.company.catchPhrase(),
+      title_by_summary: overrides?.title_by_summary,
+      title_by_user_provided: overrides?.title_by_user_provided,
+      title_resolved: overrides?.title_resolved ?? faker.company.catchPhrase(),
       last_message_at: overrides?.last_message_at ?? new Date().toISOString(),
       file_uploads: overrides?.file_uploads ?? [],
       can_edit: overrides?.can_edit ?? true,

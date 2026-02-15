@@ -87,13 +87,13 @@ export default function AssistantChatSpacePage() {
       .map(
         (chat): ChatSession => ({
           id: chat.id,
-          title: chat.title_by_summary || t`Untitled Chat`,
-          updatedAt: chat.last_message_at || new Date().toISOString(),
+          title: chat.title_resolved,
+          updatedAt: chat.last_message_at,
           messages: [],
           metadata: {
             lastMessage: {
-              content: chat.title_by_summary || "",
-              timestamp: chat.last_message_at || new Date().toISOString(),
+              content: chat.title_resolved,
+              timestamp: chat.last_message_at,
             },
             fileCount: chat.file_uploads.length,
           },

@@ -12,6 +12,7 @@ import { create } from "zustand";
 import {
   useRecentChats,
   useArchiveChatEndpoint,
+  useUpdateChat,
   recentChatsQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 // Import context and merge utility
@@ -78,6 +79,8 @@ export function useChatHistory() {
 
   // Generated hook for archiving a chat
   const { mutateAsync: archiveChatMutation } = useArchiveChatEndpoint();
+  // Generated hook for updating chat metadata
+  const { mutateAsync: updateChatMutation } = useUpdateChat();
 
   // Memoize the empty array reference
   const emptyChats = useMemo(() => [], []);
@@ -205,6 +208,31 @@ export function useChatHistory() {
     ],
   );
 
+  // Update chat title_by_user_provided
+  const updateChatTitle = useCallback(
+    async (chatId: string, titleByUserProvided?: string) => {
+      const mergedVariables = deepMerge(stableEmptyFetcherOptions, {});
+      const queryDefinition = recentChatsQuery(mergedVariables);
+      const queryKey = queryDefinition.queryKey;
+
+      try {
+        const trimmedTitle = titleByUserProvided?.trim();
+        await updateChatMutation({
+          pathParams: { chatId },
+          body: trimmedTitle
+            ? { title_by_user_provided: trimmedTitle }
+            : // Empty value removes custom title on backend.
+              {},
+        });
+        await queryClient.invalidateQueries({ queryKey });
+      } catch (error) {
+        logger.log(`Failed to update chat title for ${chatId}:`, error);
+        throw error;
+      }
+    },
+    [queryClient, stableEmptyFetcherOptions, updateChatMutation],
+  );
+
   return {
     chats,
     currentChatId,
@@ -214,6 +242,7 @@ export function useChatHistory() {
     navigateToChat,
     createNewChat,
     archiveChat,
+    updateChatTitle,
     isNewChatPending,
   };
 }

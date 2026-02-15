@@ -25,6 +25,7 @@ import {
   type ChatInputControlsHandle,
 } from "./ChatInputControlsContext";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
+import { EditChatTitleDialog } from "./EditChatTitleDialog";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
 import { FeedbackViewDialog } from "../Feedback/FeedbackViewDialog";
@@ -184,6 +185,7 @@ export const Chat = ({
     currentChatId,
     navigateToChat: switchSession,
     archiveChat,
+    updateChatTitle,
     createNewChat: createChat,
     isHistoryLoading: chatHistoryLoading,
     historyError: chatHistoryError,
@@ -197,23 +199,34 @@ export const Chat = ({
   const { chatHistoryShowMetadata } = useSidebarFeature();
 
   // Convert the chat history data to the format expected by the sidebar
-  const sessions: ChatSession[] = Array.isArray(chatHistory)
-    ? chatHistory.map((chat) => ({
-        id: chat.id,
-        title:
-          chat.title_by_summary ||
-          t({ id: "chat.newChat.title", message: "New Chat" }), // Use title from API
-        updatedAt: chat.last_message_at || new Date().toISOString(), // Use last message timestamp
-        messages: [], // We don't need to populate messages here
-        metadata: {
-          lastMessage: {
-            content: chat.title_by_summary || "", // Reuse title as a preview if no actual message available
-            timestamp: chat.last_message_at || new Date().toISOString(),
-          },
-          fileCount: chat.file_uploads.length,
-        },
-      }))
-    : [];
+  const sessions: ChatSession[] = useMemo(
+    () =>
+      Array.isArray(chatHistory)
+        ? chatHistory.map((chat) => ({
+            id: chat.id,
+            title:
+              chat.title_resolved ||
+              t({ id: "chat.newChat.title", message: "New Chat" }),
+            titleResolved: chat.title_resolved,
+            titleBySummary:
+              (chat.title_by_summary as string | null | undefined) ?? null,
+            titleByUserProvided:
+              (chat.title_by_user_provided as string | null | undefined) ??
+              null,
+            canEdit: chat.can_edit,
+            updatedAt: chat.last_message_at || new Date().toISOString(),
+            messages: [],
+            metadata: {
+              lastMessage: {
+                content: chat.title_resolved || "",
+                timestamp: chat.last_message_at || new Date().toISOString(),
+              },
+              fileCount: chat.file_uploads.length,
+            },
+          }))
+        : [],
+    [chatHistory],
+  );
 
   const canEditForCurrentChat = Array.isArray(chatHistory)
     ? !!chatHistory.find((c) => c.id === (currentChatId ?? ""))?.can_edit
@@ -344,6 +357,43 @@ export const Chat = ({
     void archiveChat(sessionId);
   };
 
+  const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
+    null,
+  );
+  const [isUpdatingChatTitle, setIsUpdatingChatTitle] = useState(false);
+
+  const handleEditTitleSession = useCallback((sessionId: string) => {
+    setTitleDialogChatId(sessionId);
+  }, []);
+
+  const handleCloseEditTitleDialog = useCallback(() => {
+    if (isUpdatingChatTitle) return;
+    setTitleDialogChatId(null);
+  }, [isUpdatingChatTitle]);
+
+  const activeTitleDialogSession = useMemo(
+    () => sessions.find((session) => session.id === titleDialogChatId) ?? null,
+    [sessions, titleDialogChatId],
+  );
+
+  const handleSubmitEditTitleDialog = useCallback(
+    async (title: string) => {
+      if (!titleDialogChatId) {
+        return;
+      }
+
+      try {
+        setIsUpdatingChatTitle(true);
+        await updateChatTitle(titleDialogChatId, title);
+        await refreshChats();
+        setTitleDialogChatId(null);
+      } finally {
+        setIsUpdatingChatTitle(false);
+      }
+    },
+    [titleDialogChatId, updateChatTitle, refreshChats],
+  );
+
   // Function to capture the scrollToBottom from MessageList
   const scrollToBottomRef = useRef<(() => void) | null>(null);
   const handleMessageListRef = useCallback((scrollToBottom: () => void) => {
@@ -443,6 +493,7 @@ export const Chat = ({
           currentSessionId={currentChatId ?? ""}
           onSessionSelect={handleSessionSelectWrapper}
           onSessionArchive={handleArchiveSession}
+          onSessionEditTitle={handleEditTitleSession}
           showTimestamps={chatHistoryShowMetadata}
           isLoading={chatHistoryLoading}
           error={
@@ -621,6 +672,23 @@ export const Chat = ({
           mode={feedbackDialogState.mode}
           initialComment={feedbackDialogState.initialComment}
           error={feedbackDialogState.error}
+        />
+
+        <EditChatTitleDialog
+          isOpen={!!activeTitleDialogSession}
+          generatedTitle={
+            activeTitleDialogSession?.titleBySummary ??
+            t({
+              id: "chat.history.rename.generated.fallback",
+              message: "Untitled Chat",
+            })
+          }
+          initialUserProvidedTitle={
+            activeTitleDialogSession?.titleByUserProvided ?? null
+          }
+          isSubmitting={isUpdatingChatTitle}
+          onClose={handleCloseEditTitleDialog}
+          onSubmit={handleSubmitEditTitleDialog}
         />
       </div>
     </ChatInputControlsProvider>

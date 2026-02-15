@@ -7,6 +7,7 @@ import {
   useMessageSubmitSse,
   useRecentChats,
   useArchiveChatEndpoint,
+  useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { createSSEConnection } from "@/utils/sse/sseClient";
 
@@ -39,6 +40,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useMessageSubmitSse: vi.fn(),
   useRecentChats: vi.fn(),
   useArchiveChatEndpoint: vi.fn(),
+  useUpdateChat: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -61,6 +63,7 @@ const mockUseRecentChats = useRecentChats as unknown as ReturnType<
 >;
 const mockUseArchiveChatEndpoint =
   useArchiveChatEndpoint as unknown as ReturnType<typeof vi.fn>;
+const mockUseUpdateChat = useUpdateChat as unknown as ReturnType<typeof vi.fn>;
 
 describe("Chat hooks integration", () => {
   // Mock chat data
@@ -155,6 +158,9 @@ describe("Chat hooks integration", () => {
 
     // Mock useArchiveChatEndpoint for useChatHistory
     mockUseArchiveChatEndpoint.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+    });
+    mockUseUpdateChat.mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue({}),
     });
 

@@ -49,6 +49,10 @@ interface ChatContextValue {
   historyError: ChatsError | null;
   createNewChat: () => Promise<string>;
   archiveChat: (chatId: string) => Promise<void>;
+  updateChatTitle: (
+    chatId: string,
+    titleByUserProvided?: string,
+  ) => Promise<void>;
   navigateToChat: (chatId: string) => void;
   refetchHistory: () => Promise<unknown>;
 
@@ -145,6 +149,7 @@ export function ChatProvider({
     error: historyError,
     createNewChat: createNewChatFromHistory,
     archiveChat,
+    updateChatTitle,
     navigateToChat,
     refetch: refetchHistory,
     isNewChatPending,
@@ -300,6 +305,7 @@ export function ChatProvider({
       historyError,
       createNewChat,
       archiveChat,
+      updateChatTitle,
       navigateToChat,
       refetchHistory,
 
@@ -347,6 +353,7 @@ export function ChatProvider({
     historyError,
     createNewChat,
     archiveChat,
+    updateChatTitle,
     navigateToChat,
     refetchHistory,
 

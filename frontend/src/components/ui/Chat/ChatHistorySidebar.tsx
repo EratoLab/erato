@@ -60,6 +60,7 @@ export interface ChatHistorySidebarProps {
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onSessionArchive: (sessionId: string) => void;
+  onSessionEditTitle?: (sessionId: string) => void;
   isLoading: boolean;
   error?: Error;
   userProfile?: UserProfile;
@@ -374,6 +375,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     currentSessionId,
     onSessionSelect,
     onSessionArchive,
+    onSessionEditTitle,
     isLoading,
     error,
     userProfile,
@@ -572,6 +574,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                       currentSessionId={currentSessionId}
                       onSessionSelect={onSessionSelect}
                       onSessionArchive={onSessionArchive}
+                      onSessionEditTitle={onSessionEditTitle}
                       showTimestamps={showTimestamps}
                     />
                   </CollapsibleSection>

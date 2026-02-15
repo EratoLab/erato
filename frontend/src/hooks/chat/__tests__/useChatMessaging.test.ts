@@ -8,6 +8,7 @@ import {
   useMessageSubmitSse,
   useRecentChats,
   useArchiveChatEndpoint,
+  useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
@@ -109,6 +110,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useMessageSubmitSse: vi.fn(),
   useRecentChats: vi.fn(),
   useArchiveChatEndpoint: vi.fn(),
+  useUpdateChat: vi.fn(),
 }));
 
 // Create a mock queryClient for testing invalidateQueries
@@ -262,6 +264,9 @@ describe("useChatMessaging", () => {
     (
       useArchiveChatEndpoint as unknown as ReturnType<typeof vi.fn>
     ).mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+    });
+    (useUpdateChat as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue({}),
     });
 

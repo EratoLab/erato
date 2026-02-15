@@ -194,7 +194,7 @@ const meta: Meta<typeof Chat> = {
         mockData.chats.map((chat) => {
           return {
             id: chat.id,
-            title: chat.title_by_summary || "Untitled Chat",
+            title: chat.title_resolved,
             messages: [],
             createdAt: new Date().toISOString(), // Convert to string
             updatedAt: ensureValidDate(chat.last_message_at).toISOString(), // Convert to string
