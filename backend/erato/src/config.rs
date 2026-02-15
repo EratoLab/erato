@@ -343,6 +343,11 @@ impl AppConfig {
             panic!("Invalid Entra ID configuration: {}", e);
         }
 
+        // Validate Prometheus configuration
+        if let Err(e) = config.integrations.prometheus.validate(config.http_port) {
+            panic!("Invalid Prometheus configuration: {}", e);
+        }
+
         // Migrate single chat_provider to new chat_providers structure and handle Azure OpenAI migration
         config = config.migrate_chat_providers();
 
@@ -1393,6 +1398,8 @@ pub struct IntegrationsConfig {
     #[serde(default)]
     pub otel: OtelConfig,
     #[serde(default)]
+    pub prometheus: PrometheusConfig,
+    #[serde(default)]
     pub experimental_sharepoint: ExperimentalSharepointConfig,
     #[serde(default)]
     pub experimental_entra_id: ExperimentalEntraIdConfig,
@@ -1431,6 +1438,60 @@ fn default_otel_protocol() -> String {
 
 fn default_service_name() -> String {
     "erato-backend".to_string()
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct PrometheusConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_prometheus_host")]
+    pub host: String,
+    #[serde(default = "default_prometheus_port")]
+    pub port: i32,
+}
+
+impl Default for PrometheusConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: default_prometheus_host(),
+            port: default_prometheus_port(),
+        }
+    }
+}
+
+fn default_prometheus_host() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_prometheus_port() -> i32 {
+    3131
+}
+
+impl PrometheusConfig {
+    pub fn validate(&self, app_http_port: i32) -> Result<(), Report> {
+        if !self.enabled {
+            return Ok(());
+        }
+
+        if self.port <= 0 || self.port > u16::MAX as i32 {
+            return Err(eyre!(
+                "Prometheus integration is enabled but port must be between 1 and {}, got {}",
+                u16::MAX,
+                self.port
+            ));
+        }
+
+        if self.port == app_http_port {
+            return Err(eyre!(
+                "Prometheus integration is enabled but its port ({}) matches http_port ({}). Configure a different port for integrations.prometheus.port.",
+                self.port,
+                app_http_port
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]

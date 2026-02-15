@@ -76,6 +76,13 @@ chat_provider_ids = ["test-token-limit"]
 # protocol = "http" # "http" or "grpc"
 # service_name = "erato-backend"
 
+# Example Prometheus integration configuration
+# Exposes metrics on a dedicated listener (separate from the main API port).
+# [integrations.prometheus]
+# enabled = true
+# host = "127.0.0.1"
+# port = 3131
+
 # Experimental Sharepoint/OneDrive integration configuration
 # Allows users to attach files from their Microsoft OneDrive/Sharepoint to chats.
 # Requires the user's access token to have MS Graph API permissions.
