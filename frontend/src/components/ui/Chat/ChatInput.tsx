@@ -40,7 +40,7 @@ import type {
   ContentPart,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
-import type { Ref } from "react";
+import type { ClipboardEvent as ReactClipboardEvent, Ref } from "react";
 
 const logger = createLogger("UI", "ChatInput");
 
@@ -185,19 +185,6 @@ export const ChatInput = ({
     resetTokenLimitsOnFileRemoval,
   } = useTokenManagement();
 
-  // Use our modernized file upload hook
-  const { uploadedFiles: _uploadedFiles, error: uploadError } = useFileDropzone(
-    {
-      acceptedFileTypes,
-      multiple: maxFiles > 1,
-      maxFiles,
-      disabled,
-      onFilesUploaded: handleFileAttachments,
-      chatId: chatId,
-      assistantId,
-    },
-  );
-
   // Use the custom hook for chat input handling
   const {
     attachedFiles,
@@ -208,6 +195,21 @@ export const ChatInput = ({
     handleRemoveAllFiles,
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
+
+  // Use our modernized file upload hook for upload error state and clipboard pastes
+  const {
+    uploadedFiles: _uploadedFiles,
+    error: uploadError,
+    uploadFiles,
+  } = useFileDropzone({
+    acceptedFileTypes,
+    multiple: maxFiles > 1,
+    maxFiles,
+    disabled,
+    onFilesUploaded: handleFilesUploaded,
+    chatId: chatId,
+    assistantId,
+  });
 
   const { data: facetsData, error: facetsError } = useFacets({});
   const availableFacets = useMemo(() => facetsData?.facets ?? [], [facetsData]);
@@ -415,6 +417,33 @@ export const ChatInput = ({
     }
   }, [message]);
 
+  const handleTextareaPaste = useCallback(
+    (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
+      if (disabled || isLoading || isPendingResponse || isUploading) {
+        return;
+      }
+
+      const imageFiles = Array.from(event.clipboardData.items)
+        .filter(
+          (item) =>
+            item.kind === "file" &&
+            // eslint-disable-next-line lingui/no-unlocalized-strings
+            item.type.startsWith("image/"),
+        )
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+
+      if (imageFiles.length === 0) {
+        return;
+      }
+
+      // Image paste should attach files, not insert text/HTML into the input.
+      event.preventDefault();
+      void uploadFiles(imageFiles);
+    },
+    [disabled, isLoading, isPendingResponse, isUploading, uploadFiles],
+  );
+
   // Combine disabled states
   // Use isPendingResponse instead of isStreaming to disable immediately when send is clicked
   const isDisabled =
@@ -549,6 +578,7 @@ export const ChatInput = ({
             ref={textareaRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
+            onPaste={handleTextareaPaste}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
