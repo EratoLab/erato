@@ -10,6 +10,10 @@ metadata:
   {{- end }}
 spec:
   replicas: {{ .Values.backend.replicaCount }}
+  {{- with .Values.backend.deploymentStrategy }}
+  strategy:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
       app.kubernetes.io/component: erato-app
@@ -55,6 +59,11 @@ spec:
             - name: http
               containerPort: 3130
               protocol: TCP
+            {{- if .Values.backend.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.backend.metrics.port }}
+              protocol: TCP
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /health
@@ -90,12 +99,18 @@ spec:
                 name: {{ .Values.backend.extraEnvVarsSecret }}
             {{- end }}
           {{- end }}
-          {{- if or (include "erato.hasMainConfigFile" .) (include "erato.hasExtraConfigFiles" .) .Values.backend.extraVolumeMounts }}
+          {{- if or (include "erato.hasMainConfigFile" .) (include "erato.hasExtraConfigFiles" .) (and .Values.backend.metrics.enabled .Values.backend.metrics.configFile.enabled) .Values.backend.extraVolumeMounts }}
           volumeMounts:
             {{- if include "erato.hasMainConfigFile" . }}
             - name: erato-config
               mountPath: /app/erato.toml
               subPath: erato.toml
+              readOnly: true
+            {{- end }}
+            {{- if and .Values.backend.metrics.enabled .Values.backend.metrics.configFile.enabled }}
+            - name: erato-metrics-config
+              mountPath: /app/metrics.auto.erato.toml
+              subPath: metrics.auto.erato.toml
               readOnly: true
             {{- end }}
             {{- range $index, $configFile := .Values.backend.extraConfigFiles }}
@@ -108,10 +123,18 @@ spec:
             {{- toYaml .Values.backend.extraVolumeMounts | nindent 12 }}
             {{- end }}
           {{- end }}
-      {{- if or (include "erato.hasMainConfigFile" .) (include "erato.hasExtraConfigFiles" .) .Values.backend.extraVolumes }}
+      {{- if or (include "erato.hasMainConfigFile" .) (include "erato.hasExtraConfigFiles" .) (and .Values.backend.metrics.enabled .Values.backend.metrics.configFile.enabled) .Values.backend.extraVolumes }}
       volumes:
         {{- if include "erato.hasMainConfigFile" . }}
         {{- include "erato.renderMainConfigVolume" . | nindent 8 }}
+        {{- end }}
+        {{- if and .Values.backend.metrics.enabled .Values.backend.metrics.configFile.enabled }}
+        - name: erato-metrics-config
+          configMap:
+            name: {{ .Release.Name }}-backend-metrics-config
+            items:
+              - key: metrics.auto.erato.toml
+                path: metrics.auto.erato.toml
         {{- end }}
         {{- range $index, $configFile := .Values.backend.extraConfigFiles }}
         {{- include "erato.renderExtraConfigVolume" (dict "configFile" $configFile "index" $index "context" $) | nindent 8 }}

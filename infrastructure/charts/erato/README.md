@@ -163,6 +163,7 @@ ingress:
 | backend.configFile.secretKey | string | `""` | Key in the secret that contains the erato.toml content |
 | backend.configFile.secretName | string | `""` | Name of the secret containing the erato.toml file |
 | backend.deploymentAnnotations | object | `{}` | Annotations to add to the backend deployment |
+| backend.deploymentStrategy | object | `{}` | Optional deployment strategy for backend rollout (e.g., RollingUpdate/Recreate). Example: deploymentStrategy:   type: RollingUpdate   rollingUpdate:     maxUnavailable: 25%     maxSurge: 25% |
 | backend.deploymentVersion | string | `""` | Optional deployment version for cache headers on static files (falls back to image tag if not set) |
 | backend.envSecrets | list | `[]` | Array of secret names to load as environment variables |
 | backend.extraConfigFiles | list | `[]` | Optional list of additional config files to mount (e.g., *.auto.erato.toml files) Example: extraConfigFiles:   - name: mcp-servers     secretName: mcp-config-secret     secretKey: mcp-servers.toml   - name: additional-config     configMapName: additional-config-cm     configMapKey: additional.toml   - name: inline-config     inlineContent: |       [mcp_servers.example]       ... |
@@ -175,6 +176,24 @@ ingress:
 | backend.image.pullSecrets | list | `[]` | Backend image pull secrets |
 | backend.image.repository | string | `"harbor.imassage.me/erato/app"` | Backend image repository |
 | backend.image.tag | string | `""` | Backend image tag (immutable tags are recommended) |
+| backend.metrics.configFile.enabled | bool | `true` | Render and mount an additional `*.auto.erato.toml` config file that enables `integrations.prometheus`. |
+| backend.metrics.enabled | bool | `false` | Enable backend Prometheus metrics integration and related chart resources. |
+| backend.metrics.host | string | `"0.0.0.0"` | Host to bind the backend metrics listener to. |
+| backend.metrics.port | int | `3131` | Port for backend metrics listener. |
+| backend.metrics.service.addPrometheusAnnotations | bool | `true` | Add standard `prometheus.io/*` scrape annotations to the metrics Service. |
+| backend.metrics.service.annotations | object | `{}` | Additional annotations for metrics Service. |
+| backend.metrics.service.enabled | bool | `false` | Create a dedicated Service for the backend metrics endpoint. |
+| backend.metrics.service.labels | object | `{}` | Additional labels for metrics Service. |
+| backend.metrics.service.port | int | `3131` | Metrics Service port. |
+| backend.metrics.service.type | string | `"ClusterIP"` | Metrics Service type. |
+| backend.metrics.serviceMonitor.enabled | bool | `false` | Create a ServiceMonitor resource for Prometheus Operator. |
+| backend.metrics.serviceMonitor.honorLabels | bool | `false` | Whether to honor labels from scraped metrics. |
+| backend.metrics.serviceMonitor.interval | string | `"30s"` | Scrape interval for ServiceMonitor endpoint. |
+| backend.metrics.serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor (for Prometheus selection). |
+| backend.metrics.serviceMonitor.metricRelabelings | list | `[]` | Metric relabel configs for ServiceMonitor endpoint. |
+| backend.metrics.serviceMonitor.namespace | string | `""` | Namespace for ServiceMonitor. Defaults to the release namespace when empty. |
+| backend.metrics.serviceMonitor.relabelings | list | `[]` | Relabel configs for ServiceMonitor endpoint. |
+| backend.metrics.serviceMonitor.scrapeTimeout | string | `""` | Optional scrape timeout for ServiceMonitor endpoint. |
 | backend.podAnnotations | object | `{}` | Annotations to add to the backend pod |
 | backend.replicaCount | int | `1` | Number of backend replicas to deploy |
 | backend.resources.limits.cpu | string | `"500m"` | The CPU limit for backend |
@@ -197,6 +216,7 @@ ingress:
 | nameOverride | string | `""` | String to partially override common.names.fullname |
 | oauth2Proxy.config | string | `"# Example configuration - replace with your own\n# http_address = \"0.0.0.0:4180\"\n# upstreams = [\"http://localhost:8080\"]\n# email_domains = [\"*\"]\n# cookie_secret = \"\"\n# cookie_secure = true\n# skip_auth_regex = [\"^/health\", \"^/metrics\"]\n"` | Full configuration file content for oauth2-proxy |
 | oauth2Proxy.deploymentAnnotations | object | `{}` | Annotations to add to the oauth2-proxy deployment |
+| oauth2Proxy.deploymentStrategy | object | `{}` | Optional deployment strategy for oauth2-proxy (e.g., RollingUpdate/Recreate). Example: deploymentStrategy:   type: RollingUpdate   rollingUpdate:     maxUnavailable: 25%     maxSurge: 25% |
 | oauth2Proxy.enabled | bool | `true` | Enable OAuth2 Proxy for authentication |
 | oauth2Proxy.extraEnvVars | list | `[]` | Array with extra environment variables to add to oauth2-proxy |
 | oauth2Proxy.extraEnvVarsCM | string | `""` | Name of existing ConfigMap containing extra env vars for oauth2-proxy |
@@ -207,6 +227,22 @@ ingress:
 | oauth2Proxy.image.pullSecrets | list | `[]` | OAuth2 Proxy image pull secrets |
 | oauth2Proxy.image.repository | string | `"quay.io/oauth2-proxy/oauth2-proxy"` | OAuth2 Proxy image repository |
 | oauth2Proxy.image.tag | string | `"v7.8.1"` | OAuth2 Proxy image tag |
+| oauth2Proxy.metrics.enabled | bool | `false` | Enable oauth2-proxy metrics exposure resources. |
+| oauth2Proxy.metrics.port | int | `44180` | oauth2-proxy metrics listener port. Must match oauth2-proxy config (e.g. metrics_address). |
+| oauth2Proxy.metrics.service.addPrometheusAnnotations | bool | `true` | Add standard `prometheus.io/*` scrape annotations to the metrics Service. |
+| oauth2Proxy.metrics.service.annotations | object | `{}` | Additional annotations for metrics Service. |
+| oauth2Proxy.metrics.service.enabled | bool | `false` | Create a dedicated Service for the oauth2-proxy metrics endpoint. |
+| oauth2Proxy.metrics.service.labels | object | `{}` | Additional labels for metrics Service. |
+| oauth2Proxy.metrics.service.port | int | `44180` | Metrics Service port. |
+| oauth2Proxy.metrics.service.type | string | `"ClusterIP"` | Metrics Service type. |
+| oauth2Proxy.metrics.serviceMonitor.enabled | bool | `false` | Create a ServiceMonitor resource for Prometheus Operator. |
+| oauth2Proxy.metrics.serviceMonitor.honorLabels | bool | `false` | Whether to honor labels from scraped metrics. |
+| oauth2Proxy.metrics.serviceMonitor.interval | string | `"30s"` | Scrape interval for ServiceMonitor endpoint. |
+| oauth2Proxy.metrics.serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor (for Prometheus selection). |
+| oauth2Proxy.metrics.serviceMonitor.metricRelabelings | list | `[]` | Metric relabel configs for ServiceMonitor endpoint. |
+| oauth2Proxy.metrics.serviceMonitor.namespace | string | `""` | Namespace for ServiceMonitor. Defaults to the release namespace when empty. |
+| oauth2Proxy.metrics.serviceMonitor.relabelings | list | `[]` | Relabel configs for ServiceMonitor endpoint. |
+| oauth2Proxy.metrics.serviceMonitor.scrapeTimeout | string | `""` | Optional scrape timeout for ServiceMonitor endpoint. |
 | oauth2Proxy.podAnnotations | object | `{}` | Annotations to add to the oauth2-proxy pod |
 | oauth2Proxy.redis.enabled | bool | `true` | Enable Redis for OAuth2 Proxy session storage |
 | oauth2Proxy.redis.image.pullPolicy | string | `"IfNotPresent"` | Redis image pull policy |

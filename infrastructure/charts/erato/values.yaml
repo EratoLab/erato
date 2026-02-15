@@ -70,6 +70,14 @@ oauth2Proxy:
     # skip_auth_regex = ["^/health", "^/metrics"]
   # -- Annotations to add to the oauth2-proxy deployment
   deploymentAnnotations: {}
+  # -- Optional deployment strategy for oauth2-proxy (e.g., RollingUpdate/Recreate).
+  # Example:
+  # deploymentStrategy:
+  #   type: RollingUpdate
+  #   rollingUpdate:
+  #     maxUnavailable: 25%
+  #     maxSurge: 25%
+  deploymentStrategy: {}
   # -- Annotations to add to the oauth2-proxy pod
   podAnnotations: {}
   resources:
@@ -83,6 +91,41 @@ oauth2Proxy:
       cpu: 500m
       # -- The memory limit for oauth2-proxy
       memory: 256Mi
+  metrics:
+    # -- Enable oauth2-proxy metrics exposure resources.
+    enabled: false
+    # -- oauth2-proxy metrics listener port. Must match oauth2-proxy config (e.g. metrics_address).
+    port: 44180
+    service:
+      # -- Create a dedicated Service for the oauth2-proxy metrics endpoint.
+      enabled: false
+      # -- Metrics Service type.
+      type: ClusterIP
+      # -- Metrics Service port.
+      port: 44180
+      # -- Additional labels for metrics Service.
+      labels: {}
+      # -- Additional annotations for metrics Service.
+      annotations: {}
+      # -- Add standard `prometheus.io/*` scrape annotations to the metrics Service.
+      addPrometheusAnnotations: true
+    serviceMonitor:
+      # -- Create a ServiceMonitor resource for Prometheus Operator.
+      enabled: false
+      # -- Namespace for ServiceMonitor. Defaults to the release namespace when empty.
+      namespace: ""
+      # -- Additional labels for ServiceMonitor (for Prometheus selection).
+      labels: {}
+      # -- Scrape interval for ServiceMonitor endpoint.
+      interval: 30s
+      # -- Optional scrape timeout for ServiceMonitor endpoint.
+      scrapeTimeout: ""
+      # -- Whether to honor labels from scraped metrics.
+      honorLabels: false
+      # -- Relabel configs for ServiceMonitor endpoint.
+      relabelings: []
+      # -- Metric relabel configs for ServiceMonitor endpoint.
+      metricRelabelings: []
 
   redis:
     # -- Enable Redis for OAuth2 Proxy session storage
@@ -142,6 +185,14 @@ backend:
   extraVolumeMounts: []
   # -- Annotations to add to the backend deployment
   deploymentAnnotations: {}
+  # -- Optional deployment strategy for backend rollout (e.g., RollingUpdate/Recreate).
+  # Example:
+  # deploymentStrategy:
+  #   type: RollingUpdate
+  #   rollingUpdate:
+  #     maxUnavailable: 25%
+  #     maxSurge: 25%
+  deploymentStrategy: {}
   # -- Annotations to add to the backend pod
   podAnnotations: {}
   configFile:
@@ -185,6 +236,46 @@ backend:
     type: ClusterIP
     # -- Backend service HTTP port
     port: 8080
+  metrics:
+    # -- Enable backend Prometheus metrics integration and related chart resources.
+    enabled: false
+    # -- Host to bind the backend metrics listener to.
+    host: 0.0.0.0
+    # -- Port for backend metrics listener.
+    port: 3131
+    configFile:
+      # -- Render and mount an additional `*.auto.erato.toml` config file that enables `integrations.prometheus`.
+      enabled: true
+    service:
+      # -- Create a dedicated Service for the backend metrics endpoint.
+      enabled: false
+      # -- Metrics Service type.
+      type: ClusterIP
+      # -- Metrics Service port.
+      port: 3131
+      # -- Additional labels for metrics Service.
+      labels: {}
+      # -- Additional annotations for metrics Service.
+      annotations: {}
+      # -- Add standard `prometheus.io/*` scrape annotations to the metrics Service.
+      addPrometheusAnnotations: true
+    serviceMonitor:
+      # -- Create a ServiceMonitor resource for Prometheus Operator.
+      enabled: false
+      # -- Namespace for ServiceMonitor. Defaults to the release namespace when empty.
+      namespace: ""
+      # -- Additional labels for ServiceMonitor (for Prometheus selection).
+      labels: {}
+      # -- Scrape interval for ServiceMonitor endpoint.
+      interval: 30s
+      # -- Optional scrape timeout for ServiceMonitor endpoint.
+      scrapeTimeout: ""
+      # -- Whether to honor labels from scraped metrics.
+      honorLabels: false
+      # -- Relabel configs for ServiceMonitor endpoint.
+      relabelings: []
+      # -- Metric relabel configs for ServiceMonitor endpoint.
+      metricRelabelings: []
   # -- Array of secret names to load as environment variables
   envSecrets: []
 
@@ -196,4 +287,3 @@ postgresql:
     # -- PostgreSQL connection string (plain value)
     connectionString:
       value: "postgresql://postgres:postgres@localhost:5432/postgres"
-

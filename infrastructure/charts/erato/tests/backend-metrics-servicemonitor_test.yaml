@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
+suite: test backend metrics servicemonitor
+minimumVersion: 1.0.1
+templates:
+  - backend-metrics-servicemonitor.yaml
+tests:
+  - it: should not render by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when metrics service is not enabled
+    set:
+      backend.metrics.enabled: true
+      backend.metrics.serviceMonitor.enabled: true
+      backend.metrics.service.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render ServiceMonitor when enabled
+    set:
+      backend.metrics.enabled: true
+      backend.metrics.service.enabled: true
+      backend.metrics.serviceMonitor.enabled: true
+      backend.metrics.serviceMonitor.interval: 15s
+    asserts:
+      - isKind:
+          of: ServiceMonitor
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-backend-metrics
+      - equal:
+          path: spec.endpoints[0].port
+          value: metrics
+      - equal:
+          path: spec.endpoints[0].path
+          value: /metrics
+      - equal:
+          path: spec.endpoints[0].interval
+          value: 15s
+      - equal:
+          path: spec.selector.matchLabels["erato.ai/scrape-metrics"]
+          value: "true"

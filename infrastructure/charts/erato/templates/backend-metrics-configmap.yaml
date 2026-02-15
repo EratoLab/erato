@@ -1,0 +1,18 @@
+{{- if and .Values.backend.metrics.enabled .Values.backend.metrics.configFile.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-backend-metrics-config
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: erato-app
+  {{- if .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
+  {{- end }}
+data:
+  metrics.auto.erato.toml: |
+    [integrations.prometheus]
+    enabled = true
+    host = {{ .Values.backend.metrics.host | quote }}
+    port = {{ .Values.backend.metrics.port }}
+{{- end }}

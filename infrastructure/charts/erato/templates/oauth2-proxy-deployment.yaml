@@ -11,6 +11,10 @@ metadata:
   {{- end }}
 spec:
   replicas: 1
+  {{- with .Values.oauth2Proxy.deploymentStrategy }}
+  strategy:
+{{ toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
       app.kubernetes.io/component: oauth2-proxy

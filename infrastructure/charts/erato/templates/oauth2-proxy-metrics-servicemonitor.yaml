@@ -1,0 +1,36 @@
+{{- if and .Values.oauth2Proxy.enabled .Values.oauth2Proxy.metrics.enabled .Values.oauth2Proxy.metrics.service.enabled .Values.oauth2Proxy.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-oauth2-proxy-metrics
+  namespace: {{ default .Release.Namespace .Values.oauth2Proxy.metrics.serviceMonitor.namespace }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    {{- with .Values.oauth2Proxy.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "erato.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      erato.ai/scrape-metrics: "true"
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.oauth2Proxy.metrics.serviceMonitor.interval }}
+      honorLabels: {{ .Values.oauth2Proxy.metrics.serviceMonitor.honorLabels }}
+      {{- if .Values.oauth2Proxy.metrics.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.oauth2Proxy.metrics.serviceMonitor.scrapeTimeout }}
+      {{- end }}
+      {{- with .Values.oauth2Proxy.metrics.serviceMonitor.relabelings }}
+      relabelings:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.oauth2Proxy.metrics.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

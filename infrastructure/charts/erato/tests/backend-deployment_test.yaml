@@ -38,6 +38,24 @@ tests:
           path: spec.replicas
           value: 3
 
+  - it: should set backend deployment strategy when configured
+    set:
+      backend.deploymentStrategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: RollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 0
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
+          value: 1
+
   - it: should use custom image repository and tag
     set:
       backend.image.repository: my-registry/erato
@@ -156,6 +174,45 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.port
           value: http
+
+  - it: should not expose metrics port or env vars by default
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 1
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ERATO__INTEGRATIONS__PROMETHEUS__ENABLED
+
+  - it: should expose metrics port and mount metrics auto config when metrics is enabled
+    set:
+      backend.metrics.enabled: true
+      backend.metrics.host: 0.0.0.0
+      backend.metrics.port: 3131
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: metrics
+            containerPort: 3131
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: erato-metrics-config
+            mountPath: /app/metrics.auto.erato.toml
+            subPath: metrics.auto.erato.toml
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: erato-metrics-config
+            configMap:
+              name: RELEASE-NAME-backend-metrics-config
+              items:
+                - key: metrics.auto.erato.toml
+                  path: metrics.auto.erato.toml
 
   - it: should support extraVolumes and extraVolumeMounts
     set:
