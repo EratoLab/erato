@@ -146,3 +146,60 @@ test(
     expect(updateBodies[1]).toEqual({});
   },
 );
+
+test(
+  "Can paste an image from clipboard as a chat attachment",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    let uploadRequestCount = 0;
+    await page.route("**/api/v1beta/me/files*", async (route) => {
+      uploadRequestCount += 1;
+      await route.continue();
+    });
+
+    await page.goto("/");
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+    await textbox.click();
+
+    await page.evaluate(() => {
+      const target = document.activeElement;
+      if (!(target instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected active element to be the chat textarea");
+      }
+
+      const imageBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9s5H8JYAAAAASUVORK5CYII=";
+      const binary = atob(imageBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+
+      const dataTransfer = new DataTransfer();
+      const file = new File([bytes], "clipboard-image.png", {
+        type: "image/png",
+      });
+      dataTransfer.items.add(file);
+
+      const pasteEvent = new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(pasteEvent, "clipboardData", {
+        value: dataTransfer,
+      });
+
+      target.dispatchEvent(pasteEvent);
+    });
+
+    await expect.poll(() => uploadRequestCount).toBeGreaterThan(0);
+    await expect(page.getByText("Attachments")).toBeVisible();
+    await expect(page.getByText(/clipboard-image/i)).toBeVisible();
+
+    await textbox.fill("what is in this image?");
+    await textbox.press("Enter");
+    await chatIsReadyToChat(page, { expectAssistantResponse: true });
+  },
+);
