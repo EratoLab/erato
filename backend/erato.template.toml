@@ -55,9 +55,15 @@ chat_provider_ids = ["test-token-limit"]
 # # prompt = { source = "static", prompt = "Explicit static prompt content" }
 
 # From ./run_mcp_server.sh
+# Global default idle timeout for MCP sessions in seconds (default: 3600)
+# [mcp_servers_global]
+# max_session_idle_seconds = 3600
+#
 # [mcp_servers.file_provider]
 # transport_type = "sse"
 # url = "http://127.0.0.1:63490/sse"
+# # Optional per-server override (seconds)
+# max_session_idle_seconds = 900
 
 # Example Sentry integration configuration
 # [integrations.sentry]

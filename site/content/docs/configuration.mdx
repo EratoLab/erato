@@ -1310,6 +1310,26 @@ Configuration for Model Context Protocol (MCP) servers that extend Erato's capab
 
 **Type:** `object<string, McpServerConfig>`
 
+### `mcp_servers_global`
+
+Global configuration for MCP server behavior across all configured servers.
+
+**Type:** `McpServersGlobalConfig`
+
+#### `mcp_servers_global.max_session_idle_seconds`
+
+Global default maximum idle time for MCP sessions, in seconds. If a session is idle longer than this threshold, it is evicted by the backend cleanup task.
+
+Server-specific settings can override this value via `mcp_servers.<server_id>.max_session_idle_seconds`.
+
+**Type:** `integer | None`
+
+**Default value:** `3600` (1 hour)
+
+**Example:** `900`
+
+**Operational note:** For MCP servers where each session allocates substantial resources (e.g. memory-heavy tools, expensive backend handles), use a lower idle timeout to reclaim server capacity faster.
+
 **Example:**
 
 ```toml
@@ -1321,6 +1341,7 @@ url = "http://127.0.0.1:63490/sse"
 transport_type = "sse"
 url = "https://my-mcp-server.example.com/sse"
 http_headers = { "Authorization" = "Bearer token123", "X-API-Key" = "key456" }
+max_session_idle_seconds = 1800
 ```
 
 #### `mcp_servers.<server_id>.transport_type`
@@ -1361,6 +1382,20 @@ transport_type = "sse"
 url = "https://secure-mcp-server.example.com/sse"
 http_headers = { "Authorization" = "Bearer your-token", "X-API-Key" = "your-api-key" }
 ```
+
+#### `mcp_servers.<server_id>.max_session_idle_seconds`
+
+Optional per-server override for maximum MCP session idle time, in seconds.
+
+If set, this value takes precedence over `mcp_servers_global.max_session_idle_seconds` for sessions created against this server.
+
+**Type:** `integer | None`
+
+**Default behavior:** Uses `mcp_servers_global.max_session_idle_seconds` (or `3600` when not set)
+
+**Example:** `300`
+
+**Operational note:** Prefer low values for resource-intensive MCP servers where long-lived idle sessions can consume significant server resources.
 
 See the [MCP Servers](./features/mcp_servers) documentation for more information about Model Context Protocol integration.
 
