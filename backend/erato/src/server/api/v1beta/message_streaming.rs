@@ -1072,6 +1072,35 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         me_profile_input.user_groups,
     )?;
 
+    let facet_allowlist = build_mcp_tool_allowlist(
+        &app_state.config.experimental_facets,
+        &user_input.selected_facet_ids,
+    );
+    let server_filter_from_allowlist = derive_requested_server_ids_from_allowlist(
+        facet_allowlist.as_deref(),
+        !app_state.config.experimental_facets.facets.is_empty(),
+    );
+    let assistant_server_ids = assistant_config
+        .as_ref()
+        .and_then(|assistant| assistant.mcp_server_ids.as_deref());
+    let effective_server_filter =
+        apply_assistant_server_filter(server_filter_from_allowlist, assistant_server_ids);
+
+    // Only discover tools for servers potentially needed in this request.
+    let all_mcp_server_tools = app_state
+        .mcp_servers
+        .list_tools_for_server_ids(chat.id, effective_server_filter.as_ref())
+        .await;
+    let filtered_mcp_tools =
+        filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
+    let generation_mcp_tools =
+        filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
+    let facet_tool_expansions = build_facet_tool_template_expansions(
+        &app_state.config.experimental_facets,
+        &user_input.selected_facet_ids,
+        &generation_mcp_tools,
+    );
+
     // Use the new prompt composition service
     let generation_input_messages = compose_prompt_messages(
         message_repo,
@@ -1082,6 +1111,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         &chat_provider_config,
         &app_state.config.experimental_facets,
         Some(me_profile_input.preferred_language),
+        Some(&facet_tool_expansions),
     )
     .await?;
 
@@ -1092,17 +1122,6 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         me_profile_input.access_token,
     )
     .await?;
-
-    // Get all MCP server tools and filter by assistant configuration and facets
-    let all_mcp_server_tools = app_state.mcp_servers.list_tools(chat.id).await;
-    let filtered_mcp_tools =
-        filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
-    let facet_allowlist = build_mcp_tool_allowlist(
-        &app_state.config.experimental_facets,
-        &user_input.selected_facet_ids,
-    );
-    let generation_mcp_tools =
-        filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
 
     // Build genai ChatRequest (messages + tools) + ChatOptions
     let mut chat_request = resolved_generation_input_messages
@@ -2164,6 +2183,153 @@ fn filter_mcp_tools_by_assistant(
     all_tools
 }
 
+/// Derive a set of MCP server IDs that may be needed for this request.
+///
+/// Returns:
+/// - `None` when all servers may be needed (no server-level pruning possible)
+/// - `Some(set)` when only a subset of servers is potentially relevant
+fn derive_requested_server_ids_from_allowlist(
+    allowlist: Option<&[String]>,
+    facets_configured: bool,
+) -> Option<HashSet<String>> {
+    if !facets_configured {
+        return None;
+    }
+
+    let allowlist = allowlist?;
+
+    if allowlist.is_empty() {
+        return None;
+    }
+
+    let mut server_ids = HashSet::new();
+    for pattern in allowlist {
+        if pattern == "*" {
+            return None;
+        }
+
+        if let Some(prefix) = pattern.strip_suffix("/*") {
+            if !prefix.is_empty() {
+                server_ids.insert(prefix.to_string());
+            }
+            continue;
+        }
+
+        if !pattern.contains('/') {
+            server_ids.insert(pattern.to_string());
+            continue;
+        }
+
+        if let Some((server_id, _tool_name)) = pattern.split_once('/')
+            && !server_id.is_empty()
+        {
+            server_ids.insert(server_id.to_string());
+        }
+    }
+
+    if server_ids.is_empty() {
+        None
+    } else {
+        Some(server_ids)
+    }
+}
+
+/// Applies assistant MCP server restrictions on top of derived server filters.
+fn apply_assistant_server_filter(
+    derived_server_filter: Option<HashSet<String>>,
+    assistant_server_ids: Option<&[String]>,
+) -> Option<HashSet<String>> {
+    let Some(assistant_server_ids) = assistant_server_ids else {
+        return derived_server_filter;
+    };
+
+    let assistant_set: HashSet<String> = assistant_server_ids.iter().cloned().collect();
+    match derived_server_filter {
+        Some(derived) => Some(derived.intersection(&assistant_set).cloned().collect()),
+        None => Some(assistant_set),
+    }
+}
+
+/// Expand facet tool patterns (e.g. `server/*`) into concrete discovered tool names
+/// for improved facet prompt template rendering.
+fn build_facet_tool_template_expansions(
+    experimental_facets: &ExperimentalFacetsConfig,
+    selected_facet_ids: &[String],
+    discovered_tools: &[crate::services::mcp_session_manager::ManagedTool],
+) -> HashMap<String, Vec<String>> {
+    let discovered_qualified_names: Vec<String> = discovered_tools
+        .iter()
+        .map(|tool| format!("{}/{}", tool.server_id, tool.tool.name))
+        .collect();
+
+    let mut expansions = HashMap::new();
+
+    for facet_id in selected_facet_ids {
+        let Some(facet) = experimental_facets.facets.get(facet_id) else {
+            continue;
+        };
+        let expanded = expand_tool_patterns_with_discovered_tools(
+            &facet.tool_call_allowlist,
+            &discovered_qualified_names,
+        );
+        // If expansion yields no concrete tools, keep original facet patterns
+        // by omitting the override for this facet.
+        if !expanded.is_empty() {
+            expansions.insert(facet_id.clone(), expanded);
+        }
+    }
+
+    expansions
+}
+
+fn expand_tool_patterns_with_discovered_tools(
+    patterns: &[String],
+    discovered_qualified_names: &[String],
+) -> Vec<String> {
+    let mut discovered_qualified_names = discovered_qualified_names.to_vec();
+    discovered_qualified_names.sort();
+    discovered_qualified_names.dedup();
+
+    let mut expanded = Vec::new();
+    let mut seen = HashSet::new();
+    let mut push_unique = |entry: String| {
+        if seen.insert(entry.clone()) {
+            expanded.push(entry);
+        }
+    };
+
+    for pattern in patterns {
+        if pattern == "*" {
+            for qualified_name in &discovered_qualified_names {
+                push_unique(qualified_name.clone());
+            }
+            continue;
+        }
+
+        if let Some(prefix) = pattern.strip_suffix("/*") {
+            for qualified_name in &discovered_qualified_names {
+                if qualified_name.starts_with(&format!("{}/", prefix)) {
+                    push_unique(qualified_name.clone());
+                }
+            }
+            continue;
+        }
+
+        if !pattern.contains('/') {
+            for qualified_name in &discovered_qualified_names {
+                if qualified_name.starts_with(&format!("{}/", pattern)) {
+                    push_unique(qualified_name.clone());
+                }
+            }
+            continue;
+        }
+
+        push_unique(pattern.clone());
+    }
+
+    expanded
+}
+
 /// Filter MCP tools based on facet tool allowlists.
 ///
 /// If no allowlist is provided, all tools are returned.
@@ -2206,6 +2372,67 @@ fn is_tool_allowed_by_allowlist(
 
         pattern == &qualified_name
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
+        expand_tool_patterns_with_discovered_tools,
+    };
+    use std::collections::HashSet;
+
+    #[test]
+    fn derives_server_ids_from_allowlist_patterns() {
+        let allowlist = vec![
+            "server_a/*".to_string(),
+            "server_b/tool_x".to_string(),
+            "server_c".to_string(),
+        ];
+        let derived =
+            derive_requested_server_ids_from_allowlist(Some(&allowlist), true).expect("derived");
+        assert_eq!(derived.len(), 3);
+        assert!(derived.contains("server_a"));
+        assert!(derived.contains("server_b"));
+        assert!(derived.contains("server_c"));
+    }
+
+    #[test]
+    fn does_not_prune_servers_when_allowlist_contains_wildcard_star() {
+        let allowlist = vec!["*".to_string(), "server_a/*".to_string()];
+        let derived = derive_requested_server_ids_from_allowlist(Some(&allowlist), true);
+        assert!(derived.is_none());
+    }
+
+    #[test]
+    fn applies_assistant_server_filter_by_intersection() {
+        let derived = HashSet::from(["server_a".to_string(), "server_b".to_string()]);
+        let assistant_server_ids = vec!["server_b".to_string(), "server_c".to_string()];
+
+        let result = apply_assistant_server_filter(Some(derived), Some(&assistant_server_ids))
+            .expect("assistant-restricted set");
+        assert_eq!(result, HashSet::from(["server_b".to_string()]));
+    }
+
+    #[test]
+    fn expands_wildcards_to_discovered_tools_for_facet_templates() {
+        let patterns = vec!["server_a/*".to_string(), "server_b/tool_3".to_string()];
+        let discovered = vec![
+            "server_a/tool_1".to_string(),
+            "server_a/tool_2".to_string(),
+            "server_b/tool_3".to_string(),
+        ];
+
+        let expanded = expand_tool_patterns_with_discovered_tools(&patterns, &discovered);
+        assert_eq!(
+            expanded,
+            vec![
+                "server_a/tool_1".to_string(),
+                "server_a/tool_2".to_string(),
+                "server_b/tool_3".to_string(),
+            ]
+        );
+    }
 }
 
 // ===== UNIFIED VALIDATION HELPERS =====

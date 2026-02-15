@@ -34,6 +34,7 @@
 //!     &chat_provider_config,
 //!     &ExperimentalFacetsConfig::default(),
 //!     preferred_language,
+//!     None,
 //! ).await?;
 //! ```
 
@@ -41,6 +42,7 @@ use crate::config::ChatProviderConfig;
 use crate::db::entity::chats;
 use crate::models::message::GenerationInputMessages;
 use eyre::Report;
+use std::collections::HashMap;
 
 pub mod adapters;
 pub mod allowlist;
@@ -82,9 +84,10 @@ pub async fn compose_prompt_messages(
     chat_provider_config: &ChatProviderConfig,
     experimental_facets: &crate::config::ExperimentalFacetsConfig,
     preferred_language: Option<&str>,
+    facet_tool_expansions: Option<&HashMap<String, Vec<String>>>,
 ) -> Result<GenerationInputMessages, Report> {
     // Phase 1: Build abstract sequence
-    let abstract_seq = build_abstract_sequence(
+    let abstract_seq = transforms::build_abstract_sequence_with_facet_tool_expansions(
         message_repo,
         prompt_provider,
         chat,
@@ -94,6 +97,7 @@ pub async fn compose_prompt_messages(
         experimental_facets,
         &user_input.selected_facet_ids,
         preferred_language,
+        facet_tool_expansions,
     )
     .await?;
 
