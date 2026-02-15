@@ -175,6 +175,24 @@ ingress:
 | backend.image.pullSecrets | list | `[]` | Backend image pull secrets |
 | backend.image.repository | string | `"harbor.imassage.me/erato/app"` | Backend image repository |
 | backend.image.tag | string | `""` | Backend image tag (immutable tags are recommended) |
+| backend.metrics.enabled | bool | `false` | Enable backend Prometheus metrics integration and related chart resources. |
+| backend.metrics.configFile.enabled | bool | `true` | Render and mount an additional `*.auto.erato.toml` config file that enables `integrations.prometheus`. |
+| backend.metrics.host | string | `"0.0.0.0"` | Host to bind the backend metrics listener to. |
+| backend.metrics.port | int | `3131` | Port for backend metrics listener. |
+| backend.metrics.service.addPrometheusAnnotations | bool | `true` | Add standard `prometheus.io/*` scrape annotations to the metrics Service. |
+| backend.metrics.service.annotations | object | `{}` | Additional annotations for metrics Service. |
+| backend.metrics.service.enabled | bool | `false` | Create a dedicated Service for the backend metrics endpoint. |
+| backend.metrics.service.labels | object | `{}` | Additional labels for metrics Service. |
+| backend.metrics.service.port | int | `3131` | Metrics Service port. |
+| backend.metrics.service.type | string | `"ClusterIP"` | Metrics Service type. |
+| backend.metrics.serviceMonitor.enabled | bool | `false` | Create a ServiceMonitor resource for Prometheus Operator. |
+| backend.metrics.serviceMonitor.honorLabels | bool | `false` | Whether to honor labels from scraped metrics. |
+| backend.metrics.serviceMonitor.interval | string | `"30s"` | Scrape interval for ServiceMonitor endpoint. |
+| backend.metrics.serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor (for Prometheus selection). |
+| backend.metrics.serviceMonitor.metricRelabelings | list | `[]` | Metric relabel configs for ServiceMonitor endpoint. |
+| backend.metrics.serviceMonitor.namespace | string | `""` | Namespace for ServiceMonitor. Defaults to the release namespace when empty. |
+| backend.metrics.serviceMonitor.relabelings | list | `[]` | Relabel configs for ServiceMonitor endpoint. |
+| backend.metrics.serviceMonitor.scrapeTimeout | string | `""` | Optional scrape timeout for ServiceMonitor endpoint. |
 | backend.podAnnotations | object | `{}` | Annotations to add to the backend pod |
 | backend.replicaCount | int | `1` | Number of backend replicas to deploy |
 | backend.resources.limits.cpu | string | `"500m"` | The CPU limit for backend |

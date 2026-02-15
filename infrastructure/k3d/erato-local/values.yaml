@@ -39,6 +39,14 @@ erato:
       repository: harbor.imassage.me/erato/app
       tag: "adff59a50e3b78d0221a8a5bbb818a249fffb45a"
       pullPolicy: Always
+    metrics:
+      enabled: true
+      host: 0.0.0.0
+      port: 3131
+      service:
+        enabled: true
+        type: ClusterIP
+        port: 3131
     configFile:
       secretName: erato-local-erato-toml-secret
       secretKey: erato.toml
