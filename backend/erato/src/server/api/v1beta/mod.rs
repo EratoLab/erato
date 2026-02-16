@@ -54,7 +54,7 @@ use axum_extra::extract::Multipart;
 use chrono::{DateTime, FixedOffset};
 use eyre::{Report, WrapErr};
 use genai::chat::{ChatMessage as GenAiChatMessage, ChatRequest};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::types::{Uuid, chrono};
 use std::collections::HashSet;
 use tower_http::limit::RequestBodyLimitLayer;
@@ -79,6 +79,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // build our application with a route
     let me_routes = Router::new()
         .route("/profile", get(profile))
+        .route("/profile/preferences", put(update_profile_preferences))
         .route("/facets", get(facets))
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/messages/regeneratestream", post(regenerate_message_sse))
@@ -186,6 +187,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         messages,
         chats,
         profile,
+        update_profile_preferences,
         facets,
         chat_messages,
         submit_message_feedback,
@@ -239,6 +241,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         SharepointProviderMetadata,
         MessageSubmitStreamingResponseMessage,
         UserProfile,
+        UpdateProfilePreferencesRequest,
         MessageSubmitRequest,
         EditMessageRequest,
         EditMessageStreamingResponseMessage,
@@ -330,6 +333,77 @@ pub async fn profile(
     Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<UserProfile>, StatusCode> {
     Ok(Json(me_user.profile.clone()))
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct UpdateProfilePreferencesRequest {
+    /// Preferred name to address the user with.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_nickname: Option<Option<String>>,
+    /// User's job title.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_job_title: Option<Option<String>>,
+    /// Additional behaviour/style/tone preferences for the assistant.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_assistant_custom_instructions: Option<Option<String>>,
+    /// Additional contextual information about the user for the assistant.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_assistant_additional_information: Option<Option<String>>,
+}
+
+fn deserialize_patch_optional_string<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Some(Option::<String>::deserialize(deserializer)?))
+}
+
+#[utoipa::path(
+    put,
+    path = "/me/profile/preferences",
+    request_body = UpdateProfilePreferencesRequest,
+    responses(
+        (status = OK, body = UserProfile),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn update_profile_preferences(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Json(request): Json<UpdateProfilePreferencesRequest>,
+) -> Result<Json<UserProfile>, StatusCode> {
+    let user_id = Uuid::parse_str(&me_user.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let updated_prefs = models::user_preference::upsert_user_preferences(
+        &app_state.db,
+        &user_id,
+        models::user_preference::UpdateUserPreferencesInput {
+            nickname: request.preference_nickname,
+            job_title: request.preference_job_title,
+            assistant_custom_instructions: request.preference_assistant_custom_instructions,
+            assistant_additional_information: request.preference_assistant_additional_information,
+        },
+    )
+    .await
+    .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut profile = me_user.profile.clone();
+    profile.preference_nickname = updated_prefs.nickname;
+    profile.preference_job_title = updated_prefs.job_title;
+    profile.preference_assistant_custom_instructions = updated_prefs.assistant_custom_instructions;
+    profile.preference_assistant_additional_information =
+        updated_prefs.assistant_additional_information;
+
+    Ok(Json(profile))
 }
 
 #[derive(Debug, Serialize, ToSchema)]

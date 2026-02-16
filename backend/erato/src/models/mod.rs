@@ -7,6 +7,7 @@ pub mod message_feedback;
 pub mod permissions;
 pub mod share_grant;
 pub mod user;
+pub mod user_preference;
 
 /// Pagination utilities for consistent pagination implementation across models
 pub mod pagination {

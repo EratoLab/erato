@@ -1,4 +1,5 @@
 use crate::models::user::get_or_create_user;
+use crate::models::user_preference::get_user_preferences;
 use crate::normalize_profile::{IdTokenProfile, normalize_profile};
 use crate::policy::prelude::Subject;
 use crate::state::AppState;
@@ -57,6 +58,22 @@ pub struct UserProfile {
     /// These can be used as subject_id when creating share grants
     /// with subject_id_type "organization_group_id".
     pub organization_group_ids: Vec<String>,
+    /// Preferred name to address the user with.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_nickname: Option<String>,
+    /// User's job title.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_job_title: Option<String>,
+    /// Additional behaviour/style/tone preferences for the assistant.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_assistant_custom_instructions: Option<String>,
+    /// Additional contextual information about the user for the assistant.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_assistant_additional_information: Option<String>,
 }
 
 impl UserProfile {
@@ -71,6 +88,10 @@ impl UserProfile {
             groups: profile.groups,
             organization_user_id: profile.organization_user_id,
             organization_group_ids: profile.organization_group_ids,
+            preference_nickname: None,
+            preference_job_title: None,
+            preference_assistant_custom_instructions: None,
+            preference_assistant_additional_information: None,
         }
     }
 
@@ -78,6 +99,19 @@ impl UserProfile {
         // TODO: Include https://docs.rs/accept-language crate, and support at least a second language.
         let _supported_languages = ["en"];
         self.preferred_language = "en".to_string()
+    }
+
+    pub fn apply_user_preferences(
+        &mut self,
+        prefs: Option<crate::db::entity::user_preferences::Model>,
+    ) {
+        if let Some(prefs) = prefs {
+            self.preference_nickname = prefs.nickname;
+            self.preference_job_title = prefs.job_title;
+            self.preference_assistant_custom_instructions = prefs.assistant_custom_instructions;
+            self.preference_assistant_additional_information =
+                prefs.assistant_additional_information;
+        }
     }
 }
 
@@ -158,6 +192,10 @@ pub async fn user_profile_from_token(
     let user_id = user.id.to_string();
     let mut user_profile = UserProfile::from_id_token_profile(normalized_profile, user_id);
     user_profile.determine_final_language();
+    let prefs = get_user_preferences(&app_state.db, &user.id)
+        .await
+        .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    user_profile.apply_user_preferences(prefs);
 
     Ok(user_profile)
 }

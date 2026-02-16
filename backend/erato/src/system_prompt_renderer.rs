@@ -5,6 +5,10 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RenderContext<'a> {
     pub preferred_language: Option<&'a str>,
+    pub user_preference_nickname: Option<&'a str>,
+    pub user_preference_job_title: Option<&'a str>,
+    pub user_preference_assistant_custom_instructions: Option<&'a str>,
+    pub user_preference_assistant_additional_information: Option<&'a str>,
 }
 
 /// Type alias for placeholder substitution functions
@@ -40,6 +44,22 @@ impl SystemPromptRenderer {
         renderer.register_placeholder(
             "erato_inject_preferred_language_en",
             render_preferred_language_name,
+        );
+        renderer.register_placeholder(
+            "erato_inject_user_preference_nickname",
+            render_user_preference_nickname,
+        );
+        renderer.register_placeholder(
+            "erato_inject_user_preference_job_title",
+            render_user_preference_job_title,
+        );
+        renderer.register_placeholder(
+            "erato_inject_user_preference_assistant_custom_instructions",
+            render_user_preference_assistant_custom_instructions,
+        );
+        renderer.register_placeholder(
+            "erato_inject_user_preference_assistant_additional_information",
+            render_user_preference_assistant_additional_information,
         );
 
         renderer
@@ -130,6 +150,26 @@ fn render_preferred_language_code(ctx: &RenderContext) -> String {
 /// Renders the English name of the user's preferred language
 fn render_preferred_language_name(ctx: &RenderContext) -> String {
     language_code_to_english_name(ctx)
+}
+
+fn render_user_preference_nickname(ctx: &RenderContext) -> String {
+    ctx.user_preference_nickname.unwrap_or("").to_string()
+}
+
+fn render_user_preference_job_title(ctx: &RenderContext) -> String {
+    ctx.user_preference_job_title.unwrap_or("").to_string()
+}
+
+fn render_user_preference_assistant_custom_instructions(ctx: &RenderContext) -> String {
+    ctx.user_preference_assistant_custom_instructions
+        .unwrap_or("")
+        .to_string()
+}
+
+fn render_user_preference_assistant_additional_information(ctx: &RenderContext) -> String {
+    ctx.user_preference_assistant_additional_information
+        .unwrap_or("")
+        .to_string()
 }
 
 #[cfg(test)]
@@ -252,6 +292,7 @@ mod tests {
             template,
             &RenderContext {
                 preferred_language: Some("de"),
+                ..Default::default()
             },
         );
         assert_eq!(result, "Language code: de");
@@ -265,6 +306,7 @@ mod tests {
             template,
             &RenderContext {
                 preferred_language: Some("es"),
+                ..Default::default()
             },
         );
         assert_eq!(result, "Language: Spanish");
@@ -294,6 +336,7 @@ mod tests {
             template,
             &RenderContext {
                 preferred_language: Some("fr"),
+                ..Default::default()
             },
         );
         assert!(!result.contains("{{erato_inject_preferred_language_code}}"));
@@ -309,9 +352,33 @@ mod tests {
             template,
             &RenderContext {
                 preferred_language: Some("xx"),
+                ..Default::default()
             },
         );
         assert_eq!(result, "Language: English");
+    }
+
+    #[test]
+    fn test_user_preference_placeholders() {
+        let renderer = SystemPromptRenderer::new();
+        let template = "Name: {{erato_inject_user_preference_nickname}}, Title: {{erato_inject_user_preference_job_title}}";
+        let result = renderer.render(
+            template,
+            &RenderContext {
+                user_preference_nickname: Some("Max"),
+                user_preference_job_title: Some("Engineer"),
+                ..Default::default()
+            },
+        );
+        assert_eq!(result, "Name: Max, Title: Engineer");
+    }
+
+    #[test]
+    fn test_user_preference_placeholders_default_to_empty() {
+        let renderer = SystemPromptRenderer::new();
+        let template = "Info: {{erato_inject_user_preference_assistant_additional_information}}";
+        let result = renderer.render(template, &RenderContext::default());
+        assert_eq!(result, "Info: ");
     }
 
     #[test]
@@ -339,6 +406,7 @@ mod tests {
                 template,
                 &RenderContext {
                     preferred_language: Some(code),
+                    ..Default::default()
                 },
             );
             assert_eq!(result, format!("Language: {}", expected_name));

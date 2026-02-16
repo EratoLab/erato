@@ -119,9 +119,9 @@ test(
     });
     await customTitleInput.fill(renamedTitle);
     await page.getByRole("button", { name: "Rename" }).click();
-    await expect(
-      page.getByRole("dialog", { name: "Rename chat" }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Rename chat" })).toHaveCount(
+      0,
+    );
 
     await expect(chatItem.getByText(renamedTitle)).toBeVisible();
     await expect.poll(() => updateBodies.length).toBeGreaterThan(0);
@@ -137,9 +137,9 @@ test(
 
     await customTitleInput.fill("");
     await page.getByRole("button", { name: "Rename" }).click();
-    await expect(
-      page.getByRole("dialog", { name: "Rename chat" }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Rename chat" })).toHaveCount(
+      0,
+    );
 
     await expect(chatItem.getByText(renamedTitle)).toHaveCount(0);
     await expect.poll(() => updateBodies.length).toBeGreaterThan(1);
@@ -201,5 +201,80 @@ test(
     await textbox.fill("what is in this image?");
     await textbox.press("Enter");
     await chatIsReadyToChat(page, { expectAssistantResponse: true });
+  },
+);
+
+test(
+  "Can edit user preferences from the profile menu",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    const uniqueSuffix = Date.now();
+    const nickname = `Max-${uniqueSuffix}`;
+    const jobTitle = `Engineer-${uniqueSuffix}`;
+    const customInstructions = `Be concise and practical. ${uniqueSuffix}`;
+    const additionalInformation = `I work on backend systems. ${uniqueSuffix}`;
+    const preferenceUpdates: Array<Record<string, unknown> | undefined> = [];
+
+    await page.route("**/api/v1beta/me/profile/preferences*", async (route) => {
+      const request = route.request();
+      if (request.method() === "PUT") {
+        const raw = request.postData();
+        preferenceUpdates.push(
+          raw ? (JSON.parse(raw) as Record<string, unknown>) : undefined,
+        );
+      }
+      await route.continue();
+    });
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await ensureOpenSidebar(page);
+
+    await page
+      .getByRole("button")
+      .filter({ has: page.getByTestId("avatar-identity") })
+      .click();
+    await page.getByRole("menuitem", { name: "Preferences" }).click();
+
+    await expect(
+      page.getByRole("dialog", { name: "Preferences" }),
+    ).toBeVisible();
+    await page.getByRole("textbox", { name: "Nickname" }).fill(nickname);
+    await page.getByRole("textbox", { name: "Job title" }).fill(jobTitle);
+    await page
+      .getByRole("textbox", {
+        name: "Custom instructions for the assistant",
+      })
+      .fill(customInstructions);
+    await page
+      .getByRole("textbox", { name: "Additional information" })
+      .fill(additionalInformation);
+
+    await expect(page.getByRole("button", { name: "Save" })).toBeEnabled();
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("dialog", { name: "Preferences" })).toHaveCount(
+      0,
+    );
+
+    await expect.poll(() => preferenceUpdates.length).toBeGreaterThan(0);
+    expect(preferenceUpdates[0]).toEqual({
+      preference_nickname: nickname,
+      preference_job_title: jobTitle,
+      preference_assistant_custom_instructions: customInstructions,
+      preference_assistant_additional_information: additionalInformation,
+    });
+
+    await page
+      .getByRole("button")
+      .filter({ has: page.getByTestId("avatar-identity") })
+      .click();
+    await page.getByRole("menuitem", { name: "Preferences" }).click();
+
+    await expect(page.getByRole("textbox", { name: "Nickname" })).toHaveValue(
+      nickname,
+    );
+    await expect(page.getByRole("textbox", { name: "Job title" })).toHaveValue(
+      jobTitle,
+    );
   },
 );

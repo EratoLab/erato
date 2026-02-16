@@ -1,12 +1,19 @@
 import { t } from "@lingui/core/macro";
 import { clsx } from "clsx";
-import { memo } from "react";
+import { memo, useState } from "react";
 
 import { useAuthFeature } from "@/providers/FeatureConfigProvider";
 
 import { DropdownMenu } from "./DropdownMenu";
 import { Avatar } from "../Feedback/Avatar";
-import { LogOutIcon, SunIcon, MoonIcon, ComputerIcon } from "../icons";
+import { UserPreferencesDialog } from "../Settings/UserPreferencesDialog";
+import {
+  LogOutIcon,
+  SunIcon,
+  MoonIcon,
+  ComputerIcon,
+  SettingsIcon,
+} from "../icons";
 
 import type { ThemeMode } from "@/components/providers/ThemeProvider";
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -32,6 +39,9 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
     themeMode = "light",
     setThemeMode,
   }) => {
+    const [isPreferencesDialogOpen, setIsPreferencesDialogOpen] =
+      useState(false);
+
     // Check if logout should be shown
     const { showLogout } = useAuthFeature();
 
@@ -59,6 +69,11 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
             },
           ]
         : []),
+      {
+        label: t({ id: "profile.menu.preferences", message: "Preferences" }),
+        icon: <SettingsIcon className="size-4" />,
+        onClick: () => setIsPreferencesDialogOpen(true),
+      },
       ...(showLogout
         ? [
             {
@@ -88,6 +103,11 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
               className="theme-transition cursor-pointer hover:opacity-80"
             />
           }
+        />
+        <UserPreferencesDialog
+          isOpen={isPreferencesDialogOpen}
+          onClose={() => setIsPreferencesDialogOpen(false)}
+          userProfile={userProfile}
         />
       </div>
     );

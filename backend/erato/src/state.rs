@@ -518,8 +518,18 @@ impl AppState {
         &self,
         config: &ChatProviderConfig,
         preferred_language: Option<&str>,
+        user_preference_nickname: Option<&str>,
+        user_preference_job_title: Option<&str>,
+        user_preference_assistant_custom_instructions: Option<&str>,
+        user_preference_assistant_additional_information: Option<&str>,
     ) -> Result<Option<String>, Report> {
-        let ctx = RenderContext { preferred_language };
+        let ctx = RenderContext {
+            preferred_language,
+            user_preference_nickname,
+            user_preference_job_title,
+            user_preference_assistant_custom_instructions,
+            user_preference_assistant_additional_information,
+        };
 
         // If a system prompt is configured, resolve, render, and return it
         if let Some(system_prompt) = &config.system_prompt {

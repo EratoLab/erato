@@ -2602,6 +2602,52 @@ export const useProfile = <TData = Schemas.UserProfile,>(
   });
 };
 
+export type UpdateProfilePreferencesError = Fetcher.ErrorWrapper<undefined>;
+
+export type UpdateProfilePreferencesVariables = {
+  body?: Schemas.UpdateProfilePreferencesRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchUpdateProfilePreferences = (
+  variables: UpdateProfilePreferencesVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.UserProfile,
+    UpdateProfilePreferencesError,
+    Schemas.UpdateProfilePreferencesRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/profile/preferences",
+    method: "put",
+    ...variables,
+    signal,
+  });
+
+export const useUpdateProfilePreferences = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.UserProfile,
+      UpdateProfilePreferencesError,
+      UpdateProfilePreferencesVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.UserProfile,
+    UpdateProfilePreferencesError,
+    UpdateProfilePreferencesVariables
+  >({
+    mutationFn: (variables: UpdateProfilePreferencesVariables) =>
+      fetchUpdateProfilePreferences(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type RecentChatsQueryParams = {
   /**
    * Maximum number of chats to return per page. Defaults to 30 if not provided. Larger values may impact performance.

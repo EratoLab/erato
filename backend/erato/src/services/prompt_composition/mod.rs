@@ -84,6 +84,10 @@ pub async fn compose_prompt_messages(
     chat_provider_config: &ChatProviderConfig,
     experimental_facets: &crate::config::ExperimentalFacetsConfig,
     preferred_language: Option<&str>,
+    user_preference_nickname: Option<&str>,
+    user_preference_job_title: Option<&str>,
+    user_preference_assistant_custom_instructions: Option<&str>,
+    user_preference_assistant_additional_information: Option<&str>,
     facet_tool_expansions: Option<&HashMap<String, Vec<String>>>,
 ) -> Result<GenerationInputMessages, Report> {
     // Phase 1: Build abstract sequence
@@ -97,6 +101,10 @@ pub async fn compose_prompt_messages(
         experimental_facets,
         &user_input.selected_facet_ids,
         preferred_language,
+        user_preference_nickname,
+        user_preference_job_title,
+        user_preference_assistant_custom_instructions,
+        user_preference_assistant_additional_information,
         facet_tool_expansions,
     )
     .await?;

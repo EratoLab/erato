@@ -53,6 +53,10 @@ pub async fn build_abstract_sequence(
         selected_facet_ids,
         preferred_language,
         None,
+        None,
+        None,
+        None,
+        None,
     )
     .await
 }
@@ -70,6 +74,10 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     experimental_facets: &ExperimentalFacetsConfig,
     selected_facet_ids: &[String],
     preferred_language: Option<&str>,
+    user_preference_nickname: Option<&str>,
+    user_preference_job_title: Option<&str>,
+    user_preference_assistant_custom_instructions: Option<&str>,
+    user_preference_assistant_additional_information: Option<&str>,
     facet_tool_expansions: Option<&HashMap<String, Vec<String>>>,
 ) -> Result<AbstractChatSequence, Report> {
     let mut sequence = AbstractChatSequence::new();
@@ -116,7 +124,14 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     // 6. Get system prompt and add it, ONLY if first message
     if should_add_system_prompts {
         let system_prompt = prompt_provider
-            .get_system_prompt(chat_provider_config, preferred_language)
+            .get_system_prompt(
+                chat_provider_config,
+                preferred_language,
+                user_preference_nickname,
+                user_preference_job_title,
+                user_preference_assistant_custom_instructions,
+                user_preference_assistant_additional_information,
+            )
             .await?;
         if let Some(prompt) = system_prompt {
             sequence.push(AbstractChatSequencePart::SystemPrompt {

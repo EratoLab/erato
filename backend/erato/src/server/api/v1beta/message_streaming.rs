@@ -72,6 +72,10 @@ pub struct MeProfileChatRequestInput<'a> {
     pub organization_group_ids: &'a [String],
     pub access_token: Option<&'a str>,
     pub preferred_language: &'a str,
+    pub user_preference_nickname: Option<&'a str>,
+    pub user_preference_job_title: Option<&'a str>,
+    pub user_preference_assistant_custom_instructions: Option<&'a str>,
+    pub user_preference_assistant_additional_information: Option<&'a str>,
 }
 
 impl<'a> MeProfileChatRequestInput<'a> {
@@ -83,6 +87,14 @@ impl<'a> MeProfileChatRequestInput<'a> {
             organization_group_ids: &me_profile.organization_group_ids,
             access_token: me_profile.access_token.as_deref(),
             preferred_language: &me_profile.preferred_language,
+            user_preference_nickname: me_profile.preference_nickname.as_deref(),
+            user_preference_job_title: me_profile.preference_job_title.as_deref(),
+            user_preference_assistant_custom_instructions: me_profile
+                .preference_assistant_custom_instructions
+                .as_deref(),
+            user_preference_assistant_additional_information: me_profile
+                .preference_assistant_additional_information
+                .as_deref(),
         }
     }
 }
@@ -1115,6 +1127,10 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         &chat_provider_config,
         &app_state.config.experimental_facets,
         Some(me_profile_input.preferred_language),
+        me_profile_input.user_preference_nickname,
+        me_profile_input.user_preference_job_title,
+        me_profile_input.user_preference_assistant_custom_instructions,
+        me_profile_input.user_preference_assistant_additional_information,
         Some(&facet_tool_expansions),
     )
     .await?;

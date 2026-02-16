@@ -638,6 +638,111 @@ msgid "navigation.page.new_chat"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.actions.cancel"
+msgstr "Abbrechen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.actions.save"
+msgstr "Speichern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.actions.saving"
+msgstr "Speichere..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.placeholder"
+msgstr "Datenbezogene Einstellungen werden hier angezeigt."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.additionalInformation.help"
+msgstr "Beliebiger zusätzlicher Kontext, den der Assistent wissen soll."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.additionalInformation.label"
+msgstr "Zusätzliche Informationen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.additionalInformation.placeholder"
+msgstr "z. B. Ich arbeite mit Unternehmenskunden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.customInstructions.help"
+msgstr "Zusätzliche Präferenzen zu Verhalten, Stil und Ton."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.customInstructions.label"
+msgstr "Benutzerdefinierte Anweisungen für den Assistenten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.customInstructions.placeholder"
+msgstr "z. B. Bevorzuge knappe Stichpunkte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.jobTitle.label"
+msgstr "Berufsbezeichnung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.jobTitle.placeholder"
+msgstr "z. B. Produktmanager"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.nickname.help"
+msgstr "Wie soll dich der Assistent nennen?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.nickname.label"
+msgstr "Spitzname"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.fields.nickname.placeholder"
+msgstr "z. B. Max"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.save.error"
+msgstr "Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.data"
+msgstr "Daten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.personalization"
+msgstr "Personalisierung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.sectionTitle"
+msgstr "Personalisierung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.title"
+msgstr "Präferenzen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Controls/UserProfileDropdown.tsx
+msgid "profile.menu.preferences"
+msgstr "Präferenzen"
+
+#. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
 msgid "search.page.subtitle"
 msgstr ""

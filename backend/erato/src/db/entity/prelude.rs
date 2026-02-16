@@ -8,4 +8,5 @@ pub use super::file_uploads::Entity as FileUploads;
 pub use super::message_feedbacks::Entity as MessageFeedbacks;
 pub use super::messages::Entity as Messages;
 pub use super::share_grants::Entity as ShareGrants;
+pub use super::user_preferences::Entity as UserPreferences;
 pub use super::users::Entity as Users;

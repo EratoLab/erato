@@ -234,6 +234,10 @@ mod test_cases {
             &self,
             _chat_provider_config: &ChatProviderConfig,
             _preferred_language: Option<&str>,
+            _user_preference_nickname: Option<&str>,
+            _user_preference_job_title: Option<&str>,
+            _user_preference_assistant_custom_instructions: Option<&str>,
+            _user_preference_assistant_additional_information: Option<&str>,
         ) -> Result<Option<String>, Report> {
             Ok(self.system_prompt.clone())
         }
