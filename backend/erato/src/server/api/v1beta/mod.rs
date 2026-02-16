@@ -15,8 +15,9 @@ use crate::db::entity_ext::messages;
 use crate::models;
 use crate::models::assistant::create_standalone_file_upload;
 use crate::models::chat::{
-    archive_chat, get_frequent_assistants, get_or_create_chat, get_recent_chats,
-    resolve_chat_display_name, update_chat_title_by_user_provided,
+    archive_all_unarchived_chats_for_owner, archive_chat, get_frequent_assistants,
+    get_or_create_chat, get_recent_chats, resolve_chat_display_name,
+    update_chat_title_by_user_provided,
 };
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
@@ -89,6 +90,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/frequent_assistants", get(frequent_assistants))
         .route("/chats", post(create_chat))
         .route("/chats/{chat_id}", put(update_chat))
+        .route("/chats/archive_all", post(archive_all_chats_endpoint))
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
         .route("/models", get(available_models))
@@ -201,6 +203,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         resume_message_sse,
         create_chat,
         update_chat,
+        archive_all_chats_endpoint,
         get_file,
         archive_chat_endpoint,
         token_usage::token_usage_estimate,
@@ -252,6 +255,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         UpdateChatResponse,
         ArchiveChatRequest,
         ArchiveChatResponse,
+        ArchiveAllChatsResponse,
         ChatModel,
         FileCapability,
         FileOperation,
@@ -1955,6 +1959,13 @@ pub struct ArchiveChatResponse {
     archived_at: DateTime<FixedOffset>,
 }
 
+/// Response from the archive all chats endpoint
+#[derive(Serialize, ToSchema)]
+pub struct ArchiveAllChatsResponse {
+    /// Number of chats newly archived by this call.
+    archived_count: i64,
+}
+
 /// Archive a chat
 ///
 /// This endpoint marks a chat as archived by setting its archived_at timestamp.
@@ -2018,6 +2029,37 @@ pub async fn archive_chat_endpoint(
     Ok(Json(ArchiveChatResponse {
         chat_id: updated_chat.id.to_string(),
         archived_at,
+    }))
+}
+
+/// Archive all chats owned by the authenticated user.
+///
+/// Only chats that are currently not archived are updated.
+/// Previously archived chats keep their original `archived_at` timestamp.
+#[utoipa::path(
+    post,
+    path = "/me/chats/archive_all",
+    responses(
+        (status = OK, body = ArchiveAllChatsResponse, description = "Successfully archived all non-archived chats"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn archive_all_chats_endpoint(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+) -> Result<Json<ArchiveAllChatsResponse>, StatusCode> {
+    let archived_count = archive_all_unarchived_chats_for_owner(&app_state.db, &me_user.id)
+        .await
+        .map_err(log_internal_server_error)?;
+
+    app_state.global_policy_engine.invalidate_data().await;
+
+    Ok(Json(ArchiveAllChatsResponse {
+        archived_count: models::pagination::u64_to_i64_count(archived_count),
     }))
 }
 
