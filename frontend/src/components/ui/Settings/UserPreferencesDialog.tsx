@@ -33,6 +33,9 @@ export function UserPreferencesDialog({
   const [additionalInformation, setAdditionalInformation] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archiveSuccess, setArchiveSuccess] = useState<string | null>(null);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -40,6 +43,8 @@ export function UserPreferencesDialog({
     }
     setActiveTab("personalization");
     setSaveError(null);
+    setArchiveError(null);
+    setArchiveSuccess(null);
     setNickname(userProfile?.preference_nickname ?? "");
     setJobTitle(userProfile?.preference_job_title ?? "");
     setCustomInstructions(
@@ -108,6 +113,41 @@ export function UserPreferencesDialog({
       );
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleArchiveAllChats = async () => {
+    setArchiveError(null);
+    setArchiveSuccess(null);
+    setIsArchiving(true);
+    try {
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- API route, not user-facing copy
+      const response = await fetch("/api/v1beta/me/chats/archive_all", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      if (!response.ok) {
+        throw new Error("Failed to archive all chats");
+      }
+
+      await response.json();
+      setArchiveSuccess(
+        t({
+          id: "preferences.dialog.dataTab.archiveAll.success",
+          message: "Archived chats successfully.",
+        }),
+      );
+    } catch {
+      setArchiveError(
+        t({
+          id: "preferences.dialog.dataTab.archiveAll.error",
+          message: "Could not archive chats. Please try again.",
+        }),
+      );
+    } finally {
+      setIsArchiving(false);
     }
   };
 
@@ -267,11 +307,49 @@ export function UserPreferencesDialog({
                 </FormField>
               </>
             ) : (
-              <div className="rounded-lg border border-theme-border bg-theme-bg-secondary p-4 text-sm text-theme-fg-secondary">
-                {t({
-                  id: "preferences.dialog.dataTab.placeholder",
-                  message: "Data-related preferences will appear here.",
-                })}
+              <div className="space-y-4">
+                {archiveSuccess ? (
+                  <Alert type="success">{archiveSuccess}</Alert>
+                ) : null}
+                {archiveError ? (
+                  <Alert type="error">{archiveError}</Alert>
+                ) : null}
+                <div className="rounded-lg border border-theme-border bg-theme-bg-secondary p-4 text-sm text-theme-fg-secondary">
+                  {t({
+                    id: "preferences.dialog.dataTab.archiveAll.help",
+                    message:
+                      "Archive all chats in your account. Existing archived chats keep their archive date.",
+                  })}
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    variant="danger"
+                    disabled={isArchiving}
+                    onClick={() => {
+                      void handleArchiveAllChats();
+                    }}
+                    confirmAction={true}
+                    confirmTitle={t({
+                      id: "preferences.dialog.dataTab.archiveAll.confirmTitle",
+                      message: "Archive all chats?",
+                    })}
+                    confirmMessage={t({
+                      id: "preferences.dialog.dataTab.archiveAll.confirmMessage",
+                      message:
+                        "This will archive every non-archived chat in your account.",
+                    })}
+                  >
+                    {isArchiving
+                      ? t({
+                          id: "preferences.dialog.dataTab.archiveAll.archiving",
+                          message: "Archiving...",
+                        })
+                      : t({
+                          id: "preferences.dialog.dataTab.archiveAll.button",
+                          message: "Archive all chats",
+                        })}
+                  </Button>
+                </div>
               </div>
             )}
           </div>

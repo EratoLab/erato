@@ -715,6 +715,37 @@
         ]
       }
     },
+    "/api/v1beta/me/chats/archive_all": {
+      "post": {
+        "tags": [],
+        "summary": "Archive all chats owned by the authenticated user.",
+        "description": "Only chats that are currently not archived are updated.\nPreviously archived chats keep their original `archived_at` timestamp.",
+        "operationId": "archive_all_chats_endpoint",
+        "responses": {
+          "200": {
+            "description": "Successfully archived all non-archived chats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveAllChatsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/chats/{chat_id}": {
       "put": {
         "tags": [],
@@ -1789,6 +1820,20 @@
               "$ref": "#/components/schemas/Drive"
             },
             "description": "List of drives accessible to the user"
+          }
+        }
+      },
+      "ArchiveAllChatsResponse": {
+        "type": "object",
+        "description": "Response from the archive all chats endpoint",
+        "required": [
+          "archived_count"
+        ],
+        "properties": {
+          "archived_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of chats newly archived by this call."
           }
         }
       },

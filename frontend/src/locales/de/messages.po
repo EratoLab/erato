@@ -654,8 +654,43 @@ msgstr "Speichere..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.dataTab.placeholder"
-msgstr "Datenbezogene Einstellungen werden hier angezeigt."
+msgid "preferences.dialog.dataTab.archiveAll.archiving"
+msgstr "Archiviere..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.button"
+msgstr "Alle Chats archivieren"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
+msgstr "Dadurch werden alle nicht archivierten Chats in deinem Konto archiviert."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.confirmTitle"
+msgstr "Alle Chats archivieren?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.error"
+msgstr "Chats konnten nicht archiviert werden. Bitte versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.help"
+msgstr "Archiviert alle Chats in deinem Konto. Bereits archivierte Chats behalten ihr Archivierungsdatum."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.success"
+msgstr "Chats erfolgreich archiviert."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#~ msgid "preferences.dialog.dataTab.placeholder"
+#~ msgstr "Datenbezogene Einstellungen werden hier angezeigt."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

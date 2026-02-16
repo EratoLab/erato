@@ -6,7 +6,10 @@ use crate::models::pagination;
 use crate::policy::prelude::*;
 use eyre::{Report, eyre};
 use sea_orm::prelude::*;
-use sea_orm::{ActiveValue, DatabaseConnection, EntityTrait, FromQueryResult, QueryOrder};
+use sea_orm::{
+    ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, FromQueryResult, QueryFilter,
+    QueryOrder,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::types::chrono::Utc;
 use tracing::instrument;
@@ -688,6 +691,27 @@ pub async fn archive_chat(
     let updated_chat = chat_active.update(conn).await?;
 
     Ok(updated_chat)
+}
+
+/// Archive all non-archived chats for a specific owner user.
+///
+/// Returns the number of chats that were newly archived.
+pub async fn archive_all_unarchived_chats_for_owner(
+    conn: &DatabaseConnection,
+    owner_user_id: &str,
+) -> Result<u64, Report> {
+    let now: DateTimeWithTimeZone = Utc::now().into();
+    let result = Chats::update_many()
+        .set(chats::ActiveModel {
+            archived_at: ActiveValue::Set(Some(now)),
+            ..Default::default()
+        })
+        .filter(chats::Column::OwnerUserId.eq(owner_user_id))
+        .filter(chats::Column::ArchivedAt.is_null())
+        .exec(conn)
+        .await?;
+
+    Ok(result.rows_affected)
 }
 
 /// Get the chat provider ID from the most recent active message in a chat.

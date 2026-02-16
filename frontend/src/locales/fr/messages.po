@@ -654,8 +654,43 @@ msgstr "Enregistrement..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.dataTab.placeholder"
-msgstr "Les préférences liées aux données apparaîtront ici."
+msgid "preferences.dialog.dataTab.archiveAll.archiving"
+msgstr "Archivage..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.button"
+msgstr "Archiver toutes les discussions"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.confirmMessage"
+msgstr "Cela archivera toutes les discussions non archivées de votre compte."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.confirmTitle"
+msgstr "Archiver toutes les discussions ?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.error"
+msgstr "Impossible d’archiver les discussions. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.help"
+msgstr "Archive toutes les discussions de votre compte. Les discussions déjà archivées conservent leur date d’archivage."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.dataTab.archiveAll.success"
+msgstr "Discussions archivées avec succès."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#~ msgid "preferences.dialog.dataTab.placeholder"
+#~ msgstr "Les préférences liées aux données apparaîtront ici."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

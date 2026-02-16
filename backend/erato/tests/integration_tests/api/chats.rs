@@ -3,6 +3,7 @@
 use axum::Router;
 use axum::http;
 use axum_test::TestServer;
+use chrono::Utc;
 use erato::config::{
     ExperimentalFacetsConfig, FacetConfig, ModelSettings, PromptSourceSpecification,
 };
@@ -18,7 +19,7 @@ use std::collections::HashMap;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    TEST_JWT_TOKEN, TEST_USER_ISSUER, TestRequestAuthExt, setup_mock_llm_server,
+    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, setup_mock_llm_server,
 };
 
 /// Test retrieving recent chats for the authenticated user.
@@ -370,6 +371,91 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
         );
         assert!(chat.get("can_edit").unwrap().as_bool().unwrap());
     }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_archive_all_chats_endpoint_archives_only_unarchived(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let user = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let owner_user_id = user.id.to_string();
+
+    let archived_at_before: sqlx::types::chrono::DateTime<sqlx::types::chrono::FixedOffset> =
+        (Utc::now() - chrono::Duration::days(2)).into();
+
+    let active_chat_1 = chats::ActiveModel {
+        owner_user_id: ActiveValue::Set(owner_user_id.clone()),
+        archived_at: ActiveValue::Set(None),
+        ..Default::default()
+    }
+    .insert(&app_state.db)
+    .await
+    .expect("Failed to create active chat 1");
+
+    let active_chat_2 = chats::ActiveModel {
+        owner_user_id: ActiveValue::Set(owner_user_id.clone()),
+        archived_at: ActiveValue::Set(None),
+        ..Default::default()
+    }
+    .insert(&app_state.db)
+    .await
+    .expect("Failed to create active chat 2");
+
+    let already_archived_chat = chats::ActiveModel {
+        owner_user_id: ActiveValue::Set(owner_user_id),
+        archived_at: ActiveValue::Set(Some(archived_at_before)),
+        ..Default::default()
+    }
+    .insert(&app_state.db)
+    .await
+    .expect("Failed to create already archived chat");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .post("/api/v1beta/me/chats/archive_all")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+
+    let body: Value = response.json();
+    assert_eq!(body["archived_count"].as_i64().unwrap(), 2);
+
+    let active_chat_1_after = chats::Entity::find_by_id(active_chat_1.id)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to fetch active chat 1 after")
+        .expect("Missing active chat 1 after");
+    let active_chat_2_after = chats::Entity::find_by_id(active_chat_2.id)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to fetch active chat 2 after")
+        .expect("Missing active chat 2 after");
+    let already_archived_chat_after = chats::Entity::find_by_id(already_archived_chat.id)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to fetch archived chat after")
+        .expect("Missing archived chat after");
+
+    assert!(active_chat_1_after.archived_at.is_some());
+    assert!(active_chat_2_after.archived_at.is_some());
+    assert_eq!(
+        already_archived_chat_after.archived_at, already_archived_chat.archived_at,
+        "Archive timestamp on previously archived chat should remain unchanged",
+    );
 }
 
 /// Test that recent chats resolve title with `title_by_user_provided` precedence.
