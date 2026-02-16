@@ -1537,6 +1537,25 @@ export type UpdateChatResponse = {
   title_resolved: string;
 };
 
+export type UpdateProfilePreferencesRequest = {
+  /**
+   * Additional contextual information about the user for the assistant.
+   */
+  preference_assistant_additional_information?: null | undefined;
+  /**
+   * Additional behaviour/style/tone preferences for the assistant.
+   */
+  preference_assistant_custom_instructions?: null | undefined;
+  /**
+   * User's job title.
+   */
+  preference_job_title?: null | undefined;
+  /**
+   * Preferred name to address the user with.
+   */
+  preference_nickname?: null | undefined;
+};
+
 export type UserProfile = {
   /**
    * The user's email address. Shouldn't be used as a unique identifier, as it may change.
@@ -1572,6 +1591,22 @@ export type UserProfile = {
    * The user's profile picture URL.
    */
   picture?: string;
+  /**
+   * Additional contextual information about the user for the assistant.
+   */
+  preference_assistant_additional_information?: string;
+  /**
+   * Additional behaviour/style/tone preferences for the assistant.
+   */
+  preference_assistant_custom_instructions?: string;
+  /**
+   * User's job title.
+   */
+  preference_job_title?: string;
+  /**
+   * Preferred name to address the user with.
+   */
+  preference_nickname?: string;
   /**
    * The user's preferred language.
    *

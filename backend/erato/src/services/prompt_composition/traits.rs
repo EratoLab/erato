@@ -57,6 +57,10 @@ pub trait PromptProvider: Send + Sync {
         &self,
         chat_provider_config: &ChatProviderConfig,
         preferred_language: Option<&str>,
+        user_preference_nickname: Option<&str>,
+        user_preference_job_title: Option<&str>,
+        user_preference_assistant_custom_instructions: Option<&str>,
+        user_preference_assistant_additional_information: Option<&str>,
     ) -> Result<Option<String>, Report>;
 
     /// Resolve a prompt source specification into a concrete prompt string.

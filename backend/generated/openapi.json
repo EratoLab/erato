@@ -1328,6 +1328,42 @@
         ]
       }
     },
+    "/api/v1beta/me/profile/preferences": {
+      "put": {
+        "tags": [],
+        "operationId": "update_profile_preferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfilePreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/recent_chats": {
       "get": {
         "tags": [],
@@ -4523,6 +4559,39 @@
           }
         }
       },
+      "UpdateProfilePreferencesRequest": {
+        "type": "object",
+        "properties": {
+          "preference_assistant_additional_information": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Additional contextual information about the user for the assistant."
+          },
+          "preference_assistant_custom_instructions": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Additional behaviour/style/tone preferences for the assistant."
+          },
+          "preference_job_title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "User's job title."
+          },
+          "preference_nickname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Preferred name to address the user with."
+          }
+        }
+      },
       "UserProfile": {
         "type": "object",
         "required": [
@@ -4564,6 +4633,22 @@
           "picture": {
             "type": "string",
             "description": "The user's profile picture URL."
+          },
+          "preference_assistant_additional_information": {
+            "type": "string",
+            "description": "Additional contextual information about the user for the assistant."
+          },
+          "preference_assistant_custom_instructions": {
+            "type": "string",
+            "description": "Additional behaviour/style/tone preferences for the assistant."
+          },
+          "preference_job_title": {
+            "type": "string",
+            "description": "User's job title."
+          },
+          "preference_nickname": {
+            "type": "string",
+            "description": "Preferred name to address the user with."
           },
           "preferred_language": {
             "type": "string",

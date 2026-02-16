@@ -242,9 +242,20 @@ impl<'a> PromptProvider for AppStatePromptProvider<'a> {
         &self,
         chat_provider_config: &ChatProviderConfig,
         preferred_language: Option<&str>,
+        user_preference_nickname: Option<&str>,
+        user_preference_job_title: Option<&str>,
+        user_preference_assistant_custom_instructions: Option<&str>,
+        user_preference_assistant_additional_information: Option<&str>,
     ) -> Result<Option<String>, Report> {
         self.app_state
-            .get_system_prompt(chat_provider_config, preferred_language)
+            .get_system_prompt(
+                chat_provider_config,
+                preferred_language,
+                user_preference_nickname,
+                user_preference_job_title,
+                user_preference_assistant_custom_instructions,
+                user_preference_assistant_additional_information,
+            )
             .await
     }
 

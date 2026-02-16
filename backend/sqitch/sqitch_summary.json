@@ -15,7 +15,8 @@
     "deploy/0013_add_assistants_table.sql",
     "deploy/0014_add_share_grants_table.sql",
     "deploy/0015_add_message_feedbacks_table.sql",
-    "deploy/0016_add_title_by_user_provided_to_chats.sql"
+    "deploy/0016_add_title_by_user_provided_to_chats.sql",
+    "deploy/0017_add_user_preferences_table.sql"
   ],
-  "latest_change": "0f132fe5c5d3078c5943abd11186bde733fb3646"
+  "latest_change": "1622ee4052c7ccf67d1ad296ed86fc906f32d95d"
 }
