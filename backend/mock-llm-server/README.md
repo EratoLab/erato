@@ -104,6 +104,7 @@ The server comes with pre-configured mocks:
 | Fast | Demonstrates fast streaming | "fast" | Quick response | 10ms |
 | Delay | Demonstrates delayed response | "delay" | Medium-sized text | 5000ms (5s) |
 | LongRunning | Demonstrates very long streaming | "long running" | 90 second countdown | 1000ms (1s) |
+| TriggerMcpContentFilterToolCall | Triggers MCP content-filter error flow | "mcp content filter" | Tool call to `trigger_content_filter` | 100ms |
 | (default) | Fallback when no match | - | Generic response | 50ms |
 
 Each mock has:
@@ -226,4 +227,3 @@ Each mock prints a summary at startup showing its name, description, match rules
   - Stateful responses
 - Request/response logging to file
 - Stateful conversations
-
