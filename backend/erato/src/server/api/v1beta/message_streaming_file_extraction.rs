@@ -1,4 +1,4 @@
-use crate::models::message::{ContentPart, ContentPartImageFilePointer};
+use crate::models::message::{ContentPart, ContentPartImageFilePointer, GenerationErrorType};
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::state::AppState;
@@ -353,6 +353,74 @@ fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
         .join("\n")
 }
 
+fn parse_content_filter_error_payload(value: &Value) -> Option<GenerationErrorType> {
+    let mut candidates = vec![value];
+    if let Some(error_object) = value.get("error") {
+        candidates.push(error_object);
+    }
+
+    for candidate in candidates {
+        let error_type = candidate
+            .get("type")
+            .and_then(Value::as_str)
+            .or_else(|| candidate.get("error_type").and_then(Value::as_str));
+        if error_type != Some("content_filter") {
+            continue;
+        }
+
+        let error_description = candidate
+            .get("error_description")
+            .and_then(Value::as_str)
+            .or_else(|| candidate.get("message").and_then(Value::as_str))
+            .or_else(|| value.get("message").and_then(Value::as_str))
+            .unwrap_or("The response was filtered by MCP content policy.")
+            .to_string();
+
+        let filter_details = candidate
+            .get("filter_details")
+            .cloned()
+            .or_else(|| candidate.get("content_filter_result").cloned())
+            .or_else(|| {
+                candidate
+                    .get("innererror")
+                    .and_then(|inner| inner.get("content_filter_result"))
+                    .cloned()
+            });
+
+        return Some(GenerationErrorType::ContentFilter {
+            error_description,
+            filter_details,
+        });
+    }
+
+    None
+}
+
+pub fn parse_content_filter_error_from_mcp_tool_result(
+    tool_call_result: &rmcp::model::CallToolResult,
+) -> Option<GenerationErrorType> {
+    if tool_call_result.is_error != Some(true) {
+        return None;
+    }
+
+    if let Some(structured_content) = tool_call_result.structured_content.as_ref()
+        && let Some(parsed) = parse_content_filter_error_payload(structured_content)
+    {
+        return Some(parsed);
+    }
+
+    for annotated_content in &tool_call_result.content {
+        if let rmcp::model::RawContent::Text(text_content) = &annotated_content.raw
+            && let Ok(json_value) = serde_json::from_str::<Value>(&text_content.text)
+            && let Some(parsed) = parse_content_filter_error_payload(&json_value)
+        {
+            return Some(parsed);
+        }
+    }
+
+    None
+}
+
 pub async fn post_process_mcp_tool_result(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -402,6 +470,7 @@ pub async fn post_process_mcp_tool_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rmcp::model::{CallToolResult, Content};
     use serde_json::json;
 
     #[test]
@@ -488,5 +557,76 @@ mod tests {
             output["images"][0]["data_base64"],
             json!("erato-file://123")
         );
+    }
+
+    #[test]
+    fn parse_content_filter_error_from_mcp_structured_error_result() {
+        let tool_result = CallToolResult::structured_error(json!({
+            "type": "content_filter",
+            "error_description": "Blocked by MCP content filter",
+            "filter_details": {
+                "sexual": { "filtered": true, "severity": "medium" }
+            }
+        }));
+
+        let parsed = parse_content_filter_error_from_mcp_tool_result(&tool_result);
+        match parsed {
+            Some(GenerationErrorType::ContentFilter {
+                error_description,
+                filter_details,
+            }) => {
+                assert_eq!(error_description, "Blocked by MCP content filter");
+                assert_eq!(
+                    filter_details,
+                    Some(json!({
+                        "sexual": { "filtered": true, "severity": "medium" }
+                    }))
+                );
+            }
+            other => panic!("Expected content filter error, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_content_filter_error_from_mcp_text_error_result() {
+        let payload = json!({
+            "error": {
+                "type": "content_filter",
+                "message": "MCP blocked content",
+                "innererror": {
+                    "content_filter_result": {
+                        "violence": { "filtered": true, "severity": "high" }
+                    }
+                }
+            }
+        });
+
+        let tool_result = CallToolResult::error(vec![Content::text(payload.to_string())]);
+        let parsed = parse_content_filter_error_from_mcp_tool_result(&tool_result);
+
+        match parsed {
+            Some(GenerationErrorType::ContentFilter {
+                error_description,
+                filter_details,
+            }) => {
+                assert_eq!(error_description, "MCP blocked content");
+                assert_eq!(
+                    filter_details,
+                    Some(json!({
+                        "violence": { "filtered": true, "severity": "high" }
+                    }))
+                );
+            }
+            other => panic!("Expected content filter error, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_content_filter_error_ignores_non_error_results() {
+        let tool_result = CallToolResult::structured(json!({
+            "type": "content_filter",
+            "message": "Should not parse because this is not marked as error"
+        }));
+        assert!(parse_content_filter_error_from_mcp_tool_result(&tool_result).is_none());
     }
 }

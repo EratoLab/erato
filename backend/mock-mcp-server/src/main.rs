@@ -4,8 +4,13 @@ use axum::{routing::get, Json, Router};
 use colored::Colorize;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
-    model::{Meta, ProgressNotificationParam, ServerCapabilities, ServerInfo},
-    schemars, tool, tool_router,
+    model::{
+        CallToolRequestParam, CallToolResult, ListToolsResult, Meta, PaginatedRequestParam,
+        ProgressNotificationParam, ServerCapabilities, ServerInfo,
+    },
+    schemars,
+    service::RequestContext,
+    tool, tool_router,
     transport::streamable_http_server::{
         session::local::LocalSessionManager,
         tower::{StreamableHttpServerConfig, StreamableHttpService},
@@ -13,6 +18,7 @@ use rmcp::{
     ErrorData as McpError, Peer, RoleServer, ServerHandler,
 };
 use serde::Serialize;
+use serde_json::json;
 use tokio::time::{sleep, Duration};
 
 const MOCK_FILES: &[(&str, &str)] = &[
@@ -56,6 +62,30 @@ fn read_mock_file(path: &str) -> Option<&'static str> {
         .map(|(_, content)| *content)
 }
 
+fn list_tools_from_router<S>(tool_router: &ToolRouter<S>) -> ListToolsResult
+where
+    S: Send + Sync + 'static,
+{
+    ListToolsResult {
+        tools: tool_router.list_all(),
+        next_cursor: None,
+    }
+}
+
+async fn call_tool_from_router<S>(
+    service: &S,
+    tool_router: &ToolRouter<S>,
+    request: CallToolRequestParam,
+    context: RequestContext<RoleServer>,
+) -> Result<CallToolResult, McpError>
+where
+    S: Send + Sync + 'static,
+{
+    let tool_call_context =
+        rmcp::handler::server::tool::ToolCallContext::new(service, request, context);
+    tool_router.call(tool_call_context).await
+}
+
 #[derive(Clone)]
 struct FileServer {
     #[allow(dead_code)]
@@ -91,6 +121,22 @@ impl FileServer {
 }
 
 impl ServerHandler for FileServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+        call_tool_from_router(self, &self.tool_router, request, context)
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             instructions: Some("Mock MCP file server".into()),
@@ -136,6 +182,22 @@ impl ErrorFileServer {
 }
 
 impl ServerHandler for ErrorFileServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+        call_tool_from_router(self, &self.tool_router, request, context)
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             instructions: Some("Mock MCP error simulation server".into()),
@@ -195,9 +257,82 @@ impl ProgressFileServer {
 }
 
 impl ServerHandler for ProgressFileServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+        call_tool_from_router(self, &self.tool_router, request, context)
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             instructions: Some("Mock MCP progress simulation server".into()),
+            capabilities: ServerCapabilities::builder().enable_tools().build(),
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ContentFilterFileServer {
+    #[allow(dead_code)]
+    tool_router: ToolRouter<Self>,
+}
+
+impl ContentFilterFileServer {
+    fn new() -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+        }
+    }
+}
+
+#[tool_router]
+impl ContentFilterFileServer {
+    #[tool(description = "Always returns a content_filter tool error payload")]
+    fn trigger_content_filter(&self) -> Result<rmcp::model::CallToolResult, McpError> {
+        Ok(rmcp::model::CallToolResult::structured_error(json!({
+            "type": "content_filter",
+            "error_description": "The response was filtered by MCP content policy.",
+            "filter_details": {
+                "sexual": { "filtered": true, "severity": "medium" },
+                "violence": { "filtered": false, "severity": "low" },
+                "hate": { "filtered": false, "severity": "safe" },
+                "self_harm": { "filtered": false, "severity": "safe" }
+            }
+        })))
+    }
+}
+
+impl ServerHandler for ContentFilterFileServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+        call_tool_from_router(self, &self.tool_router, request, context)
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParam>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
+    }
+
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            instructions: Some("Mock MCP content filter simulation server".into()),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()
         }
@@ -231,6 +366,12 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
             endpoint: "Streamable HTTP /mcp/progress",
             tools: &["list_files", "read_file"],
         },
+        MechanismSummary {
+            name: "Content filter simulation server",
+            description: "Provides trigger_content_filter and returns is_error payload",
+            endpoint: "Streamable HTTP /mcp/content-filter",
+            tools: &["trigger_content_filter"],
+        },
     ]
 }
 
@@ -255,6 +396,11 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
         "  {} {}",
         "MCP HTTP".bright_cyan(),
         "/mcp/progress".bright_yellow()
+    );
+    println!(
+        "  {} {}",
+        "MCP HTTP".bright_cyan(),
+        "/mcp/content-filter".bright_yellow()
     );
     println!();
 
@@ -311,12 +457,24 @@ async fn main() {
                 sse_keep_alive: None,
             },
         );
+    let content_filter_service: StreamableHttpService<
+        ContentFilterFileServer,
+        LocalSessionManager,
+    > = StreamableHttpService::new(
+        || Ok(ContentFilterFileServer::new()),
+        Default::default(),
+        StreamableHttpServerConfig {
+            stateful_mode: true,
+            sse_keep_alive: None,
+        },
+    );
 
     let app = Router::new()
         .route("/health", get(health))
         .nest_service("/mcp/file", file_service)
         .nest_service("/mcp/error", error_service)
-        .nest_service("/mcp/progress", progress_service);
+        .nest_service("/mcp/progress", progress_service)
+        .nest_service("/mcp/content-filter", content_filter_service);
 
     let mechanisms = builtin_mechanisms();
     log_startup(&addr.to_string(), &mechanisms);

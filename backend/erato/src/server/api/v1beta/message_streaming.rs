@@ -15,7 +15,9 @@ use crate::policy::types::Subject;
 use crate::server::api::v1beta::ChatMessage;
 use crate::server::api::v1beta::file_resolution::resolve_file_pointers_in_generation_input;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
-use crate::server::api::v1beta::message_streaming_file_extraction::post_process_mcp_tool_result;
+use crate::server::api::v1beta::message_streaming_file_extraction::{
+    parse_content_filter_error_from_mcp_tool_result, post_process_mcp_tool_result,
+};
 use crate::services::background_tasks::{
     StreamingEvent, StreamingTask, ToolCallStatus as BgToolCallStatus,
 };
@@ -1357,6 +1359,40 @@ async fn stream_generate_chat_completion<
                 .await
             {
                 Ok(tool_call_result) => {
+                    if let Some(content_filter_error) =
+                        parse_content_filter_error_from_mcp_tool_result(&tool_call_result)
+                    {
+                        let error_payload = Some(content_filter_error.clone());
+                        let error_event = MessageSubmitStreamingResponseError {
+                            message_id: Some(assistant_message_id),
+                            error: content_filter_error,
+                        };
+
+                        if let Some(task) = streaming_task
+                            && let Ok(error_json) = serde_json::to_value(
+                                MessageSubmitStreamingResponseMessage::Error(error_event.clone()),
+                            )
+                        {
+                            let _ = task
+                                .send_event(StreamingEvent::Error {
+                                    error: Some(error_json),
+                                })
+                                .await;
+                        }
+
+                        let message: MSG = error_event.into();
+                        message.send_event(tx.clone()).await?;
+                        let generation_metadata = build_generation_metadata(
+                            total_prompt_tokens,
+                            total_completion_tokens,
+                            total_total_tokens,
+                            total_reasoning_tokens,
+                            langfuse_trace_id.clone(),
+                            error_payload,
+                        );
+                        break 'loop_call_turns Ok((current_message_content, generation_metadata));
+                    }
+
                     let post_processed = match post_process_mcp_tool_result(
                         app_state,
                         policy,

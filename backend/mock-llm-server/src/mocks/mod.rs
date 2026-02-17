@@ -277,6 +277,22 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "TriggerMcpContentFilterToolCall".to_string(),
+            description:
+                "Returns a tool call to trigger_content_filter when last message asks for mcp content filter"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "mcp content filter".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "trigger_content_filter".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
             name: "ToolResultResponse".to_string(),
             description: "Returns a text response when the last message is a tool result"
                 .to_string(),
