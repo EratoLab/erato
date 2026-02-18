@@ -41,7 +41,8 @@ const VARIANT_STYLES = {
     "bg-theme-bg-secondary border border-theme-border hover:bg-theme-bg-hover text-theme-fg-secondary theme-transition",
   ghost:
     "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
-  danger: "text-theme-error-fg hover:bg-theme-error-bg theme-transition",
+  danger:
+    "border border-theme-error-border bg-theme-error-bg text-theme-error-fg hover:brightness-95 theme-transition",
   "sidebar-icon":
     "p-2 rounded-lg text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
   "list-item":
