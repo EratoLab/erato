@@ -694,8 +694,8 @@ msgstr "Archived chats successfully."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.fields.additionalInformation.help"
-msgstr "Any additional context you want the assistant to know."
+#~ msgid "preferences.dialog.fields.additionalInformation.help"
+#~ msgstr "Any additional context you want the assistant to know."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -705,12 +705,12 @@ msgstr "Additional information"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.additionalInformation.placeholder"
-msgstr "e.g. I work with enterprise customers"
+msgstr "Any extra context for the assistant, e.g. I work with enterprise customers"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.fields.customInstructions.help"
-msgstr "Additional behavior, style, and tone preferences."
+#~ msgid "preferences.dialog.fields.customInstructions.help"
+#~ msgstr "Additional behavior, style, and tone preferences."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -720,7 +720,7 @@ msgstr "Custom instructions for the assistant"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.customInstructions.placeholder"
-msgstr "e.g. Prefer concise bullet points"
+msgstr "How should the assistant behave? e.g. Prefer concise bullet points"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -730,12 +730,12 @@ msgstr "Job title"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.jobTitle.placeholder"
-msgstr "e.g. Product Manager"
+msgstr "What is your role? e.g. Product Manager"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.fields.nickname.help"
-msgstr "What should the assistant call you?"
+#~ msgid "preferences.dialog.fields.nickname.help"
+#~ msgstr "What should the assistant call you?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -745,7 +745,7 @@ msgstr "Nickname"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.nickname.placeholder"
-msgstr "e.g. Max"
+msgstr "What should the assistant call you? e.g. Max Mustermann"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

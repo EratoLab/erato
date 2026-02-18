@@ -214,10 +214,6 @@ export function UserPreferencesDialog({
                     message: "Nickname",
                   })}
                   htmlFor="preferences-nickname"
-                  helpText={t({
-                    id: "preferences.dialog.fields.nickname.help",
-                    message: "What should the assistant call you?",
-                  })}
                 >
                   <input
                     id="preferences-nickname"
@@ -227,7 +223,8 @@ export function UserPreferencesDialog({
                     className="w-full rounded-lg border border-theme-border bg-theme-bg-secondary px-4 py-2.5 text-base text-theme-fg-primary placeholder:text-theme-fg-muted focus:border-theme-border-focus focus:outline-none focus:ring-2 focus:ring-theme-focus"
                     placeholder={t({
                       id: "preferences.dialog.fields.nickname.placeholder",
-                      message: "e.g. Max",
+                      message:
+                        "What should the assistant call you? e.g. Max Mustermann",
                     })}
                   />
                 </FormField>
@@ -247,7 +244,7 @@ export function UserPreferencesDialog({
                     className="w-full rounded-lg border border-theme-border bg-theme-bg-secondary px-4 py-2.5 text-base text-theme-fg-primary placeholder:text-theme-fg-muted focus:border-theme-border-focus focus:outline-none focus:ring-2 focus:ring-theme-focus"
                     placeholder={t({
                       id: "preferences.dialog.fields.jobTitle.placeholder",
-                      message: "e.g. Product Manager",
+                      message: "What is your role? e.g. Product Manager",
                     })}
                   />
                 </FormField>
@@ -258,11 +255,6 @@ export function UserPreferencesDialog({
                     message: "Custom instructions for the assistant",
                   })}
                   htmlFor="preferences-custom-instructions"
-                  helpText={t({
-                    id: "preferences.dialog.fields.customInstructions.help",
-                    message:
-                      "Additional behavior, style, and tone preferences.",
-                  })}
                 >
                   <Textarea
                     id="preferences-custom-instructions"
@@ -274,7 +266,8 @@ export function UserPreferencesDialog({
                     autoResize={true}
                     placeholder={t({
                       id: "preferences.dialog.fields.customInstructions.placeholder",
-                      message: "e.g. Prefer concise bullet points",
+                      message:
+                        "How should the assistant behave? e.g. Prefer concise bullet points",
                     })}
                   />
                 </FormField>
@@ -285,11 +278,6 @@ export function UserPreferencesDialog({
                     message: "Additional information",
                   })}
                   htmlFor="preferences-additional-information"
-                  helpText={t({
-                    id: "preferences.dialog.fields.additionalInformation.help",
-                    message:
-                      "Any additional context you want the assistant to know.",
-                  })}
                 >
                   <Textarea
                     id="preferences-additional-information"
@@ -301,7 +289,8 @@ export function UserPreferencesDialog({
                     autoResize={true}
                     placeholder={t({
                       id: "preferences.dialog.fields.additionalInformation.placeholder",
-                      message: "e.g. I work with enterprise customers",
+                      message:
+                        "Any extra context for the assistant, e.g. I work with enterprise customers",
                     })}
                   />
                 </FormField>

@@ -694,8 +694,8 @@ msgstr "Discussions archivées avec succès."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.fields.additionalInformation.help"
-msgstr "Tout contexte supplémentaire que vous souhaitez que l’assistant connaisse."
+#~ msgid "preferences.dialog.fields.additionalInformation.help"
+#~ msgstr "Tout contexte supplémentaire que vous souhaitez que l’assistant connaisse."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -705,12 +705,12 @@ msgstr "Informations supplémentaires"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.additionalInformation.placeholder"
-msgstr "ex. Je travaille avec des clients entreprises"
+msgstr "Contexte supplémentaire pour l’assistant, ex. Je travaille avec des clients entreprises"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.fields.customInstructions.help"
-msgstr "Préférences supplémentaires de comportement, de style et de ton."
+#~ msgid "preferences.dialog.fields.customInstructions.help"
+#~ msgstr "Préférences supplémentaires de comportement, de style et de ton."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -720,7 +720,7 @@ msgstr "Instructions personnalisées pour l’assistant"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.customInstructions.placeholder"
-msgstr "ex. Préférer des puces concises"
+msgstr "Comment l’assistant doit-il se comporter ? ex. Préférer des puces concises"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -730,12 +730,12 @@ msgstr "Intitulé du poste"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.jobTitle.placeholder"
-msgstr "ex. Chef de produit"
+msgstr "Quel est votre rôle ? ex. Chef de produit"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.fields.nickname.help"
-msgstr "Comment l’assistant doit-il vous appeler ?"
+#~ msgid "preferences.dialog.fields.nickname.help"
+#~ msgstr "Comment l’assistant doit-il vous appeler ?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -745,7 +745,7 @@ msgstr "Surnom"
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.fields.nickname.placeholder"
-msgstr "ex. Max"
+msgstr "Comment l’assistant doit-il vous appeler ? ex. Max Mustermann"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
