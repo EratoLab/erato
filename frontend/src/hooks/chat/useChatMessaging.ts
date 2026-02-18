@@ -13,16 +13,22 @@
  * This approach eliminates the need for complex ID mapping and localStorage persistence,
  * resulting in less flickering during navigation and a more reliable message history.
  */
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable lingui/no-unlocalized-strings */
 import { useQueryClient, skipToken } from "@tanstack/react-query";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 import { useChatHistory } from "@/hooks";
 import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
-import { useChatMessages } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  chatMessagesQuery as buildChatMessagesQuery,
+  fetchChatMessages,
+  useChatMessages,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import {
   createOptimisticUserMessage,
-  mergeDisplayMessages,
   constructSubmitStreamRequestBody,
 } from "@/utils/chat/messageUtils";
 import { createLogger } from "@/utils/debugLogger";
@@ -35,19 +41,39 @@ import { handleTextDelta } from "./handlers/handleTextDelta";
 import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
 import { handleUserMessageSaved } from "./handlers/handleUserMessageSaved";
-import { useMessagingStore } from "./store/messagingStore";
+import {
+  getStreamKey,
+  NEW_CHAT_STREAM_KEY,
+  useMessagingStore,
+} from "./store/messagingStore";
 import { useExplicitNavigation } from "./useExplicitNavigation";
 
-import type { MessageSubmitStreamingResponseMessage } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  MessageSubmitStreamingResponseMessage,
+  MessageSubmitStreamingResponseError,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
 const logger = createLogger("HOOK", "useChatMessaging");
-
+const COMPLETION_CLOSE_DEDUP_MS = 5000;
 // Remove onChatCreated from parameters
 interface UseChatMessagingParams {
   chatId: string | null;
   // onChatCreated?: (newChatId: string) => void;
   silentChatId?: string | null;
+}
+
+function resolveStreamAlias(
+  aliases: Record<string, string>,
+  key: string,
+): string {
+  let resolved = key;
+  const visited = new Set<string>();
+  while (aliases[resolved] && !visited.has(resolved)) {
+    visited.add(resolved);
+    resolved = aliases[resolved];
+  }
+  return resolved;
 }
 
 /**
@@ -72,7 +98,6 @@ function handleNullChatIdScenario(
       );
     }
     return {
-      // eslint-disable-next-line lingui/no-unlocalized-strings
       scenario: "post_archive",
       shouldClearMessages: true,
       hasLocalMessages,
@@ -92,7 +117,6 @@ function handleNullChatIdScenario(
       );
     }
     return {
-      // eslint-disable-next-line lingui/no-unlocalized-strings
       scenario: "new_chat",
       shouldClearMessages: false,
       hasLocalMessages,
@@ -106,7 +130,6 @@ function handleNullChatIdScenario(
       );
     }
     return {
-      // eslint-disable-next-line lingui/no-unlocalized-strings
       scenario: "navigating_back",
       shouldClearMessages: true,
       hasLocalMessages,
@@ -132,27 +155,88 @@ export function useChatMessaging(
     typeof chatIdOrParams === "string" || chatIdOrParams === null
       ? null
       : chatIdOrParams.silentChatId;
+  const streamKey = useMemo(
+    () => getStreamKey(chatId ?? silentChatId),
+    [chatId, silentChatId],
+  );
 
   const queryClient = useQueryClient();
-  const {
-    streaming,
-    resetStreaming,
-    userMessages,
-    addUserMessage,
-    clearCompletedUserMessages,
-    error,
-    setError,
-    setNewlyCreatedChatIdInStore,
-    setAwaitingFirstStreamChunkForNewChat,
-    setSSEAbortCallback,
-  } = useMessagingStore();
-  const sseCleanupRef = useRef<(() => void) | null>(null);
-  const isSubmittingRef = useRef(false);
+  const newlyCreatedChatIdInStore = useMessagingStore(
+    (state) => state.newlyCreatedChatId,
+  );
+  const renderStreamKey = useMemo(
+    () => (chatId ? streamKey : getStreamKey(newlyCreatedChatIdInStore)),
+    [chatId, newlyCreatedChatIdInStore, streamKey],
+  );
+  const streaming = useMessagingStore((state) =>
+    state.getStreaming(renderStreamKey),
+  );
+  const resetStreaming = useMessagingStore((state) => state.resetStreaming);
+  const userMessages = useMessagingStore((state) =>
+    state.getUserMessages(renderStreamKey),
+  );
+  const addUserMessage = useMessagingStore((state) => state.addUserMessage);
+  const clearCompletedUserMessages = useMessagingStore(
+    (state) => state.clearCompletedUserMessages,
+  );
+  const apiMessagesForRenderStream = useMessagingStore((state) =>
+    state.getApiMessages(renderStreamKey),
+  );
+  const getRenderableMessages = useMessagingStore(
+    (state) => state.getRenderableMessages,
+  );
+  const setApiMessages = useMessagingStore((state) => state.setApiMessages);
+  const error = useMessagingStore((state) => state.error);
+  const setError = useMessagingStore((state) => state.setError);
+  const setNewlyCreatedChatIdInStore = useMessagingStore(
+    (state) => state.setNewlyCreatedChatIdInStore,
+  );
+  const setAwaitingFirstStreamChunkForNewChat = useMessagingStore(
+    (state) => state.setAwaitingFirstStreamChunkForNewChat,
+  );
+  const isAwaitingFirstStreamChunkForNewChat = useMessagingStore(
+    (state) => state.isAwaitingFirstStreamChunkForNewChat,
+  );
+  const setSSEAbortCallback = useMessagingStore(
+    (state) => state.setSSEAbortCallback,
+  );
+  const setActiveStreamKey = useMessagingStore(
+    (state) => state.setActiveStreamKey,
+  );
+  const sseCleanupRefsRef = useRef<Record<string, () => void>>({});
+  const isSubmittingByKeyRef = useRef<Record<string, boolean>>({});
+  const recentlyCompletedByKeyRef = useRef<Record<string, number>>({});
+  const lastResumeAttemptedChatIdRef = useRef<string | null>(null);
   const isUnmountingRef = useRef(false); // Track if we're unmounting to skip unnecessary refetch
   // Remove pendingChatIdRef, use state instead
   // const pendingChatIdRef = useRef<string | null>(null);
   const [newlyCreatedChatId, setNewlyCreatedChatId] = useState<string | null>(
     null,
+  );
+  const isSubmittingForKey = useCallback(
+    (key: string) => isSubmittingByKeyRef.current[key] === true,
+    [],
+  );
+  const setSubmittingForKey = useCallback((key: string, value: boolean) => {
+    if (value) {
+      isSubmittingByKeyRef.current[key] = true;
+    } else {
+      delete isSubmittingByKeyRef.current[key];
+    }
+  }, []);
+  const getSSECleanupForKey = useCallback(
+    (key: string) => sseCleanupRefsRef.current[key] ?? null,
+    [],
+  );
+  const setSSECleanupForKey = useCallback(
+    (key: string, cleanup: (() => void) | null) => {
+      if (cleanup) {
+        sseCleanupRefsRef.current[key] = cleanup;
+      } else {
+        delete sseCleanupRefsRef.current[key];
+      }
+    },
+    [],
   );
 
   // Add explicit navigation hook
@@ -163,6 +247,7 @@ export function useChatMessaging(
     const currentChatId = chatId; // Capture chatId for cleanup
     const isInTransition =
       useMessagingStore.getState().isInNavigationTransition;
+    setActiveStreamKey(streamKey);
 
     // Reset unmounting flag on mount
     isUnmountingRef.current = false;
@@ -193,37 +278,62 @@ export function useChatMessaging(
     // CRITICAL FIX: When chatId is null, distinguish between new chat and after archiving
     // to ensure clean state. For existing chats, only clear completed messages.
     if (!currentChatId) {
-      const currentUserMessages = useMessagingStore.getState().userMessages;
+      const currentUserMessages = useMessagingStore
+        .getState()
+        .getUserMessages(renderStreamKey);
       const { shouldClearMessages } = handleNullChatIdScenario(
         currentUserMessages,
-        // eslint-disable-next-line lingui/no-unlocalized-strings
+
         "useChatMessaging mount effect",
       );
+      const isNewChatTransitionInProgress =
+        !!useMessagingStore.getState().newlyCreatedChatId ||
+        useMessagingStore.getState().isAwaitingFirstStreamChunkForNewChat ||
+        useMessagingStore.getState().getStreaming(renderStreamKey)
+          .currentMessageId !== null;
 
-      if (shouldClearMessages) {
-        useMessagingStore.getState().clearUserMessages();
+      if (shouldClearMessages && !isNewChatTransitionInProgress) {
+        useMessagingStore.getState().clearUserMessages(renderStreamKey);
       }
       // Don't clear user messages for new chat scenario - let them show as optimistic UI
     } else {
+      const hasActiveStreamForKey =
+        useMessagingStore.getState().getStreaming(streamKey)
+          .currentMessageId !== null;
       // Only clear completed messages to preserve user messages during navigation for existing chats
       if (process.env.NODE_ENV === "development") {
         logger.log(
-          `[DEBUG_STORE] useChatMessaging (${currentChatId}) effect: About to call clearCompletedUserMessages. Current userMessages count: ${Object.keys(useMessagingStore.getState().userMessages).length}`,
+          `[DEBUG_STORE] useChatMessaging (${currentChatId}) effect: About to call clearCompletedUserMessages. Current userMessages count: ${Object.keys(useMessagingStore.getState().getUserMessages(streamKey)).length}`,
         );
       }
-      clearCompletedUserMessages();
+      if (!hasActiveStreamForKey) {
+        clearCompletedUserMessages(streamKey);
+      } else {
+        logger.log(
+          `[DEBUG_STORE] useChatMessaging (${currentChatId}) effect: Skipping clearCompletedUserMessages because stream is active for key ${streamKey}.`,
+        );
+      }
       if (process.env.NODE_ENV === "development") {
         logger.log(
-          `[DEBUG_STORE] useChatMessaging (${currentChatId}) effect: Called clearCompletedUserMessages. New userMessages count: ${Object.keys(useMessagingStore.getState().userMessages).length}`,
+          `[DEBUG_STORE] useChatMessaging (${currentChatId}) effect: Called clearCompletedUserMessages. New userMessages count: ${Object.keys(useMessagingStore.getState().getUserMessages(streamKey)).length}`,
         );
       }
     }
 
-    // Reset streaming state
-    logger.log(
-      "[DEBUG_STREAMING] Resetting streaming state on mount/chatId change.",
-    );
-    resetStreaming();
+    const existingStreaming = useMessagingStore
+      .getState()
+      .getStreaming(streamKey);
+    if (existingStreaming.currentMessageId === null) {
+      // Reset streaming state only when there is no active keyed stream to preserve.
+      logger.log(
+        "[DEBUG_STREAMING] Resetting streaming state on mount/chatId change.",
+      );
+      resetStreaming(streamKey);
+    } else {
+      logger.log(
+        `[DEBUG_STREAMING] Preserving existing streaming state for streamKey: ${streamKey}`,
+      );
+    }
 
     // Reset newly created chat ID state when hook mounts/chatId changes
     logger.log(
@@ -239,7 +349,14 @@ export function useChatMessaging(
         );
       }
     };
-  }, [chatId, clearCompletedUserMessages, resetStreaming, silentChatId]); // Added silentChatId to dep array for mount log
+  }, [
+    chatId,
+    clearCompletedUserMessages,
+    resetStreaming,
+    silentChatId,
+    setActiveStreamKey,
+    streamKey,
+  ]); // Added silentChatId to dep array for mount log
 
   // Skip the query if no chatId is provided using skipToken
   // This prevents the query from being executed even if refetch() is called
@@ -251,15 +368,49 @@ export function useChatMessaging(
   );
   const { refetch: refetchChatHistory } = useChatHistory();
 
+  useEffect(() => {
+    if (!chatId || !chatMessagesQuery.data) {
+      return;
+    }
+    const apiMessages =
+      chatMessagesQuery.data.messages
+        .map(mapApiMessageToUiMessage)
+        .filter((message) => message.is_message_in_active_thread !== false) ??
+      [];
+    setApiMessages(apiMessages, streamKey);
+  }, [chatId, chatMessagesQuery.data, setApiMessages, streamKey]);
+
   // --- Define handleRefetchAndClear callback ---
   const handleRefetchAndClear = useCallback(
     async (options: { invalidate?: boolean; logContext: string }) => {
       const { invalidate = false, logContext } = options;
-
-      // CRITICAL GUARD: Skip refetch if we're unmounting/navigating away
-      // This prevents expensive 3-second timeouts when SSE callbacks fire during navigation
-      if (isUnmountingRef.current) {
-        return;
+      let refetchedApiMessages: Message[] | null = null;
+      const storeSnapshot = useMessagingStore.getState();
+      const aliasResolvedNewChatKey = resolveStreamAlias(
+        storeSnapshot.streamKeyAliases,
+        NEW_CHAT_STREAM_KEY,
+      );
+      const aliasDerivedChatId =
+        aliasResolvedNewChatKey !== NEW_CHAT_STREAM_KEY
+          ? aliasResolvedNewChatKey
+          : null;
+      const activeResolvedKey = resolveStreamAlias(
+        storeSnapshot.streamKeyAliases,
+        storeSnapshot.activeStreamKey,
+      );
+      const activeDerivedChatId =
+        activeResolvedKey !== NEW_CHAT_STREAM_KEY ? activeResolvedKey : null;
+      const effectiveChatId =
+        chatId ??
+        newlyCreatedChatId ??
+        storeSnapshot.newlyCreatedChatId ??
+        aliasDerivedChatId ??
+        activeDerivedChatId;
+      const effectiveStreamKey = getStreamKey(effectiveChatId);
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `[DEBUG_STREAMING] handleRefetchAndClear: context="${logContext}" invalidate=${String(invalidate)} chatId=${chatId ?? "null"} newlyCreatedChatId(state)=${newlyCreatedChatId ?? "null"} newlyCreatedChatId(store)=${storeSnapshot.newlyCreatedChatId ?? "null"} aliasDerivedChatId=${aliasDerivedChatId ?? "null"} activeDerivedChatId=${activeDerivedChatId ?? "null"} effectiveChatId=${effectiveChatId ?? "null"} streamKey=${effectiveStreamKey}`,
+        );
       }
 
       // Don't clear optimistic state during navigation transition
@@ -268,19 +419,109 @@ export function useChatMessaging(
       // Refetch chat message history.
       await refetchChatHistory();
 
-      if (chatId) {
+      if (effectiveChatId) {
         if (process.env.NODE_ENV === "development") {
           logger.log(
-            `[DEBUG_STREAMING] ${logContext}, refetching for chatId: ${chatId}`,
+            `[DEBUG_STREAMING] ${logContext}, refetching for chatId: ${effectiveChatId}`,
           );
         }
-        if (invalidate) {
-          await queryClient.invalidateQueries({
-            queryKey: ["chatMessages", { chatId }],
-          });
+        const chatMessagesQueryKey = buildChatMessagesQuery({
+          pathParams: { chatId: effectiveChatId },
+        }).queryKey;
+        const queryStateBefore =
+          queryClient.getQueryState(chatMessagesQueryKey);
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `[DEBUG_RQ] ${logContext}: before invalidate key=${JSON.stringify(chatMessagesQueryKey)} state=${JSON.stringify(
+              {
+                status: queryStateBefore?.status ?? null,
+                fetchStatus: queryStateBefore?.fetchStatus ?? null,
+                isInvalidated: queryStateBefore?.isInvalidated ?? null,
+                dataUpdatedAt: queryStateBefore?.dataUpdatedAt ?? null,
+              },
+            )}`,
+          );
         }
-        // Ensure refetch happens before clearing messages, especially if invalidation occurred
-        await chatMessagesQuery.refetch();
+
+        // Always mark message query stale before refetch to avoid cache short-circuiting
+        // when close/completion events race with React Query dedupe logic.
+        await queryClient.invalidateQueries({
+          queryKey: chatMessagesQueryKey,
+          exact: true,
+          refetchType: "none",
+        });
+        const queryStateAfterInvalidate =
+          queryClient.getQueryState(chatMessagesQueryKey);
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `[DEBUG_RQ] ${logContext}: after invalidate key=${JSON.stringify(chatMessagesQueryKey)} state=${JSON.stringify(
+              {
+                status: queryStateAfterInvalidate?.status ?? null,
+                fetchStatus: queryStateAfterInvalidate?.fetchStatus ?? null,
+                isInvalidated: queryStateAfterInvalidate?.isInvalidated ?? null,
+                dataUpdatedAt: queryStateAfterInvalidate?.dataUpdatedAt ?? null,
+              },
+            )}`,
+          );
+        }
+
+        if (
+          invalidate ||
+          logContext.includes("closed") ||
+          logContext.includes("completed")
+        ) {
+          await queryClient.cancelQueries({
+            queryKey: chatMessagesQueryKey,
+            exact: true,
+          });
+          const queryStateAfterCancel =
+            queryClient.getQueryState(chatMessagesQueryKey);
+          if (process.env.NODE_ENV === "development") {
+            console.log(
+              `[DEBUG_RQ] ${logContext}: after cancel key=${JSON.stringify(chatMessagesQueryKey)} state=${JSON.stringify(
+                {
+                  status: queryStateAfterCancel?.status ?? null,
+                  fetchStatus: queryStateAfterCancel?.fetchStatus ?? null,
+                  isInvalidated: queryStateAfterCancel?.isInvalidated ?? null,
+                  dataUpdatedAt: queryStateAfterCancel?.dataUpdatedAt ?? null,
+                },
+              )}`,
+            );
+          }
+        }
+
+        // Force a network fetch for completion/close paths, even when current hook chatId is null.
+        const refetchResult = await fetchChatMessages({
+          pathParams: { chatId: effectiveChatId },
+        });
+
+        // Push fetched result into React Query cache to keep observers in sync
+        // without issuing another network request.
+        queryClient.setQueryData(chatMessagesQueryKey, refetchResult);
+        const queryStateAfterSetData =
+          queryClient.getQueryState(chatMessagesQueryKey);
+        if (process.env.NODE_ENV === "development") {
+          console.log(
+            `[DEBUG_RQ] ${logContext}: after setQueryData key=${JSON.stringify(chatMessagesQueryKey)} state=${JSON.stringify(
+              {
+                status: queryStateAfterSetData?.status ?? null,
+                fetchStatus: queryStateAfterSetData?.fetchStatus ?? null,
+                isInvalidated: queryStateAfterSetData?.isInvalidated ?? null,
+                dataUpdatedAt: queryStateAfterSetData?.dataUpdatedAt ?? null,
+              },
+            )}`,
+          );
+        }
+
+        refetchedApiMessages =
+          refetchResult.messages
+            .map(mapApiMessageToUiMessage)
+            .filter(
+              (message) => message.is_message_in_active_thread !== false,
+            ) ?? null;
+        if (refetchedApiMessages) {
+          setApiMessages(refetchedApiMessages, effectiveStreamKey);
+        }
 
         // Only clear user messages during navigation transitions or new chat creation
         // For existing chats, let the merge handle deduplication naturally
@@ -288,12 +529,12 @@ export function useChatMessaging(
           logger.log(
             `[DEBUG_STREAMING] ${logContext}: Skipping clearCompletedUserMessages during navigation transition`,
           );
-        } else if (logContext.includes("completed") && chatId) {
+        } else if (logContext.includes("completed") && effectiveChatId) {
           logger.log(
             `[DEBUG_STREAMING] ${logContext}: Skipping clearCompletedUserMessages for existing chat to prevent message drop`,
           );
         } else {
-          clearCompletedUserMessages();
+          clearCompletedUserMessages(effectiveStreamKey);
         }
 
         if (newlyCreatedChatId && process.env.NODE_ENV === "development") {
@@ -304,7 +545,7 @@ export function useChatMessaging(
       } else {
         if (process.env.NODE_ENV === "development") {
           logger.log(
-            `[DEBUG_STREAMING] ${logContext}, no active chatId for refetch.`,
+            `[DEBUG_STREAMING] ${logContext}, no active chatId available for refetch. effectiveChatId=${effectiveChatId ?? "null"} streamKey=${effectiveStreamKey}`,
           );
         }
 
@@ -318,7 +559,7 @@ export function useChatMessaging(
             `[DEBUG_STREAMING] ${logContext}: Skipping clearCompletedUserMessages for new chat completion to prevent message drop`,
           );
         } else {
-          clearCompletedUserMessages();
+          clearCompletedUserMessages(effectiveStreamKey);
         }
 
         if (newlyCreatedChatId && process.env.NODE_ENV === "development") {
@@ -331,11 +572,34 @@ export function useChatMessaging(
       // Signal that finalization is complete - frontend is now fully ready
       // Only set isFinalizing to false if this was called from message completion
       if (logContext.includes("completed")) {
-        logger.log(
-          `[DEBUG_STREAMING] ${logContext}: Setting isFinalizing to false and resetting streaming state - frontend fully ready`,
-        );
-        const { resetStreaming } = useMessagingStore.getState();
-        resetStreaming(); // Reset all streaming state including currentMessageId and createdAt
+        const store = useMessagingStore.getState();
+        const completionStreaming = store.getStreaming(effectiveStreamKey);
+        const completionMessageId = completionStreaming.currentMessageId;
+        const persistedMessagesById = store.getApiMessages(effectiveStreamKey);
+        const hasPersistedCompletionMessage =
+          !!completionMessageId &&
+          (persistedMessagesById[completionMessageId] !== undefined ||
+            refetchedApiMessages?.some(
+              (message) => message.id === completionMessageId,
+            ) === true);
+
+        if (hasPersistedCompletionMessage || !completionMessageId) {
+          logger.log(
+            `[DEBUG_STREAMING] ${logContext}: Persisted assistant detected, resetting streaming state.`,
+          );
+          store.resetStreaming(effectiveStreamKey);
+        } else {
+          logger.log(
+            `[DEBUG_STREAMING] ${logContext}: Persisted assistant not yet available, keeping completed streaming message visible.`,
+          );
+          store.setStreaming(
+            {
+              isStreaming: false,
+              isFinalizing: false,
+            },
+            effectiveStreamKey,
+          );
+        }
 
         // Invalidate budget query to refresh usage/consumption data
         // TanStack Query will handle deduplication and caching automatically
@@ -345,13 +609,15 @@ export function useChatMessaging(
         void queryClient.invalidateQueries({ queryKey: BUDGET_QUERY_KEY });
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     [
       chatId,
       newlyCreatedChatId,
       queryClient,
       clearCompletedUserMessages,
       refetchChatHistory,
+      setApiMessages,
+      streamKey,
     ],
   );
   // --- End of handleRefetchAndClear callback ---
@@ -363,19 +629,20 @@ export function useChatMessaging(
       useMessagingStore.getState().isInNavigationTransition;
 
     // Clean up any existing SSE connection
-    if (sseCleanupRef.current) {
-      sseCleanupRef.current();
-      sseCleanupRef.current = null;
+    const cleanupForStreamKey = getSSECleanupForKey(streamKey);
+    if (cleanupForStreamKey) {
+      cleanupForStreamKey();
+      setSSECleanupForKey(streamKey, null);
     }
 
     // Reset streaming state
-    resetStreaming();
+    resetStreaming(streamKey);
 
     // Refetch first to ensure we have latest server data before clearing messages
     if (chatId) {
       void chatMessagesQuery.refetch().then(() => {
         if (!isInTransition) {
-          clearCompletedUserMessages();
+          clearCompletedUserMessages(streamKey);
         } else {
           logger.log(
             "[DEBUG_STREAMING] cancelMessage: Skipping clearCompletedUserMessages during navigation transition",
@@ -384,7 +651,7 @@ export function useChatMessaging(
       });
     } else {
       if (!isInTransition) {
-        clearCompletedUserMessages();
+        clearCompletedUserMessages(streamKey);
       } else {
         logger.log(
           "[DEBUG_STREAMING] cancelMessage: Skipping clearCompletedUserMessages during navigation transition",
@@ -393,7 +660,7 @@ export function useChatMessaging(
     }
 
     // Reset the submission flag
-    isSubmittingRef.current = false;
+    setSubmittingForKey(streamKey, false);
 
     // Log cancellation
     if (process.env.NODE_ENV === "development") {
@@ -401,8 +668,14 @@ export function useChatMessaging(
         "[DEBUG_STREAMING] Message cancelled by calling cancelMessage.",
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetStreaming, clearCompletedUserMessages, chatId]);
+  }, [
+    resetStreaming,
+    clearCompletedUserMessages,
+    chatId,
+    streamKey,
+    getSSECleanupForKey,
+    setSSECleanupForKey,
+  ]);
 
   // Clean up any existing SSE connection on unmount or chatId change
   useEffect(() => {
@@ -412,11 +685,9 @@ export function useChatMessaging(
     const capturedChatIdForCleanup = chatId; // Capture chatId for the cleanup function
 
     return () => {
-      // Mark that we're unmounting - this prevents SSE onClose from triggering expensive refetch
-      isUnmountingRef.current = true;
-
       const isInTransition =
         useMessagingStore.getState().isInNavigationTransition;
+      const store = useMessagingStore.getState();
 
       // Skip SSE cleanup ONLY when transitioning FROM new chat (null) TO existing chat
       // This preserves the connection when the backend returns a real chat ID
@@ -431,153 +702,85 @@ export function useChatMessaging(
         return;
       }
 
-      if (sseCleanupRef.current) {
+      const hasActiveStreamForKey =
+        !!store.sseAbortCallbacksByKey[streamKey] ||
+        store.getStreaming(streamKey).currentMessageId !== null;
+      if (hasActiveStreamForKey) {
+        logger.log(
+          `[DEBUG_STREAMING] SSE Cleanup skipped to preserve active stream for streamKey: ${streamKey}`,
+        );
+        return;
+      }
+
+      const cleanupForStreamKey = getSSECleanupForKey(streamKey);
+      if (cleanupForStreamKey) {
         logger.log(
           `[DEBUG_STREAMING] SSE Cleanup: Closing SSE connection for chatId: ${String(capturedChatIdForCleanup)}`,
         );
-        sseCleanupRef.current(); // This calls abort on the SSE connection
-        sseCleanupRef.current = null;
+        cleanupForStreamKey(); // This calls abort on the SSE connection
+        setSSECleanupForKey(streamKey, null);
 
         // Clear the callback from the store as well
-        setSSEAbortCallback(null);
+        setSSEAbortCallback(null, streamKey);
       }
 
       // Reset submission flag on unmount to prevent stale state
       logger.log(
         "[DEBUG_STREAMING] SSE Cleanup: Resetting isSubmittingRef.current to false.",
       );
-      isSubmittingRef.current = false;
+      setSubmittingForKey(streamKey, false);
 
       // Reset streaming state
       logger.log("SSE Cleanup: Calling resetStreaming.");
-      resetStreaming();
+      resetStreaming(streamKey);
 
       // Clear error on unmount
       logger.log("SSE Cleanup: Clearing error state.");
       setError(null);
     };
-  }, [chatId, resetStreaming, setError, setSSEAbortCallback]);
+  }, [
+    chatId,
+    resetStreaming,
+    setError,
+    setSSEAbortCallback,
+    streamKey,
+    getSSECleanupForKey,
+    setSSECleanupForKey,
+  ]);
 
-  // Combine API messages and locally added user messages
-  const combinedMessages = useMemo(() => {
-    // Convert locally stored user messages to Message[] array
-    const localUserMsgs = Object.values(userMessages);
-
-    // When chatId is null, use shared helper to determine scenario
+  const messages = useMemo(() => {
     if (!chatId) {
+      const isNewChatTransitionInProgress =
+        !!newlyCreatedChatIdInStore ||
+        streaming.currentMessageId !== null ||
+        isAwaitingFirstStreamChunkForNewChat;
+      if (isNewChatTransitionInProgress) {
+        return getRenderableMessages(renderStreamKey, {
+          includeApiMessages: false,
+        });
+      }
       const { scenario } = handleNullChatIdScenario(
         userMessages,
-        "combinedMessages",
+        "store-rendered-messages",
       );
-
       if (scenario === "post_archive" || scenario === "navigating_back") {
-        // Clear state - no messages to show
         return {};
-      } else {
-        // New chat scenario: show optimistic user messages even without chatId
-        if (process.env.NODE_ENV === "development") {
-          logger.log(
-            "[DEBUG_STREAMING] combinedMessages: New chat scenario with optimistic messages",
-            {
-              localMessages: localUserMsgs.length,
-              userMessagesState: userMessages,
-            },
-          );
-        }
-        // Return only local messages for new chat
-        return mergeDisplayMessages([], localUserMsgs);
       }
+      return getRenderableMessages(renderStreamKey, {
+        includeApiMessages: false,
+      });
     }
-
-    // Only include messages that are in the active thread when provided by API
-    const apiMsgs: Message[] =
-      chatMessagesQuery.data?.messages
-        .map(mapApiMessageToUiMessage)
-        .filter((m) => m.is_message_in_active_thread !== false) ?? [];
-
-    // Use the new utility for merging messages
-    const merged = mergeDisplayMessages(apiMsgs, localUserMsgs);
-
-    if (process.env.NODE_ENV === "development" && localUserMsgs.length > 0) {
-      const userMsgInMerged = Object.values(merged).filter(
-        (m) => m.role === "user" && m.id.startsWith("temp-"),
-      );
-      logger.log(
-        "[DEBUG_STREAMING] Combined messages (using mergeDisplayMessages):",
-        {
-          apiMessages: apiMsgs.length,
-          localMessages: localUserMsgs.length,
-          finalMessages: Object.keys(merged).length,
-          tempUserMsgsInResult: userMsgInMerged.length,
-          allMessageIds: Object.keys(merged),
-          currentChatId: chatId,
-          userMessagesState: userMessages, // Log the actual userMessages from store
-        },
-      );
-    }
-    return merged;
-  }, [chatMessagesQuery.data, userMessages, chatId]);
-
-  // Add the streaming message if it exists
-  const messages = useMemo(() => {
-    // If no streaming message ID, just return combined messages
-    if (!streaming.currentMessageId) {
-      if (process.env.NODE_ENV === "development" && streaming.isStreaming) {
-        logger.log(
-          "[DEBUG_STREAMING] useChatMessaging messages useMemo: isStreaming is true, but currentMessageId is not yet set. Returning combinedMessages.",
-          {
-            streamingState: streaming,
-            combinedMessagesCount: Object.keys(combinedMessages).length,
-          },
-        );
-      }
-      return combinedMessages;
-    }
-
-    // Check if the real message (with same ID) already exists in API data
-    const realMessageExists: boolean =
-      !!combinedMessages[streaming.currentMessageId];
-
-    // If real message exists, don't add streaming version (API version takes precedence)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (realMessageExists) {
-      if (process.env.NODE_ENV === "development") {
-        logger.log(
-          "[DEBUG_STREAMING] useChatMessaging messages useMemo: Real message exists in API data, using API version.",
-          {
-            messageId: streaming.currentMessageId,
-            combinedMessagesCount: Object.keys(combinedMessages).length,
-          },
-        );
-      }
-      return combinedMessages;
-    }
-
-    // Keep showing streaming message (even if streaming completed) until real message arrives
-    if (process.env.NODE_ENV === "development") {
-      logger.log(
-        `[DEBUG_STREAMING] useChatMessaging messages useMemo: ${streaming.isStreaming ? "Actively streaming" : "Streaming completed, keeping placeholder"}. Constructing/updating streaming message.`,
-        {
-          streamingState: streaming,
-          realMessageExists,
-        },
-      );
-    }
-
-    const finalMessagesRecord: Record<string, Message> = {
-      ...combinedMessages,
-    };
-
-    // Add or update the streaming assistant message as placeholder
-    finalMessagesRecord[streaming.currentMessageId] = {
-      id: streaming.currentMessageId,
-      content: streaming.content, // Already ContentPart[]
-      role: "assistant",
-      createdAt: streaming.createdAt ?? new Date().toISOString(), // Use stored timestamp for consistent ordering
-      status: streaming.isStreaming ? "sending" : "complete", // Update status when streaming completes
-    };
-    return finalMessagesRecord;
-  }, [combinedMessages, streaming]);
+    return getRenderableMessages(renderStreamKey, { includeApiMessages: true });
+  }, [
+    apiMessagesForRenderStream,
+    chatId,
+    getRenderableMessages,
+    isAwaitingFirstStreamChunkForNewChat,
+    newlyCreatedChatIdInStore,
+    renderStreamKey,
+    streaming,
+    userMessages,
+  ]);
 
   // --- Hoist messageOrder definition here ---
   const messageOrder = useMemo(
@@ -592,10 +795,16 @@ export function useChatMessaging(
   );
   // --- End of hoisted messageOrder ---
 
+  const isStreamCurrentlyActive = useCallback((targetStreamKey: string) => {
+    return useMessagingStore.getState().getStreaming(targetStreamKey)
+      .isStreaming;
+  }, []);
+
   // Handle incoming SSE events
   const processStreamEvent = useCallback(
-    (event: SSEEvent) => {
+    (event: SSEEvent, streamKeyRef?: { current: string }) => {
       try {
+        const activeStreamKey = streamKeyRef?.current ?? streamKey;
         // Handle empty or invalid data
         if (!event.data || event.data.trim() === "") {
           logger.log(
@@ -620,7 +829,52 @@ export function useChatMessaging(
               "[DEBUG_REDIRECT] processStreamEvent: chat_created event received. Full payload:",
               responseData,
             );
-            handleChatCreated(responseData, setNewlyCreatedChatId);
+            {
+              const previousStreamKey = activeStreamKey;
+              handleChatCreated(
+                responseData,
+                setNewlyCreatedChatId,
+                previousStreamKey,
+              );
+
+              if (
+                responseData.chat_id &&
+                previousStreamKey !== responseData.chat_id
+              ) {
+                const existingCleanup = getSSECleanupForKey(previousStreamKey);
+                if (existingCleanup) {
+                  setSSECleanupForKey(previousStreamKey, null);
+                  setSSECleanupForKey(responseData.chat_id, existingCleanup);
+                  setSSEAbortCallback(existingCleanup, responseData.chat_id);
+                }
+                if (streamKeyRef) {
+                  streamKeyRef.current = responseData.chat_id;
+                }
+                if (isSubmittingForKey(previousStreamKey)) {
+                  setSubmittingForKey(previousStreamKey, false);
+                  setSubmittingForKey(responseData.chat_id, true);
+                }
+
+                // Navigate as soon as chat is created, not after stream completion.
+                if (
+                  explicitNav.currentAssistantId &&
+                  explicitNav.shouldNavigateFromAssistant(responseData.chat_id)
+                ) {
+                  explicitNav.navigateToAssistantChat(
+                    explicitNav.currentAssistantId,
+                    responseData.chat_id,
+                    "chat_created",
+                  );
+                } else if (
+                  explicitNav.shouldNavigateFromNewChat(responseData.chat_id)
+                ) {
+                  explicitNav.performNavigation(
+                    responseData.chat_id,
+                    "chat_created",
+                  );
+                }
+              }
+            }
             break;
 
           case "user_message_saved":
@@ -628,7 +882,7 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: user_message_saved event. Full payload:",
               responseData,
             );
-            handleUserMessageSaved(responseData);
+            handleUserMessageSaved(responseData, activeStreamKey);
             break;
 
           case "assistant_message_started":
@@ -636,12 +890,12 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_started event. Full payload:",
               responseData,
             );
-            handleAssistantMessageStarted(responseData);
+            handleAssistantMessageStarted(responseData, activeStreamKey);
             break;
 
           case "text_delta":
             // logger.log("processStreamEvent: text_delta event. Delta:", responseData.delta); // Can be too noisy
-            handleTextDelta(responseData);
+            handleTextDelta(responseData, activeStreamKey);
             break;
 
           case "assistant_message_completed":
@@ -650,18 +904,23 @@ export function useChatMessaging(
               responseData,
             );
             // Call the new external handler to update store and trigger explicit navigation
-            externalHandleMessageComplete(responseData, explicitNav);
+            externalHandleMessageComplete(
+              responseData,
+              activeStreamKey,
+              explicitNav,
+            );
 
             // Use the new utility for refetch and clear
             logger.log(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_completed - calling handleRefetchAndClear.",
             );
+            recentlyCompletedByKeyRef.current[activeStreamKey] = Date.now();
             void handleRefetchAndClear({
               invalidate: true,
               logContext: "Assistant message completed",
             }).then(() => {
               // Reset submission flag after refetch completes
-              isSubmittingRef.current = false;
+              setSubmittingForKey(activeStreamKey, false);
               logger.log(
                 "[DEBUG_STREAMING] assistant_message_completed: isSubmittingRef.current set to false after refetch.",
               );
@@ -673,7 +932,7 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: tool_call_proposed event received. Full payload:",
               responseData,
             );
-            handleToolCallProposed(responseData);
+            handleToolCallProposed(responseData, activeStreamKey);
             break;
 
           case "tool_call_update":
@@ -681,8 +940,29 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: tool_call_update event received. Full payload:",
               responseData,
             );
-            handleToolCallUpdate(responseData);
+            handleToolCallUpdate(responseData, activeStreamKey);
             break;
+
+          case "error": {
+            const streamError =
+              responseData as MessageSubmitStreamingResponseError & {
+                message_type: "error";
+              };
+            const description =
+              streamError.error_description || "Streaming error";
+            logger.error(
+              "[DEBUG_STREAMING] processStreamEvent: stream error received.",
+              streamError,
+            );
+
+            setError(new Error(description));
+            resetStreaming(activeStreamKey);
+            setSubmittingForKey(activeStreamKey, false);
+            void handleRefetchAndClear({
+              logContext: `Stream error event (${streamError.error_type})`,
+            });
+            break;
+          }
 
           default:
             logger.log(
@@ -706,8 +986,70 @@ export function useChatMessaging(
       // External handlers (handleChatCreated, handleUserMessageSaved, etc.) are stable imports
       handleRefetchAndClear, // Added dependency
       explicitNav, // Added explicit navigation dependency
+      setError,
+      resetStreaming,
+      streamKey,
+      getSSECleanupForKey,
+      setSSECleanupForKey,
+      setSSEAbortCallback,
+      setSubmittingForKey,
+      isSubmittingForKey,
     ],
   );
+
+  useEffect(() => {
+    if (!chatId) {
+      lastResumeAttemptedChatIdRef.current = null;
+      return;
+    }
+
+    if (lastResumeAttemptedChatIdRef.current === chatId) {
+      return;
+    }
+    lastResumeAttemptedChatIdRef.current = chatId;
+
+    const store = useMessagingStore.getState();
+    const hasExistingConnection = !!store.sseAbortCallbacksByKey[chatId];
+    if (hasExistingConnection) {
+      return;
+    }
+
+    logger.log(`[DEBUG_STREAMING] Attempting resumestream for chat ${chatId}`);
+    const resumeStreamKeyRef = { current: chatId };
+    const cleanup = createSSEConnection(
+      "/api/v1beta/me/messages/resumestream",
+      {
+        method: "POST",
+        body: JSON.stringify({ chat_id: chatId }),
+        onMessage: (sseEvent) =>
+          processStreamEvent(sseEvent, resumeStreamKeyRef),
+        onError: (errorEvent) => {
+          const errorMessage =
+            (errorEvent as Event & { error?: Error }).error?.message ??
+            "SSE resume connection error";
+          if (!errorMessage.includes("404")) {
+            logger.error("[DEBUG_STREAMING] resumestream error:", errorMessage);
+          } else {
+            logger.log(
+              `[DEBUG_STREAMING] resumestream unavailable for ${chatId} (no active task)`,
+            );
+          }
+          setSSECleanupForKey(chatId, null);
+          setSSEAbortCallback(null, chatId);
+        },
+        onClose: () => {
+          logger.log(
+            `[DEBUG_STREAMING] resumestream closed for chat ${chatId}`,
+          );
+          setSSECleanupForKey(chatId, null);
+          setSSEAbortCallback(null, chatId);
+        },
+      },
+    );
+
+    setSSECleanupForKey(chatId, cleanup);
+    setSSEAbortCallback(cleanup, chatId);
+  }, [chatId, processStreamEvent, setSSEAbortCallback, setSSECleanupForKey]);
 
   // Find the most recent assistant message ID, including temporary ones
   const findMostRecentAssistantMessageId = useCallback(() => {
@@ -745,15 +1087,23 @@ export function useChatMessaging(
       selectedFacetIds?: string[],
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
-      if (isSubmittingRef.current) {
+      if (isSubmittingForKey(streamKey)) {
         logger.warn(
-          "[DEBUG_STREAMING] Preventing duplicate message submission",
+          `[DEBUG_STREAMING] Preventing duplicate message submission for streamKey: ${streamKey}`,
         );
         return undefined;
       }
       logger.log(
         `[DEBUG_STREAMING] sendMessage called. Content: "${content}", Files: ${inputFileIds?.length ?? 0}, Model: ${modelId ?? "default"}, Assistant: ${assistantId ?? "none"}`,
       );
+
+      // Create optimistic user message immediately on submit so UI updates first.
+      const userMessage = createOptimisticUserMessage(content, inputFileIds);
+      logger.log(
+        "[DEBUG_STREAMING] sendMessage: Adding optimistic user message to store:",
+        userMessage,
+      );
+      addUserMessage(userMessage, streamKey);
 
       // ---> If using silentChatId, set the target navigation ID immediately <---
       if (silentChatId) {
@@ -782,18 +1132,10 @@ export function useChatMessaging(
         setNewlyCreatedChatIdInStore(null);
       }
 
-      isSubmittingRef.current = true;
+      setSubmittingForKey(streamKey, true);
       logger.log(
         "[DEBUG_STREAMING] sendMessage: isSubmittingRef.current set to true.",
       );
-
-      // Use the new utility for creating optimistic user message
-      const userMessage = createOptimisticUserMessage(content, inputFileIds);
-      logger.log(
-        "[DEBUG_STREAMING] sendMessage: Adding optimistic user message to store:",
-        userMessage,
-      );
-      addUserMessage(userMessage);
 
       if (process.env.NODE_ENV === "development") {
         // logger.log(
@@ -810,7 +1152,7 @@ export function useChatMessaging(
         logger.log(
           "[DEBUG_STREAMING] sendMessage: Resetting streaming state before SSE connection.",
         );
-        resetStreaming();
+        resetStreaming(streamKey);
 
         // ERMAIN-88 FIX: Create optimistic assistant placeholder immediately
         // This provides instant UI feedback while the POST request is being processed
@@ -820,25 +1162,29 @@ export function useChatMessaging(
           `[DEBUG_STREAMING] sendMessage: Creating optimistic assistant placeholder immediately with ID: ${optimisticAssistantId}`,
         );
         const { setStreaming } = useMessagingStore.getState();
-        setStreaming({
-          isStreaming: false, // Not streaming yet - just a "thinking" placeholder
-          currentMessageId: optimisticAssistantId,
-          content: [],
-          createdAt: now,
-          isFinalizing: false,
-          toolCalls: {},
-        });
+        setStreaming(
+          {
+            isStreaming: false, // Not streaming yet - just a "thinking" placeholder
+            currentMessageId: optimisticAssistantId,
+            content: [],
+            createdAt: now,
+            isFinalizing: false,
+            toolCalls: {},
+          },
+          streamKey,
+        );
 
         // Clean up any existing SSE connection
-        if (sseCleanupRef.current) {
+        const existingCleanup = getSSECleanupForKey(streamKey);
+        if (existingCleanup) {
           logger.log(
             "[DEBUG_STREAMING] sendMessage: Closing previous SSE connection before creating a new one.",
           );
           // logger.log(
           //   `[CHAT_FLOW_LIFECYCLE_DEBUG] sendMessage: Cleaning up existing sseCleanupRef for chatId: ${chatId ?? "null"} before new connection.`,
           // );
-          sseCleanupRef.current();
-          sseCleanupRef.current = null;
+          existingCleanup();
+          setSSECleanupForKey(streamKey, null);
 
           // Add a small delay to ensure proper cleanup
           await new Promise((resolve) => setTimeout(resolve, 50));
@@ -881,7 +1227,7 @@ export function useChatMessaging(
         }
 
         // Create a direct SSE connection for streaming
-        // eslint-disable-next-line lingui/no-unlocalized-strings
+
         const sseUrl = `/api/v1beta/me/messages/submitstream`;
 
         // The SSE client will handle the POST request format
@@ -889,14 +1235,16 @@ export function useChatMessaging(
         //   `[CHAT_FLOW_LIFECYCLE_DEBUG] sendMessage: About to call createSSEConnection for chatId: ${chatId ?? "null"}. sseCleanupRef.current is currently ${sseCleanupRef.current ? "set" : "null"}.`,
         // );
         logger.log(
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          `[DEBUG_STREAMING] sendMessage: Calling createSSEConnection. Current sseCleanupRef is ${sseCleanupRef.current ? "set" : "null"}.`,
+          `[DEBUG_STREAMING] sendMessage: Calling createSSEConnection. Current stream-keyed cleanup is ${getSSECleanupForKey(streamKey) ? "set" : "null"}.`,
         );
+
+        const connectionStreamKeyRef = { current: streamKey };
 
         // Store the abort function in both the ref AND the global store
         // This allows external code (like createNewChat) to abort the connection
-        sseCleanupRef.current = createSSEConnection(sseUrl, {
-          onMessage: processStreamEvent,
+        const cleanup = createSSEConnection(sseUrl, {
+          onMessage: (sseEvent) =>
+            processStreamEvent(sseEvent, connectionStreamKeyRef),
           onError: (errorEvent) => {
             // Use the actual event if it's an Error, otherwise create a generic one
             const connectionError =
@@ -914,7 +1262,8 @@ export function useChatMessaging(
             logger.log(
               "[DEBUG_STREAMING] SSE onError: Resetting streaming state.",
             );
-            resetStreaming();
+            const activeStreamKey = connectionStreamKeyRef.current;
+            resetStreaming(activeStreamKey);
 
             // Use the new utility for refetch and clear
             logger.log(
@@ -922,7 +1271,7 @@ export function useChatMessaging(
             );
             void handleRefetchAndClear({ logContext: "SSE error" });
 
-            isSubmittingRef.current = false; // Reset submission flag on error
+            setSubmittingForKey(activeStreamKey, false); // Reset submission flag on error
             logger.log(
               "[DEBUG_STREAMING] SSE onError: isSubmittingRef.current set to false.",
             );
@@ -934,26 +1283,37 @@ export function useChatMessaging(
             );
           },
           onClose: () => {
+            const activeStreamKey = connectionStreamKeyRef.current;
+            const currentlyStreaming = isStreamCurrentlyActive(activeStreamKey);
+            const recentlyCompletedAt =
+              recentlyCompletedByKeyRef.current[activeStreamKey] ?? 0;
+            const isCloseLikelyPostCompletion =
+              Date.now() - recentlyCompletedAt < COMPLETION_CLOSE_DEDUP_MS;
             logger.log(
               "[DEBUG_STREAMING] SSE connection closed via onClose callback in useChatMessaging.",
               {
-                isSubmitting: isSubmittingRef.current,
-                isStreaming: streaming.isStreaming,
+                isSubmitting: isSubmittingForKey(activeStreamKey),
+                isStreaming: currentlyStreaming,
+                isCloseLikelyPostCompletion,
               },
             );
-            isSubmittingRef.current = false;
+            setSubmittingForKey(activeStreamKey, false);
             logger.log(
               "[DEBUG_STREAMING] SSE onClose: isSubmittingRef.current set to false.",
             );
 
-            if (!streaming.isStreaming) {
-              // Use the new utility for refetch and clear
+            if (!currentlyStreaming) {
+              if (isCloseLikelyPostCompletion) {
+                logger.log(
+                  "[DEBUG_STREAMING] SSE onClose: Skipping duplicate refetch because completion was handled recently.",
+                );
+                return;
+              }
               logger.log(
                 "[DEBUG_STREAMING] SSE onClose: Not streaming, calling handleRefetchAndClear.",
               );
               void handleRefetchAndClear({ logContext: "SSE closed normally" });
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-            } else if (streaming.isStreaming) {
+            } else if (currentlyStreaming) {
               logger.warn(
                 "[DEBUG_STREAMING] SSE connection closed unexpectedly while streaming was still active.",
               );
@@ -964,7 +1324,7 @@ export function useChatMessaging(
               logger.log(
                 "[DEBUG_STREAMING] SSE onClose (unexpected): Resetting streaming state.",
               );
-              resetStreaming();
+              resetStreaming(activeStreamKey);
 
               // Use the new utility for refetch and clear
               logger.log(
@@ -984,7 +1344,8 @@ export function useChatMessaging(
 
         // Store the abort callback in the global store so it can be called from anywhere
         // This allows createNewChat to abort streaming without needing direct access to the ref
-        setSSEAbortCallback(sseCleanupRef.current);
+        setSSECleanupForKey(streamKey, cleanup);
+        setSSEAbortCallback(cleanup, streamKey);
 
         // logger.log(
         //   `[CHAT_FLOW_LIFECYCLE_DEBUG] sendMessage: Assigned new cleanup to sseCleanupRef.current for chatId: ${chatId ?? "null"}.`,
@@ -1008,7 +1369,7 @@ export function useChatMessaging(
         logger.log(
           "[DEBUG_STREAMING] sendMessage catch: Resetting streaming state.",
         );
-        resetStreaming();
+        resetStreaming(streamKey);
 
         // Use the new utility for refetch and clear
         logger.log(
@@ -1016,7 +1377,7 @@ export function useChatMessaging(
         );
         void handleRefetchAndClear({ logContext: "Send message error" });
 
-        isSubmittingRef.current = false; // Reset submission flag on error
+        setSubmittingForKey(streamKey, false); // Reset submission flag on error
         logger.log(
           "[DEBUG_STREAMING] sendMessage catch: isSubmittingRef.current set to false.",
         );
@@ -1024,7 +1385,7 @@ export function useChatMessaging(
         return undefined;
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     [
       silentChatId,
       addUserMessage,
@@ -1037,6 +1398,12 @@ export function useChatMessaging(
       setNewlyCreatedChatIdInStore,
       setAwaitingFirstStreamChunkForNewChat,
       setSSEAbortCallback,
+      isStreamCurrentlyActive,
+      streamKey,
+      getSSECleanupForKey,
+      setSSECleanupForKey,
+      isSubmittingForKey,
+      setSubmittingForKey,
     ],
   );
 
@@ -1048,19 +1415,20 @@ export function useChatMessaging(
       replaceInputFileIds?: string[],
       selectedFacetIds?: string[],
     ): Promise<void> => {
-      if (isSubmittingRef.current) {
+      if (isSubmittingForKey(streamKey)) {
         logger.warn("[DEBUG_STREAMING] Preventing duplicate edit submission");
         return;
       }
 
       // Clear any previous streaming state and close existing SSE connection
-      resetStreaming();
-      if (sseCleanupRef.current) {
-        sseCleanupRef.current();
-        sseCleanupRef.current = null;
+      resetStreaming(streamKey);
+      const existingCleanup = getSSECleanupForKey(streamKey);
+      if (existingCleanup) {
+        existingCleanup();
+        setSSECleanupForKey(streamKey, null);
       }
 
-      isSubmittingRef.current = true;
+      setSubmittingForKey(streamKey, true);
 
       try {
         const requestBody = {
@@ -1072,10 +1440,11 @@ export function useChatMessaging(
           ...(selectedFacetIds ? { selected_facet_ids: selectedFacetIds } : {}),
         } as const;
 
-        // eslint-disable-next-line lingui/no-unlocalized-strings
         const sseUrl = `/api/v1beta/me/messages/editstream`;
-        sseCleanupRef.current = createSSEConnection(sseUrl, {
-          onMessage: processStreamEvent,
+        const connectionStreamKeyRef = { current: streamKey };
+        const cleanup = createSSEConnection(sseUrl, {
+          onMessage: (sseEvent) =>
+            processStreamEvent(sseEvent, connectionStreamKeyRef),
           onError: (errorEvent) => {
             const connectionError =
               errorEvent instanceof Error
@@ -1086,16 +1455,18 @@ export function useChatMessaging(
               connectionError,
             );
             setError(connectionError);
-            resetStreaming();
+            resetStreaming(streamKey);
             void handleRefetchAndClear({ logContext: "SSE error (edit)" });
-            isSubmittingRef.current = false;
+            setSubmittingForKey(streamKey, false);
           },
           onOpen: () => {
             // no-op
           },
           onClose: () => {
-            isSubmittingRef.current = false;
-            if (!streaming.isStreaming) {
+            const activeStreamKey = connectionStreamKeyRef.current;
+            const currentlyStreaming = isStreamCurrentlyActive(activeStreamKey);
+            setSubmittingForKey(activeStreamKey, false);
+            if (!currentlyStreaming) {
               void handleRefetchAndClear({
                 logContext: "Edit SSE closed normally",
               });
@@ -1104,7 +1475,7 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] Edit SSE connection closed unexpectedly while streaming was still active.",
               );
               setError(new Error("SSE connection closed unexpectedly (edit)"));
-              resetStreaming();
+              resetStreaming(streamKey);
               void handleRefetchAndClear({
                 logContext: "Edit SSE closed unexpectedly",
               });
@@ -1116,16 +1487,17 @@ export function useChatMessaging(
         });
 
         // Store the abort callback in the global store
-        setSSEAbortCallback(sseCleanupRef.current);
+        setSSECleanupForKey(streamKey, cleanup);
+        setSSEAbortCallback(cleanup, streamKey);
       } catch (err) {
         logger.error("[DEBUG_STREAMING] editMessage error:", err);
         setError(
           err instanceof Error ? err : new Error("Failed to edit message"),
         );
-        resetStreaming();
-        // eslint-disable-next-line lingui/no-unlocalized-strings
+        resetStreaming(streamKey);
+
         void handleRefetchAndClear({ logContext: "Edit message error" });
-        isSubmittingRef.current = false;
+        setSubmittingForKey(streamKey, false);
       }
     },
     [
@@ -1134,7 +1506,10 @@ export function useChatMessaging(
       resetStreaming,
       setError,
       setSSEAbortCallback,
-      streaming.isStreaming,
+      isStreamCurrentlyActive,
+      streamKey,
+      getSSECleanupForKey,
+      setSSECleanupForKey,
     ],
   );
 
@@ -1144,7 +1519,7 @@ export function useChatMessaging(
       currentMessageId: string,
       selectedFacetIds?: string[],
     ): Promise<void> => {
-      if (isSubmittingRef.current) {
+      if (isSubmittingForKey(streamKey)) {
         logger.warn(
           "[DEBUG_STREAMING] Preventing duplicate regenerate submission",
         );
@@ -1152,13 +1527,14 @@ export function useChatMessaging(
       }
 
       // Clear any previous streaming state and close existing SSE connection
-      resetStreaming();
-      if (sseCleanupRef.current) {
-        sseCleanupRef.current();
-        sseCleanupRef.current = null;
+      resetStreaming(streamKey);
+      const existingCleanup = getSSECleanupForKey(streamKey);
+      if (existingCleanup) {
+        existingCleanup();
+        setSSECleanupForKey(streamKey, null);
       }
 
-      isSubmittingRef.current = true;
+      setSubmittingForKey(streamKey, true);
 
       try {
         const requestBody = {
@@ -1166,10 +1542,11 @@ export function useChatMessaging(
           ...(selectedFacetIds ? { selected_facet_ids: selectedFacetIds } : {}),
         };
 
-        // eslint-disable-next-line lingui/no-unlocalized-strings
         const sseUrl = `/api/v1beta/me/messages/regeneratestream`;
-        sseCleanupRef.current = createSSEConnection(sseUrl, {
-          onMessage: processStreamEvent,
+        const connectionStreamKeyRef = { current: streamKey };
+        const cleanup = createSSEConnection(sseUrl, {
+          onMessage: (sseEvent) =>
+            processStreamEvent(sseEvent, connectionStreamKeyRef),
           onError: (errorEvent) => {
             const connectionError =
               errorEvent instanceof Error
@@ -1180,18 +1557,20 @@ export function useChatMessaging(
               connectionError,
             );
             setError(connectionError);
-            resetStreaming();
+            resetStreaming(streamKey);
             void handleRefetchAndClear({
               logContext: "SSE error (regenerate)",
             });
-            isSubmittingRef.current = false;
+            setSubmittingForKey(streamKey, false);
           },
           onOpen: () => {
             // no-op
           },
           onClose: () => {
-            isSubmittingRef.current = false;
-            if (!streaming.isStreaming) {
+            const activeStreamKey = connectionStreamKeyRef.current;
+            const currentlyStreaming = isStreamCurrentlyActive(activeStreamKey);
+            setSubmittingForKey(activeStreamKey, false);
+            if (!currentlyStreaming) {
               void handleRefetchAndClear({
                 logContext: "Regenerate SSE closed normally",
               });
@@ -1202,7 +1581,7 @@ export function useChatMessaging(
               setError(
                 new Error("SSE connection closed unexpectedly (regenerate)"),
               );
-              resetStreaming();
+              resetStreaming(streamKey);
               void handleRefetchAndClear({
                 logContext: "Regenerate SSE closed unexpectedly",
               });
@@ -1214,7 +1593,8 @@ export function useChatMessaging(
         });
 
         // Store the abort callback in the global store
-        setSSEAbortCallback(sseCleanupRef.current);
+        setSSECleanupForKey(streamKey, cleanup);
+        setSSEAbortCallback(cleanup, streamKey);
       } catch (err) {
         logger.error("[DEBUG_STREAMING] regenerateMessage error:", err);
         setError(
@@ -1222,10 +1602,10 @@ export function useChatMessaging(
             ? err
             : new Error("Failed to regenerate message"),
         );
-        resetStreaming();
-        // eslint-disable-next-line lingui/no-unlocalized-strings
+        resetStreaming(streamKey);
+
         void handleRefetchAndClear({ logContext: "Regenerate message error" });
-        isSubmittingRef.current = false;
+        setSubmittingForKey(streamKey, false);
       }
     },
     [
@@ -1234,13 +1614,19 @@ export function useChatMessaging(
       resetStreaming,
       setError,
       setSSEAbortCallback,
-      streaming.isStreaming,
+      isStreamCurrentlyActive,
+      streamKey,
+      getSSECleanupForKey,
+      setSSECleanupForKey,
     ],
   );
 
   // isPendingResponse is true from the moment send is clicked until streaming completes
   // This is different from isStreaming which only becomes true after the first chunk arrives
-  const isPendingResponse = streaming.currentMessageId !== null;
+  const isPendingResponse =
+    isSubmittingForKey(streamKey) ||
+    streaming.isStreaming ||
+    streaming.isFinalizing;
 
   return {
     messages,

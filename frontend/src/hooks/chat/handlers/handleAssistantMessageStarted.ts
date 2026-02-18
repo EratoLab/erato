@@ -8,6 +8,7 @@ import type { MessageSubmitStreamingResponseAssistantMessageStarted } from "@/li
  */
 export const handleAssistantMessageStarted = (
   data: MessageSubmitStreamingResponseAssistantMessageStarted,
+  streamKey?: string,
 ): void => {
   const { message_id } = data;
   if (!message_id) {
@@ -18,10 +19,10 @@ export const handleAssistantMessageStarted = (
     return;
   }
 
-  const { setStreaming, setAwaitingFirstStreamChunkForNewChat } =
+  const { setStreaming, setAwaitingFirstStreamChunkForNewChat, getStreaming } =
     useMessagingStore.getState();
 
-  const currentStreaming = useMessagingStore.getState().streaming;
+  const currentStreaming = getStreaming(streamKey);
 
   // Check if we have an optimistic placeholder
   const hasOptimistic =
@@ -34,12 +35,15 @@ export const handleAssistantMessageStarted = (
       );
     }
     // Replace temp ID with real ID, preserve createdAt for ordering
-    setStreaming({
-      isStreaming: true,
-      currentMessageId: message_id, // Real UUID from backend
-      content: [], // Reset content for new stream
-      createdAt: currentStreaming.createdAt, // Preserve timestamp
-    });
+    setStreaming(
+      {
+        isStreaming: true,
+        currentMessageId: message_id, // Real UUID from backend
+        content: [], // Reset content for new stream
+        createdAt: currentStreaming.createdAt, // Preserve timestamp
+      },
+      streamKey,
+    );
   } else {
     if (process.env.NODE_ENV === "development") {
       console.log(
@@ -47,12 +51,15 @@ export const handleAssistantMessageStarted = (
       );
     }
     // No optimistic (edge case: backend was faster than optimistic creation)
-    setStreaming({
-      isStreaming: true,
-      currentMessageId: message_id,
-      content: [],
-      createdAt: new Date().toISOString(), // Use current time as fallback
-    });
+    setStreaming(
+      {
+        isStreaming: true,
+        currentMessageId: message_id,
+        content: [],
+        createdAt: new Date().toISOString(), // Use current time as fallback
+      },
+      streamKey,
+    );
   }
 
   // Reset the awaiting flag in the store as the stream has started

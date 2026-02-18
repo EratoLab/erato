@@ -121,6 +121,9 @@ pub async fn chat_completions(
         crate::matcher::ResponseConfig::CiteFiles(_) => {
             unreachable!("CiteFiles responses should be resolved into Static in matcher")
         }
+        crate::matcher::ResponseConfig::LongRunning(_) => {
+            unreachable!("LongRunning responses should be resolved into Static in matcher")
+        }
     };
 
     // Log that we're starting the stream

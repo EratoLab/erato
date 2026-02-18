@@ -18,6 +18,7 @@ export const handleToolCallUpdate = (
   responseData: MessageSubmitStreamingResponseToolCallUpdate & {
     message_type: "tool_call_update";
   },
+  streamKey?: string,
 ): void => {
   if (process.env.NODE_ENV === "development") {
     console.log(
@@ -35,39 +36,59 @@ export const handleToolCallUpdate = (
   }
 
   // Update the streaming state with the tool call update
-  useMessagingStore.setState((state) => {
-    const existingToolCall =
-      state.streaming.toolCalls[responseData.tool_call_id];
+  useMessagingStore.setState(
+    (state) => {
+      const resolvedStreamKey = streamKey ?? state.activeStreamKey;
+      const currentStreaming =
+        state.streamingByKey[resolvedStreamKey] ?? state.streaming;
+      const existingToolCall =
+        currentStreaming.toolCalls[responseData.tool_call_id];
 
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `[DEBUG_STORE] handleToolCallUpdate: Updating tool call ${responseData.tool_call_id} (${responseData.tool_name}) status: ${responseData.status}`,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        existingToolCall
-          ? "Existing tool call found"
-          : "Creating new tool call entry",
-      );
-    }
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `[DEBUG_STORE] handleToolCallUpdate: Updating tool call ${responseData.tool_call_id} (${responseData.tool_name}) status: ${responseData.status}`,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          existingToolCall
+            ? "Existing tool call found"
+            : "Creating new tool call entry",
+        );
+      }
 
-    // Update the tool call with the latest data
-    const updatedToolCall: ToolCall = {
-      id: responseData.tool_call_id,
-      name: responseData.tool_name,
-      status: responseData.status,
-      input: responseData.input ?? null,
-      output: responseData.output ?? null,
-      progressMessage: responseData.progress_message,
-    };
+      // Update the tool call with the latest data
+      const updatedToolCall: ToolCall = {
+        id: responseData.tool_call_id,
+        name: responseData.tool_name,
+        status: responseData.status,
+        input: responseData.input ?? null,
+        output: responseData.output ?? null,
+        progressMessage: responseData.progress_message,
+      };
 
-    return {
-      ...state,
-      streaming: {
-        ...state.streaming,
-        toolCalls: {
-          ...state.streaming.toolCalls,
-          [responseData.tool_call_id]: updatedToolCall,
+      return {
+        ...state,
+        streamingByKey: {
+          ...state.streamingByKey,
+          [resolvedStreamKey]: {
+            ...currentStreaming,
+            toolCalls: {
+              ...currentStreaming.toolCalls,
+              [responseData.tool_call_id]: updatedToolCall,
+            },
+          },
         },
-      },
-    };
-  });
+        streaming:
+          state.activeStreamKey === resolvedStreamKey
+            ? {
+                ...currentStreaming,
+                toolCalls: {
+                  ...currentStreaming.toolCalls,
+                  [responseData.tool_call_id]: updatedToolCall,
+                },
+              }
+            : state.streaming,
+      };
+    },
+    false,
+    "messaging/handleToolCallUpdate",
+  );
 };

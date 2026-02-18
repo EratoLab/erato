@@ -18,6 +18,7 @@ export const handleTextDelta = (
   responseData: MessageSubmitStreamingResponseMessageTextDelta & {
     message_type: "text_delta";
   },
+  streamKey?: string,
 ): void => {
   // Update the streaming content by directly modifying the store state
   // This approach is more performant than using the setter functions
@@ -25,53 +26,71 @@ export const handleTextDelta = (
   if (process.env.NODE_ENV === "development") {
     // Log only a snippet to avoid too much noise, or log less frequently
     console.log(
-      `[DEBUG_STREAMING] handleTextDelta: Received delta: "${responseData.new_text ? responseData.new_text.substring(0, 30) + "..." : "[EMPTY_DELTA]"}", Current message ID in store: ${useMessagingStore.getState().streaming.currentMessageId}`,
+      `[DEBUG_STREAMING] handleTextDelta: Received delta: "${responseData.new_text ? responseData.new_text.substring(0, 30) + "..." : "[EMPTY_DELTA]"}", Current message ID in store: ${useMessagingStore.getState().getStreaming(streamKey).currentMessageId}`,
     );
   }
-  useMessagingStore.setState((state) => {
-    if (process.env.NODE_ENV === "development") {
-      // Check if we are actually appending to the correct message
-      if (state.streaming.currentMessageId) {
-        console.log(
-          `[DEBUG_STORE] handleTextDelta: Appending to message ID ${state.streaming.currentMessageId}. Prev content parts: ${state.streaming.content.length}, New delta: "${responseData.new_text}"`,
-        );
-      } else {
-        console.warn(
-          `[DEBUG_STORE] handleTextDelta: Attempted to append delta but no currentMessageId in store. Delta: "${responseData.new_text}"`,
-        );
+  useMessagingStore.setState(
+    (state) => {
+      const resolvedStreamKey = streamKey ?? state.activeStreamKey;
+      const currentStreaming =
+        state.streamingByKey[resolvedStreamKey] ?? state.streaming;
+
+      if (process.env.NODE_ENV === "development") {
+        // Check if we are actually appending to the correct message
+        if (currentStreaming.currentMessageId) {
+          console.log(
+            `[DEBUG_STORE] handleTextDelta: Appending to message ID ${currentStreaming.currentMessageId}. Prev content parts: ${currentStreaming.content.length}, New delta: "${responseData.new_text}"`,
+          );
+        } else {
+          console.warn(
+            `[DEBUG_STORE] handleTextDelta: Attempted to append delta but no currentMessageId in store. Delta: "${responseData.new_text}"`,
+          );
+        }
       }
-    }
 
-    // Get the current content array
-    const currentContent = state.streaming.content;
-    const lastPart =
-      currentContent.length > 0
-        ? currentContent[currentContent.length - 1]
-        : null;
+      // Get the current content array
+      const currentContent = currentStreaming.content;
+      const lastPart =
+        currentContent.length > 0
+          ? currentContent[currentContent.length - 1]
+          : null;
 
-    // If the last part is a text part, append to it; otherwise create a new text part
-    let updatedContent;
-    if (lastPart && lastPart.content_type === "text") {
-      updatedContent = [
-        ...currentContent.slice(0, -1),
-        {
-          content_type: "text" as const,
-          text: lastPart.text + responseData.new_text,
+      // If the last part is a text part, append to it; otherwise create a new text part
+      let updatedContent;
+      if (lastPart && lastPart.content_type === "text") {
+        updatedContent = [
+          ...currentContent.slice(0, -1),
+          {
+            content_type: "text" as const,
+            text: lastPart.text + responseData.new_text,
+          },
+        ];
+      } else {
+        updatedContent = [
+          ...currentContent,
+          { content_type: "text" as const, text: responseData.new_text },
+        ];
+      }
+
+      return {
+        ...state,
+        streamingByKey: {
+          ...state.streamingByKey,
+          [resolvedStreamKey]: {
+            ...currentStreaming,
+            content: updatedContent,
+          },
         },
-      ];
-    } else {
-      updatedContent = [
-        ...currentContent,
-        { content_type: "text" as const, text: responseData.new_text },
-      ];
-    }
-
-    return {
-      ...state,
-      streaming: {
-        ...state.streaming,
-        content: updatedContent,
-      },
-    };
-  });
+        streaming:
+          state.activeStreamKey === resolvedStreamKey
+            ? {
+                ...currentStreaming,
+                content: updatedContent,
+              }
+            : state.streaming,
+      };
+    },
+    false,
+    "messaging/handleTextDelta",
+  );
 };

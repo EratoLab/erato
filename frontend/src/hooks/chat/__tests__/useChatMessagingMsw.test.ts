@@ -69,8 +69,7 @@ describe("useChatMessaging with direct mocking", () => {
     vi.clearAllMocks();
 
     // Set up default mocks
-    // Use mockImplementation to ensure the mock works regardless of arguments
-    mockUseChatMessages.mockImplementation(() => ({
+    const stableChatMessagesResult = {
       data: {
         messages: [],
         stats: {
@@ -83,7 +82,8 @@ describe("useChatMessaging with direct mocking", () => {
       isLoading: false,
       error: null,
       refetch: vi.fn().mockResolvedValue({}), // Ensure refetch returns a resolved promise
-    }));
+    };
+    mockUseChatMessages.mockReturnValue(stableChatMessagesResult);
 
     mockUseMessageSubmitSse.mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue({ success: true }),

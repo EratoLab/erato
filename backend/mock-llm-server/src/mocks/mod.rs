@@ -1,26 +1,11 @@
 use crate::image_data;
 use crate::matcher::{
-    CiteFilesResponseConfig, ErrorResponseConfig, ImageMock, MatchRule,
+    CiteFilesResponseConfig, ErrorResponseConfig, ImageMock, LongRunningResponseConfig, MatchRule,
     MatchRuleAnyUserMessageInCurrentTurnWithPattern, MatchRuleLastMessageIsUserWithPattern,
     MatchRuleUserMessagePattern, Mock, ResponseConfig, StaticResponseConfig, ToolCallDef,
     ToolCallResponseConfig, ToolCallsResponseConfig,
 };
 use serde_json::json;
-
-/// Generate chunks for a long running response with second-by-second progress
-fn generate_long_running_chunks(seconds: usize) -> Vec<String> {
-    let mut chunks = Vec::with_capacity(seconds);
-    for i in 1..=seconds {
-        if i == 1 {
-            chunks.push(format!("Second {} passed\n", i));
-        } else if i == seconds {
-            chunks.push(format!("Second {} passed. Complete!\n", i));
-        } else {
-            chunks.push(format!("Second {} passed\n", i));
-        }
-    }
-    chunks
-}
 
 /// Get the default set of configured mocks
 pub fn get_default_mocks() -> Vec<Mock> {
@@ -190,14 +175,16 @@ pub fn get_default_mocks() -> Vec<Mock> {
         },
         Mock {
             name: "LongRunning".to_string(),
-            description: "Demonstrates very long streaming response (90 seconds)".to_string(),
+            description:
+                "Demonstrates very long streaming response (default 90s, supports: 'long running <seconds>')"
+                    .to_string(),
             match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
                 pattern: "long running".to_string(),
             })],
-            response: ResponseConfig::Static(StaticResponseConfig {
-                chunks: generate_long_running_chunks(90),
+            response: ResponseConfig::LongRunning(LongRunningResponseConfig {
+                default_seconds: 90,
                 delay_ms: 1000,
-                ..Default::default()
+                max_seconds: 3600,
             }),
         },
         Mock {

@@ -24,10 +24,12 @@ export const handleMessageComplete = (
   responseData: MessageSubmitStreamingResponseMessageComplete & {
     message_type: "assistant_message_completed";
   },
+  streamKey?: string,
   explicitNav?: ReturnType<typeof useExplicitNavigation>,
 ): void => {
   const initialStoreState = useMessagingStore.getState();
-  const { setStreaming, streaming: currentStreamingState } = initialStoreState;
+  const { setStreaming, getStreaming } = initialStoreState;
+  const currentStreamingState = getStreaming(streamKey);
 
   const initialUserMessagesObject = initialStoreState.userMessages || {};
   const initialUserMessagesArray = Object.values(initialUserMessagesObject);
@@ -69,13 +71,16 @@ export const handleMessageComplete = (
   logger.log(
     `Setting streaming store. Real Message ID: ${realMessageId || null}, isStreaming: false, isFinalizing: true, Final Content: "${finalTextContent.substring(0, 100)}..."`,
   );
-  setStreaming({
-    isStreaming: false,
-    isFinalizing: true, // Signal that we're in the finalization phase
-    content: finalContent,
-    currentMessageId: realMessageId || null, // Update to real ID
-    toolCalls: {}, // Clear tool calls when message is completed
-  });
+  setStreaming(
+    {
+      isStreaming: false,
+      isFinalizing: true, // Signal that we're in the finalization phase
+      content: finalContent,
+      currentMessageId: realMessageId || null, // Update to real ID
+      toolCalls: {}, // Clear tool calls when message is completed
+    },
+    streamKey,
+  );
 
   // Log state after setStreaming
   const storeAfterSetStreaming = useMessagingStore.getState();
@@ -83,7 +88,9 @@ export const handleMessageComplete = (
   const finalUserMessagesArray = Object.values(finalUserMessagesObject);
 
   logger.log("END (after setStreaming).", {
-    streamingState: JSON.stringify(storeAfterSetStreaming.streaming),
+    streamingState: JSON.stringify(
+      storeAfterSetStreaming.getStreaming(streamKey),
+    ),
     userMessagesCount: finalUserMessagesArray.length,
     userMessages: JSON.stringify(finalUserMessagesArray),
     fullStoreAfterSetStreaming: JSON.stringify(storeAfterSetStreaming), // Keep for context
