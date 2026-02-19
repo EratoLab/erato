@@ -149,6 +149,85 @@ export const ensureOpenSidebar = async (page: Page) => {
 };
 
 /**
+ * Install a browser-side abort hook that can cancel active streaming requests.
+ * Intended for resilience tests that interrupt submitstream/resumestream.
+ */
+export const setupStreamingRequestAbortHook = async (page: Page) => {
+  page.on("console", (message) => {
+    if (message.text().includes("STREAM_ABORT_TEST_BROWSER")) {
+      console.log(message.text());
+    }
+  });
+
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    const streamingControllers: AbortController[] = [];
+
+    const isStreamingUrl = (url: string): boolean =>
+      url.includes("/api/v1beta/me/messages/submitstream") ||
+      url.includes("/api/v1beta/me/messages/resumestream");
+
+    (
+      window as Window & {
+        __abortActiveStreamRequest?: () => void;
+      }
+    ).__abortActiveStreamRequest = () => {
+      console.log(
+        `[STREAM_ABORT_TEST_BROWSER] aborting ${streamingControllers.length} active stream request(s)`,
+      );
+      while (streamingControllers.length > 0) {
+        const controller = streamingControllers.pop();
+        controller?.abort();
+      }
+    };
+
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+
+      if (!isStreamingUrl(url)) {
+        return originalFetch(input, init);
+      }
+
+      const abortController = new AbortController();
+      const callerSignal = init?.signal;
+      const combinedSignal =
+        callerSignal && typeof AbortSignal.any === "function"
+          ? AbortSignal.any([callerSignal, abortController.signal])
+          : abortController.signal;
+
+      streamingControllers.push(abortController);
+      console.log(
+        `[STREAM_ABORT_TEST_BROWSER] tracking stream request: ${url}`,
+      );
+
+      // Keep controller registered until test-triggered abort; this ensures we
+      // can still cancel long-lived streaming responses after headers are received.
+      return originalFetch(input, { ...init, signal: combinedSignal });
+    };
+  });
+};
+
+/**
+ * Trigger cancellation of active streaming requests previously registered by
+ * setupStreamingRequestAbortHook.
+ */
+export const abortActiveStreamingRequest = async (page: Page) => {
+  console.log("[STREAM_ABORT_TEST] aborting active stream request");
+  await page.evaluate(() => {
+    (
+      window as Window & {
+        __abortActiveStreamRequest?: () => void;
+      }
+    ).__abortActiveStreamRequest?.();
+  });
+};
+
+/**
  * Wait for message IDs to stabilize (temp-user-* → real UUIDs)
  * This handles the ~2 second window where messages have temp IDs before server replacement
  */

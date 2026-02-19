@@ -2,7 +2,12 @@ import { expect, Page, test } from "@playwright/test";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { chatIsReadyToChat, ensureOpenSidebar } from "./shared";
+import {
+  abortActiveStreamingRequest,
+  chatIsReadyToChat,
+  ensureOpenSidebar,
+  setupStreamingRequestAbortHook,
+} from "./shared";
 import { TAG_CI } from "./tags";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -159,6 +164,47 @@ test(
       "Complete!",
       {
         timeout: 30000,
+      },
+    );
+  },
+);
+
+test(
+  "Mock-LLM long-running stream resumes after network disruption",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(120000);
+    await setupStreamingRequestAbortHook(page);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+
+    await textbox.fill("long running 20");
+    await textbox.press("Enter");
+
+    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 10000 });
+    await expect(page.getByText("Second 5 passed")).toBeVisible({
+      timeout: 20000,
+    });
+
+    // Interrupt the currently active stream request without reloading.
+    await abortActiveStreamingRequest(page);
+
+    // Streaming should recover and continue until completion.
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Second 20 passed",
+      {
+        timeout: 60000,
+      },
+    );
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Complete!",
+      {
+        timeout: 60000,
       },
     );
   },

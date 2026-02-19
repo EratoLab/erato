@@ -56,6 +56,7 @@ import type { Message } from "@/types/chat";
 
 const logger = createLogger("HOOK", "useChatMessaging");
 const COMPLETION_CLOSE_DEDUP_MS = 5000;
+const MAX_RESUME_ATTEMPTS_PER_KEY = 3;
 // Remove onChatCreated from parameters
 interface UseChatMessagingParams {
   chatId: string | null;
@@ -206,6 +207,7 @@ export function useChatMessaging(
   const sseCleanupRefsRef = useRef<Record<string, () => void>>({});
   const isSubmittingByKeyRef = useRef<Record<string, boolean>>({});
   const recentlyCompletedByKeyRef = useRef<Record<string, number>>({});
+  const resumeAttemptsByKeyRef = useRef<Record<string, number>>({});
   const lastResumeAttemptedChatIdRef = useRef<string | null>(null);
   const isUnmountingRef = useRef(false); // Track if we're unmounting to skip unnecessary refetch
   // Remove pendingChatIdRef, use state instead
@@ -997,6 +999,142 @@ export function useChatMessaging(
     ],
   );
 
+  const attemptResumeStream = useCallback(
+    (options: {
+      reason: string;
+      chatIdHint?: string | null;
+      streamKeyHint?: string;
+      force?: boolean;
+    }) => {
+      const {
+        reason,
+        chatIdHint = null,
+        streamKeyHint,
+        force = false,
+      } = options;
+      const store = useMessagingStore.getState();
+      const candidateKey = streamKeyHint ?? streamKey;
+      const resolvedCandidateKey = resolveStreamAlias(
+        store.streamKeyAliases,
+        candidateKey,
+      );
+      const resolvedNewChatKey = resolveStreamAlias(
+        store.streamKeyAliases,
+        NEW_CHAT_STREAM_KEY,
+      );
+      const resolvedCandidateChatId =
+        resolvedCandidateKey !== NEW_CHAT_STREAM_KEY
+          ? resolvedCandidateKey
+          : null;
+      const resolvedNewChatId =
+        resolvedNewChatKey !== NEW_CHAT_STREAM_KEY ? resolvedNewChatKey : null;
+      const effectiveChatId =
+        chatIdHint ??
+        resolvedCandidateChatId ??
+        resolvedNewChatId ??
+        chatId ??
+        newlyCreatedChatId ??
+        store.newlyCreatedChatId;
+
+      if (!effectiveChatId) {
+        logger.log(
+          `[DEBUG_STREAMING] Skipping resumestream (${reason}): no effective chat id. candidateKey=${candidateKey}`,
+        );
+        return false;
+      }
+
+      const resumeStreamKey = getStreamKey(effectiveChatId);
+      const attemptCount = resumeAttemptsByKeyRef.current[resumeStreamKey] ?? 0;
+      const hasExistingConnection =
+        useMessagingStore.getState().sseAbortCallbacksByKey[resumeStreamKey] !==
+        undefined;
+      if (
+        !force &&
+        (hasExistingConnection || attemptCount >= MAX_RESUME_ATTEMPTS_PER_KEY)
+      ) {
+        logger.warn(
+          `[DEBUG_STREAMING] Skipping resumestream (${reason}) for ${effectiveChatId}. alreadyResuming=${String(
+            hasExistingConnection,
+          )} attempts=${attemptCount}`,
+        );
+        return false;
+      }
+
+      resumeAttemptsByKeyRef.current[resumeStreamKey] = attemptCount + 1;
+      logger.log(
+        `[DEBUG_STREAMING] Attempting resumestream for chat ${effectiveChatId} (${reason}), attempt=${resumeAttemptsByKeyRef.current[resumeStreamKey]}`,
+      );
+
+      const resumeStreamKeyRef = { current: resumeStreamKey };
+      const cleanup = createSSEConnection(
+        "/api/v1beta/me/messages/resumestream",
+        {
+          method: "POST",
+          body: JSON.stringify({ chat_id: effectiveChatId }),
+          onMessage: (sseEvent) =>
+            processStreamEvent(sseEvent, resumeStreamKeyRef),
+          onOpen: () => {
+            resumeAttemptsByKeyRef.current[resumeStreamKey] = 0;
+            logger.log(
+              `[DEBUG_STREAMING] resumestream opened for chat ${effectiveChatId}`,
+            );
+          },
+          onError: (errorEvent) => {
+            const errorMessage =
+              (errorEvent as Event & { error?: Error }).error?.message ??
+              "SSE resume connection error";
+            if (!errorMessage.includes("404")) {
+              logger.error(
+                `[DEBUG_STREAMING] resumestream error (${reason}):`,
+                errorMessage,
+              );
+            } else {
+              logger.log(
+                `[DEBUG_STREAMING] resumestream unavailable for ${effectiveChatId} (no active task)`,
+              );
+            }
+
+            setSSECleanupForKey(resumeStreamKey, null);
+            setSSEAbortCallback(null, resumeStreamKey);
+
+            const stillStreaming = useMessagingStore
+              .getState()
+              .getStreaming(resumeStreamKey).isStreaming;
+            if (stillStreaming) {
+              setError(new Error("SSE resume connection error"));
+              resetStreaming(resumeStreamKey);
+              void handleRefetchAndClear({
+                logContext: `Resume stream error (${reason})`,
+              });
+            }
+          },
+          onClose: () => {
+            logger.log(
+              `[DEBUG_STREAMING] resumestream closed for chat ${effectiveChatId}`,
+            );
+            setSSECleanupForKey(resumeStreamKey, null);
+            setSSEAbortCallback(null, resumeStreamKey);
+          },
+        },
+      );
+
+      setSSECleanupForKey(resumeStreamKey, cleanup);
+      setSSEAbortCallback(cleanup, resumeStreamKey);
+      return true;
+    },
+    [
+      chatId,
+      handleRefetchAndClear,
+      newlyCreatedChatId,
+      processStreamEvent,
+      resetStreaming,
+      setError,
+      setSSEAbortCallback,
+      setSSECleanupForKey,
+      streamKey,
+    ],
+  );
+
   useEffect(() => {
     if (!chatId) {
       lastResumeAttemptedChatIdRef.current = null;
@@ -1013,43 +1151,12 @@ export function useChatMessaging(
     if (hasExistingConnection) {
       return;
     }
-
-    logger.log(`[DEBUG_STREAMING] Attempting resumestream for chat ${chatId}`);
-    const resumeStreamKeyRef = { current: chatId };
-    const cleanup = createSSEConnection(
-      "/api/v1beta/me/messages/resumestream",
-      {
-        method: "POST",
-        body: JSON.stringify({ chat_id: chatId }),
-        onMessage: (sseEvent) =>
-          processStreamEvent(sseEvent, resumeStreamKeyRef),
-        onError: (errorEvent) => {
-          const errorMessage =
-            (errorEvent as Event & { error?: Error }).error?.message ??
-            "SSE resume connection error";
-          if (!errorMessage.includes("404")) {
-            logger.error("[DEBUG_STREAMING] resumestream error:", errorMessage);
-          } else {
-            logger.log(
-              `[DEBUG_STREAMING] resumestream unavailable for ${chatId} (no active task)`,
-            );
-          }
-          setSSECleanupForKey(chatId, null);
-          setSSEAbortCallback(null, chatId);
-        },
-        onClose: () => {
-          logger.log(
-            `[DEBUG_STREAMING] resumestream closed for chat ${chatId}`,
-          );
-          setSSECleanupForKey(chatId, null);
-          setSSEAbortCallback(null, chatId);
-        },
-      },
-    );
-
-    setSSECleanupForKey(chatId, cleanup);
-    setSSEAbortCallback(cleanup, chatId);
-  }, [chatId, processStreamEvent, setSSEAbortCallback, setSSECleanupForKey]);
+    void attemptResumeStream({
+      reason: "enter-chat",
+      chatIdHint: chatId,
+      force: true,
+    });
+  }, [attemptResumeStream, chatId]);
 
   // Find the most recent assistant message ID, including temporary ones
   const findMostRecentAssistantMessageId = useCallback(() => {
@@ -1255,6 +1362,26 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] SSE connection error in useChatMessaging:",
               connectionError,
             );
+            const activeStreamKey = connectionStreamKeyRef.current;
+            const currentlyStreaming = useMessagingStore
+              .getState()
+              .getStreaming(activeStreamKey).isStreaming;
+
+            if (currentlyStreaming) {
+              setSSECleanupForKey(activeStreamKey, null);
+              setSSEAbortCallback(null, activeStreamKey);
+              const resumed = attemptResumeStream({
+                reason: "submitstream-onError",
+                streamKeyHint: activeStreamKey,
+              });
+              if (resumed) {
+                logger.warn(
+                  "[DEBUG_STREAMING] SSE onError: attempted resumestream instead of resetting active stream.",
+                );
+                return;
+              }
+            }
+
             // Use setError from store
             setError(connectionError);
 
@@ -1262,7 +1389,6 @@ export function useChatMessaging(
             logger.log(
               "[DEBUG_STREAMING] SSE onError: Resetting streaming state.",
             );
-            const activeStreamKey = connectionStreamKeyRef.current;
             resetStreaming(activeStreamKey);
 
             // Use the new utility for refetch and clear
@@ -1314,6 +1440,18 @@ export function useChatMessaging(
               );
               void handleRefetchAndClear({ logContext: "SSE closed normally" });
             } else if (currentlyStreaming) {
+              setSSECleanupForKey(activeStreamKey, null);
+              setSSEAbortCallback(null, activeStreamKey);
+              const resumed = attemptResumeStream({
+                reason: "submitstream-onClose-unexpected",
+                streamKeyHint: activeStreamKey,
+              });
+              if (resumed) {
+                logger.warn(
+                  "[DEBUG_STREAMING] SSE onClose: attempted resumestream for unexpected close.",
+                );
+                return;
+              }
               logger.warn(
                 "[DEBUG_STREAMING] SSE connection closed unexpectedly while streaming was still active.",
               );

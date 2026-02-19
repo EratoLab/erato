@@ -630,7 +630,7 @@ describe("useChatMessaging", () => {
     expect(String(result.current.error)).toContain("backend stream failed");
   });
 
-  it("should evaluate onClose using latest streaming state", async () => {
+  it("should attempt resumestream on unexpected close while actively streaming", async () => {
     const { result, startStreaming, sendSSEEvent, simulateConnectionClose } =
       setupChatMessagingTest();
 
@@ -644,12 +644,20 @@ describe("useChatMessaging", () => {
 
     expect(result.current.isStreaming).toBe(true);
 
-    // onClose should now treat this as unexpected-close-while-streaming.
+    mockCreateSSEConnection.mockClear();
+
+    // onClose should now trigger resumestream recovery instead of immediate reset.
     await simulateConnectionClose();
 
-    expect(result.current.isStreaming).toBe(false);
-    expect(result.current.error).not.toBeNull();
-    expect(String(result.current.error)).toContain("unexpectedly");
+    expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+      "/api/v1beta/me/messages/resumestream",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ chat_id: "chat1" }),
+      }),
+    );
+    expect(result.current.isStreaming).toBe(true);
+    expect(result.current.error).toBeNull();
   });
 
   it("should keep completed assistant placeholder visible when refetch has not persisted it yet", async () => {
