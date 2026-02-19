@@ -118,8 +118,9 @@ pub fn convert_mcp_tools_to_genai_tools(managed_mcp_tools: Vec<ManagedTool>) -> 
             let tool = managed_tool.tool;
 
             // Convert Arc<JsonObject> to serde_json::Value
-            let input_schema_value: serde_json::Value =
+            let mut input_schema_value: serde_json::Value =
                 serde_json::Value::Object(tool.input_schema.as_ref().clone());
+            remove_schema_declaration(&mut input_schema_value);
 
             GenaiTool {
                 name: GenaiToolName::Custom(tool.name.to_string()),
@@ -129,4 +130,50 @@ pub fn convert_mcp_tools_to_genai_tools(managed_mcp_tools: Vec<ManagedTool>) -> 
             }
         })
         .collect()
+}
+
+fn remove_schema_declaration(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.remove("$schema");
+            for child in map.values_mut() {
+                remove_schema_declaration(child);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                remove_schema_declaration(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::remove_schema_declaration;
+    use serde_json::json;
+
+    #[test]
+    fn remove_schema_declaration_removes_all_occurrences() {
+        let mut value = json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "nested": {
+                    "$schema": "https://example.com/other",
+                    "type": "string"
+                }
+            },
+            "anyOf": [
+                { "$schema": "https://example.com/array-item", "type": "null" }
+            ]
+        });
+
+        remove_schema_declaration(&mut value);
+
+        assert!(value.get("$schema").is_none());
+        assert!(value["properties"]["nested"].get("$schema").is_none());
+        assert!(value["anyOf"][0].get("$schema").is_none());
+    }
 }
