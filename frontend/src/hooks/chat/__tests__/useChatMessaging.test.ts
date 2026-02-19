@@ -4,6 +4,8 @@ import { MemoryRouter } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import {
+  chatMessagesQuery,
+  fetchChatMessages,
   useChatMessages,
   useMessageSubmitSse,
   useRecentChats,
@@ -99,6 +101,7 @@ vi.mock("@/utils/sse/sseClient", () => {
   };
 });
 
+import { useMessagingStore } from "../store/messagingStore";
 import { useChatMessaging } from "../useChatMessaging";
 
 import type { ReactNode } from "react";
@@ -106,6 +109,10 @@ import type { StateCreator } from "zustand";
 
 // Mock dependencies
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
+  chatMessagesQuery: vi.fn((variables: { pathParams: { chatId: string } }) => ({
+    queryKey: ["chatMessages", { chatId: variables.pathParams.chatId }],
+  })),
+  fetchChatMessages: vi.fn(),
   useChatMessages: vi.fn(),
   useMessageSubmitSse: vi.fn(),
   useRecentChats: vi.fn(),
@@ -115,8 +122,19 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 
 // Create a mock queryClient for testing invalidateQueries
 const mockInvalidateQueries = vi.fn().mockResolvedValue(undefined);
+const mockCancelQueries = vi.fn().mockResolvedValue(undefined);
+const mockGetQueryState = vi.fn().mockReturnValue({
+  status: "success",
+  fetchStatus: "idle",
+  isInvalidated: false,
+  dataUpdatedAt: Date.now(),
+});
+const mockSetQueryData = vi.fn();
 const mockQueryClient = {
   invalidateQueries: mockInvalidateQueries,
+  cancelQueries: mockCancelQueries,
+  getQueryState: mockGetQueryState,
+  setQueryData: mockSetQueryData,
 };
 
 // Mock the useQueryClient hook
@@ -130,6 +148,12 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 
 // Mock implementations
 const mockUseChatMessages = useChatMessages as unknown as ReturnType<
+  typeof vi.fn
+>;
+const mockChatMessagesQuery = chatMessagesQuery as unknown as ReturnType<
+  typeof vi.fn
+>;
+const mockFetchChatMessages = fetchChatMessages as unknown as ReturnType<
   typeof vi.fn
 >;
 const mockUseMessageSubmitSse = useMessageSubmitSse as unknown as ReturnType<
@@ -251,6 +275,14 @@ describe("useChatMessaging", () => {
       isError: false,
       error: null,
     });
+    mockChatMessagesQuery.mockImplementation(
+      (variables: { pathParams: { chatId: string } }) => ({
+        queryKey: ["chatMessages", { chatId: variables.pathParams.chatId }],
+      }),
+    );
+    mockFetchChatMessages.mockResolvedValue({
+      messages: mockMessages,
+    });
 
     // Mock useRecentChats hook for useChatHistory
     (useRecentChats as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -272,6 +304,10 @@ describe("useChatMessaging", () => {
 
     // Mock SSE connection creation
     mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+      // Ignore resumestream wiring in most tests unless explicitly asserted.
+      if (url.includes("/resumestream")) {
+        return vi.fn();
+      }
       // Store callbacks to trigger them in tests
       sseCallbacks = callbacks;
       // Return a cleanup function
@@ -280,7 +316,7 @@ describe("useChatMessaging", () => {
   });
 
   // Helper function to setup a fresh hook and SSE environment for each test
-  const setupChatMessagingTest = (chatId = "chat1") => {
+  const setupChatMessagingTest = (chatId: string | null = "chat1") => {
     // Create a clean cleanup function for this test
     const cleanupFn = vi.fn();
 
@@ -288,7 +324,10 @@ describe("useChatMessaging", () => {
     sseCallbacks = {};
 
     // Setup a fresh mock for this test
-    mockCreateSSEConnection.mockImplementationOnce((url, callbacks) => {
+    mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+      if (url.includes("/resumestream")) {
+        return vi.fn();
+      }
       sseCallbacks = callbacks;
       return cleanupFn;
     });
@@ -301,24 +340,12 @@ describe("useChatMessaging", () => {
     // Helper to send a message and wait for streaming to start
     const startStreaming = async (content = "Test message") => {
       await act(async () => {
-        void hookResult.result.current.sendMessage(content);
+        await hookResult.result.current.sendMessage(content);
       });
     };
 
     // Helper to send an SSE event with accumulation
-    const sendSSEEvent = async (eventData: {
-      message_type: string;
-      new_text?: string;
-      full_text?: string;
-      message_id?: string;
-      chat_id?: string;
-      message?: {
-        id: string;
-        full_text: string;
-        role: string;
-        created_at: string;
-      };
-    }) => {
+    const sendSSEEvent = async (eventData: Record<string, unknown>) => {
       await act(async () => {
         if (sseCallbacks.onMessage) {
           // For tests checking the streaming content directly
@@ -403,6 +430,22 @@ describe("useChatMessaging", () => {
       { content_type: "text", text: "Hi there" },
     ]);
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it("should attempt resumestream when entering a chat", () => {
+    mockCreateSSEConnection.mockClear();
+
+    renderHook(() => useChatMessaging("chat1"), {
+      wrapper: TestWrapper,
+    });
+
+    expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+      "/api/v1beta/me/messages/resumestream",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ chat_id: "chat1" }),
+      }),
+    );
   });
 
   // Skip this test for now
@@ -566,6 +609,561 @@ describe("useChatMessaging", () => {
     // Should reset streaming state and set an error
     expect(result.current.isStreaming).toBe(false);
     expect(result.current.error).not.toBeNull();
+  });
+
+  it("should handle explicit stream error events and reset pending state", async () => {
+    const { result, startStreaming, sendSSEEvent } = setupChatMessagingTest();
+
+    await startStreaming("Test backend error event");
+
+    expect(result.current.isPendingResponse).toBe(true);
+
+    await sendSSEEvent({
+      message_type: "error",
+      error_type: "provider_error",
+      error_description: "backend stream failed",
+    });
+
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.isPendingResponse).toBe(false);
+    expect(result.current.error).not.toBeNull();
+    expect(String(result.current.error)).toContain("backend stream failed");
+  });
+
+  it("should evaluate onClose using latest streaming state", async () => {
+    const { result, startStreaming, sendSSEEvent, simulateConnectionClose } =
+      setupChatMessagingTest();
+
+    await startStreaming("Test stale closure");
+
+    // Move store to active streaming state.
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-live-id",
+    });
+
+    expect(result.current.isStreaming).toBe(true);
+
+    // onClose should now treat this as unexpected-close-while-streaming.
+    await simulateConnectionClose();
+
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.error).not.toBeNull();
+    expect(String(result.current.error)).toContain("unexpectedly");
+  });
+
+  it("should keep completed assistant placeholder visible when refetch has not persisted it yet", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({
+        data: {
+          messages: [
+            {
+              id: "user-only-1",
+              content: [{ content_type: "text", text: "request" }],
+              role: "user",
+              created_at: "2026-02-18T12:00:00.000Z",
+              chat_id: "chat1",
+              updated_at: "2026-02-18T12:00:00.000Z",
+              is_message_in_active_thread: true,
+            },
+          ],
+        },
+      }),
+    });
+
+    const { result, startStreaming, sendSSEEvent } = setupChatMessagingTest();
+
+    await startStreaming("request");
+
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-complete-keep",
+    });
+    await sendSSEEvent({
+      message_type: "text_delta",
+      message_id: "assistant-complete-keep",
+      content_index: 0,
+      new_text: "final answer",
+    });
+    await sendSSEEvent({
+      message_type: "assistant_message_completed",
+      message_id: "assistant-complete-keep",
+      message: {
+        id: "assistant-complete-keep",
+        role: "assistant",
+        created_at: "2026-02-18T12:00:01.000Z",
+        updated_at: "2026-02-18T12:00:01.000Z",
+        content: [{ content_type: "text", text: "final answer" }],
+        input_files_ids: [],
+        is_message_in_active_thread: true,
+      },
+    });
+
+    const assistantMessage = result.current.messages["assistant-complete-keep"];
+    expect(assistantMessage).toBeDefined();
+    expect(assistantMessage.role).toBe("assistant");
+    expect(assistantMessage.content).toEqual([
+      { content_type: "text", text: "final answer" },
+    ]);
+    expect(result.current.isFinalizing).toBe(false);
+  });
+
+  it("should force completion refetch via newly created chat id when hook chatId is null", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+    mockFetchChatMessages.mockResolvedValue({
+      messages: [
+        {
+          id: "user-real-new-1",
+          content: [{ content_type: "text", text: "Delay" }],
+          role: "user",
+          created_at: "2026-02-18T12:00:00.000Z",
+          chat_id: "chat-new-force-refetch-1",
+          updated_at: "2026-02-18T12:00:00.000Z",
+          is_message_in_active_thread: true,
+        },
+        {
+          id: "assistant-real-new-1",
+          content: [{ content_type: "text", text: "Completed reply" }],
+          role: "assistant",
+          created_at: "2026-02-18T12:00:01.000Z",
+          chat_id: "chat-new-force-refetch-1",
+          updated_at: "2026-02-18T12:00:01.000Z",
+          is_message_in_active_thread: true,
+        },
+      ],
+    });
+
+    const { startStreaming, sendSSEEvent } = setupChatMessagingTest(null);
+
+    await startStreaming("Delay");
+
+    await sendSSEEvent({
+      message_type: "chat_created",
+      chat_id: "chat-new-force-refetch-1",
+    });
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-real-new-1",
+    });
+    await sendSSEEvent({
+      message_type: "assistant_message_completed",
+      message_id: "assistant-real-new-1",
+      message: {
+        id: "assistant-real-new-1",
+        role: "assistant",
+        created_at: "2026-02-18T12:00:01.000Z",
+        updated_at: "2026-02-18T12:00:01.000Z",
+        content: [{ content_type: "text", text: "Completed reply" }],
+        input_files_ids: [],
+        is_message_in_active_thread: true,
+      },
+    });
+
+    expect(mockFetchChatMessages).toHaveBeenCalledWith({
+      pathParams: { chatId: "chat-new-force-refetch-1" },
+    });
+    const persistedMessages = useMessagingStore
+      .getState()
+      .getApiMessages("chat-new-force-refetch-1");
+    expect(persistedMessages["assistant-real-new-1"]).toBeDefined();
+    expect(persistedMessages["assistant-real-new-1"].content).toEqual([
+      { content_type: "text", text: "Completed reply" },
+    ]);
+  });
+
+  it("should prefer streaming content over api snapshot when ids collide during streaming", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    const { result, startStreaming, sendSSEEvent } = setupChatMessagingTest();
+
+    await startStreaming("Delay");
+
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-collision-1",
+    });
+
+    act(() => {
+      useMessagingStore.getState().setApiMessages(
+        [
+          {
+            id: "assistant-collision-1",
+            content: [],
+            role: "assistant",
+            createdAt: "2026-02-18T12:00:01.000Z",
+            status: "complete",
+          },
+        ],
+        "chat1",
+      );
+    });
+
+    await sendSSEEvent({
+      message_type: "text_delta",
+      message_id: "assistant-collision-1",
+      content_index: 0,
+      new_text: "stream text",
+    });
+
+    const assistantMessage = result.current.messages["assistant-collision-1"];
+    expect(assistantMessage).toBeDefined();
+    expect(assistantMessage.content).toEqual([
+      { content_type: "text", text: "stream text" },
+    ]);
+    expect(result.current.isStreaming).toBe(true);
+  });
+
+  it("should preserve per-chat streaming state when switching chats", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    const connectionCallbacks: Array<{
+      onMessage?: (event: SSEEvent) => void;
+      onError?: (event?: Event) => void;
+      onClose?: () => void;
+    }> = [];
+    const cleanupFns: ReturnType<typeof vi.fn>[] = [];
+
+    mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+      if (url.includes("/resumestream")) {
+        return vi.fn();
+      }
+      const cleanup = vi.fn();
+      cleanupFns.push(cleanup);
+      connectionCallbacks.push(callbacks);
+      return cleanup;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ chatId }: { chatId: string | null }) => useChatMessaging(chatId),
+      {
+        wrapper: TestWrapper,
+        initialProps: { chatId: "chat-a" as string | null },
+      },
+    );
+
+    const getStreamingText = () =>
+      result.current.streamingContent
+        .filter((part) => part.content_type === "text")
+        .map((part) => part.text)
+        .join("");
+
+    await act(async () => {
+      await result.current.sendMessage("Message in A");
+    });
+
+    await act(async () => {
+      connectionCallbacks[0].onMessage?.({
+        data: JSON.stringify({
+          message_type: "user_message_saved",
+          message_id: "user-a-real",
+          message: {
+            id: "user-a-real",
+            role: "user",
+            created_at: "2026-02-18T12:00:00.000Z",
+            updated_at: "2026-02-18T12:00:00.000Z",
+            content: [{ content_type: "text", text: "Message in A" }],
+            input_files_ids: [],
+            is_message_in_active_thread: true,
+          },
+        }),
+        type: "message",
+      });
+      connectionCallbacks[0].onMessage?.({
+        data: JSON.stringify({
+          message_type: "assistant_message_started",
+          message_id: "assistant-a",
+        }),
+        type: "message",
+      });
+      connectionCallbacks[0].onMessage?.({
+        data: JSON.stringify({
+          message_type: "text_delta",
+          message_id: "assistant-a",
+          content_index: 0,
+          new_text: "A1",
+        }),
+        type: "message",
+      });
+    });
+
+    expect(getStreamingText()).toContain("A1");
+
+    act(() => {
+      rerender({ chatId: "chat-b" });
+    });
+
+    expect(cleanupFns[0]).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.sendMessage("Message in B");
+    });
+
+    await act(async () => {
+      connectionCallbacks[1].onMessage?.({
+        data: JSON.stringify({
+          message_type: "assistant_message_started",
+          message_id: "assistant-b",
+        }),
+        type: "message",
+      });
+      connectionCallbacks[1].onMessage?.({
+        data: JSON.stringify({
+          message_type: "text_delta",
+          message_id: "assistant-b",
+          content_index: 0,
+          new_text: "B1",
+        }),
+        type: "message",
+      });
+    });
+
+    expect(getStreamingText()).toContain("B1");
+    expect(
+      Object.values(result.current.messages).some((message) => {
+        if (message.role !== "user") {
+          return false;
+        }
+        return message.content.some(
+          (part) =>
+            part.content_type === "text" && part.text === "Message in A",
+        );
+      }),
+    ).toBe(false);
+
+    await act(async () => {
+      connectionCallbacks[0].onMessage?.({
+        data: JSON.stringify({
+          message_type: "text_delta",
+          message_id: "assistant-a",
+          content_index: 0,
+          new_text: "A2",
+        }),
+        type: "message",
+      });
+    });
+
+    // Still on chat-b: chat-a deltas should not replace active chat-b streaming view.
+    expect(getStreamingText()).toContain("B1");
+    expect(getStreamingText()).not.toContain("A2");
+
+    act(() => {
+      rerender({ chatId: "chat-a" });
+    });
+
+    expect(getStreamingText()).toContain("A1");
+    expect(getStreamingText()).toContain("A2");
+    expect(
+      Object.values(result.current.messages).some((message) => {
+        if (message.role !== "user") {
+          return false;
+        }
+        return message.content.some(
+          (part) =>
+            part.content_type === "text" && part.text === "Message in A",
+        );
+      }),
+    ).toBe(true);
+  });
+
+  it("should keep optimistic user message visible across new-chat stream transition", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    const { result, rerender } = renderHook(
+      ({ chatId }: { chatId: string | null }) => useChatMessaging(chatId),
+      {
+        wrapper: TestWrapper,
+        initialProps: { chatId: null as string | null },
+      },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("Hello from new chat");
+    });
+
+    await act(async () => {
+      sseCallbacks.onMessage?.({
+        data: JSON.stringify({
+          message_type: "chat_created",
+          chat_id: "chat-new-1",
+        }),
+        type: "message",
+      });
+      sseCallbacks.onMessage?.({
+        data: JSON.stringify({
+          message_type: "user_message_saved",
+          message_id: "user-real-1",
+          message: {
+            id: "user-real-1",
+            role: "user",
+            created_at: "2026-02-18T12:00:00.000Z",
+            updated_at: "2026-02-18T12:00:00.000Z",
+            content: [{ content_type: "text", text: "Hello from new chat" }],
+            input_files_ids: [],
+            is_message_in_active_thread: true,
+          },
+        }),
+        type: "message",
+      });
+      sseCallbacks.onMessage?.({
+        data: JSON.stringify({
+          message_type: "assistant_message_started",
+          message_id: "assistant-real-1",
+        }),
+        type: "message",
+      });
+      sseCallbacks.onMessage?.({
+        data: JSON.stringify({
+          message_type: "text_delta",
+          message_id: "assistant-real-1",
+          content_index: 0,
+          new_text: "Streaming reply...",
+        }),
+        type: "message",
+      });
+    });
+
+    const preNavigationMessages = result.current.messageOrder.map(
+      (id) => result.current.messages[id],
+    );
+    expect(preNavigationMessages.some((msg) => msg.role === "user")).toBe(true);
+    expect(preNavigationMessages.some((msg) => msg.role === "assistant")).toBe(
+      true,
+    );
+
+    act(() => {
+      rerender({ chatId: "chat-new-1" });
+    });
+
+    const orderedMessages = result.current.messageOrder.map(
+      (id) => result.current.messages[id],
+    );
+
+    expect(orderedMessages.length).toBeGreaterThanOrEqual(2);
+    expect(orderedMessages[0].role).toBe("user");
+    expect(orderedMessages[1].role).toBe("assistant");
+    expect(
+      orderedMessages.some(
+        (msg) =>
+          msg.role === "user" &&
+          msg.content.some(
+            (part) =>
+              part.content_type === "text" &&
+              part.text === "Hello from new chat",
+          ),
+      ),
+    ).toBe(true);
+  });
+
+  it("should repair invalid temp-user stream anchor on user_message_saved", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+
+    const { result, rerender } = renderHook(
+      ({ chatId }: { chatId: string | null }) => useChatMessaging(chatId),
+      {
+        wrapper: TestWrapper,
+        initialProps: { chatId: null as string | null },
+      },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("Anchor repair test");
+    });
+
+    const tempUserMessage = Object.values(result.current.messages).find(
+      (message) =>
+        message.role === "user" && message.id.startsWith("temp-user-"),
+    );
+    expect(tempUserMessage).toBeDefined();
+
+    await act(async () => {
+      sseCallbacks.onMessage?.({
+        data: JSON.stringify({
+          message_type: "chat_created",
+          chat_id: "chat-anchor-repair-1",
+        }),
+        type: "message",
+      });
+    });
+
+    // Simulate corrupted anchor state observed in logs: currentMessageId points to temp-user.
+    act(() => {
+      useMessagingStore.getState().setStreaming(
+        {
+          currentMessageId: tempUserMessage?.id ?? null,
+          isStreaming: false,
+          content: [],
+          createdAt: "2026-02-18T12:00:00.000Z",
+          toolCalls: {},
+          isFinalizing: false,
+        },
+        "chat-anchor-repair-1",
+      );
+    });
+
+    await act(async () => {
+      sseCallbacks.onMessage?.({
+        data: JSON.stringify({
+          message_type: "user_message_saved",
+          message_id: "user-real-anchor-1",
+          message: {
+            id: "user-real-anchor-1",
+            role: "user",
+            created_at: "2026-02-18T12:00:05.000Z",
+            updated_at: "2026-02-18T12:00:05.000Z",
+            content: [{ content_type: "text", text: "Anchor repair test" }],
+            input_files_ids: [],
+            is_message_in_active_thread: true,
+          },
+        }),
+        type: "message",
+      });
+    });
+
+    const streamingAfterSave = useMessagingStore
+      .getState()
+      .getStreaming("chat-anchor-repair-1");
+
+    expect(streamingAfterSave.currentMessageId).toMatch(/^temp-assistant-/);
+    expect(streamingAfterSave.currentMessageId).not.toBe(tempUserMessage?.id);
+
+    act(() => {
+      rerender({ chatId: "chat-anchor-repair-1" });
+    });
+
+    const orderedMessages = result.current.messageOrder.map(
+      (id) => result.current.messages[id],
+    );
+    expect(orderedMessages.length).toBeGreaterThanOrEqual(2);
+    expect(orderedMessages[0].role).toBe("user");
+    expect(orderedMessages[1].role).toBe("assistant");
   });
 
   it("should handle canceling a message", async () => {

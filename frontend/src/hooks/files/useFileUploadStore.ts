@@ -1,4 +1,6 @@
+/* eslint-disable lingui/no-unlocalized-strings */
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 
 import type { UploadError } from "./errors";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -62,21 +64,38 @@ const initialState = {
 /**
  * Zustand store for file uploads
  */
-export const useFileUploadStore = create<FileUploadState>((set) => ({
-  ...initialState,
+export const useFileUploadStore = create<FileUploadState>()(
+  devtools(
+    (set) => ({
+      ...initialState,
 
-  setUploading: (isUploading: boolean) => set({ isUploading }),
+      setUploading: (isUploading: boolean) =>
+        set({ isUploading }, false, "fileUpload/setUploading"),
 
-  addFiles: (files: FileUploadItem[]) =>
-    set((state) => ({
-      uploadedFiles: [...state.uploadedFiles, ...files],
-    })),
+      addFiles: (files: FileUploadItem[]) =>
+        set(
+          (state) => ({
+            uploadedFiles: [...state.uploadedFiles, ...files],
+          }),
+          false,
+          "fileUpload/addFiles",
+        ),
 
-  setError: (error: UploadError | null) => set({ error }),
+      setError: (error: UploadError | null) =>
+        set({ error }, false, "fileUpload/setError"),
 
-  clearFiles: () => set({ uploadedFiles: [] }),
+      clearFiles: () =>
+        set({ uploadedFiles: [] }, false, "fileUpload/clearFiles"),
 
-  reset: () => set(initialState),
+      reset: () => set(initialState, false, "fileUpload/reset"),
 
-  setSilentChatId: (chatId: string | null) => set({ silentChatId: chatId }),
-}));
+      setSilentChatId: (chatId: string | null) =>
+        set({ silentChatId: chatId }, false, "fileUpload/setSilentChatId"),
+    }),
+    {
+      name: "File Upload Store",
+      store: "file-upload-store",
+      enabled: process.env.NODE_ENV === "development",
+    },
+  ),
+);

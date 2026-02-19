@@ -68,6 +68,27 @@ fn default_cite_files_delay_ms() -> u64 {
     50
 }
 
+/// Long-running response configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LongRunningResponseConfig {
+    /// Default duration in seconds when no explicit value is provided
+    pub default_seconds: usize,
+    /// Delay between emitted chunks in milliseconds
+    #[serde(default = "default_long_running_delay_ms")]
+    pub delay_ms: u64,
+    /// Maximum allowed duration in seconds to avoid pathological values
+    #[serde(default = "default_long_running_max_seconds")]
+    pub max_seconds: usize,
+}
+
+fn default_long_running_delay_ms() -> u64 {
+    1000
+}
+
+fn default_long_running_max_seconds() -> usize {
+    3600
+}
+
 /// Configuration for a response to return when a pattern matches
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResponseConfig {
@@ -81,6 +102,8 @@ pub enum ResponseConfig {
     Error(ErrorResponseConfig),
     /// Dynamic response listing erato-file links in request messages
     CiteFiles(CiteFilesResponseConfig),
+    /// Dynamic long-running response configurable via `long running <seconds>`
+    LongRunning(LongRunningResponseConfig),
 }
 
 /// Match rule that checks user message pattern using substring matching
@@ -240,6 +263,15 @@ impl Mock {
                     config.delay_ms
                 );
             }
+            ResponseConfig::LongRunning(config) => {
+                println!(
+                    "    {}: long-running response, default {}s, max {}s, {}ms delay",
+                    "Response".bold(),
+                    config.default_seconds,
+                    config.max_seconds,
+                    config.delay_ms
+                );
+            }
         }
         println!();
     }
@@ -319,8 +351,56 @@ impl Matcher {
                     ..Default::default()
                 })
             }
+            ResponseConfig::LongRunning(config) => {
+                let parsed_seconds = self
+                    .extract_last_user_message(request)
+                    .and_then(|message| Self::parse_long_running_seconds(&message));
+                let seconds = parsed_seconds
+                    .unwrap_or(config.default_seconds)
+                    .max(1)
+                    .min(config.max_seconds);
+
+                ResponseConfig::Static(StaticResponseConfig {
+                    chunks: Self::generate_long_running_chunks(seconds),
+                    delay_ms: config.delay_ms,
+                    ..Default::default()
+                })
+            }
             _ => response.clone(),
         }
+    }
+
+    fn generate_long_running_chunks(seconds: usize) -> Vec<String> {
+        let mut chunks = Vec::with_capacity(seconds);
+        for i in 1..=seconds {
+            if i == 1 {
+                chunks.push(format!("Second {} passed\n", i));
+            } else if i == seconds {
+                chunks.push(format!("Second {} passed. Complete!\n", i));
+            } else {
+                chunks.push(format!("Second {} passed\n", i));
+            }
+        }
+        chunks
+    }
+
+    fn parse_long_running_seconds(message: &str) -> Option<usize> {
+        let tokens: Vec<String> = message
+            .split_whitespace()
+            .map(|t| t.to_ascii_lowercase())
+            .collect();
+
+        if tokens.len() < 3 {
+            return None;
+        }
+
+        for i in 0..(tokens.len() - 2) {
+            if tokens[i] == "long" && tokens[i + 1] == "running" {
+                return tokens[i + 2].parse::<usize>().ok();
+            }
+        }
+
+        None
     }
 
     /// Check if any of the match rules match the request
@@ -1081,5 +1161,68 @@ mod tests {
 
         // This test just ensures print_summary doesn't panic with multiple rules
         mock.print_summary();
+    }
+
+    #[test]
+    fn test_long_running_parses_seconds_from_prompt() {
+        let mocks = vec![Mock {
+            name: "LongRunning".to_string(),
+            description: "Long running".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: "long running".to_string(),
+            })],
+            response: ResponseConfig::LongRunning(LongRunningResponseConfig {
+                default_seconds: 90,
+                delay_ms: 1000,
+                max_seconds: 3600,
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [{"role": "user", "content": "please do long running 30"}]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0011");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_eq!(config.delay_ms, 1000);
+                assert_eq!(config.chunks.len(), 30);
+                assert_eq!(config.chunks[0], "Second 1 passed\n");
+                assert_eq!(config.chunks[29], "Second 30 passed. Complete!\n");
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
+    fn test_long_running_uses_default_when_no_seconds_provided() {
+        let mocks = vec![Mock {
+            name: "LongRunning".to_string(),
+            description: "Long running".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: "long running".to_string(),
+            })],
+            response: ResponseConfig::LongRunning(LongRunningResponseConfig {
+                default_seconds: 90,
+                delay_ms: 1000,
+                max_seconds: 3600,
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [{"role": "user", "content": "please do long running"}]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0012");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_eq!(config.chunks.len(), 90);
+            }
+            _ => panic!("Expected Static response"),
+        }
     }
 }

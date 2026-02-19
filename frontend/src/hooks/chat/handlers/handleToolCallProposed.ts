@@ -16,6 +16,7 @@ export const handleToolCallProposed = (
   responseData: MessageSubmitStreamingResponseToolCallProposed & {
     message_type: "tool_call_proposed";
   },
+  streamKey?: string,
 ): void => {
   if (process.env.NODE_ENV === "development") {
     console.log(
@@ -37,27 +38,52 @@ export const handleToolCallProposed = (
   }
 
   // Update the streaming state with the proposed tool call
-  useMessagingStore.setState((state) => {
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `[DEBUG_STORE] handleToolCallProposed: Adding tool call ${responseData.tool_call_id} (${responseData.tool_name}) to streaming state`,
-      );
-    }
+  useMessagingStore.setState(
+    (state) => {
+      const resolvedStreamKey = streamKey ?? state.activeStreamKey;
+      const currentStreaming =
+        state.streamingByKey[resolvedStreamKey] ?? state.streaming;
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          `[DEBUG_STORE] handleToolCallProposed: Adding tool call ${responseData.tool_call_id} (${responseData.tool_name}) to streaming state`,
+        );
+      }
 
-    return {
-      ...state,
-      streaming: {
-        ...state.streaming,
-        toolCalls: {
-          ...state.streaming.toolCalls,
-          [responseData.tool_call_id]: {
-            id: responseData.tool_call_id,
-            name: responseData.tool_name,
-            status: "proposed",
-            input: responseData.input,
+      return {
+        ...state,
+        streamingByKey: {
+          ...state.streamingByKey,
+          [resolvedStreamKey]: {
+            ...currentStreaming,
+            toolCalls: {
+              ...currentStreaming.toolCalls,
+              [responseData.tool_call_id]: {
+                id: responseData.tool_call_id,
+                name: responseData.tool_name,
+                status: "proposed",
+                input: responseData.input,
+              },
+            },
           },
         },
-      },
-    };
-  });
+        streaming:
+          state.activeStreamKey === resolvedStreamKey
+            ? {
+                ...currentStreaming,
+                toolCalls: {
+                  ...currentStreaming.toolCalls,
+                  [responseData.tool_call_id]: {
+                    id: responseData.tool_call_id,
+                    name: responseData.tool_name,
+                    status: "proposed",
+                    input: responseData.input,
+                  },
+                },
+              }
+            : state.streaming,
+      };
+    },
+    false,
+    "messaging/handleToolCallProposed",
+  );
 };

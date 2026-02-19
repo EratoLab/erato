@@ -335,6 +335,9 @@ pub async fn stream_response(
         ResponseConfig::CiteFiles(_) => {
             unreachable!("CiteFiles responses should be resolved into Static in matcher")
         }
+        ResponseConfig::LongRunning(_) => {
+            unreachable!("LongRunning responses should be resolved into Static in matcher")
+        }
     };
 
     futures::stream::iter(actions).then(|action| async move {

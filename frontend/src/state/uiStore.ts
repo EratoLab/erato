@@ -4,8 +4,9 @@
  * Manages UI-related state like sidebar visibility, modals, and UI preferences.
  * This is separate from API/data state which is handled by React Query.
  */
+/* eslint-disable lingui/no-unlocalized-strings */
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { devtools, persist } from "zustand/middleware";
 
 export interface UIState {
   /**
@@ -29,23 +30,38 @@ export interface UIState {
  * Handles UI-specific state like sidebar visibility
  */
 export const useUIStore = create<UIState>()(
-  persist(
-    (set) => ({
-      isSidebarOpen: true,
+  devtools(
+    persist(
+      (set) => ({
+        isSidebarOpen: true,
 
-      toggleSidebar: () =>
-        set((state) => ({
-          isSidebarOpen: !state.isSidebarOpen,
-        })),
+        toggleSidebar: () =>
+          set(
+            (state) => ({
+              isSidebarOpen: !state.isSidebarOpen,
+            }),
+            false,
+            "ui/toggleSidebar",
+          ),
 
-      setSidebarOpen: (isOpen: boolean) =>
-        set({
-          isSidebarOpen: isOpen,
-        }),
-    }),
+        setSidebarOpen: (isOpen: boolean) =>
+          set(
+            {
+              isSidebarOpen: isOpen,
+            },
+            false,
+            "ui/setSidebarOpen",
+          ),
+      }),
+      {
+        name: "ui-store",
+        partialize: (state) => ({ isSidebarOpen: state.isSidebarOpen }),
+      },
+    ),
     {
-      name: "ui-store",
-      partialize: (state) => ({ isSidebarOpen: state.isSidebarOpen }),
+      name: "UI Store",
+      store: "ui-store",
+      enabled: process.env.NODE_ENV === "development",
     },
   ),
 );

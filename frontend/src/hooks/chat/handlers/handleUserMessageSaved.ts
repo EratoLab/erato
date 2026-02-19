@@ -32,6 +32,7 @@ export function handleUserMessageSaved(
   responseData: MessageSubmitStreamingResponseUserMessageSaved & {
     message_type: "user_message_saved";
   },
+  streamKey?: string,
 ): void {
   const serverConfirmedMessage = responseData.message;
   const serverConfirmedMessageContent = extractTextFromContent(
@@ -51,110 +52,212 @@ export function handleUserMessageSaved(
     `Server confirmed user message. Message ID: ${serverConfirmedMessage.id}, Content: "${serverConfirmedMessageContent.substring(0, 50)}..."`,
   );
 
-  useMessagingStore.setState((prevState) => {
-    const newUserMessages = { ...prevState.userMessages };
-
-    // Find the temporary message by content comparison (extract text from ContentPart[])
-    const tempMessage = Object.values(newUserMessages).find(
-      (msg) =>
-        msg.role === "user" &&
-        extractTextFromContent(msg.content) === serverConfirmedMessageContent &&
-        msg.status === "sending",
-    );
-
-    if (tempMessage?.id) {
-      const tempMessageKeyToDelete = tempMessage.id; // This key is the temp-user-id
-      delete newUserMessages[tempMessageKeyToDelete]; // Remove message with temp ID
-
-      // Construct the final message object using server data
-      const finalUserMessage = {
-        id: serverConfirmedMessage.id,
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        content: serverConfirmedMessage.content ?? [],
-        role: serverConfirmedMessage.role as "user", // Role from server, cast as "user"
-        createdAt: serverConfirmedMessage.created_at,
-        status: "complete" as const, // Message is saved, so status is complete
-        input_files_ids: serverConfirmedMessage.input_files_ids,
+  useMessagingStore.setState(
+    (prevState) => {
+      const resolveStreamKeyFromState = (
+        streamKeyToResolve: string,
+        aliases: Record<string, string>,
+      ): string => {
+        let resolvedKey = streamKeyToResolve;
+        const visited = new Set<string>();
+        while (aliases[resolvedKey] && !visited.has(resolvedKey)) {
+          visited.add(resolvedKey);
+          resolvedKey = aliases[resolvedKey];
+        }
+        return resolvedKey;
       };
 
-      newUserMessages[finalUserMessage.id] = finalUserMessage; // Add message with real ID
+      const inputStreamKey = streamKey ?? prevState.activeStreamKey;
+      const resolvedStreamKey = resolveStreamKeyFromState(
+        inputStreamKey,
+        prevState.streamKeyAliases,
+      );
+      const currentStreaming =
+        prevState.streamingByKey[resolvedStreamKey] ?? prevState.streaming;
+      const currentUserMessagesForKey =
+        prevState.userMessagesByKey[resolvedStreamKey] ?? {};
+      const newUserMessages = { ...currentUserMessagesForKey };
 
-      if (process.env.NODE_ENV === "development") {
-        logger.log(
-          `User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${extractTextFromContent(finalUserMessage.content).substring(0, 50)}..."`,
-        );
-      }
+      // Find the temporary message by content comparison (extract text from ContentPart[])
+      const tempMessage = Object.values(newUserMessages).find(
+        (msg) =>
+          msg.role === "user" &&
+          extractTextFromContent(msg.content) ===
+            serverConfirmedMessageContent &&
+          msg.status === "sending",
+      );
 
-      // ERMAIN-88 FIX: Only create optimistic assistant if one doesn't already exist
-      // The optimistic assistant is now created immediately in sendMessage()
-      const hasOptimisticAssistant =
-        prevState.streaming.currentMessageId?.startsWith("temp-assistant-");
+      if (tempMessage?.id) {
+        const tempMessageKeyToDelete = tempMessage.id; // This key is the temp-user-id
+        delete newUserMessages[tempMessageKeyToDelete]; // Remove message with temp ID
 
-      if (hasOptimisticAssistant) {
-        // Already have an optimistic assistant placeholder from sendMessage()
-        // Update its timestamp to be after the server-confirmed user message
-        // to maintain correct ordering (server timestamp may be much later than client timestamp)
-        const adjustedAssistantTimestamp = new Date(
-          new Date(serverConfirmedMessage.created_at).getTime() + 1,
-        ).toISOString();
+        // Construct the final message object using server data
+        const finalUserMessage = {
+          id: serverConfirmedMessage.id,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          content: serverConfirmedMessage.content ?? [],
+          role: serverConfirmedMessage.role as "user", // Role from server, cast as "user"
+          createdAt: serverConfirmedMessage.created_at,
+          status: "complete" as const, // Message is saved, so status is complete
+          input_files_ids: serverConfirmedMessage.input_files_ids,
+        };
+
+        newUserMessages[finalUserMessage.id] = finalUserMessage; // Add message with real ID
 
         if (process.env.NODE_ENV === "development") {
           logger.log(
-            `[OPTIMISTIC] Updating optimistic assistant placeholder timestamp: ${prevState.streaming.createdAt} → ${adjustedAssistantTimestamp} (after user message: ${serverConfirmedMessage.created_at})`,
+            `User message ID updated: from ${tempMessageKeyToDelete} to ${finalUserMessage.id}. Content: "${extractTextFromContent(finalUserMessage.content).substring(0, 50)}..."`,
           );
         }
-        return {
-          ...prevState,
-          userMessages: newUserMessages,
-          streaming: {
-            ...prevState.streaming,
-            createdAt: adjustedAssistantTimestamp, // Update timestamp to ensure correct ordering
-          },
-        };
-      }
 
-      // Fallback: Create optimistic assistant if backend was faster than expected
-      const now = new Date().toISOString();
-      const optimisticAssistantId = `temp-assistant-${Date.now()}`;
-
-      if (process.env.NODE_ENV === "development") {
-        logger.log(
-          `[OPTIMISTIC] Backend was faster - creating optimistic assistant placeholder with ID: ${optimisticAssistantId}`,
+        const assistantTimestamp = new Date(
+          new Date(serverConfirmedMessage.created_at).getTime() + 1,
+        ).toISOString();
+        const activeResolvedStreamKey = resolveStreamKeyFromState(
+          prevState.activeStreamKey,
+          prevState.streamKeyAliases,
         );
-      }
+        const nextUserMessagesByKey = {
+          ...prevState.userMessagesByKey,
+          [resolvedStreamKey]: newUserMessages,
+        };
 
-      return {
-        ...prevState,
-        userMessages: newUserMessages,
-        streaming: {
-          ...prevState.streaming,
+        const currentMessageId = currentStreaming.currentMessageId;
+        const pointsToUserMessage =
+          (typeof currentMessageId === "string" &&
+            (currentMessageId === tempMessageKeyToDelete ||
+              currentMessageId === finalUserMessage.id ||
+              currentMessageId.startsWith("temp-user-"))) ||
+          (typeof currentMessageId === "string" &&
+            newUserMessages[currentMessageId].role === "user");
+
+        // ERMAIN-88 FIX: Only create optimistic assistant if one doesn't already exist
+        // The optimistic assistant is now created immediately in sendMessage()
+        const hasOptimisticAssistant =
+          currentMessageId?.startsWith("temp-assistant-") &&
+          !pointsToUserMessage;
+
+        if (hasOptimisticAssistant) {
+          if (process.env.NODE_ENV === "development") {
+            logger.log(
+              `[OPTIMISTIC] Updating optimistic assistant placeholder timestamp: ${currentStreaming.createdAt} → ${assistantTimestamp} (after user message: ${serverConfirmedMessage.created_at})`,
+            );
+          }
+          const nextStreaming = {
+            ...currentStreaming,
+            createdAt: assistantTimestamp,
+          };
+
+          return {
+            ...prevState,
+            userMessagesByKey: nextUserMessagesByKey,
+            userMessages:
+              activeResolvedStreamKey === resolvedStreamKey
+                ? newUserMessages
+                : prevState.userMessages,
+            streamingByKey: {
+              ...prevState.streamingByKey,
+              [resolvedStreamKey]: nextStreaming,
+            },
+            streaming:
+              activeResolvedStreamKey === resolvedStreamKey
+                ? nextStreaming
+                : prevState.streaming,
+          };
+        }
+
+        // If we already have an assistant anchor (real assistant ID), keep it
+        // and only force ordering behind the confirmed user message.
+        const hasExistingAssistantAnchor =
+          !!currentMessageId && !pointsToUserMessage;
+
+        if (hasExistingAssistantAnchor) {
+          if (process.env.NODE_ENV === "development") {
+            logger.log(
+              `[OPTIMISTIC] Preserving existing assistant stream anchor (${currentMessageId}) and adjusting timestamp to ${assistantTimestamp}.`,
+            );
+          }
+
+          const nextStreaming = {
+            ...currentStreaming,
+            createdAt: assistantTimestamp,
+          };
+
+          return {
+            ...prevState,
+            userMessagesByKey: nextUserMessagesByKey,
+            userMessages:
+              activeResolvedStreamKey === resolvedStreamKey
+                ? newUserMessages
+                : prevState.userMessages,
+            streamingByKey: {
+              ...prevState.streamingByKey,
+              [resolvedStreamKey]: nextStreaming,
+            },
+            streaming:
+              activeResolvedStreamKey === resolvedStreamKey
+                ? nextStreaming
+                : prevState.streaming,
+          };
+        }
+
+        // Fallback: Create/repair optimistic assistant placeholder if stream anchor
+        // points to a user message or is missing.
+        const optimisticAssistantId = `temp-assistant-${Date.now()}`;
+
+        if (process.env.NODE_ENV === "development") {
+          logger.log(
+            `[OPTIMISTIC] Creating/repairing optimistic assistant placeholder with ID: ${optimisticAssistantId}. Previous anchor: ${String(currentMessageId)}`,
+          );
+        }
+
+        const nextStreaming = {
+          ...currentStreaming,
           currentMessageId: optimisticAssistantId,
           content: [],
-          createdAt: now, // Store timestamp for consistent ordering
+          createdAt: assistantTimestamp, // Ensure assistant renders after confirmed user
           isStreaming: false, // Not streaming yet, just a placeholder
           isFinalizing: false,
           toolCalls: {},
-        },
-      };
-    } else {
-      // If no matching temp message found, log a warning.
-      // This could happen if the message was cleared or if there's a mismatch.
-      logger.warn(
-        `No temporary user message found to update for content: "${serverConfirmedMessageContent.substring(0, 100)}...". This might happen if the message was cleared or if there is a data mismatch.`,
+        };
+        return {
+          ...prevState,
+          userMessagesByKey: nextUserMessagesByKey,
+          userMessages:
+            activeResolvedStreamKey === resolvedStreamKey
+              ? newUserMessages
+              : prevState.userMessages,
+          streamingByKey: {
+            ...prevState.streamingByKey,
+            [resolvedStreamKey]: nextStreaming,
+          },
+          streaming:
+            activeResolvedStreamKey === resolvedStreamKey
+              ? nextStreaming
+              : prevState.streaming,
+        };
+      } else {
+        // If no matching temp message found, log a warning.
+        // This could happen if the message was cleared or if there's a mismatch.
+        logger.warn(
+          `No temporary user message found to update for content: "${serverConfirmedMessageContent.substring(0, 100)}...". This might happen if the message was cleared or if there is a data mismatch.`,
+          {
+            serverConfirmedMessage,
+            previousUserMessages: currentUserMessagesForKey, // Log the state before attempting update
+          },
+        );
+      }
+      // If no temp message was found to replace, return the previous state unchanged
+      logger.log(
+        "No matching temporary message found, returning previous state.",
         {
-          serverConfirmedMessage,
-          previousUserMessages: prevState.userMessages, // Log the state before attempting update
+          serverContent: serverConfirmedMessageContent,
+          currentMessages: currentUserMessagesForKey,
         },
       );
-    }
-    // If no temp message was found to replace, return the previous state unchanged
-    logger.log(
-      "No matching temporary message found, returning previous state.",
-      {
-        serverContent: serverConfirmedMessageContent,
-        currentMessages: prevState.userMessages,
-      },
-    );
-    return prevState;
-  });
+      return prevState;
+    },
+    false,
+    "messaging/handleUserMessageSaved",
+  );
 }

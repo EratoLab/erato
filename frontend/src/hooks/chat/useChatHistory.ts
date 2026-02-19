@@ -3,11 +3,13 @@
  *
  * Provides a clean interface for fetching, navigating and managing chat history.
  */
+/* eslint-disable lingui/no-unlocalized-strings */
 import { useQueryClient } from "@tanstack/react-query";
 // import { useRouter } from "next/navigation"; // Removed Next.js router
 import { useCallback, useMemo } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom"; // Added React Router hooks
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 
 import {
   useRecentChats,
@@ -21,7 +23,7 @@ import { deepMerge } from "@/lib/generated/v1betaApi/v1betaApiUtils";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
-import { useMessagingStore } from "./store/messagingStore";
+import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
 // Import the correct response type and the RecentChat type from schemas
 // No longer needed after switching to invalidateQueries:
@@ -39,18 +41,32 @@ interface ChatHistoryState {
 
 // Create a store to track the current selected chat
 // This allows sharing the selection state across components
-export const useChatHistoryStore = create<ChatHistoryState>((set) => {
-  // Initialize with default state
-  const initialState: ChatHistoryState = {
-    isNewChatPending: false,
-    setNewChatPending: (isPending) => set({ isNewChatPending: isPending }),
-  };
+export const useChatHistoryStore = create<ChatHistoryState>()(
+  devtools(
+    (set) => {
+      // Initialize with default state
+      const initialState: ChatHistoryState = {
+        isNewChatPending: false,
+        setNewChatPending: (isPending) =>
+          set(
+            { isNewChatPending: isPending },
+            false,
+            "chatHistory/setNewChatPending",
+          ),
+      };
 
-  // Add debugging for state changes
-  logger.log("Initializing chat history store with state:", initialState);
+      // Add debugging for state changes
+      logger.log("Initializing chat history store with state:", initialState);
 
-  return initialState;
-});
+      return initialState;
+    },
+    {
+      name: "Chat History Store",
+      store: "chat-history-store",
+      enabled: process.env.NODE_ENV === "development",
+    },
+  ),
+);
 
 export function useChatHistory() {
   // const router = useRouter(); // Removed Next.js router
@@ -129,11 +145,17 @@ export function useChatHistory() {
     try {
       logger.log("Creating new chat - navigating to /chat/new");
 
-      // CRITICAL: Clear ALL state before navigation - messages, streaming, AND abort SSE
-      // This prevents stale messages and stops any active streaming
-      useMessagingStore.getState().abortActiveSSE();
-      useMessagingStore.getState().clearUserMessages();
-      useMessagingStore.getState().resetStreaming();
+      // CRITICAL: Clear ALL messaging state before navigation.
+      // We intentionally clear across all stream keys to avoid resurrecting
+      // an older in-flight new-chat stream when user clicks "new chat" again.
+      const messagingStore = useMessagingStore.getState();
+      messagingStore.abortAllSSE();
+      messagingStore.clearUserMessages();
+      messagingStore.clearAllStreaming();
+      messagingStore.clearAllApiMessages();
+      messagingStore.setNewlyCreatedChatIdInStore(null);
+      messagingStore.setAwaitingFirstStreamChunkForNewChat(false);
+      messagingStore.setSSEAbortCallback(null, getStreamKey(currentChatId));
 
       // Set the pending flag first to prevent unwanted changes during navigation
       logger.log("Setting isNewChatPending to TRUE");
@@ -160,7 +182,7 @@ export function useChatHistory() {
       setNewChatPending(false);
       throw error;
     }
-  }, [navigate, setNewChatPending]); // Updated dependency array
+  }, [navigate, setNewChatPending, currentChatId]); // Updated dependency array
 
   // Archive a chat
   const archiveChat = useCallback(

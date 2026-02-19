@@ -22,6 +22,7 @@ export const handleChatCreated = (
     message_type: "chat_created";
   },
   setNewlyCreatedChatId: (chatId: string | null) => void,
+  streamKey?: string,
 ): void => {
   if ("chat_id" in responseData && typeof responseData.chat_id === "string") {
     console.log(
@@ -43,6 +44,11 @@ export const handleChatCreated = (
     useMessagingStore
       .getState()
       .setNewlyCreatedChatIdInStore(responseData.chat_id);
+    if (streamKey && streamKey !== responseData.chat_id) {
+      useMessagingStore
+        .getState()
+        .moveStreamingState(streamKey, responseData.chat_id);
+    }
   } else {
     console.warn(
       "[DEBUG_REDIRECT] handleChatCreated: Received chat_created event without a valid chat_id. Payload:",

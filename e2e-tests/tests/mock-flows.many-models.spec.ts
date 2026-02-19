@@ -2,7 +2,7 @@ import { expect, Page, test } from "@playwright/test";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { chatIsReadyToChat } from "./shared";
+import { chatIsReadyToChat, ensureOpenSidebar } from "./shared";
 import { TAG_CI } from "./tags";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +33,170 @@ const uploadFileInChat = async (
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles(file);
 };
+
+test(
+  "Mock-LLM long-running streams continue independently across two chats",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(120000);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+
+    // Start first long-running chat
+    await textbox.fill("long running 20");
+    await textbox.press("Enter");
+    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 10000 });
+    const firstChatId = page.url().split("/").pop();
+    expect(firstChatId).toBeTruthy();
+
+    await expect(page.getByText("Second 5 passed")).toBeVisible({
+      timeout: 20000,
+    });
+
+    // Start second long-running chat
+    await page.goto("/chat/new");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    await textbox.fill("long running 25");
+    await textbox.press("Enter");
+    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 10000 });
+    const secondChatId = page.url().split("/").pop();
+    expect(secondChatId).toBeTruthy();
+    expect(secondChatId).not.toBe(firstChatId);
+
+    await expect(page.getByText("Second 5 passed")).toBeVisible({
+      timeout: 20000,
+    });
+
+    // Switch back to first chat; it should not be complete yet, then complete.
+    await ensureOpenSidebar(page);
+    await page
+      .getByRole("complementary")
+      .locator(`[data-chat-id="${firstChatId}"]`)
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/chat/${firstChatId}$`));
+
+    await expect(page.getByText("Complete!")).toHaveCount(0);
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Second 20 passed",
+      {
+        timeout: 40000,
+      },
+    );
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Complete!",
+      {
+        timeout: 40000,
+      },
+    );
+
+    // Switch to second chat; it should not be complete yet, then complete.
+    await ensureOpenSidebar(page);
+    await page
+      .getByRole("complementary")
+      .locator(`[data-chat-id="${secondChatId}"]`)
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/chat/${secondChatId}$`));
+
+    await expect(page.getByText("Complete!")).toHaveCount(0);
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Second 25 passed",
+      {
+        timeout: 50000,
+      },
+    );
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Complete!",
+      {
+        timeout: 50000,
+      },
+    );
+  },
+);
+
+test(
+  "Mock-LLM long-running stream survives hard reload and completes",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(90000);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+
+    await textbox.fill("long running 15");
+    await textbox.press("Enter");
+
+    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 10000 });
+    await expect(page.getByText("Second 5 passed")).toBeVisible({
+      timeout: 20000,
+    });
+
+    // Hard reload the page while stream is still in progress.
+    await page.reload();
+
+    await expect(page.getByText("Second 5 passed")).toBeVisible({
+      timeout: 20000,
+    });
+    await expect(page.getByText("Complete!")).toHaveCount(0);
+
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Second 15 passed",
+      {
+        timeout: 30000,
+      },
+    );
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Complete!",
+      {
+        timeout: 30000,
+      },
+    );
+  },
+);
+
+test(
+  "Mock-LLM delay shows optimistic user/loading quickly and completes within 5s",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+
+    await textbox.fill("delay");
+    await textbox.press("Enter");
+
+    // Within 1s of submit we should already see optimistic user + assistant loading.
+    await expect(page.getByTestId("message-user").last()).toContainText(
+      "delay",
+      {
+        timeout: 1000,
+      },
+    );
+    await expect(page.getByText("Loading")).toBeVisible({ timeout: 1000 });
+
+    // Then streaming should complete in the next 10 seconds.
+    await expect(page.getByText("Loading")).toHaveCount(0, { timeout: 10000 });
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "After waiting for 5 seconds",
+      {
+        timeout: 10000,
+      },
+    );
+  },
+);
 
 test(
   "Mock-LLM shows content-filter error for blocked prompt",

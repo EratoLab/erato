@@ -53,6 +53,15 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
 
   let abortController: AbortController | null = null;
   let isConnected = false;
+  let isClosed = false;
+
+  const closeOnce = () => {
+    if (isClosed) {
+      return;
+    }
+    isClosed = true;
+    onClose?.();
+  };
 
   // For GET requests, use the native EventSource
   if (method === "GET" && typeof EventSource !== "undefined") {
@@ -94,7 +103,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         logger.log("Closing native EventSource connection");
         eventSource.close();
         isConnected = false;
-        onClose?.();
+        closeOnce();
       }
     };
   }
@@ -148,30 +157,44 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
           logger.log(`Received ${lines.length} events`);
         }
 
-        for (const line of lines) {
-          if (line.trim() === "") continue;
+        for (const block of lines) {
+          if (block.trim() === "") continue;
 
-          // Parse event data
-          const eventData = line.split("\n").reduce(
-            (acc, line) => {
-              const colonIndex = line.indexOf(":");
-              if (colonIndex === -1) return acc;
+          const eventDataLines: string[] = [];
+          let eventType = "message";
+          let eventId: string | undefined;
 
-              const field = line.slice(0, colonIndex).trim();
-              const value = line.slice(colonIndex + 1).trim();
+          for (const rawLine of block.split("\n")) {
+            const parsedLine = rawLine.replace(/\r$/, "");
+            if (parsedLine === "" || parsedLine.startsWith(":")) {
+              continue;
+            }
 
-              if (field === "data") {
-                acc.data = value;
-              } else if (field === "event") {
-                acc.type = value;
-              } else if (field === "id") {
-                acc.id = value;
-              }
+            const colonIndex = parsedLine.indexOf(":");
+            const field =
+              colonIndex === -1
+                ? parsedLine.trim()
+                : parsedLine.slice(0, colonIndex).trim();
+            const rawValue =
+              colonIndex === -1 ? "" : parsedLine.slice(colonIndex + 1);
+            const value = rawValue.startsWith(" ")
+              ? rawValue.slice(1)
+              : rawValue;
 
-              return acc;
-            },
-            { data: "", type: "message", id: undefined } as SSEEvent,
-          );
+            if (field === "data") {
+              eventDataLines.push(value);
+            } else if (field === "event" && value) {
+              eventType = value;
+            } else if (field === "id") {
+              eventId = value;
+            }
+          }
+
+          const eventData: SSEEvent = {
+            data: eventDataLines.join("\n"),
+            type: eventType,
+            id: eventId,
+          };
 
           // Only invoke callback if we have valid data
           if (eventData.data && eventData.data.trim() !== "") {
@@ -184,7 +207,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       // Generator finishes when stream ends, reader lock released in generator's finally
       logger.log("Stream ended (async generator)");
       isConnected = false;
-      onClose?.();
+      closeOnce();
     } catch (err) {
       // Catch errors during stream processing or generator execution
       const error = err instanceof Error ? err : new Error(String(err));
@@ -250,7 +273,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         // This is just a normal abort, not an error
         logger.log("Request aborted");
         isConnected = false;
-        onClose?.();
+        closeOnce();
         return;
       }
 
@@ -273,7 +296,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       abortController.abort();
       abortController = null;
       isConnected = false;
-      onClose?.();
+      closeOnce();
     }
   };
 }
