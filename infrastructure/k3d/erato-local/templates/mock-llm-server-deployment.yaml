@@ -27,6 +27,8 @@ spec:
               value: "0.0.0.0"
             - name: PORT
               value: {{ .Values.mockLlmServer.service.port | quote }}
+            - name: TOKIO_WORKER_THREADS
+              value: "4"
           ports:
             - name: http
               containerPort: {{ .Values.mockLlmServer.service.port }}

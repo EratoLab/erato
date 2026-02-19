@@ -250,6 +250,44 @@ test(
 );
 
 test(
+  "Mock-LLM MCP flow executes a normal tool call successfully",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+    await textbox.fill("read mock file");
+    await textbox.press("Enter");
+
+    const latestAssistantMessage = page.getByTestId("message-assistant").last();
+    await expect(latestAssistantMessage).toBeVisible();
+
+    const toolCallsToggle = latestAssistantMessage.getByRole("button", {
+      name: /Tool calls \(/i,
+    });
+    await expect(toolCallsToggle).toBeVisible({ timeout: 30000 });
+    await toolCallsToggle.click();
+
+    await expect(latestAssistantMessage).toContainText("read_file");
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 30000,
+    });
+    await expect(latestAssistantMessage).toContainText(
+      "The secret content has been read successfully.",
+      { timeout: 15000 },
+    );
+    await expect(
+      latestAssistantMessage.getByTestId("chat-message-error"),
+    ).toHaveCount(0);
+  },
+);
+
+test(
   "Mock-LLM shows content-filter error for blocked prompt",
   { tag: TAG_CI },
   async ({ page }) => {

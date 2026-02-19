@@ -104,6 +104,7 @@ The server comes with pre-configured mocks:
 | Fast | Demonstrates fast streaming | "fast" | Quick response | 10ms |
 | Delay | Demonstrates delayed response | "delay" | Medium-sized text | 5000ms (5s) |
 | LongRunning | Demonstrates very long streaming | "long running" or "long running 30" | Countdown for requested seconds (default 90s) | 1000ms (1s) |
+| ReadMockFileToolCall | Triggers normal MCP file-read flow | "read mock file" | Tool call to `read_file` with `docs/readme.txt` | 100ms |
 | TriggerMcpContentFilterToolCall | Triggers MCP content-filter error flow | "mcp content filter" | Tool call to `trigger_content_filter` | 100ms |
 | (default) | Fallback when no match | - | Generic response | 50ms |
 
