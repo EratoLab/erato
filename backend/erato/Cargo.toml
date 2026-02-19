@@ -39,7 +39,7 @@ lol_html = "2.2.0"
 ordered-multimap = { version = "0.7.3",  features = ["serde"]}
 futures = "0.3"
 tokio-stream = { version = "0.1.17", features = ["sync"] }
-genai = { version = "0.5.1-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "d85950e5791dd8f863e751fc33cbbbbd4e768e49" }
+genai = { version = "0.6.0-beta.2-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "ff563b349b5dbfed9b28f92b9942e7298b333591" }
 reqwest = { version = "0.13.1", features = ["multipart"] }
 opendal = { version = "0.52.0", features = ["services-s3", "services-azblob"] }
 
@@ -69,7 +69,7 @@ tokio-metrics = { version = "0.4.7", features = ["metrics-rs-integration"] }
 base64 = "0.22.1"
 # Tokio console for async debugging
 console-subscriber = { version = "0.5.0", optional = true }
-kreuzberg = { version = "4.2.8" , features = ["bundled-pdfium", "excel", "office", "html", "archives"]}
+kreuzberg = { version = "4.3.6" , features = ["bundled-pdfium", "excel", "office", "html", "archives"]}
 
 [dependencies.sentry]
 version = "0.41.0"

@@ -3,6 +3,7 @@ use crate::services::mcp_session_manager::{ManagedTool, McpSessionManager};
 use eyre::{Report, eyre};
 use genai::chat::Tool as GenaiTool;
 use genai::chat::ToolCall as GenaiToolCall;
+use genai::chat::ToolName as GenaiToolName;
 use rmcp::model::CallToolRequestParam;
 use sea_orm::prelude::Uuid;
 use std::collections::HashSet;
@@ -121,7 +122,7 @@ pub fn convert_mcp_tools_to_genai_tools(managed_mcp_tools: Vec<ManagedTool>) -> 
                 serde_json::Value::Object(tool.input_schema.as_ref().clone());
 
             GenaiTool {
-                name: tool.name.to_string(),
+                name: GenaiToolName::Custom(tool.name.to_string()),
                 description: tool.description.map(|d| d.to_string()),
                 schema: Some(input_schema_value),
                 config: None,

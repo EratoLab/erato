@@ -446,6 +446,9 @@ impl AppConfig {
                         }
                     }
                 }
+                if provider_config.provider_kind == "vertex_ai" {
+                    *provider_config = provider_config.clone().migrate_vertex_ai_to_gemini();
+                }
             }
         }
 
@@ -804,6 +807,8 @@ pub struct ChatProviderConfig {
     // - "openai" (applicable for both OpenAI and AzureGPT)
     // - "azure_openai" (will be automatically converted to "openai" format during config loading)
     // - "ollama"
+    // - "gemini"
+    // - "vertex_ai" (will be automatically converted to "gemini" during config loading)
     pub provider_kind: String,
     // The model name to use for the chat provider.
     //
@@ -828,6 +833,10 @@ pub struct ChatProviderConfig {
     // `.cognitiveservices.azure.com`, or `.services.ai.azure.com`
     // E.g. 'https://germanywestcentral.api.cognitive.microsoft.com'
     pub base_url: Option<String>,
+    // Optional Vertex AI region (e.g. "europe-west3").
+    // If provider_kind is `vertex_ai` and base_url is not provided, this will be used
+    // to construct a regional Vertex AI endpoint.
+    pub region: Option<String>,
     pub api_key: Option<String>,
     // For Azure OpenAI, the API version to use (e.g. "2024-10-21").
     // This will be automatically converted to additional_request_parameters during config loading.
@@ -852,6 +861,10 @@ pub struct ChatProviderConfig {
 }
 
 impl ChatProviderConfig {
+    pub const VERTEX_AI_BASE_URL: &str = "https://aiplatform.googleapis.com/v1/publishers/google/";
+    pub const VERTEX_AI_REGION_BASE_URL_TEMPLATE: &str =
+        "https://{region}-aiplatform.googleapis.com/v1/publishers/google/";
+
     /// Parses the additional_request_parameters into a HashMap of key-value pairs
     pub fn additional_request_parameters_map(&self) -> HashMap<String, String> {
         let mut params = HashMap::new();
@@ -925,6 +938,7 @@ impl ChatProviderConfig {
             model_display_name: self.model_display_name,
             model_name_langfuse: self.model_name_langfuse,
             base_url,
+            region: self.region,
             api_key: None,     // Moved to headers
             api_version: None, // Moved to parameters
             additional_request_parameters: if additional_params.is_empty() {
@@ -942,6 +956,28 @@ impl ChatProviderConfig {
             model_capabilities: self.model_capabilities,
             model_settings: self.model_settings,
         })
+    }
+
+    /// Migrates vertex_ai configuration to gemini format.
+    pub fn migrate_vertex_ai_to_gemini(mut self) -> Self {
+        if self.provider_kind != "vertex_ai" {
+            return self;
+        }
+
+        self.provider_kind = "gemini".to_string();
+        if self.base_url.is_none() {
+            self.base_url = Some(
+                self.region
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|region| !region.is_empty())
+                    .map(|region| {
+                        Self::VERTEX_AI_REGION_BASE_URL_TEMPLATE.replace("{region}", region)
+                    })
+                    .unwrap_or_else(|| Self::VERTEX_AI_BASE_URL.to_string()),
+            );
+        }
+        self
     }
 
     /// Validates that system_prompt and system_prompt_langfuse are mutually exclusive.

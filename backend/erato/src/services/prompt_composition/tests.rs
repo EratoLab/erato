@@ -289,6 +289,7 @@ mod test_cases {
             model_display_name: Some("GPT-4".to_string()),
             model_name_langfuse: None,
             base_url: None,
+            region: None,
             api_key: None,
             api_version: None,
             additional_request_parameters: None,

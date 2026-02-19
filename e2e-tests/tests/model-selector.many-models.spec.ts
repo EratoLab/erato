@@ -27,6 +27,16 @@ test(
 test.describe("Can chat with different models", () => {
   const modelChatTests = [
     {
+      modelName: "Gemini 2.5-flash",
+      prompt: "Please answer in one short sentence about the sun.",
+      tags: [TAG_CI],
+    },
+    {
+      modelName: "Gemini 2.5-pro",
+      prompt: "Please provide a brief greeting in exactly five words.",
+      tags: [TAG_CI],
+    },
+    {
       modelName: "GPT-4.1",
       prompt: "Please answer in one short sentence about the sun.",
       tags: [TAG_CI],
@@ -84,6 +94,7 @@ test.describe("Can chat with different models", () => {
           loadingTimeoutMs: 20000,
         });
 
+        await expect(page.getByTestId("chat-message-error")).toHaveCount(0);
         await expect(page.getByTestId("message-assistant")).toHaveCount(
           assistantMessageCountBefore + 1,
         );
