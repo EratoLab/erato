@@ -247,6 +247,22 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "ReadMockFileToolCall".to_string(),
+            description:
+                "Returns a tool call to read_file when last message asks to read mock file"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "read mock file".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "read_file".to_string(),
+                arguments: r#"{"path":"docs/readme.txt"}"#.to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
             name: "GenerateCatMcpToolCall".to_string(),
             description:
                 "Returns a tool call to generate_image when last message asks for generate cat mcp"
