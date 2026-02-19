@@ -38,6 +38,7 @@ async fn main() -> Result<(), Report> {
     );
 
     let state = AppState::new(config.clone()).await?;
+    erato::metrics::start_cache_size_metrics_reporter(state.clone());
 
     // Verify that the database has been migrated to the latest version
     models::ensure_latest_migration(&state.db).await?;
