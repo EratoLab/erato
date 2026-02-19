@@ -195,6 +195,11 @@ test(
         timeout: 10000,
       },
     );
+
+    // Ensure no duplicate "delay" user message remains after optimistic reconciliation.
+    await expect(
+      page.getByTestId("message-user").filter({ hasText: "delay" }),
+    ).toHaveCount(1);
   },
 );
 

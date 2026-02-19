@@ -123,13 +123,16 @@ export function handleUserMessageSaved(
         };
 
         const currentMessageId = currentStreaming.currentMessageId;
+        const currentAnchoredMessage =
+          typeof currentMessageId === "string"
+            ? newUserMessages[currentMessageId]
+            : undefined;
         const pointsToUserMessage =
           (typeof currentMessageId === "string" &&
             (currentMessageId === tempMessageKeyToDelete ||
               currentMessageId === finalUserMessage.id ||
               currentMessageId.startsWith("temp-user-"))) ||
-          (typeof currentMessageId === "string" &&
-            newUserMessages[currentMessageId].role === "user");
+          currentAnchoredMessage?.role === "user";
 
         // ERMAIN-88 FIX: Only create optimistic assistant if one doesn't already exist
         // The optimistic assistant is now created immediately in sendMessage()
