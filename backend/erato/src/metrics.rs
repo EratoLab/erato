@@ -53,6 +53,7 @@ pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
     )
     .set(1.0);
 
+    report_chat_provider_info_metrics(config);
     describe_cache_metrics();
 
     tokio::spawn(RuntimeMetricsReporterBuilder::default().describe_and_run());
@@ -141,7 +142,33 @@ fn report_cache_metrics(cache_name: &str, metrics: CacheMetrics) {
     gauge!("erato_cache_fill_ratio", "cache" => cache_name.to_string()).set(fill_ratio_percent);
 }
 
+fn report_chat_provider_info_metrics(config: &AppConfig) {
+    let Some(chat_providers) = config.chat_providers.as_ref() else {
+        return;
+    };
+
+    let mut provider_ids: Vec<&String> = chat_providers.providers.keys().collect();
+    provider_ids.sort();
+
+    for chat_provider_id in provider_ids {
+        if let Some(provider) = chat_providers.providers.get(chat_provider_id) {
+            gauge!(
+                "erato_chat_provider_info",
+                "chat_provider_id" => chat_provider_id.clone(),
+                "provider_kind" => provider.provider_kind.clone(),
+                "model_name" => provider.model_name.clone()
+            )
+            .set(1.0);
+        }
+    }
+}
+
 fn describe_cache_metrics() {
+    describe_gauge!(
+        "erato_chat_provider_info",
+        Unit::Count,
+        "Info metric for configured chat providers. Always 1; labels carry provider metadata."
+    );
     describe_gauge!(
         "erato_cache_max_size_bytes",
         Unit::Bytes,
