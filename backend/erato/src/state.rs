@@ -169,6 +169,7 @@ impl AppState {
                 value.len().try_into().unwrap_or(u32::MAX)
             })
             .max_capacity(config.caches.file_bytes_cache_mb * 1024 * 1024)
+            .time_to_idle(Duration::from_hours(12))
             .build();
 
         // Initialize file contents cache with MB-based weigher
@@ -178,6 +179,7 @@ impl AppState {
                 value.len().try_into().unwrap_or(u32::MAX)
             })
             .max_capacity(config.caches.file_contents_cache_mb * 1024 * 1024)
+            .time_to_idle(Duration::from_hours(12))
             .build();
 
         // Initialize token count cache with MB-based weigher
@@ -187,6 +189,7 @@ impl AppState {
                 key.len().try_into().unwrap_or(u32::MAX)
             })
             .max_capacity(config.caches.token_count_cache_mb * 1024 * 1024)
+            .time_to_idle(Duration::from_hours(12))
             .build();
 
         // Initialize file processor based on configuration
