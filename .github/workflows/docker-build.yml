@@ -165,6 +165,38 @@ jobs:
         if: success() || failure()
         run: ./check-docs.sh
 
+      - name: "Kubescape main chart (DevOpsBest)"
+        if: success() || failure()
+        uses: kubescape/github-action@47d8e4561a2a1be8e22a4edfbd02c0b97f7335cb
+        with:
+          files: infrastructure/charts/erato
+          frameworks: DevOpsBest
+          failedThreshold: 20
+
+      - name: "Kubescape main chart (MITRE)"
+        if: success() || failure()
+        uses: kubescape/github-action@47d8e4561a2a1be8e22a4edfbd02c0b97f7335cb
+        with:
+          files: infrastructure/charts/erato
+          frameworks: MITRE
+          failedThreshold: 0
+
+      - name: "Kubescape main chart (NSA)"
+        if: success() || failure()
+        uses: kubescape/github-action@47d8e4561a2a1be8e22a4edfbd02c0b97f7335cb
+        with:
+          files: infrastructure/charts/erato
+          frameworks: NSA
+          failedThreshold: 35
+
+      - name: "Kubescape main chart (SOC2)"
+        if: success() || failure()
+        uses: kubescape/github-action@47d8e4561a2a1be8e22a4edfbd02c0b97f7335cb
+        with:
+          files: infrastructure/charts/erato
+          frameworks: SOC2
+          failedThreshold: 35
+
       - name: "Validate Helm test schema for erato-local chart"
         working-directory: ./infrastructure/k3d/erato-local
         if: success() || failure()
