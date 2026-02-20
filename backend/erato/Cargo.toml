@@ -1,6 +1,6 @@
 [package]
 name = "erato"
-version = "0.5.1"
+version = "0.5.2"
 license = "AGPL-3.0-or-later"
 edition = "2024"
 
@@ -69,7 +69,7 @@ tokio-metrics = { version = "0.4.7", features = ["metrics-rs-integration"] }
 base64 = "0.22.1"
 # Tokio console for async debugging
 console-subscriber = { version = "0.5.0", optional = true }
-kreuzberg = { version = "4.3.6" , features = ["bundled-pdfium", "excel", "office", "html", "archives"]}
+kreuzberg = { version = "4.3.6",  features = ["bundled-pdfium", "excel", "office", "html", "archives"]}
 
 [dependencies.sentry]
 version = "0.41.0"
