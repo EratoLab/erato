@@ -1,6 +1,8 @@
-postgres_data
-minio_data
 azurite_data
+minio_data
+postgres_data
+seaweedfs_data
+
 target
 
 .env
