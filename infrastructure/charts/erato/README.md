@@ -240,7 +240,7 @@ ingress:
 | oauth2Proxy.image.pullPolicy | string | `"IfNotPresent"` | OAuth2 Proxy image pull policy |
 | oauth2Proxy.image.pullSecrets | list | `[]` | OAuth2 Proxy image pull secrets |
 | oauth2Proxy.image.repository | string | `"quay.io/oauth2-proxy/oauth2-proxy"` | OAuth2 Proxy image repository |
-| oauth2Proxy.image.tag | string | `"v7.8.1"` | OAuth2 Proxy image tag |
+| oauth2Proxy.image.tag | string | `"v7.14.2"` | OAuth2 Proxy image tag |
 | oauth2Proxy.metrics.enabled | bool | `false` | Enable oauth2-proxy metrics exposure resources. |
 | oauth2Proxy.metrics.port | int | `44180` | oauth2-proxy metrics listener port. Must match oauth2-proxy config (e.g. metrics_address). |
 | oauth2Proxy.metrics.service.addPrometheusAnnotations | bool | `true` | Add standard `prometheus.io/*` scrape annotations to the metrics Service. |
