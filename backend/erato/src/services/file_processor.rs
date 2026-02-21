@@ -60,7 +60,6 @@ impl FileProcessor for KreuzbergProcessor {
                 };
 
                 // Extract content using kreuzberg
-                // Note: mime_type is auto-detected, so we pass an empty string
                 let result = kreuzberg::extract_bytes_sync(&file_bytes, &mime_type, &config)
                     .wrap_err("Kreuzberg extraction failed")?;
 
@@ -82,10 +81,30 @@ pub fn create_file_processor(_processor_type: &str) -> Result<Arc<dyn FileProces
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn test_create_file_processor() {
         let processor = create_file_processor("kreuzberg");
         assert!(processor.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_extracts_page_markers_from_compressed_pdf() {
+        let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/integration_tests/test_files/sample-report-compressed.pdf");
+        let pdf_bytes = fs::read(&fixture_path).expect("Failed to read PDF fixture");
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(pdf_bytes)
+            .await
+            .expect("Failed to extract text from PDF");
+
+        assert!(
+            extracted.contains("<page number=\""),
+            "Expected page marker in extracted text, but none was found"
+        );
     }
 }
