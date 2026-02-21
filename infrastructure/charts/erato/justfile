@@ -30,3 +30,7 @@ docs:
 # Check if README.md is up-to-date with values.yaml (for CI)
 docs_check:
     ./check-docs.sh
+
+# Run Kubescape security scan against the chart using all available frameworks.
+kubescape_scan:
+    ./scripts/kubescape_scan.sh

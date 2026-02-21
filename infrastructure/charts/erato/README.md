@@ -1,6 +1,7 @@
 # erato
 
 ![Version: 0.5.2](https://img.shields.io/badge/Version-0.5.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.2](https://img.shields.io/badge/AppVersion-0.5.2-informational?style=flat-square)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/erato)](https://artifacthub.io/packages/helm/erato/erato)
 
 Helm chart for the Erato chat application
 
@@ -44,6 +45,19 @@ helm uninstall my-erato
 ```
 
 The command removes all the Kubernetes components associated with the chart and deletes the release.
+
+## Security
+
+This chart is statically analyzed with Kubescape during local checks and CI.
+
+Current Kubescape compliance score thresholds by framework:
+
+- ![Kubescape AllControls](https://img.shields.io/badge/Kubescape-AllControls-yellow) `AllControls`: 80
+- ![Kubescape ArmoBest](https://img.shields.io/badge/Kubescape-ArmoBest-yellow) `ArmoBest`: 70
+- ![Kubescape DevOpsBest](https://img.shields.io/badge/Kubescape-DevOpsBest-yellow) `DevOpsBest`: 80
+- ![Kubescape MITRE](https://img.shields.io/badge/Kubescape-MITRE-brightgreen) `MITRE`: 100
+- ![Kubescape NSA](https://img.shields.io/badge/Kubescape-NSA-yellow) `NSA`: 65
+- ![Kubescape SOC2](https://img.shields.io/badge/Kubescape-SOC2-yellow) `SOC2`: 85
 
 ## Configuration and Installation Details
 
