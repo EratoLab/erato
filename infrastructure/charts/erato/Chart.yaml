@@ -4,8 +4,29 @@ description: Helm chart for the Erato chat application
 type: application
 version: 0.5.2
 appVersion: 0.5.2
+keywords:
+  - ai
+  - llm
+  - chat
+  - web-ui
+  - mcp
 maintainers:
 - name: Erato Team
+- name: Maximilian Goisser
+  email: max@eratolabs.com
+home: https://erato.chat
+icon: https://erato.chat/erato_logo.svg
+sources:
+  - https://github.com/EratoLab/erato/tree/main/infrastructure/charts/erato
+  - https://github.com/EratoLab/erato
+annotations:
+  'artifacthub.io/category': 'ai-machine-learning'
+  'artifacthub.io/links': |
+    - name: Repository
+      url: https://github.com/EratoLab/erato
+    - name: Chart in repository
+      url: https://github.com/EratoLab/erato/tree/main/infrastructure/charts/erato
+
 dependencies:
 - name: common
   version: 2.30.0
