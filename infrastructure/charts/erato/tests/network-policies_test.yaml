@@ -1,0 +1,122 @@
+# yaml-language-server: $schema=../tests_schema/helm-testsuite.json
+suite: test network policies
+minimumVersion: 1.0.1
+templates:
+  - network-policies.yaml
+tests:
+  - it: should render backend oauth2-proxy and redis network policies by default
+    asserts:
+      - hasDocuments:
+          count: 3
+
+  - it: should render backend network policy with oauth2-proxy ingress and open egress
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-backend-network-policy
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/component"]
+          value: erato-app
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: oauth2-proxy
+      - equal:
+          path: spec.ingress[0].ports[0].port
+          value: 3130
+      - equal:
+          path: spec.ingress[1].ports[0].port
+          value: 3131
+      - equal:
+          path: spec.egress[0]
+          value: {}
+
+  - it: should render oauth2-proxy network policy with ingress on 4180 and open egress
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-oauth2-proxy-network-policy
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.ingress[0].ports[0].port
+          value: 4180
+      - equal:
+          path: spec.egress[0]
+          value: {}
+
+  - it: should render redis network policy with oauth2-proxy-only ingress and no egress
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-oauth2-proxy-redis-network-policy
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.ingress[0].from[0].podSelector.matchLabels["app.kubernetes.io/component"]
+          value: oauth2-proxy
+      - equal:
+          path: spec.ingress[0].ports[0].port
+          value: 6379
+      - lengthEqual:
+          path: spec.egress
+          count: 0
+
+  - it: should render only backend network policy when oauth2Proxy is disabled
+    set:
+      oauth2Proxy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-backend-network-policy
+
+  - it: should not render redis network policy when redis is disabled
+    set:
+      oauth2Proxy.redis.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should disable backend network policy independently
+    set:
+      backend.networkPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should disable oauth2-proxy network policy independently
+    set:
+      oauth2Proxy.networkPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should disable redis network policy independently
+    set:
+      oauth2Proxy.redis.networkPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should not render any network policy when all component policies are disabled
+    set:
+      backend.networkPolicy.enabled: false
+      oauth2Proxy.networkPolicy.enabled: false
+      oauth2Proxy.redis.networkPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should honor namespaceOverride for network policies
+    set:
+      namespaceOverride: custom-namespace
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-backend-network-policy
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace

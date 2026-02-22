@@ -16,8 +16,8 @@ declare -A COMPLIANCE_THRESHOLDS=(
   [ArmoBest]=70
   [DevOpsBest]=80
   [MITRE]=100
-  [NSA]=65
-  [SOC2]=85
+  [NSA]=80
+  [SOC2]=100
 )
 
 mapfile -t FRAMEWORKS < <(kubescape list frameworks --format json | tr -d '[]"' | tr ',' '\n' | sed 's/^ *//; s/ *$//' | sed '/^$/d' | grep -Ev '^cis-')
