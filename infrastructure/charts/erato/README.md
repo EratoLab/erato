@@ -5,6 +5,8 @@
 
 Helm chart for the Erato chat application
 
+**Homepage:** <https://erato.chat>
+
 ## TL;DR
 
 ```bash
@@ -306,6 +308,12 @@ This version removed the embedded PostgreSQL subchart. You must now provide an e
 | Name | Email | Url |
 | ---- | ------ | --- |
 | Erato Team |  |  |
+| Maximilian Goisser | <max@eratolabs.com> |  |
+
+## Source Code
+
+* <https://github.com/EratoLab/erato/tree/main/infrastructure/charts/erato>
+* <https://github.com/EratoLab/erato>
 
 ---
 
