@@ -12,6 +12,9 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-erato-app
       - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
           path: spec.type
           value: ClusterIP
       - equal:

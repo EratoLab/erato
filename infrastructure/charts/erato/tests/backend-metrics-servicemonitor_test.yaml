@@ -31,6 +31,9 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-backend-metrics
       - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
           path: spec.endpoints[0].port
           value: metrics
       - equal:
@@ -42,3 +45,32 @@ tests:
       - equal:
           path: spec.selector.matchLabels["erato.ai/scrape-metrics"]
           value: "true"
+      - equal:
+          path: spec.namespaceSelector.matchNames[0]
+          value: NAMESPACE
+
+  - it: should use namespaceOverride for monitored resource namespace
+    set:
+      namespaceOverride: custom-namespace
+      backend.metrics.enabled: true
+      backend.metrics.service.enabled: true
+      backend.metrics.serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: spec.namespaceSelector.matchNames[0]
+          value: custom-namespace
+
+  - it: should keep explicit ServiceMonitor namespace override when configured
+    set:
+      namespaceOverride: custom-namespace
+      backend.metrics.enabled: true
+      backend.metrics.service.enabled: true
+      backend.metrics.serviceMonitor.enabled: true
+      backend.metrics.serviceMonitor.namespace: monitoring
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: monitoring
+      - equal:
+          path: spec.namespaceSelector.matchNames[0]
+          value: custom-namespace

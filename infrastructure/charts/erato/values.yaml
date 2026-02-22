@@ -6,6 +6,8 @@ global:
 
 # -- String to partially override common.names.fullname
 nameOverride: ""
+# -- String to fully override the namespace for all chart resources
+namespaceOverride: ""
 # -- Labels to add to all deployed objects
 commonLabels: {}
 # -- Annotations to add to all deployed objects
@@ -112,7 +114,7 @@ oauth2Proxy:
     serviceMonitor:
       # -- Create a ServiceMonitor resource for Prometheus Operator.
       enabled: false
-      # -- Namespace for ServiceMonitor. Defaults to the release namespace when empty.
+      # -- Namespace for ServiceMonitor. Defaults to the chart namespace (or namespaceOverride when set) when empty.
       namespace: ""
       # -- Additional labels for ServiceMonitor (for Prometheus selection).
       labels: {}
@@ -262,7 +264,7 @@ backend:
     serviceMonitor:
       # -- Create a ServiceMonitor resource for Prometheus Operator.
       enabled: false
-      # -- Namespace for ServiceMonitor. Defaults to the release namespace when empty.
+      # -- Namespace for ServiceMonitor. Defaults to the chart namespace (or namespaceOverride when set) when empty.
       namespace: ""
       # -- Additional labels for ServiceMonitor (for Prometheus selection).
       labels: {}

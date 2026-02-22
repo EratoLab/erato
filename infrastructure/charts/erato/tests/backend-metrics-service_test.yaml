@@ -29,6 +29,9 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-backend-metrics
       - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
           path: spec.type
           value: ClusterIP
       - equal:

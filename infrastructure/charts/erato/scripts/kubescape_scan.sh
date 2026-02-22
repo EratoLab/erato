@@ -29,6 +29,17 @@ fi
 
 cd "${CHART_DIR}"
 
+TMP_DIR="$(mktemp -d)"
+RENDERED_MANIFEST="${TMP_DIR}/rendered.yaml"
+trap 'rm -rf "${TMP_DIR}"' EXIT
+
+echo "Rendering Helm chart once for Kubescape scans..."
+helm template erato . \
+  --namespace erato \
+  --set namespaceOverride=erato \
+  --set postgresql.namespaceOverride=erato \
+  > "${RENDERED_MANIFEST}"
+
 for framework in "${FRAMEWORKS[@]}"; do
   threshold="${COMPLIANCE_THRESHOLDS[$framework]:-}"
   if [ -z "${threshold}" ]; then
@@ -38,5 +49,5 @@ for framework in "${FRAMEWORKS[@]}"; do
   fi
 
   echo "Running Kubescape for framework '${framework}' (compliance threshold: ${threshold})"
-  kubescape scan framework "${framework}" . --compliance-threshold "${threshold}"
+  kubescape scan framework "${framework}" "${RENDERED_MANIFEST}" --compliance-threshold "${threshold}"
 done

@@ -22,6 +22,9 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-oauth2-proxy-metrics
       - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
           path: spec.endpoints[0].port
           value: metrics
       - equal:
@@ -30,6 +33,35 @@ tests:
       - equal:
           path: spec.endpoints[0].interval
           value: 15s
+      - equal:
+          path: spec.namespaceSelector.matchNames[0]
+          value: NAMESPACE
+
+  - it: should use namespaceOverride for monitored resource namespace
+    set:
+      namespaceOverride: custom-namespace
+      oauth2Proxy.metrics.enabled: true
+      oauth2Proxy.metrics.service.enabled: true
+      oauth2Proxy.metrics.serviceMonitor.enabled: true
+    asserts:
+      - equal:
+          path: spec.namespaceSelector.matchNames[0]
+          value: custom-namespace
+
+  - it: should keep explicit ServiceMonitor namespace override when configured
+    set:
+      namespaceOverride: custom-namespace
+      oauth2Proxy.metrics.enabled: true
+      oauth2Proxy.metrics.service.enabled: true
+      oauth2Proxy.metrics.serviceMonitor.enabled: true
+      oauth2Proxy.metrics.serviceMonitor.namespace: monitoring
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: monitoring
+      - equal:
+          path: spec.namespaceSelector.matchNames[0]
+          value: custom-namespace
 
   - it: should not render when metrics service is disabled
     set:
