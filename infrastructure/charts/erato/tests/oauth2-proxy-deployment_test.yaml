@@ -25,7 +25,7 @@ tests:
           value: oauth2-proxy
       - equal:
           path: spec.template.spec.containers[0].image
-          value: quay.io/oauth2-proxy/oauth2-proxy:v7.8.1
+          value: quay.io/oauth2-proxy/oauth2-proxy:v7.14.2
 
   - it: should not render when oauth2Proxy is disabled
     set:

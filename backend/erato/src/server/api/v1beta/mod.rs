@@ -114,8 +114,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         ))
         // RequestBodyLimitLayer is used in addition to DefaultBodyLimit,
         // so we can already return a 413 error if we see a Content-Length that is too large.
-        .layer(RequestBodyLimitLayer::new(max_upload_size))
-        .layer(DefaultBodyLimit::max(max_upload_size));
+        .layer(RequestBodyLimitLayer::new(max_upload_size * 10))
+        .layer(DefaultBodyLimit::max(max_upload_size * 10));
 
     // authenticated routes that are not nested under /me
     // Should at a later time use a more generic middleware that can use a non-me profile as a Subject
@@ -789,6 +789,7 @@ pub struct PromptOptimizerResponse {
     responses(
         (status = OK, body = FileUploadResponse),
         (status = BAD_REQUEST, description = "Invalid file upload"),
+        (status = PAYLOAD_TOO_LARGE, description = "Uploaded file exceeds size limit"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error"),
     )
 )]
@@ -799,6 +800,12 @@ pub async fn upload_file(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
     mut multipart: Multipart,
 ) -> Result<Json<FileUploadResponse>, StatusCode> {
+    let max_upload_size = app_state
+        .config
+        .max_upload_size_bytes()
+        .map(|v| v as usize)
+        .unwrap_or(DEFAULT_MAX_BODY_LIMIT_BYTES);
+
     // Parse the optional chat ID parameter
     let chat_id = if let Some(chat_id_str) = params.get("chat_id") {
         Some(Uuid::parse_str(chat_id_str).map_err(|e| {
@@ -822,7 +829,7 @@ pub async fn upload_file(
     let mut uploaded_files = Vec::new();
 
     // Process the multipart form
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
+    while let Some(mut field) = multipart.next_field().await.map_err(|e| {
         tracing::error!("Failed to process multipart form: {}", e);
         StatusCode::BAD_REQUEST
     })? {
@@ -832,12 +839,6 @@ pub async fn upload_file(
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unnamed_file".to_string());
         let content_type = field.content_type().map(|s| s.to_string());
-
-        let mut data = field.bytes().await.map_err(|e| {
-            tracing::error!("Failed to read file data: {} - {}", e, e.status());
-            e.status()
-        })?;
-        let size_bytes = data.len();
 
         // Generate a random UUID for the file
         let file_id = Uuid::new_v4();
@@ -853,10 +854,17 @@ pub async fn upload_file(
                 tracing::error!("Failed to write file data: {}", e);
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
-        writer.write_from(&mut data).await.map_err(|e| {
-            tracing::error!("Failed to write file data: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+
+        let size_bytes = stream_multipart_field_with_limit(
+            &mut field,
+            &mut multipart,
+            &mut writer,
+            max_upload_size,
+            &me_user.id,
+            &filename,
+        )
+        .await?;
+
         writer.close().await.map_err(|e| {
             tracing::error!("Failed to write file data: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -930,6 +938,76 @@ pub async fn upload_file(
     Ok(Json(FileUploadResponse {
         files: uploaded_files,
     }))
+}
+
+async fn stream_multipart_field_with_limit(
+    field: &mut axum_extra::extract::multipart::Field,
+    _multipart: &mut Multipart,
+    writer: &mut opendal::Writer,
+    max_upload_size: usize,
+    user_id: &str,
+    filename: &str,
+) -> Result<usize, StatusCode> {
+    let mut size_bytes = 0usize;
+
+    while let Some(chunk) = field.chunk().await.map_err(|e| {
+        tracing::error!("Failed to read multipart chunk: {} - {}", e, e.status());
+        e.status()
+    })? {
+        if size_bytes + chunk.len() > max_upload_size {
+            tracing::warn!(
+                "User {} uploaded file '{}' that exceeded max upload size (current={}B incoming_chunk={}B limit={}B), draining request body",
+                user_id,
+                filename,
+                size_bytes,
+                chunk.len(),
+                max_upload_size
+            );
+
+            if let Err(e) = writer.close().await {
+                tracing::warn!(
+                    "Failed to close file writer after size limit was exceeded: {}",
+                    e
+                );
+            }
+
+            // Important: when we return early without consuming the body, oauth2-proxy can still be
+            // streaming request bytes to us. Closing the upstream connection immediately can surface
+            // as "write: broken pipe" in oauth2-proxy. We therefore drain the current field and all
+            // remaining multipart fields before returning 413.
+            drain_multipart_field(field).await?;
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+
+        size_bytes += chunk.len();
+
+        writer.write(chunk.to_vec()).await.map_err(|e| {
+            tracing::error!("Failed to write file chunk: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    }
+
+    Ok(size_bytes)
+}
+
+async fn drain_multipart_field(
+    field: &mut axum_extra::extract::multipart::Field,
+) -> Result<(), StatusCode> {
+    while field
+        .chunk()
+        .await
+        .map_err(|e| {
+            tracing::error!(
+                "Failed while draining remaining multipart chunk after size limit: {} - {}",
+                e,
+                e.status()
+            );
+            e.status()
+        })?
+        .is_some()
+    {}
+
+    Ok(())
 }
 
 /// Link an external file (SharePoint, Google Drive, etc.) and return a file upload record

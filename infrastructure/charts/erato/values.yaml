@@ -44,7 +44,7 @@ oauth2Proxy:
     # -- OAuth2 Proxy image repository
     repository: quay.io/oauth2-proxy/oauth2-proxy
     # -- OAuth2 Proxy image tag
-    tag: v7.8.1
+    tag: v7.14.2
     # -- OAuth2 Proxy image pull policy
     pullPolicy: IfNotPresent
     # -- OAuth2 Proxy image pull secrets
