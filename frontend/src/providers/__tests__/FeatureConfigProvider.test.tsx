@@ -17,6 +17,7 @@ import {
   useAuthFeature,
   useMessageFeedbackFeature,
   useSidebarFeature,
+  useUserPreferencesFeature,
 } from "../FeatureConfigProvider";
 
 import type { ReactNode } from "react";
@@ -51,11 +52,13 @@ describe("FeatureConfigProvider", () => {
       sharepointEnabled: false,
       messageFeedbackEnabled: false,
       messageFeedbackCommentsEnabled: false,
+      userPreferencesEnabled: true,
       messageFeedbackEditTimeLimitSeconds: null,
       maxUploadSizeBytes: 20971520, // 20 MB - matches backend default
       sidebarCollapsedMode: "hidden",
       sidebarLogoPath: null,
       sidebarLogoDarkPath: null,
+      sidebarChatHistoryShowMetadata: true,
     });
   });
 
@@ -99,6 +102,9 @@ describe("FeatureConfigProvider", () => {
         assistants: {
           enabled: false,
         },
+        userPreferences: {
+          enabled: true,
+        },
         cloudProviders: {
           availableProviders: [],
         },
@@ -111,6 +117,7 @@ describe("FeatureConfigProvider", () => {
           collapsedMode: "hidden",
           logoPath: null,
           logoDarkPath: null,
+          chatHistoryShowMetadata: true,
         },
       });
     });
@@ -131,6 +138,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -163,6 +171,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -195,6 +204,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -227,6 +237,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -287,6 +298,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -343,6 +355,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -399,6 +412,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
         maxUploadSizeBytes: 20971520,
       });
 
@@ -453,6 +467,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: true,
         messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -485,6 +500,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: true,
         messageFeedbackCommentsEnabled: true,
+        userPreferencesEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "hidden",
@@ -526,6 +542,7 @@ describe("FeatureConfigProvider", () => {
         collapsedMode: "hidden",
         logoPath: null,
         logoDarkPath: null,
+        chatHistoryShowMetadata: true,
       });
     });
 
@@ -545,6 +562,7 @@ describe("FeatureConfigProvider", () => {
         sharepointEnabled: false,
         messageFeedbackEnabled: false,
         messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
         messageFeedbackEditTimeLimitSeconds: null,
         maxUploadSizeBytes: 20971520,
         sidebarCollapsedMode: "slim",
@@ -575,6 +593,48 @@ describe("FeatureConfigProvider", () => {
       // Rerender should not call env() again
       rerender();
       expect(mockEnv).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("useUserPreferencesFeature", () => {
+    it("should return user preferences enabled by default", () => {
+      const { result } = renderHook(() => useUserPreferencesFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.enabled).toBe(true);
+    });
+
+    it("should return user preferences disabled when configured", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        disableLogout: false,
+        assistantsEnabled: false,
+        sharepointEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: false,
+        messageFeedbackEditTimeLimitSeconds: null,
+        maxUploadSizeBytes: 20971520,
+        sidebarCollapsedMode: "hidden",
+        sidebarLogoPath: null,
+        sidebarLogoDarkPath: null,
+        sidebarChatHistoryShowMetadata: true,
+      });
+
+      const { result } = renderHook(() => useUserPreferencesFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.enabled).toBe(false);
     });
   });
 });

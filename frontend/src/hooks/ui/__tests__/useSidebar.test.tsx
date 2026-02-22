@@ -45,6 +45,7 @@ beforeEach(() => {
     sharepointEnabled: false,
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,
+    userPreferencesEnabled: true,
     messageFeedbackEditTimeLimitSeconds: null,
     maxUploadSizeBytes: 20971520,
     sidebarCollapsedMode: "hidden",

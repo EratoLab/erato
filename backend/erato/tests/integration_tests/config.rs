@@ -1708,3 +1708,78 @@ additional_system_prompt = "Please execute one or multiple web searches to answe
         })
     );
 }
+
+#[test]
+fn test_user_preferences_enabled_defaults_to_true() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4.1"
+
+[file_storage_providers.test]
+provider_kind = "s3"
+config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert!(config.user_preferences.enabled);
+}
+
+#[test]
+fn test_user_preferences_enabled_can_be_disabled() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4.1"
+
+[file_storage_providers.test]
+provider_kind = "s3"
+config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+
+[user_preferences]
+enabled = false
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert!(!config.user_preferences.enabled);
+}

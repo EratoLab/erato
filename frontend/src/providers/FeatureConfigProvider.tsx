@@ -43,6 +43,14 @@ interface AssistantsFeatureConfig {
 }
 
 /**
+ * Configuration for user preferences feature
+ */
+interface UserPreferencesFeatureConfig {
+  /** Whether the user preferences feature is enabled */
+  enabled: boolean;
+}
+
+/**
  * Cloud provider type
  */
 export type CloudProvider = "sharepoint" | "googledrive";
@@ -93,6 +101,8 @@ interface FeatureConfig {
   auth: AuthFeatureConfig;
   /** Assistants feature flags */
   assistants: AssistantsFeatureConfig;
+  /** User preferences feature flags */
+  userPreferences: UserPreferencesFeatureConfig;
   /** Cloud providers feature flags */
   cloudProviders: CloudProvidersFeatureConfig;
   /** Message feedback feature flags */
@@ -167,6 +177,9 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
       },
       assistants: {
         enabled: environment.assistantsEnabled,
+      },
+      userPreferences: {
+        enabled: environment.userPreferencesEnabled,
       },
       cloudProviders: {
         availableProviders,
@@ -281,6 +294,17 @@ export function useAuthFeature(): AuthFeatureConfig {
 export function useAssistantsFeature(): AssistantsFeatureConfig {
   const config = useFeatureConfig();
   return config.assistants;
+}
+
+/**
+ * Convenience hook for accessing user preferences feature configuration.
+ *
+ * @returns User preferences feature configuration
+ * @throws {Error} If used outside of FeatureConfigProvider
+ */
+export function useUserPreferencesFeature(): UserPreferencesFeatureConfig {
+  const config = useFeatureConfig();
+  return config.userPreferences;
 }
 
 /**

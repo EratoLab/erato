@@ -23,6 +23,7 @@ const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_
 const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
 const FRONTEND_ENV_KEY_ASSISTANTS_ENABLED: &str = "ASSISTANTS_ENABLED";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
+const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_ENABLED: &str = "SHAREPOINT_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_ENABLED: &str = "MESSAGE_FEEDBACK_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_COMMENTS_ENABLED: &str =
@@ -82,6 +83,10 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED.to_string(),
         Value::Bool(config.prompt_optimizer.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED.to_string(),
+        Value::Bool(config.user_preferences.enabled),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_SHAREPOINT_ENABLED.to_string(),

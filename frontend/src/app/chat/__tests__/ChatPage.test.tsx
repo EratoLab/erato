@@ -196,6 +196,7 @@ vi.mock("@/app/env", () => ({
     sharepointEnabled: false,
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,
+    userPreferencesEnabled: true,
   }),
 }));
 
