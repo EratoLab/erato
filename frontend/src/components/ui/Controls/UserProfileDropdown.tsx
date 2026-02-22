@@ -2,7 +2,10 @@ import { t } from "@lingui/core/macro";
 import { clsx } from "clsx";
 import { memo, useState } from "react";
 
-import { useAuthFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useAuthFeature,
+  useUserPreferencesFeature,
+} from "@/providers/FeatureConfigProvider";
 
 import { DropdownMenu } from "./DropdownMenu";
 import { Avatar } from "../Feedback/Avatar";
@@ -44,6 +47,7 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
 
     // Check if logout should be shown
     const { showLogout } = useAuthFeature();
+    const { enabled: userPreferencesEnabled } = useUserPreferencesFeature();
 
     // Create dropdown items array
     const dropdownItems = [
@@ -69,11 +73,18 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
             },
           ]
         : []),
-      {
-        label: t({ id: "profile.menu.preferences", message: "Preferences" }),
-        icon: <SettingsIcon className="size-4" />,
-        onClick: () => setIsPreferencesDialogOpen(true),
-      },
+      ...(userPreferencesEnabled
+        ? [
+            {
+              label: t({
+                id: "profile.menu.preferences",
+                message: "Preferences",
+              }),
+              icon: <SettingsIcon className="size-4" />,
+              onClick: () => setIsPreferencesDialogOpen(true),
+            },
+          ]
+        : []),
       ...(showLogout
         ? [
             {
@@ -104,11 +115,13 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
             />
           }
         />
-        <UserPreferencesDialog
-          isOpen={isPreferencesDialogOpen}
-          onClose={() => setIsPreferencesDialogOpen(false)}
-          userProfile={userProfile}
-        />
+        {userPreferencesEnabled && (
+          <UserPreferencesDialog
+            isOpen={isPreferencesDialogOpen}
+            onClose={() => setIsPreferencesDialogOpen(false)}
+            userProfile={userProfile}
+          />
+        )}
       </div>
     );
   },

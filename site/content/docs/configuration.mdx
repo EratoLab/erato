@@ -1479,6 +1479,27 @@ chat_provider_id = "gpt-4o-mini"
 prompt = { source = "static", prompt = "Rewrite the user's prompt to be clearer, more specific, and action-oriented. Return only the improved prompt." }
 ```
 
+### `user_preferences`
+
+Configuration for the user preferences feature.
+
+#### `user_preferences.enabled`
+
+Whether to enable the user preferences feature.
+
+When disabled, the frontend hides the Preferences item in the user profile dropdown.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[user_preferences]
+enabled = false
+```
+
 ### `experimental_assistants`
 
 Configuration for the experimental assistants feature. This allows enabling the assistants functionality in the frontend, which provides users with pre-configured chat assistants tuned for specific use-cases.

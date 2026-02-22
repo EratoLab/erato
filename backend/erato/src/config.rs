@@ -178,6 +178,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub prompt_optimizer: PromptOptimizerConfig,
 
+    // User preferences feature configuration.
+    #[serde(default)]
+    pub user_preferences: UserPreferencesConfig,
+
     // Experimental facets configuration.
     #[serde(default)]
     pub experimental_facets: ExperimentalFacetsConfig,
@@ -1230,6 +1234,24 @@ pub struct ExperimentalAssistantsConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct UserPreferencesConfig {
+    // Whether the user preferences feature is enabled.
+    // Defaults to `true`.
+    #[serde(default = "default_user_preferences_enabled")]
+    pub enabled: bool,
+}
+
+impl Default for UserPreferencesConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+fn default_user_preferences_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Default)]
