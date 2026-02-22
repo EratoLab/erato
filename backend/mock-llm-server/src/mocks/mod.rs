@@ -7,6 +7,41 @@ use crate::matcher::{
 };
 use serde_json::json;
 
+fn build_lorem_word_chunks(total_words: usize) -> Vec<String> {
+    const LOREM_WORDS: [&str; 19] = [
+        "lorem",
+        "ipsum",
+        "dolor",
+        "sit",
+        "amet",
+        "consectetur",
+        "adipiscing",
+        "elit",
+        "sed",
+        "do",
+        "eiusmod",
+        "tempor",
+        "incididunt",
+        "ut",
+        "labore",
+        "et",
+        "dolore",
+        "magna",
+        "aliqua",
+    ];
+
+    (0..total_words)
+        .map(|i| {
+            let word = LOREM_WORDS[i % LOREM_WORDS.len()];
+            if i == 0 {
+                word.to_string()
+            } else {
+                format!(" {}", word)
+            }
+        })
+        .collect()
+}
+
 /// Get the default set of configured mocks
 pub fn get_default_mocks() -> Vec<Mock> {
     vec![
@@ -185,6 +220,20 @@ pub fn get_default_mocks() -> Vec<Mock> {
                 default_seconds: 90,
                 delay_ms: 1000,
                 max_seconds: 3600,
+            }),
+        },
+        Mock {
+            name: "SmoothLong".to_string(),
+            description:
+                "Streams one lorem ipsum word every 50ms for 10 seconds (trigger: 'smooth_long')"
+                    .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: "smooth_long".to_string(),
+            })],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: build_lorem_word_chunks(200),
+                delay_ms: 50,
+                ..Default::default()
             }),
         },
         Mock {
