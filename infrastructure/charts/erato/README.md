@@ -205,7 +205,7 @@ ingress:
 | backend.metrics.serviceMonitor.interval | string | `"30s"` | Scrape interval for ServiceMonitor endpoint. |
 | backend.metrics.serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor (for Prometheus selection). |
 | backend.metrics.serviceMonitor.metricRelabelings | list | `[]` | Metric relabel configs for ServiceMonitor endpoint. |
-| backend.metrics.serviceMonitor.namespace | string | `""` | Namespace for ServiceMonitor. Defaults to the release namespace when empty. |
+| backend.metrics.serviceMonitor.namespace | string | `""` | Namespace for ServiceMonitor. Defaults to the chart namespace (or namespaceOverride when set) when empty. |
 | backend.metrics.serviceMonitor.relabelings | list | `[]` | Relabel configs for ServiceMonitor endpoint. |
 | backend.metrics.serviceMonitor.scrapeTimeout | string | `""` | Optional scrape timeout for ServiceMonitor endpoint. |
 | backend.podAnnotations | object | `{}` | Annotations to add to the backend pod |
@@ -228,6 +228,7 @@ ingress:
 | ingress.tls.enabled | bool | `false` | Enable TLS configuration for the host defined at ingress.host |
 | ingress.tls.secretName | string | `""` | Secret containing TLS certificate |
 | nameOverride | string | `""` | String to partially override common.names.fullname |
+| namespaceOverride | string | `""` | String to fully override the namespace for all chart resources |
 | oauth2Proxy.config | string | `"# Example configuration - replace with your own\n# http_address = \"0.0.0.0:4180\"\n# upstreams = [\"http://localhost:8080\"]\n# email_domains = [\"*\"]\n# cookie_secret = \"\"\n# cookie_secure = true\n# skip_auth_regex = [\"^/health\", \"^/metrics\"]\n"` | Full configuration file content for oauth2-proxy |
 | oauth2Proxy.deploymentAnnotations | object | `{}` | Annotations to add to the oauth2-proxy deployment |
 | oauth2Proxy.deploymentStrategy | object | `{}` | Optional deployment strategy for oauth2-proxy (e.g., RollingUpdate/Recreate). Example: deploymentStrategy:   type: RollingUpdate   rollingUpdate:     maxUnavailable: 25%     maxSurge: 25% |
@@ -254,7 +255,7 @@ ingress:
 | oauth2Proxy.metrics.serviceMonitor.interval | string | `"30s"` | Scrape interval for ServiceMonitor endpoint. |
 | oauth2Proxy.metrics.serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor (for Prometheus selection). |
 | oauth2Proxy.metrics.serviceMonitor.metricRelabelings | list | `[]` | Metric relabel configs for ServiceMonitor endpoint. |
-| oauth2Proxy.metrics.serviceMonitor.namespace | string | `""` | Namespace for ServiceMonitor. Defaults to the release namespace when empty. |
+| oauth2Proxy.metrics.serviceMonitor.namespace | string | `""` | Namespace for ServiceMonitor. Defaults to the chart namespace (or namespaceOverride when set) when empty. |
 | oauth2Proxy.metrics.serviceMonitor.relabelings | list | `[]` | Relabel configs for ServiceMonitor endpoint. |
 | oauth2Proxy.metrics.serviceMonitor.scrapeTimeout | string | `""` | Optional scrape timeout for ServiceMonitor endpoint. |
 | oauth2Proxy.podAnnotations | object | `{}` | Annotations to add to the oauth2-proxy pod |

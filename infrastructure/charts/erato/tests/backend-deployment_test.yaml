@@ -15,6 +15,9 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-erato-app
       - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
           path: spec.replicas
           value: 1
       - equal:
@@ -29,6 +32,14 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].ports[0].containerPort
           value: 3130
+
+  - it: should honor namespaceOverride
+    set:
+      namespaceOverride: custom-namespace
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-namespace
 
   - it: should set custom replica count
     set:

@@ -30,6 +30,9 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-backend-metrics-config
       - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
           path: data["metrics.auto.erato.toml"]
           value: |
             [integrations.prometheus]

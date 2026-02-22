@@ -3,7 +3,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ .Release.Name }}-oauth2-proxy-metrics
-  namespace: {{ default .Release.Namespace .Values.oauth2Proxy.metrics.serviceMonitor.namespace }}
+  namespace: {{ default (include "common.names.namespace" .) .Values.oauth2Proxy.metrics.serviceMonitor.namespace | quote }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
     {{- with .Values.oauth2Proxy.metrics.serviceMonitor.labels }}
     {{- toYaml . | nindent 4 }}
@@ -16,7 +16,7 @@ spec:
       erato.ai/scrape-metrics: "true"
   namespaceSelector:
     matchNames:
-      - {{ .Release.Namespace }}
+      - {{ include "common.names.namespace" . | quote }}
   endpoints:
     - port: metrics
       path: /metrics

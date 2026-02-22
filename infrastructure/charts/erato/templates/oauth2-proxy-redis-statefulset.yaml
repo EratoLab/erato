@@ -3,6 +3,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ .Release.Name }}-oauth2-proxy-redis
+  namespace: {{ include "common.names.namespace" . | quote }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
     app.kubernetes.io/component: oauth2-proxy-redis
 spec:
@@ -47,4 +48,3 @@ spec:
         {{- end }}
   {{- end }}
 {{- end }}
-

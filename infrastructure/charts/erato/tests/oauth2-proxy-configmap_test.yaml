@@ -11,6 +11,9 @@ tests:
       - equal:
           path: metadata.name
           value: RELEASE-NAME-oauth2-proxy-config-file
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
       - isNotEmpty:
           path: data["oauth2-proxy.cfg"]
 

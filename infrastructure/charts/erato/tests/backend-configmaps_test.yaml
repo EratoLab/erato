@@ -18,6 +18,9 @@ tests:
       - equal:
           path: metadata.name
           value: RELEASE-NAME-erato-inline-config
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
 
   - it: should render configmaps for inline extra configs
     set:

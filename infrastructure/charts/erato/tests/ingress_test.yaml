@@ -12,6 +12,9 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-ingress
       - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
           path: spec.ingressClassName
           value: nginx
       - equal:

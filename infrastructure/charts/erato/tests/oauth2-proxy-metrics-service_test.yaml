@@ -22,6 +22,9 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-oauth2-proxy-metrics
       - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
           path: spec.type
           value: ClusterIP
       - equal:
