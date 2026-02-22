@@ -82,6 +82,9 @@ oauth2Proxy:
   deploymentStrategy: {}
   # -- Annotations to add to the oauth2-proxy pod
   podAnnotations: {}
+  networkPolicy:
+    # -- Enable NetworkPolicy for oauth2-proxy pods
+    enabled: true
   resources:
     requests:
       # -- The requested CPU for oauth2-proxy
@@ -132,6 +135,9 @@ oauth2Proxy:
   redis:
     # -- Enable Redis for OAuth2 Proxy session storage
     enabled: true
+    networkPolicy:
+      # -- Enable NetworkPolicy for oauth2-proxy redis pods
+      enabled: true
     image:
       # -- Redis image repository
       repository: redis
@@ -197,6 +203,9 @@ backend:
   deploymentStrategy: {}
   # -- Annotations to add to the backend pod
   podAnnotations: {}
+  networkPolicy:
+    # -- Enable NetworkPolicy for backend pods
+    enabled: true
   configFile:
     # -- Name of the secret containing the erato.toml file
     secretName: ""

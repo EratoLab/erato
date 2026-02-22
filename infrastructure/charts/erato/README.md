@@ -58,8 +58,8 @@ Current Kubescape compliance score thresholds by framework:
 - ![Kubescape ArmoBest](https://img.shields.io/badge/Kubescape-ArmoBest-yellow) `ArmoBest`: 70
 - ![Kubescape DevOpsBest](https://img.shields.io/badge/Kubescape-DevOpsBest-yellow) `DevOpsBest`: 80
 - ![Kubescape MITRE](https://img.shields.io/badge/Kubescape-MITRE-brightgreen) `MITRE`: 100
-- ![Kubescape NSA](https://img.shields.io/badge/Kubescape-NSA-yellow) `NSA`: 65
-- ![Kubescape SOC2](https://img.shields.io/badge/Kubescape-SOC2-yellow) `SOC2`: 85
+- ![Kubescape NSA](https://img.shields.io/badge/Kubescape-NSA-yellow) `NSA`: 80
+- ![Kubescape SOC2](https://img.shields.io/badge/Kubescape-SOC2-brightgreen) `SOC2`: 100
 
 ## Configuration and Installation Details
 
@@ -210,6 +210,7 @@ ingress:
 | backend.metrics.serviceMonitor.namespace | string | `""` | Namespace for ServiceMonitor. Defaults to the chart namespace (or namespaceOverride when set) when empty. |
 | backend.metrics.serviceMonitor.relabelings | list | `[]` | Relabel configs for ServiceMonitor endpoint. |
 | backend.metrics.serviceMonitor.scrapeTimeout | string | `""` | Optional scrape timeout for ServiceMonitor endpoint. |
+| backend.networkPolicy.enabled | bool | `true` | Enable NetworkPolicy for backend pods |
 | backend.podAnnotations | object | `{}` | Annotations to add to the backend pod |
 | backend.replicaCount | int | `1` | Number of backend replicas to deploy |
 | backend.resources.limits.cpu | string | `"500m"` | The CPU limit for backend |
@@ -260,11 +261,13 @@ ingress:
 | oauth2Proxy.metrics.serviceMonitor.namespace | string | `""` | Namespace for ServiceMonitor. Defaults to the chart namespace (or namespaceOverride when set) when empty. |
 | oauth2Proxy.metrics.serviceMonitor.relabelings | list | `[]` | Relabel configs for ServiceMonitor endpoint. |
 | oauth2Proxy.metrics.serviceMonitor.scrapeTimeout | string | `""` | Optional scrape timeout for ServiceMonitor endpoint. |
+| oauth2Proxy.networkPolicy.enabled | bool | `true` | Enable NetworkPolicy for oauth2-proxy pods |
 | oauth2Proxy.podAnnotations | object | `{}` | Annotations to add to the oauth2-proxy pod |
 | oauth2Proxy.redis.enabled | bool | `true` | Enable Redis for OAuth2 Proxy session storage |
 | oauth2Proxy.redis.image.pullPolicy | string | `"IfNotPresent"` | Redis image pull policy |
 | oauth2Proxy.redis.image.repository | string | `"redis"` | Redis image repository |
 | oauth2Proxy.redis.image.tag | string | `"7.0-alpine"` | Redis image tag |
+| oauth2Proxy.redis.networkPolicy.enabled | bool | `true` | Enable NetworkPolicy for oauth2-proxy redis pods |
 | oauth2Proxy.redis.persistence.accessModes | list | `["ReadWriteOnce"]` | Persistent Volume access modes |
 | oauth2Proxy.redis.persistence.enabled | bool | `true` | Enable persistence using Persistent Volume Claims |
 | oauth2Proxy.redis.persistence.size | string | `"1Gi"` | Persistent Volume size |
