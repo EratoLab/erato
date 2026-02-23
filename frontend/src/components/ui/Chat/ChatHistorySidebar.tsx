@@ -493,8 +493,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const { effectiveTheme, customThemeName } = useTheme();
 
     // Get assistants feature flag
-    const { enabled: assistantsEnabled, showRecentItems: assistantsShowRecent } =
-      useAssistantsFeature();
+    const {
+      enabled: assistantsEnabled,
+      showRecentItems: assistantsShowRecent,
+    } = useAssistantsFeature();
 
     // Only use ResizeObserver in the browser
     const isBrowser = typeof window !== "undefined";
