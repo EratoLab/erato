@@ -1,3 +1,4 @@
+use crate::db::entity::chats;
 use crate::db::entity::messages;
 use crate::db::entity::prelude::*;
 use crate::models::chat::get_chat_by_message_id;
@@ -28,12 +29,30 @@ use genai::chat::ChatRequest;
 use sea_orm::prelude::Uuid;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use tracing::instrument;
 use utoipa::ToSchema;
 
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct TokenUsageRequest {
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// The previous message ID to anchor chat history context.
+    /// Preferred over `previous_message_id` for new clients.
+    chat_previous_message_id: Option<Uuid>,
+    #[schema(example = "Hello, world!")]
+    /// Content for the new message being composed.
+    /// Preferred over `user_message` for new clients.
+    new_message_content: Option<String>,
+    /// Configuration for estimating a new chat context.
+    new_chat: Option<TokenUsageNewChatInput>,
+    /// File content inputs to include in the estimation.
+    file: Option<TokenUsageFileInput>,
+    #[schema(example = "You are a concise legal assistant.")]
+    /// Additional system prompt content to include in the estimation.
+    system_prompt: Option<String>,
+
+    // Legacy fields kept for backwards compatibility.
     #[schema(example = "00000000-0000-0000-0000-000000000000")]
     /// The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.
     previous_message_id: Option<Uuid>,
@@ -42,6 +61,7 @@ pub struct TokenUsageRequest {
     existing_chat_id: Option<Uuid>,
     #[schema(example = "Hello, world!")]
     /// The text of the message.
+    #[serde(default)]
     user_message: String,
     #[schema(example = "[\"00000000-0000-0000-0000-000000000000\"]")]
     /// The IDs of any files attached to this message. These files must already be uploaded to the file_uploads table.
@@ -51,6 +71,23 @@ pub struct TokenUsageRequest {
     /// Optional chat provider ID to use for token estimation. If not provided, uses the default provider.
     #[schema(nullable = false)]
     chat_provider_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct TokenUsageNewChatInput {
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// Optional assistant ID for new chat context.
+    assistant_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct TokenUsageFileInput {
+    #[schema(example = "[\"00000000-0000-0000-0000-000000000000\"]")]
+    /// File upload IDs to include in estimation.
+    #[serde(default)]
+    input_files_ids: Vec<Uuid>,
 }
 
 /// Token usage statistics for the request
@@ -156,19 +193,62 @@ pub async fn token_usage_estimate(
     Json(request): Json<TokenUsageRequest>,
 ) -> Result<Json<TokenUsageResponse>, (axum::http::StatusCode, String)> {
     let subject = me_user.to_subject();
+    let previous_message_id = request
+        .chat_previous_message_id
+        .or(request.previous_message_id);
+    let mut new_message_content = request.new_message_content.clone().unwrap_or_default();
+    if !request.user_message.is_empty() {
+        if !new_message_content.is_empty() {
+            new_message_content.push('\n');
+        }
+        new_message_content.push_str(&request.user_message);
+    }
 
-    let chat = if let Some(prev_msg_id) = request.previous_message_id {
-        match get_chat_by_message_id(&app_state.db, &policy, &subject, &prev_msg_id).await {
-            Ok(chat) => Some(chat),
-            Err(err) => {
-                return Err((
+    let mut file_id_set = HashSet::new();
+    let mut input_file_ids = Vec::new();
+    let mut push_file_id = |file_id: Uuid| {
+        if file_id_set.insert(file_id) {
+            input_file_ids.push(file_id);
+        }
+    };
+    for file_id in &request.input_files_ids {
+        push_file_id(*file_id);
+    }
+    if let Some(file_input) = request.file.as_ref() {
+        for file_id in &file_input.input_files_ids {
+            push_file_id(*file_id);
+        }
+    }
+
+    let mut chat = None;
+    let mut assistant_config = None;
+
+    if let Some(prev_msg_id) = previous_message_id {
+        let resolved_chat = get_chat_by_message_id(&app_state.db, &policy, &subject, &prev_msg_id)
+            .await
+            .map_err(|err| {
+                (
                     axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                     format!("Failed to resolve chat from previous_message_id: {}", err),
-                ));
-            }
-        }
+                )
+            })?;
+        let resolved_assistant_config = crate::models::chat::get_chat_assistant_configuration(
+            &app_state.db,
+            &policy,
+            &subject,
+            &resolved_chat,
+        )
+        .await
+        .map_err(|err| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to load assistant configuration: {}", err),
+            )
+        })?;
+        chat = Some(resolved_chat);
+        assistant_config = resolved_assistant_config;
     } else if let Some(existing_chat_id) = request.existing_chat_id {
-        match Chats::find_by_id(existing_chat_id).one(&app_state.db).await {
+        let resolved_chat = match Chats::find_by_id(existing_chat_id).one(&app_state.db).await {
             Ok(Some(chat)) => {
                 if let Err(err) = authorize!(
                     &policy,
@@ -178,7 +258,7 @@ pub async fn token_usage_estimate(
                 ) {
                     return Err((axum::http::StatusCode::UNAUTHORIZED, err.to_string()));
                 }
-                Some(chat)
+                chat
             }
             Ok(None) => {
                 return Err((
@@ -192,68 +272,102 @@ pub async fn token_usage_estimate(
                     format!("Failed to load chat: {}", err),
                 ));
             }
+        };
+        let resolved_assistant_config = crate::models::chat::get_chat_assistant_configuration(
+            &app_state.db,
+            &policy,
+            &subject,
+            &resolved_chat,
+        )
+        .await
+        .map_err(|err| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to load assistant configuration: {}", err),
+            )
+        })?;
+        chat = Some(resolved_chat);
+        assistant_config = resolved_assistant_config;
+    } else if let Some(new_chat) = request.new_chat.as_ref() {
+        if let Some(assistant_id) = new_chat.assistant_id {
+            let resolved_assistant_config = crate::models::assistant::get_assistant_with_files(
+                &app_state.db,
+                &policy,
+                &subject,
+                assistant_id,
+                true,
+            )
+            .await
+            .map_err(|err| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to load assistant for new_chat: {}", err),
+                )
+            })?;
+            assistant_config = Some(resolved_assistant_config);
         }
-    } else {
-        None
-    };
 
-    let history_message_id = if request.previous_message_id.is_some() {
-        request.previous_message_id
+        let assistant_configuration = new_chat
+            .assistant_id
+            .map(|assistant_id| serde_json::json!({ "assistant_id": assistant_id }));
+        let now = Utc::now().into();
+        let synthetic_chat = chats::Model {
+            id: Uuid::new_v4(),
+            owner_user_id: me_user.id.clone(),
+            created_at: now,
+            updated_at: now,
+            title_by_summary: None,
+            archived_at: None,
+            title_by_user_provided: None,
+            assistant_configuration,
+            assistant_id: new_chat.assistant_id,
+        };
+        chat = Some(synthetic_chat);
+    }
+
+    let history_message_id = if previous_message_id.is_some() {
+        previous_message_id
     } else if let Some(chat) = chat.as_ref() {
-        match find_latest_message_id(&app_state.db, chat.id).await {
-            Ok(message_id) => message_id,
-            Err(err) => {
-                return Err((
+        find_latest_message_id(&app_state.db, chat.id)
+            .await
+            .map_err(|err| {
+                (
                     axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                     format!("Failed to determine latest message for chat: {}", err),
-                ));
-            }
-        }
+                )
+            })?
     } else {
         None
     };
 
-    // Calculate token counts using tiktoken with caching
-    // Count tokens for the user message
-    let user_message_tokens = async {
+    let user_message_tokens = if new_message_content.is_empty() {
+        0
+    } else {
         let span = tracing::info_span!(
             "count_user_message_tokens",
-            message_length = request.user_message.len(),
+            message_length = new_message_content.len(),
             token_count = tracing::field::Empty,
         );
         let _enter = span.enter();
-
-        let result =
-            file_processing_cached::get_token_count_cached(&app_state, &request.user_message).await;
-
-        match result {
-            Ok(count) => {
+        file_processing_cached::get_token_count_cached(&app_state, &new_message_content)
+            .await
+            .inspect(|count| {
                 span.record("token_count", count);
                 tracing::debug!(token_count = count, "User message tokens counted");
-                Ok(count)
-            }
-            Err(err) => Err(err),
-        }
-    }
-    .await;
-
-    let user_message_tokens = match user_message_tokens {
-        Ok(count) => count,
-        Err(err) => {
-            return Err((
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to count tokens for user message: {}", err),
-            ));
-        }
+            })
+            .map_err(|err| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to count tokens for user message: {}", err),
+                )
+            })?
     };
 
-    // Process files to get their text content using cached version
-    // Note: token_usage endpoint should forward SharePoint context when available
-    let files_for_generation = match file_processing_cached::process_files_parallel_cached(
+    let files_for_generation = file_processing_cached::process_files_parallel_cached(
         &app_state,
         &policy,
         &me_user,
-        &request.input_files_ids,
+        &input_file_ids,
         me_user
             .access_token
             .as_ref()
@@ -262,29 +376,20 @@ pub async fn token_usage_estimate(
             }),
     )
     .await
-    {
-        Ok(files) => files,
-        Err(err) => {
-            return Err((
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to process input files: {}", err),
-            ));
-        }
-    };
+    .map_err(|err| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to process input files: {}", err),
+        )
+    })?;
 
-    // Count tokens for files in parallel using the cache
-    let file_token_result = async {
+    let (file_details, total_file_tokens) = {
         let span = tracing::info_span!(
             "count_file_tokens_parallel",
             num_files = files_for_generation.len(),
             total_tokens = tracing::field::Empty,
         );
         let _enter = span.enter();
-
-        tracing::debug!(
-            num_files = files_for_generation.len(),
-            "Starting parallel file token counting"
-        );
 
         let app_state_ref = &app_state;
         let file_token_futures = files_for_generation.iter().filter_map(|file| {
@@ -311,8 +416,6 @@ pub async fn token_usage_estimate(
         });
 
         let file_details_results = futures::future::join_all(file_token_futures).await;
-
-        // Collect file details and calculate total
         let mut file_details = Vec::new();
         let mut total_file_tokens = 0;
         for result in file_details_results {
@@ -322,53 +425,21 @@ pub async fn token_usage_estimate(
                     file_details.push(item);
                 }
                 Err(err) => {
-                    return Err(err);
+                    return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, err));
                 }
             }
         }
 
         span.record("total_tokens", total_file_tokens);
-        tracing::debug!(
-            num_files = file_details.len(),
-            total_tokens = total_file_tokens,
-            "File token counting completed"
-        );
-
-        Ok::<_, String>((file_details, total_file_tokens))
-    }
-    .await;
-
-    let (file_details, total_file_tokens) = match file_token_result {
-        Ok(result) => result,
-        Err(err) => {
-            return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, err));
-        }
+        (file_details, total_file_tokens)
     };
 
-    // Build resolved prompt messages using prompt composition for accuracy
     let chat_request = if let Some(chat) = chat.as_ref() {
-        let assistant_config = match crate::models::chat::get_chat_assistant_configuration(
-            &app_state.db,
-            &policy,
-            &subject,
-            chat,
-        )
-        .await
-        {
-            Ok(config) => config,
-            Err(err) => {
-                return Err((
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to load assistant configuration: {}", err),
-                ));
-            }
-        };
-
         let synthetic_message_id = Uuid::new_v4();
         let raw_message = MessageSchema {
             role: MessageRole::User,
             content: vec![ContentPart::Text(ContentPartText {
-                text: request.user_message.clone(),
+                text: new_message_content.clone(),
             })],
             name: None,
             additional_fields: Default::default(),
@@ -418,40 +489,39 @@ pub async fn token_usage_estimate(
         let user_input = PromptCompositionUserInput {
             just_submitted_user_message_id: synthetic_message_id,
             requested_chat_provider_id: request.chat_provider_id.clone(),
-            new_input_file_ids: request.input_files_ids.clone(),
+            new_input_file_ids: input_file_ids.clone(),
             selected_facet_ids: vec![],
         };
         let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
 
-        match prepare_chat_request_with_adapters(
+        prepare_chat_request_with_adapters(
             &app_state,
             chat,
             user_input,
             &me_profile_input,
-            assistant_config,
+            assistant_config.clone(),
             &message_repo,
             &file_resolver,
             &prompt_provider,
         )
         .await
-        {
-            Ok(prepared) => prepared.chat_request().clone(),
-            Err(err) => {
-                return Err((
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to prepare chat request: {}", err),
-                ));
-            }
-        }
+        .map_err(|err| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to prepare chat request: {}", err),
+            )
+        })?
+        .chat_request()
+        .clone()
     } else {
         let mut messages = GenerationInputMessages { messages: vec![] };
-        if !request.user_message.is_empty() {
+        if !new_message_content.is_empty() {
             messages
                 .messages
                 .push(crate::models::message::InputMessage {
                     role: MessageRole::User,
                     content: ContentPart::Text(ContentPartText {
-                        text: request.user_message.clone(),
+                        text: new_message_content.clone(),
                     }),
                 });
         }
@@ -469,42 +539,23 @@ pub async fn token_usage_estimate(
         messages.into_chat_request()
     };
 
-    // Count tokens for all messages in the prepared chat request (history + system + files + user)
-    let total_tokens = count_tokens_for_chat_request(&app_state, &chat_request).await;
+    let mut chat_request = chat_request;
+    if let Some(system_prompt) = request.system_prompt.as_ref()
+        && !system_prompt.is_empty()
+    {
+        chat_request.system = Some(match chat_request.system {
+            Some(existing) if !existing.is_empty() => format!("{}\n{}", existing, system_prompt),
+            _ => system_prompt.clone(),
+        });
+    }
 
-    let total_tokens = match total_tokens {
-        Ok(count) => count,
-        Err(err) => {
-            return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, err));
-        }
-    };
+    let total_tokens = count_tokens_for_chat_request(&app_state, &chat_request)
+        .await
+        .map_err(|err| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, err))?;
 
-    // Calculate the history tokens without the user message and user files
     let history_tokens_without_user = total_tokens
         .saturating_sub(user_message_tokens)
         .saturating_sub(total_file_tokens);
-
-    // Get the chat provider configuration to determine max context tokens
-    let assistant_config = if let Some(chat) = chat.as_ref() {
-        match crate::models::chat::get_chat_assistant_configuration(
-            &app_state.db,
-            &policy,
-            &subject,
-            chat,
-        )
-        .await
-        {
-            Ok(config) => config,
-            Err(err) => {
-                return Err((
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to load assistant configuration: {}", err),
-                ));
-            }
-        }
-    } else {
-        None
-    };
 
     let requested_chat_provider_id = request.chat_provider_id.as_deref();
     let effective_chat_provider_id = requested_chat_provider_id.or_else(|| {
@@ -524,24 +575,19 @@ pub async fn token_usage_estimate(
                 format!("Failed to get chat provider configuration: {}", err),
             )
         })?;
-
     let max_context_tokens = chat_provider_config.model_capabilities.context_size_tokens as u32;
-
-    // Calculate total and remaining tokens
     let remaining_tokens = max_context_tokens.saturating_sub(total_tokens as u32);
 
-    let stats = TokenUsageStats {
-        total_tokens,
-        user_message_tokens,
-        history_tokens: history_tokens_without_user,
-        file_tokens: total_file_tokens,
-        max_tokens: max_context_tokens,
-        remaining_tokens,
-        chat_provider_id,
-    };
-
     Ok(Json(TokenUsageResponse {
-        stats,
+        stats: TokenUsageStats {
+            total_tokens,
+            user_message_tokens,
+            history_tokens: history_tokens_without_user,
+            file_tokens: total_file_tokens,
+            max_tokens: max_context_tokens,
+            remaining_tokens,
+            chat_provider_id,
+        },
         file_details,
     }))
 }

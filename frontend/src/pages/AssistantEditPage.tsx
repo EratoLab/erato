@@ -206,6 +206,7 @@ export default function AssistantEditPage() {
           <div className="rounded-lg border border-theme-border bg-theme-bg-primary p-8">
             <AssistantForm
               mode="edit"
+              assistantId={id}
               initialData={initialData}
               availableModels={availableModels}
               isSubmitting={isPending}

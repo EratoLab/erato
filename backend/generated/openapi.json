@@ -4308,12 +4308,46 @@
           }
         }
       },
+      "TokenUsageFileInput": {
+        "type": "object",
+        "properties": {
+          "input_files_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "File upload IDs to include in estimation.",
+            "example": "[\"00000000-0000-0000-0000-000000000000\"]"
+          }
+        }
+      },
+      "TokenUsageNewChatInput": {
+        "type": "object",
+        "properties": {
+          "assistant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Optional assistant ID for new chat context.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          }
+        }
+      },
       "TokenUsageRequest": {
         "type": "object",
-        "required": [
-          "user_message"
-        ],
         "properties": {
+          "chat_previous_message_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The previous message ID to anchor chat history context.\nPreferred over `previous_message_id` for new clients.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          },
           "chat_provider_id": {
             "type": "string",
             "description": "Optional chat provider ID to use for token estimation. If not provided, uses the default provider.",
@@ -4328,6 +4362,17 @@
             "description": "The ID of an existing chat to use. If provided, the chat with this ID will be used instead of creating a new one.",
             "example": "00000000-0000-0000-0000-000000000000"
           },
+          "file": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TokenUsageFileInput",
+                "description": "File content inputs to include in the estimation."
+              }
+            ]
+          },
           "input_files_ids": {
             "type": "array",
             "items": {
@@ -4337,6 +4382,25 @@
             "description": "The IDs of any files attached to this message. These files must already be uploaded to the file_uploads table.",
             "example": "[\"00000000-0000-0000-0000-000000000000\"]"
           },
+          "new_chat": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TokenUsageNewChatInput",
+                "description": "Configuration for estimating a new chat context."
+              }
+            ]
+          },
+          "new_message_content": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Content for the new message being composed.\nPreferred over `user_message` for new clients.",
+            "example": "Hello, world!"
+          },
           "previous_message_id": {
             "type": [
               "string",
@@ -4345,6 +4409,14 @@
             "format": "uuid",
             "description": "The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.",
             "example": "00000000-0000-0000-0000-000000000000"
+          },
+          "system_prompt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Additional system prompt content to include in the estimation.",
+            "example": "You are a concise legal assistant."
           },
           "user_message": {
             "type": "string",

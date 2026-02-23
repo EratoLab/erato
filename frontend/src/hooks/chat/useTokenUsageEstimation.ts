@@ -54,6 +54,11 @@ export interface UseTokenUsageEstimationReturn {
     previousMessageId?: string | null,
   ) => Promise<TokenUsageEstimationResult>;
 
+  /** Estimate token usage with an explicit request payload (for composable endpoint usage) */
+  estimateTokenUsageFromParts: (
+    requestBody: Record<string, unknown>,
+  ) => Promise<TokenUsageEstimationResult>;
+
   /** Most recent estimation result */
   lastEstimation: TokenUsageEstimationResult | null;
 
@@ -97,6 +102,10 @@ export const getTokenEstimationQueryKey = (
     previousMessageId ?? "",
   ];
 };
+
+const getTokenEstimationQueryKeyFromParts = (
+  requestBody: Record<string, unknown>,
+): string[] => ["tokenEstimation", "parts", JSON.stringify(requestBody)];
 
 /**
  * Hook for estimating token usage for messages and files
@@ -236,6 +245,38 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
     [estimateTokenUsage],
   );
 
+  const estimateTokenUsageFromParts = useCallback(
+    async (
+      requestBody: Record<string, unknown>,
+    ): Promise<TokenUsageEstimationResult> => {
+      try {
+        const queryKey = getTokenEstimationQueryKeyFromParts(requestBody);
+        const cachedData =
+          queryClient.getQueryData<TokenUsageResponse>(queryKey);
+
+        if (cachedData) {
+          return processTokenUsageResponse(cachedData);
+        }
+
+        const result = await tokenUsageMutation.mutateAsync({
+          body: requestBody as unknown as TokenUsageRequest,
+        });
+
+        queryClient.setQueryData(queryKey, result);
+        return processTokenUsageResponse(result);
+      } catch (error) {
+        const errorResult: TokenUsageEstimationResult = {
+          ...emptyEstimationResult,
+          error: error instanceof Error ? error : new Error(String(error)),
+          isLoading: false,
+        };
+        setLastEstimation(errorResult);
+        return errorResult;
+      }
+    },
+    [queryClient, processTokenUsageResponse, tokenUsageMutation],
+  );
+
   /**
    * Clear the last estimation result and invalidate relevant queries
    */
@@ -252,8 +293,9 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
   return {
     estimateTokenUsage,
     estimateTokenUsageForFiles,
+    estimateTokenUsageFromParts,
     lastEstimation,
     clearLastEstimation,
-    isLoading: lastEstimation?.isLoading ?? tokenUsageMutation.isPending,
+    isLoading: tokenUsageMutation.isPending,
   };
 }

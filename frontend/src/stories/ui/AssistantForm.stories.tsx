@@ -4,6 +4,7 @@ import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import type { AssistantFormData } from "@/components/ui/Assistant/AssistantForm";
+import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type {
   ChatModel,
   FileUploadItem,
@@ -85,6 +86,80 @@ const mockFiles: FileUploadItem[] = [
     file_capability: FileTypeUtil.createMockFileCapability("guidelines.txt"),
   },
 ];
+
+const contextWarningEstimation: TokenUsageEstimationResult = {
+  tokenUsage: {
+    stats: {
+      total_tokens: 620,
+      user_message_tokens: 320,
+      history_tokens: 200,
+      file_tokens: 100,
+      max_tokens: 1000,
+      remaining_tokens: 380,
+      chat_provider_id: "gpt-4",
+    },
+    file_details: [
+      {
+        id: "file-1",
+        filename: "documentation.pdf",
+        token_count: 120,
+      },
+      {
+        id: "file-2",
+        filename: "guidelines.txt",
+        token_count: 62,
+      },
+      {
+        id: "file-3",
+        filename: "small-note.txt",
+        token_count: 30,
+      },
+    ],
+  },
+  isLoading: false,
+  error: null,
+  isApproachingLimit: false,
+  isCriticallyClose: false,
+  usagePercentage: 0.62,
+  exceedsLimit: false,
+};
+
+const contextExceededEstimation: TokenUsageEstimationResult = {
+  tokenUsage: {
+    stats: {
+      total_tokens: 1200,
+      user_message_tokens: 700,
+      history_tokens: 300,
+      file_tokens: 200,
+      max_tokens: 1000,
+      remaining_tokens: 0,
+      chat_provider_id: "gpt-4",
+    },
+    file_details: [
+      {
+        id: "file-1",
+        filename: "documentation.pdf",
+        token_count: 220,
+      },
+      {
+        id: "file-2",
+        filename: "guidelines.txt",
+        token_count: 140,
+      },
+      {
+        id: "file-3",
+        filename: "small-note.txt",
+        token_count: 20,
+      },
+    ],
+  },
+  isLoading: false,
+  error: null,
+  isApproachingLimit: true,
+  isCriticallyClose: true,
+  usagePercentage: 1.2,
+  exceedsLimit: true,
+};
 
 // Empty form (Create mode)
 export const EmptyForm: Story = {
@@ -343,6 +418,70 @@ export const WithoutModels: Story = {
       <p className="mb-4 text-sm text-theme-fg-secondary">
         Model selector is hidden when no models are available
       </p>
+      <AssistantForm {...args} />
+    </div>
+  ),
+};
+
+export const ContextUsageWarningAboveThreshold: Story = {
+  args: {
+    mode: "create",
+    availableModels: mockModels,
+    initialData: {
+      name: "Context Aware Assistant",
+      description: "Assistant with enough prompt content to consume context.",
+      prompt:
+        "You are a helpful assistant. Always reason carefully and include concise answers.",
+      defaultModel: mockModels[0],
+      files: mockFiles,
+      mcpServerIds: [],
+    },
+    tokenUsageEstimationOverride: contextWarningEstimation,
+    disableLiveTokenUsageEstimation: true,
+    onSubmit: (data) => {
+      console.log("Form submitted:", data);
+    },
+    onCancel: () => {
+      console.log("Form cancelled");
+    },
+  },
+  render: (args) => (
+    <div className="w-[700px] rounded-lg border border-theme-border bg-theme-bg-primary p-8">
+      <h2 className="mb-6 text-2xl font-semibold text-theme-fg-primary">
+        Context Usage Warning (Above 50%)
+      </h2>
+      <AssistantForm {...args} />
+    </div>
+  ),
+};
+
+export const ContextUsageErrorAbove100Percent: Story = {
+  args: {
+    mode: "create",
+    availableModels: mockModels,
+    initialData: {
+      name: "Overloaded Assistant",
+      description: "Assistant with context usage beyond model capacity.",
+      prompt:
+        "You are a detailed assistant. Include extensive instructions and process uploaded files deeply.",
+      defaultModel: mockModels[0],
+      files: mockFiles,
+      mcpServerIds: [],
+    },
+    tokenUsageEstimationOverride: contextExceededEstimation,
+    disableLiveTokenUsageEstimation: true,
+    onSubmit: (data) => {
+      console.log("Form submitted:", data);
+    },
+    onCancel: () => {
+      console.log("Form cancelled");
+    },
+  },
+  render: (args) => (
+    <div className="w-[700px] rounded-lg border border-theme-border bg-theme-bg-primary p-8">
+      <h2 className="mb-6 text-2xl font-semibold text-theme-fg-primary">
+        Context Usage Error (Above 100%)
+      </h2>
       <AssistantForm {...args} />
     </div>
   ),
