@@ -1031,6 +1031,64 @@ async fn test_token_usage_estimate_includes_assistant_file(pool: Pool<Postgres>)
     );
 }
 
+/// Test token usage estimate with composable request fields.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_token_usage_estimate_with_composable_payload(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let request = json!({
+        "new_chat": {},
+        "new_message_content": "Please summarize this.",
+        "system_prompt": "You are a concise assistant."
+    });
+
+    let response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&request)
+        .await;
+
+    response.assert_status_ok();
+
+    let token_usage: Value = response.json();
+    let total_tokens = token_usage["stats"]["total_tokens"]
+        .as_u64()
+        .expect("Expected total_tokens");
+    let user_message_tokens = token_usage["stats"]["user_message_tokens"]
+        .as_u64()
+        .expect("Expected user_message_tokens");
+    let remaining_tokens = token_usage["stats"]["remaining_tokens"]
+        .as_u64()
+        .expect("Expected remaining_tokens");
+    let max_tokens = token_usage["stats"]["max_tokens"]
+        .as_u64()
+        .expect("Expected max_tokens");
+
+    assert!(total_tokens > 0, "Expected total tokens to be > 0");
+    assert!(
+        user_message_tokens > 0,
+        "Expected new_message_content to contribute user_message_tokens"
+    );
+    assert_eq!(
+        remaining_tokens,
+        max_tokens - total_tokens,
+        "Expected remaining_tokens to equal max_tokens - total_tokens"
+    );
+}
+
 /// Test message submission with invalid previous_message_id (non-existent UUID).
 ///
 /// # Test Categories

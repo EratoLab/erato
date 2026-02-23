@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { MagicWand } from "iconoir-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDebounce } from "use-debounce";
 
 import { env } from "@/app/env";
 import { ModelSelector } from "@/components/ui/Chat/ModelSelector";
@@ -16,14 +17,18 @@ import { FormField } from "@/components/ui/Input/FormField";
 import { Input } from "@/components/ui/Input/Input";
 import { Textarea } from "@/components/ui/Input/Textarea";
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
+import { useTokenUsageEstimation } from "@/hooks/chat/useTokenUsageEstimation";
 import { useFilePreviewModal } from "@/hooks/ui";
 import { usePromptOptimizer } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type {
   ChatModel,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
+
+const CONTEXT_WARNING_THRESHOLD = 0.5;
 
 export interface AssistantFormData {
   name: string;
@@ -68,6 +73,12 @@ export interface AssistantFormProps {
    * @default "create"
    */
   mode?: "create" | "edit";
+  /** Assistant ID when editing an existing assistant */
+  assistantId?: string;
+  /** Optional override for token usage estimation display (storybook/testing) */
+  tokenUsageEstimationOverride?: TokenUsageEstimationResult | null;
+  /** Disable live token usage estimation requests (storybook/testing) */
+  disableLiveTokenUsageEstimation?: boolean;
   /**
    * Additional CSS classes
    */
@@ -103,6 +114,9 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   onSubmit,
   onCancel,
   mode = "create",
+  assistantId,
+  tokenUsageEstimationOverride = null,
+  disableLiveTokenUsageEstimation = false,
   className,
 }) => {
   const [formData, setFormData] = useState<AssistantFormData>({
@@ -128,9 +142,23 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     closePreviewModal,
   } = useFilePreviewModal();
   const promptOptimizer = usePromptOptimizer();
+  const {
+    estimateTokenUsageFromParts,
+    lastEstimation,
+    clearLastEstimation,
+    isLoading: isEstimatingTokenUsage,
+  } = useTokenUsageEstimation();
   const isPromptOptimizerEnabled = env().promptOptimizerEnabled;
   const isOptimizingPrompt = promptOptimizer.isPending;
+  const [debouncedPrompt] = useDebounce(formData.prompt, 600);
+  const [debouncedName] = useDebounce(formData.name, 600);
+  const [debouncedDescription] = useDebounce(formData.description, 600);
+  const fileIds = useMemo(
+    () => formData.files.map((file) => file.id),
+    [formData.files],
+  );
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastTokenEstimateRequestKeyRef = useRef<string | null>(null);
   /* eslint-disable lingui/no-unlocalized-strings */
   const insertTextCommand = "insertText";
   const inputEventName = "input";
@@ -348,6 +376,111 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     !Object.values(errors).some((error) => error !== "") &&
     formData.name.trim().length > 0 &&
     formData.prompt.trim().length > 0;
+  const effectiveEstimation = tokenUsageEstimationOverride ?? lastEstimation;
+  const showLiveEstimationSpinner =
+    tokenUsageEstimationOverride == null && isEstimatingTokenUsage;
+  const shouldShowEstimationPlaceholder =
+    showLiveEstimationSpinner && fileIds.length > 0;
+  const rawUsedContextPercentage =
+    effectiveEstimation?.tokenUsage != null
+      ? Math.max(
+          0,
+          Math.round(
+            (effectiveEstimation.tokenUsage.stats.total_tokens /
+              effectiveEstimation.tokenUsage.stats.max_tokens) *
+              100,
+          ),
+        )
+      : 0;
+  const usedContextPercentage = Math.min(100, rawUsedContextPercentage);
+  const remainingContextPercentage = Math.max(
+    0,
+    100 - rawUsedContextPercentage,
+  );
+  const isContextExceeded = rawUsedContextPercentage > 100;
+  const biggestFileContributors = useMemo(() => {
+    const tokenUsage = effectiveEstimation?.tokenUsage;
+    if (!tokenUsage) {
+      return [];
+    }
+
+    const maxTokens = tokenUsage.stats.max_tokens;
+    if (maxTokens <= 0) {
+      return [];
+    }
+
+    return tokenUsage.file_details
+      .map((fileDetail) => {
+        const percentage = (fileDetail.token_count / maxTokens) * 100;
+        return {
+          filename: fileDetail.filename,
+          percentage,
+        };
+      })
+      .filter((file) => file.percentage > 5)
+      .sort((a, b) => b.percentage - a.percentage);
+  }, [effectiveEstimation]);
+  const showContextWarning =
+    usedContextPercentage >= CONTEXT_WARNING_THRESHOLD * 100;
+
+  useEffect(() => {
+    if (
+      isSubmitting ||
+      disableLiveTokenUsageEstimation ||
+      tokenUsageEstimationOverride != null
+    ) {
+      return;
+    }
+
+    const hasPrompt = debouncedPrompt.trim().length > 0;
+    const hasFiles = fileIds.length > 0;
+    const hasAdditionalText =
+      debouncedName.trim().length > 0 || debouncedDescription.trim().length > 0;
+    if (!hasPrompt && !hasFiles && !hasAdditionalText) {
+      lastTokenEstimateRequestKeyRef.current = null;
+      clearLastEstimation();
+      return;
+    }
+
+    const requestBody: Record<string, unknown> = {
+      new_chat: assistantId ? { assistant_id: assistantId } : {},
+      system_prompt: debouncedPrompt,
+    };
+
+    const additionalContentParts = [
+      debouncedName.trim(),
+      debouncedDescription.trim(),
+    ].filter((value) => value.length > 0);
+    if (additionalContentParts.length > 0) {
+      requestBody.new_message_content = additionalContentParts.join("\n");
+    }
+    if (fileIds.length > 0) {
+      requestBody.file = { input_files_ids: fileIds };
+    }
+    if (formData.defaultModel?.chat_provider_id) {
+      requestBody.chat_provider_id = formData.defaultModel.chat_provider_id;
+    }
+
+    const requestKey = JSON.stringify(requestBody);
+    if (requestKey === lastTokenEstimateRequestKeyRef.current) {
+      return;
+    }
+    lastTokenEstimateRequestKeyRef.current = requestKey;
+
+    void estimateTokenUsageFromParts(requestBody);
+  }, [
+    assistantId,
+    clearLastEstimation,
+    debouncedDescription,
+    debouncedName,
+    debouncedPrompt,
+    estimateTokenUsageFromParts,
+    fileIds,
+    formData.defaultModel?.chat_provider_id,
+    isSubmitting,
+    disableLiveTokenUsageEstimation,
+    tokenUsageEstimationOverride,
+  ]);
 
   return (
     <form onSubmit={handleSubmit} className={className}>
@@ -458,7 +591,6 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
             disabled={isSubmitting}
           />
         </FormField>
-
         {/* Model selection */}
         {availableModels.length > 0 && (
           <FormField
@@ -517,31 +649,89 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
         </FormField>
 
         {/* Form actions */}
-        <div className="flex justify-end gap-3 border-t border-theme-border pt-5">
-          {onCancel && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onCancel}
-              disabled={isSubmitting}
-            >
-              {t`Cancel`}
-            </Button>
+        <div className="border-t border-theme-border pt-5">
+          {shouldShowEstimationPlaceholder ? (
+            <div className="mb-4">
+              <div className="rounded-md border border-theme-border bg-theme-bg-tertiary p-3 text-sm text-theme-fg-secondary">
+                {t`Estimating token usage...`}
+              </div>
+            </div>
+          ) : (
+            effectiveEstimation &&
+            showContextWarning && (
+              <div className="mb-4">
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between text-xs text-theme-fg-secondary">
+                    <span>{t`Used context: ${usedContextPercentage}%`}</span>
+                    <span>{t`Remaining context: ${remainingContextPercentage}%`}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-theme-bg-tertiary">
+                    <div
+                      className="h-full rounded-full bg-theme-warning-fg transition-all"
+                      style={{ width: `${usedContextPercentage}%` }}
+                      role="progressbar"
+                      aria-label={t`Context usage`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={usedContextPercentage}
+                    />
+                  </div>
+                </div>
+                <Alert
+                  type={isContextExceeded ? "error" : "warning"}
+                  className="mb-0"
+                >
+                  {isContextExceeded
+                    ? t`Context usage exceeds model capacity. The assistant can't be created like this.`
+                    : t`Using this much context may limit the chat session and reduce room for uploading additional files.`}
+                  {biggestFileContributors.length > 0 && (
+                    <div className="mt-2">
+                      <p className="mb-1 font-medium">
+                        {t`Largest file context contributors:`}
+                      </p>
+                      <ul className="list-inside list-disc">
+                        {biggestFileContributors.map((file) => {
+                          const fileName = file.filename;
+                          const filePercentage = file.percentage.toFixed(1);
+                          return (
+                            <li key={`${file.filename}-${file.percentage}`}>
+                              {t`${fileName}: ${filePercentage}%`}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </Alert>
+              </div>
+            )
           )}
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={!isFormValid || isSubmitting}
-          >
-            {isSubmitting
-              ? t`Saving...`
-              : mode === "create"
-                ? t`Create Assistant`
-                : t({
-                    id: "assistant.form.button.save",
-                    message: "Save Changes",
-                  })}
-          </Button>
+          <div className="flex justify-end gap-3">
+            {onCancel && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={onCancel}
+                disabled={isSubmitting}
+              >
+                {t`Cancel`}
+              </Button>
+            )}
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!isFormValid || isSubmitting || isContextExceeded}
+            >
+              {isSubmitting
+                ? t`Saving...`
+                : mode === "create"
+                  ? t`Create Assistant`
+                  : t({
+                      id: "assistant.form.button.save",
+                      message: "Save Changes",
+                    })}
+            </Button>
+          </div>
         </div>
       </div>
 

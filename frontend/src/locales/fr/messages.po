@@ -1028,6 +1028,10 @@ msgstr " Ceci concerne votre période budgétaire de {days} jours."
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
 msgstr "{0, plural, =0 {Aucun fichier} one {# fichier} other {# fichiers}}"
 
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "{fileName}: {filePercentage}%"
+msgstr "{fileName} : {filePercentage}%"
+
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"
 msgstr ""
@@ -1219,6 +1223,14 @@ msgstr ""
 msgid "Confirm Removal"
 msgstr "Confirmer la suppression"
 
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Context usage"
+msgstr "Utilisation du contexte"
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Context usage exceeds model capacity. The assistant can't be created like this."
+msgstr "L'utilisation du contexte dépasse la capacité du modèle. L'assistant ne peut pas être créé dans cet état."
+
 #: src/pages/AssistantsListPage.tsx
 msgid "Create and manage custom assistants with specific instructions and capabilities"
 msgstr ""
@@ -1327,6 +1339,10 @@ msgstr "Sortie d'erreur"
 msgid "Error:"
 msgstr "Erreur :"
 
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Estimating token usage..."
+msgstr "Estimation de l'utilisation des tokens..."
+
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "Expand {title}"
 msgstr ""
@@ -1403,6 +1419,10 @@ msgstr "Paramètres d'entrée"
 #: src/components/ui/Message/MessageTimestamp.tsx
 msgid "Invalid date provided to MessageTimestamp, using current date"
 msgstr "Date invalide fournie à MessageTimestamp, utilisation de la date actuelle"
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Largest file context contributors:"
+msgstr "Principales contributions des fichiers au contexte :"
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "Light mode"
@@ -1526,6 +1546,10 @@ msgstr "Aperçu :"
 #: src/pages/SearchPage.tsx
 msgid "Recent Chats"
 msgstr "Chats récents"
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Remaining context: {remainingContextPercentage}%"
+msgstr "Contexte restant : {remainingContextPercentage}%"
 
 #: src/components/ui/Chat/ChatHistoryList.tsx
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
@@ -1738,9 +1762,17 @@ msgstr "Fichiers téléchargés"
 msgid "Uploading file"
 msgstr "Téléchargement du fichier"
 
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Used context: {usedContextPercentage}%"
+msgstr "Contexte utilisé : {usedContextPercentage}%"
+
 #: src/components/ui/Feedback/Avatar.tsx
 msgid "User avatar"
 msgstr "Avatar de l'utilisateur"
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Using this much context may limit the chat session and reduce room for uploading additional files."
+msgstr "Une utilisation aussi élevée du contexte peut limiter la session de chat et réduire la marge pour téléverser des fichiers supplémentaires."
 
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Using tools"
