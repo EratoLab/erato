@@ -1234,6 +1234,11 @@ pub struct ExperimentalAssistantsConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub enabled: bool,
+
+    // Whether to show recent assistants in the chat sidebar.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub show_recent_items: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]

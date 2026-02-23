@@ -64,10 +64,6 @@ export interface ChatHistorySidebarProps {
   isLoading: boolean;
   error?: Error;
   userProfile?: UserProfile;
-  /**
-   * Callback when an assistant is selected to start a new chat
-   */
-  onAssistantSelect?: (assistantId: string) => void;
 }
 
 const SidebarLogo = memo<{
@@ -300,6 +296,90 @@ const SearchNavigationItem = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 SearchNavigationItem.displayName = "SearchNavigationItem";
 
+const AssistantsNavigationItem = memo<{
+  onAssistants?: () => void;
+  isOnAssistantsPage?: boolean;
+  isSlimMode?: boolean;
+}>(({ onAssistants, isOnAssistantsPage, isSlimMode = false }) => {
+  const assistantsIconId = useThemedIcon("navigation", "assistants");
+
+  return (
+    <div className="px-2 py-1">
+      {isOnAssistantsPage ? (
+        <InteractiveContainer
+          useDiv={true}
+          interactive={false}
+          className={clsx(
+            "flex min-h-[44px] items-center rounded-lg text-left opacity-50",
+            isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
+          )}
+          aria-label={t`Assistants`}
+          title={isSlimMode ? t`Assistants` : undefined}
+        >
+          <ResolvedIcon
+            iconId={assistantsIconId}
+            fallbackIcon={EditIcon}
+            className="size-4 shrink-0 text-theme-fg-secondary"
+          />
+          <span
+            className={clsx(
+              "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
+              isSlimMode
+                ? "w-0 overflow-hidden opacity-0"
+                : "opacity-100 delay-150",
+            )}
+          >
+            {t`Assistants`}
+          </span>
+        </InteractiveContainer>
+      ) : (
+        <a
+          href="/assistants"
+          onClick={(e) => {
+            // Allow cmd/ctrl-click to open in new tab
+            if (e.metaKey || e.ctrlKey) {
+              return;
+            }
+            // Prevent default navigation for normal clicks
+            e.preventDefault();
+            logger.log("[ASSISTANTS_FLOW] Assistants navigation item clicked");
+            onAssistants?.();
+          }}
+          aria-label={t`Assistants`}
+          title={isSlimMode ? t`Assistants` : undefined}
+        >
+          <InteractiveContainer
+            useDiv={true}
+            className={clsx(
+              "flex min-h-[44px] items-center rounded-lg text-left hover:bg-theme-bg-hover",
+              isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
+            )}
+          >
+            <ResolvedIcon
+              iconId={assistantsIconId}
+              fallbackIcon={EditIcon}
+              className="size-4 shrink-0 text-theme-fg-secondary"
+            />
+            <span
+              className={clsx(
+                "whitespace-nowrap font-medium text-theme-fg-primary transition-opacity duration-150",
+                isSlimMode
+                  ? "w-0 overflow-hidden opacity-0"
+                  : "opacity-100 delay-150",
+              )}
+            >
+              {t`Assistants`}
+            </span>
+          </InteractiveContainer>
+        </a>
+      )}
+    </div>
+  );
+});
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+AssistantsNavigationItem.displayName = "AssistantsNavigationItem";
+
 const CollapsibleSection = memo<{
   title: string;
   defaultExpanded?: boolean;
@@ -379,13 +459,15 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     isLoading,
     error,
     userProfile,
-    onAssistantSelect,
   }) => {
     const ref = useRef<HTMLElement>(null);
     const [sidebarLogoPath, setSidebarLogoPath] = useState<string | null>(null);
     const navigate = useNavigate();
     const location = useLocation();
     const isOnSearchPage = location.pathname === "/search";
+    // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal route path
+    const assistantsRoute = "/assistants";
+    const isOnAssistantsPage = location.pathname.startsWith(assistantsRoute);
 
     // Get sidebar configuration
     const {
@@ -411,7 +493,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const { effectiveTheme, customThemeName } = useTheme();
 
     // Get assistants feature flag
-    const { enabled: assistantsEnabled } = useAssistantsFeature();
+    const { enabled: assistantsEnabled, showRecentItems: assistantsShowRecent } =
+      useAssistantsFeature();
 
     // Only use ResizeObserver in the browser
     const isBrowser = typeof window !== "undefined";
@@ -463,6 +546,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       logger.log("[CHAT_FLOW] Navigating to search page");
       navigate("/search");
     }, [navigate]);
+
+    const handleAssistantsClick = useCallback(() => {
+      logger.log("[ASSISTANTS_FLOW] Navigating to assistants page");
+      navigate(assistantsRoute);
+    }, [assistantsRoute, navigate]);
 
     return (
       <ErrorBoundary FallbackComponent={ErrorDisplay}>
@@ -517,6 +605,14 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 isSlimMode={isSlimMode}
               />
 
+              {assistantsEnabled && (
+                <AssistantsNavigationItem
+                  onAssistants={handleAssistantsClick}
+                  isOnAssistantsPage={isOnAssistantsPage}
+                  isSlimMode={isSlimMode}
+                />
+              )}
+
               {/* Divider separating navigation items from content lists */}
               <div
                 className={clsx(
@@ -525,8 +621,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 )}
               />
 
-              {/* Assistants Section - fade in/out instead of instant hide */}
-              {assistantsEnabled && (
+              {/* Optional recent assistants section */}
+              {assistantsEnabled && assistantsShowRecent && !collapsed && (
                 <div
                   className={clsx(
                     "transition-opacity duration-200",
@@ -534,21 +630,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                       "pointer-events-none overflow-hidden opacity-0",
                   )}
                 >
-                  <FrequentAssistantsList
-                    onAssistantSelect={onAssistantSelect}
-                    limit={5}
-                  />
+                  <FrequentAssistantsList limit={5} showBottomDivider={true} />
                 </div>
-              )}
-
-              {/* Divider separating assistants from chat history */}
-              {assistantsEnabled && (
-                <div
-                  className={clsx(
-                    "mx-2 my-1 border-t border-theme-border transition-opacity duration-200",
-                    isSlimMode && "pointer-events-none opacity-0",
-                  )}
-                />
               )}
 
               {/* Chat History - fade in/out with staggered timing */}
