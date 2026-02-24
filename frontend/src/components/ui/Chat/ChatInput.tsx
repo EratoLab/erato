@@ -209,6 +209,7 @@ export const ChatInput = ({
     onFilesUploaded: handleFilesUploaded,
     chatId: chatId,
     assistantId,
+    chatProviderId: selectedModel?.chat_provider_id,
   });
 
   const { data: facetsData, error: facetsError } = useFacets({});
@@ -532,7 +533,9 @@ export const ChatInput = ({
           message={message}
           attachedFiles={attachedFiles}
           chatId={chatId}
+          assistantId={assistantId}
           previousMessageId={previousMessageId}
+          chatProviderId={selectedModel?.chat_provider_id}
           disabled={isDisabled}
           onLimitExceeded={handleMessageTokenLimitExceeded}
         />
@@ -622,6 +625,7 @@ export const ChatInput = ({
                       chatId={chatId}
                       assistantId={assistantId}
                       previousMessageId={previousMessageId}
+                      chatProviderId={selectedModel?.chat_provider_id}
                       onFilesUploaded={handleFilesUploaded}
                       onTokenLimitExceeded={handleFileTokenLimitExceeded}
                       // Pass the callback for processing state

@@ -20,8 +20,12 @@ interface UseTokenUsageWithFilesOptions {
   attachedFiles: FileUploadItem[];
   /** Current chat ID */
   chatId?: string | null;
+  /** Assistant ID for new chat estimation context */
+  assistantId?: string;
   /** Previous message ID */
   previousMessageId?: string | null;
+  /** Selected chat provider ID for new chats */
+  chatProviderId?: string;
   /** Is the input disabled (stops estimation) */
   disabled?: boolean;
   /** Character threshold before triggering token estimation (default: 150) */
@@ -50,7 +54,9 @@ export function useTokenUsageWithFiles({
   message,
   attachedFiles,
   chatId,
+  assistantId,
   previousMessageId,
+  chatProviderId,
   disabled = false,
   estimateThreshold = 150,
   debounceDelay = 500,
@@ -78,7 +84,9 @@ export function useTokenUsageWithFiles({
       debouncedMessage,
       fileIds.length > 0 ? fileIds : undefined,
       chatId,
+      assistantId,
       previousMessageId,
+      chatProviderId,
     ),
     queryFn: async () => {
       if (!shouldEstimate) {
@@ -88,8 +96,10 @@ export function useTokenUsageWithFiles({
       return estimateTokenUsage(
         debouncedMessage,
         chatId,
+        assistantId,
         previousMessageId,
         fileIds.length > 0 ? fileIds : undefined,
+        chatProviderId,
       );
     },
     enabled: shouldEstimate,
@@ -109,8 +119,10 @@ export function useTokenUsageWithFiles({
     return estimateTokenUsage(
       debouncedMessage,
       chatId,
+      assistantId,
       previousMessageId,
       fileIds.length > 0 ? fileIds : undefined,
+      chatProviderId,
     );
   }, [
     disabled,
@@ -118,7 +130,9 @@ export function useTokenUsageWithFiles({
     estimateTokenUsage,
     debouncedMessage,
     chatId,
+    assistantId,
     previousMessageId,
+    chatProviderId,
   ]);
 
   // Function to clear the current estimation

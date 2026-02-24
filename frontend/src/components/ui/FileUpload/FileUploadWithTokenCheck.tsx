@@ -46,6 +46,8 @@ interface FileUploadWithTokenCheckProps {
   assistantId?: string;
   /** Previous message ID */
   previousMessageId?: string | null;
+  /** Selected chat provider ID for new chats */
+  chatProviderId?: string;
   /** Callback when files are successfully uploaded */
   onFilesUploaded?: (files: FileUploadItem[]) => void;
   /** Callback when token limit is exceeded */
@@ -79,6 +81,7 @@ export const FileUploadWithTokenCheck: React.FC<
   chatId,
   assistantId,
   previousMessageId,
+  chatProviderId,
   onFilesUploaded,
   onTokenLimitExceeded,
   acceptedFileTypes = [],
@@ -115,13 +118,13 @@ export const FileUploadWithTokenCheck: React.FC<
     isUploading,
     isEstimating,
     uploadError,
-    tokenUsageEstimation,
     exceedsTokenLimit,
   } = useFileUploadWithTokenCheck({
     message,
     chatId,
     assistantId,
     previousMessageId,
+    chatProviderId,
     onFilesUploaded,
     acceptedFileTypes,
     multiple,
@@ -202,7 +205,10 @@ export const FileUploadWithTokenCheck: React.FC<
           // If no chatId exists, create one silently first
           if (!linkChatId) {
             const createChatResult = await createChatMutation.mutateAsync({
-              body: assistantId ? { assistant_id: assistantId } : {},
+              body: {
+                ...(assistantId ? { assistant_id: assistantId } : {}),
+                ...(chatProviderId ? { chat_provider_id: chatProviderId } : {}),
+              },
             });
             linkChatId = createChatResult.chat_id;
             // Set the silentChatId in the store
@@ -256,6 +262,7 @@ export const FileUploadWithTokenCheck: React.FC<
       onFilesUploaded,
       chatId,
       assistantId,
+      chatProviderId,
       createChatMutation,
       setSilentChatId,
     ],
@@ -277,11 +284,10 @@ export const FileUploadWithTokenCheck: React.FC<
   // Effect to notify parent about token limit changes
   // Now we only notify the parent and don't show warnings directly
   useEffect(() => {
-    // Notify parent if there's a token estimation and limits are exceeded
-    if (tokenUsageEstimation && onTokenLimitExceeded) {
+    if (onTokenLimitExceeded) {
       onTokenLimitExceeded(exceedsTokenLimit);
     }
-  }, [tokenUsageEstimation, exceedsTokenLimit, onTokenLimitExceeded]);
+  }, [exceedsTokenLimit, onTokenLimitExceeded]);
 
   return (
     <div className="relative">

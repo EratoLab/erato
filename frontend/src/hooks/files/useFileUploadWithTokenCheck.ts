@@ -1,18 +1,12 @@
 /**
  * Hook for handling file uploads with token usage checking
  */
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 
-import {
-  useTokenUsageEstimation,
-  getTokenEstimationQueryKey,
-} from "@/hooks/chat/useTokenUsageEstimation";
 import { createLogger } from "@/utils/debugLogger";
 
 import { useFileDropzone } from "./useFileDropzone";
 
-import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { FileType } from "@/utils/fileTypes";
 
@@ -27,6 +21,8 @@ interface UseFileUploadWithTokenCheckOptions {
   assistantId?: string;
   /** Previous message ID */
   previousMessageId?: string | null;
+  /** Selected chat provider ID for new chats */
+  chatProviderId?: string;
   /** Callback when files are successfully uploaded */
   onFilesUploaded?: (files: FileUploadItem[]) => void;
   /** Array of accepted file types */
@@ -51,7 +47,7 @@ interface UseFileUploadWithTokenCheckResult {
   /** Clear uploaded files */
   clearFiles: () => void;
   /** Token usage estimation result after upload */
-  tokenUsageEstimation: TokenUsageEstimationResult | null;
+  tokenUsageEstimation: null;
   /** Whether a token estimation is in progress */
   isEstimating: boolean;
   /** Does the usage exceed the token limit */
@@ -66,15 +62,13 @@ export function useFileUploadWithTokenCheck({
   chatId,
   assistantId,
   previousMessageId,
+  chatProviderId,
   onFilesUploaded,
   acceptedFileTypes = [],
   multiple = false,
   maxFiles = 5,
   disabled = false,
 }: UseFileUploadWithTokenCheckOptions): UseFileUploadWithTokenCheckResult {
-  // Use the query client for cache operations
-  const queryClient = useQueryClient();
-
   // Use the file upload hook
   const {
     uploadFiles: baseUploadFiles,
@@ -90,17 +84,9 @@ export function useFileUploadWithTokenCheck({
     onFilesUploaded,
     chatId,
     assistantId,
+    chatProviderId,
   });
 
-  // Use the token usage estimation hook
-  const {
-    estimateTokenUsageForFiles,
-    clearLastEstimation,
-    lastEstimation,
-    isLoading: isEstimating,
-  } = useTokenUsageEstimation();
-
-  // Combine upload with token checking using React Query
   const uploadFiles = useCallback(
     async (files: File[]) => {
       if (disabled || isUploading) {
@@ -111,57 +97,13 @@ export function useFileUploadWithTokenCheck({
         // First, upload the files
         const uploadedItems = await baseUploadFiles(files);
 
-        if (uploadedItems && uploadedItems.length > 0) {
-          // Get the file IDs for the query key
-          const uploadedFileIds = uploadedItems.map((file) => file.id);
-
-          // Generate the query key for this estimation
-          const queryKey = getTokenEstimationQueryKey(
-            message,
-            uploadedFileIds,
-            chatId,
-            previousMessageId,
-          );
-
-          // Check if we already have a recent estimation in the cache
-          const cachedEstimation = queryClient.getQueryData(queryKey);
-
-          if (!cachedEstimation) {
-            logger.log("No cached estimation, requesting new one");
-
-            // Perform estimation and update the cache
-            const messageForEstimation = message || " ";
-            await estimateTokenUsageForFiles(
-              uploadedItems,
-              messageForEstimation,
-              chatId,
-              previousMessageId,
-            );
-          } else {
-            logger.log("Using cached token estimation");
-          }
-        }
-
         return uploadedItems;
       } catch (error) {
         logger.error("Error in file upload with token check:", error);
-        if (!(error instanceof Error && error.message.includes("token"))) {
-          clearLastEstimation();
-        }
         return undefined;
       }
     },
-    [
-      disabled,
-      isUploading,
-      baseUploadFiles,
-      message,
-      estimateTokenUsageForFiles,
-      chatId,
-      previousMessageId,
-      clearLastEstimation,
-      queryClient,
-    ],
+    [disabled, isUploading, baseUploadFiles],
   );
 
   return {
@@ -170,8 +112,8 @@ export function useFileUploadWithTokenCheck({
     isUploading,
     uploadError,
     clearFiles,
-    tokenUsageEstimation: lastEstimation,
-    isEstimating,
-    exceedsTokenLimit: lastEstimation?.exceedsLimit ?? false,
+    tokenUsageEstimation: null,
+    isEstimating: false,
+    exceedsTokenLimit: false,
   };
 }

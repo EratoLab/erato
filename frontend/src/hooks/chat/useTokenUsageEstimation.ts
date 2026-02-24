@@ -42,8 +42,10 @@ export interface UseTokenUsageEstimationReturn {
   estimateTokenUsage: (
     message: string,
     chatId?: string | null,
+    assistantId?: string,
     previousMessageId?: string | null,
     inputFileIds?: string[],
+    chatProviderId?: string,
   ) => Promise<TokenUsageEstimationResult>;
 
   /** Estimate token usage for when a file is uploaded (with prior message context) */
@@ -51,7 +53,9 @@ export interface UseTokenUsageEstimationReturn {
     files: FileUploadItem[],
     message: string,
     chatId?: string | null,
+    assistantId?: string,
     previousMessageId?: string | null,
+    chatProviderId?: string,
   ) => Promise<TokenUsageEstimationResult>;
 
   /** Estimate token usage with an explicit request payload (for composable endpoint usage) */
@@ -88,7 +92,9 @@ export const getTokenEstimationQueryKey = (
   message: string,
   inputFileIds?: string[],
   chatId?: string | null,
+  assistantId?: string,
   previousMessageId?: string | null,
+  chatProviderId?: string,
 ): string[] => {
   // Normalize inputs for consistent key generation
   const normalizedMessage = message.trim();
@@ -99,7 +105,9 @@ export const getTokenEstimationQueryKey = (
     normalizedMessage,
     sortedFileIds,
     chatId ?? "",
+    assistantId ?? "",
     previousMessageId ?? "",
+    chatProviderId ?? "",
   ];
 };
 
@@ -164,8 +172,10 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
     async (
       message: string,
       chatId?: string | null,
+      assistantId?: string,
       previousMessageId?: string | null,
       inputFileIds?: string[],
+      chatProviderId?: string,
     ): Promise<TokenUsageEstimationResult> => {
       try {
         // Generate a proper query key
@@ -173,7 +183,9 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
           message,
           inputFileIds,
           chatId,
+          assistantId,
           previousMessageId,
+          chatProviderId,
         );
 
         // Check if we already have cached data
@@ -196,6 +208,14 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
 
         if (chatId) {
           (requestBody as Record<string, unknown>).existing_chat_id = chatId;
+        } else if (assistantId) {
+          (requestBody as Record<string, unknown>).new_chat = {
+            assistant_id: assistantId,
+          };
+        }
+
+        if (chatProviderId) {
+          requestBody.chat_provider_id = chatProviderId;
         }
 
         if (previousMessageId) {
@@ -234,13 +254,22 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
       files: FileUploadItem[],
       message: string,
       chatId?: string | null,
+      assistantId?: string,
       previousMessageId?: string | null,
+      chatProviderId?: string,
     ): Promise<TokenUsageEstimationResult> => {
       // Extract file IDs from the FileUploadItem objects
       const fileIds = files.map((file) => file.id);
 
       // Use the standard estimateTokenUsage function with the file IDs
-      return estimateTokenUsage(message, chatId, previousMessageId, fileIds);
+      return estimateTokenUsage(
+        message,
+        chatId,
+        assistantId,
+        previousMessageId,
+        fileIds,
+        chatProviderId,
+      );
     },
     [estimateTokenUsage],
   );
