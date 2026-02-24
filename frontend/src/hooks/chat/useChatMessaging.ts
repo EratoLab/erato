@@ -1558,6 +1558,87 @@ export function useChatMessaging(
         return;
       }
 
+      const messageIdsToRemove = new Set<string>([messageId]);
+      const editedMessageIndex = messageOrder.indexOf(messageId);
+      if (editedMessageIndex >= 0) {
+        for (let i = editedMessageIndex + 1; i < messageOrder.length; i++) {
+          const nextMessage = messages[messageOrder[i]];
+          if (!nextMessage) {
+            continue;
+          }
+          if (nextMessage.role === "assistant") {
+            messageIdsToRemove.add(nextMessage.id);
+            break;
+          }
+          if (nextMessage.role === "user") {
+            break;
+          }
+        }
+      }
+
+      // Optimistically remove the edited message and its immediately following
+      // assistant message so stale responses disappear as soon as edit is submitted.
+      useMessagingStore.setState((prevState) => {
+        const resolveStreamKeyFromState = (
+          streamKeyToResolve: string,
+          aliases: Record<string, string>,
+        ): string => {
+          let resolvedKey = streamKeyToResolve;
+          const visited = new Set<string>();
+          while (aliases[resolvedKey] && !visited.has(resolvedKey)) {
+            visited.add(resolvedKey);
+            resolvedKey = aliases[resolvedKey];
+          }
+          return resolvedKey;
+        };
+
+        const resolvedStreamKey = resolveStreamKeyFromState(
+          streamKey,
+          prevState.streamKeyAliases,
+        );
+        const resolvedActiveStreamKey = resolveStreamKeyFromState(
+          prevState.activeStreamKey,
+          prevState.streamKeyAliases,
+        );
+
+        const previousApiMessages =
+          prevState.apiMessagesByKey[resolvedStreamKey] ?? {};
+        const nextApiMessages = { ...previousApiMessages };
+        for (const id of messageIdsToRemove) {
+          delete nextApiMessages[id];
+        }
+
+        const previousUserMessages =
+          prevState.userMessagesByKey[resolvedStreamKey] ?? {};
+        const nextUserMessages = { ...previousUserMessages };
+        for (const id of messageIdsToRemove) {
+          delete nextUserMessages[id];
+        }
+
+        return {
+          ...prevState,
+          apiMessagesByKey: {
+            ...prevState.apiMessagesByKey,
+            [resolvedStreamKey]: nextApiMessages,
+          },
+          userMessagesByKey: {
+            ...prevState.userMessagesByKey,
+            [resolvedStreamKey]: nextUserMessages,
+          },
+          userMessages:
+            resolvedActiveStreamKey === resolvedStreamKey
+              ? nextUserMessages
+              : prevState.userMessages,
+        };
+      });
+
+      // Keep UX responsive and allow user_message_saved to reconcile temp -> real.
+      const optimisticEditedUserMessage = createOptimisticUserMessage(
+        newContent,
+        replaceInputFileIds,
+      );
+      addUserMessage(optimisticEditedUserMessage, streamKey);
+
       // Clear any previous streaming state and close existing SSE connection
       resetStreaming(streamKey);
       const existingCleanup = getSSECleanupForKey(streamKey);
@@ -1642,12 +1723,15 @@ export function useChatMessaging(
       handleRefetchAndClear,
       processStreamEvent,
       resetStreaming,
+      messages,
+      messageOrder,
       setError,
       setSSEAbortCallback,
       isStreamCurrentlyActive,
       streamKey,
       getSSECleanupForKey,
       setSSECleanupForKey,
+      addUserMessage,
     ],
   );
 

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { TAG_NO_CI } from "./tags";
+import { TAG_CI, TAG_NO_CI } from "./tags";
 import {
   chatIsReadyToChat,
   login,
@@ -219,7 +219,7 @@ test.describe("Edit Message Functionality", () => {
 
   test(
     "Edit button only appears on user messages",
-    { tag: TAG_NO_CI },
+    { tag: TAG_CI },
     async ({ page }) => {
       // Skip in CI until timing issues are resolved
       test.skip(
@@ -253,7 +253,7 @@ test.describe("Edit Message Functionality", () => {
     },
   );
 
-  test("Can cancel edit mode", { tag: TAG_NO_CI }, async ({ page }) => {
+  test("Can cancel edit mode", { tag: TAG_CI }, async ({ page }) => {
     // Skip in CI until timing issues are resolved
     test.skip(
       !!process.env.CI,
