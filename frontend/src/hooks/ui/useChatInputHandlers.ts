@@ -26,6 +26,8 @@ interface UseChatInputHandlersResult {
   handleRemoveFile: (fileIdOrFile: string | FileUploadItem) => void;
   /** Handle removing all files */
   handleRemoveAllFiles: () => void;
+  /** Set attached files explicitly (e.g., when entering edit mode) */
+  setAttachedFiles: (files: FileUploadItem[]) => void;
   /** Factory function to create a submit handler with the current state */
   createSubmitHandler: (
     message: string,
@@ -45,7 +47,7 @@ export function useChatInputHandlers(
   handleFileAttachments?: (files: FileUploadItem[]) => void,
   initialFiles: FileUploadItem[] = [],
 ): UseChatInputHandlersResult {
-  const [attachedFiles, setAttachedFiles] =
+  const [attachedFiles, setAttachedFilesState] =
     useState<FileUploadItem[]>(initialFiles);
   const [fileError, setFileError] = useState<string | null>(null);
 
@@ -53,7 +55,7 @@ export function useChatInputHandlers(
   const handleFilesUploaded = useCallback(
     (files: FileUploadItem[]) => {
       logger.log("handleFilesUploaded called with:", files);
-      setAttachedFiles((prevFiles) => {
+      setAttachedFilesState((prevFiles) => {
         // Limit to maxFiles
         const combinedFiles = [...prevFiles, ...files];
         const limitedFiles = combinedFiles.slice(0, maxFiles);
@@ -77,7 +79,7 @@ export function useChatInputHandlers(
         typeof fileIdOrFile === "string" ? fileIdOrFile : fileIdOrFile.id;
 
       logger.log(`handleRemoveFile called for ID: ${fileId}`);
-      setAttachedFiles((prevFiles) => {
+      setAttachedFilesState((prevFiles) => {
         const updatedFiles = prevFiles.filter((file) => file.id !== fileId);
 
         // Notify parent component if handler provided
@@ -95,13 +97,23 @@ export function useChatInputHandlers(
   // Handle removing all files
   const handleRemoveAllFiles = useCallback(() => {
     logger.log("handleRemoveAllFiles called");
-    setAttachedFiles([]);
+    setAttachedFilesState([]);
 
     // Notify parent component if handler provided
     if (handleFileAttachments) {
       handleFileAttachments([]);
     }
   }, [handleFileAttachments]);
+
+  const setAttachedFiles = useCallback(
+    (files: FileUploadItem[]) => {
+      setAttachedFilesState(files);
+      if (handleFileAttachments) {
+        handleFileAttachments(files);
+      }
+    },
+    [handleFileAttachments],
+  );
 
   // Create a submit handler with current state
   const createSubmitHandler = useCallback(
@@ -146,6 +158,7 @@ export function useChatInputHandlers(
     handleFilesUploaded,
     handleRemoveFile,
     handleRemoveAllFiles,
+    setAttachedFiles,
     createSubmitHandler,
   };
 }

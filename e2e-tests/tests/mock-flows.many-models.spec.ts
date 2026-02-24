@@ -463,7 +463,7 @@ test(
     );
 
     await uploadFileInChat(page, pdfPath);
-    await expect(page.getByText("sample-repo")).toBeVisible({
+    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
       timeout: 10000,
     });
 
@@ -524,5 +524,98 @@ test(
     await expect(
       editedAssistantMessage.getByRole("link", { name: "Link" }),
     ).toHaveCount(1);
+  },
+);
+
+test(
+  "Mock-LLM editing a file-based message can remove attachment context",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(90000);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const pdfPath = path.join(
+      __dirname,
+      "../test-files/sample-report-compressed.pdf",
+    );
+
+    await uploadFileInChat(page, pdfPath);
+    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
+      timeout: 10000,
+    });
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+    await textbox.fill("cite files");
+    await textbox.press("Enter");
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 30000,
+    });
+
+    const initialAssistantMessage = page
+      .getByTestId("message-assistant")
+      .last();
+    await expect(initialAssistantMessage).toBeVisible();
+    const initialAssistantMessageId =
+      await initialAssistantMessage.getAttribute("data-message-id");
+    expect(initialAssistantMessageId).toBeTruthy();
+    await expect(
+      initialAssistantMessage.getByRole("link", { name: "Link" }),
+    ).toHaveCount(1);
+
+    const userMessage = page
+      .getByTestId("message-user")
+      .filter({ hasText: "cite files" })
+      .last();
+    const userMessageId = await userMessage.getAttribute("data-message-id");
+    expect(userMessageId).toBeTruthy();
+    await userMessage.hover();
+
+    const editButton = userMessage.getByLabel("Edit message");
+    await editButton.waitFor({ state: "visible", timeout: 10000 });
+    await editButton.click();
+
+    const editTextbox = page.getByRole("textbox", {
+      name: "Edit your message...",
+    });
+    await expect(editTextbox).toBeVisible({ timeout: 30000 });
+
+    await expect(page.getByText(/Attachments/i)).toBeVisible();
+    await page
+      .locator(
+        'button[aria-label*="Remove sample-report-compressed.pdf"]:not([disabled])',
+      )
+      .first()
+      .click({ timeout: 10000 });
+    await expect(page.getByText(/Attachments/i)).not.toBeVisible();
+
+    await editTextbox.clear();
+    await editTextbox.fill("please cite files after removing file");
+
+    const saveButton = page.getByTestId("chat-input-save-edit");
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 30000,
+    });
+
+    await messageIsNotPresent(page, userMessageId!);
+    await messageIsNotPresent(page, initialAssistantMessageId!);
+
+    const editedAssistantMessage = page.getByTestId("message-assistant").last();
+    await expect(editedAssistantMessage).toBeVisible();
+    await expect(
+      editedAssistantMessage.getByRole("link", { name: "Link" }),
+    ).toHaveCount(0);
+    await expect(editedAssistantMessage).toContainText(
+      "No [Link](erato-file://<uuid",
+    );
   },
 );
