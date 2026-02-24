@@ -96,6 +96,8 @@ export const FileUploadWithTokenCheck: React.FC<
   // Get cloud providers configuration
   const { availableProviders } = useCloudProvidersFeature();
   const hasCloudProviders = availableProviders.length > 0;
+  const hasCustomSelector = componentRegistry.ChatFileSourceSelector != null;
+  const shouldUseSourceSelector = hasCloudProviders || hasCustomSelector;
 
   // Get upload size limit for client-side validation
   const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
@@ -292,7 +294,7 @@ export const FileUploadWithTokenCheck: React.FC<
   return (
     <div className="relative">
       {/* File upload button - show selector if cloud providers available */}
-      {hasCloudProviders ? (
+      {shouldUseSourceSelector ? (
         <>
           {/* Hidden dropzone input for disk uploads */}
           <div {...getRootProps({ className: "contents" })}>
@@ -312,6 +314,7 @@ export const FileUploadWithTokenCheck: React.FC<
               onSelectDisk={handleSelectDisk}
               onSelectCloud={handleSelectCloud}
               disabled={disabled || isProcessing}
+              isProcessing={isProcessing}
               className={className}
             />
           ) : (
@@ -320,6 +323,7 @@ export const FileUploadWithTokenCheck: React.FC<
               onSelectDisk={handleSelectDisk}
               onSelectCloud={handleSelectCloud}
               disabled={disabled || isProcessing}
+              isProcessing={isProcessing}
               className={className}
             />
           )}

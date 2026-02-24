@@ -76,6 +76,9 @@ export const AssistantFileUploadSelector: React.FC<
   // Get cloud providers configuration
   const { availableProviders } = useCloudProvidersFeature();
   const hasCloudProviders = availableProviders.length > 0;
+  const hasCustomSelector =
+    componentRegistry.AssistantFileSourceSelector != null;
+  const shouldUseSourceSelector = hasCloudProviders || hasCustomSelector;
 
   // Cloud picker state
   const [cloudPickerOpen, setCloudPickerOpen] = useState(false);
@@ -224,7 +227,7 @@ export const AssistantFileUploadSelector: React.FC<
       )}
 
       {/* File upload button - show selector if cloud providers available */}
-      {hasCloudProviders ? (
+      {shouldUseSourceSelector ? (
         <>
           {/* Hidden dropzone input for disk uploads */}
           <div {...getRootProps({ className: "contents" })}>
