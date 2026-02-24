@@ -259,6 +259,146 @@ test(
 );
 
 test(
+  "File upload size error does not persist when switching back to an existing chat",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.goto("/chat/new");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+    await textbox.fill("fast");
+    await textbox.press("Enter");
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 20000,
+    });
+    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/);
+    const firstChatId = page.url().split("/").pop();
+    expect(firstChatId).toBeTruthy();
+
+    await page.goto("/chat/new");
+    await chatIsReadyToChat(page);
+
+    const bigFilePath = path.join(__dirname, "../test-files/big-file-20mb.pdf");
+    await uploadFileInChat(page, bigFilePath);
+
+    await expect(page.getByTestId("file-upload-error")).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(page.getByTestId("file-upload-error")).toContainText(
+      "File is too large",
+      { timeout: 30000 },
+    );
+
+    await ensureOpenSidebar(page);
+    await page
+      .getByRole("complementary")
+      .locator(`[data-chat-id="${firstChatId}"]`)
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/chat/${firstChatId}$`));
+
+    await expect(page.getByTestId("file-upload-error")).not.toBeVisible();
+  },
+);
+
+test(
+  "Draft message and selected files are preserved per chat when switching chats",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.goto("/chat/new");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+    await textbox.fill("fast");
+    await textbox.press("Enter");
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 20000,
+    });
+    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/);
+    const firstChatId = page.url().split("/").pop();
+    expect(firstChatId).toBeTruthy();
+
+    await page.goto("/chat/new");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    await textbox.fill("fast");
+    await textbox.press("Enter");
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 20000,
+    });
+    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/);
+    const secondChatId = page.url().split("/").pop();
+    expect(secondChatId).toBeTruthy();
+    expect(secondChatId).not.toBe(firstChatId);
+
+    await ensureOpenSidebar(page);
+    await page
+      .getByRole("complementary")
+      .locator(`[data-chat-id="${firstChatId}"]`)
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/chat/${firstChatId}$`));
+
+    const firstChatDraft = "chat one draft text";
+    await textbox.fill(firstChatDraft);
+    const sampleReportPath = path.join(
+      __dirname,
+      "../test-files/sample-report-compressed.pdf",
+    );
+    await uploadFileInChat(page, sampleReportPath);
+    await expect(page.getByText(/Attachments/i)).toBeVisible();
+    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
+      timeout: 10000,
+    });
+
+    await ensureOpenSidebar(page);
+    await page
+      .getByRole("complementary")
+      .locator(`[data-chat-id="${secondChatId}"]`)
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/chat/${secondChatId}$`));
+
+    await expect(textbox).toHaveValue("");
+    await expect(page.getByText(/Attachments/i)).toHaveCount(0);
+
+    const secondChatDraft = "chat two draft text";
+    await textbox.fill(secondChatDraft);
+
+    await ensureOpenSidebar(page);
+    await page
+      .getByRole("complementary")
+      .locator(`[data-chat-id="${firstChatId}"]`)
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/chat/${firstChatId}$`));
+
+    await expect(textbox).toHaveValue(firstChatDraft);
+    await expect(page.getByText(/Attachments/i)).toBeVisible();
+    await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
+      timeout: 10000,
+    });
+
+    await ensureOpenSidebar(page);
+    await page
+      .getByRole("complementary")
+      .locator(`[data-chat-id="${secondChatId}"]`)
+      .click();
+    await expect(page).toHaveURL(new RegExp(`/chat/${secondChatId}$`));
+
+    await expect(textbox).toHaveValue(secondChatDraft);
+    await expect(page.getByText(/Attachments/i)).toHaveCount(0);
+  },
+);
+
+test(
   "Mock-LLM MCP flow executes a normal tool call successfully",
   { tag: TAG_CI },
   async ({ page }) => {

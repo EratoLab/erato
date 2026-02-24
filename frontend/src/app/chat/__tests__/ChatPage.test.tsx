@@ -214,7 +214,14 @@ const TestWrapper = ({ children }: { children: React.ReactNode }) => {
     <QueryClientProvider client={queryClient}>
       <I18nProvider i18n={i18n}>
         <FeatureConfigProvider>
-          <MemoryRouter>{children}</MemoryRouter>
+          <MemoryRouter
+            future={{
+              v7_startTransition: true,
+              v7_relativeSplatPath: true,
+            }}
+          >
+            {children}
+          </MemoryRouter>
         </FeatureConfigProvider>
       </I18nProvider>
     </QueryClientProvider>

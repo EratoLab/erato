@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { useAuth } from "../useAuth";
@@ -153,11 +153,10 @@ describe("useAuth", () => {
       refetch: vi.fn(),
     });
 
-    // Call logout
-    await result.current.logout();
-
-    // Force re-render to get updated state
-    rerender();
+    await act(async () => {
+      await result.current.logout();
+      rerender();
+    });
 
     // Now the user should be logged out
     expect(result.current.isAuthenticated).toBe(false);

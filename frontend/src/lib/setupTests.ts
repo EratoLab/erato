@@ -61,6 +61,9 @@ Object.defineProperty(window, "scrollTo", {
   value: () => {},
 });
 
+// Provide a default API root for tests that load theme config.
+window.API_ROOT_URL = "http://localhost";
+
 // Establish API mocking before all tests.
 beforeAll(() => server.listen());
 

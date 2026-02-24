@@ -29,11 +29,13 @@ test.describe("Can chat with different models", () => {
     {
       modelName: "Gemini 2.5-flash",
       prompt: "Please answer in one short sentence about the sun.",
+      loadingTimeoutMs: 20000,
       tags: [TAG_CI],
     },
     {
       modelName: "Gemini 2.5-pro",
       prompt: "Please provide a brief greeting in exactly five words.",
+      loadingTimeoutMs: 20000,
       tags: [TAG_CI],
     },
     {
@@ -91,7 +93,7 @@ test.describe("Can chat with different models", () => {
 
         await chatIsReadyToChat(page, {
           expectAssistantResponse: true,
-          loadingTimeoutMs: 20000,
+          loadingTimeoutMs: modelTest.loadingTimeoutMs ?? 20000,
         });
 
         await expect(page.getByTestId("chat-message-error")).toHaveCount(0);
