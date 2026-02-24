@@ -14,8 +14,12 @@ interface ChatInputTokenUsageProps {
   attachedFiles: FileUploadItem[];
   /** Current chat ID */
   chatId?: string | null;
+  /** Assistant ID to include for new-chat estimation context */
+  assistantId?: string;
   /** Previous message ID */
   previousMessageId?: string | null;
+  /** Selected chat provider ID for new chats */
+  chatProviderId?: string;
   /** Is the input disabled */
   disabled?: boolean;
   /** Called when the token limit is exceeded */
@@ -33,7 +37,9 @@ export const ChatInputTokenUsage: React.FC<ChatInputTokenUsageProps> = ({
   message,
   attachedFiles,
   chatId,
+  assistantId,
   previousMessageId,
+  chatProviderId,
   disabled = false,
   onLimitExceeded,
   estimateThreshold = 150,
@@ -45,7 +51,9 @@ export const ChatInputTokenUsage: React.FC<ChatInputTokenUsageProps> = ({
       message,
       attachedFiles,
       chatId,
+      assistantId,
       previousMessageId,
+      chatProviderId,
       disabled,
       estimateThreshold,
     });

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 
 import {
@@ -45,6 +45,8 @@ interface UseFileDropzoneProps {
   chatId?: string | null;
   /** Optional assistant ID to associate with a silently created chat */
   assistantId?: string;
+  /** Selected chat provider ID for silently created chats */
+  chatProviderId?: string;
   /** Called when a chat is silently created for file uploads */
   onSilentChatCreated?: (newChatId: string) => void;
 }
@@ -85,6 +87,7 @@ export function useFileDropzone({
   onFilesUploaded,
   chatId = null,
   assistantId,
+  chatProviderId,
   // onSilentChatCreated,
 }: UseFileDropzoneProps): UseFileDropzoneResult {
   // Check if upload feature is enabled
@@ -109,6 +112,12 @@ export function useFileDropzone({
     clearFiles,
     setSilentChatId,
   } = useFileUploadStore();
+
+  // Keep latest selected model for silent-chat creation even if dropzone callbacks are stale.
+  const latestChatProviderIdRef = useRef<string | undefined>(chatProviderId);
+  useEffect(() => {
+    latestChatProviderIdRef.current = chatProviderId;
+  }, [chatProviderId]);
 
   // Add create chat mutation for silent chat creation
   const createChatMutation = useCreateChat({
@@ -180,7 +189,12 @@ export function useFileDropzone({
         if (!uploadChatId) {
           logger.log("Creating silent chat for file uploads");
           const createChatResult = await createChatMutation.mutateAsync({
-            body: assistantId ? { assistant_id: assistantId } : {},
+            body: {
+              ...(assistantId ? { assistant_id: assistantId } : {}),
+              ...(latestChatProviderIdRef.current
+                ? { chat_provider_id: latestChatProviderIdRef.current }
+                : {}),
+            },
           });
           logger.log("Silent chat creation result:", createChatResult);
           uploadChatId = createChatResult.chat_id;
@@ -257,6 +271,7 @@ export function useFileDropzone({
       maxFiles,
       chatId,
       assistantId,
+      chatProviderId,
       // onSilentChatCreated,
       addFiles,
       onFilesUploaded,
