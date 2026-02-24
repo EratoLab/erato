@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import { ChatHistorySidebar } from "@/components/ui/Chat/ChatHistorySidebar";
 import { useSidebar } from "@/hooks/ui";
@@ -36,7 +36,6 @@ export default function AssistantsPageStructure({
   } = useSidebar();
   const { chatHistoryShowMetadata } = useSidebarFeature();
 
-  const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
   const prevPathnameRef = useRef<string>(pathname);
@@ -93,12 +92,6 @@ export default function AssistantsPageStructure({
     }
   };
 
-  // Handle assistant selection - create chat with assistant
-  const handleAssistantSelect = (assistantId: string) => {
-    logger.log("[ASSISTANTS_FLOW] Assistant selected:", assistantId);
-    navigate(`/a/${assistantId}`);
-  };
-
   logger.log(
     `AssistantsPageStructure render. Path: ${pathname}, currentChatId: ${currentChatId ?? "null"}`,
   );
@@ -113,7 +106,6 @@ export default function AssistantsPageStructure({
         currentSessionId={currentChatId ?? ""}
         onSessionSelect={handleSessionSelect}
         onSessionArchive={handleArchiveSession}
-        onAssistantSelect={handleAssistantSelect}
         showTimestamps={chatHistoryShowMetadata}
         isLoading={chatHistoryLoading}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}

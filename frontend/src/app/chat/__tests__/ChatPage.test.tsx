@@ -193,6 +193,7 @@ vi.mock("@/app/env", () => ({
     disableChatInputAutofocus: false,
     disableLogout: false,
     assistantsEnabled: false,
+    assistantsShowRecentItems: false,
     sharepointEnabled: false,
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,

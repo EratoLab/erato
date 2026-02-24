@@ -34,6 +34,7 @@ describe("themeConfig", () => {
     disableChatInputAutofocus: false,
     disableLogout: false,
     assistantsEnabled: false,
+    assistantsShowRecentItems: false,
     promptOptimizerEnabled: false,
     sharepointEnabled: false,
     messageFeedbackEnabled: false,

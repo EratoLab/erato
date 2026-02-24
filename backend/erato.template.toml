@@ -122,6 +122,8 @@ chat_provider_ids = ["test-token-limit"]
 # [experimental_assistants]
 # # Whether to enable the experimental assistants feature in the frontend (default: false)
 # enabled = false
+# # Whether to show recent assistant items in the chat sidebar (default: false)
+# show_recent_items = false
 
 # Experimental facets feature configuration
 # [experimental_facets]

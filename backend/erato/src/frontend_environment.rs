@@ -22,6 +22,7 @@ const FRONTEND_ENV_KEY_DISABLE_UPLOAD: &str = "DISABLE_UPLOAD";
 const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_AUTOFOCUS";
 const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
 const FRONTEND_ENV_KEY_ASSISTANTS_ENABLED: &str = "ASSISTANTS_ENABLED";
+const FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS: &str = "ASSISTANTS_SHOW_RECENT_ITEMS";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_ENABLED: &str = "SHAREPOINT_ENABLED";
@@ -79,6 +80,10 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_ENABLED.to_string(),
         Value::Bool(config.experimental_assistants.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS.to_string(),
+        Value::Bool(config.experimental_assistants.show_recent_items),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED.to_string(),

@@ -40,6 +40,8 @@ interface AuthFeatureConfig {
 interface AssistantsFeatureConfig {
   /** Whether the assistants feature is enabled */
   enabled: boolean;
+  /** Whether recent assistants should be shown in the sidebar */
+  showRecentItems: boolean;
 }
 
 /**
@@ -177,6 +179,7 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
       },
       assistants: {
         enabled: environment.assistantsEnabled,
+        showRecentItems: environment.assistantsShowRecentItems,
       },
       userPreferences: {
         enabled: environment.userPreferencesEnabled,

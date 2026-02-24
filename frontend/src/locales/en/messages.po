@@ -1105,7 +1105,7 @@ msgstr "Assistant created successfully!"
 msgid "Assistant updated successfully!"
 msgstr "Assistant updated successfully!"
 
-#: src/components/ui/Chat/FrequentAssistantsList.tsx
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 #: src/pages/AssistantsListPage.tsx
 msgid "Assistants"
 msgstr "Assistants"
@@ -1779,8 +1779,8 @@ msgid "Using tools"
 msgstr "Using tools"
 
 #: src/components/ui/Chat/FrequentAssistantsList.tsx
-msgid "View all assistants"
-msgstr "View all assistants"
+#~ msgid "View all assistants"
+#~ msgstr "View all assistants"
 
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "You are using {percentUsed}% of your budget ({formattedSpending} of {formattedLimit})."
