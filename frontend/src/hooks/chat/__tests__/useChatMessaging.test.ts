@@ -1174,6 +1174,70 @@ describe("useChatMessaging", () => {
     expect(orderedMessages[1].role).toBe("assistant");
   });
 
+  it("should remove replaced user and following assistant immediately on edit submit", async () => {
+    const { result } = renderHook(() => useChatMessaging("chat1"), {
+      wrapper: TestWrapper,
+    });
+
+    await act(async () => {
+      useMessagingStore.getState().setApiMessages(
+        [
+          {
+            id: "msg-user-keep",
+            content: [{ content_type: "text", text: "Keep this" }],
+            role: "user",
+            createdAt: "2026-02-20T10:00:00.000Z",
+            status: "complete",
+          },
+          {
+            id: "msg-user-edit",
+            content: [{ content_type: "text", text: "Old edited message" }],
+            role: "user",
+            createdAt: "2026-02-20T10:01:00.000Z",
+            status: "complete",
+          },
+          {
+            id: "msg-assistant-following",
+            content: [{ content_type: "text", text: "Old assistant response" }],
+            role: "assistant",
+            createdAt: "2026-02-20T10:02:00.000Z",
+            status: "complete",
+          },
+          {
+            id: "msg-user-later",
+            content: [{ content_type: "text", text: "Later message" }],
+            role: "user",
+            createdAt: "2026-02-20T10:03:00.000Z",
+            status: "complete",
+          },
+        ],
+        "chat1",
+      );
+    });
+
+    expect(result.current.messages["msg-user-edit"]).toBeDefined();
+    expect(result.current.messages["msg-assistant-following"]).toBeDefined();
+
+    await act(async () => {
+      await result.current.editMessage("msg-user-edit", "Edited content");
+    });
+
+    expect(result.current.messages["msg-user-edit"]).toBeUndefined();
+    expect(result.current.messages["msg-assistant-following"]).toBeUndefined();
+    expect(result.current.messages["msg-user-later"]).toBeDefined();
+
+    const optimisticEditedMessage = Object.values(result.current.messages).find(
+      (message) =>
+        message.role === "user" &&
+        message.status === "sending" &&
+        message.content.some(
+          (part) =>
+            part.content_type === "text" && part.text === "Edited content",
+        ),
+    );
+    expect(optimisticEditedMessage).toBeDefined();
+  });
+
   it("should handle canceling a message", async () => {
     const { result } = renderHook(() => useChatMessaging("chat1"), {
       wrapper: TestWrapper,

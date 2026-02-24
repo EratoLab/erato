@@ -292,7 +292,12 @@ export const Chat = ({
 
   // Local edit state (simple UX; further polish can come later)
   const [editState, setEditState] = useState<
-    | { mode: "edit"; messageId: string; initialContent: ContentPart[] }
+    | {
+        mode: "edit";
+        messageId: string;
+        initialContent: ContentPart[];
+        initialFiles: FileUploadItem[];
+      }
     | { mode: "compose" }
   >({ mode: "compose" });
 
@@ -555,6 +560,14 @@ export const Chat = ({
                   logger.log(`Looking up message:`, messageToEdit);
 
                   if (messageToEdit.role === "user") {
+                    const messageFiles = (
+                      messageToEdit as ChatMessage & {
+                        files?: FileUploadItem[];
+                      }
+                    ).files;
+                    const initialFiles = Array.isArray(messageFiles)
+                      ? messageFiles
+                      : [];
                     logger.log(
                       `Setting editState: messageId=${action.messageId}, content="${extractTextFromContent(messageToEdit.content)}"`,
                     );
@@ -564,6 +577,7 @@ export const Chat = ({
                       mode: "edit",
                       messageId: action.messageId,
                       initialContent: messageToEdit.content,
+                      initialFiles,
                     }));
 
                     logger.log(`editState set successfully`);
@@ -628,7 +642,9 @@ export const Chat = ({
               showControls
               onRegenerate={onRegenerate}
               showFileTypes={true}
-              initialFiles={[]}
+              initialFiles={
+                editState.mode === "edit" ? editState.initialFiles : []
+              }
               mode={editState.mode}
               editMessageId={
                 editState.mode === "edit" ? editState.messageId : undefined

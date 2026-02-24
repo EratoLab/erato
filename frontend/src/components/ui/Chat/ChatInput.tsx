@@ -142,6 +142,8 @@ export const ChatInput = ({
 }: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previousModeRef = useRef<"compose" | "edit">(mode);
+  const previousEditMessageIdRef = useRef<string | undefined>(undefined);
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
   const pendingSelectedFacetIdsRef = useRef<string[] | null>(null);
@@ -193,6 +195,7 @@ export const ChatInput = ({
     handleFilesUploaded,
     handleRemoveFile,
     handleRemoveAllFiles,
+    setAttachedFiles,
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
 
@@ -358,14 +361,28 @@ export const ChatInput = ({
 
   // Prefill message when entering edit mode
   useEffect(() => {
-    if (mode === "edit" && editInitialContent !== undefined) {
-      // Extract text from ContentPart[] for editing
-      setMessage(extractTextFromContent(editInitialContent));
+    const wasMode = previousModeRef.current;
+    const enteringCompose = mode === "compose" && wasMode !== "compose";
+    const editTargetChanged =
+      mode === "edit" && editMessageId !== previousEditMessageIdRef.current;
+    const enteringEdit = mode === "edit" && wasMode !== "edit";
+
+    if (mode === "edit" && (enteringEdit || editTargetChanged)) {
+      if (editInitialContent !== undefined) {
+        setMessage(extractTextFromContent(editInitialContent));
+      }
+      setAttachedFiles(initialFiles);
+      previousEditMessageIdRef.current = editMessageId;
     }
-    if (mode === "compose") {
+
+    if (enteringCompose) {
       setMessage("");
+      setAttachedFiles([]);
+      previousEditMessageIdRef.current = undefined;
     }
-  }, [mode, editInitialContent]);
+
+    previousModeRef.current = mode;
+  }, [mode, editMessageId, editInitialContent, initialFiles, setAttachedFiles]);
 
   // Create the submit handler
   // Use isPendingResponse instead of isStreaming to block submission immediately when send is clicked

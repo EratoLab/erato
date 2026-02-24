@@ -8,7 +8,9 @@ use crate::models::message::{
     ContentPart, ContentPartImage, ContentPartImageFilePointer, ContentPartText,
     GenerationErrorType, GenerationInputMessages, GenerationMetadata, GenerationParameters,
     MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus, ToolUse,
-    get_message_by_id, submit_message, update_message_generation_metadata,
+    get_generation_chat_provider_id_for_replaced_user_message,
+    get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
+    update_message_generation_metadata,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
@@ -3236,6 +3238,7 @@ pub async fn regenerate_message_sse(
 
     // Move validated messages into the task
     let previous_message = validation_result.previous_message;
+    let current_message = validation_result.current_message;
 
     // Clone IDs for the async task
     let current_message_id = request.current_message_id;
@@ -3259,11 +3262,21 @@ pub async fn regenerate_message_sse(
             .input_file_uploads
             .clone()
             .unwrap_or_default();
+        let fallback_chat_provider_id = if request.chat_provider_id.is_none() {
+            get_generation_chat_provider_id_from_message(&current_message)
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
 
         let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
         let user_input = crate::services::prompt_composition::PromptCompositionUserInput {
             just_submitted_user_message_id: previous_message.id,
-            requested_chat_provider_id: request.chat_provider_id.clone(),
+            requested_chat_provider_id: request
+                .chat_provider_id
+                .clone()
+                .or(fallback_chat_provider_id),
             new_input_file_ids: input_files_for_previous_message,
             selected_facet_ids: request.selected_facet_ids.clone(),
         };
@@ -3495,9 +3508,23 @@ pub async fn edit_message_sse(
         }
 
         let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
+        let fallback_chat_provider_id = if request.chat_provider_id.is_none() {
+            get_generation_chat_provider_id_for_replaced_user_message(
+                &app_state.db,
+                &message_to_edit.id,
+            )
+            .await
+            .ok()
+            .flatten()
+        } else {
+            None
+        };
         let user_input = PromptCompositionUserInput {
             just_submitted_user_message_id: saved_user_message.id,
-            requested_chat_provider_id: request.chat_provider_id.clone(),
+            requested_chat_provider_id: request
+                .chat_provider_id
+                .clone()
+                .or(fallback_chat_provider_id),
             new_input_file_ids: replace_input_files_ids,
             selected_facet_ids: request.selected_facet_ids.clone(),
         };

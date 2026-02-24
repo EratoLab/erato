@@ -493,6 +493,55 @@ pub async fn get_message_by_id(
     Ok(message)
 }
 
+pub fn get_generation_chat_provider_id_from_message(
+    message: &messages::Model,
+) -> Result<Option<String>, Report> {
+    if let Some(generation_params_json) = &message.generation_parameters {
+        let generation_params: GenerationParameters =
+            serde_json::from_value(generation_params_json.clone()).map_err(|e| {
+                eyre!(
+                    "Failed to parse generation parameters for message {}: {}",
+                    message.id,
+                    e
+                )
+            })?;
+        return Ok(generation_params.generation_chat_provider_id);
+    }
+    Ok(None)
+}
+
+/// Resolve a provider for a user message branch by checking the assistant response that follows
+/// the user message. Prefer the active-thread assistant sibling; fall back to newest sibling.
+pub async fn get_generation_chat_provider_id_for_replaced_user_message(
+    conn: &DatabaseConnection,
+    user_message_id: &Uuid,
+) -> Result<Option<String>, Report> {
+    let active_sibling = Messages::find()
+        .filter(messages::Column::PreviousMessageId.eq(*user_message_id))
+        .filter(messages::Column::GenerationParameters.is_not_null())
+        .filter(messages::Column::IsMessageInActiveThread.eq(true))
+        .order_by_desc(messages::Column::CreatedAt)
+        .one(conn)
+        .await?;
+
+    if let Some(message) = active_sibling {
+        return get_generation_chat_provider_id_from_message(&message);
+    }
+
+    let newest_sibling = Messages::find()
+        .filter(messages::Column::PreviousMessageId.eq(*user_message_id))
+        .filter(messages::Column::GenerationParameters.is_not_null())
+        .order_by_desc(messages::Column::CreatedAt)
+        .one(conn)
+        .await?;
+
+    if let Some(message) = newest_sibling {
+        return get_generation_chat_provider_id_from_message(&message);
+    }
+
+    Ok(None)
+}
+
 pub async fn update_message_content(
     conn: &DatabaseConnection,
     policy: &PolicyEngine,
