@@ -494,11 +494,65 @@ export const MessageList = memo<MessageListProps>(
       );
     }, [className, isTransitioning]);
 
+    const handleCopyPlainText = useCallback(
+      (event: React.ClipboardEvent<HTMLDivElement>) => {
+        const selection = window.getSelection();
+        const selectedText = selection?.toString();
+
+        if (!selectedText) {
+          return;
+        }
+
+        const selectedRange =
+          selection && selection.rangeCount > 0
+            ? selection.getRangeAt(0)
+            : null;
+        const selectedFragment = selectedRange?.cloneContents();
+        const htmlContainer = document.createElement("div");
+
+        if (selectedFragment) {
+          htmlContainer.appendChild(selectedFragment);
+
+          // Preserve semantic markup (bold/lists/etc) but strip theme color styling.
+          htmlContainer.querySelectorAll("*").forEach((element) => {
+            if (element instanceof HTMLElement) {
+              element.style.removeProperty("color");
+              element.style.removeProperty("background-color");
+              element.style.removeProperty("caret-color");
+              element.style.removeProperty("text-decoration-color");
+              element.style.removeProperty("fill");
+              element.style.removeProperty("stroke");
+
+              if (!element.getAttribute("style")?.trim()) {
+                element.removeAttribute("style");
+              }
+            }
+
+            element.removeAttribute("color");
+            element.removeAttribute("bgcolor");
+            element.removeAttribute("fill");
+            element.removeAttribute("stroke");
+          });
+        }
+
+        event.preventDefault();
+        event.clipboardData.clearData();
+        event.clipboardData.setData("text/plain", selectedText);
+        const sanitizedHtml = htmlContainer.innerHTML.trim();
+        if (sanitizedHtml) {
+          // eslint-disable-next-line lingui/no-unlocalized-strings -- MIME type constant
+          event.clipboardData.setData("text/html", sanitizedHtml);
+        }
+      },
+      [],
+    );
+
     return (
       <div
         ref={containerRef as React.RefObject<HTMLDivElement>}
         className={containerClass}
         data-testid="message-list"
+        onCopy={handleCopyPlainText}
       >
         {renderMessageListHeader}
         <div className={clsx("mx-auto w-full max-w-4xl")}>
