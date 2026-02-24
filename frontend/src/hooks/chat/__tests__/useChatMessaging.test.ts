@@ -180,7 +180,17 @@ const mockMutateAsync = vi.fn().mockImplementation(async () => {
 
 // Wrapper component to provide Router context for tests
 const TestWrapper = ({ children }: { children: ReactNode }) =>
-  createElement(MemoryRouter, { initialEntries: ["/chat/test"] }, children);
+  createElement(
+    MemoryRouter,
+    {
+      initialEntries: ["/chat/test"],
+      future: {
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      },
+    },
+    children,
+  );
 
 describe("useChatMessaging", () => {
   // Mock chat data

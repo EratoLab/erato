@@ -112,6 +112,15 @@ export function useFileDropzone({
     clearFiles,
     setSilentChatId,
   } = useFileUploadStore();
+  const previousChatIdRef = useRef<string | null>(chatId);
+
+  // File upload errors are chat-scoped in the UI. Clear stale errors when chat changes.
+  useEffect(() => {
+    if (previousChatIdRef.current !== chatId) {
+      setError(null);
+      previousChatIdRef.current = chatId;
+    }
+  }, [chatId, setError]);
 
   // Keep latest selected model for silent-chat creation even if dropzone callbacks are stale.
   const latestChatProviderIdRef = useRef<string | undefined>(chatProviderId);

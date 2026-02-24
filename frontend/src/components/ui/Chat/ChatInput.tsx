@@ -105,6 +105,14 @@ interface ChatInputProps {
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
 }
 
+interface ComposeDraftState {
+  message: string;
+  attachedFiles: FileUploadItem[];
+}
+
+// eslint-disable-next-line lingui/no-unlocalized-strings -- internal key used only for local draft state
+const NEW_CHAT_DRAFT_KEY = "__new-chat__";
+
 /**
  * ChatInput component with file attachment capabilities
  */
@@ -144,6 +152,11 @@ export const ChatInput = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousModeRef = useRef<"compose" | "edit">(mode);
   const previousEditMessageIdRef = useRef<string | undefined>(undefined);
+  const composeDraftKey = chatId ?? NEW_CHAT_DRAFT_KEY;
+  const composeDraftsRef = useRef<
+    Record<string, ComposeDraftState | undefined>
+  >({});
+  const activeComposeDraftKeyRef = useRef(composeDraftKey);
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
   const pendingSelectedFacetIdsRef = useRef<string[] | null>(null);
@@ -198,6 +211,20 @@ export const ChatInput = ({
     setAttachedFiles,
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
+
+  const getComposeDraft = useCallback((draftKey: string): ComposeDraftState => {
+    const existingDraft = composeDraftsRef.current[draftKey];
+    if (existingDraft) {
+      return existingDraft;
+    }
+
+    const emptyDraft = {
+      message: "",
+      attachedFiles: [],
+    };
+    composeDraftsRef.current[draftKey] = emptyDraft;
+    return emptyDraft;
+  }, []);
 
   // Use our modernized file upload hook for upload error state and clipboard pastes
   const {
@@ -313,6 +340,46 @@ export const ChatInput = ({
     }
   }, [uploadError, setFileError]);
 
+  // Persist compose-mode draft state for the currently active chat key.
+  useEffect(() => {
+    if (mode !== "compose") {
+      return;
+    }
+
+    composeDraftsRef.current[activeComposeDraftKeyRef.current] = {
+      message,
+      attachedFiles,
+    };
+  }, [mode, message, attachedFiles]);
+
+  // Persist outgoing compose draft and restore incoming compose draft on chat switch.
+  useEffect(() => {
+    if (mode !== "compose") {
+      activeComposeDraftKeyRef.current = composeDraftKey;
+      return;
+    }
+
+    const previousComposeDraftKey = activeComposeDraftKeyRef.current;
+    if (previousComposeDraftKey !== composeDraftKey) {
+      composeDraftsRef.current[previousComposeDraftKey] = {
+        message,
+        attachedFiles,
+      };
+    }
+
+    const composeDraft = getComposeDraft(composeDraftKey);
+    activeComposeDraftKeyRef.current = composeDraftKey;
+    setMessage(composeDraft.message);
+    setAttachedFiles(composeDraft.attachedFiles);
+  }, [
+    mode,
+    composeDraftKey,
+    message,
+    attachedFiles,
+    getComposeDraft,
+    setAttachedFiles,
+  ]);
+
   useEffect(() => {
     if (availableFacets.length === 0) {
       setSelectedFacetIds((previousSelectedFacetIds) =>
@@ -376,13 +443,22 @@ export const ChatInput = ({
     }
 
     if (enteringCompose) {
-      setMessage("");
-      setAttachedFiles([]);
+      const composeDraft = getComposeDraft(composeDraftKey);
+      setMessage(composeDraft.message);
+      setAttachedFiles(composeDraft.attachedFiles);
       previousEditMessageIdRef.current = undefined;
     }
 
     previousModeRef.current = mode;
-  }, [mode, editMessageId, editInitialContent, initialFiles, setAttachedFiles]);
+  }, [
+    mode,
+    editMessageId,
+    editInitialContent,
+    initialFiles,
+    composeDraftKey,
+    getComposeDraft,
+    setAttachedFiles,
+  ]);
 
   // Create the submit handler
   // Use isPendingResponse instead of isStreaming to block submission immediately when send is clicked

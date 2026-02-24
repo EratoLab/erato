@@ -58,7 +58,17 @@ type ChatMessagingHookResult = ReturnType<typeof useChatMessaging>;
 
 // Test wrapper with Router context
 const TestWrapper = ({ children }: { children: ReactNode }) =>
-  createElement(MemoryRouter, { initialEntries: ["/chat/test"] }, children);
+  createElement(
+    MemoryRouter,
+    {
+      initialEntries: ["/chat/test"],
+      future: {
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      },
+    },
+    children,
+  );
 
 describe("useChatMessaging with direct mocking", () => {
   // Store references to rendered hook results to clean up after each test
