@@ -485,6 +485,7 @@ pub async fn token_usage_estimate(
             app_state: &app_state,
             policy: &policy,
             subject: &subject,
+            access_token: me_user.access_token.as_deref(),
         };
         let user_input = PromptCompositionUserInput {
             just_submitted_user_message_id: synthetic_message_id,

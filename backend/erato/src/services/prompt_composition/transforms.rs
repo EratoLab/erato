@@ -160,6 +160,14 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
 
         // Get the file IDs to add as assistant files
         for file_info in &assistant.files {
+            if file_info.file_contents_unavailable_missing_permissions {
+                tracing::warn!(
+                    file_id = %file_info.id,
+                    "Skipping assistant file in prompt composition due to missing permissions"
+                );
+                continue;
+            }
+
             sequence.push(AbstractChatSequencePart::AssistantFile {
                 file_id: file_info.id,
             });

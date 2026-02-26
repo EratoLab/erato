@@ -1952,17 +1952,24 @@
         "required": [
           "id",
           "filename",
-          "download_url",
+          "file_contents_unavailable_missing_permissions",
           "file_capability"
         ],
         "properties": {
           "download_url": {
-            "type": "string",
-            "description": "Pre-signed URL for downloading the file"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pre-signed URL for downloading the file.\nNull when file contents are unavailable for the current user due to missing permissions."
           },
           "file_capability": {
             "$ref": "#/components/schemas/FileCapability",
             "description": "The file capability that was evaluated for this file"
+          },
+          "file_contents_unavailable_missing_permissions": {
+            "type": "boolean",
+            "description": "Indicates that file contents are unavailable for the current user due to missing permissions."
           },
           "filename": {
             "type": "string",

@@ -13,3 +13,8 @@ enabled = true
 [integrations.experimental_entra_id]
 enabled = true
 auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)
+
+[integrations.experimental_sharepoint]
+enabled = true
+file_upload_enabled = true
+auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)

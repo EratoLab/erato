@@ -1067,6 +1067,7 @@ fn prepare_chat_request<'a>(
             app_state,
             policy,
             subject: &subject,
+            access_token: me_profile_input.access_token,
         };
 
         // Get assistant configuration to check for default provider

@@ -20,6 +20,7 @@ pub struct FileInfo {
     pub filename: String,
     pub file_storage_provider_id: String,
     pub file_storage_path: String,
+    pub file_contents_unavailable_missing_permissions: bool,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }
@@ -31,6 +32,7 @@ impl From<file_uploads::Model> for FileInfo {
             filename: file.filename,
             file_storage_provider_id: file.file_storage_provider_id,
             file_storage_path: file.file_storage_path,
+            file_contents_unavailable_missing_permissions: false,
             created_at: file.created_at,
             updated_at: file.updated_at,
         }
