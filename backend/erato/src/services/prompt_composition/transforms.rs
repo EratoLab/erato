@@ -241,22 +241,32 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
                         serde_json::from_value::<GenerationInputMessages>(gen_input_json.clone())
                 {
                     let parsed = MessageSchema::validate(&prev_msg.raw_message)?;
-                    let raw_text = parsed.content.iter().find_map(|part| match part {
-                        ContentPart::Text(ContentPartText { text }) => Some(text.as_str()),
-                        _ => None,
-                    });
-                    if let Some(raw_text) = raw_text {
-                        let has_matching_assistant = gen_input.messages.iter().any(|msg| {
-                            if !matches!(msg.role, MessageRole::Assistant) {
-                                return false;
-                            }
-                            match &msg.content {
-                                ContentPart::Text(ContentPartText { text }) => text == raw_text,
-                                _ => false,
-                            }
+                    let has_non_text_content = parsed
+                        .content
+                        .iter()
+                        .any(|part| !matches!(part, ContentPart::Text(_)));
+
+                    // Only deduplicate a raw assistant message if it is purely text.
+                    // Tool uses and other structured content carry important context
+                    // (e.g. tool responses for citation continuity) and must be preserved.
+                    if !has_non_text_content {
+                        let raw_text = parsed.content.iter().find_map(|part| match part {
+                            ContentPart::Text(ContentPartText { text }) => Some(text.as_str()),
+                            _ => None,
                         });
-                        if has_matching_assistant {
-                            include_raw_assistant = false;
+                        if let Some(raw_text) = raw_text {
+                            let has_matching_assistant = gen_input.messages.iter().any(|msg| {
+                                if !matches!(msg.role, MessageRole::Assistant) {
+                                    return false;
+                                }
+                                match &msg.content {
+                                    ContentPart::Text(ContentPartText { text }) => text == raw_text,
+                                    _ => false,
+                                }
+                            });
+                            if has_matching_assistant {
+                                include_raw_assistant = false;
+                            }
                         }
                     }
                 }
@@ -423,6 +433,7 @@ pub async fn resolve_sequence(
                         Ok(gen_input) => {
                             let include_system = !has_system_message;
                             for input_msg in gen_input.messages {
+                                let input_msg = normalize_historical_input_message(input_msg);
                                 if include_system || !matches!(input_msg.role, MessageRole::System)
                                 {
                                     input_messages.push(input_msg);
@@ -450,8 +461,13 @@ pub async fn resolve_sequence(
                 let message = message_repo.get_message_by_id(&message_id).await?;
                 let parsed = MessageSchema::validate(&message.raw_message)?;
                 for content_part in parsed.content {
+                    let role = if matches!(&content_part, ContentPart::ToolUse(_)) {
+                        MessageRole::Tool
+                    } else {
+                        parsed.role.clone()
+                    };
                     input_messages.push(InputMessage {
-                        role: parsed.role.clone(),
+                        role,
                         content: content_part,
                     });
                 }
@@ -499,6 +515,19 @@ pub async fn resolve_sequence(
     let resolved = ResolvedChatSequence::new(input_messages);
 
     Ok((resolved, unresolved))
+}
+
+fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {
+    if matches!(input_msg.role, MessageRole::Assistant)
+        && matches!(&input_msg.content, ContentPart::ToolUse(_))
+    {
+        InputMessage {
+            role: MessageRole::Tool,
+            content: input_msg.content,
+        }
+    } else {
+        input_msg
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

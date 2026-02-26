@@ -6,7 +6,10 @@ mod test_cases {
     use crate::config::{ChatProviderConfig, ExperimentalFacetsConfig, PromptSourceSpecification};
     use crate::db::entity::{chats, messages};
     use crate::models::assistant::{AssistantWithFiles, FileInfo};
-    use crate::models::message::{ContentPart, ContentPartText, MessageRole, MessageSchema};
+    use crate::models::message::{
+        ContentPart, ContentPartText, GenerationInputMessages, InputMessage, MessageRole,
+        MessageSchema, ToolCallStatus, ToolUse,
+    };
     use crate::server::api::v1beta::message_streaming::{FileContent, FileContentsForGeneration};
     use async_trait::async_trait;
     use eyre::{OptionExt, Report, eyre};
@@ -38,6 +41,16 @@ mod test_cases {
             let content = vec![ContentPart::Text(ContentPartText {
                 text: text.to_string(),
             })];
+            self.add_message_with_content(id, previous_id, role, content);
+        }
+
+        fn add_message_with_content(
+            &mut self,
+            id: Uuid,
+            previous_id: Option<Uuid>,
+            role: MessageRole,
+            content: Vec<ContentPart>,
+        ) {
             let message_schema = MessageSchema {
                 role,
                 content,
@@ -1684,6 +1697,120 @@ mod test_cases {
             hello_count, 1,
             "Expected 'Hello' to appear once, but it appears {} times",
             hello_count
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tool_use_history_is_preserved_for_follow_up_turns() {
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        let msg1_id = Uuid::new_v4();
+        message_repo.add_message(msg1_id, None, MessageRole::User, "Summarize this source");
+
+        let msg2_id = Uuid::new_v4();
+        let tool_call_id = "call_1".to_string();
+        message_repo.add_message_with_content(
+            msg2_id,
+            Some(msg1_id),
+            MessageRole::Assistant,
+            vec![
+                ContentPart::ToolUse(ToolUse {
+                    tool_call_id: tool_call_id.clone(),
+                    status: ToolCallStatus::Success,
+                    tool_name: "search_documents".to_string(),
+                    progress_message: None,
+                    input: Some(serde_json::json!({ "query": "source" })),
+                    output: Some(serde_json::json!({
+                        "results": [
+                            { "id": "doc-1", "citation": "[1]" }
+                        ]
+                    })),
+                }),
+                ContentPart::Text(ContentPartText {
+                    text: "Summary with citation [1]".to_string(),
+                }),
+            ],
+        );
+
+        // Simulate a persisted snapshot that only contains assistant text.
+        // The raw assistant message still contains tool_use parts and should not be dropped.
+        let assistant_gen_input = GenerationInputMessages {
+            messages: vec![
+                InputMessage {
+                    role: MessageRole::System,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "You are helpful.".to_string(),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "Summarize this source".to_string(),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Assistant,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "Summary with citation [1]".to_string(),
+                    }),
+                },
+            ],
+        };
+        message_repo.update_generation_input_messages(msg2_id, &assistant_gen_input);
+
+        let msg3_id = Uuid::new_v4();
+        message_repo.add_message(
+            msg3_id,
+            Some(msg2_id),
+            MessageRole::User,
+            "Can you cite that again?",
+        );
+
+        let abstract_seq = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg3_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        assert!(
+            abstract_seq.parts.iter().any(|part| {
+                matches!(
+                    part,
+                    AbstractChatSequencePart::PreviousAssistantMessage { message_id }
+                    if *message_id == msg2_id
+                )
+            }),
+            "Assistant message with tool_use should be preserved in abstract history",
+        );
+
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+
+        let preserved_tool_use = resolved.messages.iter().find(|msg| {
+            msg.role == MessageRole::Tool
+                && matches!(
+                    &msg.content,
+                    ContentPart::ToolUse(ToolUse { tool_call_id: id, .. }) if id == &tool_call_id
+                )
+        });
+
+        assert!(
+            preserved_tool_use.is_some(),
+            "Expected tool response history to be preserved as a tool-role message",
         );
     }
 }
