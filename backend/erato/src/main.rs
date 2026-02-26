@@ -68,12 +68,18 @@ async fn main() -> Result<(), Report> {
         )))
         .layer(Extension(DeploymentVersion::from_env()))
         .layer(Extension(build_frontend_environment(&config)))
-        .layer(CorsLayer::very_permissive())
-        // include trace context as header into the response
-        .layer(OtelInResponseLayer)
-        //start OpenTelemetry trace on incoming request
-        .layer(OtelAxumLayer::default())
-        .with_state(state);
+        .layer(CorsLayer::very_permissive());
+
+    let app = if config.integrations.otel.enabled {
+        app
+            // include trace context as header into the response
+            .layer(OtelInResponseLayer)
+            // start OpenTelemetry trace on incoming request
+            .layer(OtelAxumLayer::default())
+    } else {
+        app
+    }
+    .with_state(state);
 
     println!();
     println!("API docs: http://{}/scalar", local_addr);
