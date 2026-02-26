@@ -452,6 +452,7 @@ mod test_cases {
             filename: "assistant_file.txt".to_string(),
             file_storage_provider_id: "test".to_string(),
             file_storage_path: "/test".to_string(),
+            file_contents_unavailable_missing_permissions: false,
             created_at: now,
             updated_at: now,
         };
@@ -510,6 +511,7 @@ mod test_cases {
             filename: "assistant_file.txt".to_string(),
             file_storage_provider_id: "test".to_string(),
             file_storage_path: "/test".to_string(),
+            file_contents_unavailable_missing_permissions: false,
             created_at: now,
             updated_at: now,
         };
@@ -768,6 +770,7 @@ mod test_cases {
             filename: "context.txt".to_string(),
             file_storage_provider_id: "test".to_string(),
             file_storage_path: "/context.txt".to_string(),
+            file_contents_unavailable_missing_permissions: false,
             created_at: now,
             updated_at: now,
         };
@@ -888,6 +891,7 @@ mod test_cases {
             filename: "assistant_context.txt".to_string(),
             file_storage_provider_id: "test".to_string(),
             file_storage_path: "/assistant_context.txt".to_string(),
+            file_contents_unavailable_missing_permissions: false,
             created_at: now,
             updated_at: now,
         };
@@ -1078,6 +1082,7 @@ mod test_cases {
             filename: "context.txt".to_string(),
             file_storage_provider_id: "test".to_string(),
             file_storage_path: "/context.txt".to_string(),
+            file_contents_unavailable_missing_permissions: false,
             created_at: now,
             updated_at: now,
         };

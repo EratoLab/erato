@@ -1375,6 +1375,59 @@ export const useCreateChat = (
   });
 };
 
+export type ArchiveAllChatsEndpointError = Fetcher.ErrorWrapper<undefined>;
+
+export type ArchiveAllChatsEndpointVariables =
+  V1betaApiContext["fetcherOptions"];
+
+/**
+ * Only chats that are currently not archived are updated.
+ * Previously archived chats keep their original `archived_at` timestamp.
+ */
+export const fetchArchiveAllChatsEndpoint = (
+  variables: ArchiveAllChatsEndpointVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ArchiveAllChatsResponse,
+    ArchiveAllChatsEndpointError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/chats/archive_all",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * Only chats that are currently not archived are updated.
+ * Previously archived chats keep their original `archived_at` timestamp.
+ */
+export const useArchiveAllChatsEndpoint = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ArchiveAllChatsResponse,
+      ArchiveAllChatsEndpointError,
+      ArchiveAllChatsEndpointVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ArchiveAllChatsResponse,
+    ArchiveAllChatsEndpointError,
+    ArchiveAllChatsEndpointVariables
+  >({
+    mutationFn: (variables: ArchiveAllChatsEndpointVariables) =>
+      fetchArchiveAllChatsEndpoint(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type UpdateChatPathParams = {
   /**
    * The ID of the chat to update
@@ -3166,7 +3219,7 @@ export const useDeleteShareGrant = (
 export type TokenUsageEstimateError = Fetcher.ErrorWrapper<undefined>;
 
 export type TokenUsageEstimateVariables = {
-  body: Schemas.TokenUsageRequest;
+  body?: Schemas.TokenUsageRequest;
 } & V1betaApiContext["fetcherOptions"];
 
 export const fetchTokenUsageEstimate = (

@@ -7,7 +7,7 @@ use crate::models::message::ContentPartImage;
 use crate::policy::prelude::*;
 use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
 use crate::services::file_processing_cached;
-use crate::services::file_storage::SharepointContext;
+use crate::services::file_storage::{SharepointContext, is_missing_permissions_error};
 use crate::state::AppState;
 use async_trait::async_trait;
 use eyre::{Context, ContextCompat, OptionExt, Report};
@@ -234,6 +234,7 @@ pub struct AppStatePromptProvider<'a> {
     pub app_state: &'a AppState,
     pub policy: &'a PolicyEngine,
     pub subject: &'a Subject,
+    pub access_token: Option<&'a str>,
 }
 
 #[async_trait]
@@ -263,13 +264,59 @@ impl<'a> PromptProvider for AppStatePromptProvider<'a> {
         &self,
         chat: &chats::Model,
     ) -> Result<Option<AssistantWithFiles>, Report> {
-        crate::models::chat::get_chat_assistant_configuration(
+        let mut assistant_config = crate::models::chat::get_chat_assistant_configuration(
             &self.app_state.db,
             self.policy,
             self.subject,
             chat,
         )
-        .await
+        .await?;
+
+        if let Some(ref mut assistant) = assistant_config {
+            let sharepoint_ctx = self.access_token.map(|token| SharepointContext {
+                access_token: token,
+            });
+
+            for file in &mut assistant.files {
+                if file.file_contents_unavailable_missing_permissions {
+                    continue;
+                }
+
+                let Some(file_storage) = self
+                    .app_state
+                    .file_storage_providers
+                    .get(&file.file_storage_provider_id)
+                else {
+                    continue;
+                };
+
+                if !file_storage.is_sharepoint() {
+                    continue;
+                }
+
+                let url_result = file_storage
+                    .generate_presigned_download_url_with_context(
+                        &file.file_storage_path,
+                        None,
+                        sharepoint_ctx.as_ref(),
+                    )
+                    .await;
+
+                if let Err(err) = url_result
+                    && is_missing_permissions_error(&err)
+                {
+                    file.file_contents_unavailable_missing_permissions = true;
+                    tracing::warn!(
+                        file_id = %file.id,
+                        assistant_id = %assistant.id,
+                        error = %err,
+                        "Assistant file marked unavailable due to missing permissions"
+                    );
+                }
+            }
+        }
+
+        Ok(assistant_config)
     }
 
     async fn resolve_prompt_source(

@@ -372,3 +372,22 @@ impl SharepointStorage {
 
 /// The well-known provider ID for Sharepoint file uploads.
 pub const SHAREPOINT_PROVIDER_ID: &str = "integrations_sharepoint";
+
+/// Best-effort classifier for Sharepoint/OneDrive permission/access failures.
+///
+/// We use this to avoid failing entire assistant/chat flows when a shared assistant
+/// contains a cloud file that the current user cannot access in MS Graph.
+pub fn is_missing_permissions_error(error: &Report) -> bool {
+    let msg = error.to_string().to_lowercase();
+    msg.contains("failed to parse ms graph api response")
+        || msg.contains("failed to get drive item from ms graph api")
+        || msg.contains("no download url found in ms graph api response")
+        || msg.contains("sharepoint storage requires an access token context")
+        || msg.contains("http 401")
+        || msg.contains("http 403")
+        || msg.contains("unauthorized")
+        || msg.contains("forbidden")
+        || msg.contains("access denied")
+        || msg.contains("insufficient")
+        || msg.contains("permission")
+}

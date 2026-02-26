@@ -14,6 +14,18 @@ export type AllDrivesResponse = {
 };
 
 /**
+ * Response from the archive all chats endpoint
+ */
+export type ArchiveAllChatsResponse = {
+  /**
+   * Number of chats newly archived by this call.
+   *
+   * @format int64
+   */
+  archived_count: number;
+};
+
+/**
  * Request to archive an assistant
  */
 export type ArchiveAssistantRequest = Record<string, any>;
@@ -1339,7 +1351,34 @@ export type SharepointProviderMetadata = {
   item_id: string;
 };
 
+export type TokenUsageFileInput = {
+  /**
+   * File upload IDs to include in estimation.
+   *
+   * @example ["00000000-0000-0000-0000-000000000000"]
+   */
+  input_files_ids?: string[];
+};
+
+export type TokenUsageNewChatInput = {
+  /**
+   * Optional assistant ID for new chat context.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  assistant_id?: null | undefined;
+};
+
 export type TokenUsageRequest = {
+  /**
+   * The previous message ID to anchor chat history context.
+   * Preferred over `previous_message_id` for new clients.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  chat_previous_message_id?: null | undefined;
   /**
    * Optional chat provider ID to use for token estimation. If not provided, uses the default provider.
    *
@@ -1353,12 +1392,21 @@ export type TokenUsageRequest = {
    * @example 00000000-0000-0000-0000-000000000000
    */
   existing_chat_id?: null | undefined;
+  file?: null | TokenUsageFileInput;
   /**
    * The IDs of any files attached to this message. These files must already be uploaded to the file_uploads table.
    *
    * @example ["00000000-0000-0000-0000-000000000000"]
    */
   input_files_ids?: string[];
+  new_chat?: null | TokenUsageNewChatInput;
+  /**
+   * Content for the new message being composed.
+   * Preferred over `user_message` for new clients.
+   *
+   * @example Hello, world!
+   */
+  new_message_content?: null | undefined;
   /**
    * The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.
    *
@@ -1367,11 +1415,17 @@ export type TokenUsageRequest = {
    */
   previous_message_id?: null | undefined;
   /**
+   * Additional system prompt content to include in the estimation.
+   *
+   * @example You are a concise legal assistant.
+   */
+  system_prompt?: null | undefined;
+  /**
    * The text of the message.
    *
    * @example Hello, world!
    */
-  user_message: string;
+  user_message?: string;
 };
 
 /**

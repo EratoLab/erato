@@ -1,6 +1,78 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
 import { loginWithEntraId, getScenarioData } from "./shared";
 import { TAG_CI } from "./tags";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function parseScenarioDataFromToml(
+  tomlContent: string,
+): Record<string, string> | null {
+  const scenarioDataMatch = tomlContent.match(
+    /SCENARIO_DATA\s*=\s*\{([^}]+)\}/,
+  );
+  if (!scenarioDataMatch) {
+    return null;
+  }
+
+  const inlineTableContent = scenarioDataMatch[1];
+  const data: Record<string, string> = {};
+
+  const keyValuePairs = inlineTableContent.split(",");
+  for (const pair of keyValuePairs) {
+    const [key, value] = pair.split("=").map((s) => s.trim());
+    if (key && value) {
+      data[key] = value.replace(/^["']|["']$/g, "");
+    }
+  }
+
+  return Object.keys(data).length > 0 ? data : null;
+}
+
+async function getScenarioDataLocalFallback(
+  scenarioName: string,
+): Promise<Record<string, string> | null> {
+  const autoTomlPath = path.resolve(
+    __dirname,
+    `../../infrastructure/k3d/erato-local/config/erato.scenario-${scenarioName}.auto.toml`,
+  );
+
+  if (!fs.existsSync(autoTomlPath)) {
+    return null;
+  }
+
+  try {
+    const tomlContent = fs.readFileSync(autoTomlPath, "utf-8");
+    return parseScenarioDataFromToml(tomlContent);
+  } catch {
+    return null;
+  }
+}
+
+async function getScenarioDataWithFallback(page: Page) {
+  let scenarioData = await getScenarioData(page);
+
+  if (!scenarioData) {
+    const scenarioName = await page.evaluate(() => {
+      return (window as { K3D_TEST_SCENARIO?: string }).K3D_TEST_SCENARIO;
+    });
+    const effectiveScenario = scenarioName || "entra_id";
+    scenarioData = await getScenarioDataLocalFallback(effectiveScenario);
+  }
+
+  if (scenarioData) {
+    await page.addInitScript((data) => {
+      (window as { SCENARIO_DATA?: Record<string, string> }).SCENARIO_DATA =
+        data;
+    }, scenarioData);
+  }
+
+  return scenarioData;
+}
 
 /**
  * Entra ID authentication tests
@@ -22,7 +94,7 @@ test(
     await page.goto("/");
 
     // Get scenario data containing test user credentials
-    const scenarioData = await getScenarioData(page);
+    const scenarioData = await getScenarioDataWithFallback(page);
 
     // Verify scenario data is available
     expect(scenarioData).toBeTruthy();
@@ -53,7 +125,10 @@ test(
 
     // Now logout
     await page.getByRole("button", { name: "expand sidebar" }).click();
-    await page.getByRole("button", { name: "Open menu" }).click();
+    await page
+      .getByRole("complementary")
+      .getByRole("button", { name: "Open menu" })
+      .click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
 
     // Verify logout by checking for the sign in button

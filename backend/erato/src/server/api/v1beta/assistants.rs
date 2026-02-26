@@ -4,6 +4,7 @@ use crate::models::file_capability::{
 use crate::models::{assistant, permissions, share_grant};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::services::file_storage::is_missing_permissions_error;
 use crate::services::sentry::log_internal_server_error;
 use crate::state::AppState;
 use axum::extract::{Path, Query, State};
@@ -69,8 +70,12 @@ pub struct AssistantFile {
     pub id: String,
     /// The original filename
     pub filename: String,
-    /// Pre-signed URL for downloading the file
-    pub download_url: String,
+    /// Pre-signed URL for downloading the file.
+    /// Null when file contents are unavailable for the current user due to missing permissions.
+    #[schema(nullable = true)]
+    pub download_url: Option<String>,
+    /// Indicates that file contents are unavailable for the current user due to missing permissions.
+    pub file_contents_unavailable_missing_permissions: bool,
     /// The file capability that was evaluated for this file
     #[serde(rename = "file_capability")]
     pub file_capability: FileCapability,
@@ -198,27 +203,40 @@ async fn file_info_to_assistant_file(
         access_token: token,
     });
 
-    // Generate a presigned download URL
-    let download_url = file_storage_provider
+    // Generate a presigned download URL. If the user lacks permission for this Sharepoint file,
+    // return the file metadata with a hint flag instead of failing the whole request.
+    let (download_url, file_contents_unavailable_missing_permissions) = match file_storage_provider
         .generate_presigned_download_url_with_context(
             &file.file_storage_path,
             None,
             sharepoint_ctx.as_ref(),
         )
         .await
-        .map_err(|e| {
+    {
+        Ok(url) => (Some(url), false),
+        Err(e) if is_missing_permissions_error(&e) => {
+            tracing::warn!(
+                file_id = %file.id,
+                error = %e,
+                "Download URL unavailable due to missing file permissions"
+            );
+            (None, true)
+        }
+        Err(e) => {
             tracing::error!(
                 "Failed to generate download URL for file {}: {}",
                 file.id,
                 e
             );
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
 
     Ok(AssistantFile {
         id: file.id.to_string(),
         filename: file.filename,
         download_url,
+        file_contents_unavailable_missing_permissions,
         file_capability,
     })
 }

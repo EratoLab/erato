@@ -1722,7 +1722,8 @@ pub async fn frequent_assistants(
                     AssistantFile {
                         id: file.id.to_string(),
                         filename: file.filename,
-                        download_url: format!("/api/v1beta/files/{}", file.id),
+                        download_url: Some(format!("/api/v1beta/files/{}", file.id)),
+                        file_contents_unavailable_missing_permissions: false,
                         file_capability,
                     }
                 })

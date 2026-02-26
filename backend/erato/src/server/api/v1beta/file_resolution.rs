@@ -2,7 +2,7 @@ use crate::db::entity::prelude::FileUploads;
 use crate::models::message::{ContentPart, ContentPartText, GenerationInputMessages};
 use crate::server::api::v1beta::message_streaming::FileContent;
 use crate::services::file_processing_cached::get_file_cached;
-use crate::services::file_storage::SharepointContext;
+use crate::services::file_storage::{SharepointContext, is_missing_permissions_error};
 use crate::state::AppState;
 use eyre::Report;
 use sea_orm::EntityTrait;
@@ -29,6 +29,18 @@ pub(crate) fn format_file_error_message(
         );
     }
 
+    content
+}
+
+/// Format an error message for files that are inaccessible due to missing permissions.
+pub(crate) fn format_file_permission_error_message(filename: &str, file_id: Uuid) -> String {
+    let mut content = String::new();
+    content.push_str("File:\n");
+    content.push_str(&format!("file name: {}\n", filename));
+    content.push_str(&format!("file_id: erato_file_id:{}\n", file_id));
+    content.push_str(
+        "Unable to retrieve file contents because the current user does not have permission to access this file.",
+    );
     content
 }
 
@@ -180,6 +192,20 @@ async fn resolve_file_pointer(
                         }
                     },
                     Err(err) => {
+                        if is_missing_permissions_error(&err) {
+                            tracing::warn!(
+                                "Failed to get file contents for {}: {} - missing permissions: {}, using permission placeholder text",
+                                file.filename,
+                                file_upload_id,
+                                err
+                            );
+                            let content = format_file_permission_error_message(
+                                &file.filename,
+                                file_upload_id,
+                            );
+                            return ContentPart::Text(ContentPartText { text: content });
+                        }
+
                         let is_parsing_error =
                             err.to_string().contains("parse") || err.to_string().contains("Parse");
 
