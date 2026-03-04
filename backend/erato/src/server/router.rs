@@ -1,4 +1,6 @@
 use super::api::v1beta::ApiV1ApiDoc;
+#[cfg(all(feature = "profiling", target_os = "linux"))]
+use crate::profiling::{memory_profile_flamegraph, memory_profile_pprof};
 use crate::state::AppState;
 use axum::routing::get;
 // use utoipa::openapi::OpenApiBuilder;
@@ -21,9 +23,19 @@ async fn health() -> &'static str {
 pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // build our application with a route
 
-    OpenApiRouter::new()
+    let router = OpenApiRouter::new()
         .route("/health", get(health).head(health))
-        .nest("/api/v1beta", crate::server::api::v1beta::router(app_state))
+        .nest("/api/v1beta", crate::server::api::v1beta::router(app_state));
+
+    #[cfg(all(feature = "profiling", target_os = "linux"))]
+    let router = router
+        .route("/debug/pprof/allocs", get(memory_profile_pprof))
+        .route(
+            "/debug/pprof/allocs/flamegraph",
+            get(memory_profile_flamegraph),
+        );
+
+    router
 }
 
 #[derive(OpenApi)]

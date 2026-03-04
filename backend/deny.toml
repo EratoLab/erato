@@ -120,6 +120,8 @@ exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "erato" },
     { allow = ["AGPL-3.0-or-later"], crate = "mock-llm-server" },
     { allow = ["AGPL-3.0-or-later"], crate = "mock-mcp-server" },
+    # Transitive dependency of jemalloc_pprof used for profiling flamegraph rendering.
+    { allow = ["CDDL-1.0"], crate = "inferno" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,

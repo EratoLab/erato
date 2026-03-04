@@ -10,12 +10,17 @@ COPY . .
 RUN cargo chef prepare --bin erato --recipe-path recipe.json
 
 FROM chef AS builder
+ARG ERATO_FEATURES=""
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --bin erato --release --recipe-path recipe.json
 
 # Build application (only erato binary)
 COPY . .
-RUN cargo build --release -p erato --bin erato
+RUN if [ -n "$ERATO_FEATURES" ]; then \
+      cargo build --release -p erato --bin erato --features "$ERATO_FEATURES"; \
+    else \
+      cargo build --release -p erato --bin erato; \
+    fi
 
 # Pinned for security & build performance reasons
 FROM debian:trixie-slim@sha256:5cf544fad978371b3df255b61e209b373583cb88b733475c86e49faa15ac2104

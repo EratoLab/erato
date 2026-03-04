@@ -14,6 +14,14 @@ use erato::state::AppState;
 use erato::{ApiDoc, server};
 use tower_http::cors::CorsLayer;
 
+#[cfg(all(feature = "profiling", target_os = "linux"))]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
+#[cfg(all(feature = "profiling", target_os = "linux"))]
+#[unsafe(export_name = "malloc_conf")]
+pub static MALLOC_CONF: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
+
 #[tokio::main]
 async fn main() -> Result<(), Report> {
     color_eyre::install()?;
