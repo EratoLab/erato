@@ -43,6 +43,7 @@ resource_kind_chat_singleton := "chat_singleton"
 resource_kind_prompt_optimizer_singleton := "prompt_optimizer_singleton"
 resource_kind_message_feedback := "message_feedback"
 resource_kind_assistant := "assistant"
+resource_kind_file_upload := "file_upload"
 resource_kind_assistant_singleton := "assistant_singleton"
 resource_kind_share_grant := "share_grant"
 # Placeholder; to be removed in the future once we have some implementation variance
@@ -126,6 +127,20 @@ allow if {
 
 	# Check ownership
 	data.resource_attributes[resource_kind_assistant][input.resource_id].owner_id == input.subject_id
+}
+
+# A user can read file uploads they own.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for file upload read action
+	input.resource_kind == resource_kind_file_upload
+	input.action == action_read
+
+	# Check ownership
+	data.resource_attributes[resource_kind_file_upload][input.resource_id].owner_id == input.subject_id
 }
 
 # A viewer (via share_grant) can read an assistant.

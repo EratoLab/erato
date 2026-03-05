@@ -1,5 +1,6 @@
 use crate::db::entity::prelude::*;
 use crate::db::entity::{assistant_file_uploads, assistants, file_uploads};
+use crate::models::file_upload;
 use crate::models::share_grant;
 use crate::policy::prelude::*;
 use crate::services::file_storage::FileStorage;
@@ -443,10 +444,9 @@ pub async fn add_file_to_assistant(
         get_assistant_by_id_for_modification(conn, subject, assistant_id, false).await?;
 
     // Verify the file upload exists
-    let _file_upload = FileUploads::find_by_id(file_upload_id)
-        .one(conn)
-        .await?
-        .wrap_err("File upload not found")?;
+    let _file_upload = file_upload::get_file_upload_by_id(conn, policy, subject, &file_upload_id)
+        .await
+        .wrap_err("File upload not found or access denied")?;
 
     // Create the association in the join table
     let new_assistant_file_upload = assistant_file_uploads::ActiveModel {
@@ -493,14 +493,17 @@ pub async fn remove_file_from_assistant(
 pub async fn create_standalone_file_upload(
     conn: &DatabaseConnection,
     _policy: &PolicyEngine,
-    _subject: &Subject,
+    subject: &Subject,
     filename: String,
     file_storage_provider_id: String,
     file_storage_path: String,
 ) -> Result<file_uploads::Model, Report> {
+    let owner_user_id = subject.user_id().to_string();
+
     // Create the file upload record (independent of chat)
     let new_file_upload = file_uploads::ActiveModel {
         id: Set(Uuid::new_v4()),
+        owner_user_id: Set(owner_user_id),
         filename: Set(filename),
         file_storage_provider_id: Set(file_storage_provider_id),
         file_storage_path: Set(file_storage_path),

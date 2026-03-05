@@ -76,6 +76,8 @@ pub enum ResourceKind {
     MessageFeedback,
     #[serde(rename = "assistant")]
     Assistant,
+    #[serde(rename = "file_upload")]
+    FileUpload,
     #[serde(rename = "assistant_singleton")]
     AssistantSingleton,
     #[serde(rename = "share_grant")]
@@ -99,6 +101,7 @@ pub enum Resource {
     Message(String),
     MessageFeedback(String),
     Assistant(String),
+    FileUpload(String),
     AssistantSingleton,
     ShareGrant(String),
 }
@@ -121,6 +124,7 @@ impl Resource {
             Resource::Message(id) => (ResourceKind::Message, ResourceId(id)),
             Resource::MessageFeedback(id) => (ResourceKind::MessageFeedback, ResourceId(id)),
             Resource::Assistant(id) => (ResourceKind::Assistant, ResourceId(id)),
+            Resource::FileUpload(id) => (ResourceKind::FileUpload, ResourceId(id)),
             Resource::AssistantSingleton => {
                 (ResourceKind::AssistantSingleton, ResourceId::singleton())
             }

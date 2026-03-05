@@ -206,6 +206,7 @@ CREATE VIEW public.chats_latest_message AS
 
 CREATE TABLE public.file_uploads (
     id uuid DEFAULT public.uuidv7() NOT NULL,
+    owner_user_id text NOT NULL,
     filename text NOT NULL,
     file_storage_provider_id text NOT NULL,
     file_storage_path text NOT NULL,
@@ -349,6 +350,12 @@ CREATE INDEX idx_messages_previous_message_id ON public.messages USING btree (pr
 --
 
 CREATE INDEX idx_messages_sibling_message_id ON public.messages USING btree (sibling_message_id);
+
+--
+-- Name: idx_file_uploads_owner_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_file_uploads_owner_user_id ON public.file_uploads USING btree (owner_user_id);
 
 
 --

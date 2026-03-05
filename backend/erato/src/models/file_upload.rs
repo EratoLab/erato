@@ -10,6 +10,10 @@ use sqlx::types::Uuid;
 use std::collections::HashMap;
 use tracing::instrument;
 
+fn subject_user_id(subject: &Subject) -> String {
+    subject.user_id().to_string()
+}
+
 /// Create a new file upload record in the database and associate it with a chat
 pub async fn create_file_upload(
     conn: &DatabaseConnection,
@@ -29,10 +33,12 @@ pub async fn create_file_upload(
     )?;
 
     let file_upload_id = Uuid::new_v4();
+    let owner_user_id = subject_user_id(subject);
 
     // Create the file upload record (independent of chat)
     let new_file_upload = file_uploads::ActiveModel {
         id: ActiveValue::Set(file_upload_id),
+        owner_user_id: ActiveValue::Set(owner_user_id),
         filename: ActiveValue::Set(filename),
         file_storage_provider_id: ActiveValue::Set(file_storage_provider_id),
         file_storage_path: ActiveValue::Set(file_storage_path),
@@ -85,10 +91,12 @@ pub async fn create_sharepoint_file_upload(
 
     let file_upload_id = Uuid::new_v4();
     let file_storage_path = format!("{} | {}", drive_id, item_id);
+    let owner_user_id = subject_user_id(subject);
 
     // Create the file upload record with Sharepoint provider
     let new_file_upload = file_uploads::ActiveModel {
         id: ActiveValue::Set(file_upload_id),
+        owner_user_id: ActiveValue::Set(owner_user_id),
         filename: ActiveValue::Set(filename),
         file_storage_provider_id: ActiveValue::Set(SHAREPOINT_PROVIDER_ID.to_string()),
         file_storage_path: ActiveValue::Set(file_storage_path),
@@ -156,6 +164,18 @@ pub async fn get_file_upload_by_id(
         .one(conn)
         .await?
         .wrap_err("File upload not found")?;
+
+    // Prefer direct ownership authorization.
+    if authorize!(
+        policy,
+        subject,
+        &Resource::FileUpload(file_upload.id.to_string()),
+        Action::Read
+    )
+    .is_ok()
+    {
+        return Ok(file_upload);
+    }
 
     // Find associated chat(s) through the join table
     let chat_relations = ChatFileUploads::find()

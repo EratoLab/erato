@@ -9,6 +9,7 @@ user_3_id := "user-3"
 chat_1_id := "chat-1"
 assistant_1_id := "assistant-1"
 assistant_2_id := "assistant-2"
+file_upload_1_id := "file-upload-1"
 
 resource_attributes := {
 	"chat": {
@@ -25,6 +26,12 @@ resource_attributes := {
 		assistant_2_id: {
 			"id": assistant_2_id,
 			"owner_id": user_2_id,
+		},
+	},
+	"file_upload": {
+		file_upload_1_id: {
+			"id": file_upload_1_id,
+			"owner_id": user_1_id,
 		},
 	},
 }
@@ -166,7 +173,7 @@ test_user_cannot_read_other_users_assistant if {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
 		"resource_kind": "assistant",
-		"resource_id": assistant_2_id,
+		"resource_id": assistant_1_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
 		with data.share_grants as []
@@ -190,7 +197,7 @@ test_user_cannot_share_other_users_assistant if {
 		"subject_kind": "user",
 		"subject_id": user_2_id,
 		"resource_kind": "assistant",
-		"resource_id": assistant_2_id,
+		"resource_id": assistant_1_id,
 		"action": "share",
 	} with data.resource_attributes as resource_attributes
 }
@@ -231,6 +238,30 @@ test_viewer_cannot_share_shared_assistant if {
 		"action": "share",
 	} with data.resource_attributes as resource_attributes
 		with data.share_grants as share_grants
+}
+
+# --- File Upload Ownership Tests ---
+
+# An owner can read their own file upload.
+test_owner_can_read_own_file_upload if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_1_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+}
+
+# A non-owner cannot read another user's file upload.
+test_user_cannot_read_other_users_file_upload if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_1_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
 }
 
 # A user without a share grant cannot read the assistant.

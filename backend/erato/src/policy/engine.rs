@@ -1,5 +1,5 @@
 use crate::db::entity::prelude::*;
-use crate::db::entity::{assistants, share_grants};
+use crate::db::entity::{assistants, file_uploads, share_grants};
 use crate::db::entity_ext::chats;
 use crate::policy::types::{
     Action, Resource, ResourceId, ResourceKind, Subject, SubjectId, SubjectKind,
@@ -80,6 +80,39 @@ async fn fetch_assistant_policy_data(db: &DatabaseConnection) -> Result<JsonValu
     }
 
     Ok(json!(assistant_attributes))
+}
+
+/// Minimal file upload attributes required for policy evaluation.
+#[derive(Debug, FromQueryResult)]
+struct FileUploadPolicyAttributes {
+    id: Uuid,
+    owner_user_id: String,
+}
+
+/// Fetch minimal file upload data required for policy evaluation.
+/// Only queries the `id` and `owner_user_id` fields.
+async fn fetch_file_upload_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
+    let file_uploads_list: Vec<FileUploadPolicyAttributes> = FileUploads::find()
+        .select_only()
+        .column(file_uploads::Column::Id)
+        .column(file_uploads::Column::OwnerUserId)
+        .into_model::<FileUploadPolicyAttributes>()
+        .all(db)
+        .await?;
+
+    let mut file_upload_attributes = serde_json::Map::new();
+    for file_upload in file_uploads_list {
+        let id_str = file_upload.id.to_string();
+        file_upload_attributes.insert(
+            id_str.clone(),
+            json!({
+                "id": id_str,
+                "owner_id": file_upload.owner_user_id,
+            }),
+        );
+    }
+
+    Ok(json!(file_upload_attributes))
 }
 
 /// Fetch share grants data for policy evaluation.
@@ -187,12 +220,14 @@ impl PolicyEngine {
         // Fetch policy data for each resource type
         let chat_data = fetch_chat_policy_data(db).await?;
         let assistant_data = fetch_assistant_policy_data(db).await?;
+        let file_upload_data = fetch_file_upload_policy_data(db).await?;
         let share_grants_data = fetch_share_grants_policy_data(db).await?;
 
         // Combine all resource attributes
         let resource_attributes = json!({
             "chat": chat_data,
-            "assistant": assistant_data
+            "assistant": assistant_data,
+            "file_upload": file_upload_data
         });
         let policy_data = json!({
             "resource_attributes": resource_attributes,
@@ -356,6 +391,7 @@ pub const fn is_valid_resource_action(resource: ResourceKind, action: Action) ->
         (ResourceKind::Assistant, Action::Read) => true,
         (ResourceKind::Assistant, Action::Update) => true,
         (ResourceKind::Assistant, Action::Share) => true,
+        (ResourceKind::FileUpload, Action::Read) => true,
         (ResourceKind::AssistantSingleton, Action::Create) => true,
         (ResourceKind::ShareGrant, Action::Create) => true,
         (ResourceKind::ShareGrant, Action::Read) => true,
