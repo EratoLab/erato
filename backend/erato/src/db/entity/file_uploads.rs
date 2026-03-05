@@ -8,6 +8,8 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     #[sea_orm(column_type = "Text")]
+    pub owner_user_id: String,
+    #[sea_orm(column_type = "Text")]
     pub filename: String,
     #[sea_orm(column_type = "Text")]
     pub file_storage_provider_id: String,

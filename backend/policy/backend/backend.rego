@@ -20,8 +20,34 @@ package backend
 #       "id": "some-chat-id",
 #       "owner_id": "some-user-id"
 #     }
+#   },
+#   "assistant": {
+#     "some-assistant-id": {
+#       "id": "some-assistant-id",
+#       "owner_id": "some-user-id"
+#     }
+#   },
+#   "file_upload": {
+#     "some-file-upload-id": {
+#       "id": "some-file-upload-id",
+#       "owner_id": "some-user-id",
+#       "linked_chat_ids": ["some-chat-id"],
+#       "linked_assistant_ids": ["some-assistant-id"]
+#     }
 #   }
 # }
+#
+# share_grants := [
+#   {
+#     "id": "some-grant-id",
+#     "resource_type": "assistant",
+#     "resource_id": "some-assistant-id",
+#     "subject_type": "user", # or "organization_group"
+#     "subject_id_type": "id", # or "organization_group_id"
+#     "subject_id": "some-user-id",
+#     "role": "viewer"
+#   }
+# ]
 
 # `input` structure
 # {
@@ -43,6 +69,7 @@ resource_kind_chat_singleton := "chat_singleton"
 resource_kind_prompt_optimizer_singleton := "prompt_optimizer_singleton"
 resource_kind_message_feedback := "message_feedback"
 resource_kind_assistant := "assistant"
+resource_kind_file_upload := "file_upload"
 resource_kind_assistant_singleton := "assistant_singleton"
 resource_kind_share_grant := "share_grant"
 # Placeholder; to be removed in the future once we have some implementation variance
@@ -63,6 +90,30 @@ action_share := "share"
 
 # Default deny all access
 default allow = false
+
+can_read_assistant(assistant_id) if {
+	data.resource_attributes[resource_kind_assistant][assistant_id].owner_id == input.subject_id
+}
+
+can_read_assistant(assistant_id) if {
+	some grant in data.share_grants
+	grant.resource_type == "assistant"
+	grant.resource_id == assistant_id
+	grant.subject_type == "user"
+	grant.subject_id == input.subject_id
+	grant.role == "viewer"
+}
+
+can_read_assistant(assistant_id) if {
+	some grant in data.share_grants
+	grant.resource_type == "assistant"
+	grant.resource_id == assistant_id
+	grant.subject_type == "organization_group"
+	grant.role == "viewer"
+
+	some group_id in input.organization_group_ids
+	group_id == grant.subject_id
+}
 
 # A user can view/update chats they own.
 allow if {
@@ -126,6 +177,50 @@ allow if {
 
 	# Check ownership
 	data.resource_attributes[resource_kind_assistant][input.resource_id].owner_id == input.subject_id
+}
+
+# A user can read file uploads they own.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for file upload read action
+	input.resource_kind == resource_kind_file_upload
+	input.action == action_read
+
+	# Check ownership
+	data.resource_attributes[resource_kind_file_upload][input.resource_id].owner_id == input.subject_id
+}
+
+# A user can read file uploads if they can access one of the linked chats.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for file upload read action
+	input.resource_kind == resource_kind_file_upload
+	input.action == action_read
+
+	# Any linked chat owned by the subject grants access.
+	some chat_id in data.resource_attributes[resource_kind_file_upload][input.resource_id].linked_chat_ids
+	data.resource_attributes[resource_kind_chat][chat_id].owner_id == input.subject_id
+}
+
+# A user can read file uploads if they can access one of the linked assistants.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for file upload read action
+	input.resource_kind == resource_kind_file_upload
+	input.action == action_read
+
+	# Any linked assistant that is readable by the subject grants access.
+	some assistant_id in data.resource_attributes[resource_kind_file_upload][input.resource_id].linked_assistant_ids
+	can_read_assistant(assistant_id)
 }
 
 # A viewer (via share_grant) can read an assistant.
