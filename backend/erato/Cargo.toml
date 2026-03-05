@@ -70,6 +70,8 @@ base64 = "0.22.1"
 # Tokio console for async debugging
 console-subscriber = { version = "0.5.0", optional = true }
 kreuzberg = { version = "=4.3.4",  features = ["bundled-pdfium", "excel", "office", "html", "archives"]}
+jemalloc_pprof = { version = "0.8.2", optional = true, features = ["flamegraph", "symbolize"] }
+tikv-jemallocator = { version = "0.6.1", optional = true, features = ["profiling", "unprefixed_malloc_on_supported_platforms"] }
 
 [dependencies.sentry]
 version = "0.41.0"
@@ -91,3 +93,4 @@ mocktail = { git = "https://github.com/EratoLab/mocktail.git", rev = "4a99543bcf
 default = ["sentry"]
 sentry = ["dep:sentry", "dep:sentry-tower"]
 tokio-console = ["dep:console-subscriber"]
+profiling = ["dep:jemalloc_pprof", "dep:tikv-jemallocator"]

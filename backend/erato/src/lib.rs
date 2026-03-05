@@ -13,11 +13,16 @@ pub mod metrics;
 pub mod models;
 pub mod normalize_profile;
 pub mod policy;
+#[cfg(feature = "profiling")]
+pub mod profiling;
 pub mod server;
 pub mod services;
 pub mod state;
 pub mod system_prompt_renderer;
 pub mod telemetry;
+
+#[cfg(all(feature = "profiling", not(target_os = "linux")))]
+compile_error!("The `profiling` feature is only supported on Linux.");
 
 #[derive(OpenApi)]
 #[openapi(
