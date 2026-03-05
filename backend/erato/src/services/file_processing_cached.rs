@@ -66,6 +66,11 @@ async fn get_file_bytes_cached<'a>(
         .file_bytes_cache
         .try_get_with_by_ref(file_id, async {
             tracing::debug!(file_id = %file_id, "File bytes cache miss - fetching");
+            let _permit = app_state
+                .file_processing_semaphore
+                .acquire()
+                .await
+                .wrap_err("File processing semaphore closed")?;
 
             let file_bytes = file_storage
                 .read_file_to_bytes_with_context(file_storage_path, sharepoint_ctx)
@@ -137,6 +142,11 @@ pub async fn get_file_contents_cached<'a>(
             span.record("file_bytes_length", file_bytes.len());
 
             // Parse the file using the configured file processor
+            let _permit = app_state
+                .file_processing_semaphore
+                .acquire()
+                .await
+                .wrap_err("File processing semaphore closed")?;
             let parsed_content = parse_file(app_state.file_processor.as_ref(), file_bytes).await?;
             let content = remove_null_characters(&parsed_content);
 
@@ -278,6 +288,11 @@ pub async fn get_token_count_cached(app_state: &AppState, content: &str) -> Resu
                 content_len = content_len,
                 "Token count cache miss - calculating"
             );
+            let _permit = app_state
+                .file_processing_semaphore
+                .acquire()
+                .await
+                .wrap_err("File processing semaphore closed")?;
 
             // Calculate token count
             let content_owned = content.to_string();
@@ -449,10 +464,21 @@ pub fn process_files_parallel_cached<'a>(
         // Process all files in parallel
         let futures = file_ids.iter().map(|file_id| {
             let sharepoint_ctx_ref = sharepoint_ctx.as_ref();
-            process_single_file_cached(app_state, policy, me_user, file_id, sharepoint_ctx_ref)
+            let pipeline_semaphore = app_state.file_processing_pipeline_semaphore.clone();
+
+            async move {
+                let _pipeline_permit = pipeline_semaphore
+                    .acquire_owned()
+                    .await
+                    .wrap_err("File processing pipeline semaphore closed")?;
+
+                process_single_file_cached(app_state, policy, me_user, file_id, sharepoint_ctx_ref)
+                    .await
+            }
         });
 
-        let results = futures::future::join_all(futures).await;
+        let results: Vec<Result<Option<FileContentsForGeneration>, Report>> =
+            futures::future::join_all(futures).await;
 
         // Collect all results (including files that had parsing errors)
         let mut converted_files = vec![];

@@ -18,6 +18,10 @@ check-config:
 generate-test-files:
     ./scripts/generate_test_files.sh
 
+# Generate N long+bloated PDFs in test-files/<subdir>
+generate-long-bloated-files count='20' subdir='long-bloated-files' words='10000' size_mb='19':
+    ./scripts/generate_long_bloated_pdfs.py --count {{count}} --subdir {{subdir}} --words {{words}} --size-mb {{size_mb}}
+
 # Run tests (checks prerequisites first)
 test: check
     pnpm exec playwright test
@@ -35,4 +39,3 @@ format:
 
 check-format:
     pnpm exec prettier . --check
-
