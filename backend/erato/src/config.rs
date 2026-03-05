@@ -1333,6 +1333,12 @@ pub struct CachesConfig {
     // Defaults to 100MB
     #[serde(default = "default_token_count_cache_mb")]
     pub token_count_cache_mb: u64,
+
+    // Global concurrency limit for file processing work on cache misses.
+    // Applies to file downloads, text extraction, and token estimation.
+    // Defaults to 4.
+    #[serde(default = "default_file_processing_parallelism")]
+    pub file_processing_parallelism: usize,
 }
 
 fn default_file_bytes_cache_mb() -> u64 {
@@ -1347,12 +1353,17 @@ fn default_token_count_cache_mb() -> u64 {
     100
 }
 
+fn default_file_processing_parallelism() -> usize {
+    4
+}
+
 impl Default for CachesConfig {
     fn default() -> Self {
         Self {
             file_bytes_cache_mb: default_file_bytes_cache_mb(),
             file_contents_cache_mb: default_file_contents_cache_mb(),
             token_count_cache_mb: default_token_count_cache_mb(),
+            file_processing_parallelism: default_file_processing_parallelism(),
         }
     }
 }

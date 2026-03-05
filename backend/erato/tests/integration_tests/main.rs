@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::default::Default;
 use std::sync::Arc;
 use test_log::test;
+use tokio::sync::Semaphore;
 
 mod actors;
 mod api;
@@ -144,6 +145,13 @@ async fn test_app_state_internal(
         .max_capacity(app_config.caches.token_count_cache_mb * 1024 * 1024)
         .build();
 
+    let file_processing_semaphore = Arc::new(Semaphore::new(
+        app_config.caches.file_processing_parallelism.max(1),
+    ));
+    let file_processing_pipeline_semaphore = Arc::new(Semaphore::new(
+        app_config.caches.file_processing_parallelism.max(1),
+    ));
+
     // Initialize file processor
     let file_processor = erato::services::file_processor::create_file_processor(
         &app_config.file_processor.processor,
@@ -164,6 +172,8 @@ async fn test_app_state_internal(
         file_bytes_cache,
         file_contents_cache,
         token_count_cache,
+        file_processing_semaphore,
+        file_processing_pipeline_semaphore,
         file_processor,
     };
 

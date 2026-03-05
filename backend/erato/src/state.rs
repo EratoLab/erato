@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 use tracing::instrument;
 
 /// Wrapper around PolicyEngine that tracks when it was last rebuilt
@@ -103,6 +103,10 @@ pub struct AppState {
     pub file_contents_cache: Cache<Uuid, String>,
     /// Cache mapping file_contents -> token count
     pub token_count_cache: Cache<String, usize>,
+    /// Global limiter for file processing work on cache misses.
+    pub file_processing_semaphore: Arc<Semaphore>,
+    /// Global limiter for end-to-end per-file processing concurrency.
+    pub file_processing_pipeline_semaphore: Arc<Semaphore>,
     /// File processor for extracting text from files
     pub file_processor: Arc<dyn crate::services::file_processor::FileProcessor>,
 }
@@ -129,6 +133,8 @@ impl std::fmt::Debug for AppState {
             .field("file_bytes_cache", &"<Cache>")
             .field("file_contents_cache", &"<Cache>")
             .field("token_count_cache", &"<Cache>")
+            .field("file_processing_semaphore", &"<Semaphore>")
+            .field("file_processing_pipeline_semaphore", &"<Semaphore>")
             .field("file_processor", &"<FileProcessor>")
             .finish()
     }
@@ -192,6 +198,11 @@ impl AppState {
             .time_to_idle(Duration::from_hours(12))
             .build();
 
+        let file_processing_parallelism = config.caches.file_processing_parallelism.max(1);
+        let file_processing_semaphore = Arc::new(Semaphore::new(file_processing_parallelism));
+        let file_processing_pipeline_semaphore =
+            Arc::new(Semaphore::new(file_processing_parallelism));
+
         // Initialize file processor based on configuration
         let file_processor = crate::services::file_processor::create_file_processor(
             &config.file_processor.processor,
@@ -211,6 +222,8 @@ impl AppState {
             file_bytes_cache,
             file_contents_cache,
             token_count_cache,
+            file_processing_semaphore,
+            file_processing_pipeline_semaphore,
             file_processor,
         })
     }
