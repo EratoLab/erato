@@ -1,5 +1,7 @@
 use crate::db::entity::prelude::*;
-use crate::db::entity::{assistants, file_uploads, share_grants};
+use crate::db::entity::{
+    assistant_file_uploads, assistants, chat_file_uploads, file_uploads, share_grants,
+};
 use crate::db::entity_ext::chats;
 use crate::policy::types::{
     Action, Resource, ResourceId, ResourceKind, Subject, SubjectId, SubjectKind,
@@ -10,6 +12,7 @@ use regorus::Engine;
 use sea_orm::prelude::Uuid;
 use sea_orm::{DatabaseConnection, EntityTrait, FromQueryResult, QuerySelect};
 use serde_json::{Value as JsonValue, json};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::instrument;
@@ -100,14 +103,56 @@ async fn fetch_file_upload_policy_data(db: &DatabaseConnection) -> Result<JsonVa
         .all(db)
         .await?;
 
+    let chat_relations: Vec<(Uuid, Uuid)> = ChatFileUploads::find()
+        .select_only()
+        .column(chat_file_uploads::Column::FileUploadId)
+        .column(chat_file_uploads::Column::ChatId)
+        .into_tuple::<(Uuid, Uuid)>()
+        .all(db)
+        .await?;
+
+    let assistant_relations: Vec<(Uuid, Uuid)> = AssistantFileUploads::find()
+        .select_only()
+        .column(assistant_file_uploads::Column::FileUploadId)
+        .column(assistant_file_uploads::Column::AssistantId)
+        .into_tuple::<(Uuid, Uuid)>()
+        .all(db)
+        .await?;
+
+    let mut linked_chat_ids_by_file: HashMap<Uuid, Vec<String>> = HashMap::new();
+    for (file_upload_id, chat_id) in chat_relations {
+        linked_chat_ids_by_file
+            .entry(file_upload_id)
+            .or_default()
+            .push(chat_id.to_string());
+    }
+
+    let mut linked_assistant_ids_by_file: HashMap<Uuid, Vec<String>> = HashMap::new();
+    for (file_upload_id, assistant_id) in assistant_relations {
+        linked_assistant_ids_by_file
+            .entry(file_upload_id)
+            .or_default()
+            .push(assistant_id.to_string());
+    }
+
     let mut file_upload_attributes = serde_json::Map::new();
     for file_upload in file_uploads_list {
         let id_str = file_upload.id.to_string();
+        let linked_chat_ids = linked_chat_ids_by_file
+            .get(&file_upload.id)
+            .cloned()
+            .unwrap_or_default();
+        let linked_assistant_ids = linked_assistant_ids_by_file
+            .get(&file_upload.id)
+            .cloned()
+            .unwrap_or_default();
         file_upload_attributes.insert(
             id_str.clone(),
             json!({
                 "id": id_str,
                 "owner_id": file_upload.owner_user_id,
+                "linked_chat_ids": linked_chat_ids,
+                "linked_assistant_ids": linked_assistant_ids,
             }),
         );
     }
@@ -572,6 +617,188 @@ mod tests {
             .await
             .unwrap();
         // User should NOT be able to read the assistant because they're not in org-group-1
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_file_upload_read_via_linked_chat() {
+        let subject = Subject::User("user_1".to_string());
+        let resource = Resource::FileUpload("file_1".to_string());
+        let action = Action::Read;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "chat": {
+                        "chat_1": { "id": "chat_1", "owner_id": "user_1" }
+                    },
+                    "assistant": {},
+                    "file_upload": {
+                        "file_1": {
+                            "id": "file_1",
+                            "owner_id": "other_user",
+                            "linked_chat_ids": ["chat_1"],
+                            "linked_assistant_ids": []
+                        }
+                    }
+                },
+                "share_grants": []
+            }))
+            .await
+            .unwrap();
+
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_file_upload_read_via_linked_assistant_owner() {
+        let subject = Subject::User("user_2".to_string());
+        let resource = Resource::FileUpload("file_2".to_string());
+        let action = Action::Read;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "chat": {},
+                    "assistant": {
+                        "assistant_2": { "id": "assistant_2", "owner_id": "user_2" }
+                    },
+                    "file_upload": {
+                        "file_2": {
+                            "id": "file_2",
+                            "owner_id": "other_user",
+                            "linked_chat_ids": [],
+                            "linked_assistant_ids": ["assistant_2"]
+                        }
+                    }
+                },
+                "share_grants": []
+            }))
+            .await
+            .unwrap();
+
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_file_upload_read_via_linked_assistant_user_share_grant() {
+        let subject = Subject::User("user_2".to_string());
+        let resource = Resource::FileUpload("file_3".to_string());
+        let action = Action::Read;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "chat": {},
+                    "assistant": {
+                        "assistant_1": { "id": "assistant_1", "owner_id": "user_1" }
+                    },
+                    "file_upload": {
+                        "file_3": {
+                            "id": "file_3",
+                            "owner_id": "other_user",
+                            "linked_chat_ids": [],
+                            "linked_assistant_ids": ["assistant_1"]
+                        }
+                    }
+                },
+                "share_grants": [
+                    {
+                        "id": "grant-1",
+                        "resource_type": "assistant",
+                        "resource_id": "assistant_1",
+                        "subject_type": "user",
+                        "subject_id_type": "id",
+                        "subject_id": "user_2",
+                        "role": "viewer"
+                    }
+                ]
+            }))
+            .await
+            .unwrap();
+
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_file_upload_read_via_linked_assistant_org_group_share_grant() {
+        let subject = Subject::UserWithOrganizationInfo {
+            id: "user_3".to_string(),
+            organization_user_id: None,
+            organization_group_ids: vec!["org-group-1".to_string()],
+        };
+        let resource = Resource::FileUpload("file_4".to_string());
+        let action = Action::Read;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "chat": {},
+                    "assistant": {
+                        "assistant_2": { "id": "assistant_2", "owner_id": "user_2" }
+                    },
+                    "file_upload": {
+                        "file_4": {
+                            "id": "file_4",
+                            "owner_id": "other_user",
+                            "linked_chat_ids": [],
+                            "linked_assistant_ids": ["assistant_2"]
+                        }
+                    }
+                },
+                "share_grants": [
+                    {
+                        "id": "grant-2",
+                        "resource_type": "assistant",
+                        "resource_id": "assistant_2",
+                        "subject_type": "organization_group",
+                        "subject_id_type": "organization_group_id",
+                        "subject_id": "org-group-1",
+                        "role": "viewer"
+                    }
+                ]
+            }))
+            .await
+            .unwrap();
+
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_file_upload_read_denied_without_owner_or_links() {
+        let subject = Subject::User("user_2".to_string());
+        let resource = Resource::FileUpload("file_5".to_string());
+        let action = Action::Read;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "chat": {},
+                    "assistant": {},
+                    "file_upload": {
+                        "file_5": {
+                            "id": "file_5",
+                            "owner_id": "user_1",
+                            "linked_chat_ids": [],
+                            "linked_assistant_ids": []
+                        }
+                    }
+                },
+                "share_grants": []
+            }))
+            .await
+            .unwrap();
+
         let result = authorize!(engine, &subject, &resource, action);
         assert!(result.is_err());
     }

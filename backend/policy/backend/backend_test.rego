@@ -10,6 +10,9 @@ chat_1_id := "chat-1"
 assistant_1_id := "assistant-1"
 assistant_2_id := "assistant-2"
 file_upload_1_id := "file-upload-1"
+file_upload_2_id := "file-upload-2"
+file_upload_3_id := "file-upload-3"
+file_upload_4_id := "file-upload-4"
 
 resource_attributes := {
 	"chat": {
@@ -32,6 +35,26 @@ resource_attributes := {
 		file_upload_1_id: {
 			"id": file_upload_1_id,
 			"owner_id": user_1_id,
+			"linked_chat_ids": [],
+			"linked_assistant_ids": [],
+		},
+		file_upload_2_id: {
+			"id": file_upload_2_id,
+			"owner_id": user_3_id,
+			"linked_chat_ids": [chat_1_id],
+			"linked_assistant_ids": [],
+		},
+		file_upload_3_id: {
+			"id": file_upload_3_id,
+			"owner_id": user_3_id,
+			"linked_chat_ids": [],
+			"linked_assistant_ids": [assistant_2_id],
+		},
+		file_upload_4_id: {
+			"id": file_upload_4_id,
+			"owner_id": user_1_id,
+			"linked_chat_ids": [],
+			"linked_assistant_ids": [assistant_1_id],
 		},
 	},
 }
@@ -262,6 +285,66 @@ test_user_cannot_read_other_users_file_upload if {
 		"resource_id": file_upload_1_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
+}
+
+# A user can read a file upload if they can read one of its linked chats.
+test_user_can_read_file_upload_via_linked_chat if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_2_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+}
+
+# A user can read a file upload if they own one of its linked assistants.
+test_assistant_owner_can_read_file_upload_via_linked_assistant if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_3_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+}
+
+# A viewer (via assistant user share_grant) can read a linked file upload.
+test_assistant_viewer_can_read_file_upload_via_user_share_grant if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_4_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants
+}
+
+# A user in a shared organization_group can read a linked file upload.
+test_user_in_org_group_can_read_file_upload_via_org_group_share_grant if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_3_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_3_id,
+		"action": "read",
+		"organization_group_ids": [org_group_1_id],
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants_with_org_group
+}
+
+# A user without access to the linked assistant cannot read the linked file upload.
+test_user_cannot_read_file_upload_via_unshared_linked_assistant if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_3_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_4_id,
+		"action": "read",
+		"organization_group_ids": [org_group_2_id],
+	} with data.resource_attributes as resource_attributes
+		with data.share_grants as share_grants
 }
 
 # A user without a share grant cannot read the assistant.

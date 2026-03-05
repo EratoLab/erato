@@ -162,7 +162,7 @@ async fn test_cleanup_logic_with_file_uploads(pool: Pool<Postgres>) {
     let file_upload1_id = sea_orm::prelude::Uuid::new_v4();
     let file_upload1 = file_uploads::ActiveModel {
         id: ActiveValue::Set(file_upload1_id),
-        owner_user_id: ActiveValue::Set(TEST_USER_ID.to_string()),
+        owner_user_id: ActiveValue::Set("test-user".to_string()),
         filename: ActiveValue::Set("test_file1.txt".to_string()),
         file_storage_provider_id: ActiveValue::Set("local".to_string()),
         file_storage_path: ActiveValue::Set("/uploads/test_file1.txt".to_string()),
@@ -174,7 +174,7 @@ async fn test_cleanup_logic_with_file_uploads(pool: Pool<Postgres>) {
     let file_upload2_id = sea_orm::prelude::Uuid::new_v4();
     let file_upload2 = file_uploads::ActiveModel {
         id: ActiveValue::Set(file_upload2_id),
-        owner_user_id: ActiveValue::Set(TEST_USER_ID.to_string()),
+        owner_user_id: ActiveValue::Set("test-user".to_string()),
         filename: ActiveValue::Set("test_file2.pdf".to_string()),
         file_storage_provider_id: ActiveValue::Set("s3".to_string()),
         file_storage_path: ActiveValue::Set("/bucket/test_file2.pdf".to_string()),

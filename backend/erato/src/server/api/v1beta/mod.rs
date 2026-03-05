@@ -934,6 +934,8 @@ pub async fn upload_file(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    app_state.global_policy_engine.invalidate_data().await;
+
     // Return the list of uploaded files
     Ok(Json(FileUploadResponse {
         files: uploaded_files,

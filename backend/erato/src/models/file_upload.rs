@@ -1,9 +1,8 @@
 use crate::db::entity::prelude::*;
-use crate::db::entity::{assistant_file_uploads, chat_file_uploads, file_uploads};
-use crate::models::share_grant;
+use crate::db::entity::{chat_file_uploads, file_uploads};
 use crate::policy::prelude::*;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID, SharepointContext};
-use eyre::{ContextCompat, OptionExt, Report};
+use eyre::{ContextCompat, OptionExt, Report, WrapErr};
 use sea_orm::prelude::*;
 use sea_orm::{ActiveValue, DatabaseConnection, JoinType, QuerySelect};
 use sqlx::types::Uuid;
@@ -165,91 +164,17 @@ pub async fn get_file_upload_by_id(
         .await?
         .wrap_err("File upload not found")?;
 
-    // Prefer direct ownership authorization.
-    if authorize!(
+    policy.rebuild_data_if_needed(conn).await?;
+
+    authorize!(
         policy,
         subject,
         &Resource::FileUpload(file_upload.id.to_string()),
         Action::Read
     )
-    .is_ok()
-    {
-        return Ok(file_upload);
-    }
+    .wrap_err("File upload access denied")?;
 
-    // Find associated chat(s) through the join table
-    let chat_relations = ChatFileUploads::find()
-        .filter(chat_file_uploads::Column::FileUploadId.eq(*file_upload_id))
-        .all(conn)
-        .await?;
-
-    // Try to authorize via chat access
-    if !chat_relations.is_empty() {
-        // Check access to the first associated chat (could be extended to check all)
-        let chat_id = &chat_relations[0].chat_id;
-        let chat_auth_result = authorize!(
-            policy,
-            subject,
-            &Resource::Chat(chat_id.to_string()),
-            Action::Read
-        );
-
-        if chat_auth_result.is_ok() {
-            return Ok(file_upload);
-        }
-    }
-
-    // If no chat access, check if file is associated with an assistant that's shared with the user
-    let assistant_relations = AssistantFileUploads::find()
-        .filter(assistant_file_uploads::Column::FileUploadId.eq(*file_upload_id))
-        .all(conn)
-        .await?;
-
-    if !assistant_relations.is_empty() {
-        // Get the user ID from subject
-        let user_id_str = subject.user_id();
-
-        // Get all assistants shared with this user (including organization group grants)
-        let share_grants = share_grant::get_resources_shared_with_subject_and_groups(
-            conn,
-            user_id_str,
-            subject.organization_user_id(),
-            "assistant",
-            subject.organization_group_ids(),
-        )
-        .await?;
-
-        // Check if any of the assistants associated with this file are shared with the user
-        for assistant_relation in &assistant_relations {
-            let assistant_id_str = assistant_relation.assistant_id.to_string();
-
-            // Check if this assistant is shared with the user
-            let has_viewer_access = share_grants
-                .iter()
-                .any(|grant| grant.resource_id == assistant_id_str && grant.role == "viewer");
-
-            if has_viewer_access {
-                return Ok(file_upload);
-            }
-
-            // Also check if user owns the assistant via authorization
-            let assistant_auth_result = authorize!(
-                policy,
-                subject,
-                &Resource::Assistant(assistant_id_str),
-                Action::Read
-            );
-
-            if assistant_auth_result.is_ok() {
-                return Ok(file_upload);
-            }
-        }
-    }
-
-    // No access via chat or assistant
-    Err(eyre::eyre!(
-        "File upload access denied: not associated with any accessible chat or assistant"
-    ))
+    Ok(file_upload)
 }
 
 /// Information about a file upload, including its download URL
