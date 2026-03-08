@@ -46,6 +46,25 @@ fn build_lorem_word_chunks(total_words: usize) -> Vec<String> {
 pub fn get_default_mocks() -> Vec<Mock> {
     vec![
         Mock {
+            name: "MarkdownFootnotes".to_string(),
+            description:
+                "Returns markdown footnotes to exercise in-message anchor navigation"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "markdown footnotes".to_string(),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "Footnote links should stay inside the current message[^1].\n\n[^1]: This footnote belongs to the current response."
+                        .to_string(),
+                ],
+                delay_ms: 50,
+                ..Default::default()
+            }),
+        },
+        Mock {
             name: "CiteFiles".to_string(),
             description:
                 "Lists erato-file links from all request messages when any user message in the current turn asks to cite files"
