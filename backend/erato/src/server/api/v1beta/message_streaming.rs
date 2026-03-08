@@ -990,7 +990,7 @@ async fn download_and_store_generated_image(
 
     // Generate presigned download URL
     let download_url = file_storage
-        .generate_presigned_download_url(&file_storage_path, None)
+        .generate_presigned_download_url(&file_storage_path, None, Some(&filename))
         .await
         .wrap_err("Failed to generate download URL for generated image")?;
 

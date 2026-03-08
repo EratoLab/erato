@@ -14,6 +14,17 @@ use sqlx::postgres::Postgres;
 use crate::test_app_state;
 use crate::test_utils::{TEST_JWT_TOKEN, TestRequestAuthExt, setup_mock_llm_server};
 
+fn assert_download_url_contains_filename(download_url: &str, filename: &str) {
+    assert!(
+        download_url.contains("response-content-disposition="),
+        "Download URL should override content disposition: {download_url}"
+    );
+    assert!(
+        download_url.contains(&format!("filename%3D%22{filename}%22")),
+        "Download URL should contain the original filename in content disposition: {download_url}"
+    );
+}
+
 /// Test file upload to a chat.
 ///
 /// # Test Categories
@@ -150,6 +161,7 @@ async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
         // Check that the filenames match one of our test files
         let filename = file["filename"].as_str().unwrap();
         assert!(filename == "test1.json" || filename == "test2.json");
+        assert_download_url_contains_filename(download_url, filename);
     }
 }
 
@@ -241,6 +253,7 @@ async fn test_get_file_by_id(pool: Pool<Postgres>) {
         download_url.starts_with("http"),
         "Download URL should be a valid URL"
     );
+    assert_download_url_contains_filename(download_url, filename);
 
     // Test 2: Get file with non-existent ID
     let nonexistent_id = Uuid::new_v4().to_string();

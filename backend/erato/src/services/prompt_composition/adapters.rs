@@ -298,6 +298,7 @@ impl<'a> PromptProvider for AppStatePromptProvider<'a> {
                     .generate_presigned_download_url_with_context(
                         &file.file_storage_path,
                         None,
+                        Some(&file.filename),
                         sharepoint_ctx.as_ref(),
                     )
                     .await;
