@@ -219,6 +219,7 @@ pub async fn get_file_upload_with_url_and_token(
         .generate_presigned_download_url_with_context(
             &file_upload.file_storage_path,
             None,
+            Some(&file_upload.filename),
             sharepoint_ctx.as_ref(),
         )
         .await
@@ -304,6 +305,7 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
             .generate_presigned_download_url_with_context(
                 &upload.file_storage_path,
                 None,
+                Some(&upload.filename),
                 sharepoint_ctx.as_ref(),
             )
             .await

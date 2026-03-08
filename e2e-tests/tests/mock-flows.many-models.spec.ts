@@ -683,6 +683,103 @@ test(
 );
 
 test(
+  "Mock-LLM cite files downloads keep original filenames for assistant and chat uploads",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    const randomSuffix = Math.floor(Math.random() * 16777215)
+      .toString(16)
+      .padStart(6, "0");
+    const assistantName = `Mock Cite Files Download Assistant-${randomSuffix}`;
+
+    const assistantDocxPath = path.join(
+      __dirname,
+      "../test-files/minimal_libreoffice.docx",
+    );
+    const chatDocxSourcePath = path.join(
+      __dirname,
+      "../test-files/Acme_Inc_Organizational_Data.docx",
+    );
+    const chatDocxBuffer = fs.readFileSync(chatDocxSourcePath);
+
+    await page.goto("/assistants/new");
+    await expect(
+      page.getByRole("heading", { name: /create assistant/i }),
+    ).toBeVisible();
+
+    await page.getByLabel(/name/i).fill(assistantName);
+    await page
+      .getByLabel(/system prompt/i)
+      .fill("You are a helpful assistant that cites files.");
+
+    const assistantFileInput = page.locator('input[type="file"]');
+    await assistantFileInput.setInputFiles(assistantDocxPath);
+    await expect(page.getByText(/minimal.*libreoffice.*docx/i)).toBeVisible({
+      timeout: 10000,
+    });
+
+    await page.getByRole("button", { name: /create assistant/i }).click();
+    await expect(page.getByText(/assistant created successfully/i)).toBeVisible(
+      {
+        timeout: 10000,
+      },
+    );
+    await page.waitForURL("/assistants", { timeout: 10000 });
+
+    const assistantButton = page.getByRole("button", {
+      name: new RegExp(assistantName),
+    });
+    await expect(assistantButton).toBeVisible();
+    await assistantButton.click();
+
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    await uploadFileInChat(page, {
+      name: "Acme_Inc_Organizational_Data.docx",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      buffer: chatDocxBuffer,
+    });
+    await expect(page.getByText(/Acme_Inc_Or/i)).toBeVisible({
+      timeout: 10000,
+    });
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+    await textbox.fill("cite files");
+    await textbox.press("Enter");
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 30000,
+    });
+
+    const latestAssistantMessage = page.getByTestId("message-assistant").last();
+    await expect(latestAssistantMessage).toBeVisible();
+
+    const citationLinks = latestAssistantMessage.getByRole("link", {
+      name: "Link",
+    });
+    await expect(citationLinks).toHaveCount(2);
+
+    const downloadedFilenames: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const downloadPromise = page.waitForEvent("download");
+      await citationLinks.nth(i).click();
+      const download = await downloadPromise;
+      downloadedFilenames.push(download.suggestedFilename());
+    }
+
+    expect(downloadedFilenames.sort()).toEqual(
+      [
+        "Acme_Inc_Organizational_Data.docx",
+        "minimal_libreoffice.docx",
+      ].sort(),
+    );
+  },
+);
+
+test(
   "Mock-LLM editing a file-based message preserves the attachment context",
   { tag: TAG_CI },
   async ({ page }) => {

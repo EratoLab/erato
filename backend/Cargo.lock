@@ -2069,6 +2069,7 @@ dependencies = [
  "opentelemetry-semantic-conventions 0.29.0",
  "opentelemetry_sdk",
  "ordered-multimap",
+ "percent-encoding",
  "ractor",
  "ractor_actors",
  "regorus",

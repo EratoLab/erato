@@ -830,6 +830,7 @@ pub async fn regenerate_image_urls_in_content(
                             .generate_presigned_download_url_with_context(
                                 &file.file_storage_path,
                                 None,
+                                Some(&file.filename),
                                 None, // No Sharepoint context for now (image generation uses default provider)
                             )
                             .await

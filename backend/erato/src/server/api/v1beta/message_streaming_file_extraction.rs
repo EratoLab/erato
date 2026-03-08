@@ -318,7 +318,7 @@ async fn process_mcp_file_outputs(
         .await?;
 
         let download_url = file_storage
-            .generate_presigned_download_url(&file_storage_path, None)
+            .generate_presigned_download_url(&file_storage_path, None, Some(&filename))
             .await
             .wrap_err("Failed to generate download URL for MCP generated image")?;
 

@@ -902,7 +902,7 @@ pub async fn upload_file(
 
         // Generate a pre-signed download URL
         let download_url = file_storage_provider
-            .generate_presigned_download_url(&file_upload.file_storage_path, None)
+            .generate_presigned_download_url(&file_upload.file_storage_path, None, Some(&filename))
             .await
             .map_err(|e| {
                 tracing::error!("Failed to generate download URL: {}", e);

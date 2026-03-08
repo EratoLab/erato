@@ -5,8 +5,17 @@ use crate::config::{
 use eyre::{Report, WrapErr};
 use graph_rs_sdk::GraphClient;
 use opendal::{Operator, Reader, Writer};
+use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use std::time::Duration;
 use tracing::instrument;
+
+const CONTENT_DISPOSITION_FILENAME_ENCODE_SET: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'%')
+    .add(b'\'')
+    .add(b';')
+    .add(b'\\');
 
 /// File storage backend supporting multiple providers.
 ///
@@ -126,11 +135,12 @@ impl FileStorage {
         &self,
         path: &str,
         expires_in: Option<Duration>,
+        download_filename: Option<&str>,
     ) -> Result<String, Report> {
         match self {
             Self::OpenDal(storage) => {
                 storage
-                    .generate_presigned_download_url(path, expires_in)
+                    .generate_presigned_download_url(path, expires_in, download_filename)
                     .await
             }
             Self::Sharepoint(_) => Err(eyre::eyre!(
@@ -147,12 +157,13 @@ impl FileStorage {
         &self,
         path: &str,
         expires_in: Option<Duration>,
+        download_filename: Option<&str>,
         context: Option<&SharepointContext<'_>>,
     ) -> Result<String, Report> {
         match self {
             Self::OpenDal(storage) => {
                 storage
-                    .generate_presigned_download_url(path, expires_in)
+                    .generate_presigned_download_url(path, expires_in, download_filename)
                     .await
             }
             Self::Sharepoint(storage) => {
@@ -255,12 +266,39 @@ impl OpenDalStorage {
         &self,
         path: &str,
         expires_in: Option<Duration>,
+        download_filename: Option<&str>,
     ) -> Result<String, Report> {
         let duration = expires_in.unwrap_or_else(|| Duration::from_secs(3600)); // Default: 1 hour
 
-        let url = self.opendal_operator.presign_read(path, duration).await?;
+        let mut presign = self.opendal_operator.presign_read_with(path, duration);
+        let content_disposition = download_filename.map(build_attachment_content_disposition);
+
+        if let Some(content_disposition) = content_disposition.as_deref() {
+            presign = presign.override_content_disposition(content_disposition);
+        }
+
+        let url = presign.await?;
         Ok(url.uri().to_string())
     }
+}
+
+fn build_attachment_content_disposition(filename: &str) -> String {
+    let escaped_ascii_filename = filename
+        .chars()
+        .map(|ch| match ch {
+            '"' => "\\\"".to_string(),
+            '\\' => "\\\\".to_string(),
+            ch if ch.is_ascii() && !ch.is_ascii_control() => ch.to_string(),
+            _ => "_".to_string(),
+        })
+        .collect::<String>();
+    let utf8_filename =
+        utf8_percent_encode(filename, CONTENT_DISPOSITION_FILENAME_ENCODE_SET).to_string();
+
+    format!(
+        "attachment; filename=\"{}\"; filename*=UTF-8''{}",
+        escaped_ascii_filename, utf8_filename
+    )
 }
 
 impl SharepointStorage {
@@ -390,4 +428,25 @@ pub fn is_missing_permissions_error(error: &Report) -> bool {
         || msg.contains("access denied")
         || msg.contains("insufficient")
         || msg.contains("permission")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_attachment_content_disposition;
+
+    #[test]
+    fn content_disposition_uses_original_filename() {
+        assert_eq!(
+            build_attachment_content_disposition("report final.pdf"),
+            "attachment; filename=\"report final.pdf\"; filename*=UTF-8''report%20final.pdf"
+        );
+    }
+
+    #[test]
+    fn content_disposition_escapes_problematic_ascii_and_preserves_utf8() {
+        assert_eq!(
+            build_attachment_content_disposition("r\"ep\\ort-ä.pdf"),
+            "attachment; filename=\"r\\\"ep\\\\ort-_.pdf\"; filename*=UTF-8''r%22ep%5Cort-%C3%A4.pdf"
+        );
+    }
 }
