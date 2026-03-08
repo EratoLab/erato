@@ -172,6 +172,7 @@ export const ChatMessage = memo(function ChatMessage({
 
           <MessageContent
             content={message.content}
+            messageId={message.id}
             fileDownloadUrls={fileDownloadUrls}
             isStreaming={!!message.loading && message.loading.state !== "done"}
             showRaw={showRawMarkdown}

@@ -20,6 +20,7 @@ import type { Components } from "react-markdown";
 
 interface MessageContentProps {
   content: ContentPart[];
+  messageId?: string;
   isStreaming?: boolean;
   showRaw?: boolean;
   onImageClick?: (image: UiImagePart) => void;
@@ -44,8 +45,38 @@ const autolinkEratoFiles = (text: string): string => {
   });
 };
 
+const FOOTNOTE_DEFINITION_ID_REGEX = /^(?:user-content-)?fn-(.+)$/;
+const FOOTNOTE_REFERENCE_ID_REGEX = /^(?:user-content-)?fnref-(.+)$/;
+
+const rewriteFootnoteValue = (
+  value: string | undefined,
+  messageId: string | undefined,
+): string | undefined => {
+  if (!value || !messageId) {
+    return value;
+  }
+
+  const isHashLink = value.startsWith("#");
+  const rawValue = isHashLink ? value.slice(1) : value;
+
+  const definitionMatch = rawValue.match(FOOTNOTE_DEFINITION_ID_REGEX);
+  if (definitionMatch) {
+    const scopedId = `message-${messageId}-fn-${definitionMatch[1]}`;
+    return isHashLink ? `#${scopedId}` : scopedId;
+  }
+
+  const referenceMatch = rawValue.match(FOOTNOTE_REFERENCE_ID_REGEX);
+  if (referenceMatch) {
+    const scopedId = `message-${messageId}-fnref-${referenceMatch[1]}`;
+    return isHashLink ? `#${scopedId}` : scopedId;
+  }
+
+  return value;
+};
+
 export const MessageContent = memo(function MessageContent({
   content,
+  messageId,
   isStreaming = false,
   showRaw = false,
   onImageClick,
@@ -75,8 +106,6 @@ export const MessageContent = memo(function MessageContent({
           const urlObj = new URL(url);
           const fileId =
             urlObj.hostname || urlObj.pathname.replace(/^\/\//, "");
-          console.log({ fileId });
-          console.log({ fileDownloadUrls });
 
           // Check for page parameter in both query string (?page=N) and hash fragment (#page=N)
           let pageParam = urlObj.searchParams.get("page");
@@ -157,12 +186,17 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Ensure links open in new tab
-    a({ href, children, ...props }) {
+    a({ href, id, children, ...props }) {
+      const rewrittenHref = rewriteFootnoteValue(href, messageId);
+      const rewrittenId = rewriteFootnoteValue(id, messageId);
+      const isHashLink = rewrittenHref?.startsWith("#") ?? false;
+
       return (
         <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={rewrittenHref}
+          id={rewrittenId}
+          target={isHashLink ? undefined : "_blank"}
+          rel={isHashLink ? undefined : "noopener noreferrer"}
           className="text-theme-fg-accent underline hover:opacity-80"
           {...props}
         >
@@ -259,9 +293,13 @@ export const MessageContent = memo(function MessageContent({
         </ol>
       );
     },
-    li({ children, ...props }) {
+    li({ children, id, ...props }) {
       return (
-        <li className="my-1 text-theme-fg-primary" {...props}>
+        <li
+          className="my-1 text-theme-fg-primary"
+          id={rewriteFootnoteValue(id, messageId)}
+          {...props}
+        >
           {children}
         </li>
       );

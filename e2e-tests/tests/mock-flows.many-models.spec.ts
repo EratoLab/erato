@@ -489,6 +489,101 @@ test(
 );
 
 test(
+  "Mock-LLM markdown footnotes stay inside the correct message without reloading",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    await page.evaluate(() => {
+      sessionStorage.setItem("__footnoteBeforeUnloadCount", "0");
+      window.addEventListener("beforeunload", () => {
+        const currentCount = Number(
+          sessionStorage.getItem("__footnoteBeforeUnloadCount") ?? "0",
+        );
+        sessionStorage.setItem(
+          "__footnoteBeforeUnloadCount",
+          String(currentCount + 1),
+        );
+      });
+    });
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+
+    for (let i = 0; i < 2; i++) {
+      await textbox.fill("markdown footnotes");
+      await textbox.press("Enter");
+
+      await chatIsReadyToChat(page, {
+        loadingTimeoutMs: 20000,
+      });
+      await expect(page.getByTestId("message-assistant").last()).toBeVisible();
+    }
+
+    const footnoteMessages = page
+      .getByTestId("message-assistant")
+      .filter({ hasText: "Footnote links should stay inside the current message" });
+    await expect(footnoteMessages).toHaveCount(2);
+
+    const firstMessage = footnoteMessages.nth(0);
+    const secondMessage = footnoteMessages.nth(1);
+    const firstMessageId = await firstMessage.getAttribute("data-message-id");
+    const secondMessageId = await secondMessage.getAttribute("data-message-id");
+
+    expect(firstMessageId).toBeTruthy();
+    expect(secondMessageId).toBeTruthy();
+    expect(firstMessageId).not.toBe(secondMessageId);
+
+    const firstFootnoteRef = firstMessage.locator('a[data-footnote-ref="true"]');
+    const secondFootnoteRef = secondMessage.locator('a[data-footnote-ref="true"]');
+
+    await expect(firstFootnoteRef).toHaveAttribute(
+      "href",
+      `#message-${firstMessageId}-fn-1`,
+    );
+    await expect(secondFootnoteRef).toHaveAttribute(
+      "href",
+      `#message-${secondMessageId}-fn-1`,
+    );
+
+    let popupCount = 0;
+    const trackPopup = () => {
+      popupCount += 1;
+    };
+    page.context().on("page", trackPopup);
+
+    await secondFootnoteRef.click();
+
+    await expect
+      .poll(async () => page.evaluate(() => window.location.hash))
+      .toBe(`#message-${secondMessageId}-fn-1`);
+
+    await expect(
+      secondMessage.locator(`[id="message-${secondMessageId}-fn-1"]`),
+    ).toBeVisible();
+
+    const secondBackref = secondMessage.locator(
+      `[href="#message-${secondMessageId}-fnref-1"]`,
+    );
+    await expect(secondBackref).toHaveCount(1);
+    await expect(
+      secondMessage.locator(`[id="message-${secondMessageId}-fnref-1"]`),
+    ).toBeVisible();
+
+    expect(
+      await page.evaluate(() =>
+        sessionStorage.getItem("__footnoteBeforeUnloadCount"),
+      ),
+    ).toBe("0");
+    expect(popupCount).toBe(0);
+
+    page.context().off("page", trackPopup);
+  },
+);
+
+test(
   "Mock-LLM cite files links open files in a new tab for assistant and chat uploads",
   { tag: TAG_CI },
   async ({ page }) => {
