@@ -127,19 +127,23 @@ fn report_cache_metrics(cache_name: &str, metrics: CacheMetrics) {
     gauge!("erato_cache_max_size_bytes", "cache" => cache_name.to_string()).set(metrics.max as f64);
     gauge!("erato_cache_used_size_bytes", "cache" => cache_name.to_string())
         .set(metrics.used as f64);
-    gauge!("erato_cache_entry_count", "cache" => cache_name.to_string())
+    gauge!("erato_cache_entries", "cache" => cache_name.to_string())
         .set(metrics.entry_count as f64);
     gauge!("erato_cache_time_to_live_seconds", "cache" => cache_name.to_string())
         .set(metrics.time_to_live_seconds);
     gauge!("erato_cache_time_to_idle_seconds", "cache" => cache_name.to_string())
         .set(metrics.time_to_idle_seconds);
 
-    let fill_ratio_percent = if metrics.max == 0 {
+    gauge!("erato_cache_fill_ratio", "cache" => cache_name.to_string())
+        .set(calculate_fill_ratio(metrics.used, metrics.max));
+}
+
+fn calculate_fill_ratio(used: u64, max: u64) -> f64 {
+    if max == 0 {
         0.0
     } else {
-        (metrics.used as f64 / metrics.max as f64) * 100.0
-    };
-    gauge!("erato_cache_fill_ratio", "cache" => cache_name.to_string()).set(fill_ratio_percent);
+        used as f64 / max as f64
+    }
 }
 
 fn report_chat_provider_info_metrics(config: &AppConfig) {
@@ -181,11 +185,11 @@ fn describe_cache_metrics() {
     );
     describe_gauge!(
         "erato_cache_fill_ratio",
-        Unit::Percent,
-        "Current AppState cache utilization as a percentage of max capacity."
+        Unit::Count,
+        "Current AppState cache utilization ratio in the range 0..1."
     );
     describe_gauge!(
-        "erato_cache_entry_count",
+        "erato_cache_entries",
         Unit::Count,
         "Current number of entries in each AppState cache."
     );
@@ -199,4 +203,19 @@ fn describe_cache_metrics() {
         Unit::Seconds,
         "Configured time-to-idle for each AppState cache policy in seconds (0 means disabled)."
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::calculate_fill_ratio;
+
+    #[test]
+    fn calculate_fill_ratio_returns_zero_when_max_is_zero() {
+        assert_eq!(calculate_fill_ratio(50, 0), 0.0);
+    }
+
+    #[test]
+    fn calculate_fill_ratio_returns_unit_interval_ratio() {
+        assert_eq!(calculate_fill_ratio(25, 100), 0.25);
+    }
 }

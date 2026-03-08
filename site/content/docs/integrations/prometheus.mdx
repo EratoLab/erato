@@ -29,3 +29,41 @@ When enabled, Erato starts a dedicated listener and prints the metrics URL at st
 `integrations.prometheus.port` must be different from `http_port`.
 
 For all configuration fields, see [Configuration Reference](../configuration#integrationsprometheus).
+
+## Exposed metrics
+
+Erato currently exposes these application-specific metrics:
+
+### Info metrics
+
+For background on `_info` metrics, see [Prometheus Info Metrics](https://oneuptime.com/blog/post/2026-01-30-prometheus-info-metrics/view).
+
+- `erato_info` (gauge)
+  - Always `1`
+  - Labels: `version`, `environment`, `service`, `deployment_version`
+- `erato_chat_provider_info` (gauge)
+  - Always `1` per configured chat provider
+  - Labels: `chat_provider_id`, `provider_kind`, `model_name`
+
+### Cache metrics
+
+- `erato_cache_max_size_bytes` (gauge)
+  - Maximum configured cache capacity in bytes
+  - Labels: `cache`
+- `erato_cache_used_size_bytes` (gauge)
+  - Current weighted cache usage in bytes
+  - Labels: `cache`
+- `erato_cache_fill_ratio` (gauge)
+  - Current cache utilization ratio in the range `0..1`
+  - Labels: `cache`
+- `erato_cache_entries` (gauge)
+  - Current number of entries in the cache
+  - Labels: `cache`
+- `erato_cache_time_to_live_seconds` (gauge)
+  - Configured cache TTL in seconds, or `0` when disabled
+  - Labels: `cache`
+- `erato_cache_time_to_idle_seconds` (gauge)
+  - Configured cache TTI in seconds, or `0` when disabled
+  - Labels: `cache`
+
+Erato also exposes Tokio runtime metrics via [`tokio-metrics`](https://github.com/tokio-rs/tokio-metrics), but those are produced by the upstream integration rather than defined directly by Erato, so they are not enumerated here.
