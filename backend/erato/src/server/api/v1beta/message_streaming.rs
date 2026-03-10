@@ -2202,14 +2202,25 @@ async fn get_assistant_files_for_generation(
                 .ok_or_eyre("File storage provider not found")?;
 
             // Get file contents using cache
-            let text = file_processing_cached::get_file_contents_cached(
+            let file_contents = file_processing_cached::get_file_cached(
                 app_state,
                 &file_id,
                 file_storage,
                 &file_storage_path,
+                &filename,
                 sharepoint_ctx_ref,
             )
             .await?;
+
+            let text = match file_contents.content {
+                FileContent::Text(text) => text,
+                FileContent::Image { .. } => {
+                    return Err(eyre::eyre!(
+                        "Assistant file {} was expected to be text but resolved as image",
+                        file_id
+                    ));
+                }
+            };
 
             tracing::debug!(
                 "Successfully processed assistant file {}: {} (text length: {})",

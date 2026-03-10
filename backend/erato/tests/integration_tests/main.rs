@@ -10,7 +10,7 @@ use erato::config::{AppConfig, LangfuseConfig};
 use erato::services::background_tasks::BackgroundTaskManager;
 use erato::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use erato::services::langfuse::LangfuseClient;
-use erato::state::{AppState, GlobalPolicyEngine};
+use erato::state::{AppState, FileCacheKey, GlobalPolicyEngine};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
 use std::collections::HashMap;
@@ -120,7 +120,7 @@ async fn test_app_state_internal(
 
     // Initialize file contents cache with MB-based weigher
     let file_contents_cache = moka::future::Cache::builder()
-        .weigher(|_key: &sea_orm::prelude::Uuid, value: &String| -> u32 {
+        .weigher(|_key: &FileCacheKey, value: &String| -> u32 {
             // Weight by string byte length
             value.len().try_into().unwrap_or(u32::MAX)
         })
@@ -129,7 +129,7 @@ async fn test_app_state_internal(
 
     // Initialize file bytes cache with MB-based weigher
     let file_bytes_cache = moka::future::Cache::builder()
-        .weigher(|_key: &sea_orm::prelude::Uuid, value: &Vec<u8>| -> u32 {
+        .weigher(|_key: &FileCacheKey, value: &Vec<u8>| -> u32 {
             // Weight by byte vector length
             value.len().try_into().unwrap_or(u32::MAX)
         })
