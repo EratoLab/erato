@@ -6,7 +6,7 @@ use crate::server::api::v1beta::message_streaming::{
 };
 use crate::services::file_parsing::parse_file;
 use crate::services::file_storage::{FileStorage, SharepointContext};
-use crate::state::AppState;
+use crate::state::{AppState, FileCacheKey};
 use eyre::{ContextCompat, OptionExt, Report, WrapErr};
 use sea_orm::EntityTrait;
 use sea_orm::prelude::Uuid;
@@ -49,13 +49,13 @@ fn get_mime_type_from_extension(filename: &str) -> String {
 #[instrument(
     skip_all,
     fields(
-        file_id = %file_id,
+        file_id = %cache_key.file_id,
         file_bytes_length = tracing::field::Empty,
     )
 )]
 async fn get_file_bytes_cached<'a>(
     app_state: &AppState,
-    file_id: &Uuid,
+    cache_key: &FileCacheKey,
     file_storage: &FileStorage,
     file_storage_path: &str,
     sharepoint_ctx: Option<&SharepointContext<'a>>,
@@ -64,8 +64,12 @@ async fn get_file_bytes_cached<'a>(
 
     let result = app_state
         .file_bytes_cache
-        .try_get_with_by_ref(file_id, async {
-            tracing::debug!(file_id = %file_id, "File bytes cache miss - fetching");
+        .try_get_with_by_ref(cache_key, async {
+            tracing::debug!(
+                file_id = %cache_key.file_id,
+                etag = ?cache_key.etag,
+                "File bytes cache miss - fetching"
+            );
             let _permit = app_state
                 .file_processing_semaphore
                 .acquire()
@@ -82,7 +86,8 @@ async fn get_file_bytes_cached<'a>(
 
             span.record("file_bytes_length", file_bytes.len());
             tracing::debug!(
-                file_id = %file_id,
+                file_id = %cache_key.file_id,
+                etag = ?cache_key.etag,
                 bytes_len = file_bytes.len(),
                 "File bytes read from storage and cached"
             );
@@ -113,12 +118,12 @@ async fn get_file_bytes_cached<'a>(
 )]
 pub async fn get_file_contents_cached<'a>(
     app_state: &AppState,
-    file_id: &Uuid,
+    cache_key: &FileCacheKey,
     file_storage: &FileStorage,
     file_storage_path: &str,
     sharepoint_ctx: Option<&SharepointContext<'a>>,
 ) -> Result<String, Report> {
-    let file_id_str = file_id.to_string();
+    let file_id_str = cache_key.file_id.to_string();
     let span = tracing::Span::current();
     span.record("file_id", &file_id_str);
     span.record("file_storage_path", file_storage_path);
@@ -126,13 +131,17 @@ pub async fn get_file_contents_cached<'a>(
     // First check the parsed content cache
     let result = app_state
         .file_contents_cache
-        .try_get_with_by_ref(file_id, async {
-            tracing::debug!(file_id = %file_id, "Parsed content cache miss");
+        .try_get_with_by_ref(cache_key, async {
+            tracing::debug!(
+                file_id = %cache_key.file_id,
+                etag = ?cache_key.etag,
+                "Parsed content cache miss"
+            );
 
             // Get raw bytes (might be cached at byte level)
             let file_bytes = get_file_bytes_cached(
                 app_state,
-                file_id,
+                cache_key,
                 file_storage,
                 file_storage_path,
                 sharepoint_ctx,
@@ -151,7 +160,8 @@ pub async fn get_file_contents_cached<'a>(
             let content = remove_null_characters(&parsed_content);
 
             tracing::debug!(
-                file_id = %file_id,
+                file_id = %cache_key.file_id,
+                etag = ?cache_key.etag,
                 content_len = content.len(),
                 "File parsed and cached"
             );
@@ -195,6 +205,9 @@ pub fn get_file_cached<'a>(
         let span = tracing::Span::current();
         span.record("filename", filename);
 
+        let cache_key =
+            get_file_cache_key(file_storage, file_id, file_storage_path, sharepoint_ctx).await?;
+
         let is_image = is_image_file(filename);
         span.record("file_type", if is_image { "image" } else { "text" });
 
@@ -208,7 +221,7 @@ pub fn get_file_cached<'a>(
 
             let raw_bytes = get_file_bytes_cached(
                 app_state,
-                file_id,
+                &cache_key,
                 file_storage,
                 file_storage_path,
                 sharepoint_ctx,
@@ -243,7 +256,7 @@ pub fn get_file_cached<'a>(
 
             let text = get_file_contents_cached(
                 app_state,
-                file_id,
+                &cache_key,
                 file_storage,
                 file_storage_path,
                 sharepoint_ctx,
@@ -263,6 +276,27 @@ pub fn get_file_cached<'a>(
                 content: FileContent::Text(text),
             })
         }
+    })
+}
+
+async fn get_file_cache_key<'a>(
+    file_storage: &FileStorage,
+    file_id: &Uuid,
+    file_storage_path: &str,
+    sharepoint_ctx: Option<&SharepointContext<'a>>,
+) -> Result<FileCacheKey, Report> {
+    let etag = if file_storage.is_sharepoint() {
+        file_storage
+            .get_sharepoint_file_metadata_with_context(file_storage_path, sharepoint_ctx)
+            .await?
+            .etag
+    } else {
+        None
+    };
+
+    Ok(FileCacheKey {
+        file_id: *file_id,
+        etag,
     })
 }
 

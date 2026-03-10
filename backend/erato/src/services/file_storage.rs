@@ -50,6 +50,7 @@ pub struct SharepointContext<'a> {
 #[derive(Debug, Clone)]
 pub struct SharepointFileMetadata {
     pub download_url: String,
+    pub etag: Option<String>,
 }
 
 impl FileStorage {
@@ -417,6 +418,14 @@ impl SharepointStorage {
             .await
             .wrap_err("Failed to parse MS Graph API response")?;
 
+        Self::parse_file_metadata_response(&item, drive_id, item_id)
+    }
+
+    fn parse_file_metadata_response(
+        item: &serde_json::Value,
+        drive_id: &str,
+        item_id: &str,
+    ) -> Result<SharepointFileMetadata, Report> {
         // Extract the download URL from the response
         // The download URL is in @microsoft.graph.downloadUrl
         let download_url = item
@@ -430,8 +439,15 @@ impl SharepointStorage {
                 )
             })?;
 
+        let etag = item
+            .get("eTag")
+            .or_else(|| item.get("etag"))
+            .and_then(|v| v.as_str())
+            .map(ToOwned::to_owned);
+
         Ok(SharepointFileMetadata {
             download_url: download_url.to_string(),
+            etag,
         })
     }
 }
@@ -460,7 +476,9 @@ pub fn is_missing_permissions_error(error: &Report) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::SharepointStorage;
     use super::build_attachment_content_disposition;
+    use serde_json::json;
 
     #[test]
     fn content_disposition_uses_original_filename() {
@@ -476,5 +494,21 @@ mod tests {
             build_attachment_content_disposition("r\"ep\\ort-ä.pdf"),
             "attachment; filename=\"r\\\"ep\\\\ort-_.pdf\"; filename*=UTF-8''r%22ep%5Cort-%C3%A4.pdf"
         );
+    }
+
+    #[test]
+    fn parse_sharepoint_metadata_extracts_etag() {
+        let metadata = SharepointStorage::parse_file_metadata_response(
+            &json!({
+                "@microsoft.graph.downloadUrl": "https://example.test/download",
+                "eTag": "\"abc123\""
+            }),
+            "drive",
+            "item",
+        )
+        .unwrap();
+
+        assert_eq!(metadata.download_url, "https://example.test/download");
+        assert_eq!(metadata.etag.as_deref(), Some("\"abc123\""));
     }
 }

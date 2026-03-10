@@ -16,6 +16,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use sea_orm::prelude::Uuid;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -97,10 +98,10 @@ pub struct AppState {
     pub global_policy_engine: GlobalPolicyEngine,
     pub background_tasks: BackgroundTaskManager,
     pub system_prompt_renderer: SystemPromptRenderer,
-    /// Cache mapping file_id -> raw file bytes (for both text and images)
-    pub file_bytes_cache: Cache<Uuid, Vec<u8>>,
-    /// Cache mapping file_id -> parsed file contents (text files only)
-    pub file_contents_cache: Cache<Uuid, String>,
+    /// Cache mapping file identity -> raw file bytes (for both text and images)
+    pub file_bytes_cache: Cache<FileCacheKey, Vec<u8>>,
+    /// Cache mapping file identity -> parsed file contents (text files only)
+    pub file_contents_cache: Cache<FileCacheKey, String>,
     /// Cache mapping file_contents -> token count
     pub token_count_cache: Cache<String, usize>,
     /// Global limiter for file processing work on cache misses.
@@ -109,6 +110,12 @@ pub struct AppState {
     pub file_processing_pipeline_semaphore: Arc<Semaphore>,
     /// File processor for extracting text from files
     pub file_processor: Arc<dyn crate::services::file_processor::FileProcessor>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct FileCacheKey {
+    pub file_id: Uuid,
+    pub etag: Option<String>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -170,7 +177,7 @@ impl AppState {
 
         // Initialize file bytes cache with MB-based weigher
         let file_bytes_cache = Cache::builder()
-            .weigher(|_key: &Uuid, value: &Vec<u8>| -> u32 {
+            .weigher(|_key: &FileCacheKey, value: &Vec<u8>| -> u32 {
                 // Weight by byte vector length
                 value.len().try_into().unwrap_or(u32::MAX)
             })
@@ -180,7 +187,7 @@ impl AppState {
 
         // Initialize file contents cache with MB-based weigher
         let file_contents_cache = Cache::builder()
-            .weigher(|_key: &Uuid, value: &String| -> u32 {
+            .weigher(|_key: &FileCacheKey, value: &String| -> u32 {
                 // Weight by string byte length
                 value.len().try_into().unwrap_or(u32::MAX)
             })
