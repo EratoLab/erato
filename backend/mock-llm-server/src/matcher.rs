@@ -339,7 +339,7 @@ impl Matcher {
                 } else {
                     let list = links
                         .iter()
-                        .map(|link| format!("- {}", link))
+                        .map(|link| format!("- {}#page=4", link))
                         .collect::<Vec<_>>()
                         .join("\n");
                     format!("Found these file links from request messages:\n{}", list)

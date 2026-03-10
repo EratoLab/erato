@@ -36,26 +36,47 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
   const isImage = imageExtensions.includes(extension);
   const isPdf = extension === "pdf";
-  const canPreview = isImage || isPdf;
+  const previewUrl = file.download_url;
+  const canPreview = (isImage || isPdf) && Boolean(previewUrl);
+  const actionButtons = (
+    <div className="mt-4 flex flex-wrap justify-center gap-3">
+      {file.download_url && (
+        <Button
+          // eslint-disable-next-line lingui/no-unlocalized-strings
+          onClick={() => window.open(file.download_url, "_blank")}
+          variant="primary"
+        >
+          {t`Download File`}
+        </Button>
+      )}
+    </div>
+  );
 
   const renderPreview = () => {
-    if (isImage && file.download_url) {
+    if (isImage && previewUrl) {
       return (
-        <img
-          src={file.download_url}
-          alt={`${t`Preview of`} ${file.filename}`}
-          className="mx-auto max-h-[75vh] max-w-full object-contain"
-        />
+        <>
+          <img
+            src={previewUrl}
+            alt={`${t`Preview of`} ${file.filename}`}
+            className="mx-auto max-h-[75vh] max-w-full object-contain"
+          />
+          {actionButtons}
+        </>
       );
     }
 
-    if (isPdf && file.download_url) {
+    if (isPdf && previewUrl) {
       return (
-        <iframe
-          src={file.download_url}
-          title={`${t`Preview of`} ${file.filename}`}
-          className="h-[75vh] w-full border-0"
-        />
+        <>
+          <iframe
+            src={previewUrl}
+            title={`${t`Preview of`} ${file.filename}`}
+            data-testid="file-preview-pdf"
+            className="h-[75vh] w-full border-0"
+          />
+          {actionButtons}
+        </>
       );
     }
 
@@ -64,15 +85,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
         <Alert type="info" className="mb-4">
           {t`Preview is not available for this file type.`}
         </Alert>
-        {file.download_url && (
-          <Button
-            // eslint-disable-next-line lingui/no-unlocalized-strings
-            onClick={() => window.open(file.download_url, "_blank")}
-            variant="primary"
-          >
-            {t`Download File`}
-          </Button>
-        )}
+        {actionButtons}
       </div>
     );
   };

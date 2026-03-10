@@ -60,8 +60,8 @@ export interface ChatMessageProps {
   userProfile?: UserProfile;
   onFilePreview?: (file: FileUploadItem) => void;
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
-  /** Map of all file IDs to download URLs from the entire conversation */
-  allFileDownloadUrls?: Record<string, string>;
+  /** Map of all files from the entire conversation keyed by file ID */
+  allFilesById?: Record<string, FileUploadItem>;
 }
 
 export const ChatMessage = memo(function ChatMessage({
@@ -76,7 +76,7 @@ export const ChatMessage = memo(function ChatMessage({
   onMessageAction,
   onFilePreview,
   onViewFeedback,
-  allFileDownloadUrls = {},
+  allFilesById = {},
 }: ChatMessageProps) {
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
@@ -110,9 +110,9 @@ export const ChatMessage = memo(function ChatMessage({
   // Use custom hook for image lightbox state management
   const lightbox = useImageLightbox();
 
-  // Use the provided allFileDownloadUrls from parent
+  // Use the provided allFilesById from parent
   // This allows erato-file:// links to reference files from any message in the conversation
-  const fileDownloadUrls = allFileDownloadUrls;
+  const filesById = allFilesById;
 
   // Content validation
   if (message.content.length === 0 && !message.loading && !message.error) {
@@ -173,10 +173,11 @@ export const ChatMessage = memo(function ChatMessage({
           <MessageContent
             content={message.content}
             messageId={message.id}
-            fileDownloadUrls={fileDownloadUrls}
+            filesById={filesById}
             isStreaming={!!message.loading && message.loading.state !== "done"}
             showRaw={showRawMarkdown}
             onImageClick={lightbox.openLightbox}
+            onFileLinkPreview={onFilePreview}
           />
 
           {/* Display attached files if any */}

@@ -47,6 +47,11 @@ pub struct SharepointContext<'a> {
     pub access_token: &'a str,
 }
 
+#[derive(Debug, Clone)]
+pub struct SharepointFileMetadata {
+    pub download_url: String,
+}
+
 impl FileStorage {
     /// Create a FileStorage from configuration (for OpenDAL-based providers).
     pub fn from_config(config: &FileStorageProviderConfig) -> Result<Self, Report> {
@@ -172,6 +177,24 @@ impl FileStorage {
                 })?;
                 storage.generate_download_url(path, ctx).await
             }
+        }
+    }
+
+    pub async fn get_sharepoint_file_metadata_with_context(
+        &self,
+        path: &str,
+        context: Option<&SharepointContext<'_>>,
+    ) -> Result<SharepointFileMetadata, Report> {
+        match self {
+            Self::Sharepoint(storage) => {
+                let ctx = context.ok_or_else(|| {
+                    eyre::eyre!("Sharepoint storage requires an access token context")
+                })?;
+                storage.get_file_metadata(path, ctx).await
+            }
+            Self::OpenDal(_) => Err(eyre::eyre!(
+                "Sharepoint file metadata is only available for Sharepoint storage"
+            )),
         }
     }
 }
@@ -327,16 +350,10 @@ impl SharepointStorage {
         path: &str,
         context: &SharepointContext<'_>,
     ) -> Result<Vec<u8>, Report> {
-        let (drive_id, item_id) = Self::parse_path(path)?;
-        let client = Self::create_graph_client(context.access_token);
-
-        // Get the download URL for the file
-        let download_url = self
-            .get_download_url_internal(&client, drive_id, item_id)
-            .await?;
+        let metadata = self.get_file_metadata(path, context).await?;
 
         // Download the file content
-        let response = reqwest::get(&download_url)
+        let response = reqwest::get(&metadata.download_url)
             .await
             .wrap_err("Failed to download file from Sharepoint")?;
 
@@ -363,20 +380,29 @@ impl SharepointStorage {
         path: &str,
         context: &SharepointContext<'_>,
     ) -> Result<String, Report> {
+        Ok(self.get_file_metadata(path, context).await?.download_url)
+    }
+
+    pub async fn get_file_metadata(
+        &self,
+        path: &str,
+        context: &SharepointContext<'_>,
+    ) -> Result<SharepointFileMetadata, Report> {
         let (drive_id, item_id) = Self::parse_path(path)?;
         let client = Self::create_graph_client(context.access_token);
 
-        self.get_download_url_internal(&client, drive_id, item_id)
+        self.get_file_metadata_internal(&client, drive_id, item_id, context.access_token)
             .await
     }
 
     /// Internal helper to get the download URL for a drive item.
-    async fn get_download_url_internal(
+    async fn get_file_metadata_internal(
         &self,
         client: &GraphClient,
         drive_id: &str,
         item_id: &str,
-    ) -> Result<String, Report> {
+        _access_token: &str,
+    ) -> Result<SharepointFileMetadata, Report> {
         // Use the MS Graph API to get the drive item with download URL
         let response = client
             .drive(drive_id)
@@ -404,7 +430,9 @@ impl SharepointStorage {
                 )
             })?;
 
-        Ok(download_url.to_string())
+        Ok(SharepointFileMetadata {
+            download_url: download_url.to_string(),
+        })
     }
 }
 

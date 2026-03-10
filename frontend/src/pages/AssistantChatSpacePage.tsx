@@ -14,10 +14,30 @@ import { useChatContext } from "@/providers/ChatProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 
+import type {
+  AssistantFile,
+  FileUploadItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 import type { MessageAction } from "@/types/message-controls";
 
 const logger = createLogger("UI", "AssistantChatSpacePage");
+
+const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
+  files.flatMap((file) => {
+    const downloadUrl = file.download_url as string | null | undefined;
+
+    return downloadUrl
+      ? [
+          {
+            id: file.id,
+            filename: file.filename,
+            download_url: downloadUrl,
+            file_capability: file.file_capability,
+          },
+        ]
+      : [];
+  });
 
 export default function AssistantChatSpacePage() {
   const { assistantId, chatId } = useParams<{
@@ -191,7 +211,7 @@ export default function AssistantChatSpacePage() {
         // For existing chats, the assistant context is already stored in the chat
         assistantId={chatId ? undefined : assistantId}
         initialModelOverride={assistantDefaultModel}
-        assistantFiles={assistant.files}
+        assistantFiles={toFileUploadItems(assistant.files)}
       />
     </div>
   );

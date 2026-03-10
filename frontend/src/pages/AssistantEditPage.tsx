@@ -21,6 +21,26 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import type { AssistantFormData } from "@/components/ui/Assistant/AssistantForm";
+import type {
+  AssistantFile,
+  FileUploadItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
+  files.flatMap((file) => {
+    const downloadUrl = file.download_url as string | null | undefined;
+
+    return downloadUrl
+      ? [
+          {
+            id: file.id,
+            filename: file.filename,
+            download_url: downloadUrl,
+            file_capability: file.file_capability,
+          },
+        ]
+      : [];
+  });
 
 export default function AssistantEditPage() {
   const navigate = useNavigate();
@@ -176,7 +196,7 @@ export default function AssistantEditPage() {
     description: assistant.description ?? "",
     prompt: assistant.prompt,
     defaultModel: selectedModel,
-    files: assistant.files,
+    files: toFileUploadItems(assistant.files),
     mcpServerIds: assistant.mcp_server_ids ?? [],
   };
 

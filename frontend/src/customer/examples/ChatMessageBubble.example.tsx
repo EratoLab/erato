@@ -62,7 +62,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
   userProfile,
   onFilePreview,
   onViewFeedback,
-  allFileDownloadUrls = {},
+  allFilesById = {},
 }: ChatMessageProps) {
   const isUser = message.role === "user";
 
@@ -91,7 +91,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
   // Image lightbox
   const lightbox = useImageLightbox();
 
-  const fileDownloadUrls = allFileDownloadUrls;
+  const filesById = allFilesById;
 
   // Content validation
   if (message.content.length === 0 && !message.loading && !message.error) {
@@ -146,12 +146,13 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
 
             <MessageContent
               content={message.content}
-              fileDownloadUrls={fileDownloadUrls}
+              filesById={filesById}
               isStreaming={
                 !!message.loading && message.loading.state !== "done"
               }
               showRaw={showRawMarkdown}
               onImageClick={lightbox.openLightbox}
+              onFileLinkPreview={onFilePreview}
             />
 
             {message.input_files_ids && message.input_files_ids.length > 0 && (
@@ -245,10 +246,11 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
 
         <MessageContent
           content={message.content}
-          fileDownloadUrls={fileDownloadUrls}
+          filesById={filesById}
           isStreaming={!!message.loading && message.loading.state !== "done"}
           showRaw={showRawMarkdown}
           onImageClick={lightbox.openLightbox}
+          onFileLinkPreview={onFilePreview}
         />
 
         {message.input_files_ids && message.input_files_ids.length > 0 && (
