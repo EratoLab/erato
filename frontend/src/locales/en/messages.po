@@ -1747,8 +1747,12 @@ msgid "Update your assistant's configuration and settings"
 msgstr "Update your assistant's configuration and settings"
 
 #: src/pages/AssistantsListPage.tsx
-msgid "Updated"
-msgstr "Updated"
+#~ msgid "Updated"
+#~ msgstr "Updated"
+
+#: src/pages/AssistantsListPage.tsx
+msgid "Updated {updatedRelativeTime}"
+msgstr "Updated {updatedRelativeTime}"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Upload Files"
