@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
+import { formatDistanceToNow } from "date-fns";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -8,7 +9,6 @@ import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
-import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
 import {
   EditIcon,
@@ -17,6 +17,7 @@ import {
   ShareIcon,
 } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
+import { useDateFnsLocale } from "@/hooks/useDateFnsLocale";
 import {
   useListAssistants,
   useArchiveAssistant,
@@ -26,6 +27,7 @@ export default function AssistantsListPage() {
   const navigate = useNavigate();
   const { containerClasses, horizontalPadding } =
     usePageAlignment("assistants");
+  const dateFnsLocale = useDateFnsLocale();
 
   // State for tab filtering
   const [selectedTab, setSelectedTab] = useState<
@@ -225,89 +227,100 @@ export default function AssistantsListPage() {
                     description?: string | null;
                     updated_at: string;
                     can_edit: boolean;
-                  }) => (
-                    <div
-                      key={assistant.id}
-                      data-testid="assistant-list-item"
-                      className="block rounded-lg border border-theme-border bg-theme-bg-primary p-4 transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus:ring-2 focus:ring-theme-focus"
-                    >
-                      <div className="flex items-start gap-4">
-                        <button
-                          type="button"
-                          className="min-w-0 flex-1 cursor-pointer text-left"
-                          onClick={() => handleStartChat(assistant.id)}
-                        >
-                          <h3 className="mb-1 font-medium text-theme-fg-primary">
-                            {assistant.name}
-                          </h3>
-                          {assistant.description && (
-                            <p className="mb-2 line-clamp-2 text-sm text-theme-fg-secondary">
-                              {assistant.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-4 text-xs text-theme-fg-muted">
-                            <span>
-                              {t`Updated`}{" "}
-                              <MessageTimestamp
-                                createdAt={new Date(assistant.updated_at)}
-                              />
-                            </span>
-                          </div>
-                        </button>
-                        <div className="flex shrink-0 gap-2">
-                          <Button
-                            variant="secondary"
-                            size="sm"
+                  }) => {
+                    const updatedRelativeTime = formatDistanceToNow(
+                      new Date(assistant.updated_at),
+                      {
+                        addSuffix: true,
+                        includeSeconds: true,
+                        locale: dateFnsLocale,
+                      },
+                    );
+
+                    return (
+                      <div
+                        key={assistant.id}
+                        data-testid="assistant-list-item"
+                        className="block rounded-lg border border-theme-border bg-theme-bg-primary p-4 transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus:ring-2 focus:ring-theme-focus"
+                      >
+                        <div className="flex items-stretch gap-4">
+                          <button
+                            type="button"
+                            className="flex min-w-0 flex-1 cursor-pointer flex-col text-left"
                             onClick={() => handleStartChat(assistant.id)}
                           >
-                            {t`New Chat`}
-                          </Button>
-                          {/* Only show dropdown menu if user owns the assistant */}
-                          {assistant.can_edit && (
-                            /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */
-                            <div
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                              }}
-                            >
-                              <DropdownMenu
-                                items={[
-                                  {
-                                    label: t({
-                                      id: "sharing.action.share",
-                                      message: "Share",
-                                    }),
-                                    icon: <ShareIcon className="size-4" />,
-                                    onClick: () =>
-                                      setSharingAssistant({
-                                        id: assistant.id,
-                                        name: assistant.name,
-                                      }),
-                                  },
-                                  {
-                                    label: t`Edit`,
-                                    icon: <EditIcon className="size-4" />,
-                                    onClick: () => handleEdit(assistant.id),
-                                  },
-                                  {
-                                    label: t`Archive`,
-                                    icon: <LogOutIcon className="size-4" />,
-                                    onClick: () => {
-                                      void handleArchive(assistant.id);
-                                    },
-                                    confirmAction: true,
-                                    confirmTitle: t`Confirm Archive`,
-                                    confirmMessage: t`Are you sure you want to archive this assistant?`,
-                                  },
-                                ]}
-                              />
+                            <h3 className="mb-1 font-medium text-theme-fg-primary">
+                              {assistant.name}
+                            </h3>
+                            {assistant.description && (
+                              <p className="mb-2 line-clamp-2 text-sm text-theme-fg-secondary">
+                                {assistant.description}
+                              </p>
+                            )}
+                            <div className="mt-auto flex items-center gap-4 text-xs text-theme-fg-muted">
+                              <span className="whitespace-nowrap">
+                                {t`Updated ${updatedRelativeTime}`}
+                              </span>
                             </div>
-                          )}
+                          </button>
+                          <div className="flex shrink-0 flex-col items-end gap-4 self-stretch">
+                            <div className="flex min-h-9 items-start justify-end">
+                              {/* Only show dropdown menu if user owns the assistant */}
+                              {assistant.can_edit && (
+                                /* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */
+                                <div
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                >
+                                  <DropdownMenu
+                                    items={[
+                                      {
+                                        label: t({
+                                          id: "sharing.action.share",
+                                          message: "Share",
+                                        }),
+                                        icon: <ShareIcon className="size-4" />,
+                                        onClick: () =>
+                                          setSharingAssistant({
+                                            id: assistant.id,
+                                            name: assistant.name,
+                                          }),
+                                      },
+                                      {
+                                        label: t`Edit`,
+                                        icon: <EditIcon className="size-4" />,
+                                        onClick: () => handleEdit(assistant.id),
+                                      },
+                                      {
+                                        label: t`Archive`,
+                                        icon: <LogOutIcon className="size-4" />,
+                                        onClick: () => {
+                                          void handleArchive(assistant.id);
+                                        },
+                                        confirmAction: true,
+                                        confirmTitle: t`Confirm Archive`,
+                                        confirmMessage: t`Are you sure you want to archive this assistant?`,
+                                      },
+                                    ]}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="mt-auto"
+                              onClick={() => handleStartChat(assistant.id)}
+                            >
+                              {t`New Chat`}
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ),
+                    );
+                  },
                 )}
               </div>
             </div>
