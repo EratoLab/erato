@@ -33,7 +33,7 @@ interface VirtualizedMessageListProps {
   onMessageAction: (action: MessageAction) => Promise<boolean>;
   onFilePreview?: (file: FileUploadItem) => void;
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
-  allFileDownloadUrls: Record<string, string>;
+  allFilesById: Record<string, FileUploadItem>;
 }
 
 export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
@@ -51,7 +51,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   onMessageAction,
   onFilePreview,
   onViewFeedback,
-  allFileDownloadUrls,
+  allFilesById,
 }) => {
   // Message renderer
   const renderMessages = useCallback(() => {
@@ -76,7 +76,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
           onFilePreview={onFilePreview}
           onViewFeedback={onViewFeedback}
           className={getMessageClassName(isNew)}
-          allFileDownloadUrls={allFileDownloadUrls}
+          allFilesById={allFilesById}
         />
       );
     });
@@ -95,7 +95,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
     onMessageAction,
     onFilePreview,
     onViewFeedback,
-    allFileDownloadUrls,
+    allFilesById,
   ]);
 
   return (

@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import React, { memo } from "react";
-import Markdown from "react-markdown";
+import Markdown, { defaultUrlTransform } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {
   oneDark,
@@ -14,7 +14,10 @@ import { parseContent } from "@/utils/adapters/contentPartAdapter";
 
 import { ImageContentDisplay } from "./ImageContentDisplay";
 
-import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ContentPart,
+  FileUploadItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
 import type { Components } from "react-markdown";
 
@@ -24,8 +27,9 @@ interface MessageContentProps {
   isStreaming?: boolean;
   showRaw?: boolean;
   onImageClick?: (image: UiImagePart) => void;
-  /** Map of file IDs to their download URLs for erato-file:// link resolution */
-  fileDownloadUrls?: Record<string, string>;
+  /** Map of file IDs to their metadata for erato-file:// link resolution */
+  filesById?: Record<string, FileUploadItem>;
+  onFileLinkPreview?: (file: FileUploadItem) => void;
 }
 
 const autolinkEratoFiles = (text: string): string => {
@@ -80,7 +84,8 @@ export const MessageContent = memo(function MessageContent({
   isStreaming = false,
   showRaw = false,
   onImageClick,
-  fileDownloadUrls = {},
+  filesById = {},
+  onFileLinkPreview,
 }: MessageContentProps) {
   const { effectiveTheme } = useTheme();
   const isDarkMode = effectiveTheme === "dark";
@@ -96,47 +101,48 @@ export const MessageContent = memo(function MessageContent({
       ? linkedTextContent + "▊"
       : linkedTextContent;
 
-  // URL transform function to handle erato-file:// protocol
-  const transformUrl = React.useCallback(
-    (url: string) => {
+  const resolveEratoFileLink = React.useCallback(
+    (
+      url: string,
+    ): { previewFile: FileUploadItem; resolvedHref: string } | null => {
       // eslint-disable-next-line lingui/no-unlocalized-strings
-      if (url.startsWith("erato-file://")) {
-        try {
-          // Parse the URL to extract file ID and page parameter
-          const urlObj = new URL(url);
-          const fileId =
-            urlObj.hostname || urlObj.pathname.replace(/^\/\//, "");
-
-          // Check for page parameter in both query string (?page=N) and hash fragment (#page=N)
-          let pageParam = urlObj.searchParams.get("page");
-          if (!pageParam && urlObj.hash) {
-            // Parse hash fragment for page parameter (e.g., #page=4)
-            const hashMatch = urlObj.hash.match(/^#page=(\d+)$/);
-            if (hashMatch) {
-              pageParam = hashMatch[1];
-            }
-          }
-
-          // Look up the download URL for this file
-          const downloadUrl = fileDownloadUrls[fileId];
-
-          if (downloadUrl) {
-            // Construct the final URL with the page parameter
-            return pageParam ? `${downloadUrl}#page=${pageParam}` : downloadUrl;
-          }
-
-          // If file not found, return a hash to prevent navigation
-          return "#file-not-found";
-        } catch (error) {
-          console.warn("Failed to parse erato-file:// URL:", url, error);
-          return "#invalid-url";
-        }
+      if (!url.startsWith("erato-file://")) {
+        return null;
       }
 
-      // Return unchanged URL for all other protocols
-      return url;
+      try {
+        const urlObj = new URL(url);
+        const fileId = urlObj.hostname || urlObj.pathname.replace(/^\/\//, "");
+        if (!(fileId in filesById)) {
+          return null;
+        }
+        const file = filesById[fileId];
+
+        let pageParam = urlObj.searchParams.get("page");
+        if (!pageParam && urlObj.hash) {
+          const hashMatch = urlObj.hash.match(/^#page=(\d+)$/);
+          if (hashMatch) {
+            pageParam = hashMatch[1];
+          }
+        }
+
+        const resolvedHref = pageParam
+          ? `${file.download_url}#page=${pageParam}`
+          : file.download_url;
+
+        return {
+          resolvedHref,
+          previewFile:
+            pageParam && file.filename.toLowerCase().endsWith(".pdf")
+              ? { ...file, download_url: resolvedHref }
+              : file,
+        };
+      } catch (error) {
+        console.warn("Failed to parse erato-file:// URL:", url, error);
+        return null;
+      }
     },
-    [fileDownloadUrls],
+    [filesById],
   );
 
   // If showing raw, just show text
@@ -190,14 +196,31 @@ export const MessageContent = memo(function MessageContent({
       const rewrittenHref = rewriteFootnoteValue(href, messageId);
       const rewrittenId = rewriteFootnoteValue(id, messageId);
       const isHashLink = rewrittenHref?.startsWith("#") ?? false;
+      const resolvedEratoFile = rewrittenHref
+        ? resolveEratoFileLink(rewrittenHref)
+        : null;
+      const finalHref =
+        resolvedEratoFile?.resolvedHref ??
+        rewrittenHref ??
+        "#missing-link-target";
 
       return (
         <a
-          href={rewrittenHref}
+          href={finalHref}
           id={rewrittenId}
-          target={isHashLink ? undefined : "_blank"}
-          rel={isHashLink ? undefined : "noopener noreferrer"}
+          target={isHashLink || resolvedEratoFile ? undefined : "_blank"}
+          rel={
+            isHashLink || resolvedEratoFile ? undefined : "noopener noreferrer"
+          }
           className="text-theme-fg-accent underline hover:opacity-80"
+          onClick={(event) => {
+            if (!resolvedEratoFile) {
+              return;
+            }
+
+            event.preventDefault();
+            onFileLinkPreview?.(resolvedEratoFile.previewFile);
+          }}
           {...props}
         >
           {children}
@@ -415,7 +438,10 @@ export const MessageContent = memo(function MessageContent({
         <Markdown
           remarkPlugins={[remarkGfm]}
           components={components}
-          urlTransform={transformUrl}
+          urlTransform={(url) =>
+            // eslint-disable-next-line lingui/no-unlocalized-strings
+            url.startsWith("erato-file://") ? url : defaultUrlTransform(url)
+          }
           // Handle incomplete markdown patterns gracefully
           skipHtml={false}
           unwrapDisallowed={false}

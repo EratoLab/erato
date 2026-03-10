@@ -8,7 +8,7 @@ import {
   ensureOpenSidebar,
   setupStreamingRequestAbortHook,
 } from "./shared";
-import { TAG_CI } from "./tags";
+import { TAG_CI, TAG_NO_CI } from "./tags";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -584,9 +584,20 @@ test(
 );
 
 test(
-  "Mock-LLM cite files links open files in a new tab for assistant and chat uploads",
+  "Mock-LLM cite files links open the file preview dialog and preserve PDF page anchors",
   { tag: TAG_CI },
   async ({ page }) => {
+    let popupCount = 0;
+    let downloadCount = 0;
+    const trackPopup = () => {
+      popupCount += 1;
+    };
+    const trackDownload = () => {
+      downloadCount += 1;
+    };
+    page.context().on("page", trackPopup);
+    page.on("download", trackDownload);
+
     const randomSuffix = Math.floor(Math.random() * 16777215)
       .toString(16)
       .padStart(6, "0");
@@ -662,29 +673,28 @@ test(
     });
     await expect(citationLinks).toHaveCount(2);
 
-    const chatUrlWithoutHash = page.url().split("#")[0];
+    await citationLinks.first().click();
 
-    for (let i = 0; i < 2; i++) {
-      const popupPromise = page.context().waitForEvent("page");
-      await citationLinks.nth(i).click();
-      const popup = await popupPromise;
+    const previewDialog = page.getByRole("dialog", { name: /preview:/i });
+    await expect(previewDialog).toBeVisible({ timeout: 10000 });
+    await expect(previewDialog).toContainText("sample-report-compressed.pdf");
 
-      await expect
-        .poll(() => popup.url(), { timeout: 10000 })
-        .not.toBe("about:blank");
-      const popupUrl = popup.url();
+    const previewFrame = previewDialog.getByTestId("file-preview-pdf");
+    await expect(previewFrame).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(1000);
+    await expect
+      .poll(() => page.context().pages().length, { timeout: 3000 })
+      .toBe(1);
+    expect(popupCount).toBe(0);
+    expect(downloadCount).toBe(0);
 
-      const popupUrlWithoutHash = popupUrl.split("#")[0];
-      expect(popupUrlWithoutHash).not.toBe(chatUrlWithoutHash);
-
-      await popup.close();
-    }
+    page.context().off("page", trackPopup);
+    page.off("download", trackDownload);
   },
 );
-
 test(
   "Mock-LLM cite files downloads keep original filenames for assistant and chat uploads",
-  { tag: TAG_CI },
+  { tag: TAG_NO_CI },
   async ({ page }) => {
     const randomSuffix = Math.floor(Math.random() * 16777215)
       .toString(16)
@@ -778,6 +788,7 @@ test(
     );
   },
 );
+
 
 test(
   "Mock-LLM editing a file-based message preserves the attachment context",

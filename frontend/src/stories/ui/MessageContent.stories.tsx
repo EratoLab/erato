@@ -1,4 +1,5 @@
 import { MessageContent } from "../../components/ui/Message/MessageContent";
+import { FileTypeUtil } from "../../utils/fileTypes";
 
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Meta, StoryObj } from "@storybook/react";
@@ -282,9 +283,23 @@ export const ResolvedFileLinksInMarkdown: Story = {
         "erato-file://file_123?page=7",
       ].join("\n"),
     ),
-    fileDownloadUrls: {
-      file_123: "https://files.example.com/downloads/quarterly-report.pdf",
-      file_abc: "https://files.example.com/downloads/design-spec.pdf",
+    filesById: {
+      file_123: {
+        id: "file_123",
+        filename: "quarterly-report.pdf",
+        download_url:
+          "https://files.example.com/downloads/quarterly-report.pdf",
+        file_capability: FileTypeUtil.createMockFileCapability(
+          "quarterly-report.pdf",
+        ),
+      },
+      file_abc: {
+        id: "file_abc",
+        filename: "design-spec.pdf",
+        download_url: "https://files.example.com/downloads/design-spec.pdf",
+        file_capability:
+          FileTypeUtil.createMockFileCapability("design-spec.pdf"),
+      },
     },
   },
   parameters: {

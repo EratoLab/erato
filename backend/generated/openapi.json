@@ -451,6 +451,43 @@
         ]
       }
     },
+    "/api/v1beta/files/{file_id}/preview": {
+      "get": {
+        "tags": [],
+        "summary": "Get an inline preview for a single file by its ID.",
+        "operationId": "get_file_preview",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "description": "The ID of the file to preview",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved the file preview"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "When the file doesn't exist or doesn't belong to the user"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/integrations/sharepoint/all-drives": {
       "get": {
         "tags": [
@@ -1978,6 +2015,13 @@
           "id": {
             "type": "string",
             "description": "The unique ID of the file"
+          },
+          "preview_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pre-signed URL for inline preview without forcing download when available."
           }
         }
       },
@@ -2975,6 +3019,13 @@
           "id": {
             "type": "string",
             "description": "The unique ID of the uploaded file"
+          },
+          "preview_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pre-signed URL for inline preview without forcing download when available"
           }
         }
       },

@@ -127,13 +127,18 @@ export type Assistant = {
  */
 export type AssistantFile = {
   /**
-   * Pre-signed URL for downloading the file
+   * Pre-signed URL for downloading the file.
+   * Null when file contents are unavailable for the current user due to missing permissions.
    */
-  download_url: string;
+  download_url?: null | undefined;
   /**
    * The file capability that was evaluated for this file
    */
   file_capability: FileCapability;
+  /**
+   * Indicates that file contents are unavailable for the current user due to missing permissions.
+   */
+  file_contents_unavailable_missing_permissions: boolean;
   /**
    * The original filename
    */

@@ -47,7 +47,8 @@ use crate::services::genai::build_chat_options_for_completion;
 use crate::services::sentry::log_internal_server_error;
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::{DefaultBodyLimit, Path, State};
-use axum::http::StatusCode;
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 use axum::{Extension, Json, Router, middleware};
@@ -127,6 +128,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             put(submit_message_feedback),
         )
         .route("/files/{file_id}", get(get_file))
+        .route("/files/{file_id}/preview", get(get_file_preview))
         .route(
             "/token_usage/estimate",
             post(token_usage::token_usage_estimate),
@@ -197,6 +199,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         frequent_assistants,
         upload_file,
         link_file,
+        get_file,
+        get_file_preview,
         message_submit_sse,
         regenerate_message_sse,
         edit_message_sse,
@@ -204,7 +208,6 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         create_chat,
         update_chat,
         archive_all_chats_endpoint,
-        get_file,
         archive_chat_endpoint,
         token_usage::token_usage_estimate,
         prompt_optimizer,
@@ -719,6 +722,8 @@ pub struct FileUploadItem {
     filename: String,
     /// Pre-signed URL for downloading the file directly from storage
     download_url: String,
+    /// Pre-signed URL for inline preview without forcing download when available
+    preview_url: Option<String>,
     /// The file capability that was evaluated for this file
     #[serde(rename = "file_capability")]
     file_capability: FileCapability,
@@ -909,6 +914,14 @@ pub async fn upload_file(
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
 
+        let preview_url = file_storage_provider
+            .generate_presigned_download_url(&file_upload.file_storage_path, None, None)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to generate preview URL: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
         tracing::info!(
             "User {} uploaded file '{}' with size {} bytes, assigned ID: {}",
             me_user.id,
@@ -925,6 +938,7 @@ pub async fn upload_file(
             id: file_upload.id.to_string(),
             filename,
             download_url,
+            preview_url: Some(preview_url),
             file_capability,
         });
     }
@@ -1175,6 +1189,7 @@ async fn link_sharepoint_file_impl(
         files: vec![FileUploadItem {
             id: file_upload.id.to_string(),
             filename,
+            preview_url: Some(format!("/api/v1beta/files/{}/preview", file_upload.id)),
             download_url,
             file_capability,
         }],
@@ -1412,6 +1427,7 @@ pub async fn chat_messages(
                     id: file_upload.id.to_string(),
                     filename: file_upload.filename,
                     download_url: file_upload.download_url,
+                    preview_url: file_upload.preview_url,
                     file_capability,
                 },
             );
@@ -1725,6 +1741,7 @@ pub async fn frequent_assistants(
                         id: file.id.to_string(),
                         filename: file.filename,
                         download_url: Some(format!("/api/v1beta/files/{}", file.id)),
+                        preview_url: None,
                         file_contents_unavailable_missing_permissions: false,
                         file_capability,
                     }
@@ -2021,8 +2038,108 @@ pub async fn get_file(
         id: file_upload.id.to_string(),
         filename: file_upload.filename,
         download_url: file_upload.download_url,
+        preview_url: file_upload.preview_url,
         file_capability,
     }))
+}
+
+fn preview_content_type(filename: &str) -> &'static str {
+    match filename
+        .rsplit('.')
+        .next()
+        .map(|ext| ext.to_ascii_lowercase())
+    {
+        Some(ext) => match ext.as_str() {
+            "pdf" => "application/pdf",
+            "jpg" | "jpeg" => "image/jpeg",
+            "png" => "image/png",
+            "gif" => "image/gif",
+            "webp" => "image/webp",
+            "svg" => "image/svg+xml",
+            "bmp" => "image/bmp",
+            _ => "application/octet-stream",
+        },
+        None => "application/octet-stream",
+    }
+}
+
+/// Get an inline preview for a single file by its ID.
+#[utoipa::path(
+    get,
+    path = "/files/{file_id}/preview",
+    params(
+        ("file_id" = String, Path, description = "The ID of the file to preview"),
+    ),
+    responses(
+        (status = OK, description = "Successfully retrieved the file preview"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = NOT_FOUND, description = "When the file doesn't exist or doesn't belong to the user"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn get_file_preview(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+    Path(file_id): Path<String>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let file_id = Uuid::parse_str(&file_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let file_upload = models::file_upload::get_file_upload_by_id(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &file_id,
+    )
+    .await
+    .map_err(|e| {
+        if e.to_string().contains("not found") {
+            StatusCode::NOT_FOUND
+        } else {
+            tracing::error!("Failed to get file upload by ID for preview: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
+
+    let file_storage = app_state
+        .file_storage_providers
+        .get(&file_upload.file_storage_provider_id)
+        .ok_or_else(|| {
+            tracing::error!(
+                "File storage provider '{}' not found for preview",
+                file_upload.file_storage_provider_id
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    if !file_storage.is_sharepoint() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let access_token = me_user.access_token.as_deref().ok_or_else(|| {
+        tracing::error!("No access token available for Sharepoint preview");
+        StatusCode::UNAUTHORIZED
+    })?;
+
+    let sharepoint_ctx = crate::services::file_storage::SharepointContext { access_token };
+    let bytes = file_storage
+        .read_file_to_bytes_with_context(&file_upload.file_storage_path, Some(&sharepoint_ctx))
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to read Sharepoint file preview: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static(preview_content_type(&file_upload.filename)),
+    );
+
+    Ok((headers, bytes))
 }
 
 /// Request to archive a chat

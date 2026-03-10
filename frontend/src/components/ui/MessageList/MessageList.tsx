@@ -426,22 +426,22 @@ export const MessageList = memo<MessageListProps>(
 
     // Collect all file download URLs from message files and assistant default files
     // for erato-file:// link resolution.
-    const allFileDownloadUrls = useMemo(() => {
-      const urlMap: Record<string, string> = {};
+    const allFilesById = useMemo(() => {
+      const fileMap: Record<string, FileUploadItem> = {};
 
       // Assistant files are available even before they appear in message payloads.
       assistantFiles.forEach((file) => {
-        urlMap[file.id] = file.download_url;
+        fileMap[file.id] = file;
       });
 
       // Message files override assistant URLs, preserving freshest data from chat API.
       messageOrder.forEach((messageId) => {
         const message = messages[messageId] as UiChatMessage;
         (message.files ?? []).forEach((file) => {
-          urlMap[file.id] = file.download_url;
+          fileMap[file.id] = file;
         });
       });
-      return urlMap;
+      return fileMap;
     }, [assistantFiles, messageOrder, messages]);
 
     // Check if there are no messages to display
@@ -577,7 +577,7 @@ export const MessageList = memo<MessageListProps>(
               onMessageAction={onMessageAction}
               onFilePreview={onFilePreview}
               onViewFeedback={onViewFeedback}
-              allFileDownloadUrls={allFileDownloadUrls}
+              allFilesById={allFilesById}
             />
           ) : (
             <StandardMessageList
@@ -595,7 +595,7 @@ export const MessageList = memo<MessageListProps>(
               onMessageAction={onMessageAction}
               onFilePreview={onFilePreview}
               onViewFeedback={onViewFeedback}
-              allFileDownloadUrls={allFileDownloadUrls}
+              allFilesById={allFilesById}
             />
           )}
         </div>
