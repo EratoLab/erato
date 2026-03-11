@@ -165,6 +165,7 @@ export const ChatInput = ({
   // isPendingResponse is true immediately when send is clicked (before streaming starts)
   const { isPendingResponse, isMessagingLoading, isUploading, cancelMessage } =
     useChatContext();
+  const wasPendingResponseRef = useRef(isPendingResponse);
 
   // Combine loading states
   const isLoading = propIsLoading ?? isMessagingLoading;
@@ -510,6 +511,17 @@ export const ChatInput = ({
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
   }, [message]);
+
+  useEffect(() => {
+    const wasPendingResponse = wasPendingResponseRef.current;
+    wasPendingResponseRef.current = isPendingResponse;
+
+    if (wasPendingResponse && !isPendingResponse && mode === "compose") {
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    }
+  }, [isPendingResponse, mode]);
 
   const handleTextareaPaste = useCallback(
     (event: ReactClipboardEvent<HTMLTextAreaElement>) => {

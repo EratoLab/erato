@@ -262,6 +262,36 @@ test(
 );
 
 test(
+  "Mock-LLM re-focuses chat input after streaming completes",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(90000);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+
+    await textbox.fill("say hello and finish quickly");
+    await textbox.press("Enter");
+
+    await expect(page).toHaveURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 10000 });
+
+    const stopButton = page.getByTestId("chat-input-stop-generation");
+    await expect(stopButton).toBeVisible({ timeout: 10000 });
+    await stopButton.focus();
+    await expect(stopButton).toBeFocused();
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 20000,
+    });
+    await expect(textbox).toBeFocused();
+  },
+);
+
+test(
   "Mock-LLM delay shows optimistic user/loading quickly and completes within 5s",
   { tag: TAG_CI },
   async ({ page }) => {
