@@ -33,6 +33,11 @@ import type {
 import type { MessageErrorFilterDetails } from "@/types/chat";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 
+const getPreviewUrl = (
+  file: Pick<FileUploadItem, "preview_url" | "download_url">,
+): string =>
+  typeof file.preview_url === "string" ? file.preview_url : file.download_url;
+
 export interface ChatMessageProps {
   message: UiChatMessage;
   className?: string;
@@ -440,8 +445,10 @@ const AttachedFile = ({
     );
   }
 
+  const previewUrl = getPreviewUrl(fileData);
+
   // Check if it's an image using centralized utility
-  if (isImageFile(fileData.filename) && fileData.download_url) {
+  if (isImageFile(fileData.filename) && previewUrl) {
     return (
       <div
         className="relative inline-block cursor-pointer"
@@ -451,8 +458,8 @@ const AttachedFile = ({
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (onFilePreview && fileData) {
             onFilePreview(fileData);
-          } else if (fileData.download_url) {
-            window.open(fileData.download_url, "_blank", "noopener,noreferrer");
+          } else if (previewUrl) {
+            window.open(previewUrl, "_blank", "noopener,noreferrer");
           }
         }}
         onKeyDown={(e) => {
@@ -461,18 +468,14 @@ const AttachedFile = ({
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             if (onFilePreview && fileData) {
               onFilePreview(fileData);
-            } else if (fileData.download_url) {
-              window.open(
-                fileData.download_url,
-                "_blank",
-                "noopener,noreferrer",
-              );
+            } else if (previewUrl) {
+              window.open(previewUrl, "_blank", "noopener,noreferrer");
             }
           }
         }}
       >
         <img
-          src={fileData.download_url}
+          src={previewUrl}
           alt={fileData.filename}
           className="size-24 rounded-lg border border-theme-border-primary object-cover transition-transform hover:scale-105"
         />
@@ -490,8 +493,8 @@ const AttachedFile = ({
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (onFilePreview && fileData) {
           onFilePreview(fileData);
-        } else if (fileData.download_url) {
-          window.open(fileData.download_url, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
+        } else if (previewUrl) {
+          window.open(previewUrl, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
         }
       }}
       aria-label={`${t({ id: "chat.file.preview.aria", message: "Preview attached file:" })} ${fileData.filename}`}

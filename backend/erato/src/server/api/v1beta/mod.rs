@@ -849,7 +849,7 @@ pub async fn upload_file(
             .file_name()
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unnamed_file".to_string());
-        let content_type = field.content_type().map(|s| s.to_string());
+        let content_type = effective_upload_content_type(&filename, field.content_type());
 
         // Generate a random UUID for the file
         let file_id = Uuid::new_v4();
@@ -921,7 +921,7 @@ pub async fn upload_file(
             })?;
 
         let preview_url = file_storage_provider
-            .generate_presigned_download_url(&file_upload.file_storage_path, None, None)
+            .generate_presigned_preview_url(&file_upload.file_storage_path, None, Some(&filename))
             .await
             .map_err(|e| {
                 tracing::error!("Failed to generate preview URL: {}", e);
@@ -2069,6 +2069,18 @@ fn preview_content_type(filename: &str) -> &'static str {
     }
 }
 
+fn effective_upload_content_type(
+    filename: &str,
+    provided_content_type: Option<&str>,
+) -> Option<String> {
+    match provided_content_type {
+        Some(content_type) if content_type != "application/octet-stream" => {
+            Some(content_type.to_string())
+        }
+        _ => Some(preview_content_type(filename).to_string()),
+    }
+}
+
 /// Get an inline preview for a single file by its ID.
 #[utoipa::path(
     get,
@@ -2144,7 +2156,6 @@ pub async fn get_file_preview(
         CONTENT_TYPE,
         HeaderValue::from_static(preview_content_type(&file_upload.filename)),
     );
-
     Ok((headers, bytes))
 }
 

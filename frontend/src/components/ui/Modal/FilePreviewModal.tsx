@@ -9,6 +9,11 @@ import { ModalBase } from "./ModalBase";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
+const getPreviewUrl = (
+  file: Pick<FileUploadItem, "preview_url">,
+): string | undefined =>
+  typeof file.preview_url === "string" ? file.preview_url : undefined;
+
 interface FilePreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -36,7 +41,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   const imageExtensions = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
   const isImage = imageExtensions.includes(extension);
   const isPdf = extension === "pdf";
-  const previewUrl = file.download_url;
+  const previewUrl = getPreviewUrl(file);
   const canPreview = (isImage || isPdf) && Boolean(previewUrl);
   const actionButtons = (
     <div className="mt-4 flex flex-wrap justify-center gap-3">

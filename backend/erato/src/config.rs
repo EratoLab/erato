@@ -1052,6 +1052,20 @@ impl FileStorageProviderConfig {
             .clone()
             .into_specific_config(&self.provider_kind)
     }
+
+    pub fn azblob_config(&self) -> Option<StorageProviderAzBlobConfig> {
+        if self.provider_kind != "azblob" {
+            return None;
+        }
+
+        Some(StorageProviderAzBlobConfig {
+            root: self.config.root.clone(),
+            container: self.config.container.clone()?,
+            endpoint: self.config.endpoint.clone()?,
+            account_name: self.config.account_name.clone(),
+            account_key: self.config.account_key.clone(),
+        })
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]

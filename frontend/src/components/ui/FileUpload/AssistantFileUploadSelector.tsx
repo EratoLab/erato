@@ -32,6 +32,9 @@ import type {
 import type { FileType } from "@/utils/fileTypes";
 import type React from "react";
 
+const getPreviewUrl = (file: { preview_url?: unknown }): string | undefined =>
+  typeof file.preview_url === "string" ? file.preview_url : undefined;
+
 interface AssistantFileUploadSelectorProps {
   /** Callback when files are successfully uploaded or linked */
   onFilesUploaded?: (files: FileUploadItem[]) => void;
@@ -181,12 +184,17 @@ export const AssistantFileUploadSelector: React.FC<
 
             // Transform response to FileUploadItem format
             allLinkedFiles.push(
-              ...response.files.map((f) => ({
-                id: f.id,
-                filename: f.filename,
-                download_url: f.download_url,
-                file_capability: f.file_capability,
-              })),
+              ...response.files.map((f) => {
+                const previewUrl = getPreviewUrl(f);
+
+                return {
+                  id: f.id,
+                  filename: f.filename,
+                  download_url: f.download_url,
+                  ...(previewUrl ? { preview_url: previewUrl } : {}),
+                  file_capability: f.file_capability,
+                } as FileUploadItem;
+              }),
             );
           }
 

@@ -68,6 +68,9 @@ metrics = "0.24"
 metrics-exporter-prometheus = "0.17.2"
 tokio-metrics = { version = "0.4.7", features = ["metrics-rs-integration"] }
 base64 = "0.22.1"
+hmac = "0.12.1"
+sha2 = "0.10.9"
+url = "2.5.8"
 # Tokio console for async debugging
 console-subscriber = { version = "0.5.0", optional = true }
 kreuzberg = { version = "=4.3.4",  features = ["bundled-pdfium", "excel", "office", "html", "archives"]}

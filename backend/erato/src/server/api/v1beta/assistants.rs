@@ -251,10 +251,10 @@ async fn file_info_to_assistant_file(
             {
                 Ok(url) => {
                     let preview_url = file_storage_provider
-                        .generate_presigned_download_url_with_context(
+                        .generate_presigned_preview_url_with_context(
                             &file.file_storage_path,
                             None,
-                            None,
+                            Some(&file.filename),
                             sharepoint_ctx.as_ref(),
                         )
                         .await

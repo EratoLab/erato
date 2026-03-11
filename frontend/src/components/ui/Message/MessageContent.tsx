@@ -32,6 +32,11 @@ interface MessageContentProps {
   onFileLinkPreview?: (file: FileUploadItem) => void;
 }
 
+const getPreviewUrl = (
+  file: Pick<FileUploadItem, "preview_url">,
+): string | undefined =>
+  typeof file.preview_url === "string" ? file.preview_url : undefined;
+
 const autolinkEratoFiles = (text: string): string => {
   // eslint-disable-next-line lingui/no-unlocalized-strings
   if (!text.includes("erato-file://")) {
@@ -117,6 +122,11 @@ export const MessageContent = memo(function MessageContent({
           return null;
         }
         const file = filesById[fileId];
+        const previewUrl = getPreviewUrl(file) ?? file.download_url;
+
+        if (!previewUrl) {
+          return null;
+        }
 
         let pageParam = urlObj.searchParams.get("page");
         if (!pageParam && urlObj.hash) {
@@ -127,14 +137,17 @@ export const MessageContent = memo(function MessageContent({
         }
 
         const resolvedHref = pageParam
-          ? `${file.download_url}#page=${pageParam}`
-          : file.download_url;
+          ? `${previewUrl}#page=${pageParam}`
+          : previewUrl;
 
         return {
           resolvedHref,
           previewFile:
             pageParam && file.filename.toLowerCase().endsWith(".pdf")
-              ? { ...file, download_url: resolvedHref }
+              ? ({
+                  ...file,
+                  preview_url: resolvedHref,
+                } as unknown as FileUploadItem)
               : file,
         };
       } catch (error) {
