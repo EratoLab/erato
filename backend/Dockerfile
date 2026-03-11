@@ -4,6 +4,7 @@
 # Pinned for security & build performance reasons
 FROM lukemathwalker/cargo-chef:0.1.73-rust-1.91.1-trixie@sha256:0952ecbcded4600a826cb52277fb662df5c56abecc3acd5475988f88f015e7aa AS chef
 WORKDIR /app
+RUN cargo install --locked cargo-auditable --version 0.7.2
 
 FROM chef AS planner
 COPY . .
@@ -12,14 +13,14 @@ RUN cargo chef prepare --bin erato --recipe-path recipe.json
 FROM chef AS builder
 ARG ERATO_FEATURES=""
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --bin erato --release --recipe-path recipe.json
+RUN cargo auditable chef cook --bin erato --release --recipe-path recipe.json
 
 # Build application (only erato binary)
 COPY . .
 RUN if [ -n "$ERATO_FEATURES" ]; then \
-      cargo build --release -p erato --bin erato --features "$ERATO_FEATURES"; \
+      cargo auditable build --release -p erato --bin erato --features "$ERATO_FEATURES"; \
     else \
-      cargo build --release -p erato --bin erato; \
+      cargo auditable build --release -p erato --bin erato; \
     fi
 
 # Pinned for security & build performance reasons
