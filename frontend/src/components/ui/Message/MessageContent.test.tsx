@@ -24,6 +24,8 @@ const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   id: "file_123",
   filename: "sample-report-compressed.pdf",
   download_url: "https://files.example.com/sample-report-compressed.pdf",
+  preview_url:
+    "https://files.example.com/preview/sample-report-compressed.pdf" as never,
   file_capability: FileTypeUtil.createMockFileCapability(
     "sample-report-compressed.pdf",
   ),
@@ -49,8 +51,8 @@ describe("MessageContent", () => {
     expect(onFileLinkPreview).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "file_123",
-        download_url:
-          "https://files.example.com/sample-report-compressed.pdf#page=4",
+        preview_url:
+          "https://files.example.com/preview/sample-report-compressed.pdf#page=4",
       }),
     );
   });

@@ -26,9 +26,15 @@ import type {
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
+const getPreviewUrl = (
+  file: Pick<AssistantFile, "preview_url">,
+): string | undefined =>
+  typeof file.preview_url === "string" ? file.preview_url : undefined;
+
 const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
   files.flatMap((file) => {
     const downloadUrl = file.download_url as string | null | undefined;
+    const previewUrl = getPreviewUrl(file);
 
     return downloadUrl
       ? [
@@ -36,8 +42,9 @@ const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
             id: file.id,
             filename: file.filename,
             download_url: downloadUrl,
+            ...(previewUrl ? { preview_url: previewUrl } : {}),
             file_capability: file.file_capability,
-          },
+          } as FileUploadItem,
         ]
       : [];
   });
