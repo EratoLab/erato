@@ -262,6 +262,13 @@ describe("useChatMessaging", () => {
     // Reset mocks
     vi.clearAllMocks();
     sseCallbacks = {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ abort_requested: true }),
+      }),
+    );
 
     // Default mock implementations
     mockUseChatMessages.mockReturnValue({
@@ -1263,8 +1270,12 @@ describe("useChatMessaging", () => {
       result.current.cancelMessage();
     });
 
-    // Should reset streaming state
-    expect(result.current.isStreaming).toBe(false);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/v1beta/me/messages/abortstream",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
   });
 
   it("should show optimistic user message immediately in new chat (null chatId)", async () => {

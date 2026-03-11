@@ -1645,6 +1645,10 @@ msgstr "Beim Laden der Chat-Oberfläche ist ein Fehler aufgetreten."
 msgid "Start typing below to begin a new conversation"
 msgstr ""
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Stop"
+msgstr ""
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
 msgstr "Erfolgreich"

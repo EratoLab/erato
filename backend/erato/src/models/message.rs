@@ -94,6 +94,9 @@ pub struct GenerationMetadata {
     /// Langfuse trace ID for this generation (if Langfuse tracing was enabled)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub langfuse_trace_id: Option<String>,
+    /// Whether this generation was stopped before natural completion
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub was_aborted: Option<bool>,
     /// Error information if generation failed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<GenerationErrorType>,

@@ -34,10 +34,12 @@ use crate::server::api::v1beta::assistants::{
 };
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
-    __path_edit_message_sse, __path_message_submit_sse, __path_regenerate_message_sse,
-    __path_resume_message_sse, EditMessageRequest, EditMessageStreamingResponseMessage,
+    __path_abort_message_stream, __path_edit_message_sse, __path_message_submit_sse,
+    __path_regenerate_message_sse, __path_resume_message_sse, AbortStreamRequest,
+    AbortStreamResponse, EditMessageRequest, EditMessageStreamingResponseMessage,
     MessageSubmitRequest, MessageSubmitStreamingResponseMessage, ResumeStreamRequest,
-    edit_message_sse, message_submit_sse, regenerate_message_sse, resume_message_sse,
+    abort_message_stream, edit_message_sse, message_submit_sse, regenerate_message_sse,
+    resume_message_sse,
 };
 use crate::server::api::v1beta::share_grants::{
     CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
@@ -86,6 +88,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/messages/regeneratestream", post(regenerate_message_sse))
         .route("/messages/editstream", post(edit_message_sse))
+        .route("/messages/abortstream", post(abort_message_stream))
         .route("/messages/resumestream", post(resume_message_sse))
         .route("/recent_chats", get(recent_chats))
         .route("/frequent_assistants", get(frequent_assistants))
@@ -204,6 +207,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         message_submit_sse,
         regenerate_message_sse,
         edit_message_sse,
+        abort_message_stream,
         resume_message_sse,
         create_chat,
         update_chat,
@@ -251,6 +255,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         MessageSubmitRequest,
         EditMessageRequest,
         EditMessageStreamingResponseMessage,
+        AbortStreamRequest,
+        AbortStreamResponse,
         ResumeStreamRequest,
         CreateChatRequest,
         CreateChatResponse,

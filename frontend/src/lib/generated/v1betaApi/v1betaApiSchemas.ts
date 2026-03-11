@@ -3,6 +3,20 @@
  *
  * @version
  */
+export type AbortStreamRequest = {
+  /**
+   * The ID of the chat whose active generation should be stopped.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  chat_id: string;
+};
+
+export type AbortStreamResponse = {
+  abort_requested: boolean;
+};
+
 /**
  * Response for the all-drives endpoint
  */
@@ -147,6 +161,10 @@ export type AssistantFile = {
    * The unique ID of the file
    */
   id: string;
+  /**
+   * Pre-signed URL for inline preview without forcing download when available.
+   */
+  preview_url?: null | undefined;
 };
 
 /**
@@ -686,6 +704,10 @@ export type FileUploadItem = {
    * The unique ID of the uploaded file
    */
   id: string;
+  /**
+   * Pre-signed URL for inline preview without forcing download when available
+   */
+  preview_url?: null | undefined;
 };
 
 /**

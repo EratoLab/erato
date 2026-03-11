@@ -187,8 +187,9 @@ fn system_time_to_iso_string(time: SystemTime) -> String {
 pub fn create_metadata_with_assistant_and_tools(
     assistant_id: Option<Uuid>,
     tool_names: &[String],
+    was_aborted: bool,
 ) -> Option<JsonValue> {
-    if assistant_id.is_none() && tool_names.is_empty() {
+    if assistant_id.is_none() && tool_names.is_empty() && !was_aborted {
         return None;
     }
 
@@ -206,6 +207,13 @@ pub fn create_metadata_with_assistant_and_tools(
     for tool_name in tool_names {
         let key = format!("tool_called_{}", tool_name);
         metadata.insert(key, JsonValue::Bool(true));
+    }
+
+    if was_aborted {
+        metadata.insert(
+            "erato_generation_aborted".to_string(),
+            JsonValue::Bool(true),
+        );
     }
 
     Some(JsonValue::Object(metadata))
@@ -390,7 +398,7 @@ impl TracedGenerationBuilder {
         let completion_start_time_str = self.completion_start_time.map(system_time_to_iso_string);
 
         // Create metadata with assistant_id and tool calls
-        let metadata = create_metadata_with_assistant_and_tools(assistant_id, tool_names);
+        let metadata = create_metadata_with_assistant_and_tools(assistant_id, tool_names, false);
 
         tracing_client
             .create_generation(
@@ -432,7 +440,7 @@ pub async fn create_trace_from_chat(
     });
 
     // Create metadata with assistant_id and tool calls
-    let metadata = create_metadata_with_assistant_and_tools(assistant_id, tool_names);
+    let metadata = create_metadata_with_assistant_and_tools(assistant_id, tool_names, false);
 
     tracing_client
         .create_trace(
@@ -482,7 +490,7 @@ pub async fn create_trace_with_generation_from_chat(
     let completion_start_time_str = completion_start_time.map(system_time_to_iso_string);
 
     // Create metadata with assistant_id and tool calls
-    let metadata = create_metadata_with_assistant_and_tools(assistant_id, tool_names);
+    let metadata = create_metadata_with_assistant_and_tools(assistant_id, tool_names, false);
 
     tracing_client
         .create_trace_with_generation(

@@ -135,6 +135,12 @@ export const ArrowUpIcon = ({ className, ...props }: IconProps) => (
   <ArrowUp className={className} {...props} />
 );
 
+export const StopIcon = ({ className, ...props }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} {...props}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+  </svg>
+);
+
 export const WarningCircleIcon = ({ className, ...props }: IconProps) => (
   <WarningCircle className={className} {...props} />
 );

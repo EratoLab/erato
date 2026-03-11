@@ -21,6 +21,7 @@ interface ButtonProps
   variant?: ButtonVariant;
   size?: ButtonSize;
   icon?: React.ReactNode;
+  iconClassName?: string;
   children?: React.ReactNode;
   showOnHover?: boolean;
   "aria-label"?: string;
@@ -79,6 +80,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       variant = "secondary",
       size = "md",
       icon,
+      iconClassName,
       children,
       className,
       showOnHover,
@@ -172,8 +174,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           variant === "icon-only" || variant === "sidebar-icon"
             ? "size-5"
             : "size-4",
+          iconClassName,
         ),
-      [variant],
+      [iconClassName, variant],
     );
 
     return (

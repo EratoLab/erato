@@ -25,7 +25,7 @@ import {
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 
-import { ArrowUpIcon } from "../icons";
+import { ArrowUpIcon, StopIcon } from "../icons";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { FacetSelector } from "./FacetSelector";
 import { ModelSelector } from "./ModelSelector";
@@ -163,7 +163,7 @@ export const ChatInput = ({
 
   // Get necessary state from context instead of useChat()
   // isPendingResponse is true immediately when send is clicked (before streaming starts)
-  const { isPendingResponse, isMessagingLoading, isUploading } =
+  const { isPendingResponse, isMessagingLoading, isUploading, cancelMessage } =
     useChatContext();
 
   // Combine loading states
@@ -777,25 +777,37 @@ export const ChatInput = ({
                 onModelChange={_setSelectedModel}
                 disabled={!_isSelectionReady}
               />
-              <Button
-                type="submit"
-                variant="secondary"
-                size="sm"
-                icon={<ArrowUpIcon className="size-5" />}
-                disabled={!canSendMessage || isSendDisabled}
-                data-testid={
-                  mode === "edit"
-                    ? "chat-input-save-edit"
-                    : "chat-input-send-message"
-                }
-                aria-label={
-                  isAnyTokenLimitExceeded
-                    ? t`Cannot send: Token limit exceeded`
-                    : mode === "edit"
-                      ? t`Save edit`
-                      : t`Send message`
-                }
-              />
+              {isPendingResponse ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={<StopIcon />}
+                  onClick={cancelMessage}
+                  data-testid="chat-input-stop-generation"
+                  aria-label={t`Stop`}
+                />
+              ) : (
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  size="sm"
+                  icon={<ArrowUpIcon className="size-5" />}
+                  disabled={!canSendMessage || isSendDisabled}
+                  data-testid={
+                    mode === "edit"
+                      ? "chat-input-save-edit"
+                      : "chat-input-send-message"
+                  }
+                  aria-label={
+                    isAnyTokenLimitExceeded
+                      ? t`Cannot send: Token limit exceeded`
+                      : mode === "edit"
+                        ? t`Save edit`
+                        : t`Send message`
+                  }
+                />
+              )}
             </div>
           </div>
           {facetsError && (
