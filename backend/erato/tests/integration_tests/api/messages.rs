@@ -1705,3 +1705,150 @@ async fn test_resume_stream_full_replay(pool: Pool<Postgres>) {
     // Clean up - abort the server
     server_handle.abort();
 }
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_abort_stream_persists_partial_message(pool: Pool<Postgres>) {
+    use crate::test_utils::MockLlmConfig;
+    use std::time::Duration;
+
+    let chunks: Vec<String> = (1..=12).map(|i| format!("Chunk {:02}", i)).collect();
+    let mock_config = MockLlmConfig {
+        chunks: chunks.clone(),
+        delay_ms: 200,
+        provider_id: "mock-llm".to_string(),
+        model_name: "gpt-3.5-turbo".to_string(),
+    };
+
+    let (app_config, _server) = setup_mock_llm_server(Some(mock_config)).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: axum::Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server_handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{}", server_addr);
+
+    let client_clone = client.clone();
+    let base_url_clone = base_url.clone();
+    let submit_handle = tokio::spawn(async move {
+        let response = client_clone
+            .post(format!(
+                "{}/api/v1beta/me/messages/submitstream",
+                base_url_clone
+            ))
+            .header("Authorization", format!("Bearer {}", TEST_JWT_TOKEN))
+            .header("Content-Type", "application/json")
+            .json(&json!({
+                "user_message": "Abort this long generation"
+            }))
+            .send()
+            .await
+            .expect("Failed to send submitstream request");
+
+        assert!(response.status().is_success());
+        response
+            .text()
+            .await
+            .expect("Failed to read submit response")
+    });
+
+    tokio::time::sleep(Duration::from_millis(900)).await;
+
+    let chat_id = {
+        let tasks = app_state.background_tasks.tasks.read().await;
+        tasks.keys().next().copied()
+    }
+    .expect("Expected active background task");
+
+    let abort_response = client
+        .post(format!("{}/api/v1beta/me/messages/abortstream", base_url))
+        .header("Authorization", format!("Bearer {}", TEST_JWT_TOKEN))
+        .header("Content-Type", "application/json")
+        .json(&json!({
+            "chat_id": chat_id.to_string()
+        }))
+        .send()
+        .await
+        .expect("Failed to send abortstream request");
+
+    assert!(
+        abort_response.status().is_success(),
+        "Abort request failed: {}",
+        abort_response.text().await.unwrap_or_default()
+    );
+
+    let submit_body = submit_handle.await.expect("submit task panicked");
+    let submit_events: Vec<String> = submit_body
+        .split("\n\n")
+        .filter(|chunk| chunk.contains("data:"))
+        .map(|chunk| chunk.to_string())
+        .collect();
+
+    let assistant_completed = submit_events.iter().find_map(|event| {
+        let data = event.split("data:").nth(1).unwrap_or("").trim();
+        if let Ok(json) = serde_json::from_str::<Value>(data)
+            && json["message_type"] == "assistant_message_completed"
+        {
+            return Some(json);
+        }
+        None
+    });
+
+    let assistant_completed =
+        assistant_completed.expect("Expected assistant_message_completed after abort");
+    let completed_text = assistant_completed["content"]
+        .as_array()
+        .and_then(|parts| parts.first())
+        .and_then(|part| part["text"].as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    assert!(
+        completed_text.contains("Chunk 01") || completed_text.is_empty(),
+        "Expected persisted partial content or empty content, got: {}",
+        completed_text
+    );
+    assert!(
+        !completed_text.contains("Chunk 12"),
+        "Aborted generation should not contain the full response"
+    );
+
+    let assistant_message_id = Uuid::parse_str(
+        assistant_completed["message_id"]
+            .as_str()
+            .expect("assistant_message_completed should contain message_id"),
+    )
+    .expect("message_id should be a uuid");
+
+    let saved_message = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to load saved message")
+        .expect("Expected saved assistant message");
+
+    let generation_metadata = saved_message
+        .generation_metadata
+        .expect("Expected generation metadata on aborted message");
+    assert_eq!(generation_metadata["was_aborted"], json!(true));
+
+    let saved_raw_message = saved_message.raw_message;
+    let saved_content = saved_raw_message["content"]
+        .as_array()
+        .expect("Saved assistant content should be an array");
+    assert_eq!(saved_content.len(), 1);
+    assert_eq!(saved_content[0]["content_type"], json!("text"));
+
+    server_handle.abort();
+}

@@ -12,7 +12,7 @@ use sqlx::types::Uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::{Notify, RwLock, broadcast};
 
 /// Maximum number of events to store in history per task
 const MAX_EVENT_HISTORY: usize = 10_000;
@@ -86,6 +86,10 @@ pub struct StreamingTask {
     event_history: Arc<RwLock<Vec<StreamingEvent>>>,
     /// Whether the generation is complete
     completed: Arc<AtomicBool>,
+    /// Whether cancellation was requested by the user
+    abort_requested: Arc<AtomicBool>,
+    /// Notifies waiters when an abort is requested
+    abort_notify: Arc<Notify>,
 }
 
 impl std::fmt::Debug for StreamingTask {
@@ -94,6 +98,10 @@ impl std::fmt::Debug for StreamingTask {
             .field("message_id", &self.message_id)
             .field("subscriber_count", &self.event_tx.receiver_count())
             .field("completed", &self.completed.load(Ordering::SeqCst))
+            .field(
+                "abort_requested",
+                &self.abort_requested.load(Ordering::SeqCst),
+            )
             .finish()
     }
 }
@@ -109,6 +117,8 @@ impl StreamingTask {
             event_tx,
             event_history: Arc::new(RwLock::new(Vec::new())),
             completed: Arc::new(AtomicBool::new(false)),
+            abort_requested: Arc::new(AtomicBool::new(false)),
+            abort_notify: Arc::new(Notify::new()),
         }
     }
 
@@ -157,6 +167,25 @@ impl StreamingTask {
     /// Check if the task is completed
     pub fn is_completed(&self) -> bool {
         self.completed.load(Ordering::SeqCst)
+    }
+
+    /// Request cancellation of the active generation.
+    pub fn request_abort(&self) {
+        self.abort_requested.store(true, Ordering::SeqCst);
+        self.abort_notify.notify_waiters();
+    }
+
+    /// Check whether cancellation was requested.
+    pub fn is_abort_requested(&self) -> bool {
+        self.abort_requested.load(Ordering::SeqCst)
+    }
+
+    /// Wait until cancellation has been requested.
+    pub async fn wait_for_abort(&self) {
+        if self.is_abort_requested() {
+            return;
+        }
+        self.abort_notify.notified().await;
     }
 
     /// Get the number of active subscribers
@@ -255,6 +284,7 @@ mod tests {
         assert_eq!(task.message_id, message_id);
         assert!(!task.is_completed());
         assert_eq!(task.subscriber_count(), 1); // One receiver created
+        assert!(!task.is_abort_requested());
     }
 
     #[tokio::test]
@@ -331,5 +361,19 @@ mod tests {
         // Remove the task manually
         manager.remove_task(&chat_id).await;
         assert!(manager.get_task(&chat_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_task_abort_request() {
+        let manager = BackgroundTaskManager::new();
+        let chat_id = Uuid::new_v4();
+        let message_id = Uuid::new_v4();
+
+        let (_receiver, task) = manager.start_task(chat_id, message_id).await;
+        assert!(!task.is_abort_requested());
+
+        task.request_abort();
+
+        assert!(task.is_abort_requested());
     }
 }

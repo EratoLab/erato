@@ -626,57 +626,56 @@ export function useChatMessaging(
 
   // For backward compatibility with tests
   const cancelMessage = useCallback(() => {
-    // Don't clear optimistic state during navigation transition
-    const isInTransition =
-      useMessagingStore.getState().isInNavigationTransition;
+    const storeSnapshot = useMessagingStore.getState();
+    const aliasResolvedNewChatKey = resolveStreamAlias(
+      storeSnapshot.streamKeyAliases,
+      NEW_CHAT_STREAM_KEY,
+    );
+    const aliasDerivedChatId =
+      aliasResolvedNewChatKey !== NEW_CHAT_STREAM_KEY
+        ? aliasResolvedNewChatKey
+        : null;
+    const activeResolvedKey = resolveStreamAlias(
+      storeSnapshot.streamKeyAliases,
+      storeSnapshot.activeStreamKey,
+    );
+    const activeDerivedChatId =
+      activeResolvedKey !== NEW_CHAT_STREAM_KEY ? activeResolvedKey : null;
+    const effectiveChatId =
+      chatId ??
+      newlyCreatedChatId ??
+      storeSnapshot.newlyCreatedChatId ??
+      aliasDerivedChatId ??
+      activeDerivedChatId;
 
-    // Clean up any existing SSE connection
-    const cleanupForStreamKey = getSSECleanupForKey(streamKey);
-    if (cleanupForStreamKey) {
-      cleanupForStreamKey();
+    if (!effectiveChatId) {
+      const cleanupForStreamKey = getSSECleanupForKey(streamKey);
+      cleanupForStreamKey?.();
       setSSECleanupForKey(streamKey, null);
+      resetStreaming(streamKey);
+      setSubmittingForKey(streamKey, false);
+      return;
     }
 
-    // Reset streaming state
-    resetStreaming(streamKey);
-
-    // Refetch first to ensure we have latest server data before clearing messages
-    if (chatId) {
-      void chatMessagesQuery.refetch().then(() => {
-        if (!isInTransition) {
-          clearCompletedUserMessages(streamKey);
-        } else {
-          logger.log(
-            "[DEBUG_STREAMING] cancelMessage: Skipping clearCompletedUserMessages during navigation transition",
-          );
-        }
-      });
-    } else {
-      if (!isInTransition) {
-        clearCompletedUserMessages(streamKey);
-      } else {
-        logger.log(
-          "[DEBUG_STREAMING] cancelMessage: Skipping clearCompletedUserMessages during navigation transition",
-        );
-      }
-    }
-
-    // Reset the submission flag
-    setSubmittingForKey(streamKey, false);
-
-    // Log cancellation
-    if (process.env.NODE_ENV === "development") {
-      logger.log(
-        "[DEBUG_STREAMING] Message cancelled by calling cancelMessage.",
-      );
-    }
+    void fetch("/api/v1beta/me/messages/abortstream", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chat_id: effectiveChatId,
+      }),
+    }).catch((error: unknown) => {
+      logger.error("Failed to request message cancellation", error);
+    });
   }, [
-    resetStreaming,
-    clearCompletedUserMessages,
     chatId,
+    newlyCreatedChatId,
     streamKey,
     getSSECleanupForKey,
     setSSECleanupForKey,
+    resetStreaming,
+    setSubmittingForKey,
   ]);
 
   // Clean up any existing SSE connection on unmount or chatId change

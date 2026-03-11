@@ -1065,6 +1065,51 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/abortstream": {
+      "post": {
+        "tags": [],
+        "operationId": "abort_message_stream",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AbortStreamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AbortStreamResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "When the user has no access to the chat"
+          },
+          "404": {
+            "description": "No active generation task found for this chat"
+          },
+          "500": {
+            "description": "When an internal server error occurs"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/editstream": {
       "post": {
         "tags": [],
@@ -1847,6 +1892,31 @@
   },
   "components": {
     "schemas": {
+      "AbortStreamRequest": {
+        "type": "object",
+        "required": [
+          "chat_id"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The ID of the chat whose active generation should be stopped.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          }
+        }
+      },
+      "AbortStreamResponse": {
+        "type": "object",
+        "required": [
+          "abort_requested"
+        ],
+        "properties": {
+          "abort_requested": {
+            "type": "boolean"
+          }
+        }
+      },
       "AllDrivesResponse": {
         "type": "object",
         "description": "Response for the all-drives endpoint",

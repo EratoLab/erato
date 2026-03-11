@@ -1645,6 +1645,10 @@ msgstr "Something went wrong while loading the chat interface."
 msgid "Start typing below to begin a new conversation"
 msgstr "Start typing below to begin a new conversation"
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Stop"
+msgstr "Stop"
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
 msgstr "Success"

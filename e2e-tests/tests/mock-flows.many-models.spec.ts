@@ -220,6 +220,48 @@ test(
 );
 
 test(
+  "Mock-LLM long-running stream can be stopped by the user",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(90000);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+
+    await textbox.fill("long running 20");
+    await textbox.press("Enter");
+
+    const stopButton = page.getByTestId("chat-input-stop-generation");
+    await expect(stopButton).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Second 5 passed")).toBeVisible({
+      timeout: 20000,
+    });
+
+    await stopButton.click();
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 20000,
+    });
+
+    await expect(page.getByTestId("chat-input-stop-generation")).toHaveCount(0);
+    await expect(page.getByTestId("message-assistant").last()).toContainText(
+      "Second 5 passed",
+      {
+        timeout: 20000,
+      },
+    );
+    await expect(
+      page.getByTestId("message-assistant").last(),
+    ).not.toContainText("Complete!");
+  },
+);
+
+test(
   "Mock-LLM delay shows optimistic user/loading quickly and completes within 5s",
   { tag: TAG_CI },
   async ({ page }) => {
@@ -524,7 +566,9 @@ test(
 
     const footnoteMessages = page
       .getByTestId("message-assistant")
-      .filter({ hasText: "Footnote links should stay inside the current message" });
+      .filter({
+        hasText: "Footnote links should stay inside the current message",
+      });
     await expect(footnoteMessages).toHaveCount(2);
 
     const firstMessage = footnoteMessages.nth(0);
@@ -536,8 +580,12 @@ test(
     expect(secondMessageId).toBeTruthy();
     expect(firstMessageId).not.toBe(secondMessageId);
 
-    const firstFootnoteRef = firstMessage.locator('a[data-footnote-ref="true"]');
-    const secondFootnoteRef = secondMessage.locator('a[data-footnote-ref="true"]');
+    const firstFootnoteRef = firstMessage.locator(
+      'a[data-footnote-ref="true"]',
+    );
+    const secondFootnoteRef = secondMessage.locator(
+      'a[data-footnote-ref="true"]',
+    );
 
     await expect(firstFootnoteRef).toHaveAttribute(
       "href",
@@ -781,14 +829,10 @@ test(
     }
 
     expect(downloadedFilenames.sort()).toEqual(
-      [
-        "Acme_Inc_Organizational_Data.docx",
-        "minimal_libreoffice.docx",
-      ].sort(),
+      ["Acme_Inc_Organizational_Data.docx", "minimal_libreoffice.docx"].sort(),
     );
   },
 );
-
 
 test(
   "Mock-LLM editing a file-based message preserves the attachment context",

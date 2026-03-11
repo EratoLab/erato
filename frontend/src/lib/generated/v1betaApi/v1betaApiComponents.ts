@@ -761,6 +761,102 @@ export const useGetFile = <TData = Schemas.FileUploadItem,>(
   });
 };
 
+export type GetFilePreviewPathParams = {
+  /**
+   * The ID of the file to preview
+   */
+  fileId: string;
+};
+
+export type GetFilePreviewError = Fetcher.ErrorWrapper<undefined>;
+
+export type GetFilePreviewVariables = {
+  pathParams: GetFilePreviewPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchGetFilePreview = (
+  variables: GetFilePreviewVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    GetFilePreviewError,
+    undefined,
+    {},
+    {},
+    GetFilePreviewPathParams
+  >({
+    url: "/api/v1beta/files/{fileId}/preview",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function getFilePreviewQuery(variables: GetFilePreviewVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<undefined>;
+};
+
+export function getFilePreviewQuery(
+  variables: GetFilePreviewVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<undefined>)
+    | reactQuery.SkipToken;
+};
+
+export function getFilePreviewQuery(
+  variables: GetFilePreviewVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/files/{fileId}/preview",
+      operationId: "getFilePreview",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchGetFilePreview(variables, signal),
+  };
+}
+
+export const useSuspenseGetFilePreview = <TData = undefined,>(
+  variables: GetFilePreviewVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<undefined, GetFilePreviewError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<undefined, GetFilePreviewError, TData>({
+    ...getFilePreviewQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGetFilePreview = <TData = undefined,>(
+  variables: GetFilePreviewVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<undefined, GetFilePreviewError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<undefined, GetFilePreviewError, TData>({
+    ...getFilePreviewQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type AllDrivesError = Fetcher.ErrorWrapper<undefined>;
 
 export type AllDrivesVariables = V1betaApiContext["fetcherOptions"];
@@ -1961,6 +2057,52 @@ export const useFrequentAssistants = <
     ),
     ...options,
     ...queryOptions,
+  });
+};
+
+export type AbortMessageStreamError = Fetcher.ErrorWrapper<undefined>;
+
+export type AbortMessageStreamVariables = {
+  body: Schemas.AbortStreamRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchAbortMessageStream = (
+  variables: AbortMessageStreamVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.AbortStreamResponse,
+    AbortMessageStreamError,
+    Schemas.AbortStreamRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/messages/abortstream",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useAbortMessageStream = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.AbortStreamResponse,
+      AbortMessageStreamError,
+      AbortMessageStreamVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.AbortStreamResponse,
+    AbortMessageStreamError,
+    AbortMessageStreamVariables
+  >({
+    mutationFn: (variables: AbortMessageStreamVariables) =>
+      fetchAbortMessageStream(deepMerge(fetcherOptions, variables)),
+    ...options,
   });
 };
 
@@ -3361,6 +3503,11 @@ export type QueryOperation =
       path: "/api/v1beta/files/{fileId}";
       operationId: "getFile";
       variables: GetFileVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/files/{fileId}/preview";
+      operationId: "getFilePreview";
+      variables: GetFilePreviewVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/integrations/sharepoint/all-drives";
