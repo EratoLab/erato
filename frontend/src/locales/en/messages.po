@@ -331,6 +331,21 @@ msgid "chat.newChat.title"
 msgstr "New Chat"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.limit_reached.header"
+msgstr "Budget Limit Reached"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.limit_reached.message"
+msgstr "You have reached or exceeded your budget limit of {formattedLimit}. Current spending: {formattedSpending}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.period_suffix"
+msgstr " This is for your {days}-day budget period."
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.driveType.personal"
 msgstr "Personal"
@@ -1019,10 +1034,6 @@ msgstr " (more available)"
 msgid " File attachments account for {fileTokensFormatted} tokens."
 msgstr " File attachments account for {fileTokensFormatted} tokens."
 
-#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
-msgid " This is for your {days}-day budget period."
-msgstr " This is for your {days}-day budget period."
-
 #. placeholder {0}: session.metadata?.fileCount ?? 0
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
@@ -1133,10 +1144,6 @@ msgstr "Beginning of conversation"
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Browser Language:"
 msgstr "Browser Language:"
-
-#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
-msgid "Budget Limit Reached"
-msgstr "Budget Limit Reached"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 #: src/components/ui/Chat/ChatInput.tsx
@@ -1797,10 +1804,6 @@ msgstr "You are using {percentUsed}% of your budget ({formattedSpending} of {for
 #: src/pages/AssistantEditPage.tsx
 msgid "You don't have permission to edit this assistant. Only the owner can modify assistant settings."
 msgstr "You don't have permission to edit this assistant. Only the owner can modify assistant settings."
-
-#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
-msgid "You have reached or exceeded your budget limit of {formattedLimit}. Current spending: {formattedSpending}."
-msgstr "You have reached or exceeded your budget limit of {formattedLimit}. Current spending: {formattedSpending}."
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Your conversations with this assistant"

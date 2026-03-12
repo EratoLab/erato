@@ -331,6 +331,21 @@ msgid "chat.newChat.title"
 msgstr "Nowy Czat"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.limit_reached.header"
+msgstr "Osiągnięto limit budżetowy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.limit_reached.message"
+msgstr "Osiągnięto lub przekroczono limit budżetowy {formattedLimit}. Bieżące wydatki: {formattedSpending}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.period_suffix"
+msgstr " Dotyczy to Twojego {days}-dniowego okresu budżetowego."
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.driveType.personal"
 msgstr "Osobisty"
@@ -1019,10 +1034,6 @@ msgstr " (więcej dostępnych)"
 msgid " File attachments account for {fileTokensFormatted} tokens."
 msgstr " Załączniki plików zajmują {fileTokensFormatted} tokenów."
 
-#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
-msgid " This is for your {days}-day budget period."
-msgstr " Dotyczy to Twojego {days}-dniowego okresu budżetowego."
-
 #. placeholder {0}: session.metadata?.fileCount ?? 0
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
@@ -1133,10 +1144,6 @@ msgstr "Początek rozmowy"
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Browser Language:"
 msgstr "Język przeglądarki:"
-
-#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
-msgid "Budget Limit Reached"
-msgstr "Osiągnięto limit budżetowy"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 #: src/components/ui/Chat/ChatInput.tsx
@@ -1796,10 +1803,6 @@ msgstr ""
 
 #: src/pages/AssistantEditPage.tsx
 msgid "You don't have permission to edit this assistant. Only the owner can modify assistant settings."
-msgstr ""
-
-#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
-msgid "You have reached or exceeded your budget limit of {formattedLimit}. Current spending: {formattedSpending}."
 msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
