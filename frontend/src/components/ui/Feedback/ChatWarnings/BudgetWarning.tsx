@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { t, msg } from "@lingui/core/macro";
 import clsx from "clsx";
 
 import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
@@ -46,7 +46,12 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
   // Determine alert type and title
   const alertType = warning.isError ? "error" : "warning";
   const title = warning.isError
-    ? t`Budget Limit Reached`
+    ? t(
+        msg({
+          id: "chat.warning.budget.limit_reached.header",
+          message: "Budget Limit Reached",
+        }),
+      )
     : t`Approaching Budget Limit`;
 
   // Format percentage for display
@@ -60,7 +65,12 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
   let message = "";
 
   if (warning.isError) {
-    message = t`You have reached or exceeded your budget limit of ${formattedLimit}. Current spending: ${formattedSpending}.`;
+    message = t(
+      msg({
+        id: "chat.warning.budget.limit_reached.message",
+        message: `You have reached or exceeded your budget limit of ${formattedLimit}. Current spending: ${formattedSpending}.`,
+      }),
+    );
   } else if (warning.isWarning) {
     message = t`You are using ${percentUsed}% of your budget (${formattedSpending} of ${formattedLimit}).`;
   }
@@ -68,7 +78,12 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
   // Show budget period if available
   if (budgetStatus?.budget_period_days) {
     const days = budgetStatus.budget_period_days;
-    message += t` This is for your ${days}-day budget period.`;
+    message += t(
+      msg({
+        id: "chat.warning.budget.period_suffix",
+        message: ` This is for your ${days}-day budget period.`,
+      }),
+    );
   }
 
   return (
