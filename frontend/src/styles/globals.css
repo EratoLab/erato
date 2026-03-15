@@ -137,9 +137,6 @@
   --theme-bg-hover: #e5e7eb;
   --theme-bg-selected: #e5e7eb;
 
-  /* Message Item colors */
-  --theme-messageItem-hover: #e5e7eb; /* neutral.200 - consistent with theme hover color */
-
   /* Foreground colors */
   --theme-fg-primary: #111827;
   --theme-fg-secondary: #374151;
@@ -148,27 +145,27 @@
 
   /* Border colors */
   --theme-border: #d1d5db;
-  --theme-border-subtle: #e5e7eb;
+  --theme-border-subtle: var(--theme-bg-accent);
   --theme-border-strong: #9ca3af;
-  --theme-border-divider: #d1d5db;
+  --theme-border-divider: var(--theme-border);
   --theme-border-focus: #6b7280; /* Monochrome focus */
 
   /* Shell and message surfaces */
-  --theme-shell-app: #f9fafb;
-  --theme-shell-page: #f3f4f6;
-  --theme-shell-sidebar: #e5e7eb;
-  --theme-shell-sidebar-hover: #e5e7eb;
-  --theme-shell-sidebar-selected: #e5e7eb;
-  --theme-shell-chat-header: #f3f4f6;
-  --theme-shell-chat-body: #f3f4f6;
-  --theme-shell-chat-input: #ffffff;
-  --theme-shell-modal: #f9fafb;
-  --theme-shell-dropdown: #f9fafb;
+  --theme-shell-app: var(--theme-bg-primary);
+  --theme-shell-page: var(--theme-bg-secondary);
+  --theme-shell-sidebar: var(--theme-bg-sidebar);
+  --theme-shell-sidebar-hover: var(--theme-bg-hover);
+  --theme-shell-sidebar-selected: var(--theme-bg-selected);
+  --theme-shell-chat-header: var(--theme-bg-secondary);
+  --theme-shell-chat-body: var(--theme-bg-secondary);
+  --theme-shell-chat-input: var(--theme-bg-tertiary);
+  --theme-shell-modal: var(--theme-bg-primary);
+  --theme-shell-dropdown: var(--theme-bg-primary);
   --theme-overlay-modal: rgba(17, 24, 39, 0.6);
-  --theme-message-user: #f9fafb;
-  --theme-message-assistant: #f3f4f6;
-  --theme-message-hover: #e5e7eb;
-  --theme-message-controls: #f3f4f6;
+  --theme-message-user: var(--theme-bg-primary);
+  --theme-message-assistant: var(--theme-bg-secondary);
+  --theme-message-hover: var(--theme-bg-hover);
+  --theme-message-controls: var(--theme-bg-secondary);
 
   /* Legacy alias for message hover */
   --theme-messageItem-hover: var(--theme-message-hover);
@@ -254,27 +251,27 @@
 
     /* Border colors */
     --theme-border: #4b5563;
-    --theme-border-subtle: #374151;
+    --theme-border-subtle: var(--theme-bg-accent);
     --theme-border-strong: #6b7280;
-    --theme-border-divider: #4b5563;
+    --theme-border-divider: var(--theme-border);
     --theme-border-focus: #9ca3af; /* Monochrome focus */
 
     /* Shell and message surfaces */
-    --theme-shell-app: #111827;
-    --theme-shell-page: #1f2937;
-    --theme-shell-sidebar: #111827;
-    --theme-shell-sidebar-hover: #4b5563;
-    --theme-shell-sidebar-selected: #374151;
-    --theme-shell-chat-header: #1f2937;
-    --theme-shell-chat-body: #1f2937;
-    --theme-shell-chat-input: #374151;
-    --theme-shell-modal: #111827;
-    --theme-shell-dropdown: #111827;
+    --theme-shell-app: var(--theme-bg-primary);
+    --theme-shell-page: var(--theme-bg-secondary);
+    --theme-shell-sidebar: var(--theme-bg-sidebar);
+    --theme-shell-sidebar-hover: var(--theme-bg-hover);
+    --theme-shell-sidebar-selected: var(--theme-bg-selected);
+    --theme-shell-chat-header: var(--theme-bg-secondary);
+    --theme-shell-chat-body: var(--theme-bg-secondary);
+    --theme-shell-chat-input: var(--theme-bg-tertiary);
+    --theme-shell-modal: var(--theme-bg-primary);
+    --theme-shell-dropdown: var(--theme-bg-primary);
     --theme-overlay-modal: rgba(0, 0, 0, 0.7);
-    --theme-message-user: #111827;
-    --theme-message-assistant: #1f2937;
-    --theme-message-hover: #374151;
-    --theme-message-controls: #1f2937;
+    --theme-message-user: var(--theme-bg-primary);
+    --theme-message-assistant: var(--theme-bg-secondary);
+    --theme-message-hover: var(--theme-bg-hover);
+    --theme-message-controls: var(--theme-bg-secondary);
 
     /* Legacy alias for message hover */
     --theme-messageItem-hover: var(--theme-message-hover);
