@@ -69,12 +69,23 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
     return null;
   }
 
+  const overlayStyle = {
+    backgroundColor: "var(--theme-overlay-modal)",
+  } as const;
+
+  const shellStyle = {
+    backgroundColor: "var(--theme-shell-modal)",
+    borderRadius: "var(--theme-radius-modal)",
+    boxShadow: "var(--theme-elevation-modal)",
+  } as const;
+
   const modalContent = (
     <div
       className={clsx(
-        "fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm",
+        "fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm",
         className,
       )}
+      style={overlayStyle}
       onMouseDown={handleOverlayMouseDown}
       onClick={handleOverlayClick}
       role="presentation"
@@ -84,13 +95,14 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       <div
         ref={modalRef}
         className={clsx(
-          "theme-transition relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-theme-bg-primary shadow-xl",
+          "theme-transition relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden",
           // Responsive padding - add margin on mobile
           "mx-4",
           // Add default focus outline for accessibility
           "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
           contentClassName,
         )}
+        style={shellStyle}
         // Make the content div focusable
         tabIndex={-1}
         role="dialog"

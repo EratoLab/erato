@@ -16,7 +16,17 @@ describe("ModalBase", () => {
     );
 
     const dialog = screen.getByRole("dialog");
+    const overlay = document.querySelector('[data-ui="modal-overlay"]');
+
     expect(dialog).toHaveAttribute("data-ui", "modal-shell");
-    expect(document.querySelector('[data-ui="modal-overlay"]')).toBeTruthy();
+    expect(dialog).toHaveStyle({
+      backgroundColor: "var(--theme-shell-modal)",
+      borderRadius: "var(--theme-radius-modal)",
+      boxShadow: "var(--theme-elevation-modal)",
+    });
+    expect(overlay).toBeTruthy();
+    expect(overlay).toHaveStyle({
+      backgroundColor: "var(--theme-overlay-modal)",
+    });
   });
 });

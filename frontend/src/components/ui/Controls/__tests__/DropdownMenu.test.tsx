@@ -26,5 +26,11 @@ describe("DropdownMenu", () => {
       "data-ui",
       "dropdown-panel",
     );
+    expect(screen.getByRole("menu")).toHaveStyle({
+      backgroundColor: "var(--theme-shell-dropdown)",
+      borderColor: "var(--theme-border-divider)",
+      borderRadius: "var(--theme-radius-base)",
+      boxShadow: "var(--theme-elevation-dropdown)",
+    });
   });
 });

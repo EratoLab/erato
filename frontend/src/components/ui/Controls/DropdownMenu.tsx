@@ -306,13 +306,16 @@ export const DropdownMenu = memo(
           ref={menuRef}
           id={menuId}
           className={clsx(
-            "fixed rounded-md shadow-lg",
+            "fixed border",
             matchContentWidth ? "w-max min-w-48" : "w-48",
-            "border border-theme-border bg-theme-bg-primary",
             "z-[9999]",
             "theme-transition",
           )}
           style={{
+            backgroundColor: "var(--theme-shell-dropdown)",
+            borderColor: "var(--theme-border-divider)",
+            borderRadius: "var(--theme-radius-base)",
+            boxShadow: "var(--theme-elevation-dropdown)",
             top:
               position.vertical === "bottom"
                 ? `${buttonRef.current?.getBoundingClientRect().bottom}px`
