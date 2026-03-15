@@ -71,6 +71,23 @@ const SidebarLogo = memo<{
   onToggle?: () => void;
 }>(({ logoPath, onToggle }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [logoPath]);
+
+  if (imgFailed) {
+    return (
+      <Button
+        onClick={onToggle}
+        variant="sidebar-icon"
+        icon={<SidebarToggleIcon />}
+        aria-label={t`expand sidebar`}
+        aria-expanded="false"
+      />
+    );
+  }
 
   return (
     <Button
@@ -89,6 +106,7 @@ const SidebarLogo = memo<{
           "max-h-8 max-w-8 transition-opacity",
           isHovered && "opacity-30",
         )}
+        onError={() => setImgFailed(true)}
       />
       {isHovered && (
         <div className="absolute inset-0 flex items-center justify-center">

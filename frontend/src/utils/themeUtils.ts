@@ -108,7 +108,12 @@ export function deepMerge<T extends Record<string, unknown>>(
 export async function checkFileExists(url: string): Promise<boolean> {
   try {
     const response = await fetch(url, { method: "HEAD" });
-    return response.ok;
+    if (!response.ok) return false;
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("text/html")) return false;
+
+    return true;
   } catch (error) {
     console.error(`Error checking if file exists at ${url}`, error);
     return false;
