@@ -9,7 +9,6 @@ vi.mock("@/components/ui/ThemeApplier", () => ({
   ThemeApplier: () => null,
 }));
 
-// eslint-disable-next-line import/order
 import { env } from "@/app/env";
 
 import { ThemeProvider } from "./ThemeProvider";
