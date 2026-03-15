@@ -3,7 +3,6 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 
-import { ThemeApplier } from "@/components/ui/ThemeApplier";
 import { defaultTheme, darkTheme } from "@/config/theme";
 import {
   defaultThemeConfig,
@@ -454,7 +453,6 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   return (
     <ThemeContext.Provider value={contextValue}>
-      <ThemeApplier />
       {children}
     </ThemeContext.Provider>
   );

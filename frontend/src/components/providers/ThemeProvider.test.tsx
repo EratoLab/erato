@@ -5,10 +5,6 @@ vi.mock("@/app/env", () => ({
   env: vi.fn(),
 }));
 
-vi.mock("@/components/ui/ThemeApplier", () => ({
-  ThemeApplier: () => null,
-}));
-
 import { env } from "@/app/env";
 
 import { ThemeProvider } from "./ThemeProvider";
