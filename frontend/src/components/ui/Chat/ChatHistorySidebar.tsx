@@ -128,7 +128,10 @@ const ChatHistoryHeader = memo<{
   sidebarLogoPath?: string | null;
 }>(
   ({ collapsed, isSlimMode, onToggleCollapse, showTitle, sidebarLogoPath }) => (
-    <div className="flex min-h-[60px] border-b border-theme-border p-2">
+    <div
+      className="flex min-h-[60px] border-b border-theme-border p-2"
+      data-ui="sidebar-header"
+    >
       {/* In slim mode, show logo with hover toggle or just toggle button */}
       {isSlimMode && (
         <div className="flex w-12">
@@ -440,7 +443,7 @@ const ChatHistoryFooter = memo<{
   onSignOut: () => void;
   isSlimMode?: boolean;
 }>(({ userProfile, onSignOut, isSlimMode = false }) => (
-  <div className="border-t border-theme-border p-2">
+  <div className="border-t border-theme-border p-2" data-ui="sidebar-footer">
     <UserProfileThemeDropdown
       userProfile={userProfile}
       onSignOut={onSignOut}
@@ -606,6 +609,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               },
               className,
             )}
+            data-ui="sidebar"
           >
             <ChatHistoryHeader
               collapsed={collapsed}

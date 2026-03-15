@@ -138,6 +138,8 @@ export const ChatMessage = memo(function ChatMessage({
       aria-label={`${userDisplayName} ${t({ id: "chat.message.aria", message: "message" })}`}
       data-testid={`message-${role}`}
       data-message-id={message.id}
+      data-ui="chat-message"
+      data-role={role}
     >
       <div className="flex w-full gap-6">
         {showAvatar && (
