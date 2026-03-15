@@ -10,7 +10,10 @@ import {
   loadResolvedThemeConfig,
   resolveIconPaths,
 } from "@/config/themeConfig";
-import { deepMerge, type CustomThemeConfig } from "@/utils/themeUtils";
+import {
+  mergeThemeWithOverrides,
+  type CustomThemeConfig,
+} from "@/utils/themeUtils";
 
 import type { Theme } from "@/config/theme";
 import type { PropsWithChildren } from "react";
@@ -210,7 +213,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
           : customThemeConfig.theme.light;
 
       if (customTheme) {
-        baseTheme = deepMerge(baseTheme, customTheme as Partial<Theme>);
+        baseTheme = mergeThemeWithOverrides(baseTheme, customTheme);
       }
     }
 

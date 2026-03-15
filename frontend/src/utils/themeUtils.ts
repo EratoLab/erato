@@ -1,5 +1,5 @@
 // Utility functions for theme handling
-import type { ThemeOverride } from "@/config/theme";
+import type { Theme, ThemeOverride } from "@/config/theme";
 
 /**
  * Page alignment options
@@ -100,6 +100,129 @@ export function deepMerge<T extends Record<string, unknown>>(
   });
 
   return result;
+}
+
+const withBorderRadiusCompatibility = (
+  theme: Theme,
+  override?: ThemeOverride,
+): Theme => {
+  if (!override?.borderRadius) return theme;
+
+  return {
+    ...theme,
+    radius: {
+      ...theme.radius,
+      base: override.radius?.base ?? theme.borderRadius,
+      shell: override.radius?.shell ?? theme.borderRadius,
+      input: override.radius?.input ?? theme.borderRadius,
+      message: override.radius?.message ?? theme.borderRadius,
+      modal: override.radius?.modal ?? theme.borderRadius,
+      pill: override.radius?.pill ?? theme.borderRadius,
+    },
+  };
+};
+
+const withLegacyColorCompatibility = (
+  theme: Theme,
+  override?: ThemeOverride,
+): Theme => {
+  const colorsOverride = override?.colors;
+  if (!colorsOverride) return theme;
+
+  const legacyMessageHover = colorsOverride.messageItem?.hover;
+  const nextTheme: Theme = {
+    ...theme,
+    colors: {
+      ...theme.colors,
+      border: { ...theme.colors.border },
+      shell: { ...theme.colors.shell },
+      message: { ...theme.colors.message },
+    },
+  };
+
+  if (colorsOverride.background?.primary) {
+    if (!colorsOverride.shell?.app) {
+      nextTheme.colors.shell.app = theme.colors.background.primary;
+    }
+    if (!colorsOverride.shell?.modal) {
+      nextTheme.colors.shell.modal = theme.colors.background.primary;
+    }
+    if (!colorsOverride.shell?.dropdown) {
+      nextTheme.colors.shell.dropdown = theme.colors.background.primary;
+    }
+    if (!colorsOverride.message?.user) {
+      nextTheme.colors.message.user = theme.colors.background.primary;
+    }
+  }
+
+  if (colorsOverride.background?.secondary) {
+    if (!colorsOverride.shell?.page) {
+      nextTheme.colors.shell.page = theme.colors.background.secondary;
+    }
+    if (!colorsOverride.shell?.chatHeader) {
+      nextTheme.colors.shell.chatHeader = theme.colors.background.secondary;
+    }
+    if (!colorsOverride.shell?.chatBody) {
+      nextTheme.colors.shell.chatBody = theme.colors.background.secondary;
+    }
+    if (!colorsOverride.message?.assistant) {
+      nextTheme.colors.message.assistant = theme.colors.background.secondary;
+    }
+    if (!colorsOverride.message?.controls) {
+      nextTheme.colors.message.controls = theme.colors.background.secondary;
+    }
+  }
+
+  if (colorsOverride.background?.tertiary && !colorsOverride.shell?.chatInput) {
+    nextTheme.colors.shell.chatInput = theme.colors.background.tertiary;
+  }
+
+  if (colorsOverride.background?.sidebar && !colorsOverride.shell?.sidebar) {
+    nextTheme.colors.shell.sidebar = theme.colors.background.sidebar;
+  }
+
+  if (colorsOverride.background?.hover) {
+    if (!colorsOverride.shell?.sidebarHover) {
+      nextTheme.colors.shell.sidebarHover = theme.colors.background.hover;
+    }
+    if (!colorsOverride.message?.hover && !legacyMessageHover) {
+      nextTheme.colors.message.hover = theme.colors.background.hover;
+    }
+  }
+
+  if (
+    colorsOverride.background?.selected &&
+    !colorsOverride.shell?.sidebarSelected
+  ) {
+    nextTheme.colors.shell.sidebarSelected = theme.colors.background.selected;
+  }
+
+  if (legacyMessageHover && !colorsOverride.message?.hover) {
+    nextTheme.colors.message.hover = legacyMessageHover;
+  }
+
+  if (colorsOverride.border?.default) {
+    if (!colorsOverride.border.subtle) {
+      nextTheme.colors.border.subtle = theme.colors.border.default;
+    }
+    if (!colorsOverride.border.divider) {
+      nextTheme.colors.border.divider = theme.colors.border.default;
+    }
+  }
+
+  return nextTheme;
+};
+
+export function mergeThemeWithOverrides(
+  baseTheme: Theme,
+  override?: ThemeOverride,
+): Theme {
+  const mergedTheme = deepMerge(baseTheme, override as Partial<Theme>);
+
+  return withLegacyColorCompatibility(
+    withBorderRadiusCompatibility(mergedTheme, override),
+    override,
+  );
 }
 
 /**

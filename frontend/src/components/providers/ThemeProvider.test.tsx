@@ -240,4 +240,73 @@ describe("ThemeProvider", () => {
       ),
     ).toBe("20rem");
   });
+
+  it("maps legacy theme fields into the expanded token surface", async () => {
+    mockEnv.mockReturnValue(
+      createMockEnv({
+        themeConfigPath: "/custom/brand/theme.json",
+      }),
+    );
+
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () =>
+        ({
+          ...mockTheme,
+          theme: {
+            light: {
+              borderRadius: "1rem",
+              colors: {
+                background: {
+                  primary: "#f5f7f4",
+                  secondary: "#edf2ee",
+                  tertiary: "#e4ebe5",
+                  sidebar: "#eff4ef",
+                  hover: "#dde7df",
+                  selected: "#d4e3d7",
+                },
+                border: {
+                  default: "#cfddd1",
+                },
+                messageItem: {
+                  hover: "#c8d9cc",
+                },
+              },
+            },
+          },
+        }) satisfies CustomThemeConfig,
+    });
+
+    render(
+      <ThemeProvider>
+        <div>content</div>
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(
+        document.documentElement.style.getPropertyValue("--theme-shell-page"),
+      ).toBe("#edf2ee");
+    });
+
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-shell-chat-input",
+      ),
+    ).toBe("#e4ebe5");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-shell-sidebar-selected",
+      ),
+    ).toBe("#d4e3d7");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-message-hover"),
+    ).toBe("#c8d9cc");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-border-subtle"),
+    ).toBe("#cfddd1");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-radius-shell"),
+    ).toBe("1rem");
+  });
 });
