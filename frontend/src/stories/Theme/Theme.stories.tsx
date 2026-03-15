@@ -85,6 +85,7 @@ export const Branded: Story = {
     theme: {
       ...defaultTheme,
       colors: {
+        ...defaultTheme.colors,
         background: {
           primary: "#fdf2f8",
           secondary: "#fce7f3",
@@ -101,6 +102,7 @@ export const Branded: Story = {
           accent: "#d946ef",
         },
         border: {
+          ...defaultTheme.colors.border,
           default: "#f0abfc",
           strong: "#e879f9",
           focus: "#d946ef",

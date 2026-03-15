@@ -1,5 +1,5 @@
 // Utility functions for theme handling
-import type { Theme } from "@/config/theme";
+import type { ThemeOverride } from "@/config/theme";
 
 /**
  * Page alignment options
@@ -41,8 +41,8 @@ export interface CustomThemeConfig {
     darkPath?: string;
   };
   theme: {
-    light?: Partial<Theme>;
-    dark?: Partial<Theme>;
+    light?: ThemeOverride;
+    dark?: ThemeOverride;
   };
   branding?: {
     welcomeScreen?: {

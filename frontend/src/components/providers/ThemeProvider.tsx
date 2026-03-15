@@ -209,9 +209,8 @@ export function ThemeProvider({ children }: PropsWithChildren) {
           ? customThemeConfig.theme.dark
           : customThemeConfig.theme.light;
 
-      // Merge custom theme with base theme (keeping base as fallback)
       if (customTheme) {
-        baseTheme = deepMerge(baseTheme, customTheme);
+        baseTheme = deepMerge(baseTheme, customTheme as Partial<Theme>);
       }
     }
 
@@ -236,153 +235,202 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     // Apply theme CSS variables
     const root = document.documentElement;
+    const setCssVariable = (name: string, value: string) => {
+      root.style.setProperty(name, value);
+    };
+    const setOptionalCssVariable = (name: string, value?: string) => {
+      if (value) {
+        root.style.setProperty(name, value);
+        return;
+      }
+
+      root.style.removeProperty(name);
+    };
 
     // Background colors
-    root.style.setProperty(
-      "--theme-bg-primary",
-      theme.colors.background.primary,
-    );
-    root.style.setProperty(
-      "--theme-bg-secondary",
-      theme.colors.background.secondary,
-    );
-    root.style.setProperty(
-      "--theme-bg-tertiary",
-      theme.colors.background.tertiary,
-    );
-    root.style.setProperty(
-      "--theme-bg-sidebar",
-      theme.colors.background.sidebar,
-    );
-    root.style.setProperty("--theme-bg-accent", theme.colors.background.accent);
-    root.style.setProperty("--theme-bg-hover", theme.colors.background.hover);
-    root.style.setProperty(
-      "--theme-bg-selected",
-      theme.colors.background.selected,
-    );
+    setCssVariable("--theme-bg-primary", theme.colors.background.primary);
+    setCssVariable("--theme-bg-secondary", theme.colors.background.secondary);
+    setCssVariable("--theme-bg-tertiary", theme.colors.background.tertiary);
+    setCssVariable("--theme-bg-sidebar", theme.colors.background.sidebar);
+    setCssVariable("--theme-bg-accent", theme.colors.background.accent);
+    setCssVariable("--theme-bg-hover", theme.colors.background.hover);
+    setCssVariable("--theme-bg-selected", theme.colors.background.selected);
 
     // Foreground colors
-    root.style.setProperty(
-      "--theme-fg-primary",
-      theme.colors.foreground.primary,
-    );
-    root.style.setProperty(
-      "--theme-fg-secondary",
-      theme.colors.foreground.secondary,
-    );
-    root.style.setProperty("--theme-fg-muted", theme.colors.foreground.muted);
-    root.style.setProperty("--theme-fg-accent", theme.colors.foreground.accent);
+    setCssVariable("--theme-fg-primary", theme.colors.foreground.primary);
+    setCssVariable("--theme-fg-secondary", theme.colors.foreground.secondary);
+    setCssVariable("--theme-fg-muted", theme.colors.foreground.muted);
+    setCssVariable("--theme-fg-accent", theme.colors.foreground.accent);
 
     // Border colors
-    root.style.setProperty("--theme-border", theme.colors.border.default);
-    root.style.setProperty("--theme-border-strong", theme.colors.border.strong);
-    root.style.setProperty("--theme-border-focus", theme.colors.border.focus);
+    setCssVariable("--theme-border", theme.colors.border.default);
+    setCssVariable("--theme-border-subtle", theme.colors.border.subtle);
+    setCssVariable("--theme-border-strong", theme.colors.border.strong);
+    setCssVariable("--theme-border-divider", theme.colors.border.divider);
+    setCssVariable("--theme-border-focus", theme.colors.border.focus);
+
+    // Shell and overlay surfaces
+    setCssVariable("--theme-shell-app", theme.colors.shell.app);
+    setCssVariable("--theme-shell-page", theme.colors.shell.page);
+    setCssVariable("--theme-shell-sidebar", theme.colors.shell.sidebar);
+    setCssVariable(
+      "--theme-shell-sidebar-hover",
+      theme.colors.shell.sidebarHover,
+    );
+    setCssVariable(
+      "--theme-shell-sidebar-selected",
+      theme.colors.shell.sidebarSelected,
+    );
+    setCssVariable("--theme-shell-chat-header", theme.colors.shell.chatHeader);
+    setCssVariable("--theme-shell-chat-body", theme.colors.shell.chatBody);
+    setCssVariable("--theme-shell-chat-input", theme.colors.shell.chatInput);
+    setCssVariable("--theme-shell-modal", theme.colors.shell.modal);
+    setCssVariable("--theme-shell-dropdown", theme.colors.shell.dropdown);
+    setCssVariable("--theme-overlay-modal", theme.colors.overlay.modal);
+
+    // Message surfaces
+    setCssVariable("--theme-message-user", theme.colors.message.user);
+    setCssVariable("--theme-message-assistant", theme.colors.message.assistant);
+    setCssVariable("--theme-message-hover", theme.colors.message.hover);
+    setCssVariable("--theme-message-controls", theme.colors.message.controls);
+    setCssVariable("--theme-messageItem-hover", theme.colors.message.hover);
+
+    // Radius
+    setCssVariable("--theme-radius-base", theme.radius.base);
+    setCssVariable("--theme-radius-shell", theme.radius.shell);
+    setCssVariable("--theme-radius-input", theme.radius.input);
+    setCssVariable("--theme-radius-message", theme.radius.message);
+    setCssVariable("--theme-radius-modal", theme.radius.modal);
+    setCssVariable("--theme-radius-pill", theme.radius.pill);
+
+    // Spacing
+    setCssVariable(
+      "--theme-spacing-shell-padding-x",
+      theme.spacing.shell.paddingX,
+    );
+    setCssVariable(
+      "--theme-spacing-shell-padding-y",
+      theme.spacing.shell.paddingY,
+    );
+    setCssVariable("--theme-spacing-shell-gap", theme.spacing.shell.gap);
+    setCssVariable(
+      "--theme-spacing-message-padding-x",
+      theme.spacing.message.paddingX,
+    );
+    setCssVariable(
+      "--theme-spacing-message-padding-y",
+      theme.spacing.message.paddingY,
+    );
+    setCssVariable("--theme-spacing-message-gap", theme.spacing.message.gap);
+    setCssVariable("--theme-spacing-control-gap", theme.spacing.control.gap);
+    setCssVariable(
+      "--theme-spacing-sidebar-row-height",
+      theme.spacing.sidebar.rowHeight,
+    );
+    setCssVariable(
+      "--theme-spacing-input-padding-x",
+      theme.spacing.input.paddingX,
+    );
+    setCssVariable(
+      "--theme-spacing-input-padding-y",
+      theme.spacing.input.paddingY,
+    );
+    setCssVariable("--theme-spacing-input-gap", theme.spacing.input.gap);
+
+    // Elevation
+    setCssVariable("--theme-elevation-shell", theme.elevation.shell);
+    setCssVariable("--theme-elevation-input", theme.elevation.input);
+    setCssVariable("--theme-elevation-modal", theme.elevation.modal);
+    setCssVariable("--theme-elevation-dropdown", theme.elevation.dropdown);
+
+    // Layout
+    setCssVariable(
+      "--theme-layout-chat-content-max-width",
+      theme.layout.chat.contentMaxWidth,
+    );
+    setCssVariable(
+      "--theme-layout-chat-input-max-width",
+      theme.layout.chat.inputMaxWidth,
+    );
+    setCssVariable("--theme-layout-sidebar-width", theme.layout.sidebar.width);
 
     // Avatar colors
-    root.style.setProperty(
+    setCssVariable(
       "--theme-avatar-user-bg",
       theme.colors.avatar.user.background,
     );
-    root.style.setProperty(
+    setCssVariable(
       "--theme-avatar-user-fg",
       theme.colors.avatar.user.foreground,
     );
-    root.style.setProperty(
+    setCssVariable(
       "--theme-avatar-assistant-bg",
       theme.colors.avatar.assistant.background,
     );
-    root.style.setProperty(
+    setCssVariable(
       "--theme-avatar-assistant-fg",
       theme.colors.avatar.assistant.foreground,
     );
 
     // Status colors
     // Info
-    root.style.setProperty(
-      "--theme-info-fg",
-      theme.colors.status.info.foreground,
-    );
-    root.style.setProperty(
-      "--theme-info-bg",
-      theme.colors.status.info.background,
-    );
-    root.style.setProperty(
-      "--theme-info-border",
-      theme.colors.status.info.border,
-    );
+    setCssVariable("--theme-info-fg", theme.colors.status.info.foreground);
+    setCssVariable("--theme-info-bg", theme.colors.status.info.background);
+    setCssVariable("--theme-info-border", theme.colors.status.info.border);
 
     // Success
-    root.style.setProperty(
+    setCssVariable(
       "--theme-success-fg",
       theme.colors.status.success.foreground,
     );
-    root.style.setProperty(
+    setCssVariable(
       "--theme-success-bg",
       theme.colors.status.success.background,
     );
-    root.style.setProperty(
+    setCssVariable(
       "--theme-success-border",
       theme.colors.status.success.border,
     );
 
     // Warning
-    root.style.setProperty(
+    setCssVariable(
       "--theme-warning-fg",
       theme.colors.status.warning.foreground,
     );
-    root.style.setProperty(
+    setCssVariable(
       "--theme-warning-bg",
       theme.colors.status.warning.background,
     );
-    root.style.setProperty(
+    setCssVariable(
       "--theme-warning-border",
       theme.colors.status.warning.border,
     );
 
     // Error
-    root.style.setProperty(
-      "--theme-error-fg",
-      theme.colors.status.error.foreground,
-    );
-    root.style.setProperty(
-      "--theme-error-bg",
-      theme.colors.status.error.background,
-    );
-    root.style.setProperty(
-      "--theme-error-border",
-      theme.colors.status.error.border,
-    );
+    setCssVariable("--theme-error-fg", theme.colors.status.error.foreground);
+    setCssVariable("--theme-error-bg", theme.colors.status.error.background);
+    setCssVariable("--theme-error-border", theme.colors.status.error.border);
 
     // Focus ring
-    root.style.setProperty("--theme-focus-ring", theme.colors.focus.ring);
+    setCssVariable("--theme-focus-ring", theme.colors.focus.ring);
 
     // Typography (font families)
-    if (theme.typography?.fontFamily) {
-      if (theme.typography.fontFamily.body) {
-        root.style.setProperty(
-          "--theme-font-body",
-          theme.typography.fontFamily.body,
-        );
-      }
-      if (theme.typography.fontFamily.heading) {
-        root.style.setProperty(
-          "--theme-font-heading",
-          theme.typography.fontFamily.heading,
-        );
-      }
-      if (theme.typography.fontFamily.semibold) {
-        root.style.setProperty(
-          "--theme-font-semibold",
-          theme.typography.fontFamily.semibold,
-        );
-      }
-      if (theme.typography.fontFamily.headingBold) {
-        root.style.setProperty(
-          "--theme-font-heading-bold",
-          theme.typography.fontFamily.headingBold,
-        );
-      }
-    }
+    setOptionalCssVariable(
+      "--theme-font-body",
+      theme.typography?.fontFamily?.body,
+    );
+    setOptionalCssVariable(
+      "--theme-font-heading",
+      theme.typography?.fontFamily?.heading,
+    );
+    setOptionalCssVariable(
+      "--theme-font-semibold",
+      theme.typography?.fontFamily?.semibold,
+    );
+    setOptionalCssVariable(
+      "--theme-font-heading-bold",
+      theme.typography?.fontFamily?.headingBold,
+    );
   }, [theme]);
 
   const toggleTheme = (mode: ThemeMode) => {

@@ -231,10 +231,36 @@ Create a theme.json file with the following structure:
       "colors": {
         "background": {
           "primary": "#f8f9ff",
-          "secondary": "#eef1fa"
+          "secondary": "#eef1fa",
+          "tertiary": "#ffffff"
+        },
+        "shell": {
+          "page": "#eef1fa",
+          "chatInput": "#ffffff"
+        },
+        "message": {
+          "assistant": "#eef1fa"
         },
         "foreground": {
           "accent": "#4361ee"
+        },
+        "overlay": {
+          "modal": "rgba(15, 23, 42, 0.5)"
+        }
+      },
+      "radius": {
+        "shell": "0.75rem",
+        "input": "1rem"
+      },
+      "spacing": {
+        "message": {
+          "paddingX": "1rem",
+          "paddingY": "1rem"
+        }
+      },
+      "layout": {
+        "chat": {
+          "contentMaxWidth": "52rem"
         }
       }
     },
@@ -252,6 +278,15 @@ Create a theme.json file with the following structure:
   }
 }
 ```
+
+The typed token surface is grouped semantically:
+
+- `colors.shell` for app/page/sidebar/modal/dropdown surfaces
+- `colors.message` for user/assistant/hover/control surfaces
+- `colors.overlay` for backdrops such as modal overlays
+- `radius`, `spacing`, `elevation`, and `layout` for reusable shell styling primitives
+
+Existing theme JSON can omit these new groups. When a theme does not provide the new token groups yet, the corresponding CSS variables fall back to the built-in theme defaults until they are explicitly overridden.
 
 Optional sibling assets can live beside `theme.json`:
 

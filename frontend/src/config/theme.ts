@@ -1,110 +1,100 @@
-// Color palette definition with semantic naming
 const colors = {
   neutral: {
-    50: "#f9fafb", // Lightest background
-    100: "#f3f4f6", // Light background
-    200: "#e5e7eb", // Light border
-    300: "#d1d5db", // Medium-light border
-    400: "#9ca3af", // Muted text
-    500: "#6b7280", // Medium text
-    600: "#4b5563", // Medium-dark text
-    700: "#374151", // Dark text / Light mode hover
-    800: "#1f2937", // Dark background
-    900: "#111827", // Darkest background
-  },
-  blue: {
-    50: "#eff6ff", // Lightest blue background
-    100: "#dbeafe", // Light blue background
-    200: "#bfdbfe", // Accent blue
-    300: "#93c5fd", // Light blue text
-    400: "#60a5fa", // Medium blue
-    500: "#3b82f6", // Primary blue
-    600: "#2563eb", // Darker blue / Hover
-    700: "#1d4ed8", // Dark blue
-    800: "#1e40af", // Darker blue for text
-    900: "#1e3a8a", // Darkest blue
+    50: "#f9fafb",
+    100: "#f3f4f6",
+    200: "#e5e7eb",
+    300: "#d1d5db",
+    400: "#9ca3af",
+    500: "#6b7280",
+    600: "#4b5563",
+    700: "#374151",
+    800: "#1f2937",
+    900: "#111827",
   },
   green: {
-    50: "#ecfdf5", // Lightest green background
-    100: "#d1fae5", // Light green background
-    200: "#a7f3d0", // Accent green
-    300: "#6ee7b7", // Light green text
-    400: "#34d399", // Medium green
-    500: "#10b981", // Primary blue
-    600: "#059669", // Darker green / Hover
-    700: "#047857", // Dark green
-    800: "#065f46", // Darker green for text
-    900: "#064e3b", // Darkest green
+    50: "#ecfdf5",
+    300: "#6ee7b7",
+    500: "#10b981",
+    700: "#047857",
+    800: "#065f46",
+    900: "#064e3b",
   },
   red: {
-    50: "#fef2f2", // Lightest red background
-    100: "#fee2e2", // Light red background
-    200: "#fecaca", // Accent red
-    300: "#fca5a5", // Light red text
-    400: "#f87171", // Medium red
-    500: "#ef4444", // Primary red
-    600: "#dc2626", // Darker red / Hover
-    700: "#b91c1c", // Dark red
-    800: "#991b1b", // Darker red for text
-    900: "#7f1d1d", // Darkest red
+    50: "#fef2f2",
+    300: "#fca5a5",
+    500: "#ef4444",
+    700: "#b91c1c",
+    800: "#991b1b",
+    900: "#7f1d1d",
   },
   amber: {
     50: "#fffbeb",
-    100: "#fef3c7",
-    200: "#fde68a",
     300: "#fcd34d",
-    400: "#fbbf24",
     500: "#f59e0b",
-    600: "#d97706",
     700: "#b45309",
     800: "#92400e",
     900: "#78350f",
   },
-  indigo: {
-    50: "#eef2ff",
-    100: "#e0e7ff",
-    500: "#6366f1",
-    600: "#4f46e5",
-    700: "#4338ca",
-  },
 } as const;
 
-// Add new state colors for focus, selection, hover
 const stateColors = {
   focus: {
-    light: colors.neutral[500], // Monochrome focus for light theme
-    dark: colors.neutral[400], // Monochrome focus for dark theme
+    light: colors.neutral[500],
+    dark: colors.neutral[400],
   },
   selection: {
-    light: colors.neutral[200], // Monochrome selection for light theme
-    dark: colors.neutral[700], // Monochrome selection for dark theme
+    light: colors.neutral[200],
+    dark: colors.neutral[700],
   },
   hover: {
-    light: colors.neutral[200], // Monochrome hover for light theme
-    dark: colors.neutral[600], // Monochrome hover for dark theme
+    light: colors.neutral[200],
+    dark: colors.neutral[600],
   },
 };
 
 export type ThemeColors = {
   background: {
-    primary: string; // Main background
-    secondary: string; // Card, sidebar backgrounds
-    tertiary: string; // Input backgrounds, alternate rows
-    sidebar: string; // Dedicated sidebar background
-    accent: string; // Highlighted, selected or focus areas
-    hover: string; // Hover state backgrounds
-    selected: string; // Selected item background
+    primary: string;
+    secondary: string;
+    tertiary: string;
+    sidebar: string;
+    accent: string;
+    hover: string;
+    selected: string;
   };
   foreground: {
-    primary: string; // Main text color
-    secondary: string; // Secondary text, labels
-    muted: string; // Placeholder, disabled text
-    accent: string; // Links, highlighted text
+    primary: string;
+    secondary: string;
+    muted: string;
+    accent: string;
   };
   border: {
-    default: string; // Default border
-    strong: string; // Emphasized borders
-    focus: string; // Focus state borders
+    default: string;
+    subtle: string;
+    strong: string;
+    divider: string;
+    focus: string;
+  };
+  shell: {
+    app: string;
+    page: string;
+    sidebar: string;
+    sidebarHover: string;
+    sidebarSelected: string;
+    chatHeader: string;
+    chatBody: string;
+    chatInput: string;
+    modal: string;
+    dropdown: string;
+  };
+  message: {
+    user: string;
+    assistant: string;
+    hover: string;
+    controls: string;
+  };
+  overlay: {
+    modal: string;
   };
   avatar: {
     user: {
@@ -139,19 +129,67 @@ export type ThemeColors = {
     };
   };
   focus: {
-    ring: string; // Focus ring color
+    ring: string;
+  };
+};
+
+export type ThemeRadius = {
+  base: string;
+  shell: string;
+  input: string;
+  message: string;
+  modal: string;
+  pill: string;
+};
+
+export type ThemeSpacing = {
+  shell: {
+    paddingX: string;
+    paddingY: string;
+    gap: string;
+  };
+  message: {
+    paddingX: string;
+    paddingY: string;
+    gap: string;
+  };
+  control: {
+    gap: string;
+  };
+  sidebar: {
+    rowHeight: string;
+  };
+  input: {
+    paddingX: string;
+    paddingY: string;
+    gap: string;
+  };
+};
+
+export type ThemeElevation = {
+  shell: string;
+  input: string;
+  modal: string;
+  dropdown: string;
+};
+
+export type ThemeLayout = {
+  chat: {
+    contentMaxWidth: string;
+    inputMaxWidth: string;
+  };
+  sidebar: {
+    width: string;
   };
 };
 
 export type Theme = {
   colors: ThemeColors;
   borderRadius: string;
-  spacing: {
-    message: {
-      padding: string;
-      gap: string;
-    };
-  };
+  radius: ThemeRadius;
+  spacing: ThemeSpacing;
+  elevation: ThemeElevation;
+  layout: ThemeLayout;
   typography?: {
     fontFamily?: {
       body?: string;
@@ -162,36 +200,71 @@ export type Theme = {
   };
 };
 
+export type DeepPartial<T> = {
+  [K in keyof T]?: NonNullable<T[K]> extends readonly (infer U)[]
+    ? U[]
+    : NonNullable<T[K]> extends Record<string, unknown>
+      ? DeepPartial<NonNullable<T[K]>>
+      : T[K];
+};
+
+export type ThemeOverride = DeepPartial<Theme>;
+
+const baseRadius = "0.375rem";
+
 export const defaultTheme: Theme = {
   colors: {
     background: {
-      primary: colors.neutral[50], // Main background
-      secondary: colors.neutral[100], // Cards, containers
-      tertiary: "#ffffff", // Input fields, form elements
-      sidebar: colors.neutral[200], // Darker sidebar background
-      accent: colors.neutral[200], // Subtle accent color (monochrome)
-      hover: stateColors.hover.light, // Using stateColors for hover
-      selected: stateColors.selection.light, // Using stateColors for selected
+      primary: colors.neutral[50],
+      secondary: colors.neutral[100],
+      tertiary: "#ffffff",
+      sidebar: colors.neutral[200],
+      accent: colors.neutral[200],
+      hover: stateColors.hover.light,
+      selected: stateColors.selection.light,
     },
     foreground: {
-      primary: colors.neutral[900], // Main text color - increased contrast
-      secondary: colors.neutral[700], // Subheadings, labels
-      muted: colors.neutral[500], // Placeholders, disabled
-      accent: colors.neutral[800], // Links, buttons - monochrome accent
+      primary: colors.neutral[900],
+      secondary: colors.neutral[700],
+      muted: colors.neutral[500],
+      accent: colors.neutral[800],
     },
     border: {
-      default: colors.neutral[300], // Default border color - increased contrast
-      strong: colors.neutral[400], // Strong borders - improved contrast
-      focus: stateColors.focus.light, // Using stateColors for focus
+      default: colors.neutral[300],
+      subtle: colors.neutral[200],
+      strong: colors.neutral[400],
+      divider: colors.neutral[300],
+      focus: stateColors.focus.light,
+    },
+    shell: {
+      app: colors.neutral[50],
+      page: colors.neutral[100],
+      sidebar: colors.neutral[200],
+      sidebarHover: stateColors.hover.light,
+      sidebarSelected: stateColors.selection.light,
+      chatHeader: colors.neutral[100],
+      chatBody: colors.neutral[100],
+      chatInput: "#ffffff",
+      modal: colors.neutral[50],
+      dropdown: colors.neutral[50],
+    },
+    message: {
+      user: colors.neutral[50],
+      assistant: colors.neutral[100],
+      hover: stateColors.hover.light,
+      controls: colors.neutral[100],
+    },
+    overlay: {
+      modal: "rgba(17, 24, 39, 0.6)",
     },
     avatar: {
       user: {
-        background: colors.neutral[700], // User avatar with good contrast
-        foreground: colors.neutral[50], // Text on user avatar
+        background: colors.neutral[700],
+        foreground: colors.neutral[50],
       },
       assistant: {
-        background: colors.neutral[500], // Assistant avatar with good contrast
-        foreground: colors.neutral[50], // Text on assistant avatar
+        background: colors.neutral[500],
+        foreground: colors.neutral[50],
       },
     },
     status: {
@@ -217,14 +290,56 @@ export const defaultTheme: Theme = {
       },
     },
     focus: {
-      ring: stateColors.focus.light, // Using stateColors for focus ring
+      ring: stateColors.focus.light,
     },
   },
-  borderRadius: "0.375rem",
+  borderRadius: baseRadius,
+  radius: {
+    base: baseRadius,
+    shell: "0.75rem",
+    input: "1rem",
+    message: "0.5rem",
+    modal: "0.5rem",
+    pill: "9999px",
+  },
   spacing: {
+    shell: {
+      paddingX: "1rem",
+      paddingY: "1rem",
+      gap: "1rem",
+    },
     message: {
-      padding: "1.5rem 1rem",
+      paddingX: "1rem",
+      paddingY: "1rem",
       gap: "1.5rem",
+    },
+    control: {
+      gap: "0.5rem",
+    },
+    sidebar: {
+      rowHeight: "2.75rem",
+    },
+    input: {
+      paddingX: "0.75rem",
+      paddingY: "0.75rem",
+      gap: "0.5rem",
+    },
+  },
+  elevation: {
+    shell: "none",
+    input: "0 0 15px rgba(0, 0, 0, 0.1)",
+    modal:
+      "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+    dropdown:
+      "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)",
+  },
+  layout: {
+    chat: {
+      contentMaxWidth: "48rem",
+      inputMaxWidth: "56rem",
+    },
+    sidebar: {
+      width: "17.5rem",
     },
   },
 };
@@ -233,33 +348,56 @@ export const darkTheme: Theme = {
   ...defaultTheme,
   colors: {
     background: {
-      primary: colors.neutral[900], // Main background
-      secondary: colors.neutral[800], // Cards, containers
-      tertiary: colors.neutral[700], // Input fields, form elements
-      sidebar: colors.neutral[900], // Sidebar background (less extreme than before)
-      accent: colors.neutral[700], // Subtle accent - monochrome
-      hover: stateColors.hover.dark, // Using stateColors for hover state
-      selected: colors.neutral[700], // Selected items - monochrome
+      primary: colors.neutral[900],
+      secondary: colors.neutral[800],
+      tertiary: colors.neutral[700],
+      sidebar: colors.neutral[900],
+      accent: colors.neutral[700],
+      hover: stateColors.hover.dark,
+      selected: colors.neutral[700],
     },
     foreground: {
-      primary: colors.neutral[50], // Main text color
-      secondary: colors.neutral[200], // Subheadings, labels
-      muted: colors.neutral[400], // Placeholders, disabled
-      accent: colors.neutral[200], // Links, buttons - monochrome
+      primary: colors.neutral[50],
+      secondary: colors.neutral[200],
+      muted: colors.neutral[400],
+      accent: colors.neutral[200],
     },
     border: {
-      default: colors.neutral[600], // Default border
-      strong: colors.neutral[500], // Strong borders
-      focus: colors.neutral[400], // Focus state borders - monochrome
+      default: colors.neutral[600],
+      subtle: colors.neutral[700],
+      strong: colors.neutral[500],
+      divider: colors.neutral[600],
+      focus: colors.neutral[400],
+    },
+    shell: {
+      app: colors.neutral[900],
+      page: colors.neutral[800],
+      sidebar: colors.neutral[900],
+      sidebarHover: stateColors.hover.dark,
+      sidebarSelected: colors.neutral[700],
+      chatHeader: colors.neutral[800],
+      chatBody: colors.neutral[800],
+      chatInput: colors.neutral[700],
+      modal: colors.neutral[900],
+      dropdown: colors.neutral[900],
+    },
+    message: {
+      user: colors.neutral[900],
+      assistant: colors.neutral[800],
+      hover: colors.neutral[700],
+      controls: colors.neutral[800],
+    },
+    overlay: {
+      modal: "rgba(0, 0, 0, 0.7)",
     },
     avatar: {
       user: {
-        background: colors.neutral[500], // User avatar - monochrome
-        foreground: colors.neutral[50], // Text on user avatar
+        background: colors.neutral[500],
+        foreground: colors.neutral[50],
       },
       assistant: {
-        background: colors.neutral[600], // Assistant avatar - monochrome
-        foreground: colors.neutral[50], // Text on assistant avatar
+        background: colors.neutral[600],
+        foreground: colors.neutral[50],
       },
     },
     status: {
@@ -285,7 +423,13 @@ export const darkTheme: Theme = {
       },
     },
     focus: {
-      ring: stateColors.focus.dark, // Using stateColors for focus ring
+      ring: stateColors.focus.dark,
     },
+  },
+  elevation: {
+    shell: "none",
+    input: "0 8px 24px rgba(0, 0, 0, 0.25)",
+    modal: "0 24px 48px rgba(0, 0, 0, 0.45)",
+    dropdown: "0 12px 24px rgba(0, 0, 0, 0.35)",
   },
 };

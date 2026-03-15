@@ -50,11 +50,23 @@ The `theme.json` file defines the color scheme for both light and dark modes:
       "colors": {
         "background": {
           "primary": "#ffffff",
-          "secondary": "#f5f5f5"
+          "secondary": "#f5f5f5",
+          "tertiary": "#ffffff"
+        },
+        "shell": {
+          "page": "#f5f5f5",
+          "chatInput": "#ffffff",
+          "modal": "#ffffff"
+        },
+        "message": {
+          "assistant": "#f5f5f5"
         },
         "foreground": {
           "primary": "#000000",
           "accent": "#0066cc"
+        },
+        "overlay": {
+          "modal": "rgba(15, 23, 42, 0.5)"
         },
         "avatar": {
           "assistant": {
@@ -65,6 +77,24 @@ The `theme.json` file defines the color scheme for both light and dark modes:
             "background": "#666666",
             "foreground": "#ffffff"
           }
+        }
+      },
+      "radius": {
+        "shell": "0.75rem",
+        "input": "1rem",
+        "modal": "0.5rem"
+      },
+      "spacing": {
+        "message": {
+          "paddingX": "1rem",
+          "paddingY": "1rem",
+          "gap": "1.5rem"
+        }
+      },
+      "layout": {
+        "chat": {
+          "contentMaxWidth": "48rem",
+          "inputMaxWidth": "56rem"
         }
       }
     },
@@ -93,6 +123,20 @@ The `theme.json` file defines the color scheme for both light and dark modes:
   }
 }
 ```
+
+## Typed Theme Tokens
+
+The typed theme contract is grouped semantically so starter themes can express shell styling without immediately falling back to `theme.css` or custom components.
+
+- `colors.shell` covers app, page, sidebar, chat shell, modal, and dropdown surfaces
+- `colors.message` covers user and assistant message surfaces plus shared hover and controls surfaces
+- `colors.overlay` covers backdrops such as the modal overlay
+- `radius` covers base, shell, input, message, modal, and pill radii
+- `spacing` covers shell, message, controls, sidebar density, and chat input spacing
+- `elevation` covers shell, input, modal, and dropdown shadows
+- `layout` covers chat content width, chat input width, and sidebar width
+
+Existing theme JSON can omit these new groups. When a theme does not provide them yet, the corresponding CSS variables fall back to the built-in theme defaults until they are explicitly overridden.
 
 ## Optional Stylesheets
 

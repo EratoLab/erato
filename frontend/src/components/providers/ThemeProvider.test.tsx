@@ -67,6 +67,7 @@ describe("ThemeProvider", () => {
       .forEach((link) => link.remove());
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.removeAttribute("data-theme-name");
+    document.documentElement.removeAttribute("style");
   });
 
   it("loads sibling fonts.css and theme.css beside the resolved theme.json path", async () => {
@@ -150,5 +151,93 @@ describe("ThemeProvider", () => {
       2,
       "/themes/customer/theme.json",
     );
+  });
+
+  it("writes the expanded token surface to CSS variables", async () => {
+    mockEnv.mockReturnValue(
+      createMockEnv({
+        themeConfigPath: "/custom/brand/theme.json",
+      }),
+    );
+
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () =>
+        ({
+          ...mockTheme,
+          theme: {
+            light: {
+              colors: {
+                shell: {
+                  page: "#f5f3ff",
+                  modal: "#ffffff",
+                },
+                message: {
+                  assistant: "#ede9fe",
+                },
+                overlay: {
+                  modal: "rgba(76, 29, 149, 0.32)",
+                },
+              },
+              radius: {
+                shell: "1.25rem",
+              },
+              elevation: {
+                dropdown: "0 16px 32px rgba(15, 23, 42, 0.18)",
+              },
+              layout: {
+                chat: {
+                  inputMaxWidth: "60rem",
+                },
+                sidebar: {
+                  width: "20rem",
+                },
+              },
+            },
+          },
+        }) satisfies CustomThemeConfig,
+    });
+
+    render(
+      <ThemeProvider>
+        <div>content</div>
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(
+        document.documentElement.style.getPropertyValue("--theme-shell-page"),
+      ).toBe("#f5f3ff");
+    });
+
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-shell-modal"),
+    ).toBe("#ffffff");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-message-assistant",
+      ),
+    ).toBe("#ede9fe");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-overlay-modal"),
+    ).toBe("rgba(76, 29, 149, 0.32)");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-radius-shell"),
+    ).toBe("1.25rem");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-elevation-dropdown",
+      ),
+    ).toBe("0 16px 32px rgba(15, 23, 42, 0.18)");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-layout-chat-input-max-width",
+      ),
+    ).toBe("60rem");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-layout-sidebar-width",
+      ),
+    ).toBe("20rem");
   });
 });
