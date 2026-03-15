@@ -222,4 +222,30 @@ describe("ChatInput", () => {
     expect(textarea).toHaveFocus();
     otherButton.remove();
   });
+
+  it("exposes stable shell hooks for theme.css selectors", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const onSendMessage = vi.fn();
+
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      container.querySelector('[data-ui="chat-input-shell"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-ui="chat-input-controls"]'),
+    ).toBeTruthy();
+  });
 });

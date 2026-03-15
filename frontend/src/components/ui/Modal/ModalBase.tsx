@@ -79,6 +79,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       onClick={handleOverlayClick}
       role="presentation"
       aria-label={t`Close modal overlay`}
+      data-ui="modal-overlay"
     >
       <div
         ref={modalRef}
@@ -94,6 +95,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         tabIndex={-1}
         role="dialog"
         aria-labelledby={title ? "modal-title" : undefined}
+        data-ui="modal-shell"
       >
         {/* Optional Header */}
         {title && (

@@ -17,7 +17,10 @@ export function ClientProviders({ children }: PropsWithChildren) {
       <ThemeProvider>
         <FeatureConfigProvider>
           <I18nProvider>
-            <div className="flex h-screen min-h-screen bg-theme-bg-primary">
+            <div
+              className="flex h-screen min-h-screen bg-theme-bg-primary"
+              data-ui="app-shell"
+            >
               {children}
             </div>
           </I18nProvider>

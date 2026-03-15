@@ -487,7 +487,7 @@ export const Chat = ({
 
   return (
     <ChatInputControlsProvider value={chatInputControls}>
-      <div className="flex size-full flex-col sm:flex-row">
+      <div className="flex size-full flex-col sm:flex-row" data-ui="page-shell">
         <ChatHistorySidebar
           collapsed={sidebarCollapsed}
           onNewChat={() => {

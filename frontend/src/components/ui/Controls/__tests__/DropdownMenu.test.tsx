@@ -1,0 +1,30 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import { DropdownMenu } from "../DropdownMenu";
+
+describe("DropdownMenu", () => {
+  it("renders a stable dropdown panel hook when opened", async () => {
+    render(
+      <DropdownMenu
+        items={[
+          {
+            label: "Rename",
+            onClick: vi.fn(),
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-ui="dropdown-panel"]')).toBeTruthy();
+    });
+
+    expect(screen.getByRole("menu")).toHaveAttribute(
+      "data-ui",
+      "dropdown-panel",
+    );
+  });
+});

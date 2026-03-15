@@ -552,6 +552,7 @@ export const MessageList = memo<MessageListProps>(
         ref={containerRef as React.RefObject<HTMLDivElement>}
         className={containerClass}
         data-testid="message-list"
+        data-ui="chat-body"
         onCopy={handleCopyPlainText}
       >
         {renderMessageListHeader}

@@ -105,6 +105,7 @@ const ChatHistoryListItem = memo<{
           layout === "compact" ? "gap-0.5" : "gap-1",
         )}
         data-chat-id={session.id}
+        data-ui="chat-history-item"
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -224,6 +225,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
           "w-full min-w-[280px] max-w-md",
           className,
         )}
+        data-ui="chat-history-list"
       >
         {sessions.map((session) => (
           <ChatHistoryListItem

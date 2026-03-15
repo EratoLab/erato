@@ -339,6 +339,7 @@ export const DropdownMenu = memo(
           role="menu"
           aria-orientation="vertical"
           aria-labelledby={buttonRef.current?.id}
+          data-ui="dropdown-panel"
         >
           <div className="overflow-y-auto py-1" role="none">
             {items.map((item, index) => (

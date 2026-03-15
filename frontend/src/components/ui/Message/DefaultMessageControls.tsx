@@ -140,6 +140,7 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
         showOnHover && "theme-transition opacity-0 group-hover:opacity-100",
         className,
       )}
+      data-ui="message-controls"
     >
       <div className="flex items-center gap-2">
         {/* Raw/Formatted toggle - always visible for any message */}

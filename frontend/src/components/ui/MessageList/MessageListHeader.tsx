@@ -29,7 +29,7 @@ export const MessageListHeader = ({
   paginationStats,
 }: MessageListHeaderProps) => {
   return (
-    <div className="pb-2">
+    <div className="pb-2" data-ui="chat-header">
       {showLoadMoreButton && (
         <LoadMoreButton onClick={handleLoadMore} isPending={isPending} />
       )}

@@ -681,6 +681,7 @@ export const ChatInput = ({
             "theme-transition focus-within:border-[var(--theme-border-focus)]",
             "flex flex-col gap-2 sm:gap-3",
           )}
+          data-ui="chat-input-shell"
         >
           <textarea
             ref={textareaRef}
@@ -719,7 +720,10 @@ export const ChatInput = ({
             )}
           />
 
-          <div className="flex items-center justify-between">
+          <div
+            className="flex items-center justify-between"
+            data-ui="chat-input-controls"
+          >
             <div className="flex items-center gap-1 sm:gap-2">
               {showControls && (
                 <>

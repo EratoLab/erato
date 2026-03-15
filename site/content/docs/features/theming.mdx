@@ -105,6 +105,29 @@ If `VITE_THEME_CONFIG_PATH` or `THEME_CONFIG_PATH` points to a specific `theme.j
 
 `theme.css` should stay constrained to theme-level visual polish. Prefer root selectors like `html[data-theme="light"]`, `html[data-theme="dark"]`, and CSS custom properties. Avoid deep DOM selectors or overrides tied to Tailwind utility classes.
 
+## Stable Styling Hooks
+
+For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `data-role` hooks over DOM-depth selectors or Tailwind class names.
+
+- `data-ui="app-shell"`
+- `data-ui="page-shell"`
+- `data-ui="sidebar"`
+- `data-ui="sidebar-header"`
+- `data-ui="sidebar-footer"`
+- `data-ui="chat-history-list"`
+- `data-ui="chat-history-item"`
+- `data-ui="chat-header"`
+- `data-ui="chat-body"`
+- `data-ui="chat-input-shell"`
+- `data-ui="chat-input-controls"`
+- `data-ui="chat-message"`
+- `data-ui="message-controls"`
+- `data-ui="modal-overlay"`
+- `data-ui="modal-shell"`
+- `data-ui="dropdown-panel"`
+
+Messages also expose `data-role="user"` and `data-role="assistant"` on the message shell.
+
 ## Custom Logos
 
 Place logo files in your theme directory:
