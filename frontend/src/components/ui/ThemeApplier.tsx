@@ -56,11 +56,7 @@ export function ThemeApplier() {
 
         // Apply custom message item colors if they exist
         // Need type check since messageItem is a custom extension to ThemeColors
-        if (
-          "messageItem" in colors &&
-          typeof colors.messageItem === "object" &&
-          colors.messageItem !== null
-        ) {
+        if ("messageItem" in colors && typeof colors.messageItem === "object") {
           const mi = colors.messageItem as { hover?: string };
           if (mi.hover)
             root.style.setProperty("--theme-messageItem-hover", mi.hover);

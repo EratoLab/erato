@@ -208,7 +208,13 @@ export type DeepPartial<T> = {
       : T[K];
 };
 
-export type ThemeOverride = DeepPartial<Theme>;
+export type ThemeOverride = DeepPartial<Theme> & {
+  colors?: DeepPartial<ThemeColors> & {
+    messageItem?: {
+      hover?: string;
+    };
+  };
+};
 
 const baseRadius = "0.375rem";
 
