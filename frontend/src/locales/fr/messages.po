@@ -1335,8 +1335,8 @@ msgid "Error"
 msgstr "Erreur"
 
 #: src/components/ui/ThemeApplier.tsx
-msgid "Error loading theme:"
-msgstr "Erreur lors du chargement du thème :"
+#~ msgid "Error loading theme:"
+#~ msgstr "Erreur lors du chargement du thème :"
 
 #: src/components/ui/ToolCall/ToolCallOutput.tsx
 msgid "Error Output"
