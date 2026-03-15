@@ -205,7 +205,8 @@ The theme system uses a configuration-based approach that can be customized in s
 1. **Environment Variables**:
 
    - `VITE_CUSTOMER_NAME`: Name of the customer folder (e.g., "trilux")
-   - `VITE_THEME_CONFIG_PATH`: Override path to theme.json file
+   - `VITE_THEME_PATH`: Override the theme pack directory
+   - `VITE_THEME_CONFIG_PATH`: Override the `theme.json` file path
    - `VITE_LOGO_PATH`: Path to logo for light mode
    - `VITE_LOGO_DARK_PATH`: Path to logo for dark mode
    - `VITE_ASSISTANT_AVATAR_PATH`: Path to assistant avatar image
@@ -216,7 +217,7 @@ The theme system uses a configuration-based approach that can be customized in s
    - This directory is git-ignored by default for customer-specific customizations
 
 3. **Default Location**:
-   - Fall back to `/themes/custom-theme/theme.json` if no other theme is found
+   - Fall back to `/custom-theme/theme.json` if no other theme is found
 
 ### Custom Theme Structure
 
@@ -251,6 +252,22 @@ Create a theme.json file with the following structure:
   }
 }
 ```
+
+Optional sibling assets can live beside `theme.json`:
+
+```text
+public/custom-theme/my-company/
+├── theme.json
+├── fonts.css              # Optional, loaded after theme vars
+├── theme.css              # Optional, loaded after fonts.css
+├── logo.svg
+├── logo-dark.svg
+└── assistant-avatar.svg
+```
+
+When `VITE_THEME_CONFIG_PATH` points at a specific `theme.json`, `fonts.css` and `theme.css` are resolved relative to that resolved file path. Otherwise they follow the active theme pack directory from `VITE_THEME_PATH`, `VITE_CUSTOMER_NAME`, or the default `/custom-theme/` location.
+
+`theme.css` is intended for light shell polish on top of the typed tokens in `theme.json`. Keep it limited to theme-level styling and avoid brittle selectors that depend on deep DOM structure or Tailwind utility classes.
 
 ### Custom Logo Support
 

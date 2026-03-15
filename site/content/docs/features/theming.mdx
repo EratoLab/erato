@@ -24,6 +24,8 @@ theme = "my-company"
 ```
 public/custom-theme/my-company/
 ├── theme.json              # Theme configuration
+├── fonts.css               # Optional custom fonts
+├── theme.css               # Optional shell-level polish
 ├── logo.svg                # Application logo (light mode)
 ├── logo-dark.svg           # Application logo (dark mode, optional)
 ├── assistant-avatar.svg    # Assistant avatar (optional)
@@ -91,6 +93,17 @@ The `theme.json` file defines the color scheme for both light and dark modes:
   }
 }
 ```
+
+## Optional Stylesheets
+
+Theme packs can include these optional sibling stylesheets beside `theme.json`:
+
+- `fonts.css` loads after the runtime CSS variables from `theme.json`
+- `theme.css` loads after `fonts.css`
+
+If `VITE_THEME_CONFIG_PATH` or `THEME_CONFIG_PATH` points to a specific `theme.json`, these stylesheets are resolved relative to that exact file path. Otherwise they are resolved from the active theme directory selected through `VITE_THEME_PATH`, `THEME_PATH`, `VITE_CUSTOMER_NAME`, or `THEME_CUSTOMER_NAME`.
+
+`theme.css` should stay constrained to theme-level visual polish. Prefer root selectors like `html[data-theme="light"]`, `html[data-theme="dark"]`, and CSS custom properties. Avoid deep DOM selectors or overrides tied to Tailwind utility classes.
 
 ## Custom Logos
 
