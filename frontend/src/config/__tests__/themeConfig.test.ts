@@ -10,6 +10,7 @@ import { env } from "@/app/env";
 import {
   defaultThemeConfig,
   loadThemeConfig,
+  loadResolvedThemeConfig,
   resolveIconPaths,
 } from "../themeConfig";
 
@@ -421,6 +422,46 @@ describe("themeConfig", () => {
     });
   });
 
+  describe("stylesheet path resolution", () => {
+    it("should resolve fonts.css and theme.css beside themeConfigPath", () => {
+      mockEnv.mockReturnValue(
+        createMockEnv({
+          themeConfigPath: "/custom/brand/theme.json",
+        }),
+      );
+
+      expect(defaultThemeConfig.getFontsCssPath(undefined)).toBe(
+        "/custom/brand/fonts.css",
+      );
+      expect(defaultThemeConfig.getThemeCssPath(undefined)).toBe(
+        "/custom/brand/theme.css",
+      );
+    });
+
+    it("should prefer the resolved theme path over env fallbacks for sibling stylesheets", () => {
+      mockEnv.mockReturnValue(
+        createMockEnv({
+          themeConfigPath: "/broken/theme.json",
+          themePath: "/themes/company",
+          themeCustomerName: "acme",
+        }),
+      );
+
+      expect(
+        defaultThemeConfig.getFontsCssPath(
+          undefined,
+          "/resolved/customer/theme.json",
+        ),
+      ).toBe("/resolved/customer/fonts.css");
+      expect(
+        defaultThemeConfig.getThemeCssPath(
+          undefined,
+          "/resolved/customer/theme.json",
+        ),
+      ).toBe("/resolved/customer/theme.css");
+    });
+  });
+
   describe("loadThemeConfig", () => {
     const mockTheme: CustomThemeConfig = {
       name: "Test Theme",
@@ -464,6 +505,27 @@ describe("themeConfig", () => {
       );
     });
 
+    it("should return the resolved theme path metadata", async () => {
+      mockEnv.mockReturnValue(
+        createMockEnv({
+          themeConfigPath: "/custom/theme.json",
+          themePath: "/themes/company",
+        }),
+      );
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockTheme,
+      });
+
+      const result = await loadResolvedThemeConfig();
+
+      expect(result).toEqual({
+        themeConfig: mockTheme,
+        themeConfigPath: "/custom/theme.json",
+      });
+    });
+
     it("should fallback to next path when first path returns 404", async () => {
       mockEnv.mockReturnValue(
         createMockEnv({
@@ -490,6 +552,31 @@ describe("themeConfig", () => {
       expect(console.log).toHaveBeenCalledWith(
         "Custom theme loaded: Test Theme from /themes/company/theme.json",
       );
+    });
+
+    it("should preserve the successful fallback path for downstream asset resolution", async () => {
+      mockEnv.mockReturnValue(
+        createMockEnv({
+          themeConfigPath: "/custom/theme.json",
+          themePath: "/themes/company",
+        }),
+      );
+
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          ok: false,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockTheme,
+        });
+
+      const result = await loadResolvedThemeConfig();
+
+      expect(result).toEqual({
+        themeConfig: mockTheme,
+        themeConfigPath: "/themes/company/theme.json",
+      });
     });
 
     it("should handle fetch errors and try next path", async () => {
@@ -568,6 +655,7 @@ describe("themeConfig", () => {
         getAssistantAvatarPath: () => null,
         getSidebarLogoPath: () => null,
         getFontsCssPath: () => null,
+        getThemeCssPath: () => null,
       };
 
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({

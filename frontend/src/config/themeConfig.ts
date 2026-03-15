@@ -45,9 +45,24 @@ export interface ThemeLocationConfig {
   /**
    * Function to determine fonts.css path for custom theme fonts
    * @param themeName The name of the loaded theme
+   * @param resolvedThemeConfigPath The resolved theme.json path, when known
    * @returns Path to the fonts.css file, or null if not available
    */
-  getFontsCssPath: (themeName: string | undefined) => string | null;
+  getFontsCssPath: (
+    themeName: string | undefined,
+    resolvedThemeConfigPath?: string | null,
+  ) => string | null;
+
+  /**
+   * Function to determine theme.css path for custom theme shell overrides
+   * @param themeName The name of the loaded theme
+   * @param resolvedThemeConfigPath The resolved theme.json path, when known
+   * @returns Path to the theme.css file, or null if not available
+   */
+  getThemeCssPath: (
+    themeName: string | undefined,
+    resolvedThemeConfigPath?: string | null,
+  ) => string | null;
 }
 
 const buildThemeAssetFilename = (baseFilename: string, isDark: boolean) =>
@@ -62,6 +77,19 @@ const buildThemePathOverride = (
   themePath: string | null | undefined,
   filename: string,
 ) => (themePath ? `${themePath}/${filename}` : null);
+
+const resolveSiblingThemeFilePath = (
+  themeConfigPath: string,
+  filename: string,
+): string => {
+  const sanitizedThemeConfigPath = themeConfigPath.replace(/[?#].*$/, "");
+  const lastSlashIndex = sanitizedThemeConfigPath.lastIndexOf("/");
+
+  if (lastSlashIndex === -1) return filename;
+  if (lastSlashIndex === 0) return `/${filename}`;
+
+  return `${sanitizedThemeConfigPath.slice(0, lastSlashIndex)}/${filename}`;
+};
 
 const resolveThemeBaseDir = (options: {
   themePath?: string | null;
@@ -99,6 +127,42 @@ const resolveThemeFilePath = (options: {
     buildCustomerThemeFilePath(themeCustomerName ?? undefined, filename) ??
     defaultPath
   );
+};
+
+const resolveThemePackAssetPath = (options: {
+  filename: string;
+  resolvedThemeConfigPath?: string | null;
+  themeConfigPath?: string | null;
+  themePath?: string | null;
+  customerName?: string | null;
+  themeCustomerName?: string | null;
+  defaultPath?: string | null;
+}): string | null => {
+  const {
+    filename,
+    resolvedThemeConfigPath,
+    themeConfigPath,
+    themePath,
+    customerName,
+    themeCustomerName,
+    defaultPath = `/custom-theme/${filename}`,
+  } = options;
+
+  if (resolvedThemeConfigPath) {
+    return resolveSiblingThemeFilePath(resolvedThemeConfigPath, filename);
+  }
+
+  if (themeConfigPath) {
+    return resolveSiblingThemeFilePath(themeConfigPath, filename);
+  }
+
+  return resolveThemeFilePath({
+    filename,
+    themePath,
+    customerName,
+    themeCustomerName,
+    defaultPath,
+  });
 };
 
 /**
@@ -181,38 +245,56 @@ export const defaultThemeConfig: ThemeLocationConfig = {
       hasDefault: false,
     }),
 
-  getFontsCssPath: (themeName) => {
-    const { themePath, themeCustomerName } = env();
+  getFontsCssPath: (themeName, resolvedThemeConfigPath) => {
+    const { themeConfigPath, themePath, themeCustomerName } = env();
     return (
-      resolveThemeFilePath({
+      resolveThemePackAssetPath({
         filename: "fonts.css",
+        resolvedThemeConfigPath,
+        themeConfigPath,
         themePath,
         themeCustomerName,
         defaultPath: "/custom-theme/fonts.css",
       }) ?? "/custom-theme/fonts.css"
     );
   },
+
+  getThemeCssPath: (themeName, resolvedThemeConfigPath) => {
+    const { themeConfigPath, themePath, themeCustomerName } = env();
+    return (
+      resolveThemePackAssetPath({
+        filename: "theme.css",
+        resolvedThemeConfigPath,
+        themeConfigPath,
+        themePath,
+        themeCustomerName,
+        defaultPath: "/custom-theme/theme.css",
+      }) ?? "/custom-theme/theme.css"
+    );
+  },
 };
 
-/**
- * Loads a theme from the configured theme paths
- * @param config Theme location configuration
- * @returns The loaded theme config or null if no theme was found
- */
-export async function loadThemeConfig(
+export interface LoadedThemeConfig {
+  themeConfig: CustomThemeConfig;
+  themeConfigPath: string;
+}
+
+export async function loadResolvedThemeConfig(
   config: ThemeLocationConfig = defaultThemeConfig,
-): Promise<CustomThemeConfig | null> {
+): Promise<LoadedThemeConfig | null> {
   try {
-    // Try paths in priority order
     const pathsToTry = config.getThemePaths().filter(Boolean) as string[];
 
     for (const path of pathsToTry) {
       try {
         const response = await fetch(path);
         if (response.ok) {
-          const themeConfig = await response.json();
+          const themeConfig = (await response.json()) as CustomThemeConfig;
           console.log(`Custom theme loaded: ${themeConfig.name} from ${path}`);
-          return themeConfig;
+          return {
+            themeConfig,
+            themeConfigPath: path,
+          };
         }
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (error) {
@@ -226,6 +308,18 @@ export async function loadThemeConfig(
     console.error("Failed to load any theme", error);
     return null;
   }
+}
+
+/**
+ * Loads a theme from the configured theme paths
+ * @param config Theme location configuration
+ * @returns The loaded theme config or null if no theme was found
+ */
+export async function loadThemeConfig(
+  config: ThemeLocationConfig = defaultThemeConfig,
+): Promise<CustomThemeConfig | null> {
+  const loadedThemeConfig = await loadResolvedThemeConfig(config);
+  return loadedThemeConfig?.themeConfig ?? null;
 }
 
 /**

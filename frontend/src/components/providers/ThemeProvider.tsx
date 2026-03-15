@@ -6,8 +6,8 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { ThemeApplier } from "@/components/ui/ThemeApplier";
 import { defaultTheme, darkTheme } from "@/config/theme";
 import {
-  loadThemeConfig,
   defaultThemeConfig,
+  loadResolvedThemeConfig,
   resolveIconPaths,
 } from "@/config/themeConfig";
 import { deepMerge, type CustomThemeConfig } from "@/utils/themeUtils";
@@ -36,6 +36,24 @@ type ThemeContextType = {
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
+const removeThemeStylesheets = () => {
+  document.querySelector('link[data-theme-fonts="true"]')?.remove();
+  document.querySelector('link[data-theme-styles="true"]')?.remove();
+};
+
+const appendThemeStylesheet = (
+  href: string | null,
+  marker: "data-theme-fonts" | "data-theme-styles",
+) => {
+  if (!href) return;
+
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = href;
+  link.setAttribute(marker, "true");
+  document.head.appendChild(link);
+};
 
 // Try to get the saved theme from localStorage
 const getSavedTheme = (): ThemeMode => {
@@ -79,6 +97,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const [theme, setTheme] = useState<Theme>(defaultTheme);
   const [customThemeConfig, setCustomThemeConfig] =
     useState<CustomThemeConfig | null>(null);
+  const [resolvedThemeConfigPath, setResolvedThemeConfigPath] = useState<
+    string | null
+  >(null);
   const [isCustomTheme, setIsCustomTheme] = useState(false);
   const [iconMappings, setIconMappings] = useState<{
     fileTypes?: Record<string, string>;
@@ -89,70 +110,63 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
   // Initialize theme from saved settings and try to load custom theme
   useEffect(() => {
+    let isMounted = true;
+
     // Load theme using the configuration module
     const loadTheme = async () => {
-      const themeConfig = await loadThemeConfig(defaultThemeConfig);
-      if (themeConfig) {
-        setCustomThemeConfig(themeConfig);
-        setIsCustomTheme(true);
+      const loadedTheme = await loadResolvedThemeConfig(defaultThemeConfig);
 
+      if (!isMounted) return;
+
+      if (loadedTheme) {
+        const { themeConfig, themeConfigPath } = loadedTheme;
+
+        setCustomThemeConfig(themeConfig);
+        setResolvedThemeConfigPath(themeConfigPath);
+        setIsCustomTheme(true);
         // Resolve icon paths from theme config
         // Use undefined to let it fall back to env().themeCustomerName (e.g., "trilux-test")
         // instead of themeConfig.name (e.g., "Trilux Theme") which is the display name
         const resolvedIcons = resolveIconPaths(themeConfig.icons, undefined);
         setIconMappings(resolvedIcons);
+        return;
       }
+
+      setCustomThemeConfig(null);
+      setResolvedThemeConfigPath(null);
+      setIsCustomTheme(false);
+      setIconMappings(undefined);
     };
 
     void loadTheme();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // Load custom fonts.css when a custom theme is active
+  // Load custom theme stylesheets when a custom theme is active
   useEffect(() => {
-    if (!customThemeConfig) return;
+    removeThemeStylesheets();
 
-    // Get fonts.css path using theme configuration
+    if (!customThemeConfig || !resolvedThemeConfigPath) return;
+
     const fontsCssPath = defaultThemeConfig.getFontsCssPath(
       customThemeConfig.name,
+      resolvedThemeConfigPath,
+    );
+    const themeCssPath = defaultThemeConfig.getThemeCssPath(
+      customThemeConfig.name,
+      resolvedThemeConfigPath,
     );
 
-    // If no path returned, don't load fonts
-    if (!fontsCssPath) return;
+    appendThemeStylesheet(fontsCssPath, "data-theme-fonts");
+    appendThemeStylesheet(themeCssPath, "data-theme-styles");
 
-    // Check if fonts.css link already exists
-    const existingLink = document.querySelector(
-      'link[data-theme-fonts="true"]',
-    );
-
-    // If it exists with the same href, do nothing
-    if (existingLink && existingLink.getAttribute("href") === fontsCssPath) {
-      return;
-    }
-
-    // Remove old link if it exists
-    if (existingLink) {
-      existingLink.remove();
-    }
-
-    // Create and append new link element
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = fontsCssPath;
-    link.setAttribute("data-theme-fonts", "true");
-
-    // Add to head
-    document.head.appendChild(link);
-
-    // Cleanup function to remove the link when component unmounts or theme changes
     return () => {
-      const linkToRemove = document.querySelector(
-        'link[data-theme-fonts="true"]',
-      );
-      if (linkToRemove) {
-        linkToRemove.remove();
-      }
+      removeThemeStylesheets();
     };
-  }, [customThemeConfig]);
+  }, [customThemeConfig, resolvedThemeConfigPath]);
 
   // Listen for system preference changes when in system mode
   useEffect(() => {
