@@ -1,0 +1,87 @@
+import { I18nProvider } from "@lingui/react";
+import { render } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { messages as enMessages } from "@/locales/en/messages.json";
+
+import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
+
+import type { ChatSession } from "@/types/chat";
+import type { Messages } from "@lingui/core";
+
+vi.mock("@/components/ui", () => ({
+  MessageTimestamp: ({ createdAt }: { createdAt: Date }) => (
+    <span>{createdAt.toISOString()}</span>
+  ),
+}));
+
+vi.mock("@/hooks/ui", () => ({
+  useThemedIcon: () => null,
+}));
+
+vi.mock("../Controls/DropdownMenu", () => ({
+  DropdownMenu: () => <div data-testid="row-menu" />,
+}));
+
+const sessions: ChatSession[] = [
+  {
+    id: "chat-1",
+    title: "First chat",
+    messages: [],
+    updatedAt: new Date("2024-01-01").toISOString(),
+    metadata: {
+      fileCount: 2,
+    },
+  },
+];
+
+describe("ChatHistoryList", () => {
+  beforeEach(async () => {
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+  });
+
+  it("uses the sidebar token surface for active history rows", async () => {
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <I18nProvider i18n={i18n}>
+        <ChatHistoryList
+          sessions={sessions}
+          currentSessionId="chat-1"
+          onSessionSelect={vi.fn()}
+          onSessionArchive={vi.fn()}
+          onSessionEditTitle={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    expect(
+      container.querySelector('[data-ui="chat-history-list"]'),
+    ).toBeTruthy();
+    const historyItem = container.querySelector(
+      '[data-ui="chat-history-item"]',
+    );
+
+    expect(historyItem).toHaveStyle({
+      minHeight: "var(--theme-spacing-sidebar-row-height)",
+      borderRadius: "var(--theme-radius-shell)",
+      backgroundColor: "var(--theme-shell-sidebar-selected)",
+    });
+    expect(historyItem).toHaveClass(
+      "hover:bg-[var(--theme-shell-sidebar-hover)]",
+    );
+  });
+
+  it("uses the same sidebar tokens in the loading skeleton", () => {
+    const { getAllByTestId } = render(<ChatHistoryListSkeleton />);
+
+    const skeletonItem = getAllByTestId("chat-history-skeleton-item")[0];
+
+    expect(skeletonItem).toHaveStyle({
+      minHeight: "var(--theme-spacing-sidebar-row-height)",
+      borderRadius: "var(--theme-radius-shell)",
+      backgroundColor: "var(--theme-shell-sidebar-selected)",
+    });
+  });
+});

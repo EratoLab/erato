@@ -35,6 +35,12 @@ import type { ChatSession } from "@/types/chat";
 
 // Create logger for this component
 const logger = createLogger("UI", "ChatHistorySidebar");
+// eslint-disable-next-line lingui/no-unlocalized-strings -- CSS length token for slim sidebar width
+const slimSidebarWidth = "4rem";
+const sidebarItemStyle = {
+  minHeight: "var(--theme-spacing-sidebar-row-height)",
+  borderRadius: "var(--theme-radius-shell)",
+} as const;
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -45,7 +51,7 @@ export interface ChatHistorySidebarProps {
   collapsed?: boolean;
   /**
    * Minimum width of the sidebar when expanded
-   * @default 280
+   * @default theme layout token
    */
   minWidth?: number;
   onNewChat?: () => void;
@@ -129,7 +135,7 @@ const ChatHistoryHeader = memo<{
 }>(
   ({ collapsed, isSlimMode, onToggleCollapse, showTitle, sidebarLogoPath }) => (
     <div
-      className="flex min-h-[60px] border-b border-theme-border p-2"
+      className="flex min-h-[60px] border-b border-[var(--theme-border-divider)] p-2"
       data-ui="sidebar-header"
     >
       {/* In slim mode, show logo with hover toggle or just toggle button */}
@@ -204,9 +210,10 @@ const NewChatItem = memo<{
           onNewChat?.();
         }}
         className={clsx(
-          "flex min-h-[44px] items-center rounded-lg text-left hover:bg-theme-bg-hover",
+          "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
           isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
         )}
+        style={sidebarItemStyle}
         aria-label={t`New Chat`}
         title={isSlimMode ? t`New Chat` : undefined}
       >
@@ -247,9 +254,10 @@ const SearchNavigationItem = memo<{
           useDiv={true}
           interactive={false}
           className={clsx(
-            "flex min-h-[44px] items-center rounded-lg text-left opacity-50",
+            "flex items-center text-left opacity-50",
             isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
           )}
+          style={sidebarItemStyle}
           aria-label={t`Search`}
           title={isSlimMode ? t`Search` : undefined}
         >
@@ -288,9 +296,10 @@ const SearchNavigationItem = memo<{
           <InteractiveContainer
             useDiv={true}
             className={clsx(
-              "flex min-h-[44px] items-center rounded-lg text-left hover:bg-theme-bg-hover",
+              "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
               isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
             )}
+            style={sidebarItemStyle}
           >
             <ResolvedIcon
               iconId={searchIconId}
@@ -331,9 +340,10 @@ const AssistantsNavigationItem = memo<{
           useDiv={true}
           interactive={false}
           className={clsx(
-            "flex min-h-[44px] items-center rounded-lg text-left opacity-50",
+            "flex items-center text-left opacity-50",
             isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
           )}
+          style={sidebarItemStyle}
           aria-label={t`Assistants`}
           title={isSlimMode ? t`Assistants` : undefined}
         >
@@ -372,9 +382,10 @@ const AssistantsNavigationItem = memo<{
           <InteractiveContainer
             useDiv={true}
             className={clsx(
-              "flex min-h-[44px] items-center rounded-lg text-left hover:bg-theme-bg-hover",
+              "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
               isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
             )}
+            style={sidebarItemStyle}
           >
             <ResolvedIcon
               iconId={assistantsIconId}
@@ -414,7 +425,8 @@ const CollapsibleSection = memo<{
       <div className="px-2 py-1">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left hover:bg-theme-bg-hover"
+          className="theme-transition flex w-full items-center justify-between px-3 py-2 text-left hover:bg-[var(--theme-shell-sidebar-hover)]"
+          style={sidebarItemStyle}
           aria-expanded={isExpanded}
           aria-label={isExpanded ? t`Collapse ${title}` : t`Expand ${title}`}
           type="button"
@@ -443,7 +455,10 @@ const ChatHistoryFooter = memo<{
   onSignOut: () => void;
   isSlimMode?: boolean;
 }>(({ userProfile, onSignOut, isSlimMode = false }) => (
-  <div className="border-t border-theme-border p-2" data-ui="sidebar-footer">
+  <div
+    className="border-t border-[var(--theme-border-divider)] p-2"
+    data-ui="sidebar-footer"
+  >
     <UserProfileThemeDropdown
       userProfile={userProfile}
       onSignOut={onSignOut}
@@ -467,7 +482,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
   ({
     className,
     collapsed = false,
-    minWidth = 280,
+    minWidth,
     onNewChat,
     onToggleCollapse,
     showTitle = false,
@@ -575,6 +590,34 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       navigate(assistantsRoute);
     }, [assistantsRoute, navigate]);
 
+    const expandedSidebarWidth = useMemo(
+      () =>
+        typeof minWidth === "number"
+          ? `${minWidth}px`
+          : "var(--theme-layout-sidebar-width)",
+      [minWidth],
+    );
+
+    const sidebarShellStyle = useMemo(
+      () => ({
+        backgroundColor: "var(--theme-shell-sidebar)",
+        borderRightColor: "var(--theme-border-divider)",
+        boxShadow: "var(--theme-elevation-shell)",
+        width: isSlimMode ? slimSidebarWidth : expandedSidebarWidth,
+      }),
+      [expandedSidebarWidth, isSlimMode],
+    );
+
+    const hiddenToggleStyle = useMemo(
+      () => ({
+        backgroundColor: "var(--theme-shell-sidebar)",
+        borderColor: "var(--theme-border-divider)",
+        borderRadius: "var(--theme-radius-shell)",
+        boxShadow: "var(--theme-elevation-shell)",
+      }),
+      [],
+    );
+
     return (
       <ErrorBoundary FallbackComponent={ErrorDisplay}>
         <div className="relative h-auto">
@@ -585,7 +628,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                 onClick={onToggleCollapse}
                 variant="sidebar-icon"
                 icon={<SidebarToggleIcon />}
-                className="border border-theme-border bg-theme-bg-sidebar shadow-md"
+                className="border"
+                style={hiddenToggleStyle}
                 aria-label={t`expand sidebar`}
                 aria-expanded="false"
               />
@@ -595,20 +639,16 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           <aside
             ref={ref}
             className={clsx(
-              "flex h-full flex-col border-r border-theme-border bg-theme-bg-sidebar",
+              "flex h-full flex-col border-r",
               "fixed inset-y-0 left-0 z-40",
               "transition-[width,transform,opacity] duration-300 ease-in-out motion-reduce:transition-none",
-              {
-                // Hidden mode: slide completely off-screen
-                "w-80 -translate-x-full opacity-0 pointer-events-none":
-                  isHiddenMode,
-                // Slim mode: slide to show 64px width
-                "w-16 translate-x-0 opacity-100": isSlimMode,
-                // Expanded mode: full width visible
-                "w-80 translate-x-0 opacity-100": !collapsed,
-              },
+              // Hidden mode: slide completely off-screen
+              isHiddenMode && "pointer-events-none -translate-x-full opacity-0",
+              // Slim and expanded modes stay visible
+              !isHiddenMode && "translate-x-0 opacity-100",
               className,
             )}
+            style={sidebarShellStyle}
             data-ui="sidebar"
           >
             <ChatHistoryHeader
@@ -640,7 +680,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               {/* Divider separating navigation items from content lists */}
               <div
                 className={clsx(
-                  "mx-2 my-1 border-t border-theme-border transition-opacity duration-200",
+                  "mx-2 my-1 border-t border-[var(--theme-border-divider)] transition-opacity duration-200",
                   isSlimMode && "pointer-events-none opacity-0",
                 )}
               />

@@ -15,6 +15,10 @@ import { LogOutIcon, ResolvedIcon, MultiplePagesIcon } from "../icons";
 import type { ChatSession } from "@/types/chat";
 
 const logger = createLogger("UI", "ChatHistoryList");
+const sidebarRowStyle = {
+  minHeight: "var(--theme-spacing-sidebar-row-height)",
+  borderRadius: "var(--theme-radius-shell)",
+} as const;
 
 const ChatItemIcon = memo(() => {
   // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifier, not user-facing text
@@ -81,110 +85,119 @@ const ChatHistoryListItem = memo<{
     canEdit = true,
     onShowDetails,
     showTimestamps = true,
-  }) => (
-    <a
-      href={getChatUrl(session.id, session.assistantId)}
-      onClick={(e) => {
-        // Allow cmd/ctrl-click to open in new tab
-        if (e.metaKey || e.ctrlKey) {
-          return;
-        }
-        // Prevent default navigation for normal clicks
-        e.preventDefault();
-        onSelect();
-      }}
-      className="block"
-      aria-label={session.title || t`New Chat`}
-    >
-      <InteractiveContainer
-        useDiv={true}
-        className={clsx(
-          "flex flex-col rounded-lg px-3 py-1.5 pb-3.5 pr-1.5 text-left",
-          isActive && "bg-theme-bg-selected",
-          "hover:bg-theme-bg-hover",
-          layout === "compact" ? "gap-0.5" : "gap-1",
-        )}
-        data-chat-id={session.id}
-        data-ui="chat-history-item"
+  }) => {
+    const rowStyle = {
+      ...sidebarRowStyle,
+      backgroundColor: isActive
+        ? "var(--theme-shell-sidebar-selected)"
+        : "transparent",
+    } as const;
+
+    return (
+      <a
+        href={getChatUrl(session.id, session.assistantId)}
+        onClick={(e) => {
+          // Allow cmd/ctrl-click to open in new tab
+          if (e.metaKey || e.ctrlKey) {
+            return;
+          }
+          // Prevent default navigation for normal clicks
+          e.preventDefault();
+          onSelect();
+        }}
+        className="block"
+        aria-label={session.title || t`New Chat`}
       >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <ChatItemIcon />
-            <span
-              className="truncate font-medium"
-              title={session.title || t`New Chat`}
+        <InteractiveContainer
+          useDiv={true}
+          className={clsx(
+            "theme-transition flex flex-col px-3 py-1.5 pb-3.5 pr-1.5 text-left",
+            "hover:bg-[var(--theme-shell-sidebar-hover)]",
+            layout === "compact" ? "gap-0.5" : "gap-1",
+          )}
+          style={rowStyle}
+          data-chat-id={session.id}
+          data-ui="chat-history-item"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <ChatItemIcon />
+              <span
+                className="truncate font-medium"
+                title={session.title || t`New Chat`}
+              >
+                {session.title || t`New Chat`}
+              </span>
+            </div>
+            {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
+            <div
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
             >
-              {session.title || t`New Chat`}
-            </span>
-          </div>
-          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- div exists to prevent bubbling */}
-          <div
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <DropdownMenu
-              items={[
-                ...(onEditTitle
-                  ? [
-                      {
-                        label: t({
-                          id: "chat.history.menu.rename",
-                          message: "Rename",
-                        }),
-                        icon: <MultiplePagesIcon className="size-4" />,
-                        onClick: onEditTitle,
-                        disabled: !canEdit,
-                      },
-                    ]
-                  : []),
-                {
-                  label: t`Remove`,
-                  icon: <LogOutIcon className="size-4" />,
-                  onClick: onArchive ?? (() => {}),
-                  confirmAction: true,
-                  confirmTitle: t`Confirm Removal`,
-                  confirmMessage: t`Are you sure you want to remove this chat?`,
-                },
-              ]}
-            />
-          </div>
-        </div>
-        {layout !== "compact" && showTimestamps && (
-          <>
-            <p
-              className={clsx(
-                "truncate text-xs",
-                session.metadata?.fileCount == 0
-                  ? "text-theme-fg-muted"
-                  : "text-theme-fg-secondary",
-              )}
-              title={
-                session.metadata?.fileCount === 0
-                  ? t`No files`
-                  : session.metadata?.fileCount === 1
-                    ? t`1 file`
-                    : `${session.metadata?.fileCount ?? 0} files`
-              }
-            >
-              <Plural
-                value={session.metadata?.fileCount ?? 0}
-                _0="No files"
-                one="# file"
-                other="# files"
+              <DropdownMenu
+                items={[
+                  ...(onEditTitle
+                    ? [
+                        {
+                          label: t({
+                            id: "chat.history.menu.rename",
+                            message: "Rename",
+                          }),
+                          icon: <MultiplePagesIcon className="size-4" />,
+                          onClick: onEditTitle,
+                          disabled: !canEdit,
+                        },
+                      ]
+                    : []),
+                  {
+                    label: t`Remove`,
+                    icon: <LogOutIcon className="size-4" />,
+                    onClick: onArchive ?? (() => {}),
+                    confirmAction: true,
+                    confirmTitle: t`Confirm Removal`,
+                    confirmMessage: t`Are you sure you want to remove this chat?`,
+                  },
+                ]}
               />
-            </p>
-            {session.updatedAt && (
-              <p className="text-xs text-theme-fg-secondary">
-                <MessageTimestamp createdAt={new Date(session.updatedAt)} />
+            </div>
+          </div>
+          {layout !== "compact" && showTimestamps && (
+            <>
+              <p
+                className={clsx(
+                  "truncate text-xs",
+                  session.metadata?.fileCount == 0
+                    ? "text-theme-fg-muted"
+                    : "text-theme-fg-secondary",
+                )}
+                title={
+                  session.metadata?.fileCount === 0
+                    ? t`No files`
+                    : session.metadata?.fileCount === 1
+                      ? t`1 file`
+                      : `${session.metadata?.fileCount ?? 0} files`
+                }
+              >
+                <Plural
+                  value={session.metadata?.fileCount ?? 0}
+                  _0="No files"
+                  one="# file"
+                  other="# files"
+                />
               </p>
-            )}
-          </>
-        )}
-      </InteractiveContainer>
-    </a>
-  ),
+              {session.updatedAt && (
+                <p className="text-xs text-theme-fg-secondary">
+                  <MessageTimestamp createdAt={new Date(session.updatedAt)} />
+                </p>
+              )}
+            </>
+          )}
+        </InteractiveContainer>
+      </a>
+    );
+  },
 );
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
@@ -221,8 +234,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     return (
       <div
         className={clsx(
-          "flex flex-col gap-1 overflow-y-auto p-2",
-          "w-full min-w-[280px] max-w-md",
+          "flex w-full min-w-0 flex-col gap-1 overflow-y-auto p-2",
           className,
         )}
         data-ui="chat-history-list"
@@ -267,13 +279,17 @@ export const ChatHistoryListSkeleton = ({
 }) => (
   <div
     data-testid="chat-history-skeleton"
-    className="flex w-full min-w-[280px] max-w-md flex-col gap-1 overflow-y-auto bg-theme-bg-secondary p-2"
+    className="flex w-full min-w-0 flex-col gap-1 overflow-y-auto bg-[var(--theme-shell-sidebar)] p-2"
   >
     {Array.from({ length: 5 }, (_, i) => (
       <div
         key={i}
         data-testid="chat-history-skeleton-item"
-        className="w-full rounded-lg bg-theme-bg-primary px-4 py-3"
+        className="w-full px-4 py-3"
+        style={{
+          ...sidebarRowStyle,
+          backgroundColor: "var(--theme-shell-sidebar-selected)",
+        }}
       >
         <div className="flex w-full items-center justify-between gap-2">
           <div className="h-5 w-2/3 animate-pulse rounded bg-theme-bg-accent" />

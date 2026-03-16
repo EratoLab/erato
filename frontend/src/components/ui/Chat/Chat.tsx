@@ -515,7 +515,7 @@ export const Chat = ({
               // Transition margin to match sidebar animation (300ms)
               "transition-[margin] duration-300 ease-in-out motion-reduce:transition-none",
               // When expanded: full width (320px)
-              !sidebarCollapsed && "sm:ml-80",
+              !sidebarCollapsed && "sm:ml-[var(--theme-layout-sidebar-width)]",
               // When collapsed in slim mode: narrow width (64px)
               sidebarCollapsed && collapsedMode === "slim" && "sm:ml-16",
               // When collapsed in hidden mode: no margin (sidebar is off-screen)
