@@ -85,6 +85,14 @@ export const ChatMessage = memo(function ChatMessage({
 }: ChatMessageProps) {
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
+  const messageShellStyle = {
+    borderRadius: "var(--theme-radius-message)",
+    padding:
+      "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
+  } as const;
+  const messageContentRowStyle = {
+    gap: "var(--theme-spacing-message-gap)",
+  } as const;
 
   // Get user display name - use profile name if available, otherwise use form of address
   const userDisplayName = isUser
@@ -127,12 +135,13 @@ export const ChatMessage = memo(function ChatMessage({
   return (
     <div
       className={clsx(
-        "group relative flex gap-4 rounded-lg p-4",
+        "group relative flex",
         "w-full min-w-[280px] shrink-0",
         messageStyles.hover,
         messageStyles.container[role],
         className,
       )}
+      style={messageShellStyle}
       role="log"
       aria-live="polite"
       aria-label={`${userDisplayName} ${t({ id: "chat.message.aria", message: "message" })}`}
@@ -141,7 +150,7 @@ export const ChatMessage = memo(function ChatMessage({
       data-ui="chat-message"
       data-role={role}
     >
-      <div className="flex w-full gap-6">
+      <div className="flex w-full" style={messageContentRowStyle}>
         {showAvatar && (
           <Avatar userProfile={userProfile} userOrAssistant={!!isUser} />
         )}

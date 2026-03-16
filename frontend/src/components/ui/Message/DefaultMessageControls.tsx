@@ -40,6 +40,14 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
   onViewFeedback,
 }: MessageControlsProps) {
   const [isCopied, setIsCopied] = useState(false);
+  const controlsRowStyle = {
+    gap: "var(--theme-spacing-control-gap)",
+  } as const;
+  const controlsClusterStyle = {
+    gap: "var(--theme-spacing-control-gap)",
+  } as const;
+  const controlsButtonClassName =
+    "hover:bg-[var(--theme-message-controls)] focus-visible:bg-[var(--theme-message-controls)]";
 
   // Chat-level edit permission from context; default true if unspecified
   const canEditChat = context.canEdit !== false; // default to true if unspecified
@@ -136,13 +144,14 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
   return (
     <div
       className={clsx(
-        "flex items-center gap-2",
+        "flex items-center",
         showOnHover && "theme-transition opacity-0 group-hover:opacity-100",
         className,
       )}
+      style={controlsRowStyle}
       data-ui="message-controls"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center" style={controlsClusterStyle}>
         {/* Raw/Formatted toggle - always visible for any message */}
         {onToggleRawMarkdown && (
           <Button
@@ -173,7 +182,10 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
                     message: "Show raw markdown",
                   })
             }
-            className={showRawMarkdown ? "text-theme-fg-accent" : ""}
+            className={clsx(
+              controlsButtonClassName,
+              showRawMarkdown && "text-theme-fg-accent",
+            )}
           />
         )}
 
@@ -192,6 +204,7 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
           showOnHover={showOnHover}
           aria-label={t({ id: "message.copy.aria", message: "Copy message" })}
           title={t({ id: "message.copy.aria", message: "Copy message" })}
+          className={controlsButtonClassName}
         />
 
         {isUser && canEditChat && !context.isSharedDialog && (
@@ -204,6 +217,7 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
             aria-label={t({ id: "message.edit.aria", message: "Edit message" })}
             title={t({ id: "message.edit.aria", message: "Edit message" })}
             disabled={feedbackState !== null}
+            className={controlsButtonClassName}
           />
         )}
 
@@ -236,7 +250,10 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
                   : t({ id: "feedback.like.aria", message: "Like message" })
               }
               disabled={false}
-              className={feedbackState === "liked" ? "opacity-100" : ""}
+              className={clsx(
+                controlsButtonClassName,
+                feedbackState === "liked" && "opacity-100",
+              )}
             />
             <Button
               onClick={() => void handleAction("dislike")}
@@ -268,7 +285,10 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
                     })
               }
               disabled={false}
-              className={feedbackState === "disliked" ? "opacity-100" : ""}
+              className={clsx(
+                controlsButtonClassName,
+                feedbackState === "disliked" && "opacity-100",
+              )}
             />
           </>
         )}

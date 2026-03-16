@@ -79,6 +79,20 @@ describe("ChatMessage", () => {
     const messageShell = screen.getByTestId("message-assistant");
     expect(messageShell).toHaveAttribute("data-ui", "chat-message");
     expect(messageShell).toHaveAttribute("data-role", "assistant");
+    expect(messageShell).toHaveStyle({
+      borderRadius: "var(--theme-radius-message)",
+      padding:
+        "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
+    });
+    expect(messageShell.className).toContain(
+      "bg-[var(--theme-message-assistant)]",
+    );
+    expect(messageShell.className).toContain(
+      "hover:bg-[var(--theme-message-hover)]",
+    );
+    expect(messageShell.firstElementChild).toHaveStyle({
+      gap: "var(--theme-spacing-message-gap)",
+    });
     expect(screen.getByTestId("message-controls-probe")).toBeInTheDocument();
   });
 });
