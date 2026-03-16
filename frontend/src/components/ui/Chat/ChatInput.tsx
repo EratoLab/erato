@@ -625,8 +625,25 @@ export const ChatInput = ({
     return fileError;
   }, [uploadError, fileError]);
 
+  const shellWrapperStyle = {
+    maxWidth: "var(--theme-layout-chat-input-max-width)",
+  } as const;
+
+  const inputShellStyle = {
+    backgroundColor: "var(--theme-shell-chat-input)",
+    borderRadius: "var(--theme-radius-input)",
+    boxShadow: "var(--theme-elevation-input)",
+    padding:
+      "var(--theme-spacing-input-padding-y) var(--theme-spacing-input-padding-x)",
+    gap: "var(--theme-spacing-input-gap)",
+  } as const;
+
+  const controlGroupStyle = {
+    gap: "var(--theme-spacing-control-gap)",
+  } as const;
+
   return (
-    <div className="mx-auto w-full max-w-4xl">
+    <div className="mx-auto w-full" style={shellWrapperStyle}>
       <form
         className={clsx("w-full ", className, {
           "pb-0 sm:pb-0": aiUsageAdvisory,
@@ -674,13 +691,12 @@ export const ChatInput = ({
 
         <div
           className={clsx(
-            "w-full rounded-2xl bg-[var(--theme-bg-tertiary)]",
-            "p-2 sm:p-3",
-            "shadow-[0_0_15px_rgba(0,0,0,0.1)]",
+            "w-full",
             "border border-[var(--theme-border)]",
             "theme-transition focus-within:border-[var(--theme-border-focus)]",
-            "flex flex-col gap-2 sm:gap-3",
+            "flex flex-col",
           )}
+          style={inputShellStyle}
           data-ui="chat-input-shell"
         >
           <textarea
@@ -724,7 +740,7 @@ export const ChatInput = ({
             className="flex items-center justify-between"
             data-ui="chat-input-controls"
           >
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center" style={controlGroupStyle}>
               {showControls && (
                 <>
                   {/* File Upload Button with Token Check */}
@@ -775,7 +791,7 @@ export const ChatInput = ({
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center" style={controlGroupStyle}>
               {mode === "edit" && onCancelEdit && (
                 <Button
                   type="button"

@@ -247,5 +247,24 @@ describe("ChatInput", () => {
     expect(
       container.querySelector('[data-ui="chat-input-controls"]'),
     ).toBeTruthy();
+
+    expect(container.firstElementChild).toHaveStyle({
+      maxWidth: "var(--theme-layout-chat-input-max-width)",
+    });
+    expect(container.querySelector('[data-ui="chat-input-shell"]')).toHaveStyle(
+      {
+        backgroundColor: "var(--theme-shell-chat-input)",
+        borderRadius: "var(--theme-radius-input)",
+        boxShadow: "var(--theme-elevation-input)",
+        padding:
+          "var(--theme-spacing-input-padding-y) var(--theme-spacing-input-padding-x)",
+        gap: "var(--theme-spacing-input-gap)",
+      },
+    );
+    expect(
+      container.querySelector('[data-ui="chat-input-controls"] > div'),
+    ).toHaveStyle({
+      gap: "var(--theme-spacing-control-gap)",
+    });
   });
 });
