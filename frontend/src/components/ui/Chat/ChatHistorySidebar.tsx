@@ -41,6 +41,10 @@ const sidebarItemStyle = {
   minHeight: "var(--theme-spacing-sidebar-row-height)",
   borderRadius: "var(--theme-radius-shell)",
 } as const;
+const compactShellPaddingStyle = {
+  padding:
+    "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
+} as const;
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -135,7 +139,8 @@ const ChatHistoryHeader = memo<{
 }>(
   ({ collapsed, isSlimMode, onToggleCollapse, showTitle, sidebarLogoPath }) => (
     <div
-      className="flex min-h-[60px] border-b border-[var(--theme-border-divider)] p-2"
+      className="flex min-h-[60px] border-b border-[var(--theme-border-divider)]"
+      style={compactShellPaddingStyle}
       data-ui="sidebar-header"
     >
       {/* In slim mode, show logo with hover toggle or just toggle button */}
@@ -456,7 +461,8 @@ const ChatHistoryFooter = memo<{
   isSlimMode?: boolean;
 }>(({ userProfile, onSignOut, isSlimMode = false }) => (
   <div
-    className="border-t border-[var(--theme-border-divider)] p-2"
+    className="border-t border-[var(--theme-border-divider)]"
+    style={compactShellPaddingStyle}
     data-ui="sidebar-footer"
   >
     <UserProfileThemeDropdown

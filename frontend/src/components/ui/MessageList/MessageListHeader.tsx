@@ -29,7 +29,12 @@ export const MessageListHeader = ({
   paginationStats,
 }: MessageListHeaderProps) => {
   return (
-    <div className="pb-2" data-ui="chat-header">
+    <div
+      className="pb-2"
+      style={{ backgroundColor: "var(--theme-shell-chat-header)" }}
+      data-testid="chat-header-shell"
+      data-ui="chat-header"
+    >
       {showLoadMoreButton && (
         <LoadMoreButton onClick={handleLoadMore} isPending={isPending} />
       )}

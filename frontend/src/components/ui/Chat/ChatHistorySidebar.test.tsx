@@ -1,5 +1,5 @@
 import { I18nProvider } from "@lingui/react";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -97,7 +97,14 @@ describe("ChatHistorySidebar", () => {
       boxShadow: "var(--theme-elevation-shell)",
       width: "var(--theme-layout-sidebar-width)",
     });
-    expect(container.querySelector('[data-ui="sidebar-header"]')).toBeTruthy();
-    expect(container.querySelector('[data-ui="sidebar-footer"]')).toBeTruthy();
+    expect(container.querySelector('[data-ui="sidebar-header"]')).toHaveStyle({
+      padding:
+        "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
+    });
+    expect(container.querySelector('[data-ui="sidebar-footer"]')).toHaveStyle({
+      padding:
+        "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
+    });
+    expect(screen.getByTestId("history-list")).toBeInTheDocument();
   });
 });

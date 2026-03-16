@@ -19,6 +19,10 @@ const sidebarRowStyle = {
   minHeight: "var(--theme-spacing-sidebar-row-height)",
   borderRadius: "var(--theme-radius-shell)",
 } as const;
+const sidebarListStyle = {
+  padding:
+    "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
+} as const;
 
 const ChatItemIcon = memo(() => {
   // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifier, not user-facing text
@@ -86,12 +90,12 @@ const ChatHistoryListItem = memo<{
     onShowDetails,
     showTimestamps = true,
   }) => {
-    const rowStyle = {
-      ...sidebarRowStyle,
-      backgroundColor: isActive
-        ? "var(--theme-shell-sidebar-selected)"
-        : "transparent",
-    } as const;
+    const rowStyle = isActive
+      ? ({
+          ...sidebarRowStyle,
+          backgroundColor: "var(--theme-shell-sidebar-selected)",
+        } as const)
+      : sidebarRowStyle;
 
     return (
       <a
@@ -234,9 +238,10 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     return (
       <div
         className={clsx(
-          "flex w-full min-w-0 flex-col gap-1 overflow-y-auto p-2",
+          "flex w-full min-w-0 flex-col gap-1 overflow-y-auto",
           className,
         )}
+        style={sidebarListStyle}
         data-ui="chat-history-list"
       >
         {sessions.map((session) => (
@@ -279,7 +284,8 @@ export const ChatHistoryListSkeleton = ({
 }) => (
   <div
     data-testid="chat-history-skeleton"
-    className="flex w-full min-w-0 flex-col gap-1 overflow-y-auto bg-[var(--theme-shell-sidebar)] p-2"
+    className="flex w-full min-w-0 flex-col gap-1 overflow-y-auto bg-[var(--theme-shell-sidebar)]"
+    style={sidebarListStyle}
   >
     {Array.from({ length: 5 }, (_, i) => (
       <div

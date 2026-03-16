@@ -633,13 +633,6 @@ export const ChatInput = ({
     backgroundColor: "var(--theme-shell-chat-input)",
     borderRadius: "var(--theme-radius-input)",
     boxShadow: "var(--theme-elevation-input)",
-    padding:
-      "var(--theme-spacing-input-padding-y) var(--theme-spacing-input-padding-x)",
-    gap: "var(--theme-spacing-input-gap)",
-  } as const;
-
-  const controlGroupStyle = {
-    gap: "var(--theme-spacing-control-gap)",
   } as const;
 
   return (
@@ -695,6 +688,10 @@ export const ChatInput = ({
             "border border-[var(--theme-border)]",
             "theme-transition focus-within:border-[var(--theme-border-focus)]",
             "flex flex-col",
+            "[padding:calc(var(--theme-spacing-input-padding-y)*2/3)_calc(var(--theme-spacing-input-padding-x)*2/3)]",
+            "gap-[var(--theme-spacing-input-gap)]",
+            "sm:[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
+            "sm:gap-[calc(var(--theme-spacing-input-gap)*1.5)]",
           )}
           style={inputShellStyle}
           data-ui="chat-input-shell"
@@ -740,7 +737,7 @@ export const ChatInput = ({
             className="flex items-center justify-between"
             data-ui="chat-input-controls"
           >
-            <div className="flex items-center" style={controlGroupStyle}>
+            <div className="flex items-center gap-[calc(var(--theme-spacing-control-gap)/2)] sm:gap-[var(--theme-spacing-control-gap)]">
               {showControls && (
                 <>
                   {/* File Upload Button with Token Check */}
@@ -791,7 +788,7 @@ export const ChatInput = ({
               )}
             </div>
 
-            <div className="flex items-center" style={controlGroupStyle}>
+            <div className="flex items-center gap-[var(--theme-spacing-control-gap)]">
               {mode === "edit" && onCancelEdit && (
                 <Button
                   type="button"

@@ -22,6 +22,15 @@ describe("MessageList", () => {
     const chatBody = screen.getByTestId("message-list");
     const contentShell = chatBody.lastElementChild;
 
+    expect(chatBody).toHaveStyle({
+      backgroundColor: "var(--theme-shell-chat-body)",
+    });
+    expect(chatBody.className).toContain(
+      "[padding:var(--theme-spacing-shell-padding-y)_calc(var(--theme-spacing-shell-padding-x)/2)]",
+    );
+    expect(chatBody.className).toContain(
+      "gap-[var(--theme-spacing-shell-gap)]",
+    );
     expect(contentShell).toHaveStyle({
       maxWidth: "var(--theme-layout-chat-content-max-width)",
     });
@@ -47,6 +56,12 @@ describe("MessageList", () => {
     const chatBody = screen.getByTestId("message-list");
     const contentShell = chatBody.lastElementChild;
 
+    expect(chatBody).toHaveStyle({
+      backgroundColor: "var(--theme-shell-chat-body)",
+    });
+    expect(chatBody.className).toContain(
+      "[padding:var(--theme-spacing-shell-padding-y)_calc(var(--theme-spacing-shell-padding-x)/2)]",
+    );
     expect(contentShell).toHaveStyle({
       maxWidth: "640px",
     });

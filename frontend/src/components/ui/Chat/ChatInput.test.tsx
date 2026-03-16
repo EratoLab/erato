@@ -256,15 +256,19 @@ describe("ChatInput", () => {
         backgroundColor: "var(--theme-shell-chat-input)",
         borderRadius: "var(--theme-radius-input)",
         boxShadow: "var(--theme-elevation-input)",
-        padding:
-          "var(--theme-spacing-input-padding-y) var(--theme-spacing-input-padding-x)",
-        gap: "var(--theme-spacing-input-gap)",
       },
     );
     expect(
-      container.querySelector('[data-ui="chat-input-controls"] > div'),
-    ).toHaveStyle({
-      gap: "var(--theme-spacing-control-gap)",
-    });
+      container.querySelector('[data-ui="chat-input-shell"]')?.className,
+    ).toContain(
+      "[padding:calc(var(--theme-spacing-input-padding-y)*2/3)_calc(var(--theme-spacing-input-padding-x)*2/3)]",
+    );
+    expect(
+      container.querySelector('[data-ui="chat-input-shell"]')?.className,
+    ).toContain("sm:gap-[calc(var(--theme-spacing-input-gap)*1.5)]");
+    expect(
+      container.querySelector('[data-ui="chat-input-controls"] > div')
+        ?.className,
+    ).toContain("sm:gap-[var(--theme-spacing-control-gap)]");
   });
 });

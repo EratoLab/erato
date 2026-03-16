@@ -509,7 +509,7 @@ export const Chat = ({
         <ChatErrorBoundary onReset={handleErrorReset}>
           <div
             className={clsx(
-              "flex h-full min-w-0 flex-1 flex-col bg-theme-bg-secondary",
+              "flex h-full min-w-0 flex-1 flex-col",
               "sm:mt-0",
               // Add left margin based on sidebar state to prevent overlap with fixed sidebar
               // Transition margin to match sidebar animation (300ms)
@@ -527,6 +527,7 @@ export const Chat = ({
               id: "chat.conversation.aria",
               message: "Chat conversation",
             })}
+            style={{ backgroundColor: "var(--theme-shell-chat-body)" }}
           >
             {/* Use the MessageList component */}
             <MessageList

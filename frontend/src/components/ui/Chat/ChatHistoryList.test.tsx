@@ -1,5 +1,5 @@
 import { I18nProvider } from "@lingui/react";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
@@ -33,6 +33,15 @@ const sessions: ChatSession[] = [
       fileCount: 2,
     },
   },
+  {
+    id: "chat-2",
+    title: "Second chat",
+    messages: [],
+    updatedAt: new Date("2024-01-02").toISOString(),
+    metadata: {
+      fileCount: 0,
+    },
+  },
 ];
 
 describe("ChatHistoryList", () => {
@@ -62,6 +71,9 @@ describe("ChatHistoryList", () => {
     const historyItem = container.querySelector(
       '[data-ui="chat-history-item"]',
     );
+    const historyItems = container.querySelectorAll(
+      '[data-ui="chat-history-item"]',
+    );
 
     expect(historyItem).toHaveStyle({
       minHeight: "var(--theme-spacing-sidebar-row-height)",
@@ -70,6 +82,15 @@ describe("ChatHistoryList", () => {
     });
     expect(historyItem).toHaveClass(
       "hover:bg-[var(--theme-shell-sidebar-hover)]",
+    );
+    expect(
+      container.querySelector('[data-ui="chat-history-list"]'),
+    ).toHaveStyle({
+      padding:
+        "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
+    });
+    expect(historyItems[1].getAttribute("style") ?? "").not.toContain(
+      "background-color",
     );
   });
 
@@ -82,6 +103,10 @@ describe("ChatHistoryList", () => {
       minHeight: "var(--theme-spacing-sidebar-row-height)",
       borderRadius: "var(--theme-radius-shell)",
       backgroundColor: "var(--theme-shell-sidebar-selected)",
+    });
+    expect(screen.getByTestId("chat-history-skeleton")).toHaveStyle({
+      padding:
+        "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
     });
   });
 });

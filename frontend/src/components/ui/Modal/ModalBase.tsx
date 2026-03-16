@@ -99,7 +99,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
           // Responsive padding - add margin on mobile
           "mx-4",
           // Add default focus outline for accessibility
-          "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
+          "focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus-ring)] focus:ring-offset-2",
           contentClassName,
         )}
         style={shellStyle}
@@ -121,7 +121,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
             {/* Simple Close Button */}
             <button
               onClick={onClose}
-              className="absolute right-3 top-3 rounded-full p-1 text-theme-fg-muted hover:bg-theme-bg-secondary focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="absolute right-3 top-3 rounded-full p-1 text-theme-fg-muted hover:bg-theme-bg-secondary focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus-ring)]"
               aria-label={t`Close modal`}
             >
               <CloseIcon className="size-6" />
