@@ -272,7 +272,7 @@ export const MessageList = memo<MessageListProps>(
     currentSessionId,
     apiMessagesResponse,
     pageSize = 6,
-    maxWidth = 768,
+    maxWidth,
     showTimestamps = true,
     showAvatars = false,
     userProfile,
@@ -494,6 +494,16 @@ export const MessageList = memo<MessageListProps>(
       );
     }, [className, isTransitioning]);
 
+    const contentWidthStyle = useMemo(
+      () => ({
+        maxWidth:
+          typeof maxWidth === "number"
+            ? `${maxWidth}px`
+            : "var(--theme-layout-chat-content-max-width)",
+      }),
+      [maxWidth],
+    );
+
     const handleCopyPlainText = useCallback(
       (event: React.ClipboardEvent<HTMLDivElement>) => {
         const selection = window.getSelection();
@@ -556,7 +566,7 @@ export const MessageList = memo<MessageListProps>(
         onCopy={handleCopyPlainText}
       >
         {renderMessageListHeader}
-        <div className={clsx("mx-auto w-full max-w-4xl")}>
+        <div className="mx-auto w-full" style={contentWidthStyle}>
           {showEmptyState && emptyStateComponent ? (
             <div className="flex h-full min-h-[300px] items-center justify-center">
               {emptyStateComponent}

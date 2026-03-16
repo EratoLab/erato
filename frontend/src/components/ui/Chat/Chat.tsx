@@ -110,7 +110,7 @@ export const Chat = ({
   messageOrder,
   className,
   layout = "default",
-  maxWidth = 768,
+  maxWidth,
   showAvatars = false,
   showTimestamps = true,
   onMessageAction,
