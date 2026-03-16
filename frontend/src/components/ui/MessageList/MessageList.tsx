@@ -272,7 +272,7 @@ export const MessageList = memo<MessageListProps>(
     currentSessionId,
     apiMessagesResponse,
     pageSize = 6,
-    maxWidth = 768,
+    maxWidth,
     showTimestamps = true,
     showAvatars = false,
     userProfile,
@@ -482,8 +482,10 @@ export const MessageList = memo<MessageListProps>(
     // Add optimized container class based on state
     const containerClass = useMemo(() => {
       return clsx(
-        "flex-1 overflow-y-auto bg-theme-bg-secondary px-2 sm:px-4",
-        "space-y-4 p-4",
+        "flex flex-1 flex-col overflow-y-auto",
+        "[padding:var(--theme-spacing-shell-padding-y)_calc(var(--theme-spacing-shell-padding-x)/2)]",
+        "gap-[var(--theme-spacing-shell-gap)]",
+        "sm:[padding:var(--theme-spacing-shell-padding-y)_var(--theme-spacing-shell-padding-x)]",
         className,
         // Apply transition properties without changing opacity
         // This creates a smoother experience when content changes
@@ -493,6 +495,23 @@ export const MessageList = memo<MessageListProps>(
         isTransitioning ? "opacity-0" : "opacity-100",
       );
     }, [className, isTransitioning]);
+
+    const containerStyle = useMemo(
+      () => ({
+        backgroundColor: "var(--theme-shell-chat-body)",
+      }),
+      [],
+    );
+
+    const contentWidthStyle = useMemo(
+      () => ({
+        maxWidth:
+          typeof maxWidth === "number"
+            ? `${maxWidth}px`
+            : "var(--theme-layout-chat-content-max-width)",
+      }),
+      [maxWidth],
+    );
 
     const handleCopyPlainText = useCallback(
       (event: React.ClipboardEvent<HTMLDivElement>) => {
@@ -551,12 +570,13 @@ export const MessageList = memo<MessageListProps>(
       <div
         ref={containerRef as React.RefObject<HTMLDivElement>}
         className={containerClass}
+        style={containerStyle}
         data-testid="message-list"
         data-ui="chat-body"
         onCopy={handleCopyPlainText}
       >
         {renderMessageListHeader}
-        <div className={clsx("mx-auto w-full max-w-4xl")}>
+        <div className="mx-auto w-full" style={contentWidthStyle}>
           {showEmptyState && emptyStateComponent ? (
             <div className="flex h-full min-h-[300px] items-center justify-center">
               {emptyStateComponent}
