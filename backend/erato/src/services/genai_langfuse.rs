@@ -219,6 +219,39 @@ pub fn create_metadata_with_assistant_and_tools(
     Some(JsonValue::Object(metadata))
 }
 
+/// Create trace-level metadata JSON including assistant_id, tool call flags, and filenames.
+pub fn create_trace_metadata(
+    assistant_id: Option<Uuid>,
+    tool_names: &[String],
+    filenames: &[String],
+    was_aborted: bool,
+) -> Option<JsonValue> {
+    let mut metadata =
+        match create_metadata_with_assistant_and_tools(assistant_id, tool_names, was_aborted) {
+            Some(JsonValue::Object(metadata)) => metadata,
+            Some(_) => serde_json::Map::new(),
+            None => serde_json::Map::new(),
+        };
+
+    if !filenames.is_empty() {
+        metadata.insert("filenames".to_string(), json!(filenames));
+    }
+
+    if metadata.is_empty() {
+        None
+    } else {
+        Some(JsonValue::Object(metadata))
+    }
+}
+
+pub fn langfuse_model_tag(model_name: &str) -> String {
+    format!("model-{}", model_name)
+}
+
+pub fn langfuse_tool_called_tag(tool_name: &str) -> String {
+    format!("tool_called_{}", tool_name)
+}
+
 /// Convenience function to generate unique observation and trace IDs
 pub fn generate_langfuse_ids() -> (String, String) {
     let observation_id = format!("obs_{}", Uuid::new_v4().simple());
@@ -622,5 +655,25 @@ mod tests {
         assert_eq!(langfuse_usage.input_cost, None);
         assert_eq!(langfuse_usage.output_cost, None);
         assert_eq!(langfuse_usage.total_cost, None);
+    }
+
+    #[test]
+    fn test_create_trace_metadata_includes_filenames() {
+        let metadata = create_trace_metadata(
+            None,
+            &["search".to_string()],
+            &["report.pdf".to_string(), "notes.txt".to_string()],
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(
+            metadata,
+            json!({
+                "tool_called_search": true,
+                "erato_generation_aborted": true,
+                "filenames": ["report.pdf", "notes.txt"]
+            })
+        );
     }
 }

@@ -25,8 +25,9 @@ use crate::services::background_tasks::{
 };
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
 use crate::services::genai_langfuse::{
-    TracedGenerationBuilder, create_trace_with_generation_from_chat, generate_langfuse_ids,
-    generate_name_from_chat_request,
+    TracedGenerationBuilder, create_trace_metadata, create_trace_with_generation_from_chat,
+    generate_langfuse_ids, generate_name_from_chat_request, langfuse_model_tag,
+    langfuse_tool_called_tag,
 };
 use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::convert_mcp_tools_to_genai_tools;
@@ -57,7 +58,7 @@ use sea_orm::JsonValue;
 use sea_orm::prelude::Uuid;
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::Sender;
@@ -1038,6 +1039,92 @@ impl PreparedChatRequest {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+struct LangfuseTraceEnrichment {
+    base_tags: Vec<String>,
+    filenames: Vec<String>,
+}
+
+impl LangfuseTraceEnrichment {
+    fn all_tags(&self, model_tags: &HashSet<String>, tool_names: &HashSet<String>) -> Vec<String> {
+        let mut tags: BTreeSet<String> = self.base_tags.iter().cloned().collect();
+        tags.extend(model_tags.iter().cloned());
+        tags.extend(
+            tool_names
+                .iter()
+                .map(|tool_name| langfuse_tool_called_tag(tool_name)),
+        );
+        tags.into_iter().collect()
+    }
+
+    fn trace_metadata(
+        &self,
+        assistant_id: Option<Uuid>,
+        tool_names: &HashSet<String>,
+        was_aborted: bool,
+    ) -> Option<JsonValue> {
+        let mut tool_names: Vec<String> = tool_names.iter().cloned().collect();
+        tool_names.sort();
+        create_trace_metadata(assistant_id, &tool_names, &self.filenames, was_aborted)
+    }
+}
+
+async fn build_langfuse_trace_enrichment(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    generation_input_messages: &GenerationInputMessages,
+    assistant_id: Option<Uuid>,
+) -> Result<LangfuseTraceEnrichment, Report> {
+    let mut base_tags = BTreeSet::from(["frontend-platform-web".to_string()]);
+    if assistant_id.is_some() {
+        base_tags.insert("assistant".to_string());
+    }
+
+    let mut filenames = BTreeSet::new();
+    let mut file_upload_ids = BTreeSet::new();
+
+    for message in &generation_input_messages.messages {
+        match &message.content {
+            ContentPart::TextFilePointer(pointer) => {
+                file_upload_ids.insert(pointer.file_upload_id);
+            }
+            ContentPart::ImageFilePointer(pointer) => {
+                file_upload_ids.insert(pointer.file_upload_id);
+            }
+            _ => {}
+        }
+    }
+
+    for file_upload_id in file_upload_ids {
+        let file_upload = crate::models::file_upload::get_file_upload_by_id(
+            &app_state.db,
+            policy,
+            subject,
+            &file_upload_id,
+        )
+        .await?;
+
+        filenames.insert(file_upload.filename.clone());
+
+        if let Some(extension) = file_upload.filename.rsplit('.').next()
+            && file_upload.filename.contains('.')
+        {
+            base_tags.insert(format!("file-extension-{}", extension.to_lowercase()));
+        }
+
+        base_tags.insert(format!(
+            "file-provider-{}",
+            file_upload.file_storage_provider_id.to_lowercase()
+        ));
+    }
+
+    Ok(LangfuseTraceEnrichment {
+        base_tags: base_tags.into_iter().collect(),
+        filenames: filenames.into_iter().collect(),
+    })
+}
+
 fn build_selected_facets(
     config: &ExperimentalFacetsConfig,
     selected_facet_ids: &[String],
@@ -1250,6 +1337,7 @@ async fn stream_generate_chat_completion<
     policy: &PolicyEngine,
     subject: &Subject,
     chat_request: ChatRequest,
+    langfuse_trace_enrichment: LangfuseTraceEnrichment,
     chat_options: ChatOptions,
     assistant_message_id: Uuid,
     user_id: String,
@@ -1353,6 +1441,7 @@ async fn stream_generate_chat_completion<
 
     // Track all tool calls across all turns for Langfuse metadata
     let mut all_tool_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut all_model_tags: HashSet<String> = HashSet::new();
 
     'loop_call_turns: loop {
         current_turn += 1;
@@ -1634,6 +1723,7 @@ async fn stream_generate_chat_completion<
                                     Err(_) => "unknown".to_string(),
                                 }
                             };
+                            all_model_tags.insert(langfuse_model_tag(&model_name));
                             let (turn_obs_id, _) = generate_langfuse_ids();
                             let generation_name = if let Some(ref name) = langfuse_generation_name {
                                 Some(format!("{} (turn {})", name, current_turn))
@@ -1646,6 +1736,9 @@ async fn stream_generate_chat_completion<
                             let accumulated_tool_names: Vec<String> =
                                 all_tool_names.iter().cloned().collect();
                             let assistant_id_for_langfuse = assistant_id;
+                            let trace_enrichment = langfuse_trace_enrichment.clone();
+                            let trace_tool_names = all_tool_names.clone();
+                            let trace_model_tags = all_model_tags.clone();
                             tokio::spawn(async move {
                                 let result = if current_turn == 1 {
                                     create_trace_with_generation_from_chat(
@@ -1688,16 +1781,28 @@ async fn stream_generate_chat_completion<
                                         current_turn,
                                         err
                                     );
-                                } else if let Some(metadata) = crate::services::genai_langfuse::create_metadata_with_assistant_and_tools(
-                                    assistant_id_for_langfuse,
-                                    &accumulated_tool_names,
-                                    true,
-                                ) && let Err(err) = client.update_trace_metadata(metadata).await {
-                                    tracing::warn!(
-                                        "Failed to update Langfuse aborted metadata for turn {}: {}",
-                                        current_turn,
-                                        err
-                                    );
+                                } else {
+                                    if let Some(metadata) = trace_enrichment.trace_metadata(
+                                        assistant_id_for_langfuse,
+                                        &trace_tool_names,
+                                        true,
+                                    ) && let Err(err) = client.update_trace_metadata(metadata).await {
+                                        tracing::warn!(
+                                            "Failed to update Langfuse aborted metadata for turn {}: {}",
+                                            current_turn,
+                                            err
+                                        );
+                                    }
+
+                                    let trace_tags = trace_enrichment
+                                        .all_tags(&trace_model_tags, &trace_tool_names);
+                                    if let Err(err) = client.update_trace_tags(trace_tags).await {
+                                        tracing::warn!(
+                                            "Failed to update Langfuse aborted tags for turn {}: {}",
+                                            current_turn,
+                                            err
+                                        );
+                                    }
                                 }
                             });
                         }
@@ -1844,6 +1949,7 @@ async fn stream_generate_chat_completion<
                         Err(_) => "unknown".to_string(),
                     }
                 };
+                all_model_tags.insert(langfuse_model_tag(&model_name));
 
                 // Generate a unique observation ID for this turn
                 let (turn_obs_id, _) = generate_langfuse_ids();
@@ -1958,9 +2064,10 @@ async fn stream_generate_chat_completion<
                     {
                         let client = client.clone();
                         let trace_id = client.trace_id().to_string();
-                        let accumulated_tool_names: Vec<String> =
-                            all_tool_names.iter().cloned().collect();
                         let assistant_id_for_trace = assistant_id;
+                        let trace_enrichment = langfuse_trace_enrichment.clone();
+                        let trace_tool_names = all_tool_names.clone();
+                        let trace_model_tags = all_model_tags.clone();
                         tokio::spawn(async move {
                             // Update trace output
                             if let Err(e) = client.update_trace_output(output_json).await {
@@ -1977,9 +2084,9 @@ async fn stream_generate_chat_completion<
                             }
 
                             // Update trace metadata with assistant_id and tool calls
-                            if let Some(metadata) = crate::services::genai_langfuse::create_metadata_with_assistant_and_tools(
+                            if let Some(metadata) = trace_enrichment.trace_metadata(
                                 assistant_id_for_trace,
-                                &accumulated_tool_names,
+                                &trace_tool_names,
                                 false,
                             ) {
                                 if let Err(e) = client.update_trace_metadata(metadata).await {
@@ -1994,6 +2101,21 @@ async fn stream_generate_chat_completion<
                                         "Successfully updated Langfuse trace with metadata"
                                     );
                                 }
+                            }
+
+                            let trace_tags =
+                                trace_enrichment.all_tags(&trace_model_tags, &trace_tool_names);
+                            if let Err(e) = client.update_trace_tags(trace_tags).await {
+                                tracing::warn!(
+                                    trace_id = %trace_id,
+                                    error = %e,
+                                    "Failed to update Langfuse trace with tags"
+                                );
+                            } else {
+                                tracing::debug!(
+                                    trace_id = %trace_id,
+                                    "Successfully updated Langfuse trace with tags"
+                                );
                             }
                         });
                     }
@@ -2019,6 +2141,13 @@ async fn stream_generate_chat_completion<
                 {
                     let client = client.clone();
                     let trace_id = client.trace_id().to_string();
+                    let trace_tags =
+                        langfuse_trace_enrichment.all_tags(&all_model_tags, &all_tool_names);
+                    let trace_metadata = langfuse_trace_enrichment.trace_metadata(
+                        assistant_id,
+                        &all_tool_names,
+                        false,
+                    );
                     tokio::spawn(async move {
                         if let Err(e) = client.update_trace_output(output_json).await {
                             tracing::warn!(
@@ -2030,6 +2159,24 @@ async fn stream_generate_chat_completion<
                             tracing::debug!(
                                 trace_id = %trace_id,
                                 "Successfully updated Langfuse trace with output"
+                            );
+                        }
+
+                        if let Some(metadata) = trace_metadata
+                            && let Err(e) = client.update_trace_metadata(metadata).await
+                        {
+                            tracing::warn!(
+                                trace_id = %trace_id,
+                                error = %e,
+                                "Failed to update Langfuse trace with metadata"
+                            );
+                        }
+
+                        if let Err(e) = client.update_trace_tags(trace_tags).await {
+                            tracing::warn!(
+                                trace_id = %trace_id,
+                                error = %e,
+                                "Failed to update Langfuse trace with tags"
                             );
                         }
                     });
@@ -3144,6 +3291,22 @@ async fn run_message_submit_task(
         .await
         .map_err(|e| format!("Failed to prepare chat request: {}", e))?;
 
+    let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
+        app_state,
+        policy,
+        &me_user.to_subject(),
+        &generation_input_messages,
+        chat.assistant_id,
+    )
+    .await
+    {
+        Ok(enrichment) => enrichment,
+        Err(err) => {
+            tracing::warn!("Failed to build Langfuse trace enrichment: {}", err);
+            LangfuseTraceEnrichment::default()
+        }
+    };
+
     // Extract chat provider ID from generation parameters (clone to avoid borrow issues)
     let chat_provider_id = generation_parameters
         .generation_chat_provider_id
@@ -3322,6 +3485,7 @@ async fn run_message_submit_task(
         policy,
         &subject,
         chat_request,
+        langfuse_trace_enrichment,
         chat_options,
         initial_assistant_message.id,
         me_user.id.clone(),
@@ -3493,6 +3657,22 @@ pub async fn regenerate_message_sse(
                 generation_parameters,
             } = prepare_chat_request_res.unwrap();
 
+            let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
+                &app_state,
+                &policy,
+                &me_user.to_subject(),
+                &generation_input_messages,
+                chat.assistant_id,
+            )
+            .await
+            {
+                Ok(enrichment) => enrichment,
+                Err(err) => {
+                    tracing::warn!("Failed to build Langfuse trace enrichment: {}", err);
+                    LangfuseTraceEnrichment::default()
+                }
+            };
+
             let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
             let chat_provider_id = generation_parameters
                 .generation_chat_provider_id
@@ -3543,6 +3723,7 @@ pub async fn regenerate_message_sse(
                     &policy,
                     &subject,
                     chat_request,
+                    langfuse_trace_enrichment,
                     chat_options,
                     initial_assistant_message.id,
                     me_user.id.clone(),
@@ -3759,6 +3940,22 @@ pub async fn edit_message_sse(
                 generation_parameters,
             } = prepare_chat_request_res.unwrap();
 
+            let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
+                &app_state,
+                &policy,
+                &me_user.to_subject(),
+                &generation_input_messages,
+                chat.assistant_id,
+            )
+            .await
+            {
+                Ok(enrichment) => enrichment,
+                Err(err) => {
+                    tracing::warn!("Failed to build Langfuse trace enrichment: {}", err);
+                    LangfuseTraceEnrichment::default()
+                }
+            };
+
             let empty_assistant_message_json = json!({ "role": "assistant", "content": [] });
             let chat_provider_id = generation_parameters
                 .generation_chat_provider_id
@@ -3809,6 +4006,7 @@ pub async fn edit_message_sse(
                     &policy,
                     &subject,
                     chat_request,
+                    langfuse_trace_enrichment,
                     chat_options,
                     initial_assistant_message.id,
                     me_user.id.clone(),

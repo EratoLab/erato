@@ -230,6 +230,58 @@ impl LangfuseClient {
         self.send_ingestion_batch(batch).await
     }
 
+    /// Update a trace with tags in Langfuse
+    /// Note: This sends a trace-create event with the same id to update the trace
+    pub async fn update_trace_tags(
+        &self,
+        trace_id: String,
+        tags: Vec<String>,
+        environment: Option<String>,
+    ) -> Result<()> {
+        if !self.enabled {
+            tracing::debug!("Langfuse client is disabled, skipping trace tags update");
+            return Ok(());
+        }
+
+        tracing::debug!(
+            trace_id = %trace_id,
+            tags = ?tags,
+            "Updating Langfuse trace with tags"
+        );
+
+        let timestamp_iso = system_time_to_iso_string(SystemTime::now());
+
+        let ingestion_event = IngestionEvent {
+            id: format!("{}_tags_update", trace_id),
+            r#type: "trace-create".to_string(),
+            timestamp: timestamp_iso,
+            body: IngestionEventBody::TraceCreate(CreateTraceEvent {
+                id: trace_id,
+                name: None,
+                user_id: None,
+                session_id: None,
+                release: None,
+                environment,
+                input: None,
+                output: None,
+                metadata: None,
+                tags: Some(tags),
+                public: None,
+            }),
+        };
+
+        let batch = IngestionBatch {
+            batch: vec![ingestion_event],
+        };
+
+        tracing::debug!(
+            batch_size = batch.batch.len(),
+            "Created Langfuse trace tags update ingestion batch"
+        );
+
+        self.send_ingestion_batch(batch).await
+    }
+
     /// Finish a generation and send it to Langfuse
     pub async fn finish_generation(&self, request: FinishGenerationRequest) -> Result<()> {
         if !self.enabled {
@@ -947,6 +999,13 @@ impl TracingLangfuseClient {
     pub async fn update_trace_metadata(&self, metadata: serde_json::Value) -> Result<()> {
         self.client
             .update_trace_metadata(self.trace_id.clone(), metadata, self.environment.clone())
+            .await
+    }
+
+    /// Update the trace tags
+    pub async fn update_trace_tags(&self, tags: Vec<String>) -> Result<()> {
+        self.client
+            .update_trace_tags(self.trace_id.clone(), tags, self.environment.clone())
             .await
     }
 
