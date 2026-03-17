@@ -36,12 +36,21 @@ const SUPPORTED_LOCALES = {
 };
 
 const TOOLTIP_EN_MESSAGES: Record<string, string> = {
+  "assistant.form.description.helpText": " ",
+  "assistant.form.facets.enforce.helpText": " ",
+  "assistant.form.facets.helpText": " ",
+  "assistant.form.files.helpText": " ",
+  "assistant.form.model.helpText": " ",
   "assistant.form.systemPrompt.tooltip":
     "Optional: Include constraints or special behavior for this assistant.",
   "assistant.form.defaultModel.tooltip":
     "Optional: Select a default model to use for this assistant.",
   "assistant.form.defaultFiles.tooltip":
     "Optional: These files are always available to the assistant.",
+  "assistant.form.defaultTools.tooltip":
+    "Optional: Configure which tools should be selected by default in chats started from this assistant",
+  "assistant.form.enforceTools.tooltip":
+    "When enabled, users cannot change the selected tools in chats derived from this assistant.",
   "chat.message.image_advisory":
     "Please ensure that your usage of the generated image complies with legal and company guideline regarding e.g. intellectual property usage.",
 };

@@ -1,15 +1,19 @@
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
+import { facetsQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import type { AssistantFormData } from "@/components/ui/Assistant/AssistantForm";
 import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type {
   ChatModel,
+  FacetsResponse,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Meta, StoryObj } from "@storybook/react";
+import type { ReactNode } from "react";
 
 const meta = {
   title: "UI/AssistantForm",
@@ -40,11 +44,13 @@ const meta = {
   tags: ["autodocs"],
   decorators: [
     (Story) => (
-      <div className="flex min-h-screen w-full items-center justify-center overflow-y-auto bg-theme-bg-secondary p-8">
-        <div className="w-full max-w-4xl">
-          <Story />
+      <StoryFacetsSeed>
+        <div className="flex min-h-screen w-full items-center justify-center overflow-y-auto bg-theme-bg-secondary p-8">
+          <div className="w-full max-w-4xl">
+            <Story />
+          </div>
         </div>
-      </div>
+      </StoryFacetsSeed>
     ),
   ],
 } satisfies Meta<typeof AssistantForm>;
@@ -86,6 +92,43 @@ const mockFiles: FileUploadItem[] = [
     file_capability: FileTypeUtil.createMockFileCapability("guidelines.txt"),
   },
 ];
+
+const mockFacetsResponse: FacetsResponse = {
+  facets: [
+    {
+      id: "web_search",
+      display_name: "Web Search",
+      icon: "search",
+      default_enabled: false,
+    },
+    {
+      id: "knowledge_base",
+      display_name: "Knowledge Base",
+      icon: "database",
+      default_enabled: false,
+    },
+    {
+      id: "code_execution",
+      display_name: "Code Execution",
+      icon: "terminal",
+      default_enabled: false,
+    },
+  ],
+  global_facet_settings: {
+    only_single_facet: false,
+    show_facet_indicator_with_display_name: true,
+  },
+};
+
+const StoryFacetsSeed = ({ children }: { children: ReactNode }) => {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    queryClient.setQueryData(facetsQuery({}).queryKey, mockFacetsResponse);
+  }, [queryClient]);
+
+  return <>{children}</>;
+};
 
 const contextWarningEstimation: TokenUsageEstimationResult = {
   tokenUsage: {
