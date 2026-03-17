@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import { profileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
@@ -14,6 +14,8 @@ import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 type PreferencesTab = "personalization" | "data";
 
+const PREFERENCES_TAB_ORDER: PreferencesTab[] = ["personalization", "data"];
+
 interface UserPreferencesDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -25,6 +27,7 @@ export function UserPreferencesDialog({
   onClose,
   userProfile,
 }: UserPreferencesDialogProps) {
+  const tabGroupId = useId();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<PreferencesTab>("personalization");
   const [nickname, setNickname] = useState("");
@@ -75,6 +78,68 @@ export function UserPreferencesDialog({
   const toNullableValue = (value: string) => {
     const normalized = value.trim();
     return normalized.length > 0 ? normalized : null;
+  };
+
+  const tabLabels = {
+    personalization: t({
+      id: "preferences.dialog.tabs.personalization",
+      message: "Personalization",
+    }),
+    data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
+  } satisfies Record<PreferencesTab, string>;
+
+  /* eslint-disable lingui/no-unlocalized-strings -- Internal DOM ids, not user-facing copy */
+  const tabIds = {
+    personalization: `${tabGroupId}-tab-personalization`,
+    data: `${tabGroupId}-tab-data`,
+  } satisfies Record<PreferencesTab, string>;
+
+  const panelIds = {
+    personalization: `${tabGroupId}-panel-personalization`,
+    data: `${tabGroupId}-panel-data`,
+  } satisfies Record<PreferencesTab, string>;
+  /* eslint-enable lingui/no-unlocalized-strings */
+
+  const focusTab = (tab: PreferencesTab) => {
+    document.getElementById(tabIds[tab])?.focus();
+  };
+
+  const handleTabKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    currentTab: PreferencesTab,
+  ) => {
+    const currentIndex = PREFERENCES_TAB_ORDER.indexOf(currentTab);
+    let nextTab: PreferencesTab | undefined;
+
+    switch (event.key) {
+      case "ArrowDown":
+      case "ArrowRight":
+        nextTab =
+          PREFERENCES_TAB_ORDER[
+            (currentIndex + 1) % PREFERENCES_TAB_ORDER.length
+          ];
+        break;
+      case "ArrowUp":
+      case "ArrowLeft":
+        nextTab =
+          PREFERENCES_TAB_ORDER[
+            (currentIndex - 1 + PREFERENCES_TAB_ORDER.length) %
+              PREFERENCES_TAB_ORDER.length
+          ];
+        break;
+      case "Home":
+        nextTab = PREFERENCES_TAB_ORDER[0];
+        break;
+      case "End":
+        nextTab = PREFERENCES_TAB_ORDER[PREFERENCES_TAB_ORDER.length - 1];
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    setActiveTab(nextTab);
+    focusTab(nextTab);
   };
 
   const handleSave = async () => {
@@ -160,36 +225,41 @@ export function UserPreferencesDialog({
     >
       <div className="flex h-full gap-5">
         <aside className="w-48 shrink-0 border-r border-theme-border pr-4">
-          <div className="space-y-1">
-            <button
-              type="button"
-              className={clsx(
-                "w-full rounded-md px-3 py-2 text-left text-sm",
-                "theme-transition",
-                activeTab === "personalization"
-                  ? "bg-theme-bg-hover font-medium text-theme-fg-primary"
-                  : "text-theme-fg-secondary hover:bg-theme-bg-hover",
-              )}
-              onClick={() => setActiveTab("personalization")}
-            >
-              {t({
-                id: "preferences.dialog.tabs.personalization",
-                message: "Personalization",
-              })}
-            </button>
-            <button
-              type="button"
-              className={clsx(
-                "w-full rounded-md px-3 py-2 text-left text-sm",
-                "theme-transition",
-                activeTab === "data"
-                  ? "bg-theme-bg-hover font-medium text-theme-fg-primary"
-                  : "text-theme-fg-secondary hover:bg-theme-bg-hover",
-              )}
-              onClick={() => setActiveTab("data")}
-            >
-              {t({ id: "preferences.dialog.tabs.data", message: "Data" })}
-            </button>
+          <div
+            role="tablist"
+            aria-label={t({
+              id: "preferences.dialog.title",
+              message: "Preferences",
+            })}
+            aria-orientation="vertical"
+            className="space-y-1"
+          >
+            {PREFERENCES_TAB_ORDER.map((tab) => {
+              const isActive = activeTab === tab;
+
+              return (
+                <button
+                  key={tab}
+                  id={tabIds[tab]}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={panelIds[tab]}
+                  tabIndex={isActive ? 0 : -1}
+                  className={clsx(
+                    "w-full rounded-md px-3 py-2 text-left text-sm",
+                    "theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
+                    isActive
+                      ? "bg-theme-bg-hover font-medium text-theme-fg-primary"
+                      : "text-theme-fg-secondary hover:bg-theme-bg-hover",
+                  )}
+                  onClick={() => setActiveTab(tab)}
+                  onKeyDown={(event) => handleTabKeyDown(event, tab)}
+                >
+                  {tabLabels[tab]}
+                </button>
+              );
+            })}
           </div>
         </aside>
 
@@ -200,7 +270,16 @@ export function UserPreferencesDialog({
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
             {saveError ? <Alert type="error">{saveError}</Alert> : null}
 
-            {activeTab === "personalization" ? (
+            <section
+              id={panelIds.personalization}
+              role="tabpanel"
+              aria-labelledby={tabIds.personalization}
+              hidden={activeTab !== "personalization"}
+              className={clsx(
+                "space-y-4",
+                activeTab !== "personalization" && "hidden",
+              )}
+            >
               <>
                 <FormField
                   label={t({
@@ -289,51 +368,55 @@ export function UserPreferencesDialog({
                   />
                 </FormField>
               </>
-            ) : (
-              <div className="space-y-4">
-                {archiveSuccess ? (
-                  <Alert type="success">{archiveSuccess}</Alert>
-                ) : null}
-                {archiveError ? (
-                  <Alert type="error">{archiveError}</Alert>
-                ) : null}
-                <div className="rounded-lg border border-theme-border bg-theme-bg-secondary p-4 text-sm text-theme-fg-secondary">
-                  {t({
-                    id: "preferences.dialog.dataTab.archiveAll.help",
-                    message: "Archive all chats in your account.",
+            </section>
+
+            <section
+              id={panelIds.data}
+              role="tabpanel"
+              aria-labelledby={tabIds.data}
+              hidden={activeTab !== "data"}
+              className={clsx("space-y-4", activeTab !== "data" && "hidden")}
+            >
+              {archiveSuccess ? (
+                <Alert type="success">{archiveSuccess}</Alert>
+              ) : null}
+              {archiveError ? <Alert type="error">{archiveError}</Alert> : null}
+              <Alert type="info">
+                {t({
+                  id: "preferences.dialog.dataTab.archiveAll.help",
+                  message: "Archive all chats in your account.",
+                })}
+              </Alert>
+              <div className="flex justify-end">
+                <Button
+                  variant="danger"
+                  disabled={isArchiving}
+                  onClick={() => {
+                    void handleArchiveAllChats();
+                  }}
+                  confirmAction={true}
+                  confirmTitle={t({
+                    id: "preferences.dialog.dataTab.archiveAll.confirmTitle",
+                    message: "Archive all chats?",
                   })}
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    variant="danger"
-                    disabled={isArchiving}
-                    onClick={() => {
-                      void handleArchiveAllChats();
-                    }}
-                    confirmAction={true}
-                    confirmTitle={t({
-                      id: "preferences.dialog.dataTab.archiveAll.confirmTitle",
-                      message: "Archive all chats?",
-                    })}
-                    confirmMessage={t({
-                      id: "preferences.dialog.dataTab.archiveAll.confirmMessage",
-                      message:
-                        "This will archive every non-archived chat in your account.",
-                    })}
-                  >
-                    {isArchiving
-                      ? t({
-                          id: "preferences.dialog.dataTab.archiveAll.archiving",
-                          message: "Archiving...",
-                        })
-                      : t({
-                          id: "preferences.dialog.dataTab.archiveAll.button",
-                          message: "Archive all chats",
-                        })}
-                  </Button>
-                </div>
+                  confirmMessage={t({
+                    id: "preferences.dialog.dataTab.archiveAll.confirmMessage",
+                    message:
+                      "This will archive every non-archived chat in your account.",
+                  })}
+                >
+                  {isArchiving
+                    ? t({
+                        id: "preferences.dialog.dataTab.archiveAll.archiving",
+                        message: "Archiving...",
+                      })
+                    : t({
+                        id: "preferences.dialog.dataTab.archiveAll.button",
+                        message: "Archive all chats",
+                      })}
+                </Button>
               </div>
-            )}
+            </section>
           </div>
 
           {activeTab === "personalization" ? (
