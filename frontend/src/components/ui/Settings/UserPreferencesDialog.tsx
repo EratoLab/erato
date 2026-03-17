@@ -247,7 +247,7 @@ export function UserPreferencesDialog({
                   aria-controls={panelIds[tab]}
                   tabIndex={isActive ? 0 : -1}
                   className={clsx(
-                    "w-full rounded-md px-3 py-2 text-left text-sm",
+                    "w-full cursor-pointer rounded-md px-3 py-2 text-left text-sm",
                     "theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
                     isActive
                       ? "bg-theme-bg-hover font-medium text-theme-fg-primary"
