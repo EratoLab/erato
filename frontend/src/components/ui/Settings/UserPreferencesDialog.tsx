@@ -7,7 +7,7 @@ import { profileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
-import { FormField, Textarea } from "../Input";
+import { FormField, Input, Textarea } from "../Input";
 import { ModalBase } from "../Modal/ModalBase";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -288,12 +288,10 @@ export function UserPreferencesDialog({
                   })}
                   htmlFor="preferences-nickname"
                 >
-                  <input
+                  <Input
                     id="preferences-nickname"
-                    type="text"
                     value={nickname}
                     onChange={(event) => setNickname(event.target.value)}
-                    className="w-full rounded-lg border border-theme-border bg-theme-bg-secondary px-4 py-2.5 text-base text-theme-fg-primary placeholder:text-theme-fg-muted focus:border-theme-border-focus focus:outline-none focus:ring-2 focus:ring-theme-focus"
                     placeholder={t({
                       id: "preferences.dialog.fields.nickname.placeholder",
                       message:
@@ -309,12 +307,10 @@ export function UserPreferencesDialog({
                   })}
                   htmlFor="preferences-job-title"
                 >
-                  <input
+                  <Input
                     id="preferences-job-title"
-                    type="text"
                     value={jobTitle}
                     onChange={(event) => setJobTitle(event.target.value)}
-                    className="w-full rounded-lg border border-theme-border bg-theme-bg-secondary px-4 py-2.5 text-base text-theme-fg-primary placeholder:text-theme-fg-muted focus:border-theme-border-focus focus:outline-none focus:ring-2 focus:ring-theme-focus"
                     placeholder={t({
                       id: "preferences.dialog.fields.jobTitle.placeholder",
                       message: "What is your role? e.g. Product Manager",
