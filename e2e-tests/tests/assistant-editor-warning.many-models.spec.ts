@@ -56,3 +56,53 @@ test(
     ).toBeVisible({ timeout: 60000 });
   },
 );
+
+test(
+  "Assistant editor clears the context warning after removing the long file with Mock-LLM 200k",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(120000);
+
+    await page.goto("/assistants/new");
+
+    await expect(
+      page.getByRole("heading", { name: /create assistant/i }),
+    ).toBeVisible();
+
+    await page.getByLabel(/name/i).fill("Context Warning Removal Validation");
+    await page
+      .getByLabel(/system prompt/i)
+      .fill("You are a helpful assistant that should use uploaded files.");
+
+    const defaultModelButton = page.locator(
+      'button[aria-controls="model-selector-dropdown"]',
+    );
+    await expect(defaultModelButton).toBeVisible();
+    await defaultModelButton.click();
+    await page
+      .getByRole("menuitem", { name: "Mock-LLM 200k", exact: true })
+      .click();
+    await expect(defaultModelButton).toContainText("Mock-LLM 200k");
+
+    const longFilePath = path.join(
+      __dirname,
+      "../test-files/long-file-100k-words.pdf",
+    );
+    const fileInput = page.locator('input[type="file"]');
+    await fileInput.setInputFiles(longFilePath);
+
+    const contextWarning = page.getByText(
+      /Using this much context may limit the chat session and reduce room for uploading additional files\./i,
+    );
+    await expect(contextWarning).toBeVisible({ timeout: 60000 });
+
+    await page
+      .getByRole("button", { name: /remove long-file-100k-words\.pdf/i })
+      .click();
+
+    await expect(contextWarning).toBeHidden({ timeout: 60000 });
+    await expect(page.getByText(/estimating token usage\.\.\./i)).toBeHidden({
+      timeout: 60000,
+    });
+  },
+);
