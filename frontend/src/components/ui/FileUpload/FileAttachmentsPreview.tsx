@@ -74,8 +74,7 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
         )}
       </div>
 
-      {/* File attachment grid */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2">
         {attachedFiles.map((file) =>
           // Wrap in InteractiveContainer if preview handler is provided
           onFilePreview ? (
@@ -83,16 +82,18 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
               key={file.id}
               onClick={() => onFilePreview(file)}
               useDiv={true}
-              className="cursor-pointer"
+              className="w-full cursor-pointer"
               aria-label={`${t`Preview attachment`} ${file.filename}`}
             >
               <FilePreviewButton
                 file={file}
                 onRemove={() => onRemoveFile(file.id)}
                 disabled={disabled}
+                className="w-full"
                 showFileType={showFileTypes}
                 showSize={showFileSizes}
                 filenameTruncateLength={filenameTruncateLength}
+                filenameClassName="max-w-full"
               />
             </InteractiveContainer>
           ) : (
@@ -102,9 +103,11 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
               file={file}
               onRemove={() => onRemoveFile(file.id)}
               disabled={disabled}
+              className="w-full"
               showFileType={showFileTypes}
               showSize={showFileSizes}
               filenameTruncateLength={filenameTruncateLength}
+              filenameClassName="max-w-full"
             />
           ),
         )}

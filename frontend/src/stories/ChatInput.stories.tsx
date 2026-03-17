@@ -2,8 +2,12 @@ import { action } from "@storybook/addon-actions";
 
 import { ChatInput } from "../components/ui/Chat/ChatInput";
 import { ChatProvider } from "../providers/ChatProvider";
+import { FileCapabilitiesProvider } from "../providers/FileCapabilitiesProvider";
 
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  FileCapability,
+  FileUploadItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Meta, StoryObj } from "@storybook/react";
 
 // export const WithCustomTheme: Story = {
@@ -40,15 +44,17 @@ const meta: Meta<typeof ChatInput> = {
   },
   decorators: [
     (Story) => (
-      <ChatProvider>
-        <div className="flex h-screen w-full items-center justify-center bg-theme-bg-primary p-0">
-          <div className="flex size-full items-center justify-center rounded-lg bg-theme-bg-tertiary p-4 shadow-lg md:w-4/5 lg:w-3/4 xl:w-2/3">
-            <div className="w-full max-w-full">
-              <Story />
+      <FileCapabilitiesProvider>
+        <ChatProvider>
+          <div className="flex h-screen w-full items-center justify-center bg-theme-bg-primary p-0">
+            <div className="flex size-full items-center justify-center rounded-lg bg-theme-bg-tertiary p-4 shadow-lg md:w-4/5 lg:w-3/4 xl:w-2/3">
+              <div className="w-full max-w-full">
+                <Story />
+              </div>
             </div>
           </div>
-        </div>
-      </ChatProvider>
+        </ChatProvider>
+      </FileCapabilitiesProvider>
     ),
   ],
 };
@@ -59,6 +65,29 @@ type Story = StoryObj<typeof meta>;
 const defaultArgs = {
   onSendMessage: action("onSendMessage"),
 };
+
+const documentCapability: FileCapability = {
+  id: "pdf",
+  extensions: ["pdf"],
+  mime_types: ["application/pdf"],
+  operations: ["extract_text"],
+};
+
+const longFilenameInitialFiles: FileUploadItem[] = [
+  {
+    id: "file-1",
+    filename:
+      "FY2026-enterprise-rollout-supporting-documentation-and-implementation-notes-final-review-v12.pdf",
+    download_url: "https://example.com/file-1",
+    file_capability: documentCapability,
+  },
+  {
+    id: "file-2",
+    filename: "quarterly-summary.xlsx",
+    download_url: "https://example.com/file-2",
+    file_capability: documentCapability,
+  },
+];
 
 export const Default: Story = {
   args: {
@@ -85,6 +114,25 @@ export const Loading: Story = {
     onRegenerate: action("regenerate"),
     showFileTypes: true,
     initialFiles: [] as FileUploadItem[],
+  },
+};
+
+export const WithInitialAttachments: Story = {
+  args: {
+    onSendMessage: action("message sent"),
+    showControls: true,
+    handleFileAttachments: action("handle file attachments"),
+    onRegenerate: action("regenerate"),
+    showFileTypes: true,
+    initialFiles: longFilenameInitialFiles,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Shows the real chat-input layout where uploaded attachments render above the textarea and can use the full input width.",
+      },
+    },
   },
 };
 
