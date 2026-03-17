@@ -150,7 +150,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           aria-invalid={!!error}
           className={clsx(
             // Base styles
-            "w-full rounded-lg px-4 py-2.5",
+            "w-full",
+            "[border-radius:var(--theme-radius-input)]",
+            "[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
             "text-base text-theme-fg-primary placeholder:text-theme-fg-muted",
             "theme-transition",
             // Background and border

@@ -266,6 +266,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
     // Border colors
     setCssVariable("--theme-border", theme.colors.border.default);
+    setCssVariable("--theme-border-primary", theme.colors.border.primary);
     setCssVariable("--theme-border-subtle", theme.colors.border.subtle);
     setCssVariable("--theme-border-strong", theme.colors.border.strong);
     setCssVariable("--theme-border-divider", theme.colors.border.divider);

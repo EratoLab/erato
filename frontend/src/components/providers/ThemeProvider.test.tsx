@@ -7,7 +7,7 @@ vi.mock("@/app/env", () => ({
 
 import { env } from "@/app/env";
 
-import { ThemeProvider } from "./ThemeProvider";
+import { THEME_MODE_LOCAL_STORAGE_KEY, ThemeProvider } from "./ThemeProvider";
 
 import type { Env } from "@/app/env";
 import type { CustomThemeConfig } from "@/utils/themeUtils";
@@ -46,10 +46,23 @@ const mockTheme: CustomThemeConfig = {
   theme: {},
 };
 
+const createMatchMedia = (matches: boolean): typeof window.matchMedia =>
+  vi.fn().mockImplementation((query: string) => ({
+    matches,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+
 describe("ThemeProvider", () => {
   beforeEach(() => {
     mockEnv.mockReturnValue(createMockEnv());
     global.fetch = vi.fn();
+    window.matchMedia = createMatchMedia(false);
     localStorage.clear();
   });
 
@@ -149,6 +162,38 @@ describe("ThemeProvider", () => {
     );
   });
 
+  it("writes the explicit dark mode to documentElement data-theme", async () => {
+    localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, "dark");
+
+    render(
+      <ThemeProvider>
+        <div>content</div>
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    });
+  });
+
+  it("writes the system dark mode to documentElement data-theme", async () => {
+    const matchMedia = createMatchMedia(true);
+    window.matchMedia = matchMedia;
+    localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, "system");
+
+    render(
+      <ThemeProvider>
+        <div>content</div>
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    });
+
+    expect(matchMedia).toHaveBeenCalledWith("(prefers-color-scheme: dark)");
+  });
+
   it("writes the expanded token surface to CSS variables", async () => {
     mockEnv.mockReturnValue(
       createMockEnv({
@@ -164,6 +209,9 @@ describe("ThemeProvider", () => {
           theme: {
             light: {
               colors: {
+                border: {
+                  primary: "#c4b5fd",
+                },
                 shell: {
                   page: "#f5f3ff",
                   modal: "#ffffff",
@@ -206,6 +254,9 @@ describe("ThemeProvider", () => {
       ).toBe("#f5f3ff");
     });
 
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-border-primary"),
+    ).toBe("#c4b5fd");
     expect(
       document.documentElement.style.getPropertyValue("--theme-shell-modal"),
     ).toBe("#ffffff");
@@ -298,6 +349,9 @@ describe("ThemeProvider", () => {
     expect(
       document.documentElement.style.getPropertyValue("--theme-message-hover"),
     ).toBe("#c8d9cc");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-border-primary"),
+    ).toBe("#cfddd1");
     expect(
       document.documentElement.style.getPropertyValue("--theme-border-subtle"),
     ).toBe("#cfddd1");

@@ -202,6 +202,9 @@ const withLegacyColorCompatibility = (
   }
 
   if (colorsOverride.border?.default) {
+    if (!colorsOverride.border.primary) {
+      nextTheme.colors.border.primary = theme.colors.border.default;
+    }
     if (!colorsOverride.border.subtle) {
       nextTheme.colors.border.subtle = theme.colors.border.default;
     }

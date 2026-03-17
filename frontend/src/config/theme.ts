@@ -70,6 +70,7 @@ export type ThemeColors = {
   };
   border: {
     default: string;
+    primary: string;
     subtle: string;
     strong: string;
     divider: string;
@@ -237,6 +238,7 @@ export const defaultTheme: Theme = {
     },
     border: {
       default: colors.neutral[300],
+      primary: colors.neutral[300],
       subtle: colors.neutral[200],
       strong: colors.neutral[400],
       divider: colors.neutral[300],
@@ -370,6 +372,7 @@ export const darkTheme: Theme = {
     },
     border: {
       default: colors.neutral[600],
+      primary: colors.neutral[600],
       subtle: colors.neutral[700],
       strong: colors.neutral[500],
       divider: colors.neutral[600],
