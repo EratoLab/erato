@@ -22,7 +22,9 @@ export const FILE_PREVIEW_STYLES = {
   container:
     "flex items-center gap-2 p-2 rounded-md bg-[var(--theme-bg-secondary)] border border-[var(--theme-border)]",
   icon: "size-5 text-[var(--theme-fg-muted)]",
-  name: "text-sm font-medium text-[var(--theme-fg-primary)] truncate max-w-[150px]",
+  name: "flex min-w-0 max-w-full items-baseline text-sm font-medium text-[var(--theme-fg-primary)]",
+  nameStem: "min-w-0 truncate",
+  nameExtension: "shrink-0",
   size: "text-xs text-[var(--theme-fg-muted)]",
   closeButton:
     "text-[var(--theme-fg-muted)] hover:text-[var(--theme-fg-primary)] p-1 rounded-full",

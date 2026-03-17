@@ -22,6 +22,8 @@ interface FilePreviewButtonProps {
   showFileType?: boolean;
   /** Maximum length of the displayed filename before truncation */
   filenameTruncateLength?: number;
+  /** Additional CSS classes for the filename element */
+  filenameClassName?: string;
 }
 
 /**
@@ -39,6 +41,7 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
     showSize = true,
     showFileType = false,
     filenameTruncateLength,
+    filenameClassName,
   }) => {
     // Handle the remove action with proper file parameter
     const handleRemove = useCallback(() => {
@@ -81,6 +84,7 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
         showRemoveButton={true}
         removeButton={customRemoveButton}
         filenameTruncateLength={filenameTruncateLength}
+        filenameClassName={filenameClassName}
       />
     );
   },

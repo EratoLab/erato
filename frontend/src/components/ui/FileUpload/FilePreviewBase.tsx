@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import clsx from "clsx";
 import { useMemo } from "react";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
@@ -110,6 +111,25 @@ export function truncateFilename(filename: string, maxLength = 30): string {
   return `${nameWithoutExtension.substring(0, startChars)}...${nameWithoutExtension.substring(nameWithoutExtension.length - endChars)}.${extension}`;
 }
 
+function splitFilenameForDisplay(filename: string) {
+  const extensionSeparatorIndex = filename.lastIndexOf(".");
+
+  if (
+    extensionSeparatorIndex <= 0 ||
+    extensionSeparatorIndex === filename.length - 1
+  ) {
+    return {
+      stem: filename,
+      extension: "",
+    };
+  }
+
+  return {
+    stem: filename.slice(0, extensionSeparatorIndex),
+    extension: filename.slice(extensionSeparatorIndex),
+  };
+}
+
 /**
  * Props for the base file preview component
  */
@@ -132,6 +152,8 @@ export interface FilePreviewBaseProps {
   removeButton?: React.ReactNode;
   /** Maximum length of the displayed filename before truncation */
   filenameTruncateLength?: number;
+  /** Additional CSS classes for the filename element */
+  filenameClassName?: string;
 }
 
 /**
@@ -149,7 +171,8 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
   showFileType = false,
   showRemoveButton = true,
   removeButton,
-  filenameTruncateLength = 30,
+  filenameTruncateLength: _filenameTruncateLength = 30,
+  filenameClassName = "",
 }) => {
   const { iconMappings } = useTheme();
 
@@ -160,9 +183,9 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
     [file, showSize],
   );
   const fileType = useMemo(() => getFileType(filename), [filename]);
-  const displayName = useMemo(
-    () => truncateFilename(filename, filenameTruncateLength),
-    [filename, filenameTruncateLength],
+  const displayNameParts = useMemo(
+    () => splitFilenameForDisplay(filename),
+    [filename],
   );
 
   // Get the file type icon ID (with theme override) and display information
@@ -204,8 +227,18 @@ export const FilePreviewBase: React.FC<FilePreviewBaseProps> = ({
 
       {/* File details */}
       <div className="min-w-0 flex-1">
-        <div className={FILE_PREVIEW_STYLES.name} title={filename}>
-          {displayName}
+        <div
+          className={clsx(FILE_PREVIEW_STYLES.name, filenameClassName)}
+          title={filename}
+        >
+          <span className={FILE_PREVIEW_STYLES.nameStem}>
+            {displayNameParts.stem}
+          </span>
+          {displayNameParts.extension && (
+            <span className={FILE_PREVIEW_STYLES.nameExtension}>
+              {displayNameParts.extension}
+            </span>
+          )}
         </div>
         <div className="flex items-center text-xs text-[var(--theme-fg-muted)]">
           {showFileType && <span className="uppercase">{typeDisplayName}</span>}
