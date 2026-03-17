@@ -96,6 +96,8 @@ export default function AssistantEditPage() {
         ...(formData.defaultModel?.chat_provider_id && {
           default_chat_provider: formData.defaultModel.chat_provider_id,
         }),
+        facet_ids: formData.facetIds,
+        enforce_facet_settings: formData.enforceFacetSettings,
         // Always include file_ids to allow clearing files when empty
         file_ids: formData.files.map((f) => f.id),
         ...(formData.mcpServerIds.length > 0 && {
@@ -203,6 +205,8 @@ export default function AssistantEditPage() {
     description: assistant.description ?? "",
     prompt: assistant.prompt,
     defaultModel: selectedModel,
+    facetIds: assistant.facet_ids ?? [],
+    enforceFacetSettings: assistant.enforce_facet_settings,
     files: toFileUploadItems(assistant.files),
     mcpServerIds: assistant.mcp_server_ids ?? [],
   };

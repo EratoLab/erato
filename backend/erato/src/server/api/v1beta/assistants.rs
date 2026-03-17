@@ -34,10 +34,16 @@ pub struct Assistant {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub mcp_server_ids: Option<Vec<String>>,
+    /// Default facet IDs for chats derived from this assistant
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub facet_ids: Option<Vec<String>>,
     /// Default chat provider/model ID for this assistant
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub default_chat_provider: Option<String>,
+    /// Whether chats derived from this assistant must use the configured facets
+    pub enforce_facet_settings: bool,
     /// When this assistant was created
     pub created_at: DateTime<FixedOffset>,
     /// When this assistant was last updated
@@ -108,8 +114,13 @@ pub struct CreateAssistantRequest {
     pub prompt: String,
     /// List of MCP server IDs available to this assistant
     pub mcp_server_ids: Option<Vec<String>>,
+    /// Optional list of facet IDs to configure for this assistant
+    pub facet_ids: Option<Vec<String>>,
     /// Default chat provider/model ID for this assistant
     pub default_chat_provider: Option<String>,
+    /// Whether chats derived from this assistant must use the configured facets
+    #[serde(default)]
+    pub enforce_facet_settings: bool,
     /// Optional list of file upload IDs to associate with this assistant
     pub file_ids: Option<Vec<String>>,
     /// Optional list of share grants to create with the assistant
@@ -135,8 +146,12 @@ pub struct UpdateAssistantRequest {
     pub prompt: Option<String>,
     /// Optional new list of MCP server IDs
     pub mcp_server_ids: Option<Option<Vec<String>>>,
+    /// Optional new list of facet IDs for this assistant
+    pub facet_ids: Option<Option<Vec<String>>>,
     /// Optional new default chat provider
     pub default_chat_provider: Option<Option<String>>,
+    /// Optional new enforcement flag for assistant facet settings
+    pub enforce_facet_settings: Option<bool>,
     /// Optional list of file upload IDs to associate with this assistant
     pub file_ids: Option<Option<Vec<String>>>,
 }
@@ -321,7 +336,9 @@ pub async fn create_assistant(
         request.description,
         request.prompt,
         request.mcp_server_ids,
+        request.facet_ids,
         request.default_chat_provider,
+        request.enforce_facet_settings,
     )
     .await
     .map_err(log_internal_server_error)?;
@@ -436,7 +453,9 @@ pub async fn create_assistant(
                     description: assistant_with_files.description,
                     prompt: assistant_with_files.prompt,
                     mcp_server_ids: assistant_with_files.mcp_server_ids,
+                    facet_ids: assistant_with_files.facet_ids,
                     default_chat_provider: assistant_with_files.default_chat_provider,
+                    enforce_facet_settings: assistant_with_files.enforce_facet_settings,
                     created_at: assistant_with_files.created_at,
                     updated_at: assistant_with_files.updated_at,
                     archived_at: assistant_with_files.archived_at,
@@ -504,7 +523,9 @@ pub async fn list_assistants(
             description: assistant.description,
             prompt: assistant.prompt,
             mcp_server_ids: assistant.mcp_server_ids,
+            facet_ids: assistant.facet_ids,
             default_chat_provider: assistant.default_chat_provider,
+            enforce_facet_settings: assistant.enforce_facet_settings,
             created_at: assistant.created_at,
             updated_at: assistant.updated_at,
             archived_at: assistant.archived_at,
@@ -595,7 +616,9 @@ pub async fn get_assistant(
             description: assistant_with_files.description,
             prompt: assistant_with_files.prompt,
             mcp_server_ids: assistant_with_files.mcp_server_ids,
+            facet_ids: assistant_with_files.facet_ids,
             default_chat_provider: assistant_with_files.default_chat_provider,
+            enforce_facet_settings: assistant_with_files.enforce_facet_settings,
             created_at: assistant_with_files.created_at,
             updated_at: assistant_with_files.updated_at,
             archived_at: assistant_with_files.archived_at,
@@ -648,7 +671,9 @@ pub async fn update_assistant(
         request.description,
         request.prompt,
         request.mcp_server_ids,
+        request.facet_ids,
         request.default_chat_provider,
+        request.enforce_facet_settings,
     )
     .await
     .map_err(|e| {
@@ -791,7 +816,9 @@ pub async fn update_assistant(
                 description: assistant_with_files.description,
                 prompt: assistant_with_files.prompt,
                 mcp_server_ids: assistant_with_files.mcp_server_ids,
+                facet_ids: assistant_with_files.facet_ids,
                 default_chat_provider: assistant_with_files.default_chat_provider,
+                enforce_facet_settings: assistant_with_files.enforce_facet_settings,
                 created_at: assistant_with_files.created_at,
                 updated_at: assistant_with_files.updated_at,
                 archived_at: assistant_with_files.archived_at,

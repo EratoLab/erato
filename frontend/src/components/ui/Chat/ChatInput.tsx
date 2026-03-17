@@ -101,6 +101,8 @@ interface ChatInputProps {
   initialModel?: ChatModel | null;
   // Initial facets to use for selection (typically from chat history)
   initialSelectedFacetIds?: string[] | undefined;
+  // Prevent changes to selected facets from the chat UI
+  enforceSelectedFacetIds?: boolean;
   // Optional callback whenever facet selection changes
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
 }
@@ -145,6 +147,7 @@ export const ChatInput = ({
   editInitialContent,
   initialModel,
   initialSelectedFacetIds,
+  enforceSelectedFacetIds = false,
   onFacetSelectionChange,
   ref,
 }: ChatInputPropsWithRef) => {
@@ -276,6 +279,16 @@ export const ChatInput = ({
 
   const applySelectedFacetIds = useCallback(
     (nextSelectedFacetIds: string[]) => {
+      if (enforceSelectedFacetIds) {
+        const lockedSelectedFacetIds = sanitizeFacetSelection(
+          initialSelectedFacetIds ?? [],
+        );
+        pendingSelectedFacetIdsRef.current = null;
+        setSelectedFacetIds(lockedSelectedFacetIds);
+        onFacetSelectionChange?.(lockedSelectedFacetIds);
+        return;
+      }
+
       pendingSelectedFacetIdsRef.current = nextSelectedFacetIds;
       if (availableFacets.length === 0) {
         setSelectedFacetIds([]);
@@ -288,11 +301,21 @@ export const ChatInput = ({
       setSelectedFacetIds(sanitizedSelectedFacetIds);
       onFacetSelectionChange?.(sanitizedSelectedFacetIds);
     },
-    [availableFacets.length, onFacetSelectionChange, sanitizeFacetSelection],
+    [
+      availableFacets.length,
+      enforceSelectedFacetIds,
+      initialSelectedFacetIds,
+      onFacetSelectionChange,
+      sanitizeFacetSelection,
+    ],
   );
 
   const toggleFacetId = useCallback(
     (facetId: string) => {
+      if (enforceSelectedFacetIds) {
+        return;
+      }
+
       const isSelected = selectedFacetIds.includes(facetId);
       const nextSelectedFacetIds = isSelected
         ? selectedFacetIds.filter((id) => id !== facetId)
@@ -303,6 +326,7 @@ export const ChatInput = ({
     },
     [
       applySelectedFacetIds,
+      enforceSelectedFacetIds,
       globalFacetSettings?.only_single_facet,
       selectedFacetIds,
     ],
@@ -781,7 +805,7 @@ export const ChatInput = ({
                         globalFacetSettings?.show_facet_indicator_with_display_name ??
                         false
                       }
-                      disabled={isDisabled}
+                      disabled={isDisabled || enforceSelectedFacetIds}
                     />
                   )}
                 </>

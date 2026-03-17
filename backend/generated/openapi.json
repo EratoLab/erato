@@ -2000,6 +2000,7 @@
           "id",
           "name",
           "prompt",
+          "enforce_facet_settings",
           "created_at",
           "updated_at",
           "can_edit"
@@ -2026,6 +2027,17 @@
           "description": {
             "type": "string",
             "description": "Optional description of the assistant"
+          },
+          "enforce_facet_settings": {
+            "type": "boolean",
+            "description": "Whether chats derived from this assistant must use the configured facets"
+          },
+          "facet_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Default facet IDs for chats derived from this assistant"
           },
           "id": {
             "type": "string",
@@ -2511,6 +2523,20 @@
               "null"
             ],
             "description": "Optional description of the assistant"
+          },
+          "enforce_facet_settings": {
+            "type": "boolean",
+            "description": "Whether chats derived from this assistant must use the configured facets"
+          },
+          "facet_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional list of facet IDs to configure for this assistant"
           },
           "file_ids": {
             "type": [
@@ -4538,6 +4564,13 @@
             "description": "The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.",
             "example": "00000000-0000-0000-0000-000000000000"
           },
+          "selected_facet_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "IDs of facets selected by the user for this estimation."
+          },
           "system_prompt": {
             "type": [
               "string",
@@ -4719,6 +4752,23 @@
               "null"
             ],
             "description": "Optional new description for the assistant"
+          },
+          "enforce_facet_settings": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Optional new enforcement flag for assistant facet settings"
+          },
+          "facet_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional new list of facet IDs for this assistant"
           },
           "file_ids": {
             "type": [

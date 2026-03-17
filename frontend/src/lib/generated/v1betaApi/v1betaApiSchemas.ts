@@ -113,6 +113,14 @@ export type Assistant = {
    */
   description?: string;
   /**
+   * Whether chats derived from this assistant must use the configured facets
+   */
+  enforce_facet_settings: boolean;
+  /**
+   * Default facet IDs for chats derived from this assistant
+   */
+  facet_ids?: string[];
+  /**
    * The unique ID of the assistant
    */
   id: string;
@@ -398,6 +406,14 @@ export type CreateAssistantRequest = {
    * Optional description of the assistant
    */
   description?: null | undefined;
+  /**
+   * Whether chats derived from this assistant must use the configured facets
+   */
+  enforce_facet_settings?: boolean;
+  /**
+   * Optional list of facet IDs to configure for this assistant
+   */
+  facet_ids?: null | undefined;
   /**
    * Optional list of file upload IDs to associate with this assistant
    */
@@ -1442,6 +1458,10 @@ export type TokenUsageRequest = {
    */
   previous_message_id?: null | undefined;
   /**
+   * IDs of facets selected by the user for this estimation.
+   */
+  selected_facet_ids?: string[];
+  /**
    * Additional system prompt content to include in the estimation.
    *
    * @example You are a concise legal assistant.
@@ -1560,6 +1580,14 @@ export type UpdateAssistantRequest = {
    * Optional new description for the assistant
    */
   description?: null | undefined;
+  /**
+   * Optional new enforcement flag for assistant facet settings
+   */
+  enforce_facet_settings?: null | undefined;
+  /**
+   * Optional new list of facet IDs for this assistant
+   */
+  facet_ids?: null | undefined;
   /**
    * Optional list of file upload IDs to associate with this assistant
    */

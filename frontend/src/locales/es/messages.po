@@ -39,6 +39,26 @@ msgstr "Este asistente ayuda con..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.facets.enforce.helpText"
+msgstr "Si se activa, los usuarios no podran cambiar las herramientas seleccionadas en los chats derivados de este asistente."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.facets.enforce.label"
+msgstr "Bloquear la seleccion de herramientas en los chats iniciados desde este asistente"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.facets.helpText"
+msgstr "Opcional: Configure que herramientas deben seleccionarse por defecto en los chats iniciados desde este asistente"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.facets.unavailable"
+msgstr "Algunas herramientas configuradas anteriormente ya no estan disponibles y se eliminaron de este asistente."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.files.helpText"
 msgstr "Opcional: Cargue archivos desde su computadora o OneDrive que estarán disponibles para este asistente en cada chat"
 
@@ -1267,6 +1287,10 @@ msgstr "Idioma predeterminado:"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Default Model"
 msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Default Tools"
+msgstr "Herramientas predeterminadas"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Define how the assistant should behave and respond"

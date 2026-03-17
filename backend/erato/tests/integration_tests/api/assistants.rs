@@ -49,7 +49,9 @@ async fn test_create_assistant_model_directly(pool: Pool<Postgres>) {
         Some("A test assistant".to_string()),
         "You are a helpful test assistant.".to_string(),
         Some(vec!["server1".to_string(), "server2".to_string()]),
+        None,
         Some("openai".to_string()),
+        false,
     )
     .await;
 
@@ -97,7 +99,9 @@ async fn test_list_assistants_endpoint(pool: Pool<Postgres>) {
         Some("First test assistant".to_string()),
         "You are assistant 1".to_string(),
         Some(vec!["server1".to_string()]),
+        None,
         Some("openai".to_string()),
+        false,
     )
     .await
     .expect("Failed to create assistant 1");
@@ -110,7 +114,9 @@ async fn test_list_assistants_endpoint(pool: Pool<Postgres>) {
         Some("Second test assistant".to_string()),
         "You are assistant 2".to_string(),
         Some(vec!["server2".to_string()]),
+        None,
         Some("anthropic".to_string()),
+        false,
     )
     .await
     .expect("Failed to create assistant 2");
@@ -192,7 +198,9 @@ async fn test_get_assistant_endpoint(pool: Pool<Postgres>) {
         Some("A test assistant".to_string()),
         "You are a helpful assistant".to_string(),
         Some(vec!["server1".to_string()]),
+        Some(vec!["server1".to_string()]),
         Some("openai".to_string()),
+        true,
     )
     .await
     .expect("Failed to create assistant");
@@ -219,6 +227,8 @@ async fn test_get_assistant_endpoint(pool: Pool<Postgres>) {
     assert_eq!(assistant_response["name"], "Test Assistant");
     assert_eq!(assistant_response["description"], "A test assistant");
     assert_eq!(assistant_response["prompt"], "You are a helpful assistant");
+    assert_eq!(assistant_response["facet_ids"], json!(["server1"]));
+    assert_eq!(assistant_response["enforce_facet_settings"], true);
     assert_eq!(assistant_response["files"], json!([])); // Should have empty files array
 }
 
@@ -253,7 +263,9 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
         Some("Original description".to_string()),
         "Original prompt".to_string(),
         Some(vec!["server1".to_string()]),
+        Some(vec!["web_search".to_string()]),
         Some("openai".to_string()),
+        false,
     )
     .await
     .expect("Failed to create assistant");
@@ -269,7 +281,9 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
     // Test updating the assistant with partial data
     let update_request = json!({
         "name": "Updated Assistant",
-        "prompt": "Updated prompt"
+        "prompt": "Updated prompt",
+        "facet_ids": ["image_generation"],
+        "enforce_facet_settings": true
     });
 
     let response = server
@@ -286,6 +300,8 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
     assert_eq!(assistant_response["name"], "Updated Assistant");
     assert_eq!(assistant_response["description"], "Original description"); // Should remain unchanged
     assert_eq!(assistant_response["prompt"], "Updated prompt");
+    assert_eq!(assistant_response["facet_ids"], json!(["image_generation"]));
+    assert_eq!(assistant_response["enforce_facet_settings"], true);
     assert_eq!(assistant_response["mcp_server_ids"], json!(["server1"])); // Should remain unchanged
 }
 
@@ -321,6 +337,8 @@ async fn test_archive_assistant_endpoint(pool: Pool<Postgres>) {
         "This assistant will be archived".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create assistant");
@@ -414,6 +432,8 @@ async fn test_assistant_authorization(pool: Pool<Postgres>) {
         "You are user 1's assistant".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create assistant");
@@ -588,7 +608,9 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
         "description": "An assistant created via the API endpoint",
         "prompt": "You are a helpful test assistant created via the API.",
         "mcp_server_ids": ["server1", "server2"],
-        "default_chat_provider": "openai"
+        "facet_ids": ["web_search"],
+        "default_chat_provider": "openai",
+        "enforce_facet_settings": true
     });
 
     let response = server
@@ -613,6 +635,8 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
         "You are a helpful test assistant created via the API."
     );
     assert_eq!(create_response["default_chat_provider"], "openai");
+    assert_eq!(create_response["facet_ids"], json!(["web_search"]));
+    assert_eq!(create_response["enforce_facet_settings"], true);
 
     // Verify mcp_server_ids is an array with the expected values
     assert!(create_response["mcp_server_ids"].is_array());
@@ -693,6 +717,8 @@ async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
         "You are owned assistant 1".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create owned assistant 1");
@@ -706,6 +732,8 @@ async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
         "You are owned assistant 2".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create owned assistant 2");
@@ -720,6 +748,8 @@ async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
         "You are shared assistant 1".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create shared assistant 1");
@@ -733,6 +763,8 @@ async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
         "You are shared assistant 2".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create shared assistant 2");

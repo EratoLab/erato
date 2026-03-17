@@ -219,6 +219,8 @@ export default function AssistantChatSpacePage() {
         assistantId={chatId ? undefined : assistantId}
         initialModelOverride={assistantDefaultModel}
         assistantFiles={toFileUploadItems(assistant.files)}
+        assistantConfiguredFacetIds={assistant.facet_ids ?? []}
+        assistantFacetSettingsEnforced={assistant.enforce_facet_settings}
       />
     </div>
   );

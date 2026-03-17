@@ -48,6 +48,10 @@ export default function AssistantCreatePage() {
         ...(formData.defaultModel?.chat_provider_id && {
           default_chat_provider: formData.defaultModel.chat_provider_id,
         }),
+        ...(formData.facetIds.length > 0 && {
+          facet_ids: formData.facetIds,
+        }),
+        enforce_facet_settings: formData.enforceFacetSettings,
         ...(formData.files.length > 0 && {
           file_ids: formData.files.map((f) => f.id),
         }),

@@ -15,8 +15,10 @@ pub struct Model {
     #[sea_orm(column_type = "Text")]
     pub prompt: String,
     pub mcp_server_ids: Option<Vec<String>>,
+    pub facet_ids: Option<Vec<String>>,
     #[sea_orm(column_type = "Text", nullable)]
     pub default_chat_provider: Option<String>,
+    pub enforce_facet_settings: bool,
     pub archived_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
