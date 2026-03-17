@@ -379,8 +379,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const effectiveEstimation = tokenUsageEstimationOverride ?? lastEstimation;
   const showLiveEstimationSpinner =
     tokenUsageEstimationOverride == null && isEstimatingTokenUsage;
-  const shouldShowEstimationPlaceholder =
-    showLiveEstimationSpinner && fileIds.length > 0;
+  const shouldShowEstimationPlaceholder = showLiveEstimationSpinner;
   const rawUsedContextPercentage =
     effectiveEstimation?.tokenUsage != null
       ? Math.max(

@@ -594,11 +594,9 @@ test(
       await expect(page.getByTestId("message-assistant").last()).toBeVisible();
     }
 
-    const footnoteMessages = page
-      .getByTestId("message-assistant")
-      .filter({
-        hasText: "Footnote links should stay inside the current message",
-      });
+    const footnoteMessages = page.getByTestId("message-assistant").filter({
+      hasText: "Footnote links should stay inside the current message",
+    });
     await expect(footnoteMessages).toHaveCount(2);
 
     const firstMessage = footnoteMessages.nth(0);
