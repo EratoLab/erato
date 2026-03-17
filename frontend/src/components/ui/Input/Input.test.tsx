@@ -1,10 +1,42 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Input } from "./Input";
 import { Textarea } from "./Textarea";
 
+const originalOffsetHeightDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLTextAreaElement.prototype,
+  "offsetHeight",
+);
+const originalClientHeightDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLTextAreaElement.prototype,
+  "clientHeight",
+);
+const originalScrollHeightDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLTextAreaElement.prototype,
+  "scrollHeight",
+);
+
+function restoreDescriptor(
+  property: "offsetHeight" | "clientHeight" | "scrollHeight",
+  descriptor: PropertyDescriptor | undefined,
+) {
+  if (descriptor) {
+    Object.defineProperty(HTMLTextAreaElement.prototype, property, descriptor);
+    return;
+  }
+
+  Reflect.deleteProperty(HTMLTextAreaElement.prototype, property);
+}
+
 describe("Input geometry tokens", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    restoreDescriptor("offsetHeight", originalOffsetHeightDescriptor);
+    restoreDescriptor("clientHeight", originalClientHeightDescriptor);
+    restoreDescriptor("scrollHeight", originalScrollHeightDescriptor);
+  });
+
   it("applies the themed input radius and padding to Input", () => {
     render(<Input aria-label="Name" />);
 
@@ -29,5 +61,59 @@ describe("Input geometry tokens", () => {
     expect(textarea.className).toContain(
       "[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
     );
+  });
+
+  it("sizes textarea auto-resize from rendered row metrics", () => {
+    let mockScrollHeight = 40;
+
+    Object.defineProperty(HTMLTextAreaElement.prototype, "offsetHeight", {
+      configurable: true,
+      get() {
+        return this.rows * 20;
+      },
+    });
+    Object.defineProperty(HTMLTextAreaElement.prototype, "clientHeight", {
+      configurable: true,
+      get() {
+        return this.rows * 20;
+      },
+    });
+    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return mockScrollHeight;
+      },
+    });
+
+    const { rerender } = render(
+      <Textarea
+        aria-label="Prompt"
+        autoResize
+        monospace
+        readOnly
+        rows={3}
+        maxRows={4}
+        value="one line"
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox", { name: "Prompt" });
+    expect(textarea.style.height).toBe("60px");
+
+    mockScrollHeight = 120;
+
+    rerender(
+      <Textarea
+        aria-label="Prompt"
+        autoResize
+        monospace
+        readOnly
+        rows={3}
+        maxRows={4}
+        value={"one\ntwo\nthree\nfour\nfive"}
+      />,
+    );
+
+    expect(textarea.style.height).toBe("80px");
   });
 });

@@ -158,7 +158,7 @@ export function UserPreferencesDialog({
       title={t({ id: "preferences.dialog.title", message: "Preferences" })}
       contentClassName="max-w-4xl h-[80vh] max-h-[700px]"
     >
-      <div className="flex h-full gap-5 overflow-hidden">
+      <div className="flex h-full gap-5">
         <aside className="w-48 shrink-0 border-r border-theme-border pr-4">
           <div className="space-y-1">
             <button
@@ -197,7 +197,7 @@ export function UserPreferencesDialog({
           className="flex min-h-0 min-w-0 flex-1 flex-col"
           data-testid="user-preferences-dialog"
         >
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
             {saveError ? <Alert type="error">{saveError}</Alert> : null}
 
             {activeTab === "personalization" ? (

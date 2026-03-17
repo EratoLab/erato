@@ -3,6 +3,32 @@ import { forwardRef, useEffect, useRef } from "react";
 
 import type React from "react";
 
+function getAutoResizeBounds(
+  textarea: HTMLTextAreaElement,
+  rows: number,
+  maxRows: number,
+) {
+  const previousRows = textarea.rows;
+  const safeMaxRows = Math.max(rows, maxRows);
+
+  textarea.style.height = "auto";
+
+  textarea.rows = rows;
+  const minHeight = textarea.offsetHeight;
+
+  textarea.rows = safeMaxRows;
+  const maxHeight = textarea.offsetHeight;
+
+  textarea.rows = previousRows;
+  const borderHeight = textarea.offsetHeight - textarea.clientHeight;
+
+  return {
+    minHeight,
+    maxHeight,
+    contentHeight: textarea.scrollHeight + borderHeight,
+  };
+}
+
 export interface TextareaProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "size"> {
   /**
@@ -124,17 +150,17 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       const textarea = textareaRef.current;
       if (textarea === null) return;
 
-      const minHeight = rows * 24; // Approximate line height
-      const maxHeight = maxRows * 24;
-
-      // Reset height to recalculate
-      textarea.style.height = "auto";
+      const { minHeight, maxHeight, contentHeight } = getAutoResizeBounds(
+        textarea,
+        rows,
+        maxRows,
+      );
       const newHeight = Math.min(
-        Math.max(textarea.scrollHeight, minHeight),
+        Math.max(contentHeight, minHeight),
         maxHeight,
       );
       textarea.style.height = `${newHeight}px`;
-    }, [value, autoResize, rows, maxRows, textareaRef]);
+    }, [value, autoResize, rows, maxRows, monospace, className, textareaRef]);
 
     return (
       <div className="w-full">
@@ -144,7 +170,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           onChange={onChange}
           placeholder={placeholder}
           disabled={disabled}
-          rows={autoResize ? undefined : rows}
+          rows={rows}
           aria-label={ariaLabel}
           aria-describedby={describedBy ?? undefined}
           aria-invalid={!!error}
