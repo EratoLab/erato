@@ -39,6 +39,26 @@ msgstr "Ten asystent pomaga w..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.facets.enforce.helpText"
+msgstr "Po wlaczeniu uzytkownicy nie moga zmieniac wybranych narzedzi w czatach utworzonych z tego asystenta."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.facets.enforce.label"
+msgstr "Zablokuj wybor narzedzi w czatach rozpoczynanych z tego asystenta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.facets.helpText"
+msgstr "Opcjonalnie: Skonfiguruj, ktore narzedzia maja byc domyslnie wybrane w czatach rozpoczynanych z tego asystenta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.facets.unavailable"
+msgstr "Niektore wczesniej skonfigurowane narzedzia nie sa juz dostepne i zostaly usuniete z tego asystenta."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.files.helpText"
 msgstr "Opcjonalnie: Prześlij pliki z komputera lub OneDrive, które będą dostępne dla tego asystenta w każdym czacie"
 
@@ -1267,6 +1287,10 @@ msgstr "Domyślny język:"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Default Model"
 msgstr ""
+
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "Default Tools"
+msgstr "Domyslne narzedzia"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Define how the assistant should behave and respond"

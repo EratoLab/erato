@@ -99,6 +99,10 @@ export interface ChatProps {
   initialModelOverride?: ChatModel | null;
   /** Optional assistant default files to include for erato-file link resolution */
   assistantFiles?: FileUploadItem[];
+  /** Optional default facets configured for the assistant backing this chat */
+  assistantConfiguredFacetIds?: string[];
+  /** Whether the assistant facet selection is enforced for derived chats */
+  assistantFacetSettingsEnforced?: boolean;
 }
 
 /**
@@ -127,6 +131,8 @@ export const Chat = ({
   assistantId,
   initialModelOverride,
   assistantFiles = [],
+  assistantConfiguredFacetIds,
+  assistantFacetSettingsEnforced = false,
 }: ChatProps) => {
   // Use the sidebar context
   const {
@@ -241,13 +247,29 @@ export const Chat = ({
       ?.last_selected_facets;
   }, [chatHistory, currentChatId]);
 
+  const effectiveInitialSelectedFacetIds = useMemo(() => {
+    if (assistantFacetSettingsEnforced) {
+      return assistantConfiguredFacetIds ?? [];
+    }
+
+    if (currentChatLastSelectedFacets !== undefined) {
+      return currentChatLastSelectedFacets;
+    }
+
+    return assistantConfiguredFacetIds;
+  }, [
+    assistantConfiguredFacetIds,
+    assistantFacetSettingsEnforced,
+    currentChatLastSelectedFacets,
+  ]);
+
   const [activeSelectedFacetIds, setActiveSelectedFacetIds] = useState<
     string[]
-  >(currentChatLastSelectedFacets ?? []);
+  >(effectiveInitialSelectedFacetIds ?? []);
 
   useEffect(() => {
-    setActiveSelectedFacetIds(currentChatLastSelectedFacets ?? []);
-  }, [currentChatId, currentChatLastSelectedFacets]);
+    setActiveSelectedFacetIds(effectiveInitialSelectedFacetIds ?? []);
+  }, [currentChatId, effectiveInitialSelectedFacetIds]);
 
   // Use chat actions hook for handlers
   const { handleSendMessage: baseHandleSendMessage, handleMessageAction } =
@@ -654,7 +676,8 @@ export const Chat = ({
                 editState.mode === "edit" ? editState.initialContent : undefined
               }
               initialModel={initialModelOverride ?? currentChatLastModel}
-              initialSelectedFacetIds={currentChatLastSelectedFacets}
+              initialSelectedFacetIds={effectiveInitialSelectedFacetIds}
+              enforceSelectedFacetIds={assistantFacetSettingsEnforced}
               onFacetSelectionChange={setActiveSelectedFacetIds}
             />
           </div>

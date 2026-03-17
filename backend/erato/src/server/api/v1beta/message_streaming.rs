@@ -1137,6 +1137,44 @@ fn build_selected_facets(
         .collect()
 }
 
+pub(crate) fn sanitize_selected_facet_ids(
+    config: &ExperimentalFacetsConfig,
+    selected_facet_ids: &[String],
+) -> Vec<String> {
+    let available_facet_ids: HashSet<&str> = config.facets.keys().map(String::as_str).collect();
+    let mut sanitized = Vec::new();
+
+    for facet_id in selected_facet_ids {
+        if available_facet_ids.contains(facet_id.as_str()) && !sanitized.contains(facet_id) {
+            sanitized.push(facet_id.clone());
+        }
+    }
+
+    if config.only_single_facet {
+        sanitized.truncate(1);
+    }
+
+    sanitized
+}
+
+pub(crate) fn resolve_effective_selected_facet_ids(
+    config: &ExperimentalFacetsConfig,
+    requested_facet_ids: &[String],
+    assistant_config: Option<&crate::models::assistant::AssistantWithFiles>,
+) -> Vec<String> {
+    let selected_facet_ids = if let Some(assistant) = assistant_config {
+        if assistant.enforce_facet_settings {
+            assistant.facet_ids.as_deref().unwrap_or(&[])
+        } else {
+            requested_facet_ids
+        }
+    } else {
+        requested_facet_ids
+    };
+
+    sanitize_selected_facet_ids(config, selected_facet_ids)
+}
+
 /// Prepares a chat request for LLM generation.
 ///
 /// This function is boxed to reduce stack usage, as it has a deep async call chain.
@@ -1215,6 +1253,12 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     file_resolver: &impl FileResolver,
     prompt_provider: &impl PromptProvider,
 ) -> Result<PreparedChatRequest, Report> {
+    let effective_selected_facet_ids = resolve_effective_selected_facet_ids(
+        &app_state.config.experimental_facets,
+        &user_input.selected_facet_ids,
+        assistant_config.as_ref(),
+    );
+
     // Determine the chat provider to use
     let requested_chat_provider_id = user_input.requested_chat_provider_id.as_deref();
     let effective_chat_provider_id = requested_chat_provider_id.or_else(|| {
@@ -1234,7 +1278,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
 
     let facet_allowlist = build_mcp_tool_allowlist(
         &app_state.config.experimental_facets,
-        &user_input.selected_facet_ids,
+        &effective_selected_facet_ids,
     );
     let server_filter_from_allowlist = derive_requested_server_ids_from_allowlist(
         facet_allowlist.as_deref(),
@@ -1257,7 +1301,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
     let facet_tool_expansions = build_facet_tool_template_expansions(
         &app_state.config.experimental_facets,
-        &user_input.selected_facet_ids,
+        &effective_selected_facet_ids,
         &generation_mcp_tools,
     );
 
@@ -1300,7 +1344,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     let effective_model_settings = build_model_settings_for_facets(
         &chat_provider_config.model_settings,
         &app_state.config.experimental_facets,
-        &user_input.selected_facet_ids,
+        &effective_selected_facet_ids,
     );
     let chat_options = build_chat_options_for_completion(&effective_model_settings);
 
@@ -1309,7 +1353,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         generation_chat_provider_id: Some(chat_provider_id),
         selected_facets: build_selected_facets(
             &app_state.config.experimental_facets,
-            &user_input.selected_facet_ids,
+            &effective_selected_facet_ids,
         ),
     };
 
@@ -3312,6 +3356,11 @@ async fn run_message_submit_task(
         .generation_chat_provider_id
         .clone()
         .unwrap_or_else(|| "unknown".to_string());
+    let effective_selected_facet_ids: Vec<String> = generation_parameters
+        .selected_facets
+        .iter()
+        .filter_map(|(facet_id, enabled)| enabled.then_some(facet_id.clone()))
+        .collect();
 
     // Get the chat provider configuration to check if image generation is enabled
     let ChatProviderConfigWithId {
@@ -3325,7 +3374,7 @@ async fn run_message_submit_task(
     let effective_model_settings = build_model_settings_for_facets(
         &chat_provider_config.model_settings,
         &app_state.config.experimental_facets,
-        &request.selected_facet_ids,
+        &effective_selected_facet_ids,
     );
     if effective_model_settings.generate_images {
         tracing::info!("Image generation mode enabled, generating image instead of text");

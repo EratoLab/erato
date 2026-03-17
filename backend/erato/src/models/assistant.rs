@@ -49,11 +49,26 @@ pub struct AssistantWithFiles {
     pub description: Option<String>,
     pub prompt: String,
     pub mcp_server_ids: Option<Vec<String>>,
+    pub facet_ids: Option<Vec<String>>,
     pub default_chat_provider: Option<String>,
+    pub enforce_facet_settings: bool,
     pub archived_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
     pub files: Vec<FileInfo>,
+}
+
+fn normalize_assistant_facet_ids(facet_ids: Option<Vec<String>>) -> Option<Vec<String>> {
+    let facet_ids = facet_ids?;
+    let mut deduped = Vec::new();
+
+    for facet_id in facet_ids {
+        if !deduped.contains(&facet_id) {
+            deduped.push(facet_id);
+        }
+    }
+
+    (!deduped.is_empty()).then_some(deduped)
 }
 
 /// Create a new assistant
@@ -66,7 +81,9 @@ pub async fn create_assistant(
     description: Option<String>,
     prompt: String,
     mcp_server_ids: Option<Vec<String>>,
+    facet_ids: Option<Vec<String>>,
     default_chat_provider: Option<String>,
+    enforce_facet_settings: bool,
 ) -> Result<assistants::Model, Report> {
     // Get the user ID from subject (subject contains the user UUID)
     let user_id_str = subject.user_id();
@@ -84,7 +101,9 @@ pub async fn create_assistant(
         description: Set(description),
         prompt: Set(prompt),
         mcp_server_ids: Set(mcp_server_ids),
+        facet_ids: Set(normalize_assistant_facet_ids(facet_ids)),
         default_chat_provider: Set(default_chat_provider),
+        enforce_facet_settings: Set(enforce_facet_settings),
         archived_at: Set(None),
         created_at: Set(Utc::now().into()),
         updated_at: Set(Utc::now().into()),
@@ -352,7 +371,9 @@ pub async fn get_assistant_with_files(
         description: assistant.description,
         prompt: assistant.prompt,
         mcp_server_ids: assistant.mcp_server_ids,
+        facet_ids: assistant.facet_ids,
         default_chat_provider: assistant.default_chat_provider,
+        enforce_facet_settings: assistant.enforce_facet_settings,
         archived_at: assistant.archived_at,
         created_at: assistant.created_at,
         updated_at: assistant.updated_at,
@@ -371,7 +392,9 @@ pub async fn update_assistant(
     description: Option<Option<String>>,
     prompt: Option<String>,
     mcp_server_ids: Option<Option<Vec<String>>>,
+    facet_ids: Option<Option<Vec<String>>>,
     default_chat_provider: Option<Option<String>>,
+    enforce_facet_settings: Option<bool>,
 ) -> Result<assistants::Model, Report> {
     let _ = policy; // Unused but kept for API consistency
     // Get the assistant (includes ownership check - viewers cannot update)
@@ -397,8 +420,16 @@ pub async fn update_assistant(
         active_assistant.mcp_server_ids = Set(new_mcp_server_ids);
     }
 
+    if let Some(new_facet_ids) = facet_ids {
+        active_assistant.facet_ids = Set(normalize_assistant_facet_ids(new_facet_ids));
+    }
+
     if let Some(new_default_chat_provider) = default_chat_provider {
         active_assistant.default_chat_provider = Set(new_default_chat_provider);
+    }
+
+    if let Some(new_enforce_facet_settings) = enforce_facet_settings {
+        active_assistant.enforce_facet_settings = Set(new_enforce_facet_settings);
     }
 
     active_assistant.updated_at = Set(Utc::now().into());

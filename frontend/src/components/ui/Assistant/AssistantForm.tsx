@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDebounce } from "use-debounce";
 
 import { env } from "@/app/env";
+import { FacetSelector } from "@/components/ui/Chat/FacetSelector";
 import { ModelSelector } from "@/components/ui/Chat/ModelSelector";
 import { Button } from "@/components/ui/Controls/Button";
 import { InfoTooltip } from "@/components/ui/Controls/InfoTooltip";
@@ -19,7 +20,10 @@ import { Textarea } from "@/components/ui/Input/Textarea";
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import { useTokenUsageEstimation } from "@/hooks/chat/useTokenUsageEstimation";
 import { useFilePreviewModal } from "@/hooks/ui";
-import { usePromptOptimizer } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  useFacets,
+  usePromptOptimizer,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type {
@@ -29,12 +33,16 @@ import type {
 import type React from "react";
 
 const CONTEXT_WARNING_THRESHOLD = 0.5;
+// eslint-disable-next-line lingui/no-unlocalized-strings -- Internal form field key
+const FACET_IDS_FIELD: keyof AssistantFormData = "facetIds";
 
 export interface AssistantFormData {
   name: string;
   description: string;
   prompt: string;
   defaultModel: ChatModel | null;
+  facetIds: string[];
+  enforceFacetSettings: boolean;
   files: FileUploadItem[];
   mcpServerIds: string[];
 }
@@ -124,6 +132,8 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     description: initialData?.description ?? "",
     prompt: initialData?.prompt ?? "",
     defaultModel: initialData?.defaultModel ?? null,
+    facetIds: initialData?.facetIds ?? [],
+    enforceFacetSettings: initialData?.enforceFacetSettings ?? false,
     files: initialData?.files ?? [],
     mcpServerIds: initialData?.mcpServerIds ?? [],
   });
@@ -142,6 +152,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     closePreviewModal,
   } = useFilePreviewModal();
   const promptOptimizer = usePromptOptimizer();
+  const { data: facetsData } = useFacets({});
   const {
     estimateTokenUsageFromParts,
     lastEstimation,
@@ -157,6 +168,8 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     () => formData.files.map((file) => file.id),
     [formData.files],
   );
+  const availableFacets = useMemo(() => facetsData?.facets ?? [], [facetsData]);
+  const globalFacetSettings = facetsData?.global_facet_settings;
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTokenEstimateRequestKeyRef = useRef<string | null>(null);
   /* eslint-disable lingui/no-unlocalized-strings */
@@ -165,11 +178,41 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const insertReplacementInputType = "insertReplacementText";
   /* eslint-enable lingui/no-unlocalized-strings */
 
+  const sanitizeFacetIds = useCallback(
+    (facetIds: string[]) => {
+      const availableFacetIdSet = new Set(
+        availableFacets.map((facet) => facet.id),
+      );
+      let nextFacetIds = facetIds.filter((facetId) =>
+        availableFacetIdSet.has(facetId),
+      );
+      if (globalFacetSettings?.only_single_facet) {
+        nextFacetIds = nextFacetIds.slice(0, 1);
+      }
+      return nextFacetIds;
+    },
+    [availableFacets, globalFacetSettings?.only_single_facet],
+  );
+
+  const unavailableConfiguredFacets = useMemo(() => {
+    const initialFacetIds = initialData?.facetIds ?? [];
+    if (initialFacetIds.length === 0 || !facetsData) {
+      return [];
+    }
+
+    const availableFacetIdSet = new Set(
+      availableFacets.map((facet) => facet.id),
+    );
+    return initialFacetIds.filter(
+      (facetId) => !availableFacetIdSet.has(facetId),
+    );
+  }, [availableFacets, facetsData, initialData?.facetIds]);
+
   // Validation
   const validateField = useCallback(
     (
       field: keyof AssistantFormData,
-      value: string | ChatModel | null | FileUploadItem[] | string[],
+      value: string | ChatModel | null | FileUploadItem[] | string[] | boolean,
     ): string => {
       switch (field) {
         case "name": {
@@ -252,7 +295,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const handleFieldChange = useCallback(
     (
       field: keyof AssistantFormData,
-      value: string | ChatModel | null | FileUploadItem[] | string[],
+      value: string | ChatModel | null | FileUploadItem[] | string[] | boolean,
     ) => {
       setFormData((prev) => ({ ...prev, [field]: value }));
 
@@ -357,6 +400,8 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
         description: true,
         prompt: true,
         defaultModel: true,
+        facetIds: true,
+        enforceFacetSettings: true,
         files: true,
         mcpServerIds: true,
       });
@@ -444,6 +489,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     const requestBody: Record<string, unknown> = {
       new_chat: assistantId ? { assistant_id: assistantId } : {},
       system_prompt: debouncedPrompt,
+      selected_facet_ids: formData.facetIds,
     };
 
     const additionalContentParts = [
@@ -476,10 +522,34 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     estimateTokenUsageFromParts,
     fileIds,
     formData.defaultModel?.chat_provider_id,
+    formData.facetIds,
     isSubmitting,
     disableLiveTokenUsageEstimation,
     tokenUsageEstimationOverride,
   ]);
+
+  useEffect(() => {
+    if (!facetsData) {
+      return;
+    }
+
+    setFormData((previousFormData) => {
+      const sanitizedFacetIds = sanitizeFacetIds(previousFormData.facetIds);
+      if (
+        sanitizedFacetIds.length === previousFormData.facetIds.length &&
+        sanitizedFacetIds.every(
+          (facetId, index) => facetId === previousFormData.facetIds[index],
+        )
+      ) {
+        return previousFormData;
+      }
+
+      return {
+        ...previousFormData,
+        facetIds: sanitizedFacetIds,
+      };
+    });
+  }, [facetsData, sanitizeFacetIds]);
 
   return (
     <form onSubmit={handleSubmit} className={className}>
@@ -489,6 +559,16 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
 
         {/* Error message */}
         {errorMessage && <Alert type="error">{errorMessage}</Alert>}
+
+        {unavailableConfiguredFacets.length > 0 && (
+          <Alert type="warning">
+            {t({
+              id: "assistant.form.facets.unavailable",
+              message:
+                "Some previously configured tools are no longer available and were removed from this assistant.",
+            })}
+          </Alert>
+        )}
 
         {/* Name field */}
         <FormField
@@ -610,6 +690,71 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
               onModelChange={handleModelSelect}
               disabled={isSubmitting}
             />
+          </FormField>
+        )}
+
+        {availableFacets.length > 0 && (
+          <FormField
+            label={t`Default Tools`}
+            helpText={t({
+              id: "assistant.form.facets.helpText",
+              message:
+                "Optional: Configure which tools should be selected by default in chats started from this assistant",
+            })}
+            labelInlineAction={
+              <InfoTooltip translationId="assistant.form.defaultTools.tooltip" />
+            }
+          >
+            <div className="space-y-3">
+              <FacetSelector
+                facets={availableFacets}
+                selectedFacetIds={formData.facetIds}
+                onSelectionChange={(facetIds) =>
+                  handleFieldChange(FACET_IDS_FIELD, sanitizeFacetIds(facetIds))
+                }
+                onlySingleFacet={
+                  globalFacetSettings?.only_single_facet ?? false
+                }
+                showFacetIndicatorWithDisplayName={
+                  globalFacetSettings?.show_facet_indicator_with_display_name ??
+                  false
+                }
+                disabled={isSubmitting}
+              />
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.enforceFacetSettings}
+                    onChange={(event) =>
+                      handleFieldChange(
+                        "enforceFacetSettings",
+                        event.target.checked,
+                      )
+                    }
+                    className="size-4 rounded border-theme-border-primary bg-theme-bg-primary text-theme-fg-accent focus:ring-theme-fg-accent focus:ring-offset-0"
+                  />
+                  <span className="inline-flex items-center gap-1.5 text-sm text-theme-fg-secondary">
+                    <span>
+                      {t({
+                        id: "assistant.form.facets.enforce.label",
+                        message:
+                          "Lock tool selection in chats started from this assistant",
+                      })}
+                    </span>
+                    <InfoTooltip translationId="assistant.form.enforceTools.tooltip" />
+                  </span>
+                </label>
+                <p className="text-sm text-theme-fg-secondary">
+                  {t({
+                    id: "assistant.form.facets.enforce.helpText",
+                    message:
+                      "When enabled, users cannot change the selected tools in chats derived from this assistant.",
+                  })}
+                </p>
+              </div>
+            </div>
           </FormField>
         )}
 

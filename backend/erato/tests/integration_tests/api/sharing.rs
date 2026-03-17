@@ -66,6 +66,8 @@ async fn test_full_assistant_sharing_flow(pool: Pool<Postgres>) {
         "You are a shared assistant".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create assistant");
@@ -225,6 +227,8 @@ async fn test_viewer_cannot_update_assistant(pool: Pool<Postgres>) {
         "Original prompt".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create assistant");
@@ -307,6 +311,8 @@ async fn test_list_share_grants(pool: Pool<Postgres>) {
         "Test prompt".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create assistant");
@@ -395,6 +401,8 @@ async fn test_delete_share_grant(pool: Pool<Postgres>) {
         "Test prompt".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create assistant");
@@ -509,6 +517,8 @@ async fn test_share_assistant_with_organization_user_id(pool: Pool<Postgres>) {
         "Test prompt".to_string(),
         None,
         None,
+        None,
+        false,
     )
     .await
     .expect("Failed to create assistant");

@@ -11,6 +11,7 @@ use crate::server::api::v1beta::file_resolution::format_successful_file_content;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming::{
     FileContent, MeProfileChatRequestInput, prepare_chat_request_with_adapters,
+    resolve_effective_selected_facet_ids,
 };
 use crate::services::file_processing_cached;
 use crate::services::file_storage::SharepointContext;
@@ -71,6 +72,9 @@ pub struct TokenUsageRequest {
     /// Optional chat provider ID to use for token estimation. If not provided, uses the default provider.
     #[schema(nullable = false)]
     chat_provider_id: Option<String>,
+    /// IDs of facets selected by the user for this estimation.
+    #[serde(default)]
+    selected_facet_ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -491,7 +495,11 @@ pub async fn token_usage_estimate(
             just_submitted_user_message_id: synthetic_message_id,
             requested_chat_provider_id: request.chat_provider_id.clone(),
             new_input_file_ids: input_file_ids.clone(),
-            selected_facet_ids: vec![],
+            selected_facet_ids: resolve_effective_selected_facet_ids(
+                &app_state.config.experimental_facets,
+                &request.selected_facet_ids,
+                assistant_config.as_ref(),
+            ),
         };
         let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
 
