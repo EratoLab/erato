@@ -59,6 +59,7 @@ describe("mergeThemeWithOverrides", () => {
       hover: "#f97316",
       controls: "#ffedd5",
     });
+    expect(mergedTheme.colors.border.primary).toBe("#ea580c");
     expect(mergedTheme.colors.border.subtle).toBe("#ea580c");
     expect(mergedTheme.colors.border.divider).toBe("#ea580c");
   });

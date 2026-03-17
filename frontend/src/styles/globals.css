@@ -30,7 +30,7 @@
     color-scheme: light;
   }
 
-  .dark {
+  :root[data-theme="dark"] {
     color-scheme: dark;
   }
 
@@ -57,11 +57,11 @@
   }
 
   /* Dark mode scrollbar with white semi-transparent thumb */
-  .dark ::-webkit-scrollbar-thumb {
+  :root[data-theme="dark"] ::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.15);
   }
 
-  .dark ::-webkit-scrollbar-thumb:hover {
+  :root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.25);
   }
 
@@ -71,7 +71,7 @@
     scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
   }
 
-  .dark * {
+  :root[data-theme="dark"] * {
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
   }
 
@@ -100,11 +100,12 @@
     background: rgba(0, 0, 0, 0.4);
   }
 
-  .dark .scrollbar-thin-solid::-webkit-scrollbar-thumb {
+  :root[data-theme="dark"] .scrollbar-thin-solid::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.3);
   }
 
-  .dark .scrollbar-thin-solid::-webkit-scrollbar-thumb:hover {
+  :root[data-theme="dark"]
+    .scrollbar-thin-solid::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.4);
   }
 
@@ -117,11 +118,11 @@
     background: rgba(0, 0, 0, 0.15);
   }
 
-  .dark .scrollbar-auto-hide::-webkit-scrollbar-thumb {
+  :root[data-theme="dark"] .scrollbar-auto-hide::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.05);
   }
 
-  .dark .scrollbar-auto-hide:hover::-webkit-scrollbar-thumb {
+  :root[data-theme="dark"] .scrollbar-auto-hide:hover::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.15);
   }
 }
@@ -145,6 +146,7 @@
 
   /* Border colors */
   --theme-border: #d1d5db;
+  --theme-border-primary: var(--theme-border);
   --theme-border-subtle: var(--theme-bg-accent);
   --theme-border-strong: #9ca3af;
   --theme-border-divider: var(--theme-border);
@@ -251,6 +253,7 @@
 
     /* Border colors */
     --theme-border: #4b5563;
+    --theme-border-primary: var(--theme-border);
     --theme-border-subtle: var(--theme-bg-accent);
     --theme-border-strong: #6b7280;
     --theme-border-divider: var(--theme-border);
