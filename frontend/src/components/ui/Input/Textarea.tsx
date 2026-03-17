@@ -155,10 +155,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         rows,
         maxRows,
       );
-      const newHeight = Math.min(
-        Math.max(contentHeight, minHeight),
-        maxHeight,
-      );
+      const newHeight = Math.min(Math.max(contentHeight, minHeight), maxHeight);
       textarea.style.height = `${newHeight}px`;
     }, [value, autoResize, rows, maxRows, monospace, className, textareaRef]);
 
