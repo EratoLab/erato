@@ -144,6 +144,11 @@
   --theme-fg-muted: #6b7280;
   --theme-fg-accent: #1f2937; /* Monochrome accent text */
 
+  /* Primary action */
+  --theme-action-primary-bg: #1f2937;
+  --theme-action-primary-fg: #f9fafb;
+  --theme-action-primary-hover: #374151;
+
   /* Border colors */
   --theme-border: #d1d5db;
   --theme-border-primary: var(--theme-border);
@@ -250,6 +255,11 @@
     --theme-fg-secondary: #e5e7eb;
     --theme-fg-muted: #9ca3af;
     --theme-fg-accent: #e5e7eb; /* Monochrome accent text */
+
+    /* Primary action */
+    --theme-action-primary-bg: #1f2937;
+    --theme-action-primary-fg: #f9fafb;
+    --theme-action-primary-hover: #374151;
 
     /* Border colors */
     --theme-border: #4b5563;

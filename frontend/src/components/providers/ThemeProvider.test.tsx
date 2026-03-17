@@ -209,6 +209,13 @@ describe("ThemeProvider", () => {
           theme: {
             light: {
               colors: {
+                action: {
+                  primary: {
+                    background: "#312e81",
+                    foreground: "#eef2ff",
+                    hover: "#4338ca",
+                  },
+                },
                 border: {
                   primary: "#c4b5fd",
                 },
@@ -254,6 +261,21 @@ describe("ThemeProvider", () => {
       ).toBe("#f5f3ff");
     });
 
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-action-primary-bg",
+      ),
+    ).toBe("#312e81");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-action-primary-fg",
+      ),
+    ).toBe("#eef2ff");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-action-primary-hover",
+      ),
+    ).toBe("#4338ca");
     expect(
       document.documentElement.style.getPropertyValue("--theme-border-primary"),
     ).toBe("#c4b5fd");

@@ -36,7 +36,8 @@ interface ButtonProps
 
 // Extract variant styles to a constant
 const VARIANT_STYLES = {
-  primary: "bg-neutral-800 text-white hover:bg-neutral-700 theme-transition",
+  primary:
+    "bg-theme-action-primary-bg text-theme-action-primary-fg hover:bg-theme-action-primary-hover theme-transition",
   secondary:
     "bg-theme-bg-secondary border border-theme-border hover:bg-theme-bg-hover text-theme-fg-secondary theme-transition",
   ghost:
