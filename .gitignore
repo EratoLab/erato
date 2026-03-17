@@ -20,3 +20,8 @@ tmp/
 .debug/
 
 __pycache__
+
+# LLM
+.codex
+.claude
+.cursor
