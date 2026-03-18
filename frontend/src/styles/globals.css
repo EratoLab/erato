@@ -181,6 +181,7 @@
   --theme-radius-base: 0.375rem;
   --theme-radius-shell: 0.75rem;
   --theme-radius-input: 1rem;
+  --theme-radius-control: 0.5rem;
   --theme-radius-message: 0.5rem;
   --theme-radius-modal: 0.5rem;
   --theme-radius-pill: 9999px;
@@ -193,10 +194,16 @@
   --theme-spacing-message-padding-y: 1rem;
   --theme-spacing-message-gap: 1.5rem;
   --theme-spacing-control-gap: 0.5rem;
+  --theme-spacing-control-padding-x: 0.75rem;
+  --theme-spacing-control-padding-y: 0.5rem;
+  --theme-spacing-control-min-height: 2.5rem;
   --theme-spacing-sidebar-row-height: 2.75rem;
   --theme-spacing-input-padding-x: 0.75rem;
   --theme-spacing-input-padding-y: 0.75rem;
   --theme-spacing-input-gap: 0.5rem;
+  --theme-spacing-dropdown-padding-x: 1rem;
+  --theme-spacing-dropdown-padding-y: 0.5rem;
+  --theme-spacing-modal-padding: 1rem;
 
   /* Elevation */
   --theme-elevation-shell: none;
@@ -372,6 +379,49 @@ body {
 
 .focus-ring-inset {
   @apply focus:outline-none focus:ring-2 focus:ring-inset focus:ring-theme-focus focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-theme-focus;
+}
+
+/* Geometry classes for controls — placed in @layer components so
+   Tailwind utilities (e.g. p-0) can override them naturally. */
+@layer components {
+  .btn-geometry-sm {
+    padding-inline: var(--theme-spacing-control-padding-x);
+    padding-block: var(--theme-spacing-control-padding-y);
+    min-height: calc(var(--theme-spacing-control-min-height) - 0.25rem);
+    min-width: calc(var(--theme-spacing-control-min-height) - 0.25rem);
+    border-radius: var(--theme-radius-control);
+  }
+
+  .btn-geometry-md {
+    padding-inline: var(--theme-spacing-control-padding-x);
+    padding-block: var(--theme-spacing-control-padding-y);
+    min-height: var(--theme-spacing-control-min-height);
+    min-width: var(--theme-spacing-control-min-height);
+    border-radius: var(--theme-radius-control);
+  }
+
+  .btn-geometry-lg {
+    padding-inline: calc(var(--theme-spacing-control-padding-x) + 0.25rem);
+    padding-block: calc(var(--theme-spacing-control-padding-y) + 0.25rem);
+    min-height: calc(var(--theme-spacing-control-min-height) + 0.25rem);
+    min-width: calc(var(--theme-spacing-control-min-height) + 0.25rem);
+    border-radius: var(--theme-radius-control);
+  }
+
+  .btn-geometry-list-item {
+    padding-inline: var(--theme-spacing-dropdown-padding-x);
+    padding-block: var(--theme-spacing-dropdown-padding-y);
+    border-radius: var(--theme-radius-control);
+  }
+
+  .dropdown-item-geometry {
+    padding-inline: var(--theme-spacing-dropdown-padding-x);
+    padding-block: var(--theme-spacing-dropdown-padding-y);
+  }
+
+  .modal-section-geometry {
+    padding: var(--theme-spacing-modal-padding);
+  }
 }
 
 .theme-transition {

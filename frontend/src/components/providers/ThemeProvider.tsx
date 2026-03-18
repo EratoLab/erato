@@ -308,6 +308,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setCssVariable("--theme-radius-base", theme.radius.base);
     setCssVariable("--theme-radius-shell", theme.radius.shell);
     setCssVariable("--theme-radius-input", theme.radius.input);
+    setCssVariable("--theme-radius-control", theme.radius.control);
     setCssVariable("--theme-radius-message", theme.radius.message);
     setCssVariable("--theme-radius-modal", theme.radius.modal);
     setCssVariable("--theme-radius-pill", theme.radius.pill);
@@ -333,6 +334,18 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setCssVariable("--theme-spacing-message-gap", theme.spacing.message.gap);
     setCssVariable("--theme-spacing-control-gap", theme.spacing.control.gap);
     setCssVariable(
+      "--theme-spacing-control-padding-x",
+      theme.spacing.control.paddingX,
+    );
+    setCssVariable(
+      "--theme-spacing-control-padding-y",
+      theme.spacing.control.paddingY,
+    );
+    setCssVariable(
+      "--theme-spacing-control-min-height",
+      theme.spacing.control.minHeight,
+    );
+    setCssVariable(
       "--theme-spacing-sidebar-row-height",
       theme.spacing.sidebar.rowHeight,
     );
@@ -345,6 +358,15 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       theme.spacing.input.paddingY,
     );
     setCssVariable("--theme-spacing-input-gap", theme.spacing.input.gap);
+    setCssVariable(
+      "--theme-spacing-dropdown-padding-x",
+      theme.spacing.dropdown.paddingX,
+    );
+    setCssVariable(
+      "--theme-spacing-dropdown-padding-y",
+      theme.spacing.dropdown.paddingY,
+    );
+    setCssVariable("--theme-spacing-modal-padding", theme.spacing.modal.padding);
 
     // Elevation
     setCssVariable("--theme-elevation-shell", theme.elevation.shell);

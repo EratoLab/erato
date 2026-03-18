@@ -150,6 +150,7 @@ export type ThemeRadius = {
   base: string;
   shell: string;
   input: string;
+  control: string;
   message: string;
   modal: string;
   pill: string;
@@ -168,6 +169,9 @@ export type ThemeSpacing = {
   };
   control: {
     gap: string;
+    paddingX: string;
+    paddingY: string;
+    minHeight: string;
   };
   sidebar: {
     rowHeight: string;
@@ -176,6 +180,13 @@ export type ThemeSpacing = {
     paddingX: string;
     paddingY: string;
     gap: string;
+  };
+  dropdown: {
+    paddingX: string;
+    paddingY: string;
+  };
+  modal: {
+    padding: string;
   };
 };
 
@@ -380,6 +391,7 @@ export const defaultTheme: Theme = {
     base: baseRadius,
     shell: "0.75rem",
     input: "1rem",
+    control: "0.5rem",
     message: "0.5rem",
     modal: "0.5rem",
     pill: "9999px",
@@ -397,6 +409,9 @@ export const defaultTheme: Theme = {
     },
     control: {
       gap: "0.5rem",
+      paddingX: "0.75rem",
+      paddingY: "0.5rem",
+      minHeight: "2.5rem",
     },
     sidebar: {
       rowHeight: "2.75rem",
@@ -405,6 +420,13 @@ export const defaultTheme: Theme = {
       paddingX: "0.75rem",
       paddingY: "0.75rem",
       gap: "0.5rem",
+    },
+    dropdown: {
+      paddingX: "1rem",
+      paddingY: "0.5rem",
+    },
+    modal: {
+      padding: "1rem",
     },
   },
   elevation: {

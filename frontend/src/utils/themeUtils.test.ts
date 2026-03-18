@@ -15,6 +15,7 @@ describe("mergeThemeWithOverrides", () => {
       base: "1.25rem",
       shell: "1.25rem",
       input: "1.25rem",
+      control: "1.25rem",
       message: "1.25rem",
       modal: "1.25rem",
       pill: "1.25rem",
