@@ -164,8 +164,15 @@ export const MessageContent = memo(function MessageContent({
 
   // Define custom components for react-markdown
   const markdownComponents: Partial<Components> = {
+    pre({ node: _node, children, ...props }) {
+      return (
+        <pre className="message-content-code-block" {...props}>
+          {children}
+        </pre>
+      );
+    },
     // Custom code block rendering with syntax highlighting
-    code({ className, children, ...props }) {
+    code({ node: _node, className, children, ...props }) {
       const codeContent = String(children).replace(/\n$/, "");
       const match = /language-(\w+)/.exec(className ?? "");
       const language = match ? match[1] : "";
@@ -176,8 +183,7 @@ export const MessageContent = memo(function MessageContent({
           <SyntaxHighlighter
             useInlineStyles={false}
             language={language}
-            PreTag="pre"
-            className="message-content-code-block"
+            PreTag="div"
           >
             {codeContent}
           </SyntaxHighlighter>
@@ -185,11 +191,7 @@ export const MessageContent = memo(function MessageContent({
       }
 
       if (isBlockCode) {
-        return (
-          <pre className="message-content-code-block">
-            <code {...props}>{codeContent}</code>
-          </pre>
-        );
+        return <code {...props}>{codeContent}</code>;
       }
 
       return (

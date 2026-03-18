@@ -470,6 +470,10 @@ body {
     letter-spacing: inherit;
   }
 
+  pre.message-content-code-block > div {
+    min-width: max-content;
+  }
+
   pre.message-content-code-block .token.comment,
   pre.message-content-code-block .token.prolog,
   pre.message-content-code-block .token.doctype,
