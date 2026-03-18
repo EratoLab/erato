@@ -469,15 +469,24 @@ pub async fn resolve_sequence(
                 let message = message_repo.get_message_by_id(&message_id).await?;
                 let parsed = MessageSchema::validate(&message.raw_message)?;
                 for content_part in parsed.content {
-                    let role = if matches!(&content_part, ContentPart::ToolUse(_)) {
-                        MessageRole::Tool
-                    } else {
-                        parsed.role.clone()
-                    };
-                    input_messages.push(InputMessage {
-                        role,
-                        content: content_part,
-                    });
+                    match content_part {
+                        ContentPart::ToolUse(tool_use) => {
+                            input_messages.push(InputMessage {
+                                role: MessageRole::Assistant,
+                                content: ContentPart::ToolUse(tool_use.clone()),
+                            });
+                            input_messages.push(InputMessage {
+                                role: MessageRole::Tool,
+                                content: ContentPart::ToolUse(tool_use),
+                            });
+                        }
+                        content_part => {
+                            input_messages.push(InputMessage {
+                                role: parsed.role.clone(),
+                                content: content_part,
+                            });
+                        }
+                    }
                 }
             }
 
@@ -526,16 +535,7 @@ pub async fn resolve_sequence(
 }
 
 fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {
-    if matches!(input_msg.role, MessageRole::Assistant)
-        && matches!(&input_msg.content, ContentPart::ToolUse(_))
-    {
-        InputMessage {
-            role: MessageRole::Tool,
-            content: input_msg.content,
-        }
-    } else {
-        input_msg
-    }
+    input_msg
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
