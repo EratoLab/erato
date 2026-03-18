@@ -141,6 +141,7 @@ export const Branded: Story = {
         },
         focus: {
           ring: "#d946ef",
+          errorRing: "rgba(225, 29, 72, 0.24)",
         },
       },
     },

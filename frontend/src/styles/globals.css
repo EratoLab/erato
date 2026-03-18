@@ -233,6 +233,7 @@
 
   /* Focus */
   --theme-focus-ring: #6b7280; /* Monochrome focus ring */
+  --theme-focus-ring-error: rgba(239, 68, 68, 0.2);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -317,6 +318,7 @@
 
     /* Focus */
     --theme-focus-ring: #6b7280; /* Monochrome focus ring */
+    --theme-focus-ring-error: rgba(239, 68, 68, 0.2);
   }
 }
 
@@ -329,6 +331,14 @@ body {
 /* Add global helper classes */
 .focus-ring {
   @apply focus:outline-none focus:ring-2 focus:ring-theme-focus focus:ring-offset-2 focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2;
+}
+
+.focus-ring-tight {
+  @apply focus:outline-none focus:ring-2 focus:ring-theme-focus focus-visible:ring-2 focus-visible:ring-theme-focus;
+}
+
+.focus-ring-inset {
+  @apply focus:outline-none focus:ring-2 focus:ring-inset focus:ring-theme-focus focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-theme-focus;
 }
 
 .theme-transition {

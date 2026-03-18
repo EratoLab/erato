@@ -84,6 +84,7 @@ export default {
       ringColor: {
         theme: {
           focus: "var(--theme-focus-ring)",
+          "focus-error": "var(--theme-focus-ring-error)",
         },
       },
     },

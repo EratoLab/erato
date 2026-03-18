@@ -64,11 +64,11 @@ const MenuItem = memo(
         "flex items-center gap-2",
         "theme-transition",
         "disabled:cursor-not-allowed disabled:opacity-50",
-        "focus:outline-none focus-visible:bg-theme-bg-accent",
+        "focus-ring-inset",
         noWrap && "whitespace-nowrap",
         item.variant === "danger"
-          ? "text-theme-error-fg hover:bg-theme-error-bg"
-          : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary",
+          ? "text-theme-error-fg hover:bg-theme-error-bg focus:bg-theme-error-bg"
+          : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-accent focus:text-theme-fg-primary",
       )}
       onClick={onSelect}
       disabled={item.disabled}

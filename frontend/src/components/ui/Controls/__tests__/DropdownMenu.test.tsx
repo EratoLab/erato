@@ -22,6 +22,8 @@ describe("DropdownMenu", () => {
       expect(document.querySelector('[data-ui="dropdown-panel"]')).toBeTruthy();
     });
 
+    const menuItem = screen.getByRole("menuitem", { name: "Rename" });
+
     expect(screen.getByRole("menu")).toHaveAttribute(
       "data-ui",
       "dropdown-panel",
@@ -32,5 +34,7 @@ describe("DropdownMenu", () => {
       borderRadius: "var(--theme-radius-base)",
       boxShadow: "var(--theme-elevation-dropdown)",
     });
+    expect(menuItem.className).toContain("focus-ring-inset");
+    expect(menuItem.className).toContain("focus:bg-theme-bg-accent");
   });
 });

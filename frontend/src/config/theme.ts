@@ -42,6 +42,10 @@ const stateColors = {
     light: colors.neutral[500],
     dark: colors.neutral[400],
   },
+  focusError: {
+    light: "rgba(239, 68, 68, 0.2)",
+    dark: "rgba(239, 68, 68, 0.2)",
+  },
   selection: {
     light: colors.neutral[200],
     dark: colors.neutral[700],
@@ -138,6 +142,7 @@ export type ThemeColors = {
   };
   focus: {
     ring: string;
+    errorRing: string;
   };
 };
 
@@ -313,6 +318,7 @@ export const defaultTheme: Theme = {
     },
     focus: {
       ring: stateColors.focus.light,
+      errorRing: stateColors.focusError.light,
     },
   },
   borderRadius: baseRadius,
@@ -454,6 +460,7 @@ export const darkTheme: Theme = {
     },
     focus: {
       ring: stateColors.focus.dark,
+      errorRing: stateColors.focusError.dark,
     },
   },
   elevation: {

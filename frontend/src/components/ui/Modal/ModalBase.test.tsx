@@ -16,6 +16,7 @@ describe("ModalBase", () => {
     );
 
     const dialog = screen.getByRole("dialog");
+    const closeButton = screen.getByRole("button", { name: "Close modal" });
     const overlay = document.querySelector('[data-ui="modal-overlay"]');
 
     expect(dialog).toHaveAttribute("data-ui", "modal-shell");
@@ -24,7 +25,8 @@ describe("ModalBase", () => {
       borderRadius: "var(--theme-radius-modal)",
       boxShadow: "var(--theme-elevation-modal)",
     });
-    expect(dialog.className).toContain("focus:ring-[var(--theme-focus-ring)]");
+    expect(dialog.className).toContain("focus-ring");
+    expect(closeButton.className).toContain("focus-ring-tight");
     expect(overlay).toBeTruthy();
     expect(overlay).toHaveStyle({
       backgroundColor: "var(--theme-overlay-modal)",
