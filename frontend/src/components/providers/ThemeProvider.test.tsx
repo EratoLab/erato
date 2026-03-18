@@ -230,6 +230,22 @@ describe("ThemeProvider", () => {
                 message: {
                   assistant: "#ede9fe",
                 },
+                code: {
+                  inline: {
+                    background: "#eef2ff",
+                    foreground: "#312e81",
+                    border: "#c7d2fe",
+                  },
+                  block: {
+                    background: "#ffffff",
+                    foreground: "#1e1b4b",
+                    border: "#c7d2fe",
+                  },
+                  syntax: {
+                    keyword: "#4338ca",
+                    string: "#047857",
+                  },
+                },
                 overlay: {
                   modal: "rgba(76, 29, 149, 0.32)",
                 },
@@ -314,6 +330,38 @@ describe("ThemeProvider", () => {
         "--theme-message-assistant",
       ),
     ).toBe("#ede9fe");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-code-inline-bg"),
+    ).toBe("#eef2ff");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-code-inline-fg"),
+    ).toBe("#312e81");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-code-inline-border",
+      ),
+    ).toBe("#c7d2fe");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-code-block-bg"),
+    ).toBe("#ffffff");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-code-block-fg"),
+    ).toBe("#1e1b4b");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-code-block-border",
+      ),
+    ).toBe("#c7d2fe");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-code-syntax-keyword",
+      ),
+    ).toBe("#4338ca");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-code-syntax-string",
+      ),
+    ).toBe("#047857");
     expect(
       document.documentElement.style.getPropertyValue("--theme-overlay-modal"),
     ).toBe("rgba(76, 29, 149, 0.32)");

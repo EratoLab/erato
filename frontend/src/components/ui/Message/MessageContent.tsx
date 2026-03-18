@@ -2,13 +2,8 @@ import { t } from "@lingui/core/macro";
 import React, { memo } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import {
-  oneDark,
-  oneLight,
-} from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 
-import { useTheme } from "@/components/providers/ThemeProvider";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { parseContent } from "@/utils/adapters/contentPartAdapter";
 
@@ -92,8 +87,6 @@ export const MessageContent = memo(function MessageContent({
   filesById = {},
   onFileLinkPreview,
 }: MessageContentProps) {
-  const { effectiveTheme } = useTheme();
-  const isDarkMode = effectiveTheme === "dark";
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
 
   // Parse content efficiently in a single pass
@@ -162,7 +155,7 @@ export const MessageContent = memo(function MessageContent({
   if (showRaw) {
     return (
       <article className="max-w-none font-sans text-base">
-        <pre className="whitespace-pre-wrap rounded-md bg-theme-bg-tertiary p-4 font-mono text-sm text-theme-fg-primary">
+        <pre className="message-content-code-block whitespace-pre-wrap">
           <code>{displayText}</code>
         </pre>
       </article>
@@ -172,35 +165,36 @@ export const MessageContent = memo(function MessageContent({
   // Define custom components for react-markdown
   const markdownComponents: Partial<Components> = {
     // Custom code block rendering with syntax highlighting
-    // @ts-expect-error - react-markdown types don't expose inline prop
-    code({ inline, className, children, ...props }) {
+    code({ className, children, ...props }) {
+      const codeContent = String(children).replace(/\n$/, "");
       const match = /language-(\w+)/.exec(className ?? "");
       const language = match ? match[1] : "";
+      const isBlockCode = Boolean(language) || codeContent.includes("\n");
 
-      if (!inline && language) {
+      if (isBlockCode && language) {
         return (
           <SyntaxHighlighter
-            style={isDarkMode ? oneDark : oneLight}
+            useInlineStyles={false}
             language={language}
-            PreTag="div"
-            className="!my-4 rounded-md"
-            customStyle={{
-              margin: "1rem 0",
-              background: "var(--theme-bg-tertiary)",
-              fontFamily: "var(--theme-font-mono)",
-              fontSize: "var(--theme-font-size-sm)",
-              lineHeight: "var(--theme-line-height-sm)",
-              letterSpacing: "var(--theme-letter-spacing-sm)",
-            }}
+            PreTag="pre"
+            className="message-content-code-block"
           >
-            {String(children).replace(/\n$/, "")}
+            {codeContent}
           </SyntaxHighlighter>
+        );
+      }
+
+      if (isBlockCode) {
+        return (
+          <pre className="message-content-code-block">
+            <code {...props}>{codeContent}</code>
+          </pre>
         );
       }
 
       return (
         <code
-          className="rounded-sm bg-theme-bg-tertiary px-1 py-0.5 font-mono text-theme-fg-secondary"
+          className="rounded-md border border-theme-code-inline-border bg-theme-code-inline-bg px-1.5 py-0.5 font-mono text-sm text-theme-code-inline-fg"
           {...props}
         >
           {children}

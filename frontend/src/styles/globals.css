@@ -173,6 +173,17 @@
   --theme-message-assistant: var(--theme-bg-secondary);
   --theme-message-hover: var(--theme-bg-hover);
   --theme-message-controls: var(--theme-bg-secondary);
+  --theme-code-inline-bg: #f3f4f6;
+  --theme-code-inline-fg: #1f2937;
+  --theme-code-inline-border: #e5e7eb;
+  --theme-code-block-bg: #ffffff;
+  --theme-code-block-fg: #1f2937;
+  --theme-code-block-border: #e5e7eb;
+  --theme-code-syntax-comment: #6b7280;
+  --theme-code-syntax-keyword: #1d4ed8;
+  --theme-code-syntax-string: #047857;
+  --theme-code-syntax-function: #92400e;
+  --theme-code-syntax-number: #b91c1c;
 
   /* Legacy alias for message hover */
   --theme-messageItem-hover: var(--theme-message-hover);
@@ -322,6 +333,17 @@
     --theme-message-assistant: var(--theme-bg-secondary);
     --theme-message-hover: var(--theme-bg-hover);
     --theme-message-controls: var(--theme-bg-secondary);
+    --theme-code-inline-bg: #374151;
+    --theme-code-inline-fg: #f3f4f6;
+    --theme-code-inline-border: #4b5563;
+    --theme-code-block-bg: #374151;
+    --theme-code-block-fg: #f3f4f6;
+    --theme-code-block-border: #4b5563;
+    --theme-code-syntax-comment: #9ca3af;
+    --theme-code-syntax-keyword: #93c5fd;
+    --theme-code-syntax-string: #6ee7b7;
+    --theme-code-syntax-function: #fcd34d;
+    --theme-code-syntax-number: #fca5a5;
 
     /* Legacy alias for message hover */
     --theme-messageItem-hover: var(--theme-message-hover);
@@ -421,6 +443,64 @@ body {
 
   .modal-section-geometry {
     padding: var(--theme-spacing-modal-padding);
+  }
+
+  pre.message-content-code-block {
+    margin-block: 1rem;
+    overflow-x: auto;
+    border: 1px solid var(--theme-code-block-border);
+    border-radius: var(--theme-radius-message);
+    background: var(--theme-code-block-bg);
+    color: var(--theme-code-block-fg);
+    padding: 1rem;
+    font-family: var(--theme-font-mono);
+    font-size: var(--theme-font-size-sm);
+    line-height: var(--theme-line-height-sm);
+    letter-spacing: var(--theme-letter-spacing-sm);
+  }
+
+  pre.message-content-code-block code,
+  pre.message-content-code-block code[class*="language-"] {
+    display: block;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+  }
+
+  pre.message-content-code-block .token.comment,
+  pre.message-content-code-block .token.prolog,
+  pre.message-content-code-block .token.doctype,
+  pre.message-content-code-block .token.cdata {
+    color: var(--theme-code-syntax-comment);
+  }
+
+  pre.message-content-code-block .token.keyword,
+  pre.message-content-code-block .token.atrule,
+  pre.message-content-code-block .token.tag,
+  pre.message-content-code-block .token.selector {
+    color: var(--theme-code-syntax-keyword);
+  }
+
+  pre.message-content-code-block .token.string,
+  pre.message-content-code-block .token.char,
+  pre.message-content-code-block .token.attr-value,
+  pre.message-content-code-block .token.regex {
+    color: var(--theme-code-syntax-string);
+  }
+
+  pre.message-content-code-block .token.function,
+  pre.message-content-code-block .token.class-name {
+    color: var(--theme-code-syntax-function);
+  }
+
+  pre.message-content-code-block .token.number,
+  pre.message-content-code-block .token.boolean,
+  pre.message-content-code-block .token.constant,
+  pre.message-content-code-block .token.symbol {
+    color: var(--theme-code-syntax-number);
   }
 }
 

@@ -51,6 +51,37 @@ describe("MessageContent", () => {
     expect(container.querySelector("article")).toHaveClass("font-sans");
     expect(container.querySelector("strong")).toHaveClass("font-body-semibold");
     expect(container.querySelector("code")).toHaveClass("font-mono");
+    expect(container.querySelector("code")).toHaveClass(
+      "border-theme-code-inline-border",
+    );
+    expect(container.querySelector("code")).toHaveClass(
+      "bg-theme-code-inline-bg",
+    );
+  });
+
+  it("renders fenced code blocks with the foundation-backed code contract", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```javascript\nconst answer = 42;\n```")}
+      />,
+    );
+
+    expect(
+      container.querySelector("pre.message-content-code-block"),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector("pre.message-content-code-block .token.keyword"),
+    ).toHaveTextContent("const");
+  });
+
+  it("uses the same code block contract for raw markdown view", () => {
+    const { container } = renderWithTheme(
+      <MessageContent content={textContent("`code`")} showRaw />,
+    );
+
+    expect(
+      container.querySelector("pre.message-content-code-block"),
+    ).toHaveClass("whitespace-pre-wrap");
   });
 
   it("passes PDF page anchors through to the preview callback for erato-file links", () => {

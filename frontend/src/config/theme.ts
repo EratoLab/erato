@@ -35,6 +35,13 @@ const colors = {
     800: "#92400e",
     900: "#78350f",
   },
+  blue: {
+    50: "#eff6ff",
+    300: "#93c5fd",
+    500: "#3b82f6",
+    700: "#1d4ed8",
+    800: "#1e40af",
+  },
 } as const;
 
 const stateColors = {
@@ -104,6 +111,25 @@ export type ThemeColors = {
     assistant: string;
     hover: string;
     controls: string;
+  };
+  code: {
+    inline: {
+      background: string;
+      foreground: string;
+      border: string;
+    };
+    block: {
+      background: string;
+      foreground: string;
+      border: string;
+    };
+    syntax: {
+      comment: string;
+      keyword: string;
+      string: string;
+      function: string;
+      number: string;
+    };
   };
   overlay: {
     modal: string;
@@ -346,6 +372,25 @@ export const defaultTheme: Theme = {
       hover: stateColors.hover.light,
       controls: colors.neutral[100],
     },
+    code: {
+      inline: {
+        background: colors.neutral[100],
+        foreground: colors.neutral[800],
+        border: colors.neutral[200],
+      },
+      block: {
+        background: "#ffffff",
+        foreground: colors.neutral[800],
+        border: colors.neutral[200],
+      },
+      syntax: {
+        comment: colors.neutral[500],
+        keyword: colors.blue[700],
+        string: colors.green[700],
+        function: colors.amber[800],
+        number: colors.red[700],
+      },
+    },
     overlay: {
       modal: "rgba(17, 24, 39, 0.6)",
     },
@@ -499,6 +544,25 @@ export const darkTheme: Theme = {
       assistant: colors.neutral[800],
       hover: colors.neutral[700],
       controls: colors.neutral[800],
+    },
+    code: {
+      inline: {
+        background: colors.neutral[700],
+        foreground: colors.neutral[100],
+        border: colors.neutral[600],
+      },
+      block: {
+        background: colors.neutral[700],
+        foreground: colors.neutral[100],
+        border: colors.neutral[600],
+      },
+      syntax: {
+        comment: colors.neutral[400],
+        keyword: colors.blue[300],
+        string: colors.green[300],
+        function: colors.amber[300],
+        number: colors.red[300],
+      },
     },
     overlay: {
       modal: "rgba(0, 0, 0, 0.7)",

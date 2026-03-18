@@ -303,6 +303,41 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setCssVariable("--theme-message-hover", theme.colors.message.hover);
     setCssVariable("--theme-message-controls", theme.colors.message.controls);
     setCssVariable("--theme-messageItem-hover", theme.colors.message.hover);
+    setCssVariable(
+      "--theme-code-inline-bg",
+      theme.colors.code.inline.background,
+    );
+    setCssVariable(
+      "--theme-code-inline-fg",
+      theme.colors.code.inline.foreground,
+    );
+    setCssVariable(
+      "--theme-code-inline-border",
+      theme.colors.code.inline.border,
+    );
+    setCssVariable("--theme-code-block-bg", theme.colors.code.block.background);
+    setCssVariable("--theme-code-block-fg", theme.colors.code.block.foreground);
+    setCssVariable("--theme-code-block-border", theme.colors.code.block.border);
+    setCssVariable(
+      "--theme-code-syntax-comment",
+      theme.colors.code.syntax.comment,
+    );
+    setCssVariable(
+      "--theme-code-syntax-keyword",
+      theme.colors.code.syntax.keyword,
+    );
+    setCssVariable(
+      "--theme-code-syntax-string",
+      theme.colors.code.syntax.string,
+    );
+    setCssVariable(
+      "--theme-code-syntax-function",
+      theme.colors.code.syntax.function,
+    );
+    setCssVariable(
+      "--theme-code-syntax-number",
+      theme.colors.code.syntax.number,
+    );
 
     // Radius
     setCssVariable("--theme-radius-base", theme.radius.base);
@@ -366,7 +401,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       "--theme-spacing-dropdown-padding-y",
       theme.spacing.dropdown.paddingY,
     );
-    setCssVariable("--theme-spacing-modal-padding", theme.spacing.modal.padding);
+    setCssVariable(
+      "--theme-spacing-modal-padding",
+      theme.spacing.modal.padding,
+    );
 
     // Elevation
     setCssVariable("--theme-elevation-shell", theme.elevation.shell);
