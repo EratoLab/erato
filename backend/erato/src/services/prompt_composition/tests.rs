@@ -11,9 +11,11 @@ mod test_cases {
         MessageSchema, ToolCallStatus, ToolUse,
     };
     use crate::server::api::v1beta::message_streaming::{FileContent, FileContentsForGeneration};
+    use crate::services::genai::into_openai_request_parts;
     use async_trait::async_trait;
     use eyre::{OptionExt, Report, eyre};
     use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
+    use serde_json::Value as JsonValue;
     use std::collections::HashMap;
 
     // ============================================================================
@@ -313,6 +315,45 @@ mod test_cases {
             system_prompt_langfuse: None,
             model_capabilities: crate::config::ModelCapabilities::default(),
             model_settings: crate::config::ModelSettings::default(),
+        }
+    }
+
+    fn assert_no_orphaned_tool_messages(messages: &[JsonValue]) {
+        let mut last_tool_call_ids = Vec::<String>::new();
+
+        for message in messages {
+            match message.get("role").and_then(|role| role.as_str()) {
+                Some("assistant") => {
+                    last_tool_call_ids = message
+                        .get("tool_calls")
+                        .and_then(|tool_calls| tool_calls.as_array())
+                        .map(|tool_calls| {
+                            tool_calls
+                                .iter()
+                                .filter_map(|tool_call| {
+                                    tool_call
+                                        .get("id")
+                                        .and_then(|tool_call_id| tool_call_id.as_str())
+                                        .map(ToOwned::to_owned)
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                }
+                Some("tool") => {
+                    let tool_call_id = message
+                        .get("tool_call_id")
+                        .and_then(|tool_call_id| tool_call_id.as_str())
+                        .expect("tool messages should carry a tool_call_id");
+                    assert!(
+                        last_tool_call_ids.iter().any(|id| id == tool_call_id),
+                        "tool message for {tool_call_id} must follow an assistant tool_calls message"
+                    );
+                }
+                _ => {
+                    last_tool_call_ids.clear();
+                }
+            }
         }
     }
 
@@ -1807,7 +1848,14 @@ mod test_cases {
             .await
             .expect("Failed to resolve sequence");
 
-        let preserved_tool_use = resolved.messages.iter().find(|msg| {
+        let tool_call_message_index = resolved.messages.iter().position(|msg| {
+            msg.role == MessageRole::Assistant
+                && matches!(
+                    &msg.content,
+                    ContentPart::ToolUse(ToolUse { tool_call_id: id, .. }) if id == &tool_call_id
+                )
+        });
+        let tool_response_message_index = resolved.messages.iter().position(|msg| {
             msg.role == MessageRole::Tool
                 && matches!(
                     &msg.content,
@@ -1816,8 +1864,210 @@ mod test_cases {
         });
 
         assert!(
-            preserved_tool_use.is_some(),
-            "Expected tool response history to be preserved as a tool-role message",
+            tool_call_message_index.is_some(),
+            "Expected tool call history to be preserved as an assistant message",
         );
+        assert!(
+            tool_response_message_index.is_some(),
+            "Expected tool response history to be preserved as a tool message",
+        );
+        assert!(
+            tool_call_message_index < tool_response_message_index,
+            "Tool call history must precede the corresponding tool response",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_history_replays_single_tool_call_as_valid_openai_sequence() {
+        let generation_input = GenerationInputMessages {
+            messages: vec![
+                InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "Find a source".to_string(),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Assistant,
+                    content: ContentPart::ToolUse(ToolUse {
+                        tool_call_id: "call_1".to_string(),
+                        status: ToolCallStatus::Success,
+                        tool_name: "search_documents".to_string(),
+                        progress_message: None,
+                        input: Some(serde_json::json!({ "query": "source" })),
+                        output: None,
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Tool,
+                    content: ContentPart::ToolUse(ToolUse {
+                        tool_call_id: "call_1".to_string(),
+                        status: ToolCallStatus::Success,
+                        tool_name: "search_documents".to_string(),
+                        progress_message: None,
+                        input: None,
+                        output: Some(serde_json::json!({ "results": ["doc-1"] })),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "What did it say?".to_string(),
+                    }),
+                },
+            ],
+        };
+
+        let request = generation_input.into_chat_request();
+        let openai_parts =
+            into_openai_request_parts(&request).expect("Failed to normalize OpenAI request");
+
+        assert_no_orphaned_tool_messages(&openai_parts.messages);
+    }
+
+    #[tokio::test]
+    async fn test_history_replays_two_parallel_tool_calls_as_valid_openai_sequence() {
+        let generation_input = GenerationInputMessages {
+            messages: vec![
+                InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "Gather context".to_string(),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Assistant,
+                    content: ContentPart::ToolUse(ToolUse {
+                        tool_call_id: "call_1".to_string(),
+                        status: ToolCallStatus::Success,
+                        tool_name: "search_documents".to_string(),
+                        progress_message: None,
+                        input: Some(serde_json::json!({ "query": "foo" })),
+                        output: None,
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Tool,
+                    content: ContentPart::ToolUse(ToolUse {
+                        tool_call_id: "call_1".to_string(),
+                        status: ToolCallStatus::Success,
+                        tool_name: "search_documents".to_string(),
+                        progress_message: None,
+                        input: None,
+                        output: Some(serde_json::json!({ "results": ["doc-1"] })),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Assistant,
+                    content: ContentPart::ToolUse(ToolUse {
+                        tool_call_id: "call_2".to_string(),
+                        status: ToolCallStatus::Success,
+                        tool_name: "fetch_metadata".to_string(),
+                        progress_message: None,
+                        input: Some(serde_json::json!({ "id": "doc-1" })),
+                        output: None,
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Tool,
+                    content: ContentPart::ToolUse(ToolUse {
+                        tool_call_id: "call_2".to_string(),
+                        status: ToolCallStatus::Success,
+                        tool_name: "fetch_metadata".to_string(),
+                        progress_message: None,
+                        input: None,
+                        output: Some(serde_json::json!({ "title": "Doc 1" })),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "Answer now".to_string(),
+                    }),
+                },
+            ],
+        };
+
+        let request = generation_input.into_chat_request();
+        let openai_parts =
+            into_openai_request_parts(&request).expect("Failed to normalize OpenAI request");
+
+        assert_no_orphaned_tool_messages(&openai_parts.messages);
+    }
+
+    #[tokio::test]
+    async fn test_history_replays_two_sequential_tool_calls_as_valid_openai_sequence() {
+        let generation_input = GenerationInputMessages {
+            messages: vec![
+                InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "Investigate".to_string(),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Assistant,
+                    content: ContentPart::ToolUse(ToolUse {
+                        tool_call_id: "call_1".to_string(),
+                        status: ToolCallStatus::Success,
+                        tool_name: "search_documents".to_string(),
+                        progress_message: None,
+                        input: Some(serde_json::json!({ "query": "foo" })),
+                        output: None,
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Tool,
+                    content: ContentPart::ToolUse(ToolUse {
+                        tool_call_id: "call_1".to_string(),
+                        status: ToolCallStatus::Success,
+                        tool_name: "search_documents".to_string(),
+                        progress_message: None,
+                        input: None,
+                        output: Some(serde_json::json!({ "results": ["doc-1"] })),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Assistant,
+                    content: ContentPart::ToolUse(ToolUse {
+                        tool_call_id: "call_2".to_string(),
+                        status: ToolCallStatus::Success,
+                        tool_name: "fetch_details".to_string(),
+                        progress_message: None,
+                        input: Some(serde_json::json!({ "id": "doc-1" })),
+                        output: None,
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Tool,
+                    content: ContentPart::ToolUse(ToolUse {
+                        tool_call_id: "call_2".to_string(),
+                        status: ToolCallStatus::Success,
+                        tool_name: "fetch_details".to_string(),
+                        progress_message: None,
+                        input: None,
+                        output: Some(serde_json::json!({ "summary": "done" })),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::Assistant,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "Investigation complete".to_string(),
+                    }),
+                },
+                InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: "Follow up".to_string(),
+                    }),
+                },
+            ],
+        };
+
+        let request = generation_input.into_chat_request();
+        let openai_parts =
+            into_openai_request_parts(&request).expect("Failed to normalize OpenAI request");
+
+        assert_no_orphaned_tool_messages(&openai_parts.messages);
     }
 }

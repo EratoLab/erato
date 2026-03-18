@@ -3,7 +3,7 @@ use crate::models::message::{ContentPart, GenerationInputMessages, InputMessage,
 use eyre::Result;
 use genai::chat::ChatRole as GenAiChatRole;
 use genai::chat::MessageContent as GenAiMessageContent;
-use genai::chat::{ChatMessage, ToolResponse};
+use genai::chat::{ChatMessage, ToolCall, ToolResponse};
 use genai::chat::{ChatOptions, ChatRequest, ReasoningEffort, Verbosity};
 use serde_json::{Value as JsonValue, json};
 use std::sync::Arc;
@@ -55,11 +55,26 @@ impl InputMessage {
         match self.role {
             MessageRole::System => ChatMessage::system(self.content),
             MessageRole::User => ChatMessage::user(self.content),
-            MessageRole::Assistant => ChatMessage::assistant(self.content),
-            MessageRole::Tool => ChatMessage {
-                role: GenAiChatRole::Tool,
-                content: self.content.into(),
-                options: None,
+            MessageRole::Assistant => match self.content {
+                ContentPart::ToolUse(tool_use) => ChatMessage::from(vec![ToolCall {
+                    call_id: tool_use.tool_call_id,
+                    fn_name: tool_use.tool_name,
+                    fn_arguments: tool_use.input.unwrap_or_else(|| json!({})),
+                    thought_signatures: None,
+                }]),
+                content => ChatMessage::assistant(content),
+            },
+            MessageRole::Tool => match self.content {
+                ContentPart::ToolUse(tool_use) => ChatMessage::from(ToolResponse {
+                    call_id: tool_use.tool_call_id,
+                    content: serde_json::to_string(&tool_use.output)
+                        .expect("Failed to serialize tool output"),
+                }),
+                content => ChatMessage {
+                    role: GenAiChatRole::Tool,
+                    content: content.into(),
+                    options: None,
+                },
             },
         }
     }
