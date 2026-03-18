@@ -451,39 +451,21 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setCssVariable("--theme-line-height-xl", typography.lineHeight.xl);
     setCssVariable("--theme-line-height-2xl", typography.lineHeight["2xl"]);
 
-    setCssVariable(
-      "--theme-letter-spacing-xs",
-      typography.letterSpacing.xs,
-    );
-    setCssVariable(
-      "--theme-letter-spacing-sm",
-      typography.letterSpacing.sm,
-    );
+    setCssVariable("--theme-letter-spacing-xs", typography.letterSpacing.xs);
+    setCssVariable("--theme-letter-spacing-sm", typography.letterSpacing.sm);
     setCssVariable(
       "--theme-letter-spacing-base",
       typography.letterSpacing.base,
     );
-    setCssVariable(
-      "--theme-letter-spacing-lg",
-      typography.letterSpacing.lg,
-    );
-    setCssVariable(
-      "--theme-letter-spacing-xl",
-      typography.letterSpacing.xl,
-    );
+    setCssVariable("--theme-letter-spacing-lg", typography.letterSpacing.lg);
+    setCssVariable("--theme-letter-spacing-xl", typography.letterSpacing.xl);
     setCssVariable(
       "--theme-letter-spacing-2xl",
       typography.letterSpacing["2xl"],
     );
 
-    setCssVariable(
-      "--theme-font-weight-normal",
-      typography.fontWeight.normal,
-    );
-    setCssVariable(
-      "--theme-font-weight-medium",
-      typography.fontWeight.medium,
-    );
+    setCssVariable("--theme-font-weight-normal", typography.fontWeight.normal);
+    setCssVariable("--theme-font-weight-medium", typography.fontWeight.medium);
     setCssVariable(
       "--theme-font-weight-semibold",
       typography.fontWeight.semibold,

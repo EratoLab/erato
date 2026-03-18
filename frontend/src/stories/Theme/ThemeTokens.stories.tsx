@@ -78,11 +78,7 @@ const TokenSection = ({
     <section style={{ marginBottom: "2rem" }}>
       <h3>{title}</h3>
       {leafPaths.map((path) => (
-        <TokenDisplay
-          key={path.join(".")}
-          theme={theme}
-          tokenPath={path}
-        />
+        <TokenDisplay key={path.join(".")} theme={theme} tokenPath={path} />
       ))}
     </section>
   );

@@ -36,13 +36,15 @@ describe("MessageContent", () => {
   it("adopts the theme typography hooks for headings and inline code", () => {
     const { container } = renderWithTheme(
       <MessageContent
-        content={textContent("# Title\n\n## Section\n\nText with **strong** and `code`.")}
+        content={textContent(
+          "# Title\n\n## Section\n\nText with **strong** and `code`.",
+        )}
       />,
     );
 
-    expect(screen.getByRole("heading", { level: 1, name: "Title" })).toHaveClass(
-      "font-heading-bold",
-    );
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Title" }),
+    ).toHaveClass("font-heading-bold");
     expect(
       screen.getByRole("heading", { level: 2, name: "Section" }),
     ).toHaveClass("font-heading");
