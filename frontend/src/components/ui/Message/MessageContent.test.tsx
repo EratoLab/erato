@@ -92,6 +92,22 @@ describe("MessageContent", () => {
     ).not.toHaveAttribute("node");
   });
 
+  it("renders single-line untagged fenced code with block styling instead of inline code styling", () => {
+    const { container } = renderWithTheme(
+      <MessageContent content={textContent("```\nsingle line only\n```")} />,
+    );
+
+    const blockCode = container.querySelector(
+      "pre.message-content-code-block code",
+    );
+
+    expect(container.querySelectorAll("pre")).toHaveLength(1);
+    expect(blockCode).toHaveTextContent("single line only");
+    expect(blockCode).not.toHaveClass("border-theme-code-inline-border");
+    expect(blockCode).not.toHaveClass("bg-theme-code-inline-bg");
+    expect(blockCode).not.toHaveAttribute("node");
+  });
+
   it("uses the same code block contract for raw markdown view", () => {
     const { container } = renderWithTheme(
       <MessageContent content={textContent("`code`")} showRaw />,

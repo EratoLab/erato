@@ -27,6 +27,58 @@ interface MessageContentProps {
   onFileLinkPreview?: (file: FileUploadItem) => void;
 }
 
+const INLINE_CODE_CLASS_NAME =
+  "rounded-md border border-theme-code-inline-border bg-theme-code-inline-bg px-1.5 py-0.5 font-mono text-sm text-theme-code-inline-fg";
+const BlockCodeContext = React.createContext(false);
+type MarkdownCodeProps = React.ComponentPropsWithoutRef<"code"> & {
+  node?: unknown;
+};
+type MarkdownPreProps = React.ComponentPropsWithoutRef<"pre"> & {
+  node?: unknown;
+};
+
+function MarkdownPre({ node: _node, children, ...props }: MarkdownPreProps) {
+  return (
+    <pre className="message-content-code-block" {...props}>
+      <BlockCodeContext.Provider value>{children}</BlockCodeContext.Provider>
+    </pre>
+  );
+}
+
+function MarkdownCode({
+  node: _node,
+  className,
+  children,
+  ...props
+}: MarkdownCodeProps) {
+  const isBlockCode = React.useContext(BlockCodeContext);
+  const codeContent = String(children).replace(/\n$/, "");
+  const match = /language-(\w+)/.exec(className ?? "");
+  const language = match ? match[1] : "";
+
+  if (isBlockCode && language) {
+    return (
+      <SyntaxHighlighter
+        useInlineStyles={false}
+        language={language}
+        PreTag="div"
+      >
+        {codeContent}
+      </SyntaxHighlighter>
+    );
+  }
+
+  if (isBlockCode) {
+    return <code {...props}>{codeContent}</code>;
+  }
+
+  return (
+    <code className={INLINE_CODE_CLASS_NAME} {...props}>
+      {children}
+    </code>
+  );
+}
+
 const getPreviewUrl = (
   file: Pick<FileUploadItem, "preview_url">,
 ): string | undefined =>
@@ -164,45 +216,8 @@ export const MessageContent = memo(function MessageContent({
 
   // Define custom components for react-markdown
   const markdownComponents: Partial<Components> = {
-    pre({ node: _node, children, ...props }) {
-      return (
-        <pre className="message-content-code-block" {...props}>
-          {children}
-        </pre>
-      );
-    },
-    // Custom code block rendering with syntax highlighting
-    code({ node: _node, className, children, ...props }) {
-      const codeContent = String(children).replace(/\n$/, "");
-      const match = /language-(\w+)/.exec(className ?? "");
-      const language = match ? match[1] : "";
-      const isBlockCode = Boolean(language) || codeContent.includes("\n");
-
-      if (isBlockCode && language) {
-        return (
-          <SyntaxHighlighter
-            useInlineStyles={false}
-            language={language}
-            PreTag="div"
-          >
-            {codeContent}
-          </SyntaxHighlighter>
-        );
-      }
-
-      if (isBlockCode) {
-        return <code {...props}>{codeContent}</code>;
-      }
-
-      return (
-        <code
-          className="rounded-md border border-theme-code-inline-border bg-theme-code-inline-bg px-1.5 py-0.5 font-mono text-sm text-theme-code-inline-fg"
-          {...props}
-        >
-          {children}
-        </code>
-      );
-    },
+    pre: MarkdownPre,
+    code: MarkdownCode,
     // Ensure links open in new tab
     a({ href, id, children, ...props }) {
       const rewrittenHref = rewriteFootnoteValue(href, messageId);
