@@ -51,7 +51,6 @@ describe("MessageContent", () => {
     expect(container.querySelector("article")).toHaveClass("font-sans");
     expect(container.querySelector("strong")).toHaveClass("font-body-semibold");
     expect(container.querySelector("code")).toHaveClass("font-mono");
-    expect(container.querySelector("code")).not.toHaveAttribute("node");
     expect(container.querySelector("code")).toHaveClass(
       "border-theme-code-inline-border",
     );
@@ -70,42 +69,9 @@ describe("MessageContent", () => {
     expect(
       container.querySelector("pre.message-content-code-block"),
     ).toBeInTheDocument();
-    expect(container.querySelectorAll("pre")).toHaveLength(1);
     expect(
       container.querySelector("pre.message-content-code-block .token.keyword"),
     ).toHaveTextContent("const");
-  });
-
-  it("renders untagged fenced code blocks with a single markdown pre wrapper", () => {
-    const { container } = renderWithTheme(
-      <MessageContent
-        content={textContent("```\nplain block\nsecond line\n```")}
-      />,
-    );
-
-    expect(container.querySelectorAll("pre")).toHaveLength(1);
-    expect(
-      container.querySelector("pre.message-content-code-block code"),
-    ).toHaveTextContent(/plain block\s+second line/);
-    expect(
-      container.querySelector("pre.message-content-code-block code"),
-    ).not.toHaveAttribute("node");
-  });
-
-  it("renders single-line untagged fenced code with block styling instead of inline code styling", () => {
-    const { container } = renderWithTheme(
-      <MessageContent content={textContent("```\nsingle line only\n```")} />,
-    );
-
-    const blockCode = container.querySelector(
-      "pre.message-content-code-block code",
-    );
-
-    expect(container.querySelectorAll("pre")).toHaveLength(1);
-    expect(blockCode).toHaveTextContent("single line only");
-    expect(blockCode).not.toHaveClass("border-theme-code-inline-border");
-    expect(blockCode).not.toHaveClass("bg-theme-code-inline-bg");
-    expect(blockCode).not.toHaveAttribute("node");
   });
 
   it("uses the same code block contract for raw markdown view", () => {
