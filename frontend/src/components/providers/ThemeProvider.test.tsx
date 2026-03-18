@@ -247,6 +247,24 @@ describe("ThemeProvider", () => {
                   width: "20rem",
                 },
               },
+              typography: {
+                fontFamily: {
+                  heading: "IBM Plex Sans",
+                  mono: "IBM Plex Mono",
+                },
+                fontSize: {
+                  base: "1.0625rem",
+                },
+                lineHeight: {
+                  base: "1.625rem",
+                },
+                letterSpacing: {
+                  xl: "-0.02em",
+                },
+                fontWeight: {
+                  semibold: "650",
+                },
+              },
             },
           },
         }) satisfies CustomThemeConfig,
@@ -316,6 +334,30 @@ describe("ThemeProvider", () => {
         "--theme-layout-sidebar-width",
       ),
     ).toBe("20rem");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-font-heading"),
+    ).toBe("IBM Plex Sans");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-font-mono"),
+    ).toBe("IBM Plex Mono");
+    expect(
+      document.documentElement.style.getPropertyValue("--theme-font-size-base"),
+    ).toBe("1.0625rem");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-line-height-base",
+      ),
+    ).toBe("1.625rem");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-letter-spacing-xl",
+      ),
+    ).toBe("-0.02em");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-font-weight-semibold",
+      ),
+    ).toBe("650");
   });
 
   it("maps legacy theme fields into the expanded token surface", async () => {

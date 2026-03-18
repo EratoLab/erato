@@ -95,7 +95,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       <div
         ref={modalRef}
         className={clsx(
-          "theme-transition relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden",
+          "theme-transition relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden font-sans",
           // Responsive padding - add margin on mobile
           "mx-4",
           "focus-ring",
@@ -113,7 +113,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
           <div className="shrink-0 border-b border-theme-border p-4">
             <h2
               id="modal-title"
-              className="text-lg font-semibold text-theme-fg-primary"
+              className="font-heading text-lg font-semibold text-theme-fg-primary"
             >
               {title}
             </h2>

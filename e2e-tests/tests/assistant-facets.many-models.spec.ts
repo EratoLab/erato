@@ -98,20 +98,20 @@ test.describe("Assistant facets", () => {
     "assistant facet defaults are applied to chats and remain editable by default",
     { tag: TAG_NO_CI },
     async ({ page }) => {
-    const facetsResponse = await getFacets(page);
-    const facet = facetsResponse.facets?.[0];
-    expect(facet).toBeDefined();
+      const facetsResponse = await getFacets(page);
+      const facet = facetsResponse.facets?.[0];
+      expect(facet).toBeDefined();
 
-    const assistantName = buildAssistantName("Assistant-facets-editable");
-    await createAssistantWithFacet(page, assistantName, facet!);
-    await openAssistantChat(page, assistantName);
+      const assistantName = buildAssistantName("Assistant-facets-editable");
+      await createAssistantWithFacet(page, assistantName, facet!);
+      await openAssistantChat(page, assistantName);
 
-    const selectedFacet = page.getByTestId(`selected-facet-${facet!.id}`);
-    await expect(selectedFacet).toBeVisible();
-    await expect(selectedFacet).toBeEnabled();
+      const selectedFacet = page.getByTestId(`selected-facet-${facet!.id}`);
+      await expect(selectedFacet).toBeVisible();
+      await expect(selectedFacet).toBeEnabled();
 
-    await selectedFacet.click();
-    await expect(selectedFacet).toHaveCount(0);
+      await selectedFacet.click();
+      await expect(selectedFacet).toHaveCount(0);
     },
   );
 
@@ -119,20 +119,22 @@ test.describe("Assistant facets", () => {
     "assistant facet enforcement locks facet selection in derived chats",
     { tag: TAG_NO_CI },
     async ({ page }) => {
-    const facetsResponse = await getFacets(page);
-    const facet = facetsResponse.facets?.[0];
-    expect(facet).toBeDefined();
+      const facetsResponse = await getFacets(page);
+      const facet = facetsResponse.facets?.[0];
+      expect(facet).toBeDefined();
 
-    const assistantName = buildAssistantName("Assistant-facets-locked");
-    await createAssistantWithFacet(page, assistantName, facet!, {
-      enforceFacetSettings: true,
-    });
-    await openAssistantChat(page, assistantName);
+      const assistantName = buildAssistantName("Assistant-facets-locked");
+      await createAssistantWithFacet(page, assistantName, facet!, {
+        enforceFacetSettings: true,
+      });
+      await openAssistantChat(page, assistantName);
 
-    await expect(page.getByTestId(`selected-facet-${facet!.id}`)).toBeDisabled();
-    await expect(
-      page.locator('button[aria-controls="facet-selector-dropdown"]'),
-    ).toBeDisabled();
+      await expect(
+        page.getByTestId(`selected-facet-${facet!.id}`),
+      ).toBeDisabled();
+      await expect(
+        page.locator('button[aria-controls="facet-selector-dropdown"]'),
+      ).toBeDisabled();
     },
   );
 
@@ -140,41 +142,41 @@ test.describe("Assistant facets", () => {
     "assistant edit handles removed configured facets gracefully",
     { tag: TAG_NO_CI },
     async ({ page }) => {
-    const facetsResponse = await getFacets(page);
-    const facet = facetsResponse.facets?.[0];
-    expect(facet).toBeDefined();
+      const facetsResponse = await getFacets(page);
+      const facet = facetsResponse.facets?.[0];
+      expect(facet).toBeDefined();
 
-    const assistantName = buildAssistantName("Assistant-facets-missing");
-    await createAssistantWithFacet(page, assistantName, facet!);
-    const assistantId = await getAssistantIdByName(page, assistantName);
+      const assistantName = buildAssistantName("Assistant-facets-missing");
+      await createAssistantWithFacet(page, assistantName, facet!);
+      const assistantId = await getAssistantIdByName(page, assistantName);
 
-    await page.route("**/api/v1beta/me/facets", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          ...facetsResponse,
-          facets: (facetsResponse.facets ?? []).filter(
-            (candidateFacet) => candidateFacet.id !== facet!.id,
-          ),
-        }),
+      await page.route("**/api/v1beta/me/facets", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ...facetsResponse,
+            facets: (facetsResponse.facets ?? []).filter(
+              (candidateFacet) => candidateFacet.id !== facet!.id,
+            ),
+          }),
+        });
       });
-    });
 
-    await page.goto(`/assistants/${assistantId}/edit`);
+      await page.goto(`/assistants/${assistantId}/edit`);
 
-    await expect(
-      page.getByText(
-        /some previously configured tools are no longer available and were removed from this assistant/i,
-      ),
-    ).toBeVisible();
+      await expect(
+        page.getByText(
+          /some previously configured tools are no longer available and were removed from this assistant/i,
+        ),
+      ).toBeVisible();
 
-    await page.getByRole("button", { name: /save changes/i }).click();
-    await expect(page.getByText(/assistant updated successfully/i)).toBeVisible(
-      {
+      await page.getByRole("button", { name: /save changes/i }).click();
+      await expect(
+        page.getByText(/assistant updated successfully/i),
+      ).toBeVisible({
         timeout: 5000,
-      },
-    );
+      });
     },
   );
 });

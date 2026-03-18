@@ -246,6 +246,10 @@ Create a theme.json file with the following structure:
         },
         "overlay": {
           "modal": "rgba(15, 23, 42, 0.5)"
+        },
+        "focus": {
+          "ring": "#475569",
+          "errorRing": "rgba(220, 38, 38, 0.24)"
         }
       },
       "radius": {
@@ -261,6 +265,26 @@ Create a theme.json file with the following structure:
       "layout": {
         "chat": {
           "contentMaxWidth": "52rem"
+        }
+      },
+      "typography": {
+        "fontFamily": {
+          "heading": "\"Avenir Next\", ui-sans-serif, system-ui, sans-serif",
+          "mono": "\"Avenir Next Mono\", ui-monospace, monospace"
+        },
+        "fontSize": {
+          "base": "1rem",
+          "2xl": "1.5rem"
+        },
+        "lineHeight": {
+          "base": "1.5rem",
+          "2xl": "2rem"
+        },
+        "letterSpacing": {
+          "2xl": "-0.01em"
+        },
+        "fontWeight": {
+          "semibold": "600"
         }
       }
     },
@@ -284,6 +308,9 @@ The typed token surface is grouped semantically:
 - `colors.shell` for app/page/sidebar/modal/dropdown surfaces
 - `colors.message` for user/assistant/hover/control surfaces
 - `colors.overlay` for backdrops such as modal overlays
+- `colors.focus` for default and error-state focus rings
+- `typography.fontFamily` for body, heading, emphasis, and mono/code fonts
+- `typography.fontSize`, `typography.lineHeight`, `typography.letterSpacing`, and `typography.fontWeight` for the shared `xs`/`sm`/`base`/`lg`/`xl`/`2xl` scale
 - `radius`, `spacing`, `elevation`, and `layout` for reusable shell styling primitives
 
 Existing theme JSON can omit these new groups. When a theme does not provide the new token groups yet, the corresponding CSS variables fall back to the built-in theme defaults until they are explicitly overridden.

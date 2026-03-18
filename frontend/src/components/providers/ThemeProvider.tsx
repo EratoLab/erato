@@ -240,14 +240,6 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     const setCssVariable = (name: string, value: string) => {
       root.style.setProperty(name, value);
     };
-    const setOptionalCssVariable = (name: string, value?: string) => {
-      if (value) {
-        root.style.setProperty(name, value);
-        return;
-      }
-
-      root.style.removeProperty(name);
-    };
 
     // Background colors
     setCssVariable("--theme-bg-primary", theme.colors.background.primary);
@@ -432,23 +424,53 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setCssVariable("--theme-focus-ring", theme.colors.focus.ring);
     setCssVariable("--theme-focus-ring-error", theme.colors.focus.errorRing);
 
-    // Typography (font families)
-    setOptionalCssVariable(
-      "--theme-font-body",
-      theme.typography?.fontFamily?.body,
-    );
-    setOptionalCssVariable(
-      "--theme-font-heading",
-      theme.typography?.fontFamily?.heading,
-    );
-    setOptionalCssVariable(
-      "--theme-font-semibold",
-      theme.typography?.fontFamily?.semibold,
-    );
-    setOptionalCssVariable(
+    const typography = theme.typography ?? defaultTheme.typography;
+    if (!typography) return;
+
+    // Typography
+    setCssVariable("--theme-font-body", typography.fontFamily.body);
+    setCssVariable("--theme-font-heading", typography.fontFamily.heading);
+    setCssVariable("--theme-font-semibold", typography.fontFamily.semibold);
+    setCssVariable(
       "--theme-font-heading-bold",
-      theme.typography?.fontFamily?.headingBold,
+      typography.fontFamily.headingBold,
     );
+    setCssVariable("--theme-font-mono", typography.fontFamily.mono);
+
+    setCssVariable("--theme-font-size-xs", typography.fontSize.xs);
+    setCssVariable("--theme-font-size-sm", typography.fontSize.sm);
+    setCssVariable("--theme-font-size-base", typography.fontSize.base);
+    setCssVariable("--theme-font-size-lg", typography.fontSize.lg);
+    setCssVariable("--theme-font-size-xl", typography.fontSize.xl);
+    setCssVariable("--theme-font-size-2xl", typography.fontSize["2xl"]);
+
+    setCssVariable("--theme-line-height-xs", typography.lineHeight.xs);
+    setCssVariable("--theme-line-height-sm", typography.lineHeight.sm);
+    setCssVariable("--theme-line-height-base", typography.lineHeight.base);
+    setCssVariable("--theme-line-height-lg", typography.lineHeight.lg);
+    setCssVariable("--theme-line-height-xl", typography.lineHeight.xl);
+    setCssVariable("--theme-line-height-2xl", typography.lineHeight["2xl"]);
+
+    setCssVariable("--theme-letter-spacing-xs", typography.letterSpacing.xs);
+    setCssVariable("--theme-letter-spacing-sm", typography.letterSpacing.sm);
+    setCssVariable(
+      "--theme-letter-spacing-base",
+      typography.letterSpacing.base,
+    );
+    setCssVariable("--theme-letter-spacing-lg", typography.letterSpacing.lg);
+    setCssVariable("--theme-letter-spacing-xl", typography.letterSpacing.xl);
+    setCssVariable(
+      "--theme-letter-spacing-2xl",
+      typography.letterSpacing["2xl"],
+    );
+
+    setCssVariable("--theme-font-weight-normal", typography.fontWeight.normal);
+    setCssVariable("--theme-font-weight-medium", typography.fontWeight.medium);
+    setCssVariable(
+      "--theme-font-weight-semibold",
+      typography.fontWeight.semibold,
+    );
+    setCssVariable("--theme-font-weight-bold", typography.fontWeight.bold);
   }, [theme]);
 
   const toggleTheme = (mode: ThemeMode) => {

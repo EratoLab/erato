@@ -196,6 +196,27 @@ export type ThemeLayout = {
   };
 };
 
+export type ThemeTypographyScale = "xs" | "sm" | "base" | "lg" | "xl" | "2xl";
+
+export type ThemeTypography = {
+  fontFamily: {
+    body: string;
+    heading: string;
+    semibold: string;
+    headingBold: string;
+    mono: string;
+  };
+  fontSize: Record<ThemeTypographyScale, string>;
+  lineHeight: Record<ThemeTypographyScale, string>;
+  letterSpacing: Record<ThemeTypographyScale, string>;
+  fontWeight: {
+    normal: string;
+    medium: string;
+    semibold: string;
+    bold: string;
+  };
+};
+
 export type Theme = {
   colors: ThemeColors;
   borderRadius: string;
@@ -203,14 +224,7 @@ export type Theme = {
   spacing: ThemeSpacing;
   elevation: ThemeElevation;
   layout: ThemeLayout;
-  typography?: {
-    fontFamily?: {
-      body?: string;
-      heading?: string;
-      semibold?: string;
-      headingBold?: string;
-    };
-  };
+  typography?: ThemeTypography;
 };
 
 export type DeepPartial<T> = {
@@ -230,6 +244,46 @@ export type ThemeOverride = DeepPartial<Theme> & {
 };
 
 const baseRadius = "0.375rem";
+
+const defaultTypography: ThemeTypography = {
+  fontFamily: {
+    body: "Geist Variable",
+    heading: "Geist Variable",
+    semibold: "Geist Variable",
+    headingBold: "Geist Variable",
+    mono: "Geist Mono Variable",
+  },
+  fontSize: {
+    xs: "0.75rem",
+    sm: "0.875rem",
+    base: "1rem",
+    lg: "1.125rem",
+    xl: "1.25rem",
+    "2xl": "1.5rem",
+  },
+  lineHeight: {
+    xs: "1rem",
+    sm: "1.25rem",
+    base: "1.5rem",
+    lg: "1.75rem",
+    xl: "1.75rem",
+    "2xl": "2rem",
+  },
+  letterSpacing: {
+    xs: "0em",
+    sm: "0em",
+    base: "0em",
+    lg: "0em",
+    xl: "0em",
+    "2xl": "0em",
+  },
+  fontWeight: {
+    normal: "400",
+    medium: "500",
+    semibold: "600",
+    bold: "700",
+  },
+};
 
 export const defaultTheme: Theme = {
   colors: {
@@ -370,6 +424,7 @@ export const defaultTheme: Theme = {
       width: "17.5rem",
     },
   },
+  typography: defaultTypography,
 };
 
 export const darkTheme: Theme = {
