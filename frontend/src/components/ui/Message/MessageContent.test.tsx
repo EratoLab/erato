@@ -1,7 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import {
+  THEME_MODE_LOCAL_STORAGE_KEY,
+  ThemeProvider,
+} from "@/components/providers/ThemeProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { MessageContent } from "./MessageContent";
@@ -33,6 +36,10 @@ const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
 });
 
 describe("MessageContent", () => {
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
   it("adopts the theme typography hooks for headings and inline code", () => {
     const { container } = renderWithTheme(
       <MessageContent
@@ -64,11 +71,15 @@ describe("MessageContent", () => {
     );
   });
 
-  it("renders fenced code blocks with the foundation-backed code contract", () => {
+  it("renders fenced code blocks with the built-in Prism light theme", () => {
     const { container } = renderWithTheme(
       <MessageContent
         content={textContent("```javascript\nconst answer = 42;\n```")}
       />,
+    );
+
+    const themedBlock = container.querySelector(
+      "pre.message-content-code-block > div",
     );
 
     expect(
@@ -76,12 +87,20 @@ describe("MessageContent", () => {
     ).toBeInTheDocument();
     expect(container.querySelectorAll("pre")).toHaveLength(1);
     expect(container.querySelector("pre pre")).toBeNull();
+    expect(themedBlock).toHaveAttribute(
+      "style",
+      expect.stringContaining("background-color: white;"),
+    );
+    expect(themedBlock).toHaveAttribute(
+      "style",
+      expect.stringContaining("margin: 0px;"),
+    );
     expect(
-      container.querySelector("pre.message-content-code-block .token.keyword"),
-    ).toHaveTextContent("const");
+      container.querySelector("pre.message-content-code-block code"),
+    ).toHaveTextContent("const answer = 42;");
   });
 
-  it("renders untagged fenced code blocks with a single pre wrapper", () => {
+  it("uses the same Prism block renderer for untagged fenced code", () => {
     const { container } = renderWithTheme(
       <MessageContent
         content={textContent(
@@ -92,6 +111,9 @@ describe("MessageContent", () => {
 
     expect(container.querySelectorAll("pre")).toHaveLength(1);
     expect(container.querySelector("pre pre")).toBeNull();
+    expect(
+      container.querySelector("pre.message-content-code-block > div"),
+    ).toBeInTheDocument();
     expect(
       container.querySelector("pre.message-content-code-block code"),
     ).toHaveTextContent(
@@ -115,10 +137,36 @@ describe("MessageContent", () => {
 
     expect(container.querySelectorAll("pre")).toHaveLength(1);
     expect(container.querySelector("pre pre")).toBeNull();
+    expect(
+      container.querySelector("pre.message-content-code-block > div"),
+    ).toBeInTheDocument();
     expect(blockCode).toHaveTextContent("single line of untagged code");
     expect(blockCode).not.toHaveClass("border-theme-code-inline-border");
     expect(blockCode).not.toHaveClass("bg-theme-code-inline-bg");
     expect(blockCode).not.toHaveAttribute("node");
+  });
+
+  it("switches fenced code blocks to Prism Dark+ in dark mode", () => {
+    window.localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, "dark");
+
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```javascript\nconst answer = 42;\n```")}
+      />,
+    );
+
+    expect(
+      container.querySelector("pre.message-content-code-block > div"),
+    ).toHaveAttribute(
+      "style",
+      expect.stringContaining("background: rgb(30, 30, 30);"),
+    );
+    expect(
+      container.querySelector("pre.message-content-code-block > div"),
+    ).toHaveAttribute(
+      "style",
+      expect.stringContaining("color: rgb(212, 212, 212);"),
+    );
   });
 
   it("uses the same code block contract for raw markdown view", () => {
@@ -127,7 +175,7 @@ describe("MessageContent", () => {
     );
 
     expect(
-      container.querySelector("pre.message-content-code-block"),
+      container.querySelector("pre.message-content-raw-block"),
     ).toHaveClass("whitespace-pre-wrap");
   });
 

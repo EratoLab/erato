@@ -448,6 +448,15 @@ body {
   pre.message-content-code-block {
     margin-block: 1rem;
     overflow-x: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+  }
+
+  pre.message-content-raw-block {
+    margin-block: 1rem;
+    overflow-x: auto;
     border: 1px solid var(--theme-code-block-border);
     border-radius: var(--theme-radius-message);
     background: var(--theme-code-block-bg);
@@ -459,8 +468,7 @@ body {
     letter-spacing: var(--theme-letter-spacing-sm);
   }
 
-  pre.message-content-code-block code,
-  pre.message-content-code-block code[class*="language-"] {
+  pre.message-content-raw-block code {
     display: block;
     background: transparent;
     color: inherit;
@@ -470,41 +478,9 @@ body {
     letter-spacing: inherit;
   }
 
-  pre.message-content-code-block > div {
+  pre.message-content-code-block > div,
+  pre.message-content-raw-block > code {
     min-width: max-content;
-  }
-
-  pre.message-content-code-block .token.comment,
-  pre.message-content-code-block .token.prolog,
-  pre.message-content-code-block .token.doctype,
-  pre.message-content-code-block .token.cdata {
-    color: var(--theme-code-syntax-comment);
-  }
-
-  pre.message-content-code-block .token.keyword,
-  pre.message-content-code-block .token.atrule,
-  pre.message-content-code-block .token.tag,
-  pre.message-content-code-block .token.selector {
-    color: var(--theme-code-syntax-keyword);
-  }
-
-  pre.message-content-code-block .token.string,
-  pre.message-content-code-block .token.char,
-  pre.message-content-code-block .token.attr-value,
-  pre.message-content-code-block .token.regex {
-    color: var(--theme-code-syntax-string);
-  }
-
-  pre.message-content-code-block .token.function,
-  pre.message-content-code-block .token.class-name {
-    color: var(--theme-code-syntax-function);
-  }
-
-  pre.message-content-code-block .token.number,
-  pre.message-content-code-block .token.boolean,
-  pre.message-content-code-block .token.constant,
-  pre.message-content-code-block .token.symbol {
-    color: var(--theme-code-syntax-number);
   }
 }
 
