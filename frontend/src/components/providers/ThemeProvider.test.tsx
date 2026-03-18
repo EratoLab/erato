@@ -223,6 +223,9 @@ describe("ThemeProvider", () => {
                   page: "#f5f3ff",
                   modal: "#ffffff",
                 },
+                focus: {
+                  errorRing: "rgba(127, 29, 29, 0.24)",
+                },
                 message: {
                   assistant: "#ede9fe",
                 },
@@ -282,6 +285,11 @@ describe("ThemeProvider", () => {
     expect(
       document.documentElement.style.getPropertyValue("--theme-shell-modal"),
     ).toBe("#ffffff");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-focus-ring-error",
+      ),
+    ).toBe("rgba(127, 29, 29, 0.24)");
     expect(
       document.documentElement.style.getPropertyValue(
         "--theme-message-assistant",

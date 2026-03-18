@@ -102,7 +102,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             // Background and border
             "border bg-theme-bg-secondary",
             error
-              ? "border-theme-error-border focus:border-theme-error-border focus:ring-2 focus:ring-red-500/20"
+              ? "border-theme-error-border focus:border-theme-error-border focus:ring-theme-focus-error"
               : "border-theme-border focus:border-theme-border-focus focus:ring-theme-focus",
             // Focus styles
             "focus:outline-none focus:ring-2",

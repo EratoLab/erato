@@ -29,7 +29,7 @@ function restoreDescriptor(
   Reflect.deleteProperty(HTMLTextAreaElement.prototype, property);
 }
 
-describe("Input geometry tokens", () => {
+describe("Input tokens", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     restoreDescriptor("offsetHeight", originalOffsetHeightDescriptor);
@@ -61,6 +61,24 @@ describe("Input geometry tokens", () => {
     expect(textarea.className).toContain(
       "[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
     );
+  });
+
+  it("uses the themed error focus ring for Input", () => {
+    render(<Input aria-label="Name" error="Required" />);
+
+    const input = screen.getByRole("textbox", { name: "Name" });
+
+    expect(input.className).toContain("focus:ring-theme-focus-error");
+    expect(input.className).not.toContain("focus:ring-red-500/20");
+  });
+
+  it("uses the themed error focus ring for Textarea", () => {
+    render(<Textarea aria-label="Notes" error="Required" />);
+
+    const textarea = screen.getByRole("textbox", { name: "Notes" });
+
+    expect(textarea.className).toContain("focus:ring-theme-focus-error");
+    expect(textarea.className).not.toContain("focus:ring-red-500/20");
   });
 
   it("sizes textarea auto-resize from rendered row metrics", () => {

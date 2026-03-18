@@ -430,6 +430,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
     // Focus ring
     setCssVariable("--theme-focus-ring", theme.colors.focus.ring);
+    setCssVariable("--theme-focus-ring-error", theme.colors.focus.errorRing);
 
     // Typography (font families)
     setOptionalCssVariable(
