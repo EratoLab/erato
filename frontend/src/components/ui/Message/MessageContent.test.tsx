@@ -48,9 +48,14 @@ describe("MessageContent", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Section" }),
     ).toHaveClass("font-heading");
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Title" }),
+    ).not.toHaveAttribute("node");
     expect(container.querySelector("article")).toHaveClass("font-sans");
+    expect(container.querySelector("p")).not.toHaveAttribute("node");
     expect(container.querySelector("strong")).toHaveClass("font-body-semibold");
     expect(container.querySelector("code")).toHaveClass("font-mono");
+    expect(container.querySelector("code")).not.toHaveAttribute("node");
     expect(container.querySelector("code")).toHaveClass(
       "border-theme-code-inline-border",
     );
@@ -69,9 +74,51 @@ describe("MessageContent", () => {
     expect(
       container.querySelector("pre.message-content-code-block"),
     ).toBeInTheDocument();
+    expect(container.querySelectorAll("pre")).toHaveLength(1);
+    expect(container.querySelector("pre pre")).toBeNull();
     expect(
       container.querySelector("pre.message-content-code-block .token.keyword"),
     ).toHaveTextContent("const");
+  });
+
+  it("renders untagged fenced code blocks with a single pre wrapper", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "```\nline one of untagged code\nline two of untagged code\n```",
+        )}
+      />,
+    );
+
+    expect(container.querySelectorAll("pre")).toHaveLength(1);
+    expect(container.querySelector("pre pre")).toBeNull();
+    expect(
+      container.querySelector("pre.message-content-code-block code"),
+    ).toHaveTextContent(
+      /line one of untagged code\s+line two of untagged code/,
+    );
+    expect(
+      container.querySelector("pre.message-content-code-block code"),
+    ).not.toHaveAttribute("node");
+  });
+
+  it("treats single-line fenced code as block code instead of inline code", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("```\nsingle line of untagged code\n```")}
+      />,
+    );
+
+    const blockCode = container.querySelector(
+      "pre.message-content-code-block code",
+    );
+
+    expect(container.querySelectorAll("pre")).toHaveLength(1);
+    expect(container.querySelector("pre pre")).toBeNull();
+    expect(blockCode).toHaveTextContent("single line of untagged code");
+    expect(blockCode).not.toHaveClass("border-theme-code-inline-border");
+    expect(blockCode).not.toHaveClass("bg-theme-code-inline-bg");
+    expect(blockCode).not.toHaveAttribute("node");
   });
 
   it("uses the same code block contract for raw markdown view", () => {
