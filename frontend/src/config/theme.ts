@@ -68,6 +68,13 @@ export type ThemeColors = {
     muted: string;
     accent: string;
   };
+  action: {
+    primary: {
+      background: string;
+      foreground: string;
+      hover: string;
+    };
+  };
   border: {
     default: string;
     primary: string;
@@ -236,6 +243,13 @@ export const defaultTheme: Theme = {
       muted: colors.neutral[500],
       accent: colors.neutral[800],
     },
+    action: {
+      primary: {
+        background: colors.neutral[800],
+        foreground: colors.neutral[50],
+        hover: colors.neutral[700],
+      },
+    },
     border: {
       default: colors.neutral[300],
       primary: colors.neutral[300],
@@ -369,6 +383,13 @@ export const darkTheme: Theme = {
       secondary: colors.neutral[200],
       muted: colors.neutral[400],
       accent: colors.neutral[200],
+    },
+    action: {
+      primary: {
+        background: colors.neutral[800],
+        foreground: colors.neutral[50],
+        hover: colors.neutral[700],
+      },
     },
     border: {
       default: colors.neutral[600],

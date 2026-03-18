@@ -264,6 +264,20 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setCssVariable("--theme-fg-muted", theme.colors.foreground.muted);
     setCssVariable("--theme-fg-accent", theme.colors.foreground.accent);
 
+    // Action colors
+    setCssVariable(
+      "--theme-action-primary-bg",
+      theme.colors.action.primary.background,
+    );
+    setCssVariable(
+      "--theme-action-primary-fg",
+      theme.colors.action.primary.foreground,
+    );
+    setCssVariable(
+      "--theme-action-primary-hover",
+      theme.colors.action.primary.hover,
+    );
+
     // Border colors
     setCssVariable("--theme-border", theme.colors.border.default);
     setCssVariable("--theme-border-primary", theme.colors.border.primary);

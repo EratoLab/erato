@@ -33,6 +33,13 @@ export default {
             muted: "var(--theme-fg-muted)",
             accent: "var(--theme-fg-accent)",
           },
+          action: {
+            primary: {
+              bg: "var(--theme-action-primary-bg)",
+              fg: "var(--theme-action-primary-fg)",
+              hover: "var(--theme-action-primary-hover)",
+            },
+          },
           border: {
             DEFAULT: "var(--theme-border)",
             primary: "var(--theme-border-primary, var(--theme-border))",
