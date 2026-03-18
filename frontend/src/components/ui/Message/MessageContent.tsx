@@ -161,7 +161,7 @@ export const MessageContent = memo(function MessageContent({
   // If showing raw, just show text
   if (showRaw) {
     return (
-      <article className="max-w-none">
+      <article className="max-w-none font-sans text-base">
         <pre className="whitespace-pre-wrap rounded-md bg-theme-bg-tertiary p-4 font-mono text-sm text-theme-fg-primary">
           <code>{displayText}</code>
         </pre>
@@ -187,7 +187,10 @@ export const MessageContent = memo(function MessageContent({
             customStyle={{
               margin: "1rem 0",
               background: "var(--theme-bg-tertiary)",
-              fontSize: "0.875rem", // eslint-disable-line lingui/no-unlocalized-strings
+              fontFamily: "var(--theme-font-mono)",
+              fontSize: "var(--theme-font-size-sm)",
+              lineHeight: "var(--theme-line-height-sm)",
+              letterSpacing: "var(--theme-letter-spacing-sm)",
             }}
           >
             {String(children).replace(/\n$/, "")}
@@ -197,7 +200,7 @@ export const MessageContent = memo(function MessageContent({
 
       return (
         <code
-          className="rounded-sm bg-theme-bg-tertiary px-1 py-0.5 text-theme-fg-secondary"
+          className="rounded-sm bg-theme-bg-tertiary px-1 py-0.5 font-mono text-theme-fg-secondary"
           {...props}
         >
           {children}
@@ -276,7 +279,7 @@ export const MessageContent = memo(function MessageContent({
     h1({ children, ...props }) {
       return (
         <h1
-          className="mb-4 mt-6 text-2xl font-bold text-theme-fg-primary"
+          className="mb-4 mt-6 font-heading-bold text-2xl font-bold text-theme-fg-primary"
           {...props}
         >
           {children}
@@ -286,7 +289,7 @@ export const MessageContent = memo(function MessageContent({
     h2({ children, ...props }) {
       return (
         <h2
-          className="mb-3 mt-5 text-xl font-semibold text-theme-fg-primary"
+          className="mb-3 mt-5 font-heading text-xl font-semibold text-theme-fg-primary"
           {...props}
         >
           {children}
@@ -296,7 +299,7 @@ export const MessageContent = memo(function MessageContent({
     h3({ children, ...props }) {
       return (
         <h3
-          className="mb-2 mt-4 text-lg font-semibold text-theme-fg-primary"
+          className="mb-2 mt-4 font-heading text-lg font-semibold text-theme-fg-primary"
           {...props}
         >
           {children}
@@ -347,7 +350,10 @@ export const MessageContent = memo(function MessageContent({
     // Strong/Bold
     strong({ children, ...props }) {
       return (
-        <strong className="font-semibold text-theme-fg-primary" {...props}>
+        <strong
+          className="font-body-semibold font-semibold text-theme-fg-primary"
+          {...props}
+        >
           {children}
         </strong>
       );
@@ -397,7 +403,7 @@ export const MessageContent = memo(function MessageContent({
             className="mt-6 border-t border-theme-border pt-4"
             data-footnotes="true"
           >
-            <h2 className="mb-3 text-lg font-semibold text-theme-fg-primary">
+            <h2 className="mb-3 font-heading text-lg font-semibold text-theme-fg-primary">
               {t`Footnotes`}
             </h2>
             {/* Filter out the auto-generated h2 from children */}
@@ -445,7 +451,7 @@ export const MessageContent = memo(function MessageContent({
   };
 
   return (
-    <article className="max-w-none">
+    <article className="max-w-none font-sans text-base">
       {/* Render markdown text */}
       {textContent && (
         <Markdown

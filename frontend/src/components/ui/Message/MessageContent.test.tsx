@@ -33,6 +33,24 @@ const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
 });
 
 describe("MessageContent", () => {
+  it("adopts the theme typography hooks for headings and inline code", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("# Title\n\n## Section\n\nText with **strong** and `code`.")}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 1, name: "Title" })).toHaveClass(
+      "font-heading-bold",
+    );
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Section" }),
+    ).toHaveClass("font-heading");
+    expect(container.querySelector("article")).toHaveClass("font-sans");
+    expect(container.querySelector("strong")).toHaveClass("font-body-semibold");
+    expect(container.querySelector("code")).toHaveClass("font-mono");
+  });
+
   it("passes PDF page anchors through to the preview callback for erato-file links", () => {
     const onFileLinkPreview = vi.fn();
     const file = makeFile();

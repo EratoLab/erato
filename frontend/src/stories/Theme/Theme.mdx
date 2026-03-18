@@ -8,6 +8,16 @@ import { defaultTheme, darkTheme } from "../../config/theme";
 
 Our application uses a theme system to maintain consistent styling across components.
 
+## Token Groups
+
+The typed theme contract is grouped into a few foundation buckets:
+
+- `colors.background`, `colors.foreground`, `colors.shell`, `colors.message`, `colors.overlay`, `colors.avatar`, `colors.status`, and `colors.focus`
+- `radius`, `spacing`, `elevation`, and `layout`
+- `typography.fontFamily`, `typography.fontSize`, `typography.lineHeight`, `typography.letterSpacing`, and `typography.fontWeight`
+
+The `Theme/Tokens` stories enumerate these groups directly so theme authors can inspect the current contract without reading the source.
+
 ## Color Palettes
 
 ### Light Theme
@@ -31,6 +41,48 @@ Our application uses a theme system to maintain consistent styling across compon
     }}
   />
 </ColorPalette>
+
+## Typography Contract
+
+Typography tokens let themes change body, heading, emphasis, and mono/code presentation without editing component classes.
+
+Supported scale keys are `xs`, `sm`, `base`, `lg`, `xl`, and `2xl`.
+
+```json
+{
+  "theme": {
+    "light": {
+      "colors": {
+        "focus": {
+          "ring": "#475569",
+          "errorRing": "rgba(220, 38, 38, 0.24)"
+        }
+      },
+      "typography": {
+        "fontFamily": {
+          "heading": "\"Avenir Next\", ui-sans-serif, system-ui, sans-serif",
+          "mono": "\"Avenir Next Mono\", ui-monospace, monospace"
+        },
+        "fontSize": {
+          "base": "1rem",
+          "2xl": "1.5rem"
+        },
+        "lineHeight": {
+          "base": "1.5rem",
+          "2xl": "2rem"
+        },
+        "letterSpacing": {
+          "2xl": "-0.01em"
+        },
+        "fontWeight": {
+          "semibold": "600",
+          "bold": "700"
+        }
+      }
+    }
+  }
+}
+```
 
 ### Dark Theme
 

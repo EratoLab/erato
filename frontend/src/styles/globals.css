@@ -211,6 +211,35 @@
   --theme-layout-chat-input-max-width: 56rem;
   --theme-layout-sidebar-width: 17.5rem;
 
+  /* Typography */
+  --theme-font-body: "Geist Variable";
+  --theme-font-heading: var(--theme-font-body);
+  --theme-font-semibold: var(--theme-font-body);
+  --theme-font-heading-bold: var(--theme-font-heading);
+  --theme-font-mono: "Geist Mono Variable";
+  --theme-font-size-xs: 0.75rem;
+  --theme-font-size-sm: 0.875rem;
+  --theme-font-size-base: 1rem;
+  --theme-font-size-lg: 1.125rem;
+  --theme-font-size-xl: 1.25rem;
+  --theme-font-size-2xl: 1.5rem;
+  --theme-line-height-xs: 1rem;
+  --theme-line-height-sm: 1.25rem;
+  --theme-line-height-base: 1.5rem;
+  --theme-line-height-lg: 1.75rem;
+  --theme-line-height-xl: 1.75rem;
+  --theme-line-height-2xl: 2rem;
+  --theme-letter-spacing-xs: 0em;
+  --theme-letter-spacing-sm: 0em;
+  --theme-letter-spacing-base: 0em;
+  --theme-letter-spacing-lg: 0em;
+  --theme-letter-spacing-xl: 0em;
+  --theme-letter-spacing-2xl: 0em;
+  --theme-font-weight-normal: 400;
+  --theme-font-weight-medium: 500;
+  --theme-font-weight-semibold: 600;
+  --theme-font-weight-bold: 700;
+
   /* Avatar colors */
   --theme-avatar-user-bg: #4b5563;
   --theme-avatar-user-fg: #ffffff;
@@ -326,6 +355,10 @@ body {
   color: var(--theme-fg-primary);
   background: var(--theme-bg-primary);
   font-family: var(--theme-font-body, Arial, Helvetica, sans-serif);
+  font-size: var(--theme-font-size-base, 1rem);
+  font-weight: var(--theme-font-weight-normal, 400);
+  line-height: var(--theme-line-height-base, 1.5rem);
+  letter-spacing: var(--theme-letter-spacing-base, 0em);
 }
 
 /* Add global helper classes */
