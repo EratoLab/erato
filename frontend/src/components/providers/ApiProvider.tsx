@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 
 interface ApiProviderProps {
   children: ReactNode;
+  enableDevtools?: boolean;
 }
 
 // Define a type for API errors
@@ -22,7 +23,10 @@ interface ApiError {
  * - Retry behavior
  * - Refetch policies
  */
-export function ApiProvider({ children }: ApiProviderProps) {
+export function ApiProvider({
+  children,
+  enableDevtools = true,
+}: ApiProviderProps) {
   // Create a client that persists across renders but is unique per component instance
   const [queryClient] = useState(
     () =>
@@ -48,7 +52,7 @@ export function ApiProvider({ children }: ApiProviderProps) {
     <QueryClientProvider client={queryClient}>
       {children}
       {/* Only show React Query devtools in development */}
-      {process.env.NODE_ENV === "development" && (
+      {enableDevtools && process.env.NODE_ENV === "development" && (
         <ReactQueryDevtools initialIsOpen={false} />
       )}
     </QueryClientProvider>

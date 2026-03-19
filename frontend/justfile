@@ -42,6 +42,12 @@ dev_nginx_jwt:
 start:
     pnpm run start
 
+build-lib:
+    pnpm run build:lib
+
+watch-lib:
+    pnpm run build:lib:watch
+
 format:
     pnpm exec prettier . --write
 
@@ -97,4 +103,3 @@ test-update:
 # Run all checks including tests (single run)
 check-all: check
     pnpm exec vitest run
-

@@ -1,11 +1,25 @@
 {
-  "name": "frontend",
+  "name": "@erato/frontend",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.25.0",
+  "files": [
+    "dist-library"
+  ],
+  "exports": {
+    "./library": {
+      "types": "./dist-library/library/index.d.ts",
+      "import": "./dist-library/library.js"
+    },
+    "./library.css": "./dist-library/style.css"
+  },
   "scripts": {
     "dev": "pnpm i18n:compile && vite",
-    "build": "pnpm i18n:compile && tsc && vite build",
+    "build": "pnpm build:app",
+    "build:app": "pnpm i18n:compile && tsc && vite build",
+    "build:lib": "tsc -p tsconfig.lib.json && node scripts/rewrite-library-dts-paths.mjs && vite build --config vite.library.config.ts --mode library && node scripts/pack-library.mjs",
+    "build:lib:watch": "node scripts/watch-library.mjs",
+    "pack:lib": "node scripts/pack-library.mjs",
     "start": "vite preview",
     "lint": "eslint .",
     "lint:strict": "eslint --max-warnings=0 .",
@@ -27,15 +41,9 @@
     "i18n:watch": "lingui extract --watch"
   },
   "dependencies": {
-    "@lingui/core": "^5.6.0",
     "@lingui/detect-locale": "^5.6.0",
     "@lingui/format-po": "^5.6.0",
-    "@lingui/react": "^5.6.0",
     "@react-hook/resize-observer": "^2.0.2",
-    "@tanstack/query-sync-storage-persister": "^5.69.0",
-    "@tanstack/react-query": "5.75.7",
-    "@tanstack/react-query-devtools": "^5.75.7",
-    "@tanstack/react-query-persist-client": "^5.75.7",
     "@types/react-syntax-highlighter": "^15.5.13",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -45,12 +53,9 @@
     "immer": "^10.1.1",
     "lodash": "^4.17.21",
     "non.geist": "^1.0.4",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "react-dropzone": "^14.3.8",
     "react-error-boundary": "^5.0.0",
     "react-markdown": "^10.1.0",
-    "react-router-dom": "^6.25.1",
     "react-syntax-highlighter": "^15.6.1",
     "react-use": "^17.6.0",
     "react-window": "^1.8.11",
@@ -64,8 +69,10 @@
     "@eslint/eslintrc": "^3",
     "@eslint/js": "^9.28.0",
     "@faker-js/faker": "^9.4.0",
+    "@lingui/core": "5.6.0",
     "@lingui/babel-plugin-lingui-macro": "^5.6.0",
     "@lingui/cli": "^5.6.0",
+    "@lingui/react": "5.6.0",
     "@lingui/vite-plugin": "^5.6.0",
     "@openapi-codegen/cli": "^3.1.0",
     "@openapi-codegen/typescript": "^11.0.1",
@@ -104,11 +111,28 @@
     "msw": "^2.7.3",
     "postcss": "^8",
     "prettier": "3.5.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-router": "6.30.3",
+    "react-router-dom": "6.30.3",
     "storybook": "^8.6.14",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
     "vite": "^5.4.2",
     "vitest": "^3.2.3"
+  },
+  "peerDependencies": {
+    "@lingui/core": "^5.6.0",
+    "@lingui/react": "^5.6.0",
+    "@tanstack/query-sync-storage-persister": "5.69.0",
+    "@tanstack/query-core": "5.75.7",
+    "@tanstack/react-query": "5.75.7",
+    "@tanstack/react-query-devtools": "5.75.7",
+    "@tanstack/react-query-persist-client": "5.75.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "6.30.3",
+    "react-router-dom": "6.30.3"
   },
   "eslintConfig": {
     "extends": [

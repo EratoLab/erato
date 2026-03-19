@@ -12,6 +12,7 @@ on:
       - '.github/workflows/docker-build.yml' 
       - 'backend/**'
       - 'frontend/**'
+      - 'office-addin/**'
       - 'e2e-tests/**'
       - 'infrastructure/charts/**'
       - 'infrastructure/k3d/**'
@@ -25,6 +26,7 @@ on:
       - '.github/workflows/docker-build.yml' 
       - 'backend/**'
       - 'frontend/**'
+      - 'office-addin/**'
       - 'e2e-tests/**'
       - 'infrastructure/charts/**'
       - 'infrastructure/k3d/**'
@@ -63,11 +65,21 @@ jobs:
           # Source of truth is at /frontend/.node-version
           node-version: '22.10.0'
           cache: 'pnpm'
-          cache-dependency-path: './frontend/pnpm-lock.yaml'
+          cache-dependency-path: |
+            ./frontend/pnpm-lock.yaml
+            ./office-addin/pnpm-lock.yaml
 
       - name: "Install frontend packages"
         working-directory: ./frontend
         run: pnpm install
+
+      - name: "Build frontend library package"
+        working-directory: ./frontend
+        run: pnpm run build:lib
+
+      - name: "Install office-addin packages"
+        working-directory: ./office-addin
+        run: pnpm install --no-frozen-lockfile --lockfile=false
 
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
@@ -114,6 +126,26 @@ jobs:
 
       - name: "Frontend typecheck"
         working-directory: ./frontend
+        if: success() || failure()
+        run: pnpm run typecheck
+
+      - name: "Office add-in prettier"
+        working-directory: ./office-addin
+        if: success() || failure()
+        run: pnpm run format:check
+
+      - name: "Office add-in lint"
+        working-directory: ./office-addin
+        if: success() || failure()
+        run: pnpm run lint
+
+      - name: "Office add-in lint (strict)"
+        working-directory: ./office-addin
+        if: success() || failure()
+        run: pnpm run lint:strict
+
+      - name: "Office add-in typecheck"
+        working-directory: ./office-addin
         if: success() || failure()
         run: pnpm run typecheck
 

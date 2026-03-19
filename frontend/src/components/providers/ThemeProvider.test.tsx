@@ -22,6 +22,8 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   themeLogoPath: null,
   themeLogoDarkPath: null,
   themeAssistantAvatarPath: null,
+  msalClientId: null,
+  msalAuthority: null,
   disableUpload: false,
   disableChatInputAutofocus: false,
   disableLogout: false,

@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./dist-library",
+    "rootDir": "./src"
+  },
+  "include": ["src", "vite-env.d.ts"],
+  "exclude": [
+    "node_modules",
+    "src/**/__tests__/**/*",
+    "src/**/__mocks__/**/*",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx",
+    "src/**/*.stories.tsx",
+    "src/**/*.stories.ts",
+    "src/**/*.example.tsx",
+    "src/lib/setupTests.ts",
+    "src/lib/setupMsw.ts",
+    "src/test/**/*",
+    "src/stories/**/*"
+  ]
+}

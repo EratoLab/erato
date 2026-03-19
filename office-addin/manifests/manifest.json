@@ -1,0 +1,115 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
+  "manifestVersion": "devPreview",
+  "version": "1.0.4",
+  "id": "ee94d041-bd77-446c-8854-421648f50e7c",
+  "developer": {
+    "name": "Erato",
+    "websiteUrl": "https://erato.app",
+    "privacyUrl": "https://erato.app/privacy",
+    "termsOfUseUrl": "https://erato.app/terms"
+  },
+  "name": {
+    "short": "Erato Office Extension",
+    "full": "Erato AI Assistant for Office"
+  },
+  "description": {
+    "short": "Erato AI assistant for Outlook",
+    "full": "Access the Erato AI assistant directly from your Outlook task pane to get help with emails and documents."
+  },
+  "icons": {
+    "color": "assets/color-icon-192x192.png",
+    "outline": "assets/outline-icon-32x32.png"
+  },
+  "accentColor": "#4F46E5",
+  "extensions": [
+    {
+      "requirements": {
+        "scopes": ["mail"]
+      },
+      "runtimes": [
+        {
+          "requirements": {
+            "capabilities": [
+              {
+                "name": "Mailbox",
+                "minVersion": "1.13"
+              }
+            ]
+          },
+          "id": "TaskPaneRuntime",
+          "type": "general",
+          "code": {
+            "page": "https://localhost:3002/office-addin/"
+          },
+          "lifetime": "short",
+          "actions": [
+            {
+              "id": "TaskPaneRuntimeShow",
+              "type": "openPage",
+              "view": "dashboard",
+              "pinnable": true,
+              "supportsNoItemContext": true
+            }
+          ]
+        }
+      ],
+      "ribbons": [
+        {
+          "contexts": ["mailRead", "mailCompose"],
+          "tabs": [
+            {
+              "builtInTabId": "TabDefault",
+              "groups": [
+                {
+                  "id": "eratoGroup",
+                  "label": "Erato",
+                  "icons": [
+                    {
+                      "size": 16,
+                      "url": "assets/outline-icon-32x32.png"
+                    },
+                    {
+                      "size": 32,
+                      "url": "assets/outline-icon-32x32.png"
+                    },
+                    {
+                      "size": 80,
+                      "url": "assets/color-icon-192x192.png"
+                    }
+                  ],
+                  "controls": [
+                    {
+                      "id": "openErato",
+                      "type": "button",
+                      "label": "Open Erato",
+                      "icons": [
+                        {
+                          "size": 16,
+                          "url": "assets/outline-icon-32x32.png"
+                        },
+                        {
+                          "size": 32,
+                          "url": "assets/outline-icon-32x32.png"
+                        },
+                        {
+                          "size": 80,
+                          "url": "assets/color-icon-192x192.png"
+                        }
+                      ],
+                      "supertip": {
+                        "title": "Open Erato",
+                        "description": "Open the Erato AI assistant in a task pane"
+                      },
+                      "actionId": "TaskPaneRuntimeShow"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

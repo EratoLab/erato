@@ -24,6 +24,8 @@ const eslintConfig = [
       // "src/stories/**/*",
       ".next/**/*", // Old Next.js build directory
       "dist/**/*", // Vite build output
+      "dist-library/**/*", // Library build output
+      "dist-package/**/*", // Packed library tarball output
       "node_modules/**/*",
       "out/**/*",
       ".pnpm-store/**/*", // pnpm store directory

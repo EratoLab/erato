@@ -6,6 +6,7 @@ import {
   type UseQueryOptions,
 } from "@tanstack/react-query";
 import { QueryOperation } from "./v1betaApiComponents";
+import { getIdToken } from "@/auth/tokenStore";
 
 export type V1betaApiContext<
   TQueryFnData = unknown,
@@ -48,8 +49,12 @@ export function useV1betaApiContext<
     "queryKey" | "queryFn"
   >,
 ): V1betaApiContext<TQueryFnData, TError, TData, TQueryKey> {
+  const idToken = getIdToken();
+
   return {
-    fetcherOptions: {},
+    fetcherOptions: {
+      headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+    },
     queryOptions: {},
   };
 }

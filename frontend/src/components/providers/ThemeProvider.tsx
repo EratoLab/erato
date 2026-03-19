@@ -21,6 +21,12 @@ export type ThemeMode = "light" | "dark" | "system";
 
 export const THEME_MODE_LOCAL_STORAGE_KEY = "theme-mode";
 
+export interface ThemeProviderProps extends PropsWithChildren {
+  enableCustomTheme?: boolean;
+  initialThemeMode?: ThemeMode;
+  persistThemeMode?: boolean;
+}
+
 type ThemeContextType = {
   theme: Theme;
   themeMode: ThemeMode;
@@ -88,8 +94,13 @@ const getEffectiveTheme = (mode: ThemeMode): "light" | "dark" => {
   return "light";
 };
 
-export function ThemeProvider({ children }: PropsWithChildren) {
-  const savedOrDefaultThemeMode = getSavedTheme();
+export function ThemeProvider({
+  children,
+  enableCustomTheme = true,
+  initialThemeMode,
+  persistThemeMode = true,
+}: ThemeProviderProps) {
+  const savedOrDefaultThemeMode = initialThemeMode ?? getSavedTheme();
   const [themeMode, setThemeMode] = useState<ThemeMode>(
     savedOrDefaultThemeMode,
   );
@@ -115,6 +126,14 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     let isMounted = true;
 
     // Load theme using the configuration module
+    if (!enableCustomTheme) {
+      setCustomThemeConfig(null);
+      setResolvedThemeConfigPath(null);
+      setIsCustomTheme(false);
+      setIconMappings(undefined);
+      return;
+    }
+
     const loadTheme = async () => {
       const loadedTheme = await loadResolvedThemeConfig(defaultThemeConfig);
 
@@ -145,13 +164,14 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [enableCustomTheme]);
 
   // Load custom theme stylesheets when a custom theme is active
   useEffect(() => {
     removeThemeStylesheets();
 
-    if (!customThemeConfig || !resolvedThemeConfigPath) return;
+    if (!enableCustomTheme || !customThemeConfig) return;
+    if (!resolvedThemeConfigPath) return;
 
     const fontsCssPath = defaultThemeConfig.getFontsCssPath(
       customThemeConfig.name,
@@ -168,7 +188,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     return () => {
       removeThemeStylesheets();
     };
-  }, [customThemeConfig, resolvedThemeConfigPath]);
+  }, [customThemeConfig, enableCustomTheme, resolvedThemeConfigPath]);
 
   // Listen for system preference changes when in system mode
   useEffect(() => {
@@ -474,7 +494,9 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   }, [theme]);
 
   const toggleTheme = (mode: ThemeMode) => {
-    localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, mode);
+    if (persistThemeMode) {
+      localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, mode);
+    }
     setThemeMode(mode);
   };
 

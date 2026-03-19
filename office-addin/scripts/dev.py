@@ -1,0 +1,373 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+import secrets
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+from urllib.parse import urlparse
+
+
+OFFICE_ADDIN_PORT = 3002
+AUTH_PROXY_PORT = 4181
+FUNNEL_TARGET_PORT = AUTH_PROXY_PORT
+SCRIPT_PATH = Path(__file__).resolve()
+OFFICE_ADDIN_DIR = SCRIPT_PATH.parent.parent
+FRONTEND_DIR = OFFICE_ADDIN_DIR.parent / "frontend"
+FRONTEND_TARBALL_PATH = FRONTEND_DIR / "dist-package" / "erato-frontend.tgz"
+LOCAL_AUTH_DIR = OFFICE_ADDIN_DIR / "local-auth"
+MANIFEST_LOCAL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-local.xml"
+MANIFEST_FUNNEL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.xml"
+ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
+ENTRA_CONFIG_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.cfg"
+REQUIRED_COMMANDS = ("docker", "pnpm", "tailscale")
+
+
+def run_command(
+    command: list[str],
+    *,
+    cwd: Path | None = None,
+    capture_output: bool = False,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        check=check,
+        capture_output=capture_output,
+        text=True,
+    )
+
+
+def require_command(name: str) -> None:
+    if shutil.which(name) is None:
+        print(f"Missing required command: {name}", file=sys.stderr)
+        sys.exit(1)
+
+
+def read_required_value(label: str, env_names: tuple[str, ...]) -> str:
+    for env_name in env_names:
+        value = os.environ.get(env_name)
+        if value:
+            return value
+
+    if not sys.stdin.isatty():
+        joined_names = ", ".join(env_names)
+        print(
+            f"{label} is required. Set one of: {joined_names}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return input(f"{label}: ").strip()
+
+
+def ensure_entra_proxy_config() -> None:
+    if ENTRA_CONFIG_PATH.exists():
+        return
+
+    template = ENTRA_TEMPLATE_PATH.read_text(encoding="utf-8")
+    tenant_id = read_required_value(
+        "Entra tenant ID",
+        ("ERATO_ENTRA_TENANT_ID", "ENTRA_TENANT_ID", "AZURE_TENANT_ID"),
+    )
+    client_id = read_required_value(
+        "Entra client ID",
+        ("ERATO_ENTRA_CLIENT_ID", "ENTRA_CLIENT_ID", "AZURE_CLIENT_ID"),
+    )
+    client_secret = read_required_value(
+        "Entra client secret",
+        (
+            "ERATO_ENTRA_CLIENT_SECRET",
+            "ENTRA_CLIENT_SECRET",
+            "AZURE_CLIENT_SECRET",
+        ),
+    )
+    cookie_secret = base64.b64encode(secrets.token_bytes(32)).decode("ascii")
+
+    rendered = (
+        template.replace("{{TENANT_ID}}", tenant_id)
+        .replace("{{CLIENT_ID}}", client_id)
+        .replace("{{CLIENT_SECRET}}", client_secret)
+        .replace("{{COOKIE_SECRET}}", cookie_secret)
+    )
+
+    ENTRA_CONFIG_PATH.write_text(rendered, encoding="utf-8")
+    ENTRA_CONFIG_PATH.chmod(0o600)
+    print(f"Generated {ENTRA_CONFIG_PATH.relative_to(OFFICE_ADDIN_DIR)}")
+
+
+def start_auth_proxy() -> None:
+    run_command(
+        ["docker", "compose", "up", "--force-recreate", "--detach"],
+        cwd=LOCAL_AUTH_DIR,
+    )
+    print(f"Auth proxy available at http://localhost:{AUTH_PROXY_PORT}")
+
+
+def load_funnel_status() -> dict:
+    result = run_command(
+        ["tailscale", "funnel", "status", "--json"],
+        capture_output=True,
+    )
+    return json.loads(result.stdout)
+
+
+def extract_funnel_proxy_port(status: dict) -> int | None:
+    web = status.get("Web", {})
+    for host_config in web.values():
+        handlers = host_config.get("Handlers", {})
+        for handler in handlers.values():
+            proxy = handler.get("Proxy")
+            if not proxy:
+                continue
+
+            parsed = urlparse(proxy)
+            if parsed.port is not None:
+                return parsed.port
+    return None
+
+
+def extract_funnel_url(status: dict) -> str | None:
+    web = status.get("Web", {})
+    for host in web:
+        display_host = host.removesuffix(":443")
+        return f"https://{display_host}/"
+    return None
+
+
+def load_redirect_url() -> str | None:
+    if not ENTRA_CONFIG_PATH.exists():
+        return None
+
+    for raw_line in ENTRA_CONFIG_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("redirect_url"):
+            continue
+
+        _, _, value = line.partition("=")
+        redirect_url = value.strip().strip('"')
+        return redirect_url or None
+
+    return None
+
+
+def build_redirect_status_message(funnel_url: str) -> str:
+    redirect_url = load_redirect_url()
+    if not redirect_url:
+        return "Warning: redirect_url is missing from oauth2-proxy-entra-id.cfg"
+
+    expected_redirect_url = f"{funnel_url}oauth2/callback"
+    if redirect_url == expected_redirect_url:
+        return f"redirect_url aligns with funnel URL ({redirect_url})"
+
+    return (
+        "Warning: redirect_url does not match funnel URL "
+        f"({redirect_url} != {expected_redirect_url})"
+    )
+
+
+def write_funnel_manifest(funnel_url: str) -> None:
+    manifest_contents = MANIFEST_LOCAL_PATH.read_text(encoding="utf-8")
+    updated_contents = manifest_contents.replace(
+        "https://localhost:3002",
+        funnel_url.rstrip("/"),
+    )
+    MANIFEST_FUNNEL_PATH.write_text(updated_contents, encoding="utf-8")
+
+
+def funnel_is_correct(status: dict) -> bool:
+    if not any(status.get("AllowFunnel", {}).values()):
+        return False
+
+    return extract_funnel_proxy_port(status) == FUNNEL_TARGET_PORT
+
+
+def ensure_funnel() -> None:
+    try:
+        status = load_funnel_status()
+    except subprocess.CalledProcessError as error:
+        print(error.stderr, file=sys.stderr)
+        raise
+
+    if funnel_is_correct(status):
+        proxy_port = extract_funnel_proxy_port(status)
+        print(f"Tailscale funnel already targets localhost:{proxy_port}")
+        return
+
+    print(f"Updating Tailscale funnel to localhost:{FUNNEL_TARGET_PORT}")
+    run_command(
+        ["tailscale", "funnel", "--bg", str(FUNNEL_TARGET_PORT)],
+        capture_output=True,
+    )
+
+    updated_status = load_funnel_status()
+    if not funnel_is_correct(updated_status):
+        print(
+            "Tailscale funnel did not settle on the expected port",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+def print_funnel_url() -> None:
+    status = load_funnel_status()
+    funnel_url = extract_funnel_url(status)
+    if not funnel_url:
+        print("Could not determine Tailscale funnel URL", file=sys.stderr)
+        return
+
+    write_funnel_manifest(funnel_url)
+    redirect_status = build_redirect_status_message(funnel_url)
+
+    lines = [
+        "Public Tailscale URL",
+        funnel_url,
+        "",
+        redirect_status,
+        "",
+        (
+            "Upload manifests/manifest-funnel.xml via "
+            "https://aka.ms/olksideload"
+        ),
+    ]
+    width = max(len(line) for line in lines) + 4
+    border = "#" * width
+
+    print(border)
+    for line in lines:
+        print(f"# {line.ljust(width - 4)} #")
+    print(border)
+
+
+def install_packaged_frontend() -> None:
+    run_command(
+        ["pnpm", "install", "--no-frozen-lockfile", "--lockfile=false"],
+        cwd=OFFICE_ADDIN_DIR,
+    )
+
+
+def wait_for_packaged_frontend(timeout_seconds: int = 60) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if FRONTEND_TARBALL_PATH.exists():
+            return
+        time.sleep(0.5)
+
+    print(
+        f"Timed out waiting for {FRONTEND_TARBALL_PATH.relative_to(FRONTEND_DIR.parent)}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def spawn_frontend_watch() -> subprocess.Popen[str]:
+    return subprocess.Popen(
+        ["pnpm", "run", "build:lib:watch"],
+        cwd=FRONTEND_DIR,
+        text=True,
+    )
+
+
+def spawn_app_dev() -> subprocess.Popen[str]:
+    return subprocess.Popen(
+        ["pnpm", "run", "dev"],
+        cwd=OFFICE_ADDIN_DIR,
+        text=True,
+    )
+
+
+def terminate_process(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def wait_for_processes(
+    frontend_watch: subprocess.Popen[str],
+    app_dev: subprocess.Popen[str],
+) -> int:
+    package_mtime = (
+        FRONTEND_TARBALL_PATH.stat().st_mtime if FRONTEND_TARBALL_PATH.exists() else None
+    )
+
+    try:
+        while True:
+            frontend_return_code = frontend_watch.poll()
+            if frontend_return_code is not None:
+                if frontend_return_code != 0:
+                    print(
+                        f"Process exited with code {frontend_return_code}: {frontend_watch.args}",
+                        file=sys.stderr,
+                    )
+                return frontend_return_code
+
+            if FRONTEND_TARBALL_PATH.exists():
+                current_mtime = FRONTEND_TARBALL_PATH.stat().st_mtime
+                if package_mtime is None:
+                    package_mtime = current_mtime
+                elif current_mtime != package_mtime:
+                    print("Detected packaged frontend update, reinstalling office-addin")
+                    install_packaged_frontend()
+                    terminate_process(app_dev)
+                    app_dev = spawn_app_dev()
+                    package_mtime = current_mtime
+
+            app_return_code = app_dev.poll()
+            if app_return_code is not None:
+                if app_return_code != 0:
+                    print(
+                        f"Process exited with code {app_return_code}: {app_dev.args}",
+                        file=sys.stderr,
+                    )
+                return app_return_code
+
+            time.sleep(0.5)
+    finally:
+        terminate_process(frontend_watch)
+        terminate_process(app_dev)
+
+
+def main() -> int:
+    for command in REQUIRED_COMMANDS:
+        require_command(command)
+
+    ensure_entra_proxy_config()
+    start_auth_proxy()
+    ensure_funnel()
+    print_funnel_url()
+
+    frontend_watch = spawn_frontend_watch()
+    wait_for_packaged_frontend()
+    install_packaged_frontend()
+    app_dev = spawn_app_dev()
+
+    def handle_signal(signum: int, _frame: object) -> None:
+        terminate_process(frontend_watch)
+        terminate_process(app_dev)
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
+    return wait_for_processes(frontend_watch, app_dev)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

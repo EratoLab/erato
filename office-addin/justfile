@@ -1,0 +1,38 @@
+default:
+    just --list
+
+install:
+    pnpm install --no-frozen-lockfile --lockfile=false
+
+dev:
+    uv run --script scripts/dev.py
+
+format:
+    pnpm run format
+
+format-check:
+    pnpm run format:check
+
+lint:
+    pnpm run lint
+
+lint-strict:
+    pnpm run lint:strict
+
+lint-fix:
+    pnpm run lint:fix
+
+type-check:
+    pnpm run typecheck
+
+check:
+    pnpm run check
+
+build:
+    pnpm run build
+
+preview:
+    pnpm run preview
+
+office-validate:
+    pnpm run office:validate

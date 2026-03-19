@@ -23,6 +23,8 @@ export type Env = {
   sidebarLogoPath: string | null;
   sidebarLogoDarkPath: string | null;
   sidebarChatHistoryShowMetadata: boolean;
+  msalClientId: string | null;
+  msalAuthority: string | null;
 };
 
 declare global {
@@ -52,6 +54,8 @@ declare global {
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
+    MSAL_CLIENT_ID?: string;
+    MSAL_AUTHORITY?: string;
     __E2E_COMPONENT_VARIANT__?: string;
     __E2E_FACET_ID__?: string;
   }
@@ -174,6 +178,10 @@ export const env = (): Env => {
     import.meta.env.VITE_SIDEBAR_CHAT_HISTORY_SHOW_METADATA === "false"
       ? false
       : (window.SIDEBAR_CHAT_HISTORY_SHOW_METADATA ?? true);
+  const msalClientId =
+    import.meta.env.VITE_MSAL_CLIENT_ID ?? window.MSAL_CLIENT_ID ?? null;
+  const msalAuthority =
+    import.meta.env.VITE_MSAL_AUTHORITY ?? window.MSAL_AUTHORITY ?? null;
 
   return {
     apiRootUrl,
@@ -200,5 +208,7 @@ export const env = (): Env => {
     sidebarLogoPath,
     sidebarLogoDarkPath,
     sidebarChatHistoryShowMetadata,
+    msalClientId,
+    msalAuthority,
   };
 };

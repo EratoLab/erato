@@ -1,0 +1,6 @@
+@import "../styles/globals.css";
+
+html,
+body {
+  overflow: auto;
+}

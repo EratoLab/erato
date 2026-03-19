@@ -46,6 +46,8 @@ describe("themeConfig", () => {
     maxUploadSizeBytes: 20971520,
     sidebarCollapsedMode: "hidden",
     sidebarChatHistoryShowMetadata: true,
+    msalClientId: null,
+    msalAuthority: null,
     ...overrides,
   });
 
