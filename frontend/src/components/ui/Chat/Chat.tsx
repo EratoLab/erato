@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDropzone } from "react-dropzone";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import {
@@ -17,6 +18,7 @@ import { useChatContext } from "@/providers/ChatProvider";
 import { useSidebarFeature } from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
+import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
@@ -31,6 +33,7 @@ import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
 import { FeedbackViewDialog } from "../Feedback/FeedbackViewDialog";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 import { MessageList } from "../MessageList/MessageList";
+import { DocumentIcon } from "../icons";
 
 import type { ChatMessage } from "../MessageList/MessageList";
 import type {
@@ -159,6 +162,9 @@ export const Chat = ({
       toggleFacetId: (facetId: string) => {
         chatInputControlsRef.current?.toggleFacetId(facetId);
       },
+      addUploadedFiles: (files: FileUploadItem[]) => {
+        chatInputControlsRef.current?.addUploadedFiles(files);
+      },
     }),
     [],
   );
@@ -200,6 +206,9 @@ export const Chat = ({
     historyError: chatHistoryError,
     refetchHistory: refreshChats,
     currentChatLastModel,
+    uploadFiles,
+    uploadError,
+    isUploading,
   } = useChatContext();
 
   const { profile } = useProfile();
@@ -504,6 +513,38 @@ export const Chat = ({
     // For now, its presence enables the button in ChatInput.
   }, []);
 
+  const handleConversationDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      if (acceptedFiles.length === 0) {
+        return;
+      }
+
+      void uploadFiles(acceptedFiles).then((uploadedFiles) => {
+        if (uploadedFiles && uploadedFiles.length > 0) {
+          chatInputControlsRef.current?.addUploadedFiles(uploadedFiles);
+        }
+      });
+    },
+    [uploadFiles],
+  );
+
+  const {
+    getRootProps: getConversationDropzoneRootProps,
+    getInputProps: getConversationDropzoneInputProps,
+    isDragActive,
+    isDragAccept,
+  } = useDropzone({
+    onDrop: handleConversationDrop,
+    accept:
+      acceptedFileTypes && acceptedFileTypes.length > 0
+        ? FileTypeUtil.getAcceptObject(acceptedFileTypes)
+        : undefined,
+    multiple: true,
+    disabled: isUploading,
+    noClick: true,
+    noKeyboard: true,
+  });
+
   if (process.env.NODE_ENV === "development") {
     logger.log(
       `Chat.tsx rendering. chatLoading: ${chatLoading}, currentChatId: ${currentChatId ?? ""}, sidebarCollapsed: ${sidebarCollapsed}, messagesCount: ${Object.keys(messages).length}`,
@@ -533,8 +574,9 @@ export const Chat = ({
         />
         <ChatErrorBoundary onReset={handleErrorReset}>
           <div
+            {...getConversationDropzoneRootProps()}
             className={clsx(
-              "flex h-full min-w-0 flex-1 flex-col",
+              "relative flex h-full min-w-0 flex-1 flex-col",
               "sm:mt-0",
               // Add left margin based on sidebar state to prevent overlap with fixed sidebar
               // Transition margin to match sidebar animation (300ms)
@@ -552,8 +594,32 @@ export const Chat = ({
               id: "chat.conversation.aria",
               message: "Chat conversation",
             })}
+            data-ui="chat-conversation-dropzone"
             style={{ backgroundColor: "var(--theme-shell-chat-body)" }}
           >
+            <input
+              {...getConversationDropzoneInputProps()}
+              aria-label={t({
+                id: "chat.conversation.dropzone.ariaLabel",
+                message: "Drop files anywhere in the conversation to upload",
+              })}
+            />
+            {isDragActive && isDragAccept && (
+              <div
+                className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden bg-[color:color-mix(in_srgb,var(--theme-shell-chat-body)_75%,transparent)]"
+                data-testid="chat-drop-overlay"
+              >
+                <div className="relative flex flex-col items-center gap-3 px-8 py-7 text-center">
+                  <DocumentIcon className="size-12 text-[var(--theme-fg-primary)] drop-shadow-[0_8px_24px_rgba(0,0,0,0.18)]" />
+                  <p className="text-sm font-medium text-[var(--theme-fg-primary)] [text-shadow:0_1px_12px_rgba(255,255,255,0.18)]">
+                    {t({
+                      id: "chat.fileDrop.overlay.label",
+                      message: "Drop to upload",
+                    })}
+                  </p>
+                </div>
+              </div>
+            )}
             {/* Use the MessageList component */}
             <MessageList
               messages={messages}
@@ -682,6 +748,8 @@ export const Chat = ({
               initialSelectedFacetIds={effectiveInitialSelectedFacetIds}
               enforceSelectedFacetIds={assistantFacetSettingsEnforced}
               onFacetSelectionChange={setActiveSelectedFacetIds}
+              uploadFiles={uploadFiles}
+              uploadError={uploadError}
             />
           </div>
         </ChatErrorBoundary>

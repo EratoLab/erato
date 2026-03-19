@@ -195,6 +195,11 @@ msgid "chat.conversation.aria"
 msgstr "Chat conversation"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+msgid "chat.conversation.dropzone.ariaLabel"
+msgstr "Drop files anywhere in the conversation to upload"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.facets.loadError"
 msgstr "Failed to load tools for this workspace."
@@ -218,6 +223,11 @@ msgstr "Loading file..."
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.file.preview.aria"
 msgstr "Preview attached file:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+msgid "chat.fileDrop.overlay.label"
+msgstr "Drop to upload"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx
