@@ -719,8 +719,8 @@ msgstr "Archiwizuje wszystkie czaty na Twoim koncie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.dataTab.archiveAll.success"
-msgstr "Pomyślnie zarchiwizowano czaty."
+#~ msgid "preferences.dialog.dataTab.archiveAll.success"
+#~ msgstr "Pomyślnie zarchiwizowano czaty."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

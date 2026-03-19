@@ -86,14 +86,23 @@ export const createAuthenticatedContext = async (
     storageState: { cookies: [], origins: [] },
   });
   const page = await context.newPage();
+  const chatTextbox = page.getByRole("textbox", { name: "Type a message..." });
+  const localAuthUsername = email.split("@")[0];
 
-  await page.goto("/");
-  await login(page, email, password);
+  // Local nginx-jwt environments support direct auth via ?user=<username>.
+  // Fall back to the interactive login flow for environments that use oauth.
+  await page.goto(`/?user=${encodeURIComponent(localAuthUsername)}`);
+
+  try {
+    await expect(chatTextbox).toBeVisible({ timeout: 5000 });
+    return { context, page };
+  } catch {
+    await page.goto("/");
+    await login(page, email, password);
+  }
 
   // Wait for successful login
-  await expect(
-    page.getByRole("textbox", { name: "Type a message..." }),
-  ).toBeVisible();
+  await expect(chatTextbox).toBeVisible();
 
   return { context, page };
 };
@@ -125,17 +134,16 @@ export const chatIsReadyToChat = async (
  * Select a specific model by display name from the model dropdown
  */
 export const selectModel = async (page: Page, modelDisplayName: string) => {
-  // Click the model selector dropdown (it shows the current model name)
-  // The dropdown button should be in the chat input area
-  const modelSelector = page
-    .locator(
-      'button:has-text("GPT"), button:has-text("Test Model"), button:has-text("Llama")',
-    )
-    .first();
+  const modelSelector = page.locator(
+    'button[aria-controls="model-selector-dropdown"]',
+  );
   await modelSelector.click();
 
-  // Wait for dropdown menu to appear and click the desired model
-  await page.getByRole("menuitem", { name: modelDisplayName }).click();
+  const menu = page.locator("#model-selector-dropdown");
+  await expect(menu).toBeVisible();
+  await menu
+    .getByRole("menuitem", { name: modelDisplayName, exact: true })
+    .click();
 
   // Wait a moment for the selection to take effect
   await page.waitForTimeout(500);

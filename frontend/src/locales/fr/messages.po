@@ -719,8 +719,8 @@ msgstr "Archive toutes les discussions de votre compte."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.dataTab.archiveAll.success"
-msgstr "Discussions archivées avec succès."
+#~ msgid "preferences.dialog.dataTab.archiveAll.success"
+#~ msgstr "Discussions archivées avec succès."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

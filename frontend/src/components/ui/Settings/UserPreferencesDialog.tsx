@@ -2,8 +2,13 @@ import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { useEffect, useId, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-import { profileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  profileQuery,
+  recentChatsQuery,
+  useArchiveAllChatsEndpoint,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
@@ -27,6 +32,7 @@ export function UserPreferencesDialog({
   onClose,
   userProfile,
 }: UserPreferencesDialogProps) {
+  const navigate = useNavigate();
   const tabGroupId = useId();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<PreferencesTab>("personalization");
@@ -39,6 +45,7 @@ export function UserPreferencesDialog({
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [archiveSuccess, setArchiveSuccess] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+  const { mutateAsync: archiveAllChatsMutation } = useArchiveAllChatsEndpoint();
 
   useEffect(() => {
     if (!isOpen) {
@@ -186,24 +193,17 @@ export function UserPreferencesDialog({
     setArchiveSuccess(null);
     setIsArchiving(true);
     try {
-      // eslint-disable-next-line lingui/no-unlocalized-strings -- API route, not user-facing copy
-      const response = await fetch("/api/v1beta/me/chats/archive_all", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-      if (!response.ok) {
-        throw new Error("Failed to archive all chats");
-      }
+      const recentChatsQueryKey = recentChatsQuery({}).queryKey;
 
-      await response.json();
-      setArchiveSuccess(
-        t({
-          id: "preferences.dialog.dataTab.archiveAll.success",
-          message: "Archived chats successfully.",
-        }),
-      );
+      await archiveAllChatsMutation({});
+      await queryClient.invalidateQueries({ queryKey: recentChatsQueryKey });
+      await queryClient.refetchQueries({
+        queryKey: recentChatsQueryKey,
+        type: "active",
+      });
+
+      onClose();
+      navigate("/chat/new", { replace: true });
     } catch {
       setArchiveError(
         t({

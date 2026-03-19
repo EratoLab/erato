@@ -719,8 +719,8 @@ msgstr "Archiviert alle Chats in deinem Konto."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
-msgid "preferences.dialog.dataTab.archiveAll.success"
-msgstr "Chats erfolgreich archiviert."
+#~ msgid "preferences.dialog.dataTab.archiveAll.success"
+#~ msgstr "Chats erfolgreich archiviert."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
