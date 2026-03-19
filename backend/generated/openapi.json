@@ -1539,6 +1539,38 @@
         ]
       }
     },
+    "/api/v1beta/me/starter-prompts": {
+      "get": {
+        "tags": [],
+        "operationId": "starter_prompts",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StarterPromptsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "When starter prompts are disabled"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/messages": {
       "get": {
         "tags": [],
@@ -4459,6 +4491,55 @@
           "item_id": {
             "type": "string",
             "description": "The ID of the file item"
+          }
+        }
+      },
+      "StarterPromptInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "subtitle",
+          "prompt"
+        ],
+        "properties": {
+          "chat_provider": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "selected_facets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "StarterPromptsResponse": {
+        "type": "object",
+        "required": [
+          "starter_prompts"
+        ],
+        "properties": {
+          "starter_prompts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StarterPromptInfo"
+            }
           }
         }
       },

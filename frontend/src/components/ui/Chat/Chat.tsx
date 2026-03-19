@@ -153,6 +153,9 @@ export const Chat = ({
       setSelectedFacetIds: (facetIds: string[]) => {
         chatInputControlsRef.current?.setSelectedFacetIds(facetIds);
       },
+      setSelectedChatProviderId: (chatProviderId: string) => {
+        chatInputControlsRef.current?.setSelectedChatProviderId(chatProviderId);
+      },
       toggleFacetId: (facetId: string) => {
         chatInputControlsRef.current?.toggleFacetId(facetId);
       },

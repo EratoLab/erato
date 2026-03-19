@@ -8,6 +8,7 @@ export interface ChatInputControls {
   setDraftMessage: (message: string, options?: DraftMessageOptions) => void;
   focusInput: () => void;
   setSelectedFacetIds: (facetIds: string[]) => void;
+  setSelectedChatProviderId: (chatProviderId: string) => void;
   toggleFacetId: (facetId: string) => void;
 }
 
@@ -19,6 +20,7 @@ const defaultControls: ChatInputControls = {
   setDraftMessage: noop,
   focusInput: noop,
   setSelectedFacetIds: noop,
+  setSelectedChatProviderId: noop,
   toggleFacetId: noop,
 };
 

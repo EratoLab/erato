@@ -1710,6 +1710,103 @@ additional_system_prompt = "Please execute one or multiple web searches to answe
 }
 
 #[test]
+fn test_config_with_starter_prompts() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers.providers.mock-llm]
+provider_kind = "openai"
+model_name = "placeholder"
+base_url = "http://localhost:1234/v1"
+
+[chat_providers]
+priority_order = ["mock-llm"]
+
+[file_storage_providers.test]
+provider_kind = "s3"
+config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+
+[integrations.langfuse]
+enabled = true
+base_url = "http://localhost:3000"
+public_key = "pk-test"
+secret_key = "sk-test"
+
+[starter_prompts]
+enabled = true
+priority_order = ["web_research", "draft_email"]
+
+[starter_prompts.prompts.web_research]
+title = "Research a topic"
+subtitle = "Kick off with web search enabled"
+icon = "iconoir-globe"
+prompt = { source = "static", prompt = "Research this topic and summarize the findings." }
+selected_facets = ["web_search"]
+chat_provider = "mock-llm"
+
+[starter_prompts.prompts.draft_email]
+title = "Draft an email"
+subtitle = "Write a concise customer reply"
+prompt = { source = "langfuse", prompt_name = "starter-draft-email", fallback = "Draft a concise reply to this message." }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    let starter_prompts = &config.starter_prompts;
+    assert!(starter_prompts.enabled);
+    assert_eq!(
+        starter_prompts.priority_order,
+        vec!["web_research".to_string(), "draft_email".to_string()]
+    );
+
+    let web_research = starter_prompts
+        .prompts
+        .get("web_research")
+        .expect("web_research starter prompt missing");
+    assert_eq!(web_research.title, "Research a topic");
+    assert_eq!(web_research.subtitle, "Kick off with web search enabled");
+    assert_eq!(web_research.icon, Some("iconoir-globe".to_string()));
+    assert_eq!(
+        web_research.prompt,
+        PromptSourceSpecification::Static {
+            content: "Research this topic and summarize the findings.".to_string()
+        }
+    );
+    assert_eq!(web_research.selected_facets, vec!["web_search".to_string()]);
+    assert_eq!(web_research.chat_provider, Some("mock-llm".to_string()));
+
+    let draft_email = starter_prompts
+        .prompts
+        .get("draft_email")
+        .expect("draft_email starter prompt missing");
+    assert_eq!(
+        draft_email.prompt,
+        PromptSourceSpecification::Langfuse {
+            prompt_name: "starter-draft-email".to_string(),
+            label: None,
+            fallback: Some("Draft a concise reply to this message.".to_string())
+        }
+    );
+}
+
+#[test]
 fn test_user_preferences_enabled_defaults_to_true() {
     let mut temp_file = Builder::new()
         .suffix(".toml")

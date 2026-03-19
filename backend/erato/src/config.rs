@@ -182,6 +182,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub user_preferences: UserPreferencesConfig,
 
+    // Starter prompts configuration.
+    #[serde(default)]
+    pub starter_prompts: StarterPromptsConfig,
+
     // Experimental facets configuration.
     #[serde(default)]
     pub experimental_facets: ExperimentalFacetsConfig,
@@ -756,6 +760,12 @@ impl AppConfig {
             }
         }
 
+        for starter_prompt in self.starter_prompts.prompts.values() {
+            if starter_prompt.prompt.uses_langfuse() {
+                return true;
+            }
+        }
+
         false
     }
 
@@ -1271,6 +1281,44 @@ impl Default for UserPreferencesConfig {
 
 fn default_user_preferences_enabled() -> bool {
     true
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
+pub struct StarterPromptsConfig {
+    // Whether the starter prompts feature is enabled.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    // Map of starter prompt id to starter prompt configuration.
+    #[serde(default)]
+    pub prompts: HashMap<String, StarterPromptConfig>,
+
+    // List of starter prompt IDs in priority order for display.
+    #[serde(default)]
+    pub priority_order: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct StarterPromptConfig {
+    // Human readable title for the starter prompt.
+    pub title: String,
+
+    // Human readable subtitle for the starter prompt.
+    pub subtitle: String,
+
+    // Optional icon identifier (e.g. "iconoir-globe").
+    pub icon: Option<String>,
+
+    // Prompt content to prefill into the chat input.
+    pub prompt: PromptSourceSpecification,
+
+    // Facet IDs to preselect when the starter prompt is activated.
+    #[serde(default)]
+    pub selected_facets: Vec<String>,
+
+    // Optional chat provider ID to select when the starter prompt is activated.
+    pub chat_provider: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Default)]

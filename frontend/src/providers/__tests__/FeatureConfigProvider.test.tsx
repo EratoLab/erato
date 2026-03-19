@@ -50,6 +50,7 @@ describe("FeatureConfigProvider", () => {
       disableLogout: false,
       assistantsEnabled: false,
       assistantsShowRecentItems: false,
+      starterPromptsEnabled: false,
       sharepointEnabled: false,
       messageFeedbackEnabled: false,
       messageFeedbackCommentsEnabled: false,
@@ -103,6 +104,9 @@ describe("FeatureConfigProvider", () => {
         assistants: {
           enabled: false,
           showRecentItems: false,
+        },
+        starterPrompts: {
+          enabled: false,
         },
         userPreferences: {
           enabled: true,

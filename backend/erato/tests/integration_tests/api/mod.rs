@@ -12,3 +12,4 @@ pub mod message_feedback;
 pub mod messages;
 pub mod sharepoint;
 pub mod sharing;
+pub mod starter_prompts;

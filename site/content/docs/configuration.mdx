@@ -1530,6 +1530,74 @@ Once the assistants feature has stabilized, this configuration will be replaced 
 enabled = true  # Will default to true once stable
 ```
 
+### `starter_prompts`
+
+Configuration for welcome-screen starter prompts. Starter prompts prefill the chat input, optional facet selections, and an optional chat provider when clicked, but do not submit the message automatically.
+
+#### `starter_prompts.enabled`
+
+Whether to enable starter prompts globally.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[starter_prompts]
+enabled = true
+```
+
+#### `starter_prompts.prompts`
+
+Map of starter prompt configurations, keyed by starter prompt id.
+
+**Type:** `object`
+
+**Example:**
+
+```toml
+[starter_prompts.prompts.research_topic]
+title = "Research a topic"
+subtitle = "Prefill a research request with web search selected"
+icon = "iconoir-globe"
+prompt = "Research this topic and summarize the most important findings."
+selected_facets = ["web_search"]
+chat_provider = "mock-llm"
+
+[starter_prompts.prompts.draft_email]
+title = "Draft an email"
+subtitle = "Write a concise and professional reply"
+icon = "iconoir-mail"
+prompt = { source = "static", prompt = "Draft a concise and professional reply to this email." }
+```
+
+Using Langfuse:
+
+```toml
+[starter_prompts.prompts.summarize_notes]
+title = "Summarize notes"
+subtitle = "Turn rough notes into a structured summary"
+icon = "iconoir-page"
+prompt = { source = "langfuse", prompt_name = "starter-summarize-notes", label = "production", fallback = "Summarize these notes into clear action items and decisions." }
+```
+
+#### `starter_prompts.priority_order`
+
+List of starter prompt IDs in the order they should be displayed.
+
+**Type:** `list<string>`
+
+**Default value:** `[]`
+
+**Example:**
+
+```toml
+[starter_prompts]
+priority_order = ["research_topic", "draft_email", "summarize_notes"]
+```
+
 ### `experimental_facets`
 
 Configuration for the experimental facets feature. Facets allow users to select tool-focused modes (e.g. web search) with optional tool allowlists, model setting overrides, and system prompt additions.

@@ -44,6 +44,11 @@ interface AssistantsFeatureConfig {
   showRecentItems: boolean;
 }
 
+interface StarterPromptsFeatureConfig {
+  /** Whether starter prompts are enabled */
+  enabled: boolean;
+}
+
 /**
  * Configuration for user preferences feature
  */
@@ -105,6 +110,8 @@ interface FeatureConfig {
   assistants: AssistantsFeatureConfig;
   /** User preferences feature flags */
   userPreferences: UserPreferencesFeatureConfig;
+  /** Starter prompts feature flags */
+  starterPrompts: StarterPromptsFeatureConfig;
   /** Cloud providers feature flags */
   cloudProviders: CloudProvidersFeatureConfig;
   /** Message feedback feature flags */
@@ -180,6 +187,9 @@ export function FeatureConfigProvider({ children }: { children: ReactNode }) {
       assistants: {
         enabled: environment.assistantsEnabled,
         showRecentItems: environment.assistantsShowRecentItems,
+      },
+      starterPrompts: {
+        enabled: environment.starterPromptsEnabled,
       },
       userPreferences: {
         enabled: environment.userPreferencesEnabled,
@@ -297,6 +307,11 @@ export function useAuthFeature(): AuthFeatureConfig {
 export function useAssistantsFeature(): AssistantsFeatureConfig {
   const config = useFeatureConfig();
   return config.assistants;
+}
+
+export function useStarterPromptsFeature(): StarterPromptsFeatureConfig {
+  const config = useFeatureConfig();
+  return config.starterPrompts;
 }
 
 /**

@@ -163,6 +163,7 @@ export const ChatInput = ({
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
   const pendingSelectedFacetIdsRef = useRef<string[] | null>(null);
+  const pendingSelectedChatProviderIdRef = useRef<string | null>(null);
 
   // Get necessary state from context instead of useChat()
   // isPendingResponse is true immediately when send is clicked (before streaming starts)
@@ -185,14 +186,10 @@ export const ChatInput = ({
   const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
 
   // Use local model selection hook
-  const {
-    availableModels: _availableModels,
-    selectedModel,
-    setSelectedModel: _setSelectedModel,
-    isSelectionReady: _isSelectionReady,
-  } = useActiveModelSelection({
-    initialModel,
-  });
+  const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
+    useActiveModelSelection({
+      initialModel,
+    });
 
   // Use our token management hook
   const {
@@ -346,16 +343,61 @@ export const ChatInput = ({
     textareaRef.current?.focus();
   }, []);
 
+  const applySelectedChatProviderId = useCallback(
+    (chatProviderId: string) => {
+      pendingSelectedChatProviderIdRef.current = chatProviderId;
+      if (availableModels.length === 0) {
+        return;
+      }
+
+      const matchedModel = availableModels.find(
+        (model) => model.chat_provider_id === chatProviderId,
+      );
+      if (!matchedModel) {
+        return;
+      }
+
+      pendingSelectedChatProviderIdRef.current = null;
+      setSelectedModel(matchedModel);
+    },
+    [availableModels, setSelectedModel],
+  );
+
   useImperativeHandle(
     ref,
     () => ({
       setDraftMessage,
       focusInput,
       setSelectedFacetIds: applySelectedFacetIds,
+      setSelectedChatProviderId: applySelectedChatProviderId,
       toggleFacetId,
     }),
-    [applySelectedFacetIds, focusInput, setDraftMessage, toggleFacetId],
+    [
+      applySelectedChatProviderId,
+      applySelectedFacetIds,
+      focusInput,
+      setDraftMessage,
+      toggleFacetId,
+    ],
   );
+
+  useEffect(() => {
+    const pendingSelectedChatProviderId =
+      pendingSelectedChatProviderIdRef.current;
+    if (!pendingSelectedChatProviderId || availableModels.length === 0) {
+      return;
+    }
+
+    const matchedModel = availableModels.find(
+      (model) => model.chat_provider_id === pendingSelectedChatProviderId,
+    );
+    if (!matchedModel) {
+      return;
+    }
+
+    pendingSelectedChatProviderIdRef.current = null;
+    setSelectedModel(matchedModel);
+  }, [availableModels, setSelectedModel]);
 
   useEffect(() => {
     if (uploadError) {
@@ -825,10 +867,10 @@ export const ChatInput = ({
                 </Button>
               )}
               <ModelSelector
-                availableModels={_availableModels}
+                availableModels={availableModels}
                 selectedModel={selectedModel}
-                onModelChange={_setSelectedModel}
-                disabled={!_isSelectionReady}
+                onModelChange={setSelectedModel}
+                disabled={!isSelectionReady}
               />
               {isPendingResponse ? (
                 <Button
