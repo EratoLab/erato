@@ -195,6 +195,11 @@ msgid "chat.conversation.aria"
 msgstr "Conversation de chat"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+msgid "chat.conversation.dropzone.ariaLabel"
+msgstr "Déposez des fichiers n'importe où dans la conversation pour les téléverser"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.facets.loadError"
 msgstr "Impossible de charger les outils pour cet espace de travail."
@@ -218,6 +223,11 @@ msgstr "Chargement du fichier..."
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.file.preview.aria"
 msgstr "Aperçu du fichier joint :"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+msgid "chat.fileDrop.overlay.label"
+msgstr "Déposez pour téléverser"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistoryList.tsx

@@ -55,6 +55,10 @@ interface FileUploadWithTokenCheckProps {
   onFilesUploaded?: (files: FileUploadItem[]) => void;
   /** Callback when token limit is exceeded */
   onTokenLimitExceeded?: (isExceeded: boolean) => void;
+  /** Optional upload function supplied by a parent so drag/drop and buttons share one path */
+  performFileUpload?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
+  /** Optional upload error supplied by a parent */
+  uploadError?: Error | null;
   /** Array of accepted file types */
   acceptedFileTypes?: FileType[];
   /** Whether multiple files can be selected */
@@ -87,6 +91,8 @@ export const FileUploadWithTokenCheck: React.FC<
   chatProviderId,
   onFilesUploaded,
   onTokenLimitExceeded,
+  performFileUpload: externalPerformFileUpload,
+  uploadError: externalUploadError = null,
   acceptedFileTypes = [],
   multiple = false,
   label = t({ id: "fileUpload.uploadFiles", message: "Upload Files" }),
@@ -130,12 +136,15 @@ export const FileUploadWithTokenCheck: React.FC<
     assistantId,
     previousMessageId,
     chatProviderId,
-    onFilesUploaded,
     acceptedFileTypes,
     multiple,
     maxFiles,
     disabled,
   });
+
+  const performDiskUpload = externalPerformFileUpload ?? uploadFiles;
+  const resolvedUploadError =
+    externalUploadError ?? (uploadError instanceof Error ? uploadError : null);
 
   // Get error setter from upload store for dropzone validation errors
   const { setError } = useFileUploadStore();
@@ -161,7 +170,11 @@ export const FileUploadWithTokenCheck: React.FC<
 
       // Upload accepted files
       if (acceptedFiles.length > 0) {
-        void uploadFiles(acceptedFiles);
+        void performDiskUpload(acceptedFiles).then((uploadedFiles) => {
+          if (uploadedFiles && uploadedFiles.length > 0) {
+            onFilesUploaded?.(uploadedFiles);
+          }
+        });
       }
     },
     accept:
@@ -344,9 +357,9 @@ export const FileUploadWithTokenCheck: React.FC<
           iconOnly={iconOnly}
           className={className}
           disabled={disabled || isProcessing}
-          performFileUpload={uploadFiles}
+          performFileUpload={performDiskUpload}
           isUploading={isProcessing}
-          uploadError={uploadError instanceof Error ? uploadError : null}
+          uploadError={resolvedUploadError}
         />
       )}
 

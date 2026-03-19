@@ -1,6 +1,75 @@
-import { test, expect } from "@playwright/test";
+import { readFileSync } from "fs";
+import path from "path";
+
+import { test, expect, type Page } from "@playwright/test";
 import { TAG_CI } from "./tags";
 import { chatIsReadyToChat, ensureOpenSidebar } from "./shared";
+
+const dispatchFileDragEvent = async (
+  page: Page,
+  eventType: "dragenter" | "dragover" | "drop" | "dragleave",
+  file?: {
+    bytes: number[];
+    name: string;
+    type: string;
+  },
+) => {
+  await page.evaluate(({ type, filePayload }) => {
+    const dropzone = document.querySelector(
+      '[data-ui="chat-conversation-dropzone"]',
+    );
+    if (!(dropzone instanceof HTMLElement)) {
+      throw new Error("Chat conversation dropzone not found");
+    }
+
+    const dataTransfer = new DataTransfer();
+    if (filePayload) {
+      const fileBytes = new Uint8Array(filePayload.bytes);
+      const draggedFile = new File([fileBytes], filePayload.name, {
+        type: filePayload.type,
+      });
+      dataTransfer.items.add(draggedFile);
+    }
+
+    const dragEvent = new DragEvent(type, {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(dragEvent, "dataTransfer", {
+      value: dataTransfer,
+    });
+
+    dropzone.dispatchEvent(dragEvent);
+  }, { type: eventType, filePayload: file });
+};
+
+const expectChatDragDropUploadToWork = async (
+  page: Page,
+) => {
+  const testFilePath = path.join(
+    process.cwd(),
+    "test-files",
+    "sample-report-compressed.pdf",
+  );
+  const filePayload = {
+    bytes: Array.from(readFileSync(testFilePath)),
+    name: "sample-report-compressed.pdf",
+    type: "application/pdf",
+  };
+
+  await page.goto("/");
+  await chatIsReadyToChat(page);
+
+  await dispatchFileDragEvent(page, "dragenter", filePayload);
+  await dispatchFileDragEvent(page, "dragover", filePayload);
+
+  await expect(page.getByTestId("chat-drop-overlay")).toBeVisible();
+  await expect(page.getByText("Drop to upload")).toBeVisible();
+  await dispatchFileDragEvent(page, "drop", filePayload);
+  await expect(page.getByTestId("chat-drop-overlay")).toHaveCount(0);
+  await expect(page.getByText("Attachments")).toBeVisible();
+  await expect(page.getByText(/sample-report-compressed/i)).toBeVisible();
+};
 
 test(
   "Can open new chat page and input is focused",
@@ -201,6 +270,27 @@ test(
     await textbox.fill("what is in this image?");
     await textbox.press("Enter");
     await chatIsReadyToChat(page, { expectAssistantResponse: true });
+  },
+);
+
+test(
+  "Can drag and drop files anywhere in the chat conversation with direct upload button",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await expectChatDragDropUploadToWork(page);
+  },
+);
+
+test(
+  "Can drag and drop files anywhere in the chat conversation when the file source selector is shown",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as Window & { SHAREPOINT_ENABLED?: boolean }).SHAREPOINT_ENABLED =
+        true;
+    });
+
+    await expectChatDragDropUploadToWork(page);
   },
 );
 

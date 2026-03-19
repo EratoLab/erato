@@ -19,7 +19,6 @@ const mockUseOptionalTranslation = vi.fn();
 const mockUseActiveModelSelection = vi.fn();
 const mockUseTokenManagement = vi.fn();
 const mockUseChatInputHandlers = vi.fn();
-const mockUseFileDropzone = vi.fn();
 const mockUseFacets = vi.fn();
 
 vi.mock("@/providers/ChatProvider", () => ({
@@ -43,10 +42,6 @@ vi.mock("@/hooks/chat", () => ({
 vi.mock("@/hooks/ui", () => ({
   useChatInputHandlers: (...args: unknown[]) =>
     mockUseChatInputHandlers(...args),
-}));
-
-vi.mock("@/hooks/files", () => ({
-  useFileDropzone: (...args: unknown[]) => mockUseFileDropzone(...args),
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
@@ -145,11 +140,6 @@ describe("ChatInput", () => {
       handleRemoveAllFiles: vi.fn(),
       setAttachedFiles: vi.fn(),
       createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
-    });
-    mockUseFileDropzone.mockReturnValue({
-      uploadedFiles: [],
-      error: null,
-      uploadFiles: vi.fn(),
     });
     mockUseFacets.mockReturnValue({
       data: { facets: [], global_facet_settings: undefined },

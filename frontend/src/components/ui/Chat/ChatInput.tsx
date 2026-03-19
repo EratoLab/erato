@@ -12,7 +12,6 @@ import {
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
-import { useFileDropzone } from "@/hooks/files";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
@@ -105,6 +104,9 @@ interface ChatInputProps {
   enforceSelectedFacetIds?: boolean;
   // Optional callback whenever facet selection changes
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
+  uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
+  uploadError?: Error | string | null;
+  onSelectedChatProviderIdChange?: (chatProviderId: string | null) => void;
 }
 
 interface ComposeDraftState {
@@ -149,6 +151,9 @@ export const ChatInput = ({
   initialSelectedFacetIds,
   enforceSelectedFacetIds = false,
   onFacetSelectionChange,
+  uploadFiles: externalUploadFiles,
+  uploadError: externalUploadError = null,
+  onSelectedChatProviderIdChange,
   ref,
 }: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
@@ -226,22 +231,6 @@ export const ChatInput = ({
     composeDraftsRef.current[draftKey] = emptyDraft;
     return emptyDraft;
   }, []);
-
-  // Use our modernized file upload hook for upload error state and clipboard pastes
-  const {
-    uploadedFiles: _uploadedFiles,
-    error: uploadError,
-    uploadFiles,
-  } = useFileDropzone({
-    acceptedFileTypes,
-    multiple: maxFiles > 1,
-    maxFiles,
-    disabled,
-    onFilesUploaded: handleFilesUploaded,
-    chatId: chatId,
-    assistantId,
-    chatProviderId: selectedModel?.chat_provider_id,
-  });
 
   const { data: facetsData, error: facetsError } = useFacets({});
   const availableFacets = useMemo(() => facetsData?.facets ?? [], [facetsData]);
@@ -371,8 +360,10 @@ export const ChatInput = ({
       setSelectedFacetIds: applySelectedFacetIds,
       setSelectedChatProviderId: applySelectedChatProviderId,
       toggleFacetId,
+      addUploadedFiles: handleFilesUploaded,
     }),
     [
+      handleFilesUploaded,
       applySelectedChatProviderId,
       applySelectedFacetIds,
       focusInput,
@@ -400,12 +391,18 @@ export const ChatInput = ({
   }, [availableModels, setSelectedModel]);
 
   useEffect(() => {
-    if (uploadError) {
-      setFileError(uploadError.message);
+    if (externalUploadError instanceof Error) {
+      setFileError(externalUploadError.message);
+    } else if (typeof externalUploadError === "string") {
+      setFileError(externalUploadError);
     } else {
       setFileError(null);
     }
-  }, [uploadError, setFileError]);
+  }, [externalUploadError, setFileError]);
+
+  useEffect(() => {
+    onSelectedChatProviderIdChange?.(selectedModel?.chat_provider_id ?? null);
+  }, [onSelectedChatProviderIdChange, selectedModel?.chat_provider_id]);
 
   // Persist compose-mode draft state for the currently active chat key.
   useEffect(() => {
@@ -589,9 +586,31 @@ export const ChatInput = ({
     }
   }, [isPendingResponse, mode]);
 
+  const uploadFiles = useCallback(
+    async (files: File[]) => {
+      if (!externalUploadFiles) {
+        return undefined;
+      }
+
+      const uploadedFiles = await externalUploadFiles(files);
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        handleFilesUploaded(uploadedFiles);
+      }
+
+      return uploadedFiles;
+    },
+    [externalUploadFiles, handleFilesUploaded],
+  );
+
   const handleTextareaPaste = useCallback(
     (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
-      if (disabled || isLoading || isPendingResponse || isUploading) {
+      if (
+        disabled ||
+        isLoading ||
+        isPendingResponse ||
+        isUploading ||
+        !externalUploadFiles
+      ) {
         return;
       }
 
@@ -613,7 +632,14 @@ export const ChatInput = ({
       event.preventDefault();
       void uploadFiles(imageFiles);
     },
-    [disabled, isLoading, isPendingResponse, isUploading, uploadFiles],
+    [
+      disabled,
+      isLoading,
+      isPendingResponse,
+      isUploading,
+      externalUploadFiles,
+      uploadFiles,
+    ],
   );
 
   // Combine disabled states
@@ -681,15 +707,15 @@ export const ChatInput = ({
 
   // Helper function to get the appropriate file error message
   const getFileErrorMessage = useCallback(() => {
-    if (uploadError instanceof UnsupportedFileTypeError) {
-      const filename = uploadError.filenames[0];
-      const filenames = uploadError.filenames.join(", ");
-      return uploadError.filenames.length === 1
+    if (externalUploadError instanceof UnsupportedFileTypeError) {
+      const filename = externalUploadError.filenames[0];
+      const filenames = externalUploadError.filenames.join(", ");
+      return externalUploadError.filenames.length === 1
         ? t`The file "${filename}" cannot be processed by the AI and was not uploaded.`
         : t`The following files cannot be processed and were not uploaded: ${filenames}`;
     }
     return fileError;
-  }, [uploadError, fileError]);
+  }, [externalUploadError, fileError]);
 
   const shellWrapperStyle = {
     maxWidth: "var(--theme-layout-chat-input-max-width)",
@@ -816,6 +842,12 @@ export const ChatInput = ({
                       chatProviderId={selectedModel?.chat_provider_id}
                       onFilesUploaded={handleFilesUploaded}
                       onTokenLimitExceeded={handleFileTokenLimitExceeded}
+                      performFileUpload={uploadFiles}
+                      uploadError={
+                        externalUploadError instanceof Error
+                          ? externalUploadError
+                          : null
+                      }
                       // Pass the callback for processing state
                       onProcessingChange={handleFileButtonProcessingChange}
                       acceptedFileTypes={acceptedFileTypes}
