@@ -159,7 +159,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           "flex touch-manipulation items-center gap-2",
           "focus-ring",
           VARIANT_STYLES[variant],
-          variant === "list-item" ? "btn-geometry-list-item" : SIZE_STYLES[size],
+          variant === "list-item"
+            ? "btn-geometry-list-item"
+            : SIZE_STYLES[size],
           {
             "bg-theme-bg-selected": ariaPressed === true,
           },

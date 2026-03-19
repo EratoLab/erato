@@ -97,7 +97,7 @@ describe("mergeThemeWithOverrides", () => {
         preset: "night-owl",
         blockStyle: {
           borderRadius: "0.75rem",
-          fontFamily: "\"IBM Plex Mono\", monospace",
+          fontFamily: '"IBM Plex Mono", monospace',
         },
       },
     });
@@ -105,7 +105,7 @@ describe("mergeThemeWithOverrides", () => {
     expect(mergedTheme.codeHighlight.preset).toBe("night-owl");
     expect(mergedTheme.codeHighlight.blockStyle).toMatchObject({
       borderRadius: "0.75rem",
-      fontFamily: "\"IBM Plex Mono\", monospace",
+      fontFamily: '"IBM Plex Mono", monospace',
     });
   });
 });
