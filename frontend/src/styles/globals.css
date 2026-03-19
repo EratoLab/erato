@@ -173,6 +173,17 @@
   --theme-message-assistant: var(--theme-bg-secondary);
   --theme-message-hover: var(--theme-bg-hover);
   --theme-message-controls: var(--theme-bg-secondary);
+  --theme-code-inline-bg: #f3f4f6;
+  --theme-code-inline-fg: #1f2937;
+  --theme-code-inline-border: #e5e7eb;
+  --theme-code-block-bg: #ffffff;
+  --theme-code-block-fg: #1f2937;
+  --theme-code-block-border: #e5e7eb;
+  --theme-code-syntax-comment: #6b7280;
+  --theme-code-syntax-keyword: #1d4ed8;
+  --theme-code-syntax-string: #047857;
+  --theme-code-syntax-function: #92400e;
+  --theme-code-syntax-number: #b91c1c;
 
   /* Legacy alias for message hover */
   --theme-messageItem-hover: var(--theme-message-hover);
@@ -181,6 +192,7 @@
   --theme-radius-base: 0.375rem;
   --theme-radius-shell: 0.75rem;
   --theme-radius-input: 1rem;
+  --theme-radius-control: 0.5rem;
   --theme-radius-message: 0.5rem;
   --theme-radius-modal: 0.5rem;
   --theme-radius-pill: 9999px;
@@ -193,10 +205,16 @@
   --theme-spacing-message-padding-y: 1rem;
   --theme-spacing-message-gap: 1.5rem;
   --theme-spacing-control-gap: 0.5rem;
+  --theme-spacing-control-padding-x: 0.75rem;
+  --theme-spacing-control-padding-y: 0.5rem;
+  --theme-spacing-control-min-height: 2.5rem;
   --theme-spacing-sidebar-row-height: 2.75rem;
   --theme-spacing-input-padding-x: 0.75rem;
   --theme-spacing-input-padding-y: 0.75rem;
   --theme-spacing-input-gap: 0.5rem;
+  --theme-spacing-dropdown-padding-x: 1rem;
+  --theme-spacing-dropdown-padding-y: 0.5rem;
+  --theme-spacing-modal-padding: 1rem;
 
   /* Elevation */
   --theme-elevation-shell: none;
@@ -315,6 +333,17 @@
     --theme-message-assistant: var(--theme-bg-secondary);
     --theme-message-hover: var(--theme-bg-hover);
     --theme-message-controls: var(--theme-bg-secondary);
+    --theme-code-inline-bg: #374151;
+    --theme-code-inline-fg: #f3f4f6;
+    --theme-code-inline-border: #4b5563;
+    --theme-code-block-bg: #374151;
+    --theme-code-block-fg: #f3f4f6;
+    --theme-code-block-border: #4b5563;
+    --theme-code-syntax-comment: #9ca3af;
+    --theme-code-syntax-keyword: #93c5fd;
+    --theme-code-syntax-string: #6ee7b7;
+    --theme-code-syntax-function: #fcd34d;
+    --theme-code-syntax-number: #fca5a5;
 
     /* Legacy alias for message hover */
     --theme-messageItem-hover: var(--theme-message-hover);
@@ -372,6 +401,87 @@ body {
 
 .focus-ring-inset {
   @apply focus:outline-none focus:ring-2 focus:ring-inset focus:ring-theme-focus focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-theme-focus;
+}
+
+/* Geometry classes for controls — placed in @layer components so
+   Tailwind utilities (e.g. p-0) can override them naturally. */
+@layer components {
+  .btn-geometry-sm {
+    padding-inline: var(--theme-spacing-control-padding-x);
+    padding-block: var(--theme-spacing-control-padding-y);
+    min-height: calc(var(--theme-spacing-control-min-height) - 0.25rem);
+    min-width: calc(var(--theme-spacing-control-min-height) - 0.25rem);
+    border-radius: var(--theme-radius-control);
+  }
+
+  .btn-geometry-md {
+    padding-inline: var(--theme-spacing-control-padding-x);
+    padding-block: var(--theme-spacing-control-padding-y);
+    min-height: var(--theme-spacing-control-min-height);
+    min-width: var(--theme-spacing-control-min-height);
+    border-radius: var(--theme-radius-control);
+  }
+
+  .btn-geometry-lg {
+    padding-inline: calc(var(--theme-spacing-control-padding-x) + 0.25rem);
+    padding-block: calc(var(--theme-spacing-control-padding-y) + 0.25rem);
+    min-height: calc(var(--theme-spacing-control-min-height) + 0.25rem);
+    min-width: calc(var(--theme-spacing-control-min-height) + 0.25rem);
+    border-radius: var(--theme-radius-control);
+  }
+
+  .btn-geometry-list-item {
+    padding-inline: var(--theme-spacing-dropdown-padding-x);
+    padding-block: var(--theme-spacing-dropdown-padding-y);
+    border-radius: var(--theme-radius-control);
+  }
+
+  .dropdown-item-geometry {
+    padding-inline: var(--theme-spacing-dropdown-padding-x);
+    padding-block: var(--theme-spacing-dropdown-padding-y);
+  }
+
+  .modal-section-geometry {
+    padding: var(--theme-spacing-modal-padding);
+  }
+
+  pre.message-content-code-block {
+    margin-block: 1rem;
+    overflow-x: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+  }
+
+  pre.message-content-raw-block {
+    margin-block: 1rem;
+    overflow-x: auto;
+    border: 1px solid var(--theme-code-block-border);
+    border-radius: var(--theme-radius-message);
+    background: var(--theme-code-block-bg);
+    color: var(--theme-code-block-fg);
+    padding: 1rem;
+    font-family: var(--theme-font-mono);
+    font-size: var(--theme-font-size-sm);
+    line-height: var(--theme-line-height-sm);
+    letter-spacing: var(--theme-letter-spacing-sm);
+  }
+
+  pre.message-content-raw-block code {
+    display: block;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+  }
+
+  pre.message-content-code-block > div,
+  pre.message-content-raw-block > code {
+    min-width: max-content;
+  }
 }
 
 .theme-transition {

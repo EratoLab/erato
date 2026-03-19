@@ -1,3 +1,9 @@
+import {
+  DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
+  DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
+  type PrismCodeThemePreset,
+} from "./codeHighlightThemes";
+
 const colors = {
   neutral: {
     50: "#f9fafb",
@@ -34,6 +40,13 @@ const colors = {
     700: "#b45309",
     800: "#92400e",
     900: "#78350f",
+  },
+  blue: {
+    50: "#eff6ff",
+    300: "#93c5fd",
+    500: "#3b82f6",
+    700: "#1d4ed8",
+    800: "#1e40af",
   },
 } as const;
 
@@ -105,6 +118,25 @@ export type ThemeColors = {
     hover: string;
     controls: string;
   };
+  code: {
+    inline: {
+      background: string;
+      foreground: string;
+      border: string;
+    };
+    block: {
+      background: string;
+      foreground: string;
+      border: string;
+    };
+    syntax: {
+      comment: string;
+      keyword: string;
+      string: string;
+      function: string;
+      number: string;
+    };
+  };
   overlay: {
     modal: string;
   };
@@ -150,6 +182,7 @@ export type ThemeRadius = {
   base: string;
   shell: string;
   input: string;
+  control: string;
   message: string;
   modal: string;
   pill: string;
@@ -168,6 +201,9 @@ export type ThemeSpacing = {
   };
   control: {
     gap: string;
+    paddingX: string;
+    paddingY: string;
+    minHeight: string;
   };
   sidebar: {
     rowHeight: string;
@@ -176,6 +212,13 @@ export type ThemeSpacing = {
     paddingX: string;
     paddingY: string;
     gap: string;
+  };
+  dropdown: {
+    paddingX: string;
+    paddingY: string;
+  };
+  modal: {
+    padding: string;
   };
 };
 
@@ -217,6 +260,22 @@ export type ThemeTypography = {
   };
 };
 
+export type ThemeCodeHighlightBlockStyle = {
+  backgroundColor: string;
+  color: string;
+  border: string;
+  borderRadius: string;
+  padding: string;
+  fontFamily: string;
+  fontSize: string;
+  lineHeight: string;
+};
+
+export type ThemeCodeHighlight = {
+  preset: PrismCodeThemePreset;
+  blockStyle?: Partial<ThemeCodeHighlightBlockStyle>;
+};
+
 export type Theme = {
   colors: ThemeColors;
   borderRadius: string;
@@ -224,6 +283,7 @@ export type Theme = {
   spacing: ThemeSpacing;
   elevation: ThemeElevation;
   layout: ThemeLayout;
+  codeHighlight: ThemeCodeHighlight;
   typography?: ThemeTypography;
 };
 
@@ -335,6 +395,25 @@ export const defaultTheme: Theme = {
       hover: stateColors.hover.light,
       controls: colors.neutral[100],
     },
+    code: {
+      inline: {
+        background: colors.neutral[100],
+        foreground: colors.neutral[800],
+        border: colors.neutral[200],
+      },
+      block: {
+        background: "#ffffff",
+        foreground: colors.neutral[800],
+        border: colors.neutral[200],
+      },
+      syntax: {
+        comment: colors.neutral[500],
+        keyword: colors.blue[700],
+        string: colors.green[700],
+        function: colors.amber[800],
+        number: colors.red[700],
+      },
+    },
     overlay: {
       modal: "rgba(17, 24, 39, 0.6)",
     },
@@ -380,6 +459,7 @@ export const defaultTheme: Theme = {
     base: baseRadius,
     shell: "0.75rem",
     input: "1rem",
+    control: "0.5rem",
     message: "0.5rem",
     modal: "0.5rem",
     pill: "9999px",
@@ -397,6 +477,9 @@ export const defaultTheme: Theme = {
     },
     control: {
       gap: "0.5rem",
+      paddingX: "0.75rem",
+      paddingY: "0.5rem",
+      minHeight: "2.5rem",
     },
     sidebar: {
       rowHeight: "2.75rem",
@@ -405,6 +488,13 @@ export const defaultTheme: Theme = {
       paddingX: "0.75rem",
       paddingY: "0.75rem",
       gap: "0.5rem",
+    },
+    dropdown: {
+      paddingX: "1rem",
+      paddingY: "0.5rem",
+    },
+    modal: {
+      padding: "1rem",
     },
   },
   elevation: {
@@ -423,6 +513,9 @@ export const defaultTheme: Theme = {
     sidebar: {
       width: "17.5rem",
     },
+  },
+  codeHighlight: {
+    preset: DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
   },
   typography: defaultTypography,
 };
@@ -478,6 +571,25 @@ export const darkTheme: Theme = {
       hover: colors.neutral[700],
       controls: colors.neutral[800],
     },
+    code: {
+      inline: {
+        background: colors.neutral[700],
+        foreground: colors.neutral[100],
+        border: colors.neutral[600],
+      },
+      block: {
+        background: colors.neutral[700],
+        foreground: colors.neutral[100],
+        border: colors.neutral[600],
+      },
+      syntax: {
+        comment: colors.neutral[400],
+        keyword: colors.blue[300],
+        string: colors.green[300],
+        function: colors.amber[300],
+        number: colors.red[300],
+      },
+    },
     overlay: {
       modal: "rgba(0, 0, 0, 0.7)",
     },
@@ -523,5 +635,8 @@ export const darkTheme: Theme = {
     input: "0 8px 24px rgba(0, 0, 0, 0.25)",
     modal: "0 24px 48px rgba(0, 0, 0, 0.45)",
     dropdown: "0 12px 24px rgba(0, 0, 0, 0.35)",
+  },
+  codeHighlight: {
+    preset: DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
   },
 };

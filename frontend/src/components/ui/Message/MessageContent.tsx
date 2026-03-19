@@ -2,13 +2,14 @@ import { t } from "@lingui/core/macro";
 import React, { memo } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import {
-  oneDark,
-  oneLight,
-} from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
+import {
+  DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
+  DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
+  resolvePrismCodeTheme,
+} from "@/config/codeHighlightThemes";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { parseContent } from "@/utils/adapters/contentPartAdapter";
 
@@ -30,6 +31,89 @@ interface MessageContentProps {
   /** Map of file IDs to their metadata for erato-file:// link resolution */
   filesById?: Record<string, FileUploadItem>;
   onFileLinkPreview?: (file: FileUploadItem) => void;
+}
+
+const INLINE_CODE_CLASS_NAME =
+  "rounded-md border border-theme-code-inline-border bg-theme-code-inline-bg px-1.5 py-0.5 font-mono text-sm text-theme-code-inline-fg";
+const BlockCodeContext = React.createContext(false);
+const BASE_BLOCK_CODE_CUSTOM_STYLE = {
+  margin: 0,
+  overflow: "visible",
+} as const;
+
+type MarkdownCodeProps = React.ComponentPropsWithoutRef<"code"> & {
+  node?: unknown;
+};
+
+type MarkdownPreProps = React.ComponentPropsWithoutRef<"pre"> & {
+  node?: unknown;
+};
+
+function MarkdownPre({
+  node: _node,
+  className,
+  children,
+  ...props
+}: MarkdownPreProps) {
+  return (
+    <pre
+      className={["message-content-code-block", className]
+        .filter(Boolean)
+        .join(" ")}
+      {...props}
+    >
+      <BlockCodeContext.Provider value={true}>
+        {children}
+      </BlockCodeContext.Provider>
+    </pre>
+  );
+}
+
+function MarkdownCode({
+  node: _node,
+  className,
+  children,
+  ...props
+}: MarkdownCodeProps) {
+  const { effectiveTheme, theme } = useTheme();
+  const isBlockCode = React.useContext(BlockCodeContext);
+  const codeContent = String(children).replace(/\n$/, "");
+  const match = /language-(\w+)/.exec(className ?? "");
+  const language = match ? match[1] : "";
+  const fallbackPreset =
+    effectiveTheme === "dark"
+      ? DEFAULT_DARK_CODE_HIGHLIGHT_PRESET
+      : DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET;
+  const syntaxTheme = resolvePrismCodeTheme(
+    theme.codeHighlight.preset,
+    fallbackPreset,
+  );
+  const blockCustomStyle = {
+    ...BASE_BLOCK_CODE_CUSTOM_STYLE,
+    ...theme.codeHighlight.blockStyle,
+  };
+
+  if (isBlockCode) {
+    return (
+      <SyntaxHighlighter
+        customStyle={blockCustomStyle}
+        language={language || undefined}
+        PreTag="div"
+        style={syntaxTheme}
+      >
+        {codeContent}
+      </SyntaxHighlighter>
+    );
+  }
+
+  return (
+    <code
+      className={[INLINE_CODE_CLASS_NAME, className].filter(Boolean).join(" ")}
+      {...props}
+    >
+      {children}
+    </code>
+  );
 }
 
 const getPreviewUrl = (
@@ -92,8 +176,6 @@ export const MessageContent = memo(function MessageContent({
   filesById = {},
   onFileLinkPreview,
 }: MessageContentProps) {
-  const { effectiveTheme } = useTheme();
-  const isDarkMode = effectiveTheme === "dark";
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
 
   // Parse content efficiently in a single pass
@@ -162,7 +244,7 @@ export const MessageContent = memo(function MessageContent({
   if (showRaw) {
     return (
       <article className="max-w-none font-sans text-base">
-        <pre className="whitespace-pre-wrap rounded-md bg-theme-bg-tertiary p-4 font-mono text-sm text-theme-fg-primary">
+        <pre className="message-content-raw-block whitespace-pre-wrap">
           <code>{displayText}</code>
         </pre>
       </article>
@@ -171,44 +253,10 @@ export const MessageContent = memo(function MessageContent({
 
   // Define custom components for react-markdown
   const markdownComponents: Partial<Components> = {
-    // Custom code block rendering with syntax highlighting
-    // @ts-expect-error - react-markdown types don't expose inline prop
-    code({ inline, className, children, ...props }) {
-      const match = /language-(\w+)/.exec(className ?? "");
-      const language = match ? match[1] : "";
-
-      if (!inline && language) {
-        return (
-          <SyntaxHighlighter
-            style={isDarkMode ? oneDark : oneLight}
-            language={language}
-            PreTag="div"
-            className="!my-4 rounded-md"
-            customStyle={{
-              margin: "1rem 0",
-              background: "var(--theme-bg-tertiary)",
-              fontFamily: "var(--theme-font-mono)",
-              fontSize: "var(--theme-font-size-sm)",
-              lineHeight: "var(--theme-line-height-sm)",
-              letterSpacing: "var(--theme-letter-spacing-sm)",
-            }}
-          >
-            {String(children).replace(/\n$/, "")}
-          </SyntaxHighlighter>
-        );
-      }
-
-      return (
-        <code
-          className="rounded-sm bg-theme-bg-tertiary px-1 py-0.5 font-mono text-theme-fg-secondary"
-          {...props}
-        >
-          {children}
-        </code>
-      );
-    },
+    pre: MarkdownPre,
+    code: MarkdownCode,
     // Ensure links open in new tab
-    a({ href, id, children, ...props }) {
+    a({ href, id, children, node: _node, ...props }) {
       const rewrittenHref = rewriteFootnoteValue(href, messageId);
       const rewrittenId = rewriteFootnoteValue(id, messageId);
       const isHashLink = rewrittenHref?.startsWith("#") ?? false;
@@ -244,7 +292,7 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Custom table styling
-    table({ children, ...props }) {
+    table({ children, node: _node, ...props }) {
       return (
         <div className="my-4 overflow-x-auto">
           <table className="min-w-full divide-y divide-theme-border" {...props}>
@@ -254,7 +302,7 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Table header
-    th({ children, ...props }) {
+    th({ children, node: _node, ...props }) {
       return (
         <th
           className="bg-theme-bg-secondary px-4 py-2 text-left text-sm font-medium text-theme-fg-primary"
@@ -265,7 +313,7 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Table cell
-    td({ children, ...props }) {
+    td({ children, node: _node, ...props }) {
       return (
         <td
           className="border-t border-theme-border px-4 py-2 text-sm text-theme-fg-secondary"
@@ -276,7 +324,7 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Headers
-    h1({ children, ...props }) {
+    h1({ children, node: _node, ...props }) {
       return (
         <h1
           className="mb-4 mt-6 font-heading-bold text-2xl font-bold text-theme-fg-primary"
@@ -286,7 +334,7 @@ export const MessageContent = memo(function MessageContent({
         </h1>
       );
     },
-    h2({ children, ...props }) {
+    h2({ children, node: _node, ...props }) {
       return (
         <h2
           className="mb-3 mt-5 font-heading text-xl font-semibold text-theme-fg-primary"
@@ -296,7 +344,7 @@ export const MessageContent = memo(function MessageContent({
         </h2>
       );
     },
-    h3({ children, ...props }) {
+    h3({ children, node: _node, ...props }) {
       return (
         <h3
           className="mb-2 mt-4 font-heading text-lg font-semibold text-theme-fg-primary"
@@ -307,7 +355,7 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Blockquote
-    blockquote({ children, ...props }) {
+    blockquote({ children, node: _node, ...props }) {
       return (
         <blockquote
           className="my-4 border-l-4 border-theme-border pl-4 italic text-theme-fg-secondary"
@@ -318,21 +366,21 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Lists
-    ul({ children, ...props }) {
+    ul({ children, node: _node, ...props }) {
       return (
         <ul className="my-3 list-disc pl-6 text-theme-fg-primary" {...props}>
           {children}
         </ul>
       );
     },
-    ol({ children, ...props }) {
+    ol({ children, node: _node, ...props }) {
       return (
         <ol className="my-3 list-decimal pl-6 text-theme-fg-primary" {...props}>
           {children}
         </ol>
       );
     },
-    li({ children, id, ...props }) {
+    li({ children, id, node: _node, ...props }) {
       return (
         <li
           className="my-1 text-theme-fg-primary"
@@ -344,11 +392,11 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Horizontal rule
-    hr({ ...props }) {
+    hr({ node: _node, ...props }) {
       return <hr className="my-6 border-theme-border" {...props} />;
     },
     // Strong/Bold
-    strong({ children, ...props }) {
+    strong({ children, node: _node, ...props }) {
       return (
         <strong
           className="font-body-semibold font-semibold text-theme-fg-primary"
@@ -359,7 +407,7 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Emphasis/Italic
-    em({ children, ...props }) {
+    em({ children, node: _node, ...props }) {
       return (
         <em className="italic" {...props}>
           {children}
@@ -367,7 +415,7 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Handle incomplete markdown gracefully
-    p({ children, ...props }) {
+    p({ children, node: _node, ...props }) {
       return (
         <p className="mb-4 text-theme-fg-primary last:mb-0" {...props}>
           {children}
@@ -375,7 +423,7 @@ export const MessageContent = memo(function MessageContent({
       );
     },
     // Footnote references - render as inline instead of superscript
-    sup({ children, ...props }) {
+    sup({ children, node: _node, ...props }) {
       return (
         <span className="inline" {...props}>
           {children}
@@ -426,7 +474,7 @@ export const MessageContent = memo(function MessageContent({
     ...markdownComponents,
     // Override p component for streaming to handle incomplete markdown
     p: isStreaming
-      ? ({ children, ...props }) => {
+      ? ({ children, node: _node, ...props }) => {
           // Check if this paragraph contains only incomplete markdown
           if (
             typeof children === "string" &&

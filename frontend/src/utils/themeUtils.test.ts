@@ -15,6 +15,7 @@ describe("mergeThemeWithOverrides", () => {
       base: "1.25rem",
       shell: "1.25rem",
       input: "1.25rem",
+      control: "1.25rem",
       message: "1.25rem",
       modal: "1.25rem",
       pill: "1.25rem",
@@ -88,5 +89,23 @@ describe("mergeThemeWithOverrides", () => {
     expect(mergedTheme.radius.shell).toBe("1.25rem");
     expect(mergedTheme.colors.shell.modal).toBe("#111827");
     expect(mergedTheme.colors.message.hover).toBe("#334155");
+  });
+
+  it("merges code highlight preset and block style overrides", () => {
+    const mergedTheme = mergeThemeWithOverrides(defaultTheme, {
+      codeHighlight: {
+        preset: "night-owl",
+        blockStyle: {
+          borderRadius: "0.75rem",
+          fontFamily: '"IBM Plex Mono", monospace',
+        },
+      },
+    });
+
+    expect(mergedTheme.codeHighlight.preset).toBe("night-owl");
+    expect(mergedTheme.codeHighlight.blockStyle).toMatchObject({
+      borderRadius: "0.75rem",
+      fontFamily: '"IBM Plex Mono", monospace',
+    });
   });
 });

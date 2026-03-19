@@ -45,18 +45,19 @@ const VARIANT_STYLES = {
   danger:
     "border border-theme-error-border bg-theme-error-bg text-theme-error-fg hover:brightness-95 theme-transition",
   "sidebar-icon":
-    "p-2 rounded-lg text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
+    "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
   "list-item":
-    "w-full px-4 py-2 text-sm text-left text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
+    "w-full text-sm text-left text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
   "icon-only":
-    "p-2 rounded-lg text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
+    "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary theme-transition",
 } as const;
 
-// Update size styles to ensure mobile-friendly touch targets
+// Size geometry classes defined in globals.css @layer components
+// so consumer Tailwind utilities (e.g. p-0) can override them.
 const SIZE_STYLES = {
-  sm: "p-2 min-h-[36px] min-w-[36px] text-sm",
-  md: "px-3 py-2 min-h-[40px] min-w-[40px]",
-  lg: "px-4 py-3 min-h-[44px] min-w-[44px]",
+  sm: "btn-geometry-sm text-sm",
+  md: "btn-geometry-md",
+  lg: "btn-geometry-lg",
 } as const;
 
 const validateProps = (props: ButtonProps) => {
@@ -155,10 +156,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const buttonClasses = useMemo(
       () =>
         clsx(
-          "flex touch-manipulation items-center gap-2 rounded-lg",
+          "flex touch-manipulation items-center gap-2",
           "focus-ring",
           VARIANT_STYLES[variant],
-          SIZE_STYLES[size],
+          variant === "list-item"
+            ? "btn-geometry-list-item"
+            : SIZE_STYLES[size],
           {
             "bg-theme-bg-selected": ariaPressed === true,
           },

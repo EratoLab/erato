@@ -36,12 +36,14 @@ const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
     const downloadUrl = file.download_url as string | null | undefined;
     const previewUrl = getPreviewUrl(file);
 
-    return downloadUrl
+    return downloadUrl || previewUrl
       ? [
           {
             id: file.id,
             filename: file.filename,
-            download_url: downloadUrl,
+            // Preserve preview-only assistant files so existing previews keep
+            // working even when downloads are unavailable to the current user.
+            download_url: downloadUrl ?? "",
             ...(previewUrl ? { preview_url: previewUrl } : {}),
             file_capability: file.file_capability,
           } as FileUploadItem,

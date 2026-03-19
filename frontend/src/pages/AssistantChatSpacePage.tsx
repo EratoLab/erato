@@ -33,12 +33,15 @@ const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
     const downloadUrl = file.download_url as string | null | undefined;
     const previewUrl = getPreviewUrl(file);
 
-    return downloadUrl
+    return downloadUrl || previewUrl
       ? [
           {
             id: file.id,
             filename: file.filename,
-            download_url: downloadUrl,
+            // Preserve preview-only assistant files so erato-file:// links can
+            // still resolve inside chat, while hiding the download action when
+            // no dedicated download URL is available.
+            download_url: downloadUrl ?? "",
             ...(previewUrl ? { preview_url: previewUrl } : {}),
             file_capability: file.file_capability,
           } as FileUploadItem,
@@ -59,9 +62,7 @@ export default function AssistantChatSpacePage() {
     isLoading: isLoadingAssistant,
     error: assistantError,
   } = useGetAssistant(
-    shouldFetchAssistant && assistantId
-      ? { pathParams: { assistantId } }
-      : reactQuery.skipToken,
+    assistantId ? { pathParams: { assistantId } } : reactQuery.skipToken,
   );
 
   // Fetch available models to find the assistant's default model

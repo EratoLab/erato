@@ -14,6 +14,7 @@ The typed theme contract is grouped into a few foundation buckets:
 
 - `colors.background`, `colors.foreground`, `colors.shell`, `colors.message`, `colors.overlay`, `colors.avatar`, `colors.status`, and `colors.focus`
 - `radius`, `spacing`, `elevation`, and `layout`
+- `codeHighlight` for fenced code block theme selection
 - `typography.fontFamily`, `typography.fontSize`, `typography.lineHeight`, `typography.letterSpacing`, and `typography.fontWeight`
 
 The `Theme/Tokens` stories enumerate these groups directly so theme authors can inspect the current contract without reading the source.
@@ -77,6 +78,50 @@ Supported scale keys are `xs`, `sm`, `base`, `lg`, `xl`, and `2xl`.
         "fontWeight": {
           "semibold": "600",
           "bold": "700"
+        }
+      }
+    }
+  }
+}
+```
+
+## Code Highlighting Contract
+
+Highlighted fenced code blocks use a curated set of built-in Prism themes from `react-syntax-highlighter`.
+
+Supported `codeHighlight.preset` values:
+
+- `vs`
+- `vsc-dark-plus`
+- `one-light`
+- `one-dark`
+- `night-owl`
+- `nord`
+- `okaidia`
+
+Inline code chips and raw markdown blocks still use `colors.code` plus the normal typography tokens. `codeHighlight` only controls syntax-highlighted fenced blocks.
+
+`blockStyle` is optional and applies only to the outer highlighted code block shell. Use it for font, spacing, radius, or border tweaks without taking ownership of token-level syntax colors.
+
+```json
+{
+  "theme": {
+    "light": {
+      "codeHighlight": {
+        "preset": "one-light",
+        "blockStyle": {
+          "fontFamily": "\"IBM Plex Mono\", monospace",
+          "fontSize": "0.875rem",
+          "lineHeight": "1.5rem",
+          "borderRadius": "0.75rem"
+        }
+      }
+    },
+    "dark": {
+      "codeHighlight": {
+        "preset": "vsc-dark-plus",
+        "blockStyle": {
+          "border": "1px solid #334155"
         }
       }
     }

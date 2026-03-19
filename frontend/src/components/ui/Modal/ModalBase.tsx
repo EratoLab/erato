@@ -110,17 +110,21 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       >
         {/* Optional Header */}
         {title && (
-          <div className="shrink-0 border-b border-theme-border p-4">
+          <div className="modal-section-geometry shrink-0 border-b border-theme-border">
             <h2
               id="modal-title"
               className="font-heading text-lg font-semibold text-theme-fg-primary"
             >
               {title}
             </h2>
-            {/* Simple Close Button */}
+            {/* Simple Close Button — positioned using the same modal padding token */}
             <button
               onClick={onClose}
-              className="focus-ring-tight absolute right-3 top-3 rounded-full p-1 text-theme-fg-muted hover:bg-theme-bg-secondary"
+              className="focus-ring-tight absolute rounded-full p-1 text-theme-fg-muted hover:bg-theme-bg-secondary"
+              style={{
+                right: "var(--theme-spacing-modal-padding)",
+                top: "var(--theme-spacing-modal-padding)",
+              }}
               aria-label={t`Close modal`}
             >
               <CloseIcon className="size-6" />
@@ -129,7 +133,9 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         )}
 
         {/* Content - scrollable */}
-        <div className="flex-1 overflow-y-auto p-4">{children}</div>
+        <div className="modal-section-geometry flex-1 overflow-y-auto">
+          {children}
+        </div>
       </div>
     </div>
   );

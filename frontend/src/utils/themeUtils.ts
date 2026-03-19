@@ -115,6 +115,7 @@ const withBorderRadiusCompatibility = (
       base: override.radius?.base ?? theme.borderRadius,
       shell: override.radius?.shell ?? theme.borderRadius,
       input: override.radius?.input ?? theme.borderRadius,
+      control: override.radius?.control ?? theme.borderRadius,
       message: override.radius?.message ?? theme.borderRadius,
       modal: override.radius?.modal ?? theme.borderRadius,
       pill: override.radius?.pill ?? theme.borderRadius,

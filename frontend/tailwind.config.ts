@@ -117,6 +117,18 @@ export default {
               fg: "var(--theme-avatar-assistant-fg)",
             },
           },
+          code: {
+            inline: {
+              bg: "var(--theme-code-inline-bg)",
+              fg: "var(--theme-code-inline-fg)",
+              border: "var(--theme-code-inline-border)",
+            },
+            block: {
+              bg: "var(--theme-code-block-bg)",
+              fg: "var(--theme-code-block-fg)",
+              border: "var(--theme-code-block-border)",
+            },
+          },
           info: {
             fg: "var(--theme-info-fg)",
             bg: "var(--theme-info-bg)",

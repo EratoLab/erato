@@ -303,11 +303,47 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setCssVariable("--theme-message-hover", theme.colors.message.hover);
     setCssVariable("--theme-message-controls", theme.colors.message.controls);
     setCssVariable("--theme-messageItem-hover", theme.colors.message.hover);
+    setCssVariable(
+      "--theme-code-inline-bg",
+      theme.colors.code.inline.background,
+    );
+    setCssVariable(
+      "--theme-code-inline-fg",
+      theme.colors.code.inline.foreground,
+    );
+    setCssVariable(
+      "--theme-code-inline-border",
+      theme.colors.code.inline.border,
+    );
+    setCssVariable("--theme-code-block-bg", theme.colors.code.block.background);
+    setCssVariable("--theme-code-block-fg", theme.colors.code.block.foreground);
+    setCssVariable("--theme-code-block-border", theme.colors.code.block.border);
+    setCssVariable(
+      "--theme-code-syntax-comment",
+      theme.colors.code.syntax.comment,
+    );
+    setCssVariable(
+      "--theme-code-syntax-keyword",
+      theme.colors.code.syntax.keyword,
+    );
+    setCssVariable(
+      "--theme-code-syntax-string",
+      theme.colors.code.syntax.string,
+    );
+    setCssVariable(
+      "--theme-code-syntax-function",
+      theme.colors.code.syntax.function,
+    );
+    setCssVariable(
+      "--theme-code-syntax-number",
+      theme.colors.code.syntax.number,
+    );
 
     // Radius
     setCssVariable("--theme-radius-base", theme.radius.base);
     setCssVariable("--theme-radius-shell", theme.radius.shell);
     setCssVariable("--theme-radius-input", theme.radius.input);
+    setCssVariable("--theme-radius-control", theme.radius.control);
     setCssVariable("--theme-radius-message", theme.radius.message);
     setCssVariable("--theme-radius-modal", theme.radius.modal);
     setCssVariable("--theme-radius-pill", theme.radius.pill);
@@ -333,6 +369,18 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     setCssVariable("--theme-spacing-message-gap", theme.spacing.message.gap);
     setCssVariable("--theme-spacing-control-gap", theme.spacing.control.gap);
     setCssVariable(
+      "--theme-spacing-control-padding-x",
+      theme.spacing.control.paddingX,
+    );
+    setCssVariable(
+      "--theme-spacing-control-padding-y",
+      theme.spacing.control.paddingY,
+    );
+    setCssVariable(
+      "--theme-spacing-control-min-height",
+      theme.spacing.control.minHeight,
+    );
+    setCssVariable(
       "--theme-spacing-sidebar-row-height",
       theme.spacing.sidebar.rowHeight,
     );
@@ -345,6 +393,18 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       theme.spacing.input.paddingY,
     );
     setCssVariable("--theme-spacing-input-gap", theme.spacing.input.gap);
+    setCssVariable(
+      "--theme-spacing-dropdown-padding-x",
+      theme.spacing.dropdown.paddingX,
+    );
+    setCssVariable(
+      "--theme-spacing-dropdown-padding-y",
+      theme.spacing.dropdown.paddingY,
+    );
+    setCssVariable(
+      "--theme-spacing-modal-padding",
+      theme.spacing.modal.padding,
+    );
 
     // Elevation
     setCssVariable("--theme-elevation-shell", theme.elevation.shell);
