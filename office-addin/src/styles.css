@@ -1,0 +1,35 @@
+:root {
+  background: linear-gradient(
+    180deg,
+    rgba(246, 248, 252, 0.98),
+    rgba(232, 237, 245, 0.98)
+  );
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.office-shell {
+  min-height: 100vh;
+}
+
+.office-shell--centered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.office-status {
+  margin: 0;
+  color: #475569;
+  font-size: 0.95rem;
+}
+
+.office-status--error {
+  color: #b91c1c;
+}

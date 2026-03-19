@@ -41,7 +41,7 @@ interface ChatMessage extends Message {
   };
 }
 
-interface ChatContextValue {
+export interface ChatContextValue {
   // Chat history
   chats: ReturnType<typeof useChatHistory>["chats"];
   currentChatId: string | null;
@@ -107,7 +107,7 @@ interface ChatContextValue {
   currentChatLastModel: ChatModel | null;
 }
 
-const ChatContext = createContext<ChatContextValue | null>(null);
+export const ChatContext = createContext<ChatContextValue | null>(null);
 
 export const useChatContext = () => {
   const context = useContext(ChatContext);

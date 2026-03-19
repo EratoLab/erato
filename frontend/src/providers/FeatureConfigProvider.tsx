@@ -73,7 +73,7 @@ interface CloudProvidersFeatureConfig {
 /**
  * Configuration for message feedback feature
  */
-interface MessageFeedbackFeatureConfig {
+export interface MessageFeedbackFeatureConfig {
   /** Whether message feedback (thumbs up/down) is enabled */
   enabled: boolean;
   /** Whether comment text field is enabled in feedback dialog */
@@ -99,7 +99,7 @@ interface SidebarFeatureConfig {
 /**
  * Complete feature configuration interface
  */
-interface FeatureConfig {
+export interface FeatureConfig {
   /** Upload-related feature flags */
   upload: UploadFeatureConfig;
   /** Chat input feature flags */
@@ -122,6 +122,44 @@ interface FeatureConfig {
 
 const FeatureConfigContext = createContext<FeatureConfig | null>(null);
 
+export const defaultStaticFeatureConfig: FeatureConfig = {
+  upload: {
+    enabled: true,
+    maxSizeBytes: 20 * 1024 * 1024,
+    maxSizeFormatted: "20 MB",
+  },
+  chatInput: {
+    autofocus: true,
+  },
+  auth: {
+    showLogout: false,
+  },
+  assistants: {
+    enabled: false,
+    showRecentItems: false,
+  },
+  starterPrompts: {
+    enabled: false,
+  },
+  userPreferences: {
+    enabled: false,
+  },
+  cloudProviders: {
+    availableProviders: [],
+  },
+  messageFeedback: {
+    enabled: false,
+    commentsEnabled: false,
+    editTimeLimitSeconds: null,
+  },
+  sidebar: {
+    collapsedMode: "hidden",
+    logoPath: null,
+    logoDarkPath: null,
+    chatHistoryShowMetadata: true,
+  },
+};
+
 /**
  * Formats bytes into a human-readable string (MB or GB)
  * @param bytes - The number of bytes to format
@@ -135,6 +173,89 @@ function formatBytes(bytes: number): string {
     return `${(bytes / GB).toFixed(1)} GB`;
   }
   return `${Math.round(bytes / MB)} MB`;
+}
+
+function createFeatureConfig(
+  environment: ReturnType<typeof env>,
+): FeatureConfig {
+  const availableProviders: CloudProvider[] = [];
+  if (environment.sharepointEnabled) {
+    availableProviders.push("sharepoint");
+  }
+
+  return {
+    upload: {
+      enabled: !environment.disableUpload,
+      maxSizeBytes: environment.maxUploadSizeBytes,
+      maxSizeFormatted: formatBytes(environment.maxUploadSizeBytes),
+    },
+    chatInput: {
+      autofocus: !environment.disableChatInputAutofocus,
+    },
+    auth: {
+      showLogout: !environment.disableLogout,
+    },
+    assistants: {
+      enabled: environment.assistantsEnabled,
+      showRecentItems: environment.assistantsShowRecentItems,
+    },
+    starterPrompts: {
+      enabled: environment.starterPromptsEnabled,
+    },
+    userPreferences: {
+      enabled: environment.userPreferencesEnabled,
+    },
+    cloudProviders: {
+      availableProviders,
+    },
+    messageFeedback: {
+      enabled: environment.messageFeedbackEnabled,
+      commentsEnabled: environment.messageFeedbackCommentsEnabled,
+      editTimeLimitSeconds: environment.messageFeedbackEditTimeLimitSeconds,
+    },
+    sidebar: {
+      collapsedMode: environment.sidebarCollapsedMode,
+      logoPath: environment.sidebarLogoPath,
+      logoDarkPath: environment.sidebarLogoDarkPath,
+      chatHistoryShowMetadata: environment.sidebarChatHistoryShowMetadata,
+    },
+  };
+}
+
+function mergeFeatureConfig(overrides?: Partial<FeatureConfig>): FeatureConfig {
+  if (!overrides) {
+    return defaultStaticFeatureConfig;
+  }
+
+  return {
+    upload: { ...defaultStaticFeatureConfig.upload, ...overrides.upload },
+    chatInput: {
+      ...defaultStaticFeatureConfig.chatInput,
+      ...overrides.chatInput,
+    },
+    auth: { ...defaultStaticFeatureConfig.auth, ...overrides.auth },
+    assistants: {
+      ...defaultStaticFeatureConfig.assistants,
+      ...overrides.assistants,
+    },
+    starterPrompts: {
+      ...defaultStaticFeatureConfig.starterPrompts,
+      ...overrides.starterPrompts,
+    },
+    userPreferences: {
+      ...defaultStaticFeatureConfig.userPreferences,
+      ...overrides.userPreferences,
+    },
+    cloudProviders: {
+      ...defaultStaticFeatureConfig.cloudProviders,
+      ...overrides.cloudProviders,
+    },
+    messageFeedback: {
+      ...defaultStaticFeatureConfig.messageFeedback,
+      ...overrides.messageFeedback,
+    },
+    sidebar: { ...defaultStaticFeatureConfig.sidebar, ...overrides.sidebar },
+  };
 }
 
 /**
@@ -157,62 +278,36 @@ function formatBytes(bytes: number): string {
  *   return <FileUploadButton />;
  * }
  */
-export function FeatureConfigProvider({ children }: { children: ReactNode }) {
-  // Call env() once during initialization and compute feature config
-  const config = useMemo<FeatureConfig>(() => {
-    const environment = env();
-
-    // Build list of available cloud providers based on feature flags
-    const availableProviders: CloudProvider[] = [];
-    if (environment.sharepointEnabled) {
-      availableProviders.push("sharepoint");
-    }
-    // Future: Add Google Drive when available
-    // if (environment.googleDriveEnabled) {
-    //   availableProviders.push("googledrive");
-    // }
-
-    return {
-      upload: {
-        enabled: !environment.disableUpload,
-        maxSizeBytes: environment.maxUploadSizeBytes,
-        maxSizeFormatted: formatBytes(environment.maxUploadSizeBytes),
-      },
-      chatInput: {
-        autofocus: !environment.disableChatInputAutofocus,
-      },
-      auth: {
-        showLogout: !environment.disableLogout,
-      },
-      assistants: {
-        enabled: environment.assistantsEnabled,
-        showRecentItems: environment.assistantsShowRecentItems,
-      },
-      starterPrompts: {
-        enabled: environment.starterPromptsEnabled,
-      },
-      userPreferences: {
-        enabled: environment.userPreferencesEnabled,
-      },
-      cloudProviders: {
-        availableProviders,
-      },
-      messageFeedback: {
-        enabled: environment.messageFeedbackEnabled,
-        commentsEnabled: environment.messageFeedbackCommentsEnabled,
-        editTimeLimitSeconds: environment.messageFeedbackEditTimeLimitSeconds,
-      },
-      sidebar: {
-        collapsedMode: environment.sidebarCollapsedMode,
-        logoPath: environment.sidebarLogoPath,
-        logoDarkPath: environment.sidebarLogoDarkPath,
-        chatHistoryShowMetadata: environment.sidebarChatHistoryShowMetadata,
-      },
-    };
-  }, []); // Empty deps - only compute once
+export function FeatureConfigProvider({
+  children,
+  config,
+}: {
+  children: ReactNode;
+  config?: Partial<FeatureConfig>;
+}) {
+  const resolvedConfig = useMemo<FeatureConfig>(
+    () => (config ? mergeFeatureConfig(config) : createFeatureConfig(env())),
+    [config],
+  );
 
   return (
-    <FeatureConfigContext.Provider value={config}>
+    <FeatureConfigContext.Provider value={resolvedConfig}>
+      {children}
+    </FeatureConfigContext.Provider>
+  );
+}
+
+export function StaticFeatureConfigProvider({
+  children,
+  config,
+}: {
+  children: ReactNode;
+  config?: Partial<FeatureConfig>;
+}) {
+  const mergedConfig = useMemo(() => mergeFeatureConfig(config), [config]);
+
+  return (
+    <FeatureConfigContext.Provider value={mergedConfig}>
       {children}
     </FeatureConfigContext.Provider>
   );

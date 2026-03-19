@@ -19,6 +19,7 @@
 import { useQueryClient, skipToken } from "@tanstack/react-query";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
+import { getIdToken } from "@/auth/tokenStore";
 import { useChatHistory } from "@/hooks";
 import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import {
@@ -57,6 +58,13 @@ import type { Message } from "@/types/chat";
 const logger = createLogger("HOOK", "useChatMessaging");
 const COMPLETION_CLOSE_DEDUP_MS = 5000;
 const MAX_RESUME_ATTEMPTS_PER_KEY = 3;
+
+const getAuthHeaders = (): Record<string, string> => {
+  const idToken = getIdToken();
+
+  return idToken ? { Authorization: `Bearer ${idToken}` } : {};
+};
+
 // Remove onChatCreated from parameters
 interface UseChatMessagingParams {
   chatId: string | null;
@@ -1475,6 +1483,7 @@ export function useChatMessaging(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...getAuthHeaders(),
           },
           body: JSON.stringify(requestBody),
         });
@@ -1700,7 +1709,10 @@ export function useChatMessaging(
             }
           },
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify(requestBody),
         });
 
@@ -1809,7 +1821,10 @@ export function useChatMessaging(
             }
           },
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify(requestBody),
         });
 
