@@ -1,11 +1,25 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { UserPreferencesDialog } from "./UserPreferencesDialog";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
+
+const mockNavigate = vi.fn();
+
+vi.mock("react-router-dom", async () => {
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 vi.mock("../Feedback/Alert", () => ({
   Alert: ({ children }: { children: ReactNode }) => (
@@ -36,17 +50,20 @@ function renderDialog() {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <UserPreferencesDialog
-        isOpen={true}
-        onClose={vi.fn()}
-        userProfile={userProfile}
-      />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <UserPreferencesDialog
+          isOpen={true}
+          onClose={vi.fn()}
+          userProfile={userProfile}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -123,5 +140,51 @@ describe("UserPreferencesDialog", () => {
     expect(dataTab).toHaveFocus();
     expect(dataTab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel", { name: "Data" })).toBeInTheDocument();
+  });
+
+  it("archives chats, refreshes recent chats, and redirects to a new chat", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, refetchOnWindowFocus: false },
+      },
+    });
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    const refetchQueries = vi.spyOn(queryClient, "refetchQueries");
+    const onClose = vi.fn();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ archived_chat_count: 2 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <UserPreferencesDialog
+            isOpen={true}
+            onClose={onClose}
+            userProfile={userProfile}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive all chats" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1beta/me/chats/archive_all",
+        expect.objectContaining({
+          method: "POST",
+        }),
+      );
+      expect(invalidateQueries).toHaveBeenCalled();
+      expect(refetchQueries).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith("/chat/new", { replace: true });
+    });
   });
 });
