@@ -51,6 +51,7 @@ export default function AssistantChatSpacePage() {
     assistantId: string;
     chatId?: string;
   }>();
+  const shouldFetchAssistant = !chatId;
 
   // Fetch assistant data
   const {
@@ -58,7 +59,9 @@ export default function AssistantChatSpacePage() {
     isLoading: isLoadingAssistant,
     error: assistantError,
   } = useGetAssistant(
-    assistantId ? { pathParams: { assistantId } } : reactQuery.skipToken,
+    shouldFetchAssistant && assistantId
+      ? { pathParams: { assistantId } }
+      : reactQuery.skipToken,
   );
 
   // Fetch available models to find the assistant's default model
@@ -162,7 +165,7 @@ export default function AssistantChatSpacePage() {
   );
 
   // Loading state
-  if (isLoadingAssistant) {
+  if (shouldFetchAssistant && isLoadingAssistant) {
     return (
       <div className="flex size-full flex-col">
         <div className="flex flex-1 items-center justify-center">
@@ -176,7 +179,7 @@ export default function AssistantChatSpacePage() {
   }
 
   // Error state
-  if (assistantError || !assistant) {
+  if (shouldFetchAssistant && (assistantError || !assistant)) {
     return (
       <div className="flex size-full flex-col">
         <div className="flex flex-1 items-center justify-center p-6">
@@ -206,21 +209,27 @@ export default function AssistantChatSpacePage() {
         layout="default"
         maxWidth={768}
         emptyStateComponent={
-          <ChatEmptyState
-            variant="assistant"
-            assistant={assistant}
-            pastChats={assistantChats}
-            isLoadingChats={false}
-          />
+          assistant ? (
+            <ChatEmptyState
+              variant="assistant"
+              assistant={assistant}
+              pastChats={assistantChats}
+              isLoadingChats={false}
+            />
+          ) : (
+            <ChatEmptyState variant="chat" />
+          )
         }
         onMessageAction={handleMessageAction}
         // Only pass assistantId when creating a NEW chat (no chatId in URL)
         // For existing chats, the assistant context is already stored in the chat
         assistantId={chatId ? undefined : assistantId}
         initialModelOverride={assistantDefaultModel}
-        assistantFiles={toFileUploadItems(assistant.files)}
-        assistantConfiguredFacetIds={assistant.facet_ids ?? []}
-        assistantFacetSettingsEnforced={assistant.enforce_facet_settings}
+        assistantFiles={toFileUploadItems(assistant?.files ?? [])}
+        assistantConfiguredFacetIds={assistant?.facet_ids ?? []}
+        assistantFacetSettingsEnforced={
+          assistant?.enforce_facet_settings ?? false
+        }
       />
     </div>
   );

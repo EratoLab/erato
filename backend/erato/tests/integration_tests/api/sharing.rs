@@ -186,6 +186,146 @@ async fn test_full_assistant_sharing_flow(pool: Pool<Postgres>) {
     assert_eq!(file_details["filename"], "test_file.txt");
 }
 
+/// Test that archiving a shared assistant removes it from the recipient's overview
+/// but does not break access to an already-created chat.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_archived_shared_assistant_hidden_but_existing_chat_accessible(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let user_a_subject = "user-a-archive-shared-assistant";
+    let user_a = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        user_a_subject,
+        None,
+    )
+    .await
+    .expect("Failed to create user A");
+
+    let user_b_subject = TEST_USER_SUBJECT;
+    let user_b = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        user_b_subject,
+        None,
+    )
+    .await
+    .expect("Failed to create user B");
+
+    let assistant = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user_a.id.to_string()),
+        "Shared Assistant To Archive".to_string(),
+        Some("Shared assistant that will be archived".to_string()),
+        "You are a shared assistant".to_string(),
+        None,
+        None,
+        None,
+        false,
+    )
+    .await
+    .expect("Failed to create assistant");
+
+    erato::models::share_grant::create_share_grant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user_a.id.to_string()),
+        "assistant".to_string(),
+        assistant.id.to_string(),
+        "user".to_string(),
+        "id".to_string(),
+        user_b.id.to_string(),
+        "viewer".to_string(),
+    )
+    .await
+    .expect("Failed to create share grant");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let create_chat_response = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "assistant_id": assistant.id.to_string() }))
+        .await;
+
+    assert_eq!(create_chat_response.status_code(), http::StatusCode::OK);
+    let create_chat_json: Value = create_chat_response.json();
+    let chat_id = create_chat_json["chat_id"]
+        .as_str()
+        .expect("Expected chat_id")
+        .to_string();
+
+    let message_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": chat_id,
+            "user_message": "Please answer before the assistant is archived"
+        }))
+        .await;
+
+    assert_eq!(message_response.status_code(), http::StatusCode::OK);
+    let events = parse_sse_events(&message_response);
+    assert!(
+        has_event_type(&events, "assistant_message_completed"),
+        "Expected a completed assistant response before archiving",
+    );
+
+    erato::models::assistant::archive_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(user_a.id.to_string()),
+        assistant.id,
+    )
+    .await
+    .expect("Failed to archive assistant");
+
+    let shared_assistants_response = server
+        .get("/api/v1beta/assistants?sharing_relation=shared_with_user")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(
+        shared_assistants_response.status_code(),
+        http::StatusCode::OK
+    );
+    let shared_assistants_json: Value = shared_assistants_response.json();
+    let shared_assistants = shared_assistants_json
+        .as_array()
+        .expect("Expected assistants array");
+    assert!(
+        !shared_assistants
+            .iter()
+            .any(|item| item["id"] == assistant.id.to_string()),
+        "Archived shared assistant should not remain visible in the recipient overview",
+    );
+
+    let messages_response = server
+        .get(&format!("/api/v1beta/chats/{}/messages", chat_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    assert_eq!(messages_response.status_code(), http::StatusCode::OK);
+    let messages_json: Value = messages_response.json();
+    let messages = messages_json["messages"]
+        .as_array()
+        .expect("Expected messages array for archived shared assistant chat");
+    assert!(
+        messages.len() >= 2,
+        "Existing chat should still be readable after the shared assistant is archived",
+    );
+}
+
 /// Test that User B cannot update an assistant they only have viewer access to
 ///
 /// # Test Categories

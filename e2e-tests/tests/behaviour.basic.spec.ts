@@ -14,38 +14,39 @@ const dispatchFileDragEvent = async (
     type: string;
   },
 ) => {
-  await page.evaluate(({ type, filePayload }) => {
-    const dropzone = document.querySelector(
-      '[data-ui="chat-conversation-dropzone"]',
-    );
-    if (!(dropzone instanceof HTMLElement)) {
-      throw new Error("Chat conversation dropzone not found");
-    }
+  await page.evaluate(
+    ({ type, filePayload }) => {
+      const dropzone = document.querySelector(
+        '[data-ui="chat-conversation-dropzone"]',
+      );
+      if (!(dropzone instanceof HTMLElement)) {
+        throw new Error("Chat conversation dropzone not found");
+      }
 
-    const dataTransfer = new DataTransfer();
-    if (filePayload) {
-      const fileBytes = new Uint8Array(filePayload.bytes);
-      const draggedFile = new File([fileBytes], filePayload.name, {
-        type: filePayload.type,
+      const dataTransfer = new DataTransfer();
+      if (filePayload) {
+        const fileBytes = new Uint8Array(filePayload.bytes);
+        const draggedFile = new File([fileBytes], filePayload.name, {
+          type: filePayload.type,
+        });
+        dataTransfer.items.add(draggedFile);
+      }
+
+      const dragEvent = new DragEvent(type, {
+        bubbles: true,
+        cancelable: true,
       });
-      dataTransfer.items.add(draggedFile);
-    }
+      Object.defineProperty(dragEvent, "dataTransfer", {
+        value: dataTransfer,
+      });
 
-    const dragEvent = new DragEvent(type, {
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(dragEvent, "dataTransfer", {
-      value: dataTransfer,
-    });
-
-    dropzone.dispatchEvent(dragEvent);
-  }, { type: eventType, filePayload: file });
+      dropzone.dispatchEvent(dragEvent);
+    },
+    { type: eventType, filePayload: file },
+  );
 };
 
-const expectChatDragDropUploadToWork = async (
-  page: Page,
-) => {
+const expectChatDragDropUploadToWork = async (page: Page) => {
   const testFilePath = path.join(
     process.cwd(),
     "test-files",
