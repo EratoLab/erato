@@ -11,6 +11,7 @@ import {
 } from "@/config/componentRegistry";
 import { useChatActions } from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
+import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { chatMessagesQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -169,6 +170,10 @@ export const Chat = ({
     [],
   );
 
+  const [selectedChatProviderId, setSelectedChatProviderId] = useState<
+    string | null
+  >(initialModelOverride?.chat_provider_id ?? null);
+
   // Resolve message controls from registry if not explicitly provided
   const resolvedMessageControls = useMemo(
     () =>
@@ -206,10 +211,37 @@ export const Chat = ({
     historyError: chatHistoryError,
     refetchHistory: refreshChats,
     currentChatLastModel,
-    uploadFiles,
-    uploadError,
-    isUploading,
   } = useChatContext();
+
+  useEffect(() => {
+    if (selectedChatProviderId) {
+      return;
+    }
+
+    const fallbackChatProviderId =
+      initialModelOverride?.chat_provider_id ??
+      currentChatLastModel?.chat_provider_id ??
+      null;
+
+    if (fallbackChatProviderId) {
+      setSelectedChatProviderId(fallbackChatProviderId);
+    }
+  }, [
+    currentChatLastModel?.chat_provider_id,
+    initialModelOverride?.chat_provider_id,
+    selectedChatProviderId,
+  ]);
+
+  const { uploadFiles, uploadError, isUploading } = useFileUploadWithTokenCheck(
+    {
+      message: "",
+      chatId: currentChatId,
+      assistantId,
+      chatProviderId: selectedChatProviderId ?? undefined,
+      acceptedFileTypes,
+      multiple: true,
+    },
+  );
 
   const { profile } = useProfile();
 
@@ -748,6 +780,7 @@ export const Chat = ({
               initialSelectedFacetIds={effectiveInitialSelectedFacetIds}
               enforceSelectedFacetIds={assistantFacetSettingsEnforced}
               onFacetSelectionChange={setActiveSelectedFacetIds}
+              onSelectedChatProviderIdChange={setSelectedChatProviderId}
               uploadFiles={uploadFiles}
               uploadError={uploadError}
             />

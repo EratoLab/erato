@@ -35,6 +35,16 @@ vi.mock("@/providers/ChatProvider", () => ({
   useChatContext: vi.fn(),
 }));
 
+vi.mock("@/providers/FileCapabilitiesProvider", () => ({
+  FileCapabilitiesProvider: ({ children }: { children: React.ReactNode }) =>
+    children,
+  useFileCapabilitiesContext: () => ({
+    capabilities: [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 vi.mock("@/hooks/useProfile", () => ({
   useProfile: vi.fn().mockImplementation(() => ({
     profile: {
