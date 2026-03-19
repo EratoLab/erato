@@ -36,6 +36,7 @@ describe("themeConfig", () => {
     disableLogout: false,
     assistantsEnabled: false,
     assistantsShowRecentItems: false,
+    starterPromptsEnabled: false,
     promptOptimizerEnabled: false,
     sharepointEnabled: false,
     messageFeedbackEnabled: false,

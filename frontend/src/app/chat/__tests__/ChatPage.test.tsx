@@ -194,6 +194,7 @@ vi.mock("@/app/env", () => ({
     disableLogout: false,
     assistantsEnabled: false,
     assistantsShowRecentItems: false,
+    starterPromptsEnabled: false,
     sharepointEnabled: false,
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,

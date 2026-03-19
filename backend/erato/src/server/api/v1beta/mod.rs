@@ -85,6 +85,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/profile", get(profile))
         .route("/profile/preferences", put(update_profile_preferences))
         .route("/facets", get(facets))
+        .route("/starter-prompts", get(starter_prompts))
         .route("/messages/submitstream", post(message_submit_sse))
         .route("/messages/regeneratestream", post(regenerate_message_sse))
         .route("/messages/editstream", post(edit_message_sse))
@@ -196,6 +197,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         profile,
         update_profile_preferences,
         facets,
+        starter_prompts,
         chat_messages,
         submit_message_feedback,
         recent_chats,
@@ -240,6 +242,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         FacetInfo,
         GlobalFacetSettings,
         FacetsResponse,
+        StarterPromptInfo,
+        StarterPromptsResponse,
         ChatMessage,
         ChatMessageStats,
         ChatMessagesResponse,
@@ -443,6 +447,27 @@ pub struct FacetsResponse {
     facets: Vec<FacetInfo>,
 }
 
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StarterPromptInfo {
+    id: String,
+    title: String,
+    subtitle: String,
+    prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    icon: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    selected_facets: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    chat_provider: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StarterPromptsResponse {
+    starter_prompts: Vec<StarterPromptInfo>,
+}
+
 #[utoipa::path(
     get,
     path = "/me/facets",
@@ -501,6 +526,112 @@ pub async fn facets(
         },
         facets,
     }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/me/starter-prompts",
+    responses(
+        (status = OK, body = StarterPromptsResponse),
+        (status = NOT_FOUND, description = "When starter prompts are disabled"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = INTERNAL_SERVER_ERROR, description = "Server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn starter_prompts(
+    State(app_state): State<AppState>,
+    Extension(_me_user): Extension<MeProfile>,
+) -> Result<Json<StarterPromptsResponse>, StatusCode> {
+    let config = &app_state.config.starter_prompts;
+    if !config.enabled {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let mut starter_prompts = Vec::new();
+    let mut seen = HashSet::new();
+
+    for starter_prompt_id in &config.priority_order {
+        if let Some(starter_prompt) = config.prompts.get(starter_prompt_id) {
+            starter_prompts.push(
+                build_starter_prompt_info(&app_state, starter_prompt_id, starter_prompt).await?,
+            );
+            seen.insert(starter_prompt_id.clone());
+        }
+    }
+
+    let mut remaining: Vec<String> = config
+        .prompts
+        .keys()
+        .filter(|starter_prompt_id| !seen.contains(*starter_prompt_id))
+        .cloned()
+        .collect();
+    remaining.sort();
+    for starter_prompt_id in remaining {
+        if let Some(starter_prompt) = config.prompts.get(&starter_prompt_id) {
+            starter_prompts.push(
+                build_starter_prompt_info(&app_state, &starter_prompt_id, starter_prompt).await?,
+            );
+        }
+    }
+
+    Ok(Json(StarterPromptsResponse { starter_prompts }))
+}
+
+async fn build_starter_prompt_info(
+    app_state: &AppState,
+    starter_prompt_id: &str,
+    starter_prompt: &crate::config::StarterPromptConfig,
+) -> Result<StarterPromptInfo, StatusCode> {
+    let prompt = app_state
+        .resolve_prompt_source(&starter_prompt.prompt)
+        .await
+        .map_err(|error| {
+            tracing::error!(
+                "Failed to resolve starter prompt '{}': {}",
+                starter_prompt_id,
+                error
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let available_facet_ids: HashSet<&str> = app_state
+        .config
+        .experimental_facets
+        .facets
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let selected_facets = starter_prompt
+        .selected_facets
+        .iter()
+        .filter(|facet_id| available_facet_ids.contains(facet_id.as_str()))
+        .cloned()
+        .collect();
+
+    let chat_provider = starter_prompt
+        .chat_provider
+        .as_ref()
+        .and_then(|provider_id| {
+            app_state
+                .config
+                .chat_providers
+                .as_ref()
+                .and_then(|chat_providers| chat_providers.providers.get(provider_id))
+                .map(|_| provider_id.clone())
+        });
+
+    Ok(StarterPromptInfo {
+        id: starter_prompt_id.to_string(),
+        title: starter_prompt.title.clone(),
+        subtitle: starter_prompt.subtitle.clone(),
+        prompt,
+        icon: starter_prompt.icon.clone(),
+        selected_facets,
+        chat_provider,
+    })
 }
 
 #[derive(Serialize, ToSchema)]

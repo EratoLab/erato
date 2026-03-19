@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useNavigate } from "react-router-dom";
 
+import { StarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSection";
 import { Button } from "@/components/ui/Controls/Button";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { EditIcon } from "@/components/ui/icons";
@@ -187,6 +188,8 @@ export function AssistantWelcomeScreen({
       <div className={`mt-8 text-theme-fg-muted ${textAlignment}`}>
         <p className="text-sm">{t`Start typing below to begin a new conversation`}</p>
       </div>
+
+      <StarterPromptsSection className="mt-4" />
     </div>
   );
 }

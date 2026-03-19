@@ -578,7 +578,7 @@ export const MessageList = memo<MessageListProps>(
         {renderMessageListHeader}
         <div className="mx-auto w-full" style={contentWidthStyle}>
           {showEmptyState && emptyStateComponent ? (
-            <div className="flex h-full min-h-[300px] items-center justify-center">
+            <div className="flex h-full min-h-[300px] items-center justify-end pb-6 pt-16 sm:pb-10 sm:pt-24">
               {emptyStateComponent}
             </div>
           ) : shouldUseVirtualization ? (

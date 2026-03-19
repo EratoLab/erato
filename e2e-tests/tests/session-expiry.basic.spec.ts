@@ -37,7 +37,10 @@ test(
     // Logout on tab 1
     await page1.bringToFront();
     await page1.getByRole("button", { name: "expand sidebar" }).click();
-    await page1.locator("button").filter({ hasText: "A" }).click();
+    await page1
+      .locator("button")
+      .filter({ has: page1.getByTestId("avatar-identity") })
+      .click();
     await page1.getByRole("menuitem", { name: "Sign out" }).click();
 
     // Verify tab 1 is at login page

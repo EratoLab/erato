@@ -1394,6 +1394,20 @@ export type SharepointProviderMetadata = {
   item_id: string;
 };
 
+export type StarterPromptInfo = {
+  chat_provider?: string;
+  icon?: string;
+  id: string;
+  prompt: string;
+  selected_facets?: string[];
+  subtitle: string;
+  title: string;
+};
+
+export type StarterPromptsResponse = {
+  starter_prompts: StarterPromptInfo[];
+};
+
 export type TokenUsageFileInput = {
   /**
    * File upload IDs to include in estimation.

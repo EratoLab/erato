@@ -8,6 +8,7 @@ import Markdown from "react-markdown";
 
 import { env } from "@/app/env";
 import { useTheme } from "@/components/providers/ThemeProvider";
+import { StarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSection";
 import { Logo } from "@/components/ui/Logo";
 import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
 import { loadThemeFromPath } from "@/utils/themeUtils";
@@ -64,27 +65,28 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
     void loadBranding();
   }, [isCustomTheme]);
 
-  // If no branding or if branding is disabled, don't show
-  if (!branding?.enabled) return null;
-
   // Get logo dimensions based on size
-  const logoSize = logoSizes[branding.logoSize] || logoSizes.medium;
+  const logoSize = branding?.logoSize
+    ? logoSizes[branding.logoSize] || logoSizes.medium
+    : null;
 
   return (
     <div
       className={`flex flex-col ${flexAlignment} ${justifyAlignment} p-12 ${className}`}
       data-testid="welcome-screen-default"
     >
-      <div className={`mb-8 ${flexAlignment}`}>
-        <Logo
-          width={logoSize.width}
-          height={logoSize.height}
-          alt={t({
-            id: "branding.welcomeScreen.title",
-            message: "Welcome to AI Assistant",
-          })}
-        />
-      </div>
+      {branding?.enabled && logoSize && (
+        <div className={`mb-8 ${flexAlignment}`}>
+          <Logo
+            width={logoSize.width}
+            height={logoSize.height}
+            alt={t({
+              id: "branding.welcomeScreen.title",
+              message: "Welcome to AI Assistant",
+            })}
+          />
+        </div>
+      )}
 
       <h1
         className={`mb-4 text-2xl font-bold text-theme-fg-primary ${textAlignment}`}
@@ -150,6 +152,8 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
           })}
         </Markdown>
       </div>
+
+      <StarterPromptsSection className="mt-4" />
     </div>
   );
 }

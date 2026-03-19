@@ -11,6 +11,7 @@ export type Env = {
   disableLogout: boolean;
   assistantsEnabled: boolean;
   assistantsShowRecentItems: boolean;
+  starterPromptsEnabled: boolean;
   promptOptimizerEnabled: boolean;
   userPreferencesEnabled: boolean;
   sharepointEnabled: boolean;
@@ -39,6 +40,7 @@ declare global {
     DISABLE_LOGOUT?: boolean;
     ASSISTANTS_ENABLED?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
+    STARTER_PROMPTS_ENABLED?: boolean;
     PROMPT_OPTIMIZER_ENABLED?: boolean;
     USER_PREFERENCES_ENABLED?: boolean;
     SHAREPOINT_ENABLED?: boolean;
@@ -117,6 +119,10 @@ export const env = (): Env => {
     import.meta.env.VITE_ASSISTANTS_SHOW_RECENT_ITEMS === "true"
       ? true
       : (window.ASSISTANTS_SHOW_RECENT_ITEMS ?? false);
+  const starterPromptsEnabled =
+    import.meta.env.VITE_STARTER_PROMPTS_ENABLED === "true"
+      ? true
+      : (window.STARTER_PROMPTS_ENABLED ?? false);
   const promptOptimizerEnabled =
     import.meta.env.VITE_PROMPT_OPTIMIZER_ENABLED === "true"
       ? true
@@ -182,6 +188,7 @@ export const env = (): Env => {
     disableLogout,
     assistantsEnabled,
     assistantsShowRecentItems,
+    starterPromptsEnabled,
     promptOptimizerEnabled,
     userPreferencesEnabled,
     sharepointEnabled,

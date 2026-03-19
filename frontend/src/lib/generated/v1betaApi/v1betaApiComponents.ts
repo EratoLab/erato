@@ -2968,6 +2968,111 @@ export const useRecentChats = <TData = Schemas.RecentChatsResponse,>(
   });
 };
 
+export type StarterPromptsError = Fetcher.ErrorWrapper<undefined>;
+
+export type StarterPromptsVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchStarterPrompts = (
+  variables: StarterPromptsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.StarterPromptsResponse,
+    StarterPromptsError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/starter-prompts",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function starterPromptsQuery(variables: StarterPromptsVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.StarterPromptsResponse>;
+};
+
+export function starterPromptsQuery(
+  variables: StarterPromptsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.StarterPromptsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function starterPromptsQuery(
+  variables: StarterPromptsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/starter-prompts",
+      operationId: "starterPrompts",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchStarterPrompts(variables, signal),
+  };
+}
+
+export const useSuspenseStarterPrompts = <
+  TData = Schemas.StarterPromptsResponse,
+>(
+  variables: StarterPromptsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.StarterPromptsResponse,
+      StarterPromptsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.StarterPromptsResponse,
+    StarterPromptsError,
+    TData
+  >({
+    ...starterPromptsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useStarterPrompts = <TData = Schemas.StarterPromptsResponse,>(
+  variables: StarterPromptsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.StarterPromptsResponse,
+      StarterPromptsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.StarterPromptsResponse,
+    StarterPromptsError,
+    TData
+  >({
+    ...starterPromptsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type MessagesError = Fetcher.ErrorWrapper<undefined>;
 
 export type MessagesResponse = Schemas.Message[];
@@ -3573,6 +3678,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/recent_chats";
       operationId: "recentChats";
       variables: RecentChatsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/starter-prompts";
+      operationId: "starterPrompts";
+      variables: StarterPromptsVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/messages";

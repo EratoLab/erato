@@ -17,7 +17,10 @@ test("Can login & logout", { tag: TAG_CI }, async ({ browser }) => {
   ).toBeVisible();
 
   await page.getByRole("button", { name: "expand sidebar" }).click();
-  await page.locator("button").filter({ hasText: "A" }).click();
+  await page
+    .locator("button")
+    .filter({ has: page.getByTestId("avatar-identity") })
+    .click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
 
   await expect(

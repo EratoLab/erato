@@ -1,2 +1,36 @@
 # Main configuration file
 # File storage providers are configured in erato.file-storage.auto.erato.toml
+
+[starter_prompts]
+enabled = true
+priority_order = ["research_topic", "draft_email", "summarize_notes"]
+
+[starter_prompts.prompts.research_topic]
+title = "Research a topic"
+subtitle = "Prefill a research request with web search selected"
+icon = "iconoir-globe"
+prompt = "Research this topic and summarize the most important findings."
+selected_facets = ["web_search"]
+chat_provider = "mock-llm-200k"
+
+[starter_prompts.prompts.draft_email]
+title = "Draft an email"
+subtitle = "Write a concise and professional reply"
+icon = "iconoir-mail"
+prompt = "Draft a concise and professional reply to this email."
+
+[starter_prompts.prompts.summarize_notes]
+title = "Summarize notes"
+subtitle = "Turn rough notes into a structured summary"
+icon = "iconoir-page"
+prompt = "Summarize these notes into clear action items and decisions."
+
+[experimental_facets]
+priority_order = ["web_search"]
+default_selected_facets = []
+
+[experimental_facets.facets.web_search]
+display_name = "Web search"
+icon = "iconoir-globe"
+tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
+additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."
