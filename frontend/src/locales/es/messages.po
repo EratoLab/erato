@@ -368,7 +368,7 @@ msgstr "Límite presupuestario alcanzado"
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "chat.warning.budget.limit_reached.message"
-msgstr "Ha alcanzado o superado su límite presupuestario de {formattedLimit}. Gasto actual: {formattedSpending}."
+msgstr "Ha alcanzado o superado su límite presupuestario personal de {formattedLimit}. Gasto actual: {formattedSpending}."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx

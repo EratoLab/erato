@@ -368,12 +368,12 @@ msgstr "Budgetlimit erreicht"
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "chat.warning.budget.limit_reached.message"
-msgstr "Sie haben Ihr Budgetlimit von {formattedLimit} erreicht oder überschritten. Aktuelle Ausgaben: {formattedSpending}."
+msgstr "Du hast deine persönliche Budgetgrenze von {formattedLimit} erreicht oder überschritten. Aktuelle Ausgaben: {formattedSpending}."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "chat.warning.budget.period_suffix"
-msgstr " Dies gilt für Ihre {days}-Tage-Budgetperiode."
+msgstr " Dies gilt für deine {days}-Tage-Budgetperiode."
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
