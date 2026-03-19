@@ -68,7 +68,7 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
     message = t(
       msg({
         id: "chat.warning.budget.limit_reached.message",
-        message: `You have reached or exceeded your budget limit of ${formattedLimit}. Current spending: ${formattedSpending}.`,
+        message: `You have reached or exceeded your personal budget limit of ${formattedLimit}. Current spending: ${formattedSpending}.`,
       }),
     );
   } else if (warning.isWarning) {
