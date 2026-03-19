@@ -203,6 +203,33 @@ describe("MessageContent", () => {
     );
   });
 
+  it("resolves preview-only erato-file links without requiring a download url", () => {
+    const onFileLinkPreview = vi.fn();
+    const file = makeFile({
+      download_url: "",
+    });
+
+    renderWithTheme(
+      <MessageContent
+        content={textContent("[Link](erato-file://file_123#page=4)")}
+        filesById={{ [file.id]: file }}
+        onFileLinkPreview={onFileLinkPreview}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Link" }));
+
+    expect(onFileLinkPreview).toHaveBeenCalledTimes(1);
+    expect(onFileLinkPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "file_123",
+        download_url: "",
+        preview_url:
+          "https://files.example.com/preview/sample-report-compressed.pdf#page=4",
+      }),
+    );
+  });
+
   it("keeps external links opening in a new tab", () => {
     renderWithTheme(
       <MessageContent

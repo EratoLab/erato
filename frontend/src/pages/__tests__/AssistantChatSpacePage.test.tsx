@@ -31,13 +31,24 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 vi.mock("@/components/ui/Chat/Chat", () => ({
   Chat: ({
     assistantId,
+    assistantFiles,
     emptyStateComponent,
   }: {
     assistantId?: string;
+    assistantFiles?: Array<{ filename: string; download_url: string }>;
     emptyStateComponent?: React.ReactNode;
   }) => (
     <div data-testid="chat">
       <div data-testid="assistant-id">{assistantId ?? "none"}</div>
+      <div data-testid="assistant-file-count">
+        {assistantFiles?.length ?? 0}
+      </div>
+      <div data-testid="assistant-file-names">
+        {assistantFiles?.map((file) => file.filename).join(",") ?? ""}
+      </div>
+      <div data-testid="assistant-file-downloads">
+        {assistantFiles?.map((file) => file.download_url).join(",") ?? ""}
+      </div>
       {emptyStateComponent}
     </div>
   ),
@@ -120,5 +131,54 @@ describe("AssistantChatSpacePage", () => {
       "Failed to load assistant. Please try again.",
     );
     expect(screen.queryByTestId("chat")).not.toBeInTheDocument();
+  });
+
+  it("passes preview-only assistant files through to chat for erato-file link resolution", () => {
+    (useGetAssistant as Mock).mockReturnValue({
+      data: {
+        id: "assistant-1",
+        name: "Preview Assistant",
+        prompt: "Use attached files",
+        description: null,
+        default_chat_provider: null,
+        facet_ids: [],
+        enforce_facet_settings: false,
+        mcp_server_ids: [],
+        updated_at: "2026-03-19T12:00:00.000Z",
+        files: [
+          {
+            id: "file-preview-only",
+            filename: "sample-report-compressed.pdf",
+            download_url: null,
+            preview_url:
+              "https://files.example.com/preview/sample-report-compressed.pdf",
+            file_contents_unavailable_missing_permissions: false,
+            file_capability: {
+              can_read: true,
+              can_search: true,
+              can_extract_text: true,
+              can_analyze: false,
+              can_summarize: true,
+              can_render_inline: true,
+              is_supported: true,
+              supported_operations: ["extract_text"],
+            },
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    });
+
+    renderPage("/a/assistant-1");
+
+    expect(screen.getByTestId("chat")).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-file-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("assistant-file-names")).toHaveTextContent(
+      "sample-report-compressed.pdf",
+    );
+    expect(screen.getByTestId("assistant-file-downloads")).toHaveTextContent(
+      "",
+    );
   });
 });
