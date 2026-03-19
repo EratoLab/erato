@@ -90,4 +90,22 @@ describe("mergeThemeWithOverrides", () => {
     expect(mergedTheme.colors.shell.modal).toBe("#111827");
     expect(mergedTheme.colors.message.hover).toBe("#334155");
   });
+
+  it("merges code highlight preset and block style overrides", () => {
+    const mergedTheme = mergeThemeWithOverrides(defaultTheme, {
+      codeHighlight: {
+        preset: "night-owl",
+        blockStyle: {
+          borderRadius: "0.75rem",
+          fontFamily: "\"IBM Plex Mono\", monospace",
+        },
+      },
+    });
+
+    expect(mergedTheme.codeHighlight.preset).toBe("night-owl");
+    expect(mergedTheme.codeHighlight.blockStyle).toMatchObject({
+      borderRadius: "0.75rem",
+      fontFamily: "\"IBM Plex Mono\", monospace",
+    });
+  });
 });

@@ -1,3 +1,9 @@
+import {
+  DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
+  DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
+  type PrismCodeThemePreset,
+} from "./codeHighlightThemes";
+
 const colors = {
   neutral: {
     50: "#f9fafb",
@@ -254,6 +260,22 @@ export type ThemeTypography = {
   };
 };
 
+export type ThemeCodeHighlightBlockStyle = {
+  backgroundColor: string;
+  color: string;
+  border: string;
+  borderRadius: string;
+  padding: string;
+  fontFamily: string;
+  fontSize: string;
+  lineHeight: string;
+};
+
+export type ThemeCodeHighlight = {
+  preset: PrismCodeThemePreset;
+  blockStyle?: Partial<ThemeCodeHighlightBlockStyle>;
+};
+
 export type Theme = {
   colors: ThemeColors;
   borderRadius: string;
@@ -261,6 +283,7 @@ export type Theme = {
   spacing: ThemeSpacing;
   elevation: ThemeElevation;
   layout: ThemeLayout;
+  codeHighlight: ThemeCodeHighlight;
   typography?: ThemeTypography;
 };
 
@@ -491,6 +514,9 @@ export const defaultTheme: Theme = {
       width: "17.5rem",
     },
   },
+  codeHighlight: {
+    preset: DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
+  },
   typography: defaultTypography,
 };
 
@@ -609,5 +635,8 @@ export const darkTheme: Theme = {
     input: "0 8px 24px rgba(0, 0, 0, 0.25)",
     modal: "0 24px 48px rgba(0, 0, 0, 0.45)",
     dropdown: "0 12px 24px rgba(0, 0, 0, 0.35)",
+  },
+  codeHighlight: {
+    preset: DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
   },
 };

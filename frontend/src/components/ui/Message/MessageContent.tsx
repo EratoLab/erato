@@ -2,11 +2,14 @@ import { t } from "@lingui/core/macro";
 import React, { memo } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import vs from "react-syntax-highlighter/dist/esm/styles/prism/vs";
-import vscDarkPlus from "react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus";
 import remarkGfm from "remark-gfm";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
+import {
+  DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
+  DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
+  resolvePrismCodeTheme,
+} from "@/config/codeHighlightThemes";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { parseContent } from "@/utils/adapters/contentPartAdapter";
 
@@ -33,7 +36,7 @@ interface MessageContentProps {
 const INLINE_CODE_CLASS_NAME =
   "rounded-md border border-theme-code-inline-border bg-theme-code-inline-bg px-1.5 py-0.5 font-mono text-sm text-theme-code-inline-fg";
 const BlockCodeContext = React.createContext(false);
-const BLOCK_CODE_CUSTOM_STYLE = {
+const BASE_BLOCK_CODE_CUSTOM_STYLE = {
   margin: 0,
   overflow: "visible",
 } as const;
@@ -72,17 +75,28 @@ function MarkdownCode({
   children,
   ...props
 }: MarkdownCodeProps) {
-  const { effectiveTheme } = useTheme();
+  const { effectiveTheme, theme } = useTheme();
   const isBlockCode = React.useContext(BlockCodeContext);
   const codeContent = String(children).replace(/\n$/, "");
   const match = /language-(\w+)/.exec(className ?? "");
   const language = match ? match[1] : "";
-  const syntaxTheme = effectiveTheme === "dark" ? vscDarkPlus : vs;
+  const fallbackPreset =
+    effectiveTheme === "dark"
+      ? DEFAULT_DARK_CODE_HIGHLIGHT_PRESET
+      : DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET;
+  const syntaxTheme = resolvePrismCodeTheme(
+    theme.codeHighlight.preset,
+    fallbackPreset,
+  );
+  const blockCustomStyle = {
+    ...BASE_BLOCK_CODE_CUSTOM_STYLE,
+    ...theme.codeHighlight.blockStyle,
+  };
 
   if (isBlockCode) {
     return (
       <SyntaxHighlighter
-        customStyle={BLOCK_CODE_CUSTOM_STYLE}
+        customStyle={blockCustomStyle}
         language={language || undefined}
         PreTag="div"
         style={syntaxTheme}
