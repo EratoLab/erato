@@ -7,6 +7,9 @@ install:
 dev:
     uv run --script scripts/dev.py
 
+dev-linked:
+    uv run --script scripts/dev.py --mode linked
+
 format:
     pnpm run format
 

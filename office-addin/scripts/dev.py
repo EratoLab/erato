@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 import os
@@ -25,7 +26,13 @@ SCRIPT_PATH = Path(__file__).resolve()
 OFFICE_ADDIN_DIR = SCRIPT_PATH.parent.parent
 FRONTEND_DIR = OFFICE_ADDIN_DIR.parent / "frontend"
 FRONTEND_TARBALL_PATH = FRONTEND_DIR / "dist-package" / "erato-frontend.tgz"
+FRONTEND_PACKAGE_STATE_PATH = (
+    FRONTEND_DIR / "dist-package" / "erato-frontend.state.json"
+)
+FRONTEND_LIBRARY_ENTRY_PATH = FRONTEND_DIR / "dist-library" / "library.js"
+FRONTEND_LIBRARY_CSS_PATH = FRONTEND_DIR / "dist-library" / "style.css"
 LOCAL_AUTH_DIR = OFFICE_ADDIN_DIR / "local-auth"
+VITE_BIN_PATH = OFFICE_ADDIN_DIR / "node_modules" / ".bin" / "vite"
 MANIFEST_LOCAL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-local.xml"
 MANIFEST_FUNNEL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.xml"
 ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
@@ -251,24 +258,52 @@ def print_funnel_url() -> None:
 
 
 def install_packaged_frontend() -> None:
-    run_command(
-        ["pnpm", "install", "--no-frozen-lockfile", "--lockfile=false"],
+    result = run_command(
+        [
+            "pnpm",
+            "install",
+            "--no-frozen-lockfile",
+            "--lockfile=false",
+            "--loglevel=error",
+        ],
         cwd=OFFICE_ADDIN_DIR,
+        capture_output=True,
     )
+    if result.stderr:
+        print(result.stderr.rstrip())
 
 
-def wait_for_packaged_frontend(timeout_seconds: int = 60) -> None:
+def wait_for_path(path: Path, timeout_seconds: int = 60) -> None:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
-        if FRONTEND_TARBALL_PATH.exists():
+        if path.exists():
             return
         time.sleep(0.5)
 
     print(
-        f"Timed out waiting for {FRONTEND_TARBALL_PATH.relative_to(FRONTEND_DIR.parent)}",
+        f"Timed out waiting for {path.relative_to(FRONTEND_DIR.parent)}",
         file=sys.stderr,
     )
     sys.exit(1)
+
+
+def wait_for_packaged_frontend(timeout_seconds: int = 60) -> None:
+    wait_for_path(FRONTEND_PACKAGE_STATE_PATH, timeout_seconds=timeout_seconds)
+
+
+def wait_for_linked_frontend(timeout_seconds: int = 60) -> None:
+    wait_for_path(FRONTEND_LIBRARY_ENTRY_PATH, timeout_seconds=timeout_seconds)
+    wait_for_path(FRONTEND_LIBRARY_CSS_PATH, timeout_seconds=timeout_seconds)
+
+
+def read_package_state() -> dict[str, str] | None:
+    if not FRONTEND_PACKAGE_STATE_PATH.exists():
+        return None
+
+    try:
+        return json.loads(FRONTEND_PACKAGE_STATE_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
 
 
 def spawn_frontend_watch() -> subprocess.Popen[str]:
@@ -276,14 +311,20 @@ def spawn_frontend_watch() -> subprocess.Popen[str]:
         ["pnpm", "run", "build:lib:watch"],
         cwd=FRONTEND_DIR,
         text=True,
+        start_new_session=True,
     )
 
 
-def spawn_app_dev() -> subprocess.Popen[str]:
+def spawn_app_dev(mode: str) -> subprocess.Popen[str]:
+    command = [str(VITE_BIN_PATH), "--host"]
+    if mode == "linked":
+        command.extend(["--mode", "linked"])
+
     return subprocess.Popen(
-        ["pnpm", "run", "dev"],
+        command,
         cwd=OFFICE_ADDIN_DIR,
         text=True,
+        start_new_session=True,
     )
 
 
@@ -291,21 +332,31 @@ def terminate_process(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         return
 
-    process.terminate()
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        process.kill()
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
         process.wait(timeout=5)
 
 
 def wait_for_processes(
     frontend_watch: subprocess.Popen[str],
     app_dev: subprocess.Popen[str],
+    *,
+    mode: str,
 ) -> int:
-    package_mtime = (
-        FRONTEND_TARBALL_PATH.stat().st_mtime if FRONTEND_TARBALL_PATH.exists() else None
-    )
+    current_package_sha = None
+    initial_package_state = read_package_state()
+    if initial_package_state is not None:
+        current_package_sha = initial_package_state.get("sha256")
 
     try:
         while True:
@@ -318,16 +369,15 @@ def wait_for_processes(
                     )
                 return frontend_return_code
 
-            if FRONTEND_TARBALL_PATH.exists():
-                current_mtime = FRONTEND_TARBALL_PATH.stat().st_mtime
-                if package_mtime is None:
-                    package_mtime = current_mtime
-                elif current_mtime != package_mtime:
+            if mode == "packaged":
+                package_state = read_package_state()
+                next_package_sha = package_state.get("sha256") if package_state else None
+                if next_package_sha and next_package_sha != current_package_sha:
                     print("Detected packaged frontend update, reinstalling office-addin")
                     install_packaged_frontend()
                     terminate_process(app_dev)
-                    app_dev = spawn_app_dev()
-                    package_mtime = current_mtime
+                    app_dev = spawn_app_dev(mode)
+                    current_package_sha = next_package_sha
 
             app_return_code = app_dev.poll()
             if app_return_code is not None:
@@ -344,7 +394,20 @@ def wait_for_processes(
         terminate_process(app_dev)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode",
+        choices=("packaged", "linked"),
+        default="packaged",
+        help="How office-addin consumes the frontend library during development.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
+
     for command in REQUIRED_COMMANDS:
         require_command(command)
 
@@ -354,9 +417,12 @@ def main() -> int:
     print_funnel_url()
 
     frontend_watch = spawn_frontend_watch()
-    wait_for_packaged_frontend()
-    install_packaged_frontend()
-    app_dev = spawn_app_dev()
+    if args.mode == "packaged":
+        wait_for_packaged_frontend()
+        install_packaged_frontend()
+    else:
+        wait_for_linked_frontend()
+    app_dev = spawn_app_dev(args.mode)
 
     def handle_signal(signum: int, _frame: object) -> None:
         terminate_process(frontend_watch)
@@ -366,7 +432,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    return wait_for_processes(frontend_watch, app_dev)
+    return wait_for_processes(frontend_watch, app_dev, mode=args.mode)
 
 
 if __name__ == "__main__":
