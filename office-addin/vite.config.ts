@@ -6,6 +6,7 @@ import { defineConfig, loadEnv } from "vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd());
   const apiRootUrl = env.VITE_API_ROOT_URL;
+  const linkedFrontend = mode === "linked";
 
   const apiProxy =
     apiRootUrl && !apiRootUrl.startsWith("http://localhost:3002")
@@ -21,6 +22,20 @@ export default defineConfig(({ mode }) => {
   return {
     base: "/office-addin/",
     plugins: [react()],
+    resolve: linkedFrontend
+      ? {
+          alias: {
+            "@erato/frontend/library": path.resolve(
+              __dirname,
+              "../frontend/dist-library/library.js",
+            ),
+            "@erato/frontend/library.css": path.resolve(
+              __dirname,
+              "../frontend/dist-library/style.css",
+            ),
+          },
+        }
+      : undefined,
     server: {
       host: true,
       allowedHosts: [".ts.net"],

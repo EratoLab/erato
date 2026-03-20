@@ -5,7 +5,9 @@
   "packageManager": "pnpm@10.25.0",
   "scripts": {
     "dev": "vite --host",
+    "dev:linked": "vite --host --mode linked",
     "dev:with-library": "uv run --script scripts/dev.py",
+    "dev:with-library:linked": "uv run --script scripts/dev.py --mode linked",
     "build": "tsc && vite build",
     "check": "pnpm run format:check && pnpm run lint:strict && pnpm run typecheck",
     "format": "prettier . --write",
