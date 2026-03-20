@@ -11,7 +11,9 @@ function logLine(line) {
 function shouldSuppressLine(line) {
   return (
     line.includes("Progress: resolved") ||
-    line.includes("reused") && line.includes("downloaded") && line.includes("added") ||
+    (line.includes("reused") &&
+      line.includes("downloaded") &&
+      line.includes("added")) ||
     line.includes("transforming (")
   );
 }
@@ -35,12 +37,18 @@ function emitLine(name, line) {
     return;
   }
 
-  if (name === "types" && trimmed.includes("Starting compilation in watch mode")) {
+  if (
+    name === "types" &&
+    trimmed.includes("Starting compilation in watch mode")
+  ) {
     logLine("[watch-library] type declarations watching");
     return;
   }
 
-  if (name === "types" && trimmed.includes("Found 0 errors. Watching for file changes.")) {
+  if (
+    name === "types" &&
+    trimmed.includes("Found 0 errors. Watching for file changes.")
+  ) {
     logLine("[watch-library] type declarations ready");
     return;
   }
