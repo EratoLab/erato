@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import secrets
@@ -31,8 +32,17 @@ FRONTEND_PACKAGE_STATE_PATH = (
 )
 FRONTEND_LIBRARY_ENTRY_PATH = FRONTEND_DIR / "dist-library" / "library.js"
 FRONTEND_LIBRARY_CSS_PATH = FRONTEND_DIR / "dist-library" / "style.css"
+INSTALLED_FRONTEND_LIBRARY_ENTRY_PATH = (
+    OFFICE_ADDIN_DIR
+    / "node_modules"
+    / "@erato"
+    / "frontend"
+    / "dist-library"
+    / "library.js"
+)
 LOCAL_AUTH_DIR = OFFICE_ADDIN_DIR / "local-auth"
 VITE_BIN_PATH = OFFICE_ADDIN_DIR / "node_modules" / ".bin" / "vite"
+VITE_CACHE_DIR = OFFICE_ADDIN_DIR / "node_modules" / ".vite"
 MANIFEST_LOCAL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-local.xml"
 MANIFEST_FUNNEL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.xml"
 ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
@@ -273,6 +283,10 @@ def install_packaged_frontend() -> None:
         print(result.stderr.rstrip())
 
 
+def clear_vite_cache() -> None:
+    shutil.rmtree(VITE_CACHE_DIR, ignore_errors=True)
+
+
 def wait_for_path(path: Path, timeout_seconds: int = 60) -> None:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
@@ -306,6 +320,18 @@ def read_package_state() -> dict[str, str] | None:
         return None
 
 
+def compute_file_sha256(path: Path) -> str | None:
+    if not path.exists():
+        return None
+
+    digest = hashlib.sha256()
+    with path.open("rb") as file_handle:
+        for chunk in iter(lambda: file_handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+
+    return digest.hexdigest()
+
+
 def spawn_frontend_watch() -> subprocess.Popen[str]:
     return subprocess.Popen(
         ["pnpm", "run", "build:lib:watch"],
@@ -315,10 +341,12 @@ def spawn_frontend_watch() -> subprocess.Popen[str]:
     )
 
 
-def spawn_app_dev(mode: str) -> subprocess.Popen[str]:
+def spawn_app_dev(mode: str, *, force_optimize: bool = False) -> subprocess.Popen[str]:
     command = [str(VITE_BIN_PATH), "--host"]
     if mode == "linked":
         command.extend(["--mode", "linked"])
+    if force_optimize:
+        command.append("--force")
 
     return subprocess.Popen(
         command,
@@ -354,6 +382,9 @@ def wait_for_processes(
     mode: str,
 ) -> int:
     current_package_sha = None
+    current_installed_library_sha = compute_file_sha256(
+        INSTALLED_FRONTEND_LIBRARY_ENTRY_PATH,
+    )
     initial_package_state = read_package_state()
     if initial_package_state is not None:
         current_package_sha = initial_package_state.get("sha256")
@@ -375,9 +406,28 @@ def wait_for_processes(
                 if next_package_sha and next_package_sha != current_package_sha:
                     print("Detected packaged frontend update, reinstalling office-addin")
                     install_packaged_frontend()
+                    clear_vite_cache()
                     terminate_process(app_dev)
-                    app_dev = spawn_app_dev(mode)
+                    app_dev = spawn_app_dev(mode, force_optimize=True)
                     current_package_sha = next_package_sha
+                    current_installed_library_sha = compute_file_sha256(
+                        INSTALLED_FRONTEND_LIBRARY_ENTRY_PATH,
+                    )
+
+                next_installed_library_sha = compute_file_sha256(
+                    INSTALLED_FRONTEND_LIBRARY_ENTRY_PATH,
+                )
+                if (
+                    next_installed_library_sha
+                    and next_installed_library_sha != current_installed_library_sha
+                ):
+                    print(
+                        "Detected installed frontend library change, clearing Vite cache and restarting office-addin",
+                    )
+                    clear_vite_cache()
+                    terminate_process(app_dev)
+                    app_dev = spawn_app_dev(mode, force_optimize=True)
+                    current_installed_library_sha = next_installed_library_sha
 
             app_return_code = app_dev.poll()
             if app_return_code is not None:
@@ -420,9 +470,11 @@ def main() -> int:
     if args.mode == "packaged":
         wait_for_packaged_frontend()
         install_packaged_frontend()
+        clear_vite_cache()
+        app_dev = spawn_app_dev(args.mode, force_optimize=True)
     else:
         wait_for_linked_frontend()
-    app_dev = spawn_app_dev(args.mode)
+        app_dev = spawn_app_dev(args.mode)
 
     def handle_signal(signum: int, _frame: object) -> None:
         terminate_process(frontend_watch)
