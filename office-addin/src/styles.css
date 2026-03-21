@@ -6,22 +6,54 @@
   );
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html,
+body {
+  overflow: hidden;
+}
+
 body {
   margin: 0;
 }
 
 #root {
-  min-height: 100vh;
+  display: flex;
+  min-height: 0;
+  width: 100%;
 }
 
 .office-shell {
-  min-height: 100vh;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
 }
 
 .office-shell--centered {
-  display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.office-shell [data-ui="chat-message"] {
+  min-width: 0;
+}
+
+.office-shell [data-ui="chat-input-controls"] {
+  flex-wrap: wrap;
+  gap: calc(var(--theme-spacing-control-gap) / 2);
+}
+
+.office-shell [data-ui="chat-input-controls"] > div {
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .office-status {

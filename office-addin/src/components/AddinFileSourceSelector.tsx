@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AnchoredPopover } from "@erato/frontend/library";
+import { useCallback, useMemo, useState } from "react";
 
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
@@ -44,7 +45,6 @@ export function AddinFileSourceSelector({
   const { host } = useOffice();
   const { mailItem, attachments, isLoadingAttachments, getAttachmentFile } =
     useOutlookMailItem();
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEmailContentOpen, setIsEmailContentOpen] = useState(false);
   const [isUploadingEmailContent, setIsUploadingEmailContent] = useState(false);
@@ -63,37 +63,16 @@ export function AddinFileSourceSelector({
     [attachments],
   );
 
-  useEffect(() => {
-    if (!isMenuOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-        setIsEmailContentOpen(false);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsMenuOpen(false);
-        setIsEmailContentOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleEscape);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isMenuOpen]);
-
   const closeMenus = useCallback(() => {
     setIsMenuOpen(false);
     setIsEmailContentOpen(false);
+  }, []);
+
+  const handleMenuOpenChange = useCallback((open: boolean) => {
+    setIsMenuOpen(open);
+    if (!open) {
+      setIsEmailContentOpen(false);
+    }
   }, []);
 
   const handleUploadResolvedFiles = useCallback(
@@ -166,140 +145,149 @@ export function AddinFileSourceSelector({
     .join(" ");
 
   return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setIsMenuOpen((previous) => !previous)}
-        disabled={isBusy}
-        aria-label="Add files"
-        aria-expanded={isMenuOpen}
-        aria-haspopup="menu"
-        className={triggerButtonClassName}
-      >
-        {triggerLabel}
-      </button>
+    <AnchoredPopover
+      isOpen={isMenuOpen}
+      onOpenChange={handleMenuOpenChange}
+      ariaHasPopup="dialog"
+      role="dialog"
+      preferredOrientation={{
+        vertical: "top",
+        horizontal: "left",
+      }}
+      initialFocusSelector="button:not(:disabled)"
+      panelClassName="w-[min(20rem,calc(100vw-16px))] overflow-y-auto p-2"
+      dataUi="file-source-popover"
+      trigger={(triggerProps) => (
+        <button
+          ref={triggerProps.ref}
+          id={triggerProps.id}
+          type={triggerProps.type}
+          onClick={triggerProps.onClick}
+          disabled={isBusy}
+          aria-label="Add files"
+          aria-expanded={triggerProps["aria-expanded"]}
+          aria-haspopup={triggerProps["aria-haspopup"]}
+          aria-controls={triggerProps["aria-controls"]}
+          className={triggerButtonClassName}
+        >
+          {triggerLabel}
+        </button>
+      )}
+    >
+      <div className="flex flex-col gap-1">
+        <button
+          type="button"
+          onClick={handleSelectDisk}
+          disabled={isBusy}
+          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span>Upload from Computer</span>
+        </button>
 
-      {isMenuOpen && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-xl border border-theme-border bg-theme-bg-primary p-2 shadow-lg">
-          <div className="flex flex-col gap-1">
+        {availableProviders.includes("sharepoint") && (
+          <button
+            type="button"
+            onClick={() => handleSelectCloudProvider("sharepoint")}
+            disabled={isBusy}
+            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span>Upload from OneDrive</span>
+          </button>
+        )}
+
+        {canShowEmailContent && (
+          <>
             <button
               type="button"
-              onClick={handleSelectDisk}
-              disabled={isBusy}
+              onClick={() => setIsEmailContentOpen((previous) => !previous)}
+              disabled={isBusy || !canUploadEmailContent || !hasAnyEmailContent}
               className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <span>Upload from Computer</span>
+              <span>Email content</span>
+              <span className="text-xs text-theme-fg-muted">
+                {isEmailContentOpen ? "Hide" : "Show"}
+              </span>
             </button>
 
-            {availableProviders.includes("sharepoint") && (
-              <button
-                type="button"
-                onClick={() => handleSelectCloudProvider("sharepoint")}
-                disabled={isBusy}
-                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <span>Upload from OneDrive</span>
-              </button>
-            )}
-
-            {canShowEmailContent && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setIsEmailContentOpen((previous) => !previous)}
-                  disabled={
-                    isBusy || !canUploadEmailContent || !hasAnyEmailContent
-                  }
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <span>Email content</span>
-                  <span className="text-xs text-theme-fg-muted">
-                    {isEmailContentOpen ? "Hide" : "Show"}
-                  </span>
-                </button>
-
-                {isEmailContentOpen && (
-                  <div className="max-h-72 overflow-y-auto rounded-lg border border-theme-border bg-theme-bg-secondary p-1">
-                    {mailItem?.isLoadingBody && (
-                      <div className="px-3 py-2 text-xs text-theme-fg-muted">
-                        Loading email thread...
-                      </div>
-                    )}
-
-                    {emailBodyFile && (
-                      <button
-                        type="button"
-                        onClick={handleSelectEmailBody}
-                        disabled={isBusy}
-                        title={emailBodyFile.name}
-                        className="flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-theme-fg-primary">
-                            Email thread
-                          </div>
-                          <div className="truncate text-xs text-theme-fg-muted">
-                            {emailBodyFile.name}
-                          </div>
-                        </div>
-                        <span className="shrink-0 text-xs text-theme-fg-muted">
-                          {formatFileSize(emailBodyFile.size)}
-                        </span>
-                      </button>
-                    )}
-
-                    {isLoadingAttachments && (
-                      <div className="px-3 py-2 text-xs text-theme-fg-muted">
-                        Loading attachments...
-                      </div>
-                    )}
-
-                    {selectableAttachments.map((attachment) => {
-                      const isCloudAttachment =
-                        String(attachment.attachmentType).toLowerCase() ===
-                        "cloud";
-
-                      return (
-                        <button
-                          key={attachment.id}
-                          type="button"
-                          onClick={() => handleSelectAttachment(attachment.id)}
-                          disabled={isBusy || isCloudAttachment}
-                          title={attachment.name}
-                          className="flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium text-theme-fg-primary">
-                              {attachment.name}
-                            </div>
-                            <div className="truncate text-xs text-theme-fg-muted">
-                              {isCloudAttachment
-                                ? "Cloud attachment cannot be uploaded from Outlook"
-                                : attachment.contentType || "Attachment"}
-                            </div>
-                          </div>
-                          <span className="shrink-0 text-xs text-theme-fg-muted">
-                            {formatFileSize(attachment.size)}
-                          </span>
-                        </button>
-                      );
-                    })}
-
-                    {!mailItem?.isLoadingBody &&
-                      !isLoadingAttachments &&
-                      !emailBodyFile &&
-                      selectableAttachments.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-theme-fg-muted">
-                          No email content is available for this item.
-                        </div>
-                      )}
+            {isEmailContentOpen && (
+              <div className="max-h-72 overflow-y-auto rounded-lg border border-theme-border bg-theme-bg-secondary p-1">
+                {mailItem?.isLoadingBody && (
+                  <div className="px-3 py-2 text-xs text-theme-fg-muted">
+                    Loading email thread...
                   </div>
                 )}
-              </>
+
+                {emailBodyFile && (
+                  <button
+                    type="button"
+                    onClick={handleSelectEmailBody}
+                    disabled={isBusy}
+                    title={emailBodyFile.name}
+                    className="flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-theme-fg-primary">
+                        Email thread
+                      </div>
+                      <div className="truncate text-xs text-theme-fg-muted">
+                        {emailBodyFile.name}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-xs text-theme-fg-muted">
+                      {formatFileSize(emailBodyFile.size)}
+                    </span>
+                  </button>
+                )}
+
+                {isLoadingAttachments && (
+                  <div className="px-3 py-2 text-xs text-theme-fg-muted">
+                    Loading attachments...
+                  </div>
+                )}
+
+                {selectableAttachments.map((attachment) => {
+                  const isCloudAttachment =
+                    String(attachment.attachmentType).toLowerCase() === "cloud";
+
+                  return (
+                    <button
+                      key={attachment.id}
+                      type="button"
+                      onClick={() => handleSelectAttachment(attachment.id)}
+                      disabled={isBusy || isCloudAttachment}
+                      title={attachment.name}
+                      className="flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-theme-fg-primary">
+                          {attachment.name}
+                        </div>
+                        <div className="truncate text-xs text-theme-fg-muted">
+                          {isCloudAttachment
+                            ? "Cloud attachment cannot be uploaded from Outlook"
+                            : attachment.contentType || "Attachment"}
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-xs text-theme-fg-muted">
+                        {formatFileSize(attachment.size)}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {!mailItem?.isLoadingBody &&
+                  !isLoadingAttachments &&
+                  !emailBodyFile &&
+                  selectableAttachments.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-theme-fg-muted">
+                      No email content is available for this item.
+                    </div>
+                  )}
+              </div>
             )}
-          </div>
-        </div>
-      )}
-    </div>
+          </>
+        )}
+      </div>
+    </AnchoredPopover>
   );
 }

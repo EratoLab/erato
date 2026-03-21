@@ -198,7 +198,13 @@ export const AddinChatInput = forwardRef<
   );
 
   return (
-    <div className={className ? `flex flex-col ${className}` : "flex flex-col"}>
+    <div
+      className={
+        className
+          ? `flex min-w-0 flex-col ${className}`
+          : "flex min-w-0 flex-col"
+      }
+    >
       {host === "Outlook" &&
         showSuggestedEmailSource &&
         (hasSelectedEmailSource || isLoadingAttachments) && (

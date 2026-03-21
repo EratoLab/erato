@@ -1,11 +1,10 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useState, useRef, useCallback, memo, useEffect, useId } from "react";
-import { createPortal } from "react-dom";
+import { useState, useRef, useCallback, memo, useEffect } from "react";
 
-import { useClickOutside } from "@/hooks/useClickOutside";
 import { useKeyboard } from "@/hooks/useKeyboard";
 
+import { AnchoredPopover } from "./AnchoredPopover";
 import { Button } from "./Button";
 import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
 import { MoreVertical, CheckIcon } from "../icons";
@@ -42,11 +41,6 @@ export interface DropdownMenuProps {
   /** Callback fired when dropdown open state changes */
   onOpenChange?: (isOpen: boolean) => void;
 }
-
-type Position = {
-  vertical: "top" | "bottom";
-  horizontal: "left" | "right";
-};
 
 const MenuItem = memo(
   ({
@@ -126,77 +120,13 @@ export const DropdownMenu = memo(
     );
     const [isProcessingClick, setIsProcessingClick] = useState(false);
     const clickTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
-    const [position, setPosition] = useState<Position>({
-      vertical: preferredOrientation?.vertical ?? "bottom",
-      horizontal: preferredOrientation?.horizontal ?? align,
-    });
     const menuRef = useRef<HTMLDivElement>(null);
-    const buttonRef = useRef<HTMLButtonElement>(null);
     const [confirmingItem, setConfirmingItem] =
       useState<DropdownMenuItem | null>(null);
-
-    // Use React's useId hook for stable IDs across server/client
-    const reactId = useId();
-    const menuId = id ?? `dropdown-${reactId}`;
-
-    const updatePosition = useCallback(() => {
-      if (!isOpen || !menuRef.current || !buttonRef.current) return;
-
-      const menu = menuRef.current.getBoundingClientRect();
-      const trigger = buttonRef.current.getBoundingClientRect();
-      const viewport = {
-        width: window.innerWidth,
-        height: window.innerHeight,
-        padding: 8,
-      };
-
-      const requiredSpace = {
-        vertical: menu.height + viewport.padding,
-        horizontal: menu.width + viewport.padding,
-      };
-
-      const space = {
-        top: trigger.top - viewport.padding,
-        bottom: viewport.height - trigger.bottom - viewport.padding,
-        left: trigger.left - viewport.padding,
-        right: viewport.width - trigger.right - viewport.padding,
-      };
-
-      const hasSpace = {
-        top: space.top >= requiredSpace.vertical,
-        bottom: space.bottom >= requiredSpace.vertical,
-        left: space.left >= requiredSpace.horizontal,
-        right: space.right >= requiredSpace.horizontal,
-      };
-
-      const newPosition: Position = {
-        vertical: preferredOrientation?.vertical
-          ? hasSpace[preferredOrientation.vertical]
-            ? preferredOrientation.vertical
-            : space.top > space.bottom
-              ? "top"
-              : "bottom"
-          : space.bottom > space.top
-            ? "bottom"
-            : "top",
-        horizontal: preferredOrientation?.horizontal
-          ? hasSpace[preferredOrientation.horizontal]
-            ? preferredOrientation.horizontal
-            : space.left > space.right
-              ? "right"
-              : "left"
-          : space.right > space.left
-            ? "left"
-            : "right",
-      };
-
-      setPosition(newPosition);
-    }, [isOpen, preferredOrientation]);
 
     const closeMenu = useCallback(() => {
       if (isProcessingClick) return;
       setIsOpen(false);
-      buttonRef.current?.focus();
     }, [isProcessingClick, setIsOpen]);
 
     const handleMenuItemClick = useCallback(
@@ -243,7 +173,6 @@ export const DropdownMenu = memo(
       setConfirmingItem(null); // Just close the confirmation dialog
     }, []);
 
-    useClickOutside(menuRef, closeMenu, isOpen && confirmingItem === null); // Only close if confirm dialog isn't open
     useKeyboard({
       target: menuRef,
       enabled: isOpen,
@@ -271,27 +200,6 @@ export const DropdownMenu = memo(
     });
 
     useEffect(() => {
-      updatePosition();
-      const handleResize = () => requestAnimationFrame(updatePosition);
-
-      if (isOpen) {
-        window.addEventListener("resize", handleResize);
-        return () => window.removeEventListener("resize", handleResize);
-      }
-    }, [isOpen, updatePosition]);
-
-    useEffect(() => {
-      if (isOpen) {
-        requestAnimationFrame(() => {
-          const firstItem = menuRef.current?.querySelector('[role="menuitem"]');
-          if (firstItem instanceof HTMLElement) {
-            firstItem.focus();
-          }
-        });
-      }
-    }, [isOpen]);
-
-    useEffect(() => {
       return () => {
         if (clickTimeoutRef.current) {
           clearTimeout(clickTimeoutRef.current);
@@ -299,51 +207,44 @@ export const DropdownMenu = memo(
       };
     }, []);
 
-    const renderDropdown = () => {
-      if (!isOpen) return null;
-
-      const content = (
-        <div
-          ref={menuRef}
-          id={menuId}
-          className={clsx(
-            "fixed border",
-            matchContentWidth ? "w-max min-w-48" : "w-48",
-            "z-[9999]",
-            "theme-transition",
-          )}
-          style={{
-            backgroundColor: "var(--theme-shell-dropdown)",
-            borderColor: "var(--theme-border-divider)",
-            borderRadius: "var(--theme-radius-base)",
-            boxShadow: "var(--theme-elevation-dropdown)",
-            top:
-              position.vertical === "bottom"
-                ? `${buttonRef.current?.getBoundingClientRect().bottom}px`
-                : "auto",
-            bottom:
-              position.vertical === "top"
-                ? `${window.innerHeight - (buttonRef.current?.getBoundingClientRect().top ?? 0)}px`
-                : "auto",
-            left:
-              position.horizontal === "left"
-                ? `${buttonRef.current?.getBoundingClientRect().left}px`
-                : "auto",
-            right:
-              position.horizontal === "right"
-                ? `${window.innerWidth - (buttonRef.current?.getBoundingClientRect().right ?? 0)}px`
-                : "auto",
-            maxHeight: `calc(${
-              position.vertical === "bottom"
-                ? window.innerHeight -
-                  (buttonRef.current?.getBoundingClientRect().bottom ?? 0)
-                : (buttonRef.current?.getBoundingClientRect().top ?? 0)
-            }px - 16px)`,
-          }}
+    return (
+      <>
+        <AnchoredPopover
+          id={id}
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          className={className}
           role="menu"
-          aria-orientation="vertical"
-          aria-labelledby={buttonRef.current?.id}
-          data-ui="dropdown-panel"
+          ariaHasPopup="menu"
+          preferredOrientation={{
+            vertical: preferredOrientation?.vertical ?? "bottom",
+            horizontal: preferredOrientation?.horizontal ?? align,
+          }}
+          initialFocusSelector='[role="menuitem"]'
+          panelRef={menuRef}
+          panelClassName={clsx(
+            matchContentWidth
+              ? "w-max min-w-48 max-w-[calc(100vw-16px)]"
+              : "w-48 max-w-[calc(100vw-16px)]",
+          )}
+          dataUi="dropdown-panel"
+          trigger={(triggerProps) => (
+            <Button
+              ref={triggerProps.ref}
+              id={triggerProps.id}
+              type={triggerProps.type}
+              size="sm"
+              variant="ghost"
+              onClick={triggerProps.onClick}
+              className="flex min-w-fit items-center justify-center"
+              aria-label={t`Open menu`}
+              aria-expanded={triggerProps["aria-expanded"]}
+              aria-haspopup={triggerProps["aria-haspopup"]}
+              aria-controls={triggerProps["aria-controls"]}
+            >
+              {triggerIcon}
+            </Button>
+          )}
         >
           <div className="overflow-y-auto py-1" role="none">
             {items.map((item, index) => (
@@ -355,32 +256,7 @@ export const DropdownMenu = memo(
               />
             ))}
           </div>
-        </div>
-      );
-
-      return createPortal(content, document.body);
-    };
-
-    return (
-      <div className={clsx("relative inline-block", className)}>
-        <Button
-          ref={buttonRef}
-          size="sm"
-          variant="ghost"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsOpen(!isOpen);
-          }}
-          className="flex min-w-fit items-center justify-center"
-          aria-label={t`Open menu`}
-          aria-expanded={isOpen}
-          aria-haspopup="true"
-          aria-controls={menuId}
-        >
-          {triggerIcon}
-        </Button>
-        {renderDropdown()}
+        </AnchoredPopover>
 
         {/* Render Confirmation Dialog if needed */}
         {confirmingItem && (
@@ -399,7 +275,7 @@ export const DropdownMenu = memo(
             }
           />
         )}
-      </div>
+      </>
     );
   },
 );

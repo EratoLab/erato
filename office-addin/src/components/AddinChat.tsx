@@ -184,7 +184,7 @@ export function AddinChat() {
 
   return (
     <ChatInputControlsProvider value={chatInputControls}>
-      <div className="flex size-full flex-col">
+      <div className="flex size-full min-w-0 flex-col">
         <div className="flex items-center justify-between border-b border-theme-border px-4 py-2">
           <span className="text-sm font-semibold text-theme-fg-primary">
             Erato
@@ -199,7 +199,7 @@ export function AddinChat() {
         </div>
 
         <ChatErrorBoundary onReset={() => void refetchHistory()}>
-          <div className="flex min-h-0 flex-1 flex-col bg-theme-bg-secondary">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-theme-bg-secondary">
             <MessageList
               messages={messages}
               messageOrder={messageOrder}
