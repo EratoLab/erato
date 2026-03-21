@@ -247,8 +247,7 @@ export function AddinFileSourceSelector({
 
                 {selectableAttachments.map((attachment) => {
                   const isCloudAttachment =
-                    String(attachment.attachmentType).toLowerCase() ===
-                    "cloud";
+                    String(attachment.attachmentType).toLowerCase() === "cloud";
 
                   return (
                     <button

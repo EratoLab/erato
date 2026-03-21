@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState, useRef, useCallback, memo, useEffect } from "react";
+
 import { useKeyboard } from "@/hooks/useKeyboard";
 
 import { AnchoredPopover } from "./AnchoredPopover";
@@ -251,9 +252,7 @@ export const DropdownMenu = memo(
                 key={`${item.label}-${index}`}
                 item={item}
                 noWrap={noWrapItems}
-                onSelect={(e: React.MouseEvent) =>
-                  handleMenuItemClick(item, e)
-                }
+                onSelect={(e: React.MouseEvent) => handleMenuItemClick(item, e)}
               />
             ))}
           </div>

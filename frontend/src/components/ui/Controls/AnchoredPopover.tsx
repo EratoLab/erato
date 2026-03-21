@@ -71,6 +71,7 @@ export function AnchoredPopover({
   const internalPanelRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(false);
   const panelId = useMemo(() => id ?? `popover-${reactId}`, [id, reactId]);
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
   const triggerId = `${panelId}-trigger`;
 
   const getPanelElement = useCallback(
@@ -164,9 +165,7 @@ export function AnchoredPopover({
     panelElement.style.top =
       vertical === "bottom" ? `${triggerRect.bottom}px` : "auto";
     panelElement.style.bottom =
-      vertical === "top"
-        ? `${viewport.height - triggerRect.top}px`
-        : "auto";
+      vertical === "top" ? `${viewport.height - triggerRect.top}px` : "auto";
     panelElement.style.left = `${left}px`;
     panelElement.style.maxHeight = `${maxHeight}px`;
   }, [getPanelElement, isOpen, preferredOrientation]);
@@ -231,7 +230,8 @@ export function AnchoredPopover({
     }
 
     requestAnimationFrame(() => {
-      const focusTarget = getPanelElement()?.querySelector(initialFocusSelector);
+      const focusTarget =
+        getPanelElement()?.querySelector(initialFocusSelector);
       if (focusTarget instanceof HTMLElement) {
         focusTarget.focus();
       }
@@ -264,10 +264,7 @@ export function AnchoredPopover({
     <div
       ref={setPanelElement}
       id={panelId}
-      className={clsx(
-        "fixed z-[9999] border theme-transition",
-        panelClassName,
-      )}
+      className={clsx("theme-transition fixed z-[9999] border", panelClassName)}
       style={{
         backgroundColor: "var(--theme-shell-dropdown)",
         borderColor: "var(--theme-border-divider)",

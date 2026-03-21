@@ -200,7 +200,9 @@ export const AddinChatInput = forwardRef<
   return (
     <div
       className={
-        className ? `flex min-w-0 flex-col ${className}` : "flex min-w-0 flex-col"
+        className
+          ? `flex min-w-0 flex-col ${className}`
+          : "flex min-w-0 flex-col"
       }
     >
       {host === "Outlook" &&
