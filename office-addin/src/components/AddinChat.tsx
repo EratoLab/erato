@@ -64,6 +64,8 @@ export function AddinChat() {
     createNewChat,
     refetchHistory,
     currentChatLastModel,
+    uploadFiles,
+    uploadError,
   } = useChatContext();
   const { profile } = useProfile();
 
@@ -309,6 +311,8 @@ export function AddinChat() {
               initialSelectedFacetIds={currentChatLastSelectedFacets}
               onFacetSelectionChange={setActiveSelectedFacetIds}
               showSuggestedEmailSource={shouldSuggestCurrentEmail}
+              uploadFiles={uploadFiles}
+              uploadError={uploadError}
             />
           </div>
         </ChatErrorBoundary>

@@ -46,18 +46,15 @@ interface AddinChatInputProps {
   initialSelectedFacetIds?: string[];
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
   showSuggestedEmailSource?: boolean;
+  uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
+  uploadError?: Error | string | null;
 }
 
 export const AddinChatInput = forwardRef<
   ChatInputControlsHandle,
   AddinChatInputProps
 >(function AddinChatInput(
-  {
-    chatId,
-    className,
-    showSuggestedEmailSource = false,
-    ...chatInputProps
-  },
+  { chatId, className, showSuggestedEmailSource = false, ...chatInputProps },
   ref,
 ) {
   const { host } = useOffice();
@@ -253,6 +250,8 @@ export const AddinChatInput = forwardRef<
         initialFiles={[]}
         chatId={chatId}
         {...chatInputProps}
+        uploadFiles={chatInputProps.uploadFiles}
+        uploadError={chatInputProps.uploadError}
         onSendMessage={(message, inputFileIds, modelId, selectedFacetIds) => {
           void wrappedOnSendMessage(
             message,
