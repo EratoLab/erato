@@ -149,6 +149,24 @@ export const FileUploadWithTokenCheck: React.FC<
   // Get error setter from upload store for dropzone validation errors
   const { setError } = useFileUploadStore();
 
+  const handleSelectedFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) {
+        return;
+      }
+
+      const uploadedFiles = await performDiskUpload(files);
+      if (
+        !externalPerformFileUpload &&
+        uploadedFiles &&
+        uploadedFiles.length > 0
+      ) {
+        onFilesUploaded?.(uploadedFiles);
+      }
+    },
+    [externalPerformFileUpload, onFilesUploaded, performDiskUpload],
+  );
+
   // Setup react-dropzone for disk file selection when cloud providers are available
   const {
     open: openDiskFilePicker,
@@ -170,11 +188,7 @@ export const FileUploadWithTokenCheck: React.FC<
 
       // Upload accepted files
       if (acceptedFiles.length > 0) {
-        void performDiskUpload(acceptedFiles).then((uploadedFiles) => {
-          if (uploadedFiles && uploadedFiles.length > 0) {
-            onFilesUploaded?.(uploadedFiles);
-          }
-        });
+        void handleSelectedFiles(acceptedFiles);
       }
     },
     accept:
@@ -334,6 +348,7 @@ export const FileUploadWithTokenCheck: React.FC<
               availableProviders={availableProviders}
               onSelectDisk={handleSelectDisk}
               onSelectCloud={handleSelectCloud}
+              onSelectFiles={handleSelectedFiles}
               disabled={disabled || isProcessing}
               isProcessing={isProcessing}
               className={className}
@@ -343,6 +358,7 @@ export const FileUploadWithTokenCheck: React.FC<
               availableProviders={availableProviders}
               onSelectDisk={handleSelectDisk}
               onSelectCloud={handleSelectCloud}
+              onSelectFiles={handleSelectedFiles}
               disabled={disabled || isProcessing}
               isProcessing={isProcessing}
               className={className}

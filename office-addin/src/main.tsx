@@ -1,10 +1,11 @@
+import "@erato/frontend/library.css";
+import { componentRegistry } from "@erato/frontend/library";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import "@erato/frontend/library.css";
-
 import App from "./App";
+import { AddinFileSourceSelector } from "./components/AddinFileSourceSelector";
 
 function applyFrontendEnvToWindow() {
   window.API_ROOT_URL = import.meta.env.VITE_API_ROOT_URL;
@@ -60,6 +61,7 @@ function applyFrontendEnvToWindow() {
 }
 
 applyFrontendEnvToWindow();
+componentRegistry.ChatFileSourceSelector = AddinFileSourceSelector;
 
 const rootElement = document.getElementById("root");
 

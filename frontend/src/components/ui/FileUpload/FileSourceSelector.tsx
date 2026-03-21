@@ -16,6 +16,8 @@ export interface FileSourceSelectorProps {
   onSelectDisk: () => void;
   /** Callback when a cloud provider is selected */
   onSelectCloud: (provider: CloudProvider) => void;
+  /** Callback when the caller already resolved local File objects to upload */
+  onSelectFiles?: (files: File[]) => Promise<void>;
   /** Whether the selector is disabled */
   disabled?: boolean;
   /** Whether files are currently being processed (uploading or linking) */
