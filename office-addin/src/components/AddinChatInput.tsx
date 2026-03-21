@@ -8,6 +8,7 @@ import {
   type ChatInputControlsHandle,
   type ChatModel,
   type ContentPart,
+  type FileAttachmentGroupItem,
   type FileType,
   type FileUploadItem,
 } from "@erato/frontend/library";
@@ -15,8 +16,6 @@ import { forwardRef, useCallback, useMemo, useState } from "react";
 
 import { useOutlookEmailSource } from "../hooks/useOutlookEmailSource";
 import { useOffice } from "../providers/OfficeProvider";
-
-import type { FileAttachmentGroupItem } from "@erato/frontend/library";
 
 interface AddinChatInputProps {
   onSendMessage: (
@@ -204,7 +203,9 @@ export const AddinChatInput = forwardRef<
               ) : (
                 <FilePreviewButton
                   file={emailSourceItems[0].file}
-                  onRemove={() => handleRemoveEmailSourceFile(emailSourceItems[0].id)}
+                  onRemove={() =>
+                    handleRemoveEmailSourceFile(emailSourceItems[0].id)
+                  }
                   disabled={isUploadingEmail}
                   className="w-full"
                   showFileType={true}

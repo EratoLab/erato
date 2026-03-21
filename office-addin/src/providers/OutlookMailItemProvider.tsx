@@ -121,16 +121,14 @@ async function readAttachmentMetadata(
     return item.attachments.map(parseAttachmentDetails);
   }
 
-  const attachments = await callOfficeAsync<
-    Office.AttachmentDetailsCompose[]
-  >((callback) =>
-    item.getAttachmentsAsync(callback),
+  const attachments = await callOfficeAsync<Office.AttachmentDetailsCompose[]>(
+    (callback) => item.getAttachmentsAsync(callback),
   );
   return attachments.map(parseAttachmentDetails);
 }
 
 function base64ToArrayBuffer(content: string): ArrayBuffer {
-  const binaryString = atob(content);
+  const binaryString = window.atob(content);
   const bytes = new Uint8Array(binaryString.length);
 
   for (let index = 0; index < binaryString.length; index += 1) {
@@ -228,10 +226,7 @@ function readMailItemCompose(
   });
 
   item.subject.getAsync((result) => {
-    if (
-      result.status === Office.AsyncResultStatus.Succeeded &&
-      canCommit()
-    ) {
+    if (result.status === Office.AsyncResultStatus.Succeeded && canCommit()) {
       setMailItem((previous) =>
         previous ? { ...previous, subject: result.value } : previous,
       );
@@ -239,10 +234,7 @@ function readMailItemCompose(
   });
 
   item.to.getAsync((result) => {
-    if (
-      result.status === Office.AsyncResultStatus.Succeeded &&
-      canCommit()
-    ) {
+    if (result.status === Office.AsyncResultStatus.Succeeded && canCommit()) {
       setMailItem((previous) =>
         previous
           ? { ...previous, to: parseRecipients(result.value) }
@@ -252,10 +244,7 @@ function readMailItemCompose(
   });
 
   item.cc.getAsync((result) => {
-    if (
-      result.status === Office.AsyncResultStatus.Succeeded &&
-      canCommit()
-    ) {
+    if (result.status === Office.AsyncResultStatus.Succeeded && canCommit()) {
       setMailItem((previous) =>
         previous
           ? { ...previous, cc: parseRecipients(result.value) }
@@ -276,10 +265,7 @@ function readMailItemCompose(
   };
 
   item.body.getAsync(Office.CoercionType.Text, (result) => {
-    if (
-      result.status === Office.AsyncResultStatus.Succeeded &&
-      canCommit()
-    ) {
+    if (result.status === Office.AsyncResultStatus.Succeeded && canCommit()) {
       setMailItem((previous) =>
         previous ? { ...previous, bodyText: result.value } : previous,
       );
@@ -290,10 +276,7 @@ function readMailItemCompose(
   });
 
   item.body.getAsync(Office.CoercionType.Html, (result) => {
-    if (
-      result.status === Office.AsyncResultStatus.Succeeded &&
-      canCommit()
-    ) {
+    if (result.status === Office.AsyncResultStatus.Succeeded && canCommit()) {
       setMailItem((previous) =>
         previous ? { ...previous, bodyHtml: result.value } : previous,
       );
@@ -319,9 +302,9 @@ export function OutlookMailItemProvider({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
-  const currentItemRef = useRef<Office.MessageRead | Office.MessageCompose | null>(
-    null,
-  );
+  const currentItemRef = useRef<
+    Office.MessageRead | Office.MessageCompose | null
+  >(null);
   const selectionVersionRef = useRef(0);
 
   const refresh = useCallback(() => {
@@ -344,7 +327,7 @@ export function OutlookMailItemProvider({
 
       const attachmentContent = await callOfficeAsync<Office.AttachmentContent>(
         (callback) =>
-        currentItem.getAttachmentContentAsync(attachmentId, callback),
+          currentItem.getAttachmentContentAsync(attachmentId, callback),
       );
 
       return attachmentContentToFile(attachmentContent, currentAttachment);

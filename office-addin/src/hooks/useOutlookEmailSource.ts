@@ -72,9 +72,7 @@ export function useOutlookEmailSource() {
 
   const removeAttachment = useCallback((attachmentId: string) => {
     setDismissedAttachmentIds((previous) =>
-      previous.includes(attachmentId)
-        ? previous
-        : [...previous, attachmentId],
+      previous.includes(attachmentId) ? previous : [...previous, attachmentId],
     );
   }, []);
 
