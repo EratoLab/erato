@@ -1,4 +1,5 @@
 import { V1betaApiContext } from "./v1betaApiContext";
+import { mergeApiAuthHeaders } from "../../../auth/apiRequestAuth";
 
 const baseUrl = ""; // TODO add your baseUrl
 
@@ -45,10 +46,10 @@ export async function v1betaApiFetch<
 >): Promise<TData> {
   let error: ErrorWrapper<TError>;
   try {
-    const requestHeaders: HeadersInit = {
+    const requestHeaders = mergeApiAuthHeaders({
       "Content-Type": "application/json",
-      ...headers,
-    };
+      ...(headers as Record<string, string | undefined> | undefined),
+    });
 
     /**
      * As the fetch API is being used, when multipart/form-data is specified
@@ -56,11 +57,7 @@ export async function v1betaApiFetch<
      * the correct boundary.
      * https://developer.mozilla.org/en-US/docs/Web/API/FormData/Using_FormData_Objects#sending_files_using_a_formdata_object
      */
-    if (
-      requestHeaders["Content-Type"]
-        ?.toLowerCase()
-        .includes("multipart/form-data")
-    ) {
+    if (requestHeaders["Content-Type"]?.toLowerCase().includes("multipart/form-data")) {
       delete requestHeaders["Content-Type"];
     }
 

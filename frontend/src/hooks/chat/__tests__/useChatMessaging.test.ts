@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
+import { setIdToken } from "@/auth/tokenStore";
 import {
   chatMessagesQuery,
   fetchChatMessages,
@@ -262,6 +263,7 @@ describe("useChatMessaging", () => {
     // Reset mocks
     vi.clearAllMocks();
     sseCallbacks = {};
+    setIdToken(null);
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -1256,6 +1258,8 @@ describe("useChatMessaging", () => {
   });
 
   it("should handle canceling a message", async () => {
+    setIdToken("test-id-token");
+
     const { result } = renderHook(() => useChatMessaging("chat1"), {
       wrapper: TestWrapper,
     });
@@ -1274,6 +1278,9 @@ describe("useChatMessaging", () => {
       "/api/v1beta/me/messages/abortstream",
       expect.objectContaining({
         method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-id-token",
+        }),
       }),
     );
   });
