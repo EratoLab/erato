@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { setIdToken } from "@/auth/tokenStore";
+
 import { createSSEConnection } from "./sseClient";
 
 const makeStream = (chunks: string[]) => {
@@ -19,6 +21,7 @@ const waitForAsyncWork = async () => {
 
 describe("sseClient fetch parser", () => {
   afterEach(() => {
+    setIdToken(null);
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -80,5 +83,61 @@ describe("sseClient fetch parser", () => {
     await waitForAsyncWork();
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("injects bearer auth for fetch-based SSE requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      body: makeStream(["data: done\n\n"]),
+    });
+
+    setIdToken("test-id-token");
+    vi.stubGlobal("fetch", fetchMock);
+
+    createSSEConnection("/api/test", {
+      method: "POST",
+      onMessage: vi.fn(),
+      onError: vi.fn(),
+      onClose: vi.fn(),
+    });
+
+    await waitForAsyncWork();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({
+      "Content-Type": "application/json",
+      Authorization: "Bearer test-id-token",
+    });
+  });
+
+  it("uses the fetch-based SSE path for GET when auth headers are required", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      body: makeStream(["data: done\n\n"]),
+    });
+    const eventSourceSpy = vi.fn();
+
+    setIdToken("test-id-token");
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("EventSource", eventSourceSpy);
+
+    createSSEConnection("/api/test", {
+      method: "GET",
+      onMessage: vi.fn(),
+      onError: vi.fn(),
+      onClose: vi.fn(),
+    });
+
+    await waitForAsyncWork();
+
+    expect(eventSourceSpy).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({
+      Authorization: "Bearer test-id-token",
+    });
   });
 });

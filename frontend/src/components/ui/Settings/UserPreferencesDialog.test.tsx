@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { profileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+
 import { UserPreferencesDialog } from "./UserPreferencesDialog";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -42,20 +44,32 @@ const userProfile: UserProfile = {
     "I work with enterprise customers in regulated industries.",
 };
 
-function renderDialog() {
-  const queryClient = new QueryClient({
+const createJsonResponse = (payload: unknown, status = 200) =>
+  new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+
+function renderDialog({
+  queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, refetchOnWindowFocus: false },
     },
-  });
-
+  }),
+  onClose = vi.fn(),
+  profile = userProfile,
+}: {
+  queryClient?: QueryClient;
+  onClose?: () => void;
+  profile?: UserProfile;
+} = {}) {
   return render(
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
         <UserPreferencesDialog
           isOpen={true}
-          onClose={vi.fn()}
-          userProfile={userProfile}
+          onClose={onClose}
+          userProfile={profile}
         />
       </QueryClientProvider>
     </MemoryRouter>,
@@ -185,6 +199,73 @@ describe("UserPreferencesDialog", () => {
       expect(refetchQueries).toHaveBeenCalled();
       expect(onClose).toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith("/chat/new", { replace: true });
+    });
+  });
+
+  it("saves preferences via the generated API helper and refreshes the profile query", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, refetchOnWindowFocus: false },
+      },
+    });
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    const onClose = vi.fn();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(createJsonResponse(userProfile));
+
+    renderDialog({ queryClient, onClose });
+
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Maximilian" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      const requestCall = fetchMock.mock.calls.find(
+        ([url]) => url === "/api/v1beta/me/profile/preferences",
+      );
+
+      expect(requestCall).toBeDefined();
+      expect(requestCall?.[1]).toEqual(
+        expect.objectContaining({
+          method: "PUT",
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+          }),
+        }),
+      );
+      expect(JSON.parse(String(requestCall?.[1]?.body))).toEqual({
+        preference_nickname: "Maximilian",
+        preference_job_title: "Product Manager",
+        preference_assistant_custom_instructions:
+          "Prefer concise bullet points and highlight risks first.",
+        preference_assistant_additional_information:
+          "I work with enterprise customers in regulated industries.",
+      });
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: profileQuery({}).queryKey,
+      });
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it("shows a save error when updating preferences fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      createJsonResponse({ message: "boom" }, 500),
+    );
+
+    renderDialog();
+
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Maximilian" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Could not save preferences. Please try again."),
+      ).toBeInTheDocument();
     });
   });
 });

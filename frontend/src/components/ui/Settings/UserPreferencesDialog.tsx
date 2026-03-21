@@ -5,6 +5,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
+  fetchUpdateProfilePreferences,
   profileQuery,
   recentChatsQuery,
   useArchiveAllChatsEndpoint,
@@ -15,7 +16,10 @@ import { Alert } from "../Feedback/Alert";
 import { FormField, Input, Textarea } from "../Input";
 import { ModalBase } from "../Modal/ModalBase";
 
-import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  UpdateProfilePreferencesRequest,
+  UserProfile,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 type PreferencesTab = "personalization" | "data";
 
@@ -153,25 +157,20 @@ export function UserPreferencesDialog({
     setSaveError(null);
     setIsSaving(true);
     try {
-      // eslint-disable-next-line lingui/no-unlocalized-strings -- API route, not user-facing copy
-      const response = await fetch("/api/v1beta/me/profile/preferences", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          preference_nickname: toNullableValue(nickname),
-          preference_job_title: toNullableValue(jobTitle),
-          preference_assistant_custom_instructions:
-            toNullableValue(customInstructions),
-          preference_assistant_additional_information: toNullableValue(
-            additionalInformation,
-          ),
-        }),
+      // The generated schema currently drops the string branch for these optional patch fields.
+      const requestBody = {
+        preference_nickname: toNullableValue(nickname),
+        preference_job_title: toNullableValue(jobTitle),
+        preference_assistant_custom_instructions:
+          toNullableValue(customInstructions),
+        preference_assistant_additional_information: toNullableValue(
+          additionalInformation,
+        ),
+      } as unknown as UpdateProfilePreferencesRequest;
+
+      await fetchUpdateProfilePreferences({
+        body: requestBody,
       });
-      if (!response.ok) {
-        throw new Error("Failed to update preferences");
-      }
       await queryClient.invalidateQueries({
         queryKey: profileQuery({}).queryKey,
       });

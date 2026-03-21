@@ -16,7 +16,10 @@ export { FileUploadLoading, FileUploadError } from "./FileUploadStates";
 // Re-export types for external usage
 export type { FileUploadProps } from "./FileUpload";
 export type { FileUploadButtonProps } from "./FileUploadButton";
-export type { FileUploadItemWithSize, LocalFilePreviewItem } from "./FilePreviewBase";
+export type {
+  FileUploadItemWithSize,
+  LocalFilePreviewItem,
+} from "./FilePreviewBase";
 export type { FileAttachmentsPreviewProps } from "./FileAttachmentsPreview";
 export type {
   FileAttachmentGroup,

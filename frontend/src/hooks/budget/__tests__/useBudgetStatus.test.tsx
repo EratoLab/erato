@@ -35,6 +35,12 @@ describe("useBudgetStatus", () => {
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
 
+  const createJsonResponse = (payload: unknown, status = 200) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+
   it("should fetch budget status successfully", async () => {
     const mockData = {
       enabled: true,
@@ -45,10 +51,7 @@ describe("useBudgetStatus", () => {
       budget_currency: "USD" as const,
     };
 
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockData,
-    });
+    fetchMock.mockResolvedValueOnce(createJsonResponse(mockData));
 
     const { result } = renderHook(() => useBudgetStatus(), { wrapper });
 
@@ -64,12 +67,7 @@ describe("useBudgetStatus", () => {
   });
 
   it("should handle API errors gracefully", async () => {
-    // Mock a failed response (ok: false will cause the queryFn to throw)
-    fetchMock.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      json: async () => ({}),
-    } as Response);
+    fetchMock.mockResolvedValueOnce(createJsonResponse({}, 500));
 
     const { result } = renderHook(() => useBudgetStatus(), { wrapper });
 
@@ -105,10 +103,7 @@ describe("useBudgetStatus", () => {
       budget_currency: null,
     };
 
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockData,
-    });
+    fetchMock.mockResolvedValueOnce(createJsonResponse(mockData));
 
     const { result } = renderHook(() => useBudgetStatus(), { wrapper });
 
@@ -116,5 +111,22 @@ describe("useBudgetStatus", () => {
 
     expect(result.current.data?.enabled).toBe(false);
     expect(result.current.data?.current_spending).toBeNull();
+  });
+
+  it("normalizes omitted optional budget fields to null", async () => {
+    fetchMock.mockResolvedValueOnce(createJsonResponse({ enabled: true }));
+
+    const { result } = renderHook(() => useBudgetStatus(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({
+      enabled: true,
+      budget_period_days: null,
+      current_spending: null,
+      warn_threshold: null,
+      budget_limit: null,
+      budget_currency: null,
+    });
   });
 });

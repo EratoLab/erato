@@ -9,6 +9,8 @@
  * a custom implementation for more advanced features.
  */
 
+import { mergeApiAuthHeaders } from "@/auth/apiRequestAuth";
+
 import { createLogger } from "../debugLogger";
 
 // SSE event interface
@@ -49,6 +51,8 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
     body,
   } = options;
 
+  const effectiveHeaders = mergeApiAuthHeaders(headers);
+
   logger.log(`Creating ${method} connection to: ${url}`);
 
   let abortController: AbortController | null = null;
@@ -64,7 +68,11 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
   };
 
   // For GET requests, use the native EventSource
-  if (method === "GET" && typeof EventSource !== "undefined") {
+  if (
+    method === "GET" &&
+    typeof EventSource !== "undefined" &&
+    Object.keys(effectiveHeaders).length === 0
+  ) {
     logger.log("Using native EventSource for GET");
     // Create URL with query params if there's a body for GET
     const requestUrl = body
@@ -236,10 +244,10 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
 
       const response = await fetch(url, {
         method,
-        headers: {
+        headers: mergeApiAuthHeaders({
           ...(method === "POST" && { "Content-Type": "application/json" }),
           ...headers,
-        },
+        }),
         body: method === "POST" ? body : undefined,
         signal,
         // SSE needs these options

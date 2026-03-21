@@ -6,6 +6,8 @@
  */
 import { useQuery } from "@tanstack/react-query";
 
+import { fetchBudgetStatus } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+
 export interface BudgetStatusResponse {
   /** Whether the budget feature is enabled */
   enabled: boolean;
@@ -34,6 +36,17 @@ interface UseBudgetStatusOptions {
  */
 export const BUDGET_QUERY_KEY = ["budget-status"] as const;
 
+const normalizeBudgetStatusResponse = (
+  response: Awaited<ReturnType<typeof fetchBudgetStatus>>,
+): BudgetStatusResponse => ({
+  enabled: response.enabled,
+  budget_period_days: response.budget_period_days ?? null,
+  current_spending: response.current_spending ?? null,
+  warn_threshold: response.warn_threshold ?? null,
+  budget_limit: response.budget_limit ?? null,
+  budget_currency: response.budget_currency ?? null,
+});
+
 /**
  * Hook to fetch the current user's budget status
  *
@@ -60,22 +73,8 @@ export function useBudgetStatus(options: UseBudgetStatusOptions = {}) {
 
   return useQuery({
     queryKey: BUDGET_QUERY_KEY,
-    queryFn: async (): Promise<BudgetStatusResponse> => {
-      // eslint-disable-next-line lingui/no-unlocalized-strings
-      const response = await fetch("/api/v1beta/me/budget", {
-        method: "GET",
-        credentials: "include", // Include cookies for authentication
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Budget API error: ${response.status}`);
-      }
-
-      return response.json();
-    },
+    queryFn: async (): Promise<BudgetStatusResponse> =>
+      normalizeBudgetStatusResponse(await fetchBudgetStatus({})),
     enabled,
     refetchInterval,
     staleTime: 30 * 1000, // Data is fresh for 30 seconds

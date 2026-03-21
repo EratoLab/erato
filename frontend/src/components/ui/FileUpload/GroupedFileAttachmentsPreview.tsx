@@ -2,13 +2,13 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState } from "react";
 
+import { getFileName, type FileResource } from "./FilePreviewBase";
 import { FilePreviewButton } from "./FilePreviewButton";
 import { FilePreviewLoading } from "./FilePreviewLoading";
 import { FILE_PREVIEW_STYLES } from "./fileUploadStyles";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
 
-import { getFileName, type FileResource } from "./FilePreviewBase";
 import type React from "react";
 
 export interface FileAttachmentGroupItem {
@@ -84,16 +84,20 @@ export const GroupedFileAttachmentsPreview: React.FC<
   return (
     <div className={clsx("mb-3 flex flex-col gap-3", className)}>
       {groups.map((group) => {
+        const itemCount = group.items.length;
         const isExpanded = expandedGroupIds.includes(group.id);
-        const shouldCollapse = group.items.length > defaultVisibleItems;
+        const shouldCollapse = itemCount > defaultVisibleItems;
         const visibleItems =
           shouldCollapse && !isExpanded
             ? group.items.slice(0, defaultVisibleItems)
             : group.items;
-        const hiddenCount = group.items.length - visibleItems.length;
+        const hiddenCount = itemCount - visibleItems.length;
 
         return (
-          <section key={group.id} className={FILE_PREVIEW_STYLES.group.container}>
+          <section
+            key={group.id}
+            className={FILE_PREVIEW_STYLES.group.container}
+          >
             <div className={FILE_PREVIEW_STYLES.group.header}>
               <div className="min-w-0">
                 <h3
@@ -105,9 +109,7 @@ export const GroupedFileAttachmentsPreview: React.FC<
                 {group.metaLabel !== "" && (
                   <p className={FILE_PREVIEW_STYLES.group.meta}>
                     {group.metaLabel ??
-                      (group.items.length === 1
-                        ? t`1 item`
-                        : t`${group.items.length} items`)}
+                      (itemCount === 1 ? t`1 item` : t`${itemCount} items`)}
                   </p>
                 )}
               </div>

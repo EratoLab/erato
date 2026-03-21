@@ -669,6 +669,7 @@ export function useChatMessaging(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         chat_id: effectiveChatId,

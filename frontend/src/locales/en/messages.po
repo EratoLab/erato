@@ -1064,9 +1064,17 @@ msgstr " File attachments account for {fileTokensFormatted} tokens."
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
 msgstr "{0, plural, =0 {No files} one {# file} other {# files}}"
 
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+#~ msgid "{0} items"
+#~ msgstr "{0} items"
+
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "{fileName}: {filePercentage}%"
 msgstr "{fileName}: {filePercentage}%"
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "{itemCount} items"
+msgstr "{itemCount} items"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"
@@ -1091,6 +1099,10 @@ msgstr "• Use \"Reset to Browser Detection\" to test fresh detection"
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "1 file"
 msgstr "1 file"
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "1 item"
+msgstr "1 item"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Accepted types:"
@@ -1485,6 +1497,14 @@ msgstr "Loading assistant..."
 msgid "Loading assistants..."
 msgstr "Loading assistants..."
 
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Loading attachment..."
+msgstr "Loading attachment..."
+
+#: src/components/ui/FileUpload/FilePreviewLoading.tsx
+msgid "Loading file..."
+msgstr "Loading file..."
+
 #: src/components/ui/Chat/ModelSelector.tsx
 #: src/components/ui/Feedback/SpinnerIcon.tsx
 #: src/components/ui/Message/LoadMoreButton.tsx
@@ -1559,7 +1579,12 @@ msgstr "Optimize prompt"
 msgid "Output"
 msgstr "Output"
 
+#: src/components/ui/FileUpload/FilePreviewLoading.tsx
+msgid "Please wait"
+msgstr "Please wait"
+
 #: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Preview attachment"
 msgstr "Preview attachment"
 
@@ -1645,9 +1670,21 @@ msgstr "Send message"
 msgid "Show"
 msgstr "Show"
 
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Show {hiddenCount} more items"
+msgstr "Show {hiddenCount} more items"
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Show 1 more item"
+msgstr "Show 1 more item"
+
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show details"
 msgstr "Show details"
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "Show less"
+msgstr "Show less"
 
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Show tool calls"
