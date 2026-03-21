@@ -156,7 +156,11 @@ export const FileUploadWithTokenCheck: React.FC<
       }
 
       const uploadedFiles = await performDiskUpload(files);
-      if (!externalPerformFileUpload && uploadedFiles && uploadedFiles.length > 0) {
+      if (
+        !externalPerformFileUpload &&
+        uploadedFiles &&
+        uploadedFiles.length > 0
+      ) {
         onFilesUploaded?.(uploadedFiles);
       }
     },
