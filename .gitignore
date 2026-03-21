@@ -12,6 +12,7 @@
 
 # Temporary files
 tmp/
+.pnpm-store/
 
 # LLM helper
 .aider*
