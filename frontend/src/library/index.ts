@@ -22,6 +22,7 @@ export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageCo
 export { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
+export { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export { ChatErrorBoundary } from "@/components/ui/Feedback/ChatErrorBoundary";
 export { FeedbackCommentDialog } from "@/components/ui/Feedback/FeedbackCommentDialog";
 export { FeedbackViewDialog } from "@/components/ui/Feedback/FeedbackViewDialog";

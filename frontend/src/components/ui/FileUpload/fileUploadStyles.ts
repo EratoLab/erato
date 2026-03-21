@@ -33,6 +33,16 @@ export const FILE_PREVIEW_STYLES = {
       "w-full h-1 bg-[var(--theme-bg-primary)] rounded-full overflow-hidden",
     bar: "h-full bg-blue-500 transition-all duration-300 ease-in-out",
   },
+  group: {
+    container:
+      "rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] p-3",
+    header:
+      "mb-2 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between",
+    title: "truncate text-sm font-medium text-[var(--theme-fg-secondary)]",
+    meta: "text-xs text-[var(--theme-fg-muted)]",
+    toggleButton: "text-xs",
+    moreButton: "self-start px-0 text-xs text-[var(--theme-fg-muted)]",
+  },
 };
 
 /**

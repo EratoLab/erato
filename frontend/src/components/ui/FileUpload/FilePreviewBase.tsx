@@ -18,6 +18,7 @@ import type React from "react";
 export interface LocalFilePreviewItem {
   id: string;
   filename: string;
+  displayName?: string;
   size?: number;
 }
 
@@ -53,7 +54,15 @@ export function isLocalFilePreviewItem(
  * Get the name of a file regardless of type
  */
 export function getFileName(file: FileResource): string {
-  return isFile(file) ? file.name : file.filename;
+  if (isFile(file)) {
+    return file.name;
+  }
+
+  if (isLocalFilePreviewItem(file) && file.displayName) {
+    return file.displayName;
+  }
+
+  return file.filename;
 }
 
 /**

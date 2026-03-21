@@ -122,6 +122,7 @@ export function useOutlookEmailSource() {
   ]);
 
   return {
+    emailSubject: mailItem?.subject ?? "",
     isEmailBodyIncluded,
     emailBodyFile,
     selectedAttachmentItems,

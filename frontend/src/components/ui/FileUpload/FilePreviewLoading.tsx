@@ -28,7 +28,9 @@ export const FilePreviewLoading = memo<FilePreviewLoadingProps>(
 
         <div className="min-w-0 flex-1">
           <div className={FILE_PREVIEW_STYLES.name}>{label}</div>
-          <div className="text-xs text-[var(--theme-fg-muted)]">{t`Please wait`}</div>
+          <div className="text-xs text-[var(--theme-fg-muted)]">
+            {t`Please wait`}
+          </div>
         </div>
       </div>
     );

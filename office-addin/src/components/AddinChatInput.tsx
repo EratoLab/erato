@@ -2,6 +2,7 @@ import {
   ChatInput,
   FilePreviewButton,
   FilePreviewLoading,
+  GroupedFileAttachmentsPreview,
   fetchUploadFile,
   getIdToken,
   type ChatInputControlsHandle,
@@ -10,10 +11,12 @@ import {
   type FileType,
   type FileUploadItem,
 } from "@erato/frontend/library";
-import { forwardRef, useCallback, useState } from "react";
+import { forwardRef, useCallback, useMemo, useState } from "react";
 
 import { useOutlookEmailSource } from "../hooks/useOutlookEmailSource";
 import { useOffice } from "../providers/OfficeProvider";
+
+import type { FileAttachmentGroupItem } from "@erato/frontend/library";
 
 interface AddinChatInputProps {
   onSendMessage: (
@@ -55,12 +58,65 @@ export const AddinChatInput = forwardRef<
     hasSelectedEmailSource,
     isEmailBodyIncluded,
     emailBodyFile,
+    emailSubject,
     selectedAttachmentItems,
     isLoadingAttachments,
     removeEmailBody,
     removeAttachment,
     resolveSelectedFilesForSend,
   } = useOutlookEmailSource();
+  const emailSourceItems = useMemo(() => {
+    return [
+      ...(isEmailBodyIncluded && emailBodyFile
+        ? [
+            {
+              id: "email-body",
+              file: {
+                id: "email-body",
+                filename: emailBodyFile.name,
+                displayName: "Email thread",
+                size: emailBodyFile.size,
+              },
+              isLoading: false,
+            },
+          ]
+        : []),
+      ...selectedAttachmentItems.map((attachmentItem) => ({
+        id: attachmentItem.id,
+        file: attachmentItem,
+        isLoading: false,
+      })),
+      ...(isLoadingAttachments
+        ? [
+            {
+              id: "attachments-loading",
+              file: {
+                id: "attachments-loading",
+                filename: "attachments-loading",
+              },
+              isLoading: true,
+            },
+          ]
+        : []),
+    ];
+  }, [
+    emailBodyFile,
+    isEmailBodyIncluded,
+    isLoadingAttachments,
+    selectedAttachmentItems,
+  ]) as FileAttachmentGroupItem[];
+
+  const handleRemoveEmailSourceFile = useCallback(
+    (fileId: string) => {
+      if (fileId === "email-body") {
+        removeEmailBody();
+        return;
+      }
+
+      removeAttachment(fileId);
+    },
+    [removeAttachment, removeEmailBody],
+  );
 
   const wrappedOnSendMessage = useCallback(
     async (
@@ -136,46 +192,45 @@ export const AddinChatInput = forwardRef<
 
   return (
     <div className={className ? `flex flex-col ${className}` : "flex flex-col"}>
-      {host === "Outlook" && isEmailBodyIncluded && emailBodyFile && (
-        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
-          <FilePreviewButton
-            file={emailBodyFile}
-            onRemove={removeEmailBody}
-            disabled={isUploadingEmail}
-            className="w-full"
-            showFileType={true}
-            showSize={true}
-            filenameClassName="max-w-full"
-          />
-        </div>
-      )}
-
-      {host === "Outlook" && isLoadingAttachments && (
-        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
-          <FilePreviewLoading
-            className="w-full"
-            label="Loading attachments..."
-          />
-        </div>
-      )}
-
       {host === "Outlook" &&
-        selectedAttachmentItems.map((attachmentItem) => (
-          <div
-            key={attachmentItem.id}
-            className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4"
-          >
-            <FilePreviewButton
-              file={attachmentItem}
-              onRemove={() => removeAttachment(attachmentItem.id)}
-              disabled={isUploadingEmail}
-              className="w-full"
-              showFileType={true}
-              showSize={true}
-              filenameClassName="max-w-full"
-            />
+        (hasSelectedEmailSource || isLoadingAttachments) && (
+          <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+            {emailSourceItems.length === 1 ? (
+              emailSourceItems[0].isLoading ? (
+                <FilePreviewLoading
+                  className="w-full"
+                  label="Loading attachments..."
+                />
+              ) : (
+                <FilePreviewButton
+                  file={emailSourceItems[0].file}
+                  onRemove={() => handleRemoveEmailSourceFile(emailSourceItems[0].id)}
+                  disabled={isUploadingEmail}
+                  className="w-full"
+                  showFileType={true}
+                  showSize={true}
+                  filenameClassName="max-w-full"
+                />
+              )
+            ) : (
+              <GroupedFileAttachmentsPreview
+                groups={[
+                  {
+                    id: "current-email",
+                    label: emailSubject || "Email",
+                    metaLabel: "",
+                    items: emailSourceItems,
+                  },
+                ]}
+                onRemoveFile={handleRemoveEmailSourceFile}
+                disabled={isUploadingEmail}
+                showFileTypes={true}
+                showFileSizes={true}
+                defaultVisibleItems={3}
+              />
+            )}
           </div>
-        ))}
+        )}
 
       <ChatInput
         ref={ref}
