@@ -85,4 +85,32 @@ describe("v1betaApiFetch auth injection", () => {
       Authorization: "Bearer test-id-token",
     });
   });
+
+  it("does not apply the json content-type default to FormData uploads", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: vi.fn().mockResolvedValue({ ok: true }),
+    });
+
+    setIdToken("test-id-token");
+    vi.stubGlobal("fetch", fetchMock);
+
+    const formData = new FormData();
+    formData.append("file", new File(["hello"], "hello.txt"));
+
+    await v1betaApiFetch({
+      url: "/api/v1beta/me/files",
+      method: "post",
+      body: formData,
+      headers: {
+        Authorization: "Bearer caller-token",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({
+      Authorization: "Bearer caller-token",
+    });
+  });
 });
