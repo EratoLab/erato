@@ -1064,14 +1064,17 @@ msgstr " Los archivos adjuntos ocupan {fileTokensFormatted} tokens."
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
 msgstr "{0, plural, =0 {Sin archivos} one {# archivo} other {# archivos}}"
 
-#. placeholder {0}: group.items.length
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-msgid "{0} items"
-msgstr ""
+#~ msgid "{0} items"
+#~ msgstr ""
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "{fileName}: {filePercentage}%"
 msgstr "{fileName}: {filePercentage}%"
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "{itemCount} items"
+msgstr ""
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"

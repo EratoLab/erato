@@ -1064,14 +1064,17 @@ msgstr " File attachments account for {fileTokensFormatted} tokens."
 msgid "{0, plural, =0 {No files} one {# file} other {# files}}"
 msgstr "{0, plural, =0 {No files} one {# file} other {# files}}"
 
-#. placeholder {0}: group.items.length
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
-msgid "{0} items"
-msgstr "{0} items"
+#~ msgid "{0} items"
+#~ msgstr "{0} items"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "{fileName}: {filePercentage}%"
 msgstr "{fileName}: {filePercentage}%"
+
+#: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
+msgid "{itemCount} items"
+msgstr "{itemCount} items"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "• Change browser language in settings and refresh"

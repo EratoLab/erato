@@ -2,10 +2,10 @@ import { I18nProvider } from "@lingui/react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { GroupedFileAttachmentsPreview } from "./GroupedFileAttachmentsPreview";
-import { ThemeProvider } from "@/components/providers/ThemeProvider";
 
 import type { Messages } from "@lingui/core";
 
@@ -74,7 +74,9 @@ describe("GroupedFileAttachmentsPreview", () => {
     expect(screen.getByText("invoice")).toBeVisible();
     expect(screen.getByText(".pdf")).toBeVisible();
     expect(screen.queryByText("notes")).toBeNull();
-    expect(screen.getByRole("button", { name: /show 1 more item/i })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /show 1 more item/i }),
+    ).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: /show 1 more item/i }));
 
@@ -134,7 +136,9 @@ describe("GroupedFileAttachmentsPreview", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /remove invoice\.pdf/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /remove invoice\.pdf/i }),
+    );
     expect(onRemoveFile).toHaveBeenCalledWith("file-1");
   });
 });
