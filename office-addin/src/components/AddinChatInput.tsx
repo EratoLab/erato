@@ -1,5 +1,7 @@
 import {
   ChatInput,
+  FilePreviewButton,
+  FilePreviewLoading,
   fetchUploadFile,
   getIdToken,
   type ChatInputControlsHandle,
@@ -10,9 +12,8 @@ import {
 } from "@erato/frontend/library";
 import { forwardRef, useCallback, useState } from "react";
 
+import { useOutlookEmailSource } from "../hooks/useOutlookEmailSource";
 import { useOffice } from "../providers/OfficeProvider";
-import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
-import { emailToHtmlFile } from "../utils/emailToFile";
 
 interface AddinChatInputProps {
   onSendMessage: (
@@ -49,9 +50,17 @@ export const AddinChatInput = forwardRef<
   AddinChatInputProps
 >(function AddinChatInput({ chatId, className, ...chatInputProps }, ref) {
   const { host } = useOffice();
-  const { mailItem } = useOutlookMailItem();
-  const [emailIncluded, setEmailIncluded] = useState(false);
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
+  const {
+    hasSelectedEmailSource,
+    isEmailBodyIncluded,
+    emailBodyFile,
+    selectedAttachmentItems,
+    isLoadingAttachments,
+    removeEmailBody,
+    removeAttachment,
+    resolveSelectedFilesForSend,
+  } = useOutlookEmailSource();
 
   const wrappedOnSendMessage = useCallback(
     async (
@@ -60,7 +69,7 @@ export const AddinChatInput = forwardRef<
       modelId?: string,
       selectedFacetIds?: string[],
     ) => {
-      if (!emailIncluded || !mailItem) {
+      if (!hasSelectedEmailSource) {
         chatInputProps.onSendMessage(
           message,
           inputFileIds,
@@ -71,12 +80,24 @@ export const AddinChatInput = forwardRef<
       }
 
       setIsUploadingEmail(true);
-      let emailFileIds: string[] = [];
+      let resolvedFileIds: string[] = [];
 
       try {
-        const emailFile = emailToHtmlFile(mailItem);
+        const filesToUpload = await resolveSelectedFilesForSend();
+        if (filesToUpload.length === 0) {
+          chatInputProps.onSendMessage(
+            message,
+            inputFileIds,
+            modelId,
+            selectedFacetIds,
+          );
+          return;
+        }
+
         const formData = new FormData();
-        formData.append("file", emailFile, emailFile.name);
+        filesToUpload.forEach((file) => {
+          formData.append("file", file, file.name);
+        });
 
         const idToken = getIdToken();
         const result = await fetchUploadFile({
@@ -87,52 +108,74 @@ export const AddinChatInput = forwardRef<
           },
         });
 
-        emailFileIds = result.files.map((file) => file.id);
+        resolvedFileIds = result.files.map((file) => file.id);
       } catch (error) {
-        console.warn("Failed to upload email file, sending without it:", error);
+        console.warn(
+          "Failed to upload Outlook email source files, sending without them:",
+          error,
+        );
       } finally {
         setIsUploadingEmail(false);
       }
 
-      const mergedFileIds = [...(inputFileIds ?? []), ...emailFileIds];
+      const mergedFileIds = [...(inputFileIds ?? []), ...resolvedFileIds];
       chatInputProps.onSendMessage(
         message,
         mergedFileIds.length > 0 ? mergedFileIds : undefined,
         modelId,
         selectedFacetIds,
       );
-      setEmailIncluded(false);
     },
-    [chatId, chatInputProps, emailIncluded, mailItem],
+    [
+      chatId,
+      chatInputProps,
+      hasSelectedEmailSource,
+      resolveSelectedFilesForSend,
+    ],
   );
 
   return (
     <div className={className ? `flex flex-col ${className}` : "flex flex-col"}>
-      {host === "Outlook" && mailItem && (
-        <div className="mx-auto flex w-full max-w-4xl items-center gap-2 px-2 pb-1 sm:px-4">
-          <button
-            type="button"
-            onClick={() => setEmailIncluded((previous) => !previous)}
+      {host === "Outlook" && isEmailBodyIncluded && emailBodyFile && (
+        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+          <FilePreviewButton
+            file={emailBodyFile}
+            onRemove={removeEmailBody}
             disabled={isUploadingEmail}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              emailIncluded
-                ? "bg-theme-bg-accent text-theme-fg-accent"
-                : "bg-theme-bg-tertiary text-theme-fg-muted hover:text-theme-fg-secondary"
-            }`}
-          >
-            {isUploadingEmail ? (
-              <span className="inline-block size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            ) : (
-              <span className="text-sm">
-                {emailIncluded ? "\u2709\uFE0F" : "\u2709"}
-              </span>
-            )}
-            <span className="max-w-[200px] truncate">
-              {mailItem.subject || "(no subject)"}
-            </span>
-          </button>
+            className="w-full"
+            showFileType={true}
+            showSize={true}
+            filenameClassName="max-w-full"
+          />
         </div>
       )}
+
+      {host === "Outlook" && isLoadingAttachments && (
+        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+          <FilePreviewLoading
+            className="w-full"
+            label="Loading attachments..."
+          />
+        </div>
+      )}
+
+      {host === "Outlook" &&
+        selectedAttachmentItems.map((attachmentItem) => (
+          <div
+            key={attachmentItem.id}
+            className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4"
+          >
+            <FilePreviewButton
+              file={attachmentItem}
+              onRemove={() => removeAttachment(attachmentItem.id)}
+              disabled={isUploadingEmail}
+              className="w-full"
+              showFileType={true}
+              showSize={true}
+              filenameClassName="max-w-full"
+            />
+          </div>
+        ))}
 
       <ChatInput
         ref={ref}

@@ -13,9 +13,18 @@ import type { FileType } from "@/utils/fileTypes";
 import type React from "react";
 
 /**
- * Type that can represent either a browser File or a server-side FileUploadItem
+ * Lightweight local preview item that hasn't been uploaded yet.
  */
-export type FileResource = File | FileUploadItem;
+export interface LocalFilePreviewItem {
+  id: string;
+  filename: string;
+  size?: number;
+}
+
+/**
+ * Type that can represent a browser File, a local preview item, or a server-side FileUploadItem
+ */
+export type FileResource = File | LocalFilePreviewItem | FileUploadItem;
 
 /**
  * Type guard to determine if a FileResource is a File
@@ -29,6 +38,15 @@ export function isFile(file: FileResource): file is File {
  */
 export function isFileUploadItem(file: FileResource): file is FileUploadItem {
   return "id" in file && "filename" in file;
+}
+
+/**
+ * Type guard to determine if a FileResource is a local preview item
+ */
+export function isLocalFilePreviewItem(
+  file: FileResource,
+): file is LocalFilePreviewItem {
+  return "id" in file && "filename" in file && !("download_url" in file);
 }
 
 /**

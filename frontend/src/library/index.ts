@@ -20,6 +20,8 @@ export { MessageContent } from "@/components/ui/Message/MessageContent";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
+export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
+export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { ChatErrorBoundary } from "@/components/ui/Feedback/ChatErrorBoundary";
 export { FeedbackCommentDialog } from "@/components/ui/Feedback/FeedbackCommentDialog";
 export { FeedbackViewDialog } from "@/components/ui/Feedback/FeedbackViewDialog";
@@ -117,3 +119,4 @@ export type {
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export type { FileType } from "@/utils/fileTypes";
+export type { LocalFilePreviewItem } from "@/components/ui/FileUpload/FilePreviewBase";
