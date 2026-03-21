@@ -87,6 +87,10 @@ export function AddinChat() {
     | { mode: "compose" }
     | { mode: "edit"; messageId: string; initialContent: ContentPart[] }
   >({ mode: "compose" });
+  const shouldSuggestCurrentEmail =
+    currentChatId === null &&
+    messageOrder.length === 0 &&
+    editState.mode === "compose";
 
   const { handleSendMessage: baseHandleSendMessage, handleMessageAction } =
     useChatActions({ switchSession: navigateToChat, sendMessage });
@@ -304,6 +308,7 @@ export function AddinChat() {
               initialModel={currentChatLastModel}
               initialSelectedFacetIds={currentChatLastSelectedFacets}
               onFacetSelectionChange={setActiveSelectedFacetIds}
+              showSuggestedEmailSource={shouldSuggestCurrentEmail}
             />
           </div>
         </ChatErrorBoundary>

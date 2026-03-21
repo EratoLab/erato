@@ -45,12 +45,21 @@ interface AddinChatInputProps {
   initialModel?: ChatModel | null;
   initialSelectedFacetIds?: string[];
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
+  showSuggestedEmailSource?: boolean;
 }
 
 export const AddinChatInput = forwardRef<
   ChatInputControlsHandle,
   AddinChatInputProps
->(function AddinChatInput({ chatId, className, ...chatInputProps }, ref) {
+>(function AddinChatInput(
+  {
+    chatId,
+    className,
+    showSuggestedEmailSource = false,
+    ...chatInputProps
+  },
+  ref,
+) {
   const { host } = useOffice();
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
   const {
@@ -64,6 +73,8 @@ export const AddinChatInput = forwardRef<
     removeAttachment,
     resolveSelectedFilesForSend,
   } = useOutlookEmailSource();
+  const shouldUseSuggestedEmailSource =
+    showSuggestedEmailSource && hasSelectedEmailSource;
   const emailSourceItems = useMemo(() => {
     return [
       ...(isEmailBodyIncluded && emailBodyFile
@@ -124,7 +135,7 @@ export const AddinChatInput = forwardRef<
       modelId?: string,
       selectedFacetIds?: string[],
     ) => {
-      if (!hasSelectedEmailSource) {
+      if (!shouldUseSuggestedEmailSource) {
         chatInputProps.onSendMessage(
           message,
           inputFileIds,
@@ -184,14 +195,15 @@ export const AddinChatInput = forwardRef<
     [
       chatId,
       chatInputProps,
-      hasSelectedEmailSource,
       resolveSelectedFilesForSend,
+      shouldUseSuggestedEmailSource,
     ],
   );
 
   return (
     <div className={className ? `flex flex-col ${className}` : "flex flex-col"}>
       {host === "Outlook" &&
+        showSuggestedEmailSource &&
         (hasSelectedEmailSource || isLoadingAttachments) && (
           <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
             {emailSourceItems.length === 1 ? (
