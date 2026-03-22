@@ -193,6 +193,8 @@ export type ThemeSpacing = {
     paddingX: string;
     paddingY: string;
     gap: string;
+    compactPaddingX: string;
+    compactPaddingY: string;
   };
   message: {
     paddingX: string;
@@ -236,6 +238,7 @@ export type ThemeLayout = {
   };
   sidebar: {
     width: string;
+    slimWidth: string;
   };
 };
 
@@ -469,6 +472,8 @@ export const defaultTheme: Theme = {
       paddingX: "1rem",
       paddingY: "1rem",
       gap: "1rem",
+      compactPaddingX: "0.5rem",
+      compactPaddingY: "0.5rem",
     },
     message: {
       paddingX: "1rem",
@@ -512,6 +517,7 @@ export const defaultTheme: Theme = {
     },
     sidebar: {
       width: "17.5rem",
+      slimWidth: "4rem",
     },
   },
   codeHighlight: {

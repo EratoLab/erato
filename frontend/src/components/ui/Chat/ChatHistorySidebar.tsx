@@ -35,15 +35,13 @@ import type { ChatSession } from "@/types/chat";
 
 // Create logger for this component
 const logger = createLogger("UI", "ChatHistorySidebar");
-// eslint-disable-next-line lingui/no-unlocalized-strings -- CSS length token for slim sidebar width
-const slimSidebarWidth = "4rem";
 const sidebarItemStyle = {
   minHeight: "var(--theme-spacing-sidebar-row-height)",
   borderRadius: "var(--theme-radius-shell)",
 } as const;
 const compactShellPaddingStyle = {
   padding:
-    "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
+    "var(--theme-spacing-shell-compact-padding-y) var(--theme-spacing-shell-compact-padding-x)",
 } as const;
 
 export interface ChatHistorySidebarProps {
@@ -609,7 +607,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
         backgroundColor: "var(--theme-shell-sidebar)",
         borderRightColor: "var(--theme-border-divider)",
         boxShadow: "var(--theme-elevation-shell)",
-        width: isSlimMode ? slimSidebarWidth : expandedSidebarWidth,
+        width: isSlimMode
+          ? "var(--theme-layout-sidebar-slim-width)"
+          : expandedSidebarWidth,
       }),
       [expandedSidebarWidth, isSlimMode],
     );

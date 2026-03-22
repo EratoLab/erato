@@ -634,7 +634,9 @@ export const Chat = ({
               // When expanded: full width (320px)
               !sidebarCollapsed && "sm:ml-[var(--theme-layout-sidebar-width)]",
               // When collapsed in slim mode: narrow width (64px)
-              sidebarCollapsed && collapsedMode === "slim" && "sm:ml-16",
+              sidebarCollapsed &&
+                collapsedMode === "slim" &&
+                "sm:ml-[var(--theme-layout-sidebar-slim-width)]",
               // When collapsed in hidden mode: no margin (sidebar is off-screen)
               // (default, no class needed)
               className,

@@ -202,6 +202,8 @@
   --theme-spacing-shell-padding-x: 1rem;
   --theme-spacing-shell-padding-y: 1rem;
   --theme-spacing-shell-gap: 1rem;
+  --theme-spacing-shell-compact-padding-x: 0.5rem;
+  --theme-spacing-shell-compact-padding-y: 0.5rem;
   --theme-spacing-message-padding-x: 1rem;
   --theme-spacing-message-padding-y: 1rem;
   --theme-spacing-message-gap: 1.5rem;
@@ -229,6 +231,7 @@
   --theme-layout-chat-content-max-width: 48rem;
   --theme-layout-chat-input-max-width: 56rem;
   --theme-layout-sidebar-width: 17.5rem;
+  --theme-layout-sidebar-slim-width: 4rem;
 
   /* Typography */
   --theme-font-body: "Geist Variable";

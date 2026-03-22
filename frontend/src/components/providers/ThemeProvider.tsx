@@ -379,6 +379,14 @@ export function ThemeProvider({
     );
     setCssVariable("--theme-spacing-shell-gap", theme.spacing.shell.gap);
     setCssVariable(
+      "--theme-spacing-shell-compact-padding-x",
+      theme.spacing.shell.compactPaddingX,
+    );
+    setCssVariable(
+      "--theme-spacing-shell-compact-padding-y",
+      theme.spacing.shell.compactPaddingY,
+    );
+    setCssVariable(
       "--theme-spacing-message-padding-x",
       theme.spacing.message.paddingX,
     );
@@ -442,6 +450,10 @@ export function ThemeProvider({
       theme.layout.chat.inputMaxWidth,
     );
     setCssVariable("--theme-layout-sidebar-width", theme.layout.sidebar.width);
+    setCssVariable(
+      "--theme-layout-sidebar-slim-width",
+      theme.layout.sidebar.slimWidth,
+    );
 
     // Avatar colors
     setCssVariable(
