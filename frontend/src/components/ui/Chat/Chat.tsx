@@ -583,9 +583,27 @@ export const Chat = ({
     );
   }
 
+  const appShellStyle = useMemo(
+    () => ({
+      backgroundColor: "var(--theme-shell-app)",
+    }),
+    [],
+  );
+
+  const pageShellStyle = useMemo(
+    () => ({
+      backgroundColor: "var(--theme-shell-page)",
+    }),
+    [],
+  );
+
   return (
     <ChatInputControlsProvider value={chatInputControls}>
-      <div className="flex size-full flex-col sm:flex-row" data-ui="page-shell">
+      <div
+        className="flex size-full flex-col sm:flex-row"
+        data-ui="app-shell"
+        style={appShellStyle}
+      >
         <ChatHistorySidebar
           collapsed={sidebarCollapsed}
           onNewChat={() => {
@@ -627,7 +645,7 @@ export const Chat = ({
               message: "Chat conversation",
             })}
             data-ui="chat-conversation-dropzone"
-            style={{ backgroundColor: "var(--theme-shell-chat-body)" }}
+            style={pageShellStyle}
           >
             <input
               {...getConversationDropzoneInputProps()}
