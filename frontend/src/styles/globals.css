@@ -212,6 +212,8 @@
   --theme-spacing-control-padding-y: 0.5rem;
   --theme-spacing-control-min-height: 2.5rem;
   --theme-spacing-sidebar-row-height: 2.75rem;
+  --theme-spacing-input-compact-padding-x: 0.5rem;
+  --theme-spacing-input-compact-padding-y: 0.5rem;
   --theme-spacing-input-padding-x: 0.75rem;
   --theme-spacing-input-padding-y: 0.75rem;
   --theme-spacing-input-gap: 0.5rem;
@@ -452,8 +454,8 @@ body {
   }
 
   .chat-input-shell-geometry {
-    padding-inline: var(--theme-spacing-shell-compact-padding-x);
-    padding-block: var(--theme-spacing-shell-compact-padding-y);
+    padding-inline: var(--theme-spacing-input-compact-padding-x);
+    padding-block: var(--theme-spacing-input-compact-padding-y);
     gap: var(--theme-spacing-input-gap);
   }
 

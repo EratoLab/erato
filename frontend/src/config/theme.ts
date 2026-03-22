@@ -211,6 +211,8 @@ export type ThemeSpacing = {
     rowHeight: string;
   };
   input: {
+    compactPaddingX: string;
+    compactPaddingY: string;
     paddingX: string;
     paddingY: string;
     gap: string;
@@ -491,6 +493,8 @@ export const defaultTheme: Theme = {
       rowHeight: "2.75rem",
     },
     input: {
+      compactPaddingX: "0.5rem",
+      compactPaddingY: "0.5rem",
       paddingX: "0.75rem",
       paddingY: "0.75rem",
       gap: "0.5rem",

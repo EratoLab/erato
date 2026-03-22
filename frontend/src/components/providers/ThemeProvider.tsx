@@ -413,6 +413,14 @@ export function ThemeProvider({
       theme.spacing.sidebar.rowHeight,
     );
     setCssVariable(
+      "--theme-spacing-input-compact-padding-x",
+      theme.spacing.input.compactPaddingX,
+    );
+    setCssVariable(
+      "--theme-spacing-input-compact-padding-y",
+      theme.spacing.input.compactPaddingY,
+    );
+    setCssVariable(
       "--theme-spacing-input-padding-x",
       theme.spacing.input.paddingX,
     );
