@@ -36,6 +36,7 @@ export interface AnchoredPopoverProps {
   panelClassName?: string;
   panelStyle?: CSSProperties;
   panelRef?: RefObject<HTMLDivElement | null>;
+  viewportPadding?: string;
   id?: string;
   role?: React.AriaRole;
   ariaHasPopup?: AnchoredPopoverTriggerProps["aria-haspopup"];
@@ -45,6 +46,30 @@ export interface AnchoredPopoverProps {
 }
 
 const VIEWPORT_PADDING = 8;
+
+function resolveCssLengthToPixels(
+  value: string,
+  referenceElement: HTMLElement,
+  fallback: number,
+) {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  const probe = document.createElement("div");
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.pointerEvents = "none";
+  probe.style.width = value;
+
+  referenceElement.appendChild(probe);
+  const resolvedWidth = probe.getBoundingClientRect().width;
+  probe.remove();
+
+  return Number.isFinite(resolvedWidth) && resolvedWidth > 0
+    ? resolvedWidth
+    : fallback;
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -59,6 +84,7 @@ export function AnchoredPopover({
   panelClassName,
   panelStyle,
   panelRef,
+  viewportPadding = `${VIEWPORT_PADDING}px`,
   id,
   role,
   ariaHasPopup,
@@ -104,7 +130,11 @@ export function AnchoredPopover({
     const viewport = {
       width: window.innerWidth,
       height: window.innerHeight,
-      padding: VIEWPORT_PADDING,
+      padding: resolveCssLengthToPixels(
+        viewportPadding,
+        triggerRef.current,
+        VIEWPORT_PADDING,
+      ),
     };
 
     const requiredSpace = {
@@ -168,7 +198,7 @@ export function AnchoredPopover({
       vertical === "top" ? `${viewport.height - triggerRect.top}px` : "auto";
     panelElement.style.left = `${left}px`;
     panelElement.style.maxHeight = `${maxHeight}px`;
-  }, [getPanelElement, isOpen, preferredOrientation]);
+  }, [getPanelElement, isOpen, preferredOrientation, viewportPadding]);
 
   useEffect(() => {
     if (!isOpen) {

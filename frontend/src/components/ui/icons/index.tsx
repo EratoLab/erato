@@ -37,6 +37,7 @@ import {
   NavArrowRight,
   Folder,
   ShareAndroid,
+  GridXmark,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -239,6 +240,10 @@ export const ShareIcon = ({ className, ...props }: IconProps) => (
   <ShareAndroid className={className} {...props} />
 );
 
+export const GridXmarkIcon = ({ className, ...props }: IconProps) => (
+  <GridXmark className={className} {...props} />
+);
+
 // Direct re-exports for convenience (maintaining Iconoir naming)
 export {
   Copy,
@@ -269,6 +274,7 @@ export {
   MediaVideo,
   MultiplePages,
   Search,
+  GridXmark,
 };
 
 // Export the IconProps type for use in other components

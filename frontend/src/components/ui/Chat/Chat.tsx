@@ -583,9 +583,27 @@ export const Chat = ({
     );
   }
 
+  const appShellStyle = useMemo(
+    () => ({
+      backgroundColor: "var(--theme-shell-app)",
+    }),
+    [],
+  );
+
+  const pageShellStyle = useMemo(
+    () => ({
+      backgroundColor: "var(--theme-shell-page)",
+    }),
+    [],
+  );
+
   return (
     <ChatInputControlsProvider value={chatInputControls}>
-      <div className="flex size-full flex-col sm:flex-row" data-ui="page-shell">
+      <div
+        className="flex size-full flex-col sm:flex-row"
+        data-ui="app-shell"
+        style={appShellStyle}
+      >
         <ChatHistorySidebar
           collapsed={sidebarCollapsed}
           onNewChat={() => {
@@ -616,7 +634,9 @@ export const Chat = ({
               // When expanded: full width (320px)
               !sidebarCollapsed && "sm:ml-[var(--theme-layout-sidebar-width)]",
               // When collapsed in slim mode: narrow width (64px)
-              sidebarCollapsed && collapsedMode === "slim" && "sm:ml-16",
+              sidebarCollapsed &&
+                collapsedMode === "slim" &&
+                "sm:ml-[var(--theme-layout-sidebar-slim-width)]",
               // When collapsed in hidden mode: no margin (sidebar is off-screen)
               // (default, no class needed)
               className,
@@ -627,7 +647,7 @@ export const Chat = ({
               message: "Chat conversation",
             })}
             data-ui="chat-conversation-dropzone"
-            style={{ backgroundColor: "var(--theme-shell-chat-body)" }}
+            style={pageShellStyle}
           >
             <input
               {...getConversationDropzoneInputProps()}

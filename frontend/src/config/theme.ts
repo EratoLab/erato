@@ -193,6 +193,8 @@ export type ThemeSpacing = {
     paddingX: string;
     paddingY: string;
     gap: string;
+    compactPaddingX: string;
+    compactPaddingY: string;
   };
   message: {
     paddingX: string;
@@ -209,16 +211,21 @@ export type ThemeSpacing = {
     rowHeight: string;
   };
   input: {
+    compactPaddingX: string;
+    compactPaddingY: string;
     paddingX: string;
     paddingY: string;
     gap: string;
+    minHeight: string;
   };
   dropdown: {
     paddingX: string;
     paddingY: string;
+    chromePaddingY: string;
   };
   modal: {
     padding: string;
+    closeButtonPadding: string;
   };
 };
 
@@ -236,6 +243,17 @@ export type ThemeLayout = {
   };
   sidebar: {
     width: string;
+    slimWidth: string;
+  };
+  dropdown: {
+    minWidth: string;
+    viewportMargin: string;
+  };
+  modal: {
+    backdropBlur: string;
+    maxHeight: string;
+    maxWidth: string;
+    viewportMargin: string;
   };
 };
 
@@ -381,7 +399,7 @@ export const defaultTheme: Theme = {
       app: colors.neutral[50],
       page: colors.neutral[100],
       sidebar: colors.neutral[200],
-      sidebarHover: stateColors.hover.light,
+      sidebarHover: colors.neutral[300],
       sidebarSelected: stateColors.selection.light,
       chatHeader: colors.neutral[100],
       chatBody: colors.neutral[100],
@@ -392,7 +410,7 @@ export const defaultTheme: Theme = {
     message: {
       user: colors.neutral[50],
       assistant: colors.neutral[100],
-      hover: stateColors.hover.light,
+      hover: colors.neutral[200],
       controls: colors.neutral[100],
     },
     code: {
@@ -469,6 +487,8 @@ export const defaultTheme: Theme = {
       paddingX: "1rem",
       paddingY: "1rem",
       gap: "1rem",
+      compactPaddingX: "0.5rem",
+      compactPaddingY: "0.5rem",
     },
     message: {
       paddingX: "1rem",
@@ -485,16 +505,21 @@ export const defaultTheme: Theme = {
       rowHeight: "2.75rem",
     },
     input: {
+      compactPaddingX: "0.5rem",
+      compactPaddingY: "0.5rem",
       paddingX: "0.75rem",
       paddingY: "0.75rem",
       gap: "0.5rem",
+      minHeight: "2rem",
     },
     dropdown: {
       paddingX: "1rem",
       paddingY: "0.5rem",
+      chromePaddingY: "0.25rem",
     },
     modal: {
       padding: "1rem",
+      closeButtonPadding: "0.25rem",
     },
   },
   elevation: {
@@ -512,6 +537,17 @@ export const defaultTheme: Theme = {
     },
     sidebar: {
       width: "17.5rem",
+      slimWidth: "4rem",
+    },
+    dropdown: {
+      minWidth: "12rem",
+      viewportMargin: "8px",
+    },
+    modal: {
+      backdropBlur: "4px",
+      maxHeight: "90vh",
+      maxWidth: "42rem",
+      viewportMargin: "1rem",
     },
   },
   codeHighlight: {

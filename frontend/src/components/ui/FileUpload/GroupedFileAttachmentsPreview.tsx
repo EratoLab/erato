@@ -160,7 +160,7 @@ export const GroupedFileAttachmentsPreview: React.FC<
                     key={getFileKey(item)}
                     onClick={() => onFilePreview(item.file)}
                     useDiv={true}
-                    className="w-full cursor-pointer"
+                    className="w-full cursor-pointer hover:bg-theme-bg-accent"
                     aria-label={`${t`Preview attachment`} ${getFileName(item.file)}`}
                   >
                     {content}

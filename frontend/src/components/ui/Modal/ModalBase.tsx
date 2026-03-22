@@ -71,6 +71,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
 
   const overlayStyle = {
     backgroundColor: "var(--theme-overlay-modal)",
+    backdropFilter: "blur(var(--theme-layout-modal-backdrop-blur))",
   } as const;
 
   const shellStyle = {
@@ -82,7 +83,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   const modalContent = (
     <div
       className={clsx(
-        "fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm",
+        "fixed inset-0 z-50 flex items-center justify-center",
         className,
       )}
       style={overlayStyle}
@@ -95,9 +96,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       <div
         ref={modalRef}
         className={clsx(
-          "theme-transition relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden font-sans",
-          // Responsive padding - add margin on mobile
-          "mx-4",
+          "modal-shell-frame-geometry theme-transition relative flex w-full flex-col overflow-hidden font-sans",
           "focus-ring",
           contentClassName,
         )}
@@ -120,8 +119,9 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
             {/* Simple Close Button — positioned using the same modal padding token */}
             <button
               onClick={onClose}
-              className="focus-ring-tight absolute rounded-full p-1 text-theme-fg-muted hover:bg-theme-bg-secondary"
+              className="focus-ring-tight absolute rounded-full text-theme-fg-muted hover:bg-theme-bg-secondary"
               style={{
+                padding: "var(--theme-spacing-modal-close-button-padding)",
                 right: "var(--theme-spacing-modal-padding)",
                 top: "var(--theme-spacing-modal-padding)",
               }}
