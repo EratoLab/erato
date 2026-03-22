@@ -258,9 +258,27 @@ describe("ThemeProvider", () => {
               elevation: {
                 dropdown: "0 16px 32px rgba(15, 23, 42, 0.18)",
               },
+              spacing: {
+                dropdown: {
+                  chromePaddingY: "0.375rem",
+                },
+                modal: {
+                  closeButtonPadding: "0.375rem",
+                },
+              },
               layout: {
                 chat: {
                   inputMaxWidth: "60rem",
+                },
+                dropdown: {
+                  minWidth: "14rem",
+                  viewportMargin: "12px",
+                },
+                modal: {
+                  backdropBlur: "6px",
+                  maxHeight: "85vh",
+                  maxWidth: "44rem",
+                  viewportMargin: "1.5rem",
                 },
                 sidebar: {
                   width: "20rem",
@@ -377,9 +395,49 @@ describe("ThemeProvider", () => {
     ).toBe("0 16px 32px rgba(15, 23, 42, 0.18)");
     expect(
       document.documentElement.style.getPropertyValue(
+        "--theme-spacing-dropdown-chrome-padding-y",
+      ),
+    ).toBe("0.375rem");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-spacing-modal-close-button-padding",
+      ),
+    ).toBe("0.375rem");
+    expect(
+      document.documentElement.style.getPropertyValue(
         "--theme-layout-chat-input-max-width",
       ),
     ).toBe("60rem");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-layout-dropdown-min-width",
+      ),
+    ).toBe("14rem");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-layout-dropdown-viewport-margin",
+      ),
+    ).toBe("12px");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-layout-modal-backdrop-blur",
+      ),
+    ).toBe("6px");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-layout-modal-max-height",
+      ),
+    ).toBe("85vh");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-layout-modal-max-width",
+      ),
+    ).toBe("44rem");
+    expect(
+      document.documentElement.style.getPropertyValue(
+        "--theme-layout-modal-viewport-margin",
+      ),
+    ).toBe("1.5rem");
     expect(
       document.documentElement.style.getPropertyValue(
         "--theme-layout-sidebar-width",

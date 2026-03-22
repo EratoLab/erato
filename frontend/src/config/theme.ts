@@ -221,9 +221,11 @@ export type ThemeSpacing = {
   dropdown: {
     paddingX: string;
     paddingY: string;
+    chromePaddingY: string;
   };
   modal: {
     padding: string;
+    closeButtonPadding: string;
   };
 };
 
@@ -242,6 +244,16 @@ export type ThemeLayout = {
   sidebar: {
     width: string;
     slimWidth: string;
+  };
+  dropdown: {
+    minWidth: string;
+    viewportMargin: string;
+  };
+  modal: {
+    backdropBlur: string;
+    maxHeight: string;
+    maxWidth: string;
+    viewportMargin: string;
   };
 };
 
@@ -503,9 +515,11 @@ export const defaultTheme: Theme = {
     dropdown: {
       paddingX: "1rem",
       paddingY: "0.5rem",
+      chromePaddingY: "0.25rem",
     },
     modal: {
       padding: "1rem",
+      closeButtonPadding: "0.25rem",
     },
   },
   elevation: {
@@ -524,6 +538,16 @@ export const defaultTheme: Theme = {
     sidebar: {
       width: "17.5rem",
       slimWidth: "4rem",
+    },
+    dropdown: {
+      minWidth: "12rem",
+      viewportMargin: "8px",
+    },
+    modal: {
+      backdropBlur: "4px",
+      maxHeight: "90vh",
+      maxWidth: "42rem",
+      viewportMargin: "1rem",
     },
   },
   codeHighlight: {

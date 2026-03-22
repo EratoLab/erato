@@ -33,8 +33,14 @@ describe("DropdownMenu", () => {
       borderColor: "var(--theme-border-divider)",
       borderRadius: "var(--theme-radius-base)",
       boxShadow: "var(--theme-elevation-dropdown)",
+      maxWidth:
+        "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
+      minWidth: "var(--theme-layout-dropdown-min-width)",
     });
     expect(menuItem.className).toContain("focus-ring-inset");
     expect(menuItem.className).toContain("focus:bg-theme-bg-accent");
+    expect(screen.getByRole("menu").firstElementChild).toHaveClass(
+      "dropdown-panel-chrome-geometry",
+    );
   });
 });

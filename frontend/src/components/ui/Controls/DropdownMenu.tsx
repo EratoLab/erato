@@ -222,11 +222,17 @@ export const DropdownMenu = memo(
           }}
           initialFocusSelector='[role="menuitem"]'
           panelRef={menuRef}
+          panelStyle={{
+            maxWidth:
+              "calc(100vw - (var(--theme-layout-dropdown-viewport-margin) * 2))",
+            minWidth: "var(--theme-layout-dropdown-min-width)",
+          }}
           panelClassName={clsx(
             matchContentWidth
-              ? "w-max min-w-48 max-w-[calc(100vw-16px)]"
-              : "w-48 max-w-[calc(100vw-16px)]",
+              ? "w-max"
+              : "w-[var(--theme-layout-dropdown-min-width)]",
           )}
+          viewportPadding="var(--theme-layout-dropdown-viewport-margin)"
           dataUi="dropdown-panel"
           trigger={(triggerProps) => (
             <Button
@@ -246,7 +252,7 @@ export const DropdownMenu = memo(
             </Button>
           )}
         >
-          <div className="overflow-y-auto py-1" role="none">
+          <div className="dropdown-panel-chrome-geometry overflow-y-auto" role="none">
             {items.map((item, index) => (
               <MenuItem
                 key={`${item.label}-${index}`}

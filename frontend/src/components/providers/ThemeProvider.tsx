@@ -442,8 +442,16 @@ export function ThemeProvider({
       theme.spacing.dropdown.paddingY,
     );
     setCssVariable(
+      "--theme-spacing-dropdown-chrome-padding-y",
+      theme.spacing.dropdown.chromePaddingY,
+    );
+    setCssVariable(
       "--theme-spacing-modal-padding",
       theme.spacing.modal.padding,
+    );
+    setCssVariable(
+      "--theme-spacing-modal-close-button-padding",
+      theme.spacing.modal.closeButtonPadding,
     );
 
     // Elevation
@@ -465,6 +473,30 @@ export function ThemeProvider({
     setCssVariable(
       "--theme-layout-sidebar-slim-width",
       theme.layout.sidebar.slimWidth,
+    );
+    setCssVariable(
+      "--theme-layout-dropdown-min-width",
+      theme.layout.dropdown.minWidth,
+    );
+    setCssVariable(
+      "--theme-layout-dropdown-viewport-margin",
+      theme.layout.dropdown.viewportMargin,
+    );
+    setCssVariable(
+      "--theme-layout-modal-backdrop-blur",
+      theme.layout.modal.backdropBlur,
+    );
+    setCssVariable(
+      "--theme-layout-modal-max-height",
+      theme.layout.modal.maxHeight,
+    );
+    setCssVariable(
+      "--theme-layout-modal-max-width",
+      theme.layout.modal.maxWidth,
+    );
+    setCssVariable(
+      "--theme-layout-modal-viewport-margin",
+      theme.layout.modal.viewportMargin,
     );
 
     // Avatar colors

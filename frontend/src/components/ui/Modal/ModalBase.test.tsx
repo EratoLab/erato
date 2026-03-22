@@ -26,10 +26,20 @@ describe("ModalBase", () => {
       boxShadow: "var(--theme-elevation-modal)",
     });
     expect(dialog.className).toContain("focus-ring");
+    expect(dialog.className).toContain("modal-shell-frame-geometry");
+    expect(dialog.className).toContain("w-full");
     expect(closeButton.className).toContain("focus-ring-tight");
+    expect(closeButton.className).not.toContain("p-1");
+    expect(closeButton.getAttribute("style")).toContain(
+      "right: var(--theme-spacing-modal-padding)",
+    );
+    expect(closeButton.getAttribute("style")).toContain(
+      "top: var(--theme-spacing-modal-padding)",
+    );
     expect(overlay).toBeTruthy();
-    expect(overlay).toHaveStyle({
-      backgroundColor: "var(--theme-overlay-modal)",
-    });
+    expect(overlay?.getAttribute("style")).toContain(
+      "background-color: var(--theme-overlay-modal)",
+    );
+    expect(overlay?.className).not.toContain("backdrop-blur-sm");
   });
 });
