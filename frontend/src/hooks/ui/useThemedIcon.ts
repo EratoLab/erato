@@ -24,7 +24,7 @@ const DEFAULT_ICONS = {
     refresh: "Refresh",
   },
   navigation: {
-    assistants: "EditPencil",
+    assistants: "GridXmark",
     newChat: "EditPencil",
     search: "Search",
   },
