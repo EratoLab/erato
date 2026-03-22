@@ -252,7 +252,10 @@ export const DropdownMenu = memo(
             </Button>
           )}
         >
-          <div className="dropdown-panel-chrome-geometry overflow-y-auto" role="none">
+          <div
+            className="dropdown-panel-chrome-geometry overflow-y-auto"
+            role="none"
+          >
             {items.map((item, index) => (
               <MenuItem
                 key={`${item.label}-${index}`}

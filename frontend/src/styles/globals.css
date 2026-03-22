@@ -162,7 +162,11 @@
   --theme-shell-app: var(--theme-bg-primary);
   --theme-shell-page: var(--theme-bg-secondary);
   --theme-shell-sidebar: var(--theme-bg-sidebar);
-  --theme-shell-sidebar-hover: var(--theme-bg-hover);
+  --theme-shell-sidebar-hover: color-mix(
+    in srgb,
+    var(--theme-shell-sidebar),
+    black 6%
+  );
   --theme-shell-sidebar-selected: var(--theme-bg-selected);
   --theme-shell-chat-header: var(--theme-bg-secondary);
   --theme-shell-chat-body: var(--theme-bg-secondary);
@@ -172,7 +176,11 @@
   --theme-overlay-modal: rgba(17, 24, 39, 0.6);
   --theme-message-user: var(--theme-bg-primary);
   --theme-message-assistant: var(--theme-bg-secondary);
-  --theme-message-hover: var(--theme-bg-hover);
+  --theme-message-hover: color-mix(
+    in srgb,
+    var(--theme-shell-chat-body),
+    black 6%
+  );
   --theme-message-controls: var(--theme-bg-secondary);
   --theme-code-inline-bg: #f3f4f6;
   --theme-code-inline-fg: #1f2937;
@@ -337,7 +345,11 @@
     --theme-shell-app: var(--theme-bg-primary);
     --theme-shell-page: var(--theme-bg-secondary);
     --theme-shell-sidebar: var(--theme-bg-sidebar);
-    --theme-shell-sidebar-hover: var(--theme-bg-hover);
+    --theme-shell-sidebar-hover: color-mix(
+      in srgb,
+      var(--theme-shell-sidebar),
+      white 8%
+    );
     --theme-shell-sidebar-selected: var(--theme-bg-selected);
     --theme-shell-chat-header: var(--theme-bg-secondary);
     --theme-shell-chat-body: var(--theme-bg-secondary);
@@ -347,7 +359,11 @@
     --theme-overlay-modal: rgba(0, 0, 0, 0.7);
     --theme-message-user: var(--theme-bg-primary);
     --theme-message-assistant: var(--theme-bg-secondary);
-    --theme-message-hover: var(--theme-bg-hover);
+    --theme-message-hover: color-mix(
+      in srgb,
+      var(--theme-shell-chat-body),
+      white 8%
+    );
     --theme-message-controls: var(--theme-bg-secondary);
     --theme-code-inline-bg: #374151;
     --theme-code-inline-fg: #f3f4f6;

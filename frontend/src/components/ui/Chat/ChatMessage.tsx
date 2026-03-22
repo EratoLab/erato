@@ -509,7 +509,7 @@ const AttachedFile = ({
         }
       }}
       aria-label={`${t({ id: "chat.file.preview.aria", message: "Preview attached file:" })} ${fileData.filename}`}
-      className="cursor-pointer"
+      className="cursor-pointer hover:bg-theme-bg-accent"
       useDiv={true}
     >
       <FilePreviewButton

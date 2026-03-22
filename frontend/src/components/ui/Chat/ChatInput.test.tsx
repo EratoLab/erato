@@ -251,9 +251,9 @@ describe("ChatInput", () => {
     expect(
       container.querySelector('[data-ui="chat-input-shell"]')?.className,
     ).toContain("chat-input-shell-geometry");
-    expect(
-      container.querySelector("textarea")?.className,
-    ).toContain("chat-input-textarea-geometry");
+    expect(container.querySelector("textarea")?.className).toContain(
+      "chat-input-textarea-geometry",
+    );
     expect(
       container.querySelector('[data-ui="chat-input-controls"] > div')
         ?.className,

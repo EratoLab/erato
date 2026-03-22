@@ -82,7 +82,7 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
               key={file.id}
               onClick={() => onFilePreview(file)}
               useDiv={true}
-              className="w-full cursor-pointer"
+              className="w-full cursor-pointer hover:bg-theme-bg-accent"
               aria-label={`${t`Preview attachment`} ${file.filename}`}
             >
               <FilePreviewButton

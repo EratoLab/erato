@@ -399,7 +399,7 @@ export const defaultTheme: Theme = {
       app: colors.neutral[50],
       page: colors.neutral[100],
       sidebar: colors.neutral[200],
-      sidebarHover: stateColors.hover.light,
+      sidebarHover: colors.neutral[300],
       sidebarSelected: stateColors.selection.light,
       chatHeader: colors.neutral[100],
       chatBody: colors.neutral[100],
@@ -410,7 +410,7 @@ export const defaultTheme: Theme = {
     message: {
       user: colors.neutral[50],
       assistant: colors.neutral[100],
-      hover: stateColors.hover.light,
+      hover: colors.neutral[200],
       controls: colors.neutral[100],
     },
     code: {
