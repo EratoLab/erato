@@ -250,15 +250,13 @@ describe("ChatInput", () => {
     );
     expect(
       container.querySelector('[data-ui="chat-input-shell"]')?.className,
-    ).toContain(
-      "[padding:calc(var(--theme-spacing-input-padding-y)*2/3)_calc(var(--theme-spacing-input-padding-x)*2/3)]",
-    );
+    ).toContain("chat-input-shell-geometry");
     expect(
-      container.querySelector('[data-ui="chat-input-shell"]')?.className,
-    ).toContain("sm:gap-[calc(var(--theme-spacing-input-gap)*1.5)]");
+      container.querySelector("textarea")?.className,
+    ).toContain("chat-input-textarea-geometry");
     expect(
       container.querySelector('[data-ui="chat-input-controls"] > div')
         ?.className,
-    ).toContain("sm:gap-[var(--theme-spacing-control-gap)]");
+    ).toContain("chat-input-controls-geometry");
   });
 });

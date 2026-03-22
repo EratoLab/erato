@@ -214,6 +214,7 @@ export type ThemeSpacing = {
     paddingX: string;
     paddingY: string;
     gap: string;
+    minHeight: string;
   };
   dropdown: {
     paddingX: string;
@@ -493,6 +494,7 @@ export const defaultTheme: Theme = {
       paddingX: "0.75rem",
       paddingY: "0.75rem",
       gap: "0.5rem",
+      minHeight: "2rem",
     },
     dropdown: {
       paddingX: "1rem",

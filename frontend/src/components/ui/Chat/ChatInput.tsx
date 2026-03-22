@@ -780,10 +780,7 @@ export const ChatInput = ({
             "border border-[var(--theme-border)]",
             "theme-transition focus-within:border-[var(--theme-border-focus)]",
             "flex flex-col",
-            "[padding:calc(var(--theme-spacing-input-padding-y)*2/3)_calc(var(--theme-spacing-input-padding-x)*2/3)]",
-            "gap-[var(--theme-spacing-input-gap)]",
-            "sm:[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
-            "sm:gap-[calc(var(--theme-spacing-input-gap)*1.5)]",
+            "chat-input-shell-geometry",
           )}
           style={inputShellStyle}
           data-ui="chat-input-shell"
@@ -812,12 +809,12 @@ export const ChatInput = ({
             autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
             className={clsx(
               "w-full resize-none overflow-y-auto",
-              "p-2 sm:px-3",
+              "chat-input-textarea-geometry",
               "bg-transparent",
               "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
               "focus:outline-none",
               "disabled:cursor-not-allowed disabled:opacity-50",
-              "max-h-[200px] min-h-[32px]",
+              "max-h-[200px]",
               "text-base",
               "scrollbar-auto-hide",
               isAnyTokenLimitExceeded &&
@@ -829,7 +826,7 @@ export const ChatInput = ({
             className="flex items-center justify-between"
             data-ui="chat-input-controls"
           >
-            <div className="flex items-center gap-[calc(var(--theme-spacing-control-gap)/2)] sm:gap-[var(--theme-spacing-control-gap)]">
+            <div className="chat-input-controls-geometry flex items-center">
               {showControls && (
                 <>
                   {/* File Upload Button with Token Check */}

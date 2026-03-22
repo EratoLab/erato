@@ -422,6 +422,10 @@ export function ThemeProvider({
     );
     setCssVariable("--theme-spacing-input-gap", theme.spacing.input.gap);
     setCssVariable(
+      "--theme-spacing-input-min-height",
+      theme.spacing.input.minHeight,
+    );
+    setCssVariable(
       "--theme-spacing-dropdown-padding-x",
       theme.spacing.dropdown.paddingX,
     );

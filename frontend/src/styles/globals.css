@@ -215,6 +215,7 @@
   --theme-spacing-input-padding-x: 0.75rem;
   --theme-spacing-input-padding-y: 0.75rem;
   --theme-spacing-input-gap: 0.5rem;
+  --theme-spacing-input-min-height: 2rem;
   --theme-spacing-dropdown-padding-x: 1rem;
   --theme-spacing-dropdown-padding-y: 0.5rem;
   --theme-spacing-modal-padding: 1rem;
@@ -448,6 +449,39 @@ body {
 
   .modal-section-geometry {
     padding: var(--theme-spacing-modal-padding);
+  }
+
+  .chat-input-shell-geometry {
+    padding-inline: var(--theme-spacing-shell-compact-padding-x);
+    padding-block: var(--theme-spacing-shell-compact-padding-y);
+    gap: var(--theme-spacing-input-gap);
+  }
+
+  .chat-input-textarea-geometry {
+    padding-inline: calc(var(--theme-spacing-input-padding-x) * 2 / 3);
+    padding-block: calc(var(--theme-spacing-input-padding-y) * 2 / 3);
+    min-height: var(--theme-spacing-input-min-height);
+  }
+
+  .chat-input-controls-geometry {
+    gap: calc(var(--theme-spacing-control-gap) / 2);
+  }
+
+  @media (min-width: 640px) {
+    .chat-input-shell-geometry {
+      padding-inline: var(--theme-spacing-input-padding-x);
+      padding-block: var(--theme-spacing-input-padding-y);
+      gap: calc(var(--theme-spacing-input-gap) * 1.5);
+    }
+
+    .chat-input-textarea-geometry {
+      padding-inline: var(--theme-spacing-input-padding-x);
+      padding-block: calc(var(--theme-spacing-input-padding-y) * 2 / 3);
+    }
+
+    .chat-input-controls-geometry {
+      gap: var(--theme-spacing-control-gap);
+    }
   }
 
   pre.message-content-code-block {
