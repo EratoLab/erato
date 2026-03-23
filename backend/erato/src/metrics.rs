@@ -11,6 +11,8 @@ use tokio_metrics::RuntimeMetricsReporterBuilder;
 use crate::config::AppConfig;
 use crate::state::AppState;
 
+const MCP_ACTIVE_SESSIONS_METRIC: &str = "erato_mcp_active_sessions";
+
 pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
     if !config.integrations.prometheus.enabled {
         return Ok(());
@@ -54,7 +56,8 @@ pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
     .set(1.0);
 
     report_chat_provider_info_metrics(config);
-    describe_cache_metrics();
+    report_mcp_active_session_metrics(config);
+    describe_application_metrics();
 
     tokio::spawn(RuntimeMetricsReporterBuilder::default().describe_and_run());
 
@@ -167,11 +170,29 @@ fn report_chat_provider_info_metrics(config: &AppConfig) {
     }
 }
 
-fn describe_cache_metrics() {
+fn report_mcp_active_session_metrics(config: &AppConfig) {
+    let mut server_ids: Vec<&String> = config.mcp_servers.keys().collect();
+    server_ids.sort();
+
+    for server_id in server_ids {
+        report_mcp_active_sessions_for_server(server_id, 0);
+    }
+}
+
+pub fn report_mcp_active_sessions_for_server(server_id: &str, count: usize) {
+    gauge!(MCP_ACTIVE_SESSIONS_METRIC, "server_id" => server_id.to_string()).set(count as f64);
+}
+
+fn describe_application_metrics() {
     describe_gauge!(
         "erato_chat_provider_info",
         Unit::Count,
         "Info metric for configured chat providers. Always 1; labels carry provider metadata."
+    );
+    describe_gauge!(
+        MCP_ACTIVE_SESSIONS_METRIC,
+        Unit::Count,
+        "Current number of active MCP sessions for each configured MCP server."
     );
     describe_gauge!(
         "erato_cache_max_size_bytes",
