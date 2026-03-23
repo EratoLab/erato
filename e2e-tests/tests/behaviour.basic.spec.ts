@@ -325,7 +325,7 @@ test(
       .getByRole("button")
       .filter({ has: page.getByTestId("avatar-identity") })
       .click();
-    await page.getByRole("menuitem", { name: "Preferences" }).click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
 
     await expect(
       page.getByRole("dialog", { name: "Preferences" }),
@@ -359,7 +359,7 @@ test(
       .getByRole("button")
       .filter({ has: page.getByTestId("avatar-identity") })
       .click();
-    await page.getByRole("menuitem", { name: "Preferences" }).click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
 
     await expect(page.getByRole("textbox", { name: "Nickname" })).toHaveValue(
       nickname,

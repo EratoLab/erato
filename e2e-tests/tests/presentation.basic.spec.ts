@@ -82,6 +82,17 @@ const expectIsDarkPage = async (
   expect(analysisResult.theme, expectMessage).toBe("dark");
 };
 
+const openAppearanceSettings = async (page) => {
+  await page.getByRole("button", { name: "expand sidebar" }).click();
+  await page
+    .getByRole("button")
+    .filter({ has: page.getByTestId("avatar-identity") })
+    .click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await expect(page.getByRole("dialog", { name: "Preferences" })).toBeVisible();
+  await page.getByRole("tab", { name: "Appearance" }).click();
+};
+
 test(
   "Can login and see dark mode by default",
   { tag: TAG_CI },
@@ -91,13 +102,11 @@ test(
     await chatIsReadyToChat(page);
 
     await expectIsDarkPage(page, "Page should be dark by default");
-    // Toggle to light and check if it persists after reload
-    await page.getByRole("button", { name: "expand sidebar" }).click();
-    await page
-      .getByRole("button")
-      .filter({ has: page.getByTestId("avatar-identity") })
-      .click();
-    await page.getByRole("menuitem", { name: "Light mode" }).click();
+    await openAppearanceSettings(page);
+    await page.getByRole("radio", { name: /Light mode/i }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Preferences" }),
+    ).toBeVisible();
     await expectIsLightPage(
       page,
       "Page should switch to light after selecting light mode",
@@ -116,13 +125,11 @@ test(
     await chatIsReadyToChat(page);
 
     await expectIsLightPage(page, "Page should be light by default");
-    // Toggle to light and check if it persists after reload
-    await page.getByRole("button", { name: "expand sidebar" }).click();
-    await page
-      .getByRole("button")
-      .filter({ has: page.getByTestId("avatar-identity") })
-      .click();
-    await page.getByRole("menuitem", { name: "Dark mode" }).click();
+    await openAppearanceSettings(page);
+    await page.getByRole("radio", { name: /Dark mode/i }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Preferences" }),
+    ).toBeVisible();
     await expectIsDarkPage(
       page,
       "Page should switch to dark after selecting dark mode",

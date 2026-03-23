@@ -457,7 +457,7 @@ const ChatHistoryFooter = memo<{
   userProfile?: UserProfile;
   onSignOut: () => void;
   isSlimMode?: boolean;
-}>(({ userProfile, onSignOut, isSlimMode = false }) => (
+}>(({ userProfile, onSignOut }) => (
   <div
     className="border-t border-[var(--theme-border-divider)]"
     style={compactShellPaddingStyle}
@@ -467,7 +467,6 @@ const ChatHistoryFooter = memo<{
       userProfile={userProfile}
       onSignOut={onSignOut}
       className="flex w-full items-center"
-      showThemeToggle={!isSlimMode}
     />
   </div>
 ));

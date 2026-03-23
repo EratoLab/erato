@@ -699,6 +699,56 @@ msgstr "Zapisywanie..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.current.dark"
+msgstr "Obecnie ciemny"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.current.light"
+msgstr "Obecnie jasny"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.dark.description"
+msgstr "Zawsze używaj ciemnego motywu."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.dark.label"
+msgstr "Tryb ciemny"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.description"
+msgstr "Wybierz, jak Erato ma wyglądać dla Twojego konta."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.heading"
+msgstr "Tryb kolorów"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.light.description"
+msgstr "Zawsze używaj jasnego motywu."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.light.label"
+msgstr "Tryb jasny"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.system.description"
+msgstr "Dopasuj do ustawień wyglądu Twojego urządzenia."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.system.label"
+msgstr "Motyw systemowy"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.archiving"
 msgstr "Archiwizowanie..."
 
@@ -799,6 +849,11 @@ msgstr "Nie udało się zapisać preferencji. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.appearance"
+msgstr "Wygląd"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.data"
 msgstr "Dane"
 
@@ -815,7 +870,7 @@ msgstr "Preferencje"
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "profile.menu.preferences"
-msgstr "Preferencje"
+msgstr "Ustawienia"
 
 #. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
@@ -1294,8 +1349,8 @@ msgid "Create your first assistant to get started"
 msgstr ""
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
-msgid "Dark mode"
-msgstr "Tryb ciemny"
+#~ msgid "Dark mode"
+#~ msgstr "Tryb ciemny"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -1473,8 +1528,8 @@ msgid "Largest file context contributors:"
 msgstr "Największy udział plików w kontekście:"
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
-msgid "Light mode"
-msgstr "Tryb jasny"
+#~ msgid "Light mode"
+#~ msgstr "Tryb jasny"
 
 #: src/components/ui/Message/MessageContent.tsx
 msgid "Link"
@@ -1740,8 +1795,8 @@ msgid "System Prompt"
 msgstr ""
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
-msgid "System theme"
-msgstr "Motyw systemowy"
+#~ msgid "System theme"
+#~ msgstr "Motyw systemowy"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Test Locale Changes:"
