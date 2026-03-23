@@ -1,5 +1,9 @@
 use crate::config::ExperimentalFacetsConfig;
 use crate::db::entity_ext::{chats, messages};
+use crate::metrics::{
+    report_chat_provider_generation_error, report_chat_provider_time_to_first_token,
+    report_chat_provider_time_to_last_token,
+};
 use crate::models::chat::{
     ChatCreationStatus, get_chat_by_message_id, get_or_create_chat,
     get_or_create_chat_by_previous_message_id,
@@ -60,7 +64,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamExt as _;
 use tracing;
@@ -1490,6 +1494,10 @@ async fn stream_generate_chat_completion<
     'loop_call_turns: loop {
         current_turn += 1;
         tracing::debug!("Starting chat completion turn {}", current_turn);
+        let chat_provider_metric_label = chat_provider_id.unwrap_or("unknown");
+        let provider_request_start = Instant::now();
+        let mut first_response_elapsed: Option<Duration> = None;
+        let mut last_response_elapsed: Option<Duration> = None;
 
         // Track timing for this specific turn
         let turn_start_time = if langfuse_enabled {
@@ -1705,6 +1713,10 @@ async fn stream_generate_chat_completion<
             Ok(stream) => stream,
             Err(err) => {
                 let error_event = parse_streaming_error(err, assistant_message_id).await;
+                report_chat_provider_generation_error(
+                    chat_provider_metric_label,
+                    &error_event.error,
+                );
                 let error_payload = Some(error_event.error.clone());
 
                 if let Some(task) = streaming_task
@@ -1875,6 +1887,8 @@ async fn stream_generate_chat_completion<
             match result {
                 Ok(message) => match message {
                     ChatStreamEvent::Chunk(StreamChunk { content }) => {
+                        let elapsed = provider_request_start.elapsed();
+                        first_response_elapsed.get_or_insert(elapsed);
                         current_turn_streamed_text.push_str(&content);
                         let delta = MessageSubmitStreamingResponseMessageTextDelta {
                             message_id: assistant_message_id,
@@ -1895,6 +1909,9 @@ async fn stream_generate_chat_completion<
                         message.send_event(tx.clone()).await?;
                     }
                     ChatStreamEvent::End(end) => {
+                        if first_response_elapsed.is_some() {
+                            last_response_elapsed = Some(provider_request_start.elapsed());
+                        }
                         stream_end = Some(end);
                     }
                     ChatStreamEvent::Start => {}
@@ -1906,6 +1923,10 @@ async fn stream_generate_chat_completion<
                     }
 
                     let error_event = parse_streaming_error(err, assistant_message_id).await;
+                    report_chat_provider_generation_error(
+                        chat_provider_metric_label,
+                        &error_event.error,
+                    );
                     let error_payload = Some(error_event.error.clone());
 
                     if let Some(task) = streaming_task
@@ -1936,6 +1957,13 @@ async fn stream_generate_chat_completion<
             }
         }
         if let Some(stream_end) = stream_end {
+            if let Some(elapsed) = first_response_elapsed {
+                report_chat_provider_time_to_first_token(chat_provider_metric_label, elapsed);
+            }
+            if let Some(elapsed) = last_response_elapsed {
+                report_chat_provider_time_to_last_token(chat_provider_metric_label, elapsed);
+            }
+
             // Track the content generated in this turn for Langfuse tracing
             let turn_content_start_index = current_message_content.len();
 
@@ -2248,6 +2276,10 @@ async fn stream_generate_chat_completion<
             )
             .await
             {
+                report_chat_provider_generation_error(
+                    chat_provider_metric_label,
+                    &error_event.error,
+                );
                 let error_payload = Some(error_event.error.clone());
 
                 if let Some(task) = streaming_task

@@ -45,6 +45,18 @@ For background on `_info` metrics, see [Prometheus Info Metrics](https://oneupti
   - Always `1` per configured chat provider
   - Labels: `chat_provider_id`, `provider_kind`, `model_name`
 
+### Chat provider metrics
+
+- `erato_chat_provider_time_to_first_token_seconds` (histogram)
+  - Time from dispatching a chat generation request until the first streamed token, reported in seconds with millisecond precision
+  - Labels: `chat_provider_id`
+- `erato_chat_provider_time_to_last_token_seconds` (histogram)
+  - Time from dispatching a chat generation request until the last streamed token, reported in seconds with millisecond precision
+  - Labels: `chat_provider_id`
+- `erato_chat_provider_generation_errors_total` (counter)
+  - Total number of chat generation failures
+  - Labels: `chat_provider_id`, `error_type`
+
 ### MCP metrics
 
 - `erato_mcp_active_sessions` (gauge)
