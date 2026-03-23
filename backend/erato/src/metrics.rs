@@ -12,6 +12,7 @@ use tokio_metrics::RuntimeMetricsReporterBuilder;
 
 use crate::config::AppConfig;
 use crate::models::message::GenerationErrorType;
+use crate::query_metrics::{POSTGRES_QUERY_DURATION_METRIC, init_known_postgres_query_metrics};
 use crate::state::AppState;
 
 const MCP_ACTIVE_SESSIONS_METRIC: &str = "erato_mcp_active_sessions";
@@ -66,6 +67,7 @@ pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
     report_chat_provider_info_metrics(config);
     report_mcp_active_session_metrics(config);
     describe_application_metrics();
+    init_known_postgres_query_metrics();
 
     tokio::spawn(RuntimeMetricsReporterBuilder::default().describe_and_run());
 
@@ -227,7 +229,7 @@ fn generation_error_type_label(error: &GenerationErrorType) -> &'static str {
     }
 }
 
-fn duration_seconds_with_millisecond_precision(duration: Duration) -> f64 {
+pub(crate) fn duration_seconds_with_millisecond_precision(duration: Duration) -> f64 {
     duration.as_millis() as f64 / 1_000.0
 }
 
@@ -246,6 +248,11 @@ fn describe_application_metrics() {
         CHAT_PROVIDER_TIME_TO_LAST_TOKEN_METRIC,
         Unit::Seconds,
         "Time from dispatching a chat-provider generation request until the last streamed token, recorded with millisecond precision."
+    );
+    describe_histogram!(
+        POSTGRES_QUERY_DURATION_METRIC,
+        Unit::Seconds,
+        "Execution time of Postgres queries segmented by stable query ID and success or error status."
     );
     describe_counter!(
         CHAT_PROVIDER_GENERATION_ERRORS_METRIC,

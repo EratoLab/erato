@@ -1,11 +1,13 @@
 use crate::config::BudgetCurrency;
+use crate::metrics_constants::POSTGRES_QUERY_USER_SPENDING_BY_PROVIDER;
+use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::state::AppState;
 use axum::extract::State;
 use axum::{Extension, Json};
 use chrono::{DateTime, Duration, Utc};
 use eyre::Report;
-use sea_orm::{DatabaseConnection, FromQueryResult, Statement};
+use sea_orm::{DatabaseConnection, FromQueryResult};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -140,8 +142,9 @@ async fn calculate_user_spending(
     "#;
 
     let usage_results =
-        UserTokenUsageByProvider::find_by_statement(Statement::from_sql_and_values(
+        UserTokenUsageByProvider::find_by_statement(named_statement_from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_USER_SPENDING_BY_PROVIDER,
             sql,
             vec![
                 user_id.into(),

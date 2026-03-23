@@ -10,11 +10,13 @@ pub mod config;
 pub mod db;
 pub mod frontend_environment;
 pub mod metrics;
+pub mod metrics_constants;
 pub mod models;
 pub mod normalize_profile;
 pub mod policy;
 #[cfg(feature = "profiling")]
 pub mod profiling;
+pub mod query_metrics;
 pub mod server;
 pub mod services;
 pub mod state;
