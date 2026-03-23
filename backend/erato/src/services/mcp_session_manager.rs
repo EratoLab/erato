@@ -1,4 +1,5 @@
 use crate::config::{AppConfig, McpServerConfig};
+use crate::metrics::report_mcp_active_sessions_for_server;
 use crate::services::mcp_transports::{EmptyClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
 use futures::future::join_all;
@@ -146,12 +147,14 @@ impl McpSessionManager {
             .max_session_idle_seconds
             .unwrap_or(60 * 60);
         let sessions = Arc::new(RwLock::new(HashMap::new()));
+        let configured_server_ids: Vec<String> = server_configs.keys().cloned().collect();
 
         // Spawn background cleanup task
         let cleanup_task = {
             let sessions = Arc::clone(&sessions);
+            let configured_server_ids = configured_server_ids.clone();
             tokio::spawn(async move {
-                Self::run_cleanup_task(sessions).await;
+                Self::run_cleanup_task(sessions, configured_server_ids).await;
             })
         };
 
@@ -163,8 +166,32 @@ impl McpSessionManager {
         }
     }
 
+    fn update_active_session_metrics(
+        sessions: &HashMap<SessionKey, McpSession>,
+        configured_server_ids: impl Iterator<Item = String>,
+    ) {
+        let mut active_sessions_per_server = HashMap::new();
+
+        for (_, server_id) in sessions.keys() {
+            *active_sessions_per_server
+                .entry(server_id.as_str())
+                .or_insert(0usize) += 1;
+        }
+
+        for server_id in configured_server_ids {
+            let active_session_count = active_sessions_per_server
+                .get(server_id.as_str())
+                .copied()
+                .unwrap_or(0);
+            report_mcp_active_sessions_for_server(&server_id, active_session_count);
+        }
+    }
+
     /// Background task that periodically cleans up inactive sessions
-    async fn run_cleanup_task(sessions: Arc<RwLock<HashMap<SessionKey, McpSession>>>) {
+    async fn run_cleanup_task(
+        sessions: Arc<RwLock<HashMap<SessionKey, McpSession>>>,
+        configured_server_ids: Vec<String>,
+    ) {
         let mut interval = tokio::time::interval(Duration::from_secs(60)); // Run every 60 seconds
 
         loop {
@@ -188,6 +215,10 @@ impl McpSessionManager {
 
             let removed_count = initial_count - sessions_guard.len();
             if removed_count > 0 {
+                Self::update_active_session_metrics(
+                    &sessions_guard,
+                    configured_server_ids.iter().cloned(),
+                );
                 info!(
                     "Cleaned up {} inactive MCP sessions, {} remaining",
                     removed_count,
@@ -226,6 +257,7 @@ impl McpSessionManager {
 
         let mut sessions_guard = self.sessions.write().await;
         sessions_guard.insert(key, session);
+        Self::update_active_session_metrics(&sessions_guard, self.server_configs.keys().cloned());
 
         info!(
             chat_id = %chat_id,
@@ -241,6 +273,10 @@ impl McpSessionManager {
         let key = (chat_id, server_id.to_string());
         let mut sessions_guard = self.sessions.write().await;
         if sessions_guard.remove(&key).is_some() {
+            Self::update_active_session_metrics(
+                &sessions_guard,
+                self.server_configs.keys().cloned(),
+            );
             info!(
                 chat_id = %chat_id,
                 server_id = %server_id,
