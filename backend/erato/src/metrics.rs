@@ -3,15 +3,23 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use eyre::{Result, WrapErr, eyre};
-use metrics::{Unit, describe_gauge, gauge};
+use metrics::{
+    Unit, counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram,
+};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use moka::future::Cache;
 use tokio_metrics::RuntimeMetricsReporterBuilder;
 
 use crate::config::AppConfig;
+use crate::models::message::GenerationErrorType;
 use crate::state::AppState;
 
 const MCP_ACTIVE_SESSIONS_METRIC: &str = "erato_mcp_active_sessions";
+const CHAT_PROVIDER_TIME_TO_FIRST_TOKEN_METRIC: &str =
+    "erato_chat_provider_time_to_first_token_seconds";
+const CHAT_PROVIDER_TIME_TO_LAST_TOKEN_METRIC: &str =
+    "erato_chat_provider_time_to_last_token_seconds";
+const CHAT_PROVIDER_GENERATION_ERRORS_METRIC: &str = "erato_chat_provider_generation_errors_total";
 
 pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
     if !config.integrations.prometheus.enabled {
@@ -183,11 +191,66 @@ pub fn report_mcp_active_sessions_for_server(server_id: &str, count: usize) {
     gauge!(MCP_ACTIVE_SESSIONS_METRIC, "server_id" => server_id.to_string()).set(count as f64);
 }
 
+pub fn report_chat_provider_time_to_first_token(chat_provider_id: &str, duration: Duration) {
+    histogram!(
+        CHAT_PROVIDER_TIME_TO_FIRST_TOKEN_METRIC,
+        "chat_provider_id" => chat_provider_id.to_string()
+    )
+    .record(duration_seconds_with_millisecond_precision(duration));
+}
+
+pub fn report_chat_provider_time_to_last_token(chat_provider_id: &str, duration: Duration) {
+    histogram!(
+        CHAT_PROVIDER_TIME_TO_LAST_TOKEN_METRIC,
+        "chat_provider_id" => chat_provider_id.to_string()
+    )
+    .record(duration_seconds_with_millisecond_precision(duration));
+}
+
+pub fn report_chat_provider_generation_error(chat_provider_id: &str, error: &GenerationErrorType) {
+    counter!(
+        CHAT_PROVIDER_GENERATION_ERRORS_METRIC,
+        "chat_provider_id" => chat_provider_id.to_string(),
+        "error_type" => generation_error_type_label(error).to_string()
+    )
+    .increment(1);
+}
+
+fn generation_error_type_label(error: &GenerationErrorType) -> &'static str {
+    match error {
+        GenerationErrorType::ContentFilter { .. } => "content_filter",
+        GenerationErrorType::RateLimit { .. } => "rate_limit",
+        GenerationErrorType::ModelUnavailable { .. } => "model_unavailable",
+        GenerationErrorType::InvalidRequest { .. } => "invalid_request",
+        GenerationErrorType::ProviderError { .. } => "provider_error",
+        GenerationErrorType::InternalError { .. } => "internal_error",
+    }
+}
+
+fn duration_seconds_with_millisecond_precision(duration: Duration) -> f64 {
+    duration.as_millis() as f64 / 1_000.0
+}
+
 fn describe_application_metrics() {
     describe_gauge!(
         "erato_chat_provider_info",
         Unit::Count,
         "Info metric for configured chat providers. Always 1; labels carry provider metadata."
+    );
+    describe_histogram!(
+        CHAT_PROVIDER_TIME_TO_FIRST_TOKEN_METRIC,
+        Unit::Seconds,
+        "Time from dispatching a chat-provider generation request until the first streamed token, recorded with millisecond precision."
+    );
+    describe_histogram!(
+        CHAT_PROVIDER_TIME_TO_LAST_TOKEN_METRIC,
+        Unit::Seconds,
+        "Time from dispatching a chat-provider generation request until the last streamed token, recorded with millisecond precision."
+    );
+    describe_counter!(
+        CHAT_PROVIDER_GENERATION_ERRORS_METRIC,
+        Unit::Count,
+        "Total number of chat-provider generation failures segmented by provider and normalized error type."
     );
     describe_gauge!(
         MCP_ACTIVE_SESSIONS_METRIC,
@@ -228,7 +291,12 @@ fn describe_application_metrics() {
 
 #[cfg(test)]
 mod tests {
-    use super::calculate_fill_ratio;
+    use super::{
+        calculate_fill_ratio, duration_seconds_with_millisecond_precision,
+        generation_error_type_label,
+    };
+    use crate::models::message::GenerationErrorType;
+    use std::time::Duration;
 
     #[test]
     fn calculate_fill_ratio_returns_zero_when_max_is_zero() {
@@ -238,5 +306,59 @@ mod tests {
     #[test]
     fn calculate_fill_ratio_returns_unit_interval_ratio() {
         assert_eq!(calculate_fill_ratio(25, 100), 0.25);
+    }
+
+    #[test]
+    fn generation_error_type_label_matches_serialized_names() {
+        assert_eq!(
+            generation_error_type_label(&GenerationErrorType::ContentFilter {
+                error_description: "x".to_string(),
+                filter_details: None,
+            }),
+            "content_filter"
+        );
+        assert_eq!(
+            generation_error_type_label(&GenerationErrorType::RateLimit {
+                error_description: "x".to_string(),
+            }),
+            "rate_limit"
+        );
+        assert_eq!(
+            generation_error_type_label(&GenerationErrorType::ModelUnavailable {
+                error_description: "x".to_string(),
+            }),
+            "model_unavailable"
+        );
+        assert_eq!(
+            generation_error_type_label(&GenerationErrorType::InvalidRequest {
+                error_description: "x".to_string(),
+            }),
+            "invalid_request"
+        );
+        assert_eq!(
+            generation_error_type_label(&GenerationErrorType::ProviderError {
+                error_description: "x".to_string(),
+                status_code: None,
+            }),
+            "provider_error"
+        );
+        assert_eq!(
+            generation_error_type_label(&GenerationErrorType::InternalError {
+                error_description: "x".to_string(),
+            }),
+            "internal_error"
+        );
+    }
+
+    #[test]
+    fn duration_seconds_with_millisecond_precision_truncates_sub_millisecond_precision() {
+        assert_eq!(
+            duration_seconds_with_millisecond_precision(Duration::from_micros(1_999)),
+            0.001
+        );
+        assert_eq!(
+            duration_seconds_with_millisecond_precision(Duration::from_micros(2_000)),
+            0.002
+        );
     }
 }
