@@ -45,9 +45,17 @@ type ThemeContextType = {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const THEME_FONTS_MARKER = 'link[data-theme-fonts="true"]';
+const THEME_STYLES_MARKER = 'link[data-theme-styles="true"]';
+const THEME_VARS_MARKER = 'style[data-theme-vars="true"]';
+
 const removeThemeStylesheets = () => {
-  document.querySelector('link[data-theme-fonts="true"]')?.remove();
-  document.querySelector('link[data-theme-styles="true"]')?.remove();
+  document.querySelector(THEME_FONTS_MARKER)?.remove();
+  document.querySelector(THEME_STYLES_MARKER)?.remove();
+};
+
+const removeThemeVariablesStyle = () => {
+  document.querySelector(THEME_VARS_MARKER)?.remove();
 };
 
 const appendThemeStylesheet = (
@@ -61,6 +69,209 @@ const appendThemeStylesheet = (
   link.href = href;
   link.setAttribute(marker, "true");
   document.head.appendChild(link);
+};
+
+const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
+  const typography = theme.typography ?? defaultTheme.typography;
+  if (!typography) {
+    throw new Error("Default theme typography is not configured");
+  }
+
+  return [
+    ["--theme-bg-primary", theme.colors.background.primary],
+    ["--theme-bg-secondary", theme.colors.background.secondary],
+    ["--theme-bg-tertiary", theme.colors.background.tertiary],
+    ["--theme-bg-sidebar", theme.colors.background.sidebar],
+    ["--theme-bg-accent", theme.colors.background.accent],
+    ["--theme-bg-hover", theme.colors.background.hover],
+    ["--theme-bg-selected", theme.colors.background.selected],
+    ["--theme-fg-primary", theme.colors.foreground.primary],
+    ["--theme-fg-secondary", theme.colors.foreground.secondary],
+    ["--theme-fg-muted", theme.colors.foreground.muted],
+    ["--theme-fg-accent", theme.colors.foreground.accent],
+    ["--theme-action-primary-bg", theme.colors.action.primary.background],
+    ["--theme-action-primary-fg", theme.colors.action.primary.foreground],
+    ["--theme-action-primary-hover", theme.colors.action.primary.hover],
+    ["--theme-border", theme.colors.border.default],
+    ["--theme-border-primary", theme.colors.border.primary],
+    ["--theme-border-subtle", theme.colors.border.subtle],
+    ["--theme-border-strong", theme.colors.border.strong],
+    ["--theme-border-divider", theme.colors.border.divider],
+    ["--theme-border-focus", theme.colors.border.focus],
+    ["--theme-shell-app", theme.colors.shell.app],
+    ["--theme-shell-page", theme.colors.shell.page],
+    ["--theme-shell-sidebar", theme.colors.shell.sidebar],
+    ["--theme-shell-sidebar-hover", theme.colors.shell.sidebarHover],
+    ["--theme-shell-sidebar-selected", theme.colors.shell.sidebarSelected],
+    ["--theme-shell-chat-header", theme.colors.shell.chatHeader],
+    ["--theme-shell-chat-body", theme.colors.shell.chatBody],
+    ["--theme-shell-chat-input", theme.colors.shell.chatInput],
+    ["--theme-shell-modal", theme.colors.shell.modal],
+    ["--theme-shell-dropdown", theme.colors.shell.dropdown],
+    ["--theme-overlay-modal", theme.colors.overlay.modal],
+    ["--theme-message-user", theme.colors.message.user],
+    ["--theme-message-assistant", theme.colors.message.assistant],
+    ["--theme-message-hover", theme.colors.message.hover],
+    ["--theme-message-controls", theme.colors.message.controls],
+    ["--theme-messageItem-hover", theme.colors.message.hover],
+    ["--theme-code-inline-bg", theme.colors.code.inline.background],
+    ["--theme-code-inline-fg", theme.colors.code.inline.foreground],
+    ["--theme-code-inline-border", theme.colors.code.inline.border],
+    ["--theme-code-block-bg", theme.colors.code.block.background],
+    ["--theme-code-block-fg", theme.colors.code.block.foreground],
+    ["--theme-code-block-border", theme.colors.code.block.border],
+    ["--theme-code-syntax-comment", theme.colors.code.syntax.comment],
+    ["--theme-code-syntax-keyword", theme.colors.code.syntax.keyword],
+    ["--theme-code-syntax-string", theme.colors.code.syntax.string],
+    ["--theme-code-syntax-function", theme.colors.code.syntax.function],
+    ["--theme-code-syntax-number", theme.colors.code.syntax.number],
+    ["--theme-radius-base", theme.radius.base],
+    ["--theme-radius-shell", theme.radius.shell],
+    ["--theme-radius-input", theme.radius.input],
+    ["--theme-radius-control", theme.radius.control],
+    ["--theme-radius-message", theme.radius.message],
+    ["--theme-radius-modal", theme.radius.modal],
+    ["--theme-radius-pill", theme.radius.pill],
+    ["--theme-spacing-shell-padding-x", theme.spacing.shell.paddingX],
+    ["--theme-spacing-shell-padding-y", theme.spacing.shell.paddingY],
+    ["--theme-spacing-shell-gap", theme.spacing.shell.gap],
+    [
+      "--theme-spacing-shell-compact-padding-x",
+      theme.spacing.shell.compactPaddingX,
+    ],
+    [
+      "--theme-spacing-shell-compact-padding-y",
+      theme.spacing.shell.compactPaddingY,
+    ],
+    ["--theme-spacing-message-padding-x", theme.spacing.message.paddingX],
+    ["--theme-spacing-message-padding-y", theme.spacing.message.paddingY],
+    ["--theme-spacing-message-gap", theme.spacing.message.gap],
+    ["--theme-spacing-control-gap", theme.spacing.control.gap],
+    ["--theme-spacing-control-padding-x", theme.spacing.control.paddingX],
+    ["--theme-spacing-control-padding-y", theme.spacing.control.paddingY],
+    ["--theme-spacing-control-min-height", theme.spacing.control.minHeight],
+    ["--theme-spacing-sidebar-row-height", theme.spacing.sidebar.rowHeight],
+    [
+      "--theme-spacing-input-compact-padding-x",
+      theme.spacing.input.compactPaddingX,
+    ],
+    [
+      "--theme-spacing-input-compact-padding-y",
+      theme.spacing.input.compactPaddingY,
+    ],
+    ["--theme-spacing-input-padding-x", theme.spacing.input.paddingX],
+    ["--theme-spacing-input-padding-y", theme.spacing.input.paddingY],
+    ["--theme-spacing-input-gap", theme.spacing.input.gap],
+    ["--theme-spacing-input-min-height", theme.spacing.input.minHeight],
+    ["--theme-spacing-dropdown-padding-x", theme.spacing.dropdown.paddingX],
+    ["--theme-spacing-dropdown-padding-y", theme.spacing.dropdown.paddingY],
+    [
+      "--theme-spacing-dropdown-chrome-padding-y",
+      theme.spacing.dropdown.chromePaddingY,
+    ],
+    ["--theme-spacing-modal-padding", theme.spacing.modal.padding],
+    [
+      "--theme-spacing-modal-close-button-padding",
+      theme.spacing.modal.closeButtonPadding,
+    ],
+    ["--theme-elevation-shell", theme.elevation.shell],
+    ["--theme-elevation-input", theme.elevation.input],
+    ["--theme-elevation-modal", theme.elevation.modal],
+    ["--theme-elevation-dropdown", theme.elevation.dropdown],
+    [
+      "--theme-layout-chat-content-max-width",
+      theme.layout.chat.contentMaxWidth,
+    ],
+    ["--theme-layout-chat-input-max-width", theme.layout.chat.inputMaxWidth],
+    ["--theme-layout-sidebar-width", theme.layout.sidebar.width],
+    ["--theme-layout-sidebar-slim-width", theme.layout.sidebar.slimWidth],
+    ["--theme-layout-dropdown-min-width", theme.layout.dropdown.minWidth],
+    [
+      "--theme-layout-dropdown-viewport-margin",
+      theme.layout.dropdown.viewportMargin,
+    ],
+    ["--theme-layout-modal-backdrop-blur", theme.layout.modal.backdropBlur],
+    ["--theme-layout-modal-max-height", theme.layout.modal.maxHeight],
+    ["--theme-layout-modal-max-width", theme.layout.modal.maxWidth],
+    ["--theme-layout-modal-viewport-margin", theme.layout.modal.viewportMargin],
+    ["--theme-avatar-user-bg", theme.colors.avatar.user.background],
+    ["--theme-avatar-user-fg", theme.colors.avatar.user.foreground],
+    ["--theme-avatar-assistant-bg", theme.colors.avatar.assistant.background],
+    ["--theme-avatar-assistant-fg", theme.colors.avatar.assistant.foreground],
+    ["--theme-info-fg", theme.colors.status.info.foreground],
+    ["--theme-info-bg", theme.colors.status.info.background],
+    ["--theme-info-border", theme.colors.status.info.border],
+    ["--theme-success-fg", theme.colors.status.success.foreground],
+    ["--theme-success-bg", theme.colors.status.success.background],
+    ["--theme-success-border", theme.colors.status.success.border],
+    ["--theme-warning-fg", theme.colors.status.warning.foreground],
+    ["--theme-warning-bg", theme.colors.status.warning.background],
+    ["--theme-warning-border", theme.colors.status.warning.border],
+    ["--theme-error-fg", theme.colors.status.error.foreground],
+    ["--theme-error-bg", theme.colors.status.error.background],
+    ["--theme-error-border", theme.colors.status.error.border],
+    ["--theme-focus-ring", theme.colors.focus.ring],
+    ["--theme-focus-ring-error", theme.colors.focus.errorRing],
+    ["--theme-font-body", typography.fontFamily.body],
+    ["--theme-font-heading", typography.fontFamily.heading],
+    ["--theme-font-semibold", typography.fontFamily.semibold],
+    ["--theme-font-heading-bold", typography.fontFamily.headingBold],
+    ["--theme-font-mono", typography.fontFamily.mono],
+    ["--theme-font-size-xs", typography.fontSize.xs],
+    ["--theme-font-size-sm", typography.fontSize.sm],
+    ["--theme-font-size-base", typography.fontSize.base],
+    ["--theme-font-size-lg", typography.fontSize.lg],
+    ["--theme-font-size-xl", typography.fontSize.xl],
+    ["--theme-font-size-2xl", typography.fontSize["2xl"]],
+    ["--theme-line-height-xs", typography.lineHeight.xs],
+    ["--theme-line-height-sm", typography.lineHeight.sm],
+    ["--theme-line-height-base", typography.lineHeight.base],
+    ["--theme-line-height-lg", typography.lineHeight.lg],
+    ["--theme-line-height-xl", typography.lineHeight.xl],
+    ["--theme-line-height-2xl", typography.lineHeight["2xl"]],
+    ["--theme-letter-spacing-xs", typography.letterSpacing.xs],
+    ["--theme-letter-spacing-sm", typography.letterSpacing.sm],
+    ["--theme-letter-spacing-base", typography.letterSpacing.base],
+    ["--theme-letter-spacing-lg", typography.letterSpacing.lg],
+    ["--theme-letter-spacing-xl", typography.letterSpacing.xl],
+    ["--theme-letter-spacing-2xl", typography.letterSpacing["2xl"]],
+    ["--theme-font-weight-normal", typography.fontWeight.normal],
+    ["--theme-font-weight-medium", typography.fontWeight.medium],
+    ["--theme-font-weight-semibold", typography.fontWeight.semibold],
+    ["--theme-font-weight-bold", typography.fontWeight.bold],
+  ];
+};
+
+const buildThemeVariablesCss = (theme: Theme): string =>
+  `:root {\n${getThemeVariableEntries(theme)
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join("\n")}\n}`;
+
+const syncThemeVariablesStyle = (theme: Theme) => {
+  const root = document.documentElement;
+  const inlineStyle = root.style;
+
+  for (const [name] of getThemeVariableEntries(theme)) {
+    inlineStyle.removeProperty(name);
+  }
+
+  let style = document.querySelector<HTMLStyleElement>(THEME_VARS_MARKER);
+  if (!style) {
+    style = document.createElement("style");
+    style.setAttribute("data-theme-vars", "true");
+  }
+
+  style.textContent = buildThemeVariablesCss(theme);
+
+  const themeStylesheet = document.querySelector(THEME_STYLES_MARKER);
+  if (themeStylesheet) {
+    document.head.insertBefore(style, themeStylesheet);
+    return;
+  }
+
+  if (!style.parentNode) {
+    document.head.appendChild(style);
+  }
 };
 
 // Try to get the saved theme from localStorage
@@ -185,6 +396,12 @@ export function ThemeProvider({
     appendThemeStylesheet(fontsCssPath, "data-theme-fonts");
     appendThemeStylesheet(themeCssPath, "data-theme-styles");
 
+    const themeVariablesStyle = document.querySelector(THEME_VARS_MARKER);
+    const themeStylesheet = document.querySelector(THEME_STYLES_MARKER);
+    if (themeVariablesStyle && themeStylesheet) {
+      document.head.insertBefore(themeVariablesStyle, themeStylesheet);
+    }
+
     return () => {
       removeThemeStylesheets();
     };
@@ -255,358 +472,11 @@ export function ThemeProvider({
   }, [effectiveTheme, customThemeConfig]);
 
   useEffect(() => {
-    // Apply theme CSS variables
-    const root = document.documentElement;
-    const setCssVariable = (name: string, value: string) => {
-      root.style.setProperty(name, value);
+    syncThemeVariablesStyle(theme);
+
+    return () => {
+      removeThemeVariablesStyle();
     };
-
-    // Background colors
-    setCssVariable("--theme-bg-primary", theme.colors.background.primary);
-    setCssVariable("--theme-bg-secondary", theme.colors.background.secondary);
-    setCssVariable("--theme-bg-tertiary", theme.colors.background.tertiary);
-    setCssVariable("--theme-bg-sidebar", theme.colors.background.sidebar);
-    setCssVariable("--theme-bg-accent", theme.colors.background.accent);
-    setCssVariable("--theme-bg-hover", theme.colors.background.hover);
-    setCssVariable("--theme-bg-selected", theme.colors.background.selected);
-
-    // Foreground colors
-    setCssVariable("--theme-fg-primary", theme.colors.foreground.primary);
-    setCssVariable("--theme-fg-secondary", theme.colors.foreground.secondary);
-    setCssVariable("--theme-fg-muted", theme.colors.foreground.muted);
-    setCssVariable("--theme-fg-accent", theme.colors.foreground.accent);
-
-    // Action colors
-    setCssVariable(
-      "--theme-action-primary-bg",
-      theme.colors.action.primary.background,
-    );
-    setCssVariable(
-      "--theme-action-primary-fg",
-      theme.colors.action.primary.foreground,
-    );
-    setCssVariable(
-      "--theme-action-primary-hover",
-      theme.colors.action.primary.hover,
-    );
-
-    // Border colors
-    setCssVariable("--theme-border", theme.colors.border.default);
-    setCssVariable("--theme-border-primary", theme.colors.border.primary);
-    setCssVariable("--theme-border-subtle", theme.colors.border.subtle);
-    setCssVariable("--theme-border-strong", theme.colors.border.strong);
-    setCssVariable("--theme-border-divider", theme.colors.border.divider);
-    setCssVariable("--theme-border-focus", theme.colors.border.focus);
-
-    // Shell and overlay surfaces
-    setCssVariable("--theme-shell-app", theme.colors.shell.app);
-    setCssVariable("--theme-shell-page", theme.colors.shell.page);
-    setCssVariable("--theme-shell-sidebar", theme.colors.shell.sidebar);
-    setCssVariable(
-      "--theme-shell-sidebar-hover",
-      theme.colors.shell.sidebarHover,
-    );
-    setCssVariable(
-      "--theme-shell-sidebar-selected",
-      theme.colors.shell.sidebarSelected,
-    );
-    setCssVariable("--theme-shell-chat-header", theme.colors.shell.chatHeader);
-    setCssVariable("--theme-shell-chat-body", theme.colors.shell.chatBody);
-    setCssVariable("--theme-shell-chat-input", theme.colors.shell.chatInput);
-    setCssVariable("--theme-shell-modal", theme.colors.shell.modal);
-    setCssVariable("--theme-shell-dropdown", theme.colors.shell.dropdown);
-    setCssVariable("--theme-overlay-modal", theme.colors.overlay.modal);
-
-    // Message surfaces
-    setCssVariable("--theme-message-user", theme.colors.message.user);
-    setCssVariable("--theme-message-assistant", theme.colors.message.assistant);
-    setCssVariable("--theme-message-hover", theme.colors.message.hover);
-    setCssVariable("--theme-message-controls", theme.colors.message.controls);
-    setCssVariable("--theme-messageItem-hover", theme.colors.message.hover);
-    setCssVariable(
-      "--theme-code-inline-bg",
-      theme.colors.code.inline.background,
-    );
-    setCssVariable(
-      "--theme-code-inline-fg",
-      theme.colors.code.inline.foreground,
-    );
-    setCssVariable(
-      "--theme-code-inline-border",
-      theme.colors.code.inline.border,
-    );
-    setCssVariable("--theme-code-block-bg", theme.colors.code.block.background);
-    setCssVariable("--theme-code-block-fg", theme.colors.code.block.foreground);
-    setCssVariable("--theme-code-block-border", theme.colors.code.block.border);
-    setCssVariable(
-      "--theme-code-syntax-comment",
-      theme.colors.code.syntax.comment,
-    );
-    setCssVariable(
-      "--theme-code-syntax-keyword",
-      theme.colors.code.syntax.keyword,
-    );
-    setCssVariable(
-      "--theme-code-syntax-string",
-      theme.colors.code.syntax.string,
-    );
-    setCssVariable(
-      "--theme-code-syntax-function",
-      theme.colors.code.syntax.function,
-    );
-    setCssVariable(
-      "--theme-code-syntax-number",
-      theme.colors.code.syntax.number,
-    );
-
-    // Radius
-    setCssVariable("--theme-radius-base", theme.radius.base);
-    setCssVariable("--theme-radius-shell", theme.radius.shell);
-    setCssVariable("--theme-radius-input", theme.radius.input);
-    setCssVariable("--theme-radius-control", theme.radius.control);
-    setCssVariable("--theme-radius-message", theme.radius.message);
-    setCssVariable("--theme-radius-modal", theme.radius.modal);
-    setCssVariable("--theme-radius-pill", theme.radius.pill);
-
-    // Spacing
-    setCssVariable(
-      "--theme-spacing-shell-padding-x",
-      theme.spacing.shell.paddingX,
-    );
-    setCssVariable(
-      "--theme-spacing-shell-padding-y",
-      theme.spacing.shell.paddingY,
-    );
-    setCssVariable("--theme-spacing-shell-gap", theme.spacing.shell.gap);
-    setCssVariable(
-      "--theme-spacing-shell-compact-padding-x",
-      theme.spacing.shell.compactPaddingX,
-    );
-    setCssVariable(
-      "--theme-spacing-shell-compact-padding-y",
-      theme.spacing.shell.compactPaddingY,
-    );
-    setCssVariable(
-      "--theme-spacing-message-padding-x",
-      theme.spacing.message.paddingX,
-    );
-    setCssVariable(
-      "--theme-spacing-message-padding-y",
-      theme.spacing.message.paddingY,
-    );
-    setCssVariable("--theme-spacing-message-gap", theme.spacing.message.gap);
-    setCssVariable("--theme-spacing-control-gap", theme.spacing.control.gap);
-    setCssVariable(
-      "--theme-spacing-control-padding-x",
-      theme.spacing.control.paddingX,
-    );
-    setCssVariable(
-      "--theme-spacing-control-padding-y",
-      theme.spacing.control.paddingY,
-    );
-    setCssVariable(
-      "--theme-spacing-control-min-height",
-      theme.spacing.control.minHeight,
-    );
-    setCssVariable(
-      "--theme-spacing-sidebar-row-height",
-      theme.spacing.sidebar.rowHeight,
-    );
-    setCssVariable(
-      "--theme-spacing-input-compact-padding-x",
-      theme.spacing.input.compactPaddingX,
-    );
-    setCssVariable(
-      "--theme-spacing-input-compact-padding-y",
-      theme.spacing.input.compactPaddingY,
-    );
-    setCssVariable(
-      "--theme-spacing-input-padding-x",
-      theme.spacing.input.paddingX,
-    );
-    setCssVariable(
-      "--theme-spacing-input-padding-y",
-      theme.spacing.input.paddingY,
-    );
-    setCssVariable("--theme-spacing-input-gap", theme.spacing.input.gap);
-    setCssVariable(
-      "--theme-spacing-input-min-height",
-      theme.spacing.input.minHeight,
-    );
-    setCssVariable(
-      "--theme-spacing-dropdown-padding-x",
-      theme.spacing.dropdown.paddingX,
-    );
-    setCssVariable(
-      "--theme-spacing-dropdown-padding-y",
-      theme.spacing.dropdown.paddingY,
-    );
-    setCssVariable(
-      "--theme-spacing-dropdown-chrome-padding-y",
-      theme.spacing.dropdown.chromePaddingY,
-    );
-    setCssVariable(
-      "--theme-spacing-modal-padding",
-      theme.spacing.modal.padding,
-    );
-    setCssVariable(
-      "--theme-spacing-modal-close-button-padding",
-      theme.spacing.modal.closeButtonPadding,
-    );
-
-    // Elevation
-    setCssVariable("--theme-elevation-shell", theme.elevation.shell);
-    setCssVariable("--theme-elevation-input", theme.elevation.input);
-    setCssVariable("--theme-elevation-modal", theme.elevation.modal);
-    setCssVariable("--theme-elevation-dropdown", theme.elevation.dropdown);
-
-    // Layout
-    setCssVariable(
-      "--theme-layout-chat-content-max-width",
-      theme.layout.chat.contentMaxWidth,
-    );
-    setCssVariable(
-      "--theme-layout-chat-input-max-width",
-      theme.layout.chat.inputMaxWidth,
-    );
-    setCssVariable("--theme-layout-sidebar-width", theme.layout.sidebar.width);
-    setCssVariable(
-      "--theme-layout-sidebar-slim-width",
-      theme.layout.sidebar.slimWidth,
-    );
-    setCssVariable(
-      "--theme-layout-dropdown-min-width",
-      theme.layout.dropdown.minWidth,
-    );
-    setCssVariable(
-      "--theme-layout-dropdown-viewport-margin",
-      theme.layout.dropdown.viewportMargin,
-    );
-    setCssVariable(
-      "--theme-layout-modal-backdrop-blur",
-      theme.layout.modal.backdropBlur,
-    );
-    setCssVariable(
-      "--theme-layout-modal-max-height",
-      theme.layout.modal.maxHeight,
-    );
-    setCssVariable(
-      "--theme-layout-modal-max-width",
-      theme.layout.modal.maxWidth,
-    );
-    setCssVariable(
-      "--theme-layout-modal-viewport-margin",
-      theme.layout.modal.viewportMargin,
-    );
-
-    // Avatar colors
-    setCssVariable(
-      "--theme-avatar-user-bg",
-      theme.colors.avatar.user.background,
-    );
-    setCssVariable(
-      "--theme-avatar-user-fg",
-      theme.colors.avatar.user.foreground,
-    );
-    setCssVariable(
-      "--theme-avatar-assistant-bg",
-      theme.colors.avatar.assistant.background,
-    );
-    setCssVariable(
-      "--theme-avatar-assistant-fg",
-      theme.colors.avatar.assistant.foreground,
-    );
-
-    // Status colors
-    // Info
-    setCssVariable("--theme-info-fg", theme.colors.status.info.foreground);
-    setCssVariable("--theme-info-bg", theme.colors.status.info.background);
-    setCssVariable("--theme-info-border", theme.colors.status.info.border);
-
-    // Success
-    setCssVariable(
-      "--theme-success-fg",
-      theme.colors.status.success.foreground,
-    );
-    setCssVariable(
-      "--theme-success-bg",
-      theme.colors.status.success.background,
-    );
-    setCssVariable(
-      "--theme-success-border",
-      theme.colors.status.success.border,
-    );
-
-    // Warning
-    setCssVariable(
-      "--theme-warning-fg",
-      theme.colors.status.warning.foreground,
-    );
-    setCssVariable(
-      "--theme-warning-bg",
-      theme.colors.status.warning.background,
-    );
-    setCssVariable(
-      "--theme-warning-border",
-      theme.colors.status.warning.border,
-    );
-
-    // Error
-    setCssVariable("--theme-error-fg", theme.colors.status.error.foreground);
-    setCssVariable("--theme-error-bg", theme.colors.status.error.background);
-    setCssVariable("--theme-error-border", theme.colors.status.error.border);
-
-    // Focus ring
-    setCssVariable("--theme-focus-ring", theme.colors.focus.ring);
-    setCssVariable("--theme-focus-ring-error", theme.colors.focus.errorRing);
-
-    const typography = theme.typography ?? defaultTheme.typography;
-    if (!typography) return;
-
-    // Typography
-    setCssVariable("--theme-font-body", typography.fontFamily.body);
-    setCssVariable("--theme-font-heading", typography.fontFamily.heading);
-    setCssVariable("--theme-font-semibold", typography.fontFamily.semibold);
-    setCssVariable(
-      "--theme-font-heading-bold",
-      typography.fontFamily.headingBold,
-    );
-    setCssVariable("--theme-font-mono", typography.fontFamily.mono);
-
-    setCssVariable("--theme-font-size-xs", typography.fontSize.xs);
-    setCssVariable("--theme-font-size-sm", typography.fontSize.sm);
-    setCssVariable("--theme-font-size-base", typography.fontSize.base);
-    setCssVariable("--theme-font-size-lg", typography.fontSize.lg);
-    setCssVariable("--theme-font-size-xl", typography.fontSize.xl);
-    setCssVariable("--theme-font-size-2xl", typography.fontSize["2xl"]);
-
-    setCssVariable("--theme-line-height-xs", typography.lineHeight.xs);
-    setCssVariable("--theme-line-height-sm", typography.lineHeight.sm);
-    setCssVariable("--theme-line-height-base", typography.lineHeight.base);
-    setCssVariable("--theme-line-height-lg", typography.lineHeight.lg);
-    setCssVariable("--theme-line-height-xl", typography.lineHeight.xl);
-    setCssVariable("--theme-line-height-2xl", typography.lineHeight["2xl"]);
-
-    setCssVariable("--theme-letter-spacing-xs", typography.letterSpacing.xs);
-    setCssVariable("--theme-letter-spacing-sm", typography.letterSpacing.sm);
-    setCssVariable(
-      "--theme-letter-spacing-base",
-      typography.letterSpacing.base,
-    );
-    setCssVariable("--theme-letter-spacing-lg", typography.letterSpacing.lg);
-    setCssVariable("--theme-letter-spacing-xl", typography.letterSpacing.xl);
-    setCssVariable(
-      "--theme-letter-spacing-2xl",
-      typography.letterSpacing["2xl"],
-    );
-
-    setCssVariable("--theme-font-weight-normal", typography.fontWeight.normal);
-    setCssVariable("--theme-font-weight-medium", typography.fontWeight.medium);
-    setCssVariable(
-      "--theme-font-weight-semibold",
-      typography.fontWeight.semibold,
-    );
-    setCssVariable("--theme-font-weight-bold", typography.fontWeight.bold);
   }, [theme]);
 
   const toggleTheme = (mode: ThemeMode) => {

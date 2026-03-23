@@ -74,9 +74,9 @@ describe("ThemeProvider", () => {
     vi.clearAllMocks();
     document
       .querySelectorAll(
-        'link[data-theme-fonts="true"], link[data-theme-styles="true"]',
+        'link[data-theme-fonts="true"], link[data-theme-styles="true"], style[data-theme-vars="true"]',
       )
-      .forEach((link) => link.remove());
+      .forEach((node) => node.remove());
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.removeAttribute("data-theme-name");
     document.documentElement.removeAttribute("style");
@@ -106,24 +106,35 @@ describe("ThemeProvider", () => {
       ).toHaveAttribute("href", "/custom/brand/fonts.css");
     });
 
+    await waitFor(() => {
+      expect(
+        document.querySelector('style[data-theme-vars="true"]'),
+      ).not.toBeNull();
+    });
+
     expect(
       document.querySelector('link[data-theme-styles="true"]'),
     ).toHaveAttribute("href", "/custom/brand/theme.css");
 
     const stylesheetMarkers = Array.from(
       document.head.querySelectorAll(
-        'link[data-theme-fonts="true"], link[data-theme-styles="true"]',
+        'link[data-theme-fonts="true"], style[data-theme-vars="true"], link[data-theme-styles="true"]',
       ),
-    ).map((link) =>
-      link.hasAttribute("data-theme-fonts") ? "fonts" : "theme",
+    ).map((node) =>
+      node instanceof HTMLLinkElement
+        ? node.hasAttribute("data-theme-fonts")
+          ? "fonts"
+          : "theme"
+        : "vars",
     );
 
-    expect(stylesheetMarkers).toEqual(["fonts", "theme"]);
+    expect(stylesheetMarkers).toEqual(["fonts", "vars", "theme"]);
 
     unmount();
 
     expect(document.querySelector('link[data-theme-fonts="true"]')).toBeNull();
     expect(document.querySelector('link[data-theme-styles="true"]')).toBeNull();
+    expect(document.querySelector('style[data-theme-vars="true"]')).toBeNull();
   });
 
   it("derives stylesheet paths from the theme.json path that actually loaded after fallback", async () => {
@@ -313,160 +324,61 @@ describe("ThemeProvider", () => {
       </ThemeProvider>,
     );
 
+    const getThemeVarsStyle = () =>
+      document.querySelector<HTMLStyleElement>('style[data-theme-vars="true"]');
+
     await waitFor(() => {
-      expect(
-        document.documentElement.style.getPropertyValue("--theme-shell-page"),
-      ).toBe("#f5f3ff");
+      expect(getThemeVarsStyle()?.textContent).toContain(
+        "--theme-shell-page: #f5f3ff;",
+      );
     });
 
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-action-primary-bg",
-      ),
-    ).toBe("#312e81");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-action-primary-fg",
-      ),
-    ).toBe("#eef2ff");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-action-primary-hover",
-      ),
-    ).toBe("#4338ca");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-border-primary"),
-    ).toBe("#c4b5fd");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-shell-modal"),
-    ).toBe("#ffffff");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-focus-ring-error",
-      ),
-    ).toBe("rgba(127, 29, 29, 0.24)");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-message-assistant",
-      ),
-    ).toBe("#ede9fe");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-code-inline-bg"),
-    ).toBe("#eef2ff");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-code-inline-fg"),
-    ).toBe("#312e81");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-code-inline-border",
-      ),
-    ).toBe("#c7d2fe");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-code-block-bg"),
-    ).toBe("#ffffff");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-code-block-fg"),
-    ).toBe("#1e1b4b");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-code-block-border",
-      ),
-    ).toBe("#c7d2fe");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-code-syntax-keyword",
-      ),
-    ).toBe("#4338ca");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-code-syntax-string",
-      ),
-    ).toBe("#047857");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-overlay-modal"),
-    ).toBe("rgba(76, 29, 149, 0.32)");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-radius-shell"),
-    ).toBe("1.25rem");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-elevation-dropdown",
-      ),
-    ).toBe("0 16px 32px rgba(15, 23, 42, 0.18)");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-spacing-dropdown-chrome-padding-y",
-      ),
-    ).toBe("0.375rem");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-spacing-modal-close-button-padding",
-      ),
-    ).toBe("0.375rem");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-layout-chat-input-max-width",
-      ),
-    ).toBe("60rem");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-layout-dropdown-min-width",
-      ),
-    ).toBe("14rem");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-layout-dropdown-viewport-margin",
-      ),
-    ).toBe("12px");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-layout-modal-backdrop-blur",
-      ),
-    ).toBe("6px");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-layout-modal-max-height",
-      ),
-    ).toBe("85vh");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-layout-modal-max-width",
-      ),
-    ).toBe("44rem");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-layout-modal-viewport-margin",
-      ),
-    ).toBe("1.5rem");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-layout-sidebar-width",
-      ),
-    ).toBe("20rem");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-font-heading"),
-    ).toBe("IBM Plex Sans");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-font-mono"),
-    ).toBe("IBM Plex Mono");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-font-size-base"),
-    ).toBe("1.0625rem");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-line-height-base",
-      ),
-    ).toBe("1.625rem");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-letter-spacing-xl",
-      ),
-    ).toBe("-0.02em");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-font-weight-semibold",
-      ),
-    ).toBe("650");
+    const varsCss = getThemeVarsStyle()?.textContent ?? "";
+
+    expect(varsCss).toContain("--theme-action-primary-bg: #312e81;");
+    expect(varsCss).toContain("--theme-action-primary-fg: #eef2ff;");
+    expect(varsCss).toContain("--theme-action-primary-hover: #4338ca;");
+    expect(varsCss).toContain("--theme-border-primary: #c4b5fd;");
+    expect(varsCss).toContain("--theme-shell-modal: #ffffff;");
+    expect(varsCss).toContain(
+      "--theme-focus-ring-error: rgba(127, 29, 29, 0.24);",
+    );
+    expect(varsCss).toContain("--theme-message-assistant: #ede9fe;");
+    expect(varsCss).toContain("--theme-code-inline-bg: #eef2ff;");
+    expect(varsCss).toContain("--theme-code-inline-fg: #312e81;");
+    expect(varsCss).toContain("--theme-code-inline-border: #c7d2fe;");
+    expect(varsCss).toContain("--theme-code-block-bg: #ffffff;");
+    expect(varsCss).toContain("--theme-code-block-fg: #1e1b4b;");
+    expect(varsCss).toContain("--theme-code-block-border: #c7d2fe;");
+    expect(varsCss).toContain("--theme-code-syntax-keyword: #4338ca;");
+    expect(varsCss).toContain("--theme-code-syntax-string: #047857;");
+    expect(varsCss).toContain(
+      "--theme-overlay-modal: rgba(76, 29, 149, 0.32);",
+    );
+    expect(varsCss).toContain("--theme-radius-shell: 1.25rem;");
+    expect(varsCss).toContain(
+      "--theme-elevation-dropdown: 0 16px 32px rgba(15, 23, 42, 0.18);",
+    );
+    expect(varsCss).toContain(
+      "--theme-spacing-dropdown-chrome-padding-y: 0.375rem;",
+    );
+    expect(varsCss).toContain(
+      "--theme-spacing-modal-close-button-padding: 0.375rem;",
+    );
+    expect(varsCss).toContain("--theme-layout-chat-input-max-width: 60rem;");
+    expect(varsCss).toContain("--theme-layout-dropdown-min-width: 14rem;");
+    expect(varsCss).toContain("--theme-layout-dropdown-viewport-margin: 12px;");
+    expect(varsCss).toContain("--theme-layout-modal-backdrop-blur: 6px;");
+    expect(varsCss).toContain("--theme-layout-modal-max-height: 85vh;");
+    expect(varsCss).toContain("--theme-layout-modal-max-width: 44rem;");
+    expect(varsCss).toContain("--theme-layout-modal-viewport-margin: 1.5rem;");
+    expect(varsCss).toContain("--theme-layout-sidebar-width: 20rem;");
+    expect(varsCss).toContain("--theme-font-heading: IBM Plex Sans;");
+    expect(varsCss).toContain("--theme-font-mono: IBM Plex Mono;");
+    expect(varsCss).toContain("--theme-font-size-base: 1.0625rem;");
+    expect(varsCss).toContain("--theme-line-height-base: 1.625rem;");
+    expect(varsCss).toContain("--theme-letter-spacing-xl: -0.02em;");
+    expect(varsCss).toContain("--theme-font-weight-semibold: 650;");
   });
 
   it("maps legacy theme fields into the expanded token surface", async () => {
@@ -511,33 +423,22 @@ describe("ThemeProvider", () => {
       </ThemeProvider>,
     );
 
+    const getThemeVarsStyle = () =>
+      document.querySelector<HTMLStyleElement>('style[data-theme-vars="true"]');
+
     await waitFor(() => {
-      expect(
-        document.documentElement.style.getPropertyValue("--theme-shell-page"),
-      ).toBe("#edf2ee");
+      expect(getThemeVarsStyle()?.textContent).toContain(
+        "--theme-shell-page: #edf2ee;",
+      );
     });
 
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-shell-chat-input",
-      ),
-    ).toBe("#e4ebe5");
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--theme-shell-sidebar-selected",
-      ),
-    ).toBe("#d4e3d7");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-message-hover"),
-    ).toBe("#c8d9cc");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-border-primary"),
-    ).toBe("#cfddd1");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-border-subtle"),
-    ).toBe("#cfddd1");
-    expect(
-      document.documentElement.style.getPropertyValue("--theme-radius-shell"),
-    ).toBe("1rem");
+    const varsCss = getThemeVarsStyle()?.textContent ?? "";
+
+    expect(varsCss).toContain("--theme-shell-chat-input: #e4ebe5;");
+    expect(varsCss).toContain("--theme-shell-sidebar-selected: #d4e3d7;");
+    expect(varsCss).toContain("--theme-message-hover: #c8d9cc;");
+    expect(varsCss).toContain("--theme-border-primary: #cfddd1;");
+    expect(varsCss).toContain("--theme-border-subtle: #cfddd1;");
+    expect(varsCss).toContain("--theme-radius-shell: 1rem;");
   });
 });

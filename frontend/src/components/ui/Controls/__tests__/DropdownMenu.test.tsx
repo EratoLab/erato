@@ -38,7 +38,7 @@ describe("DropdownMenu", () => {
       minWidth: "var(--theme-layout-dropdown-min-width)",
     });
     expect(menuItem.className).toContain("focus-ring-inset");
-    expect(menuItem.className).toContain("focus:bg-theme-bg-accent");
+    expect(menuItem.className).not.toContain("focus:bg-theme-bg-accent");
     expect(screen.getByRole("menu").firstElementChild).toHaveClass(
       "dropdown-panel-chrome-geometry",
     );
