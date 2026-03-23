@@ -1,9 +1,14 @@
 use crate::db::entity::messages;
 use crate::db::entity_ext::chats;
 use crate::db::entity_ext::prelude::*;
+use crate::metrics_constants::{
+    POSTGRES_QUERY_COUNT_RECENT_CHATS, POSTGRES_QUERY_FREQUENT_ASSISTANTS,
+    POSTGRES_QUERY_LIST_RECENT_CHATS,
+};
 use crate::models::message::GenerationParameters;
 use crate::models::pagination;
 use crate::policy::prelude::*;
+use crate::query_metrics::named_statement_from_sql_and_values;
 use eyre::{Report, eyre};
 use sea_orm::prelude::*;
 use sea_orm::{
@@ -289,8 +294,9 @@ pub async fn get_recent_chats(
     );
 
     let chats_with_messages: Vec<ChatWithLatestMessage> =
-        ChatWithLatestMessage::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        ChatWithLatestMessage::find_by_statement(named_statement_from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_LIST_RECENT_CHATS,
             sql,
             vec![
                 owner_user_id.into(),
@@ -330,8 +336,9 @@ pub async fn get_recent_chats(
             }
 
             let count_result: CountResult =
-                CountResult::find_by_statement(sea_orm::Statement::from_sql_and_values(
+                CountResult::find_by_statement(named_statement_from_sql_and_values(
                     sea_orm::DatabaseBackend::Postgres,
+                    POSTGRES_QUERY_COUNT_RECENT_CHATS,
                     count_sql,
                     vec![owner_user_id.into()],
                 ))
@@ -511,8 +518,9 @@ pub async fn get_frequent_assistants(
     let cutoff_date = Utc::now() - chrono::Duration::days(days as i64);
 
     let usage_counts: Vec<AssistantUsageCount> =
-        AssistantUsageCount::find_by_statement(sea_orm::Statement::from_sql_and_values(
+        AssistantUsageCount::find_by_statement(named_statement_from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_FREQUENT_ASSISTANTS,
             r#"
                 SELECT 
                     (assistant_configuration->>'assistant_id')::uuid as assistant_id,

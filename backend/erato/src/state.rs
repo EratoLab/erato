@@ -1,6 +1,7 @@
 use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig, PromptSourceSpecification};
 use crate::policy::engine::PolicyEngine;
+use crate::query_metrics::install_postgres_query_metrics;
 use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
@@ -152,7 +153,10 @@ impl AppState {
         let db_connect_options = ConnectOptions::new(&config.database_url);
         // TODO: Change level to Debug, but that also seems to deactivate some other logging (e.g. Errors during request?)
         // db_connect_options.sqlx_logging_level(LevelFilter::Debug);
-        let db = Database::connect(db_connect_options).await?;
+        let mut db = Database::connect(db_connect_options).await?;
+        if config.integrations.prometheus.enabled {
+            install_postgres_query_metrics(&mut db);
+        }
         let file_storage_providers = Self::build_file_storage_providers(&config)?;
         let mcp_servers = Arc::new(McpServers::new(&config));
 

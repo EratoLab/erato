@@ -62,7 +62,10 @@ pub mod pagination {
 }
 
 use eyre::{Result, eyre};
-use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
+use sea_orm::{ConnectionTrait, DatabaseConnection};
+
+use crate::metrics_constants::POSTGRES_QUERY_VERIFY_LATEST_MIGRATION;
+use crate::query_metrics::named_statement_from_sql_and_values;
 
 /// The latest migration change hash from the sqitch deployment
 const LATEST_MIGRATION_HASH: &str = include_str!("../../../sqitch/latest_change.txt");
@@ -76,12 +79,11 @@ pub async fn verify_latest_migration(conn: &DatabaseConnection) -> Result<bool> 
     let latest_change = LATEST_MIGRATION_HASH.trim();
 
     // Query the changes table to check if the latest change exists
-    let stmt = Statement::from_string(
+    let stmt = named_statement_from_sql_and_values(
         conn.get_database_backend(),
-        format!(
-            "SELECT EXISTS(SELECT 1 FROM changes WHERE change_id = '{}') as exists",
-            latest_change
-        ),
+        POSTGRES_QUERY_VERIFY_LATEST_MIGRATION,
+        "SELECT EXISTS(SELECT 1 FROM changes WHERE change_id = $1) as exists",
+        vec![latest_change.into()],
     );
 
     let row = conn.query_one(stmt).await?;
