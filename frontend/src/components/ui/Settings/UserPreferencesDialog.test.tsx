@@ -3,7 +3,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  ThemeProvider,
+  type ThemeMode,
+} from "@/components/providers/ThemeProvider";
 import { profileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import { UserPreferencesDialog } from "./UserPreferencesDialog";
 
@@ -58,20 +63,34 @@ function renderDialog({
   }),
   onClose = vi.fn(),
   profile = userProfile,
+  themeMode = "light",
+  userPreferencesEnabled = true,
 }: {
   queryClient?: QueryClient;
   onClose?: () => void;
   profile?: UserProfile;
+  themeMode?: ThemeMode;
+  userPreferencesEnabled?: boolean;
 } = {}) {
   return render(
     <MemoryRouter>
-      <QueryClientProvider client={queryClient}>
-        <UserPreferencesDialog
-          isOpen={true}
-          onClose={onClose}
-          userProfile={profile}
-        />
-      </QueryClientProvider>
+      <StaticFeatureConfigProvider
+        config={{ userPreferences: { enabled: userPreferencesEnabled } }}
+      >
+        <ThemeProvider
+          initialThemeMode={themeMode}
+          persistThemeMode={false}
+          enableCustomTheme={false}
+        >
+          <QueryClientProvider client={queryClient}>
+            <UserPreferencesDialog
+              isOpen={true}
+              onClose={onClose}
+              userProfile={profile}
+            />
+          </QueryClientProvider>
+        </ThemeProvider>
+      </StaticFeatureConfigProvider>
     </MemoryRouter>,
   );
 }
@@ -89,41 +108,46 @@ describe("UserPreferencesDialog", () => {
     const personalizationTab = screen.getByRole("tab", {
       name: "Personalization",
     });
+    const appearanceTab = screen.getByRole("tab", { name: "Appearance" });
     const dataTab = screen.getByRole("tab", { name: "Data" });
     const personalizationPanel = screen.getByRole("tabpanel", {
       name: "Personalization",
     });
+    const appearancePanelId = appearanceTab.getAttribute("aria-controls");
+    const appearancePanel =
+      appearancePanelId !== null
+        ? document.getElementById(appearancePanelId)
+        : null;
     const dataPanelId = dataTab.getAttribute("aria-controls");
     const dataPanel =
       dataPanelId !== null ? document.getElementById(dataPanelId) : null;
 
     expect(tablist).toHaveAttribute("aria-orientation", "vertical");
     expect(personalizationTab).toHaveAttribute("aria-selected", "true");
+    expect(appearanceTab).toHaveAttribute("aria-selected", "false");
     expect(dataTab).toHaveAttribute("aria-selected", "false");
     expect(personalizationTab).toHaveAttribute(
       "aria-controls",
       personalizationPanel.id,
     );
+    expect(appearancePanel).not.toBeNull();
+    expect(appearanceTab).toHaveAttribute("aria-controls", appearancePanel?.id);
     expect(dataPanel).not.toBeNull();
     expect(dataTab).toHaveAttribute("aria-controls", dataPanel?.id);
     expect(personalizationPanel).not.toHaveAttribute("hidden");
+    expect(appearancePanel).toHaveAttribute("hidden");
     expect(dataPanel).toHaveAttribute("hidden");
-    expect(personalizationPanel).toHaveAttribute(
-      "aria-labelledby",
-      personalizationTab.id,
-    );
-    expect(dataPanel).toHaveAttribute("aria-labelledby", dataTab.id);
   });
 
   it("switches panels and only shows footer actions on the personalization tab", () => {
     renderDialog();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Data" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Appearance" }));
 
-    expect(screen.getByRole("tabpanel", { name: "Data" })).toBeInTheDocument();
     expect(
-      screen.getByText("Archive all chats in your account."),
+      screen.getByRole("tabpanel", { name: "Appearance" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Color mode")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument();
@@ -140,20 +164,49 @@ describe("UserPreferencesDialog", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 
-  it("supports keyboard navigation between tabs", () => {
+  it("supports keyboard navigation between visible tabs", () => {
     renderDialog();
 
     const personalizationTab = screen.getByRole("tab", {
       name: "Personalization",
     });
-    const dataTab = screen.getByRole("tab", { name: "Data" });
+    const appearanceTab = screen.getByRole("tab", { name: "Appearance" });
 
     personalizationTab.focus();
     fireEvent.keyDown(personalizationTab, { key: "ArrowDown" });
 
-    expect(dataTab).toHaveFocus();
-    expect(dataTab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tabpanel", { name: "Data" })).toBeInTheDocument();
+    expect(appearanceTab).toHaveFocus();
+    expect(appearanceTab).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("tabpanel", { name: "Appearance" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows appearance and data tabs when personalization is disabled", () => {
+    renderDialog({ userPreferencesEnabled: false, themeMode: "system" });
+
+    expect(
+      screen.queryByRole("tab", { name: "Personalization" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Appearance" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("tabpanel", { name: "Appearance" }),
+    ).toHaveTextContent("Currently light");
+  });
+
+  it("updates the selected theme mode from the appearance pane", () => {
+    renderDialog({ themeMode: "light" });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Appearance" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Dark mode/i }));
+
+    expect(screen.getByRole("radio", { name: /Dark mode/i })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 
   it("archives chats, refreshes recent chats, and redirects to a new chat", async () => {
@@ -172,17 +225,7 @@ describe("UserPreferencesDialog", () => {
       }),
     );
 
-    render(
-      <MemoryRouter>
-        <QueryClientProvider client={queryClient}>
-          <UserPreferencesDialog
-            isOpen={true}
-            onClose={onClose}
-            userProfile={userProfile}
-          />
-        </QueryClientProvider>
-      </MemoryRouter>,
-    );
+    renderDialog({ queryClient, onClose });
 
     fireEvent.click(screen.getByRole("tab", { name: "Data" }));
     fireEvent.click(screen.getByRole("button", { name: "Archive all chats" }));

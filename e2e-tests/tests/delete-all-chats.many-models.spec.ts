@@ -65,7 +65,7 @@ test(
         .getByRole("button")
         .filter({ has: page.getByTestId("avatar-identity") })
         .click();
-      await page.getByRole("menuitem", { name: "Preferences" }).click();
+      await page.getByRole("menuitem", { name: "Settings" }).click();
       await page.getByRole("tab", { name: "Data" }).click();
       await page.getByRole("button", { name: "Archive all chats" }).click();
 

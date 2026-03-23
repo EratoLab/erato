@@ -2,89 +2,39 @@ import { t } from "@lingui/core/macro";
 import { clsx } from "clsx";
 import { memo, useState } from "react";
 
-import {
-  useAuthFeature,
-  useUserPreferencesFeature,
-} from "@/providers/FeatureConfigProvider";
+import { useAuthFeature } from "@/providers/FeatureConfigProvider";
 
 import { DropdownMenu } from "./DropdownMenu";
 import { Avatar } from "../Feedback/Avatar";
 import { UserPreferencesDialog } from "../Settings/UserPreferencesDialog";
-import {
-  LogOutIcon,
-  SunIcon,
-  MoonIcon,
-  ComputerIcon,
-  SettingsIcon,
-} from "../icons";
+import { LogOutIcon, SettingsIcon } from "../icons";
 
-import type { ThemeMode } from "@/components/providers/ThemeProvider";
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface UserProfileDropdownProps {
   userProfile?: UserProfile;
   onSignOut: () => void;
   className?: string;
-  /** Enable theme toggle feature */
-  showThemeToggle?: boolean;
-  /** Current theme mode (if theme toggle is enabled) */
-  themeMode?: ThemeMode;
-  /** Function to set the theme mode (if theme toggle is enabled) */
-  setThemeMode?: (mode: ThemeMode) => void;
 }
 
 export const UserProfileDropdown = memo<UserProfileDropdownProps>(
-  ({
-    userProfile,
-    onSignOut,
-    className,
-    showThemeToggle = false,
-    themeMode = "light",
-    setThemeMode,
-  }) => {
+  ({ userProfile, onSignOut, className }) => {
     const [isPreferencesDialogOpen, setIsPreferencesDialogOpen] =
       useState(false);
 
     // Check if logout should be shown
     const { showLogout } = useAuthFeature();
-    const { enabled: userPreferencesEnabled } = useUserPreferencesFeature();
 
     // Create dropdown items array
     const dropdownItems = [
-      ...(showThemeToggle && setThemeMode
-        ? [
-            {
-              label: t`Light mode`,
-              icon: <SunIcon className="size-4" />,
-              onClick: () => setThemeMode("light"),
-              checked: themeMode === "light",
-            },
-            {
-              label: t`Dark mode`,
-              icon: <MoonIcon className="size-4" />,
-              onClick: () => setThemeMode("dark"),
-              checked: themeMode === "dark",
-            },
-            {
-              label: t`System theme`,
-              icon: <ComputerIcon className="size-4" />,
-              onClick: () => setThemeMode("system"),
-              checked: themeMode === "system",
-            },
-          ]
-        : []),
-      ...(userPreferencesEnabled
-        ? [
-            {
-              label: t({
-                id: "profile.menu.preferences",
-                message: "Preferences",
-              }),
-              icon: <SettingsIcon className="size-4" />,
-              onClick: () => setIsPreferencesDialogOpen(true),
-            },
-          ]
-        : []),
+      {
+        label: t({
+          id: "profile.menu.preferences",
+          message: "Settings",
+        }),
+        icon: <SettingsIcon className="size-4" />,
+        onClick: () => setIsPreferencesDialogOpen(true),
+      },
       ...(showLogout
         ? [
             {
@@ -115,13 +65,11 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
             />
           }
         />
-        {userPreferencesEnabled && (
-          <UserPreferencesDialog
-            isOpen={isPreferencesDialogOpen}
-            onClose={() => setIsPreferencesDialogOpen(false)}
-            userProfile={userProfile}
-          />
-        )}
+        <UserPreferencesDialog
+          isOpen={isPreferencesDialogOpen}
+          onClose={() => setIsPreferencesDialogOpen(false)}
+          userProfile={userProfile}
+        />
       </div>
     );
   },

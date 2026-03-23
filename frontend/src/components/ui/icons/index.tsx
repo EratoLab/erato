@@ -38,6 +38,8 @@ import {
   Folder,
   ShareAndroid,
   GridXmark,
+  MenuScale,
+  Lock,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -163,6 +165,10 @@ export const SettingsIcon = ({ className, ...props }: IconProps) => (
   <Settings className={className} {...props} />
 );
 
+export const MenuScaleIcon = ({ className, ...props }: IconProps) => (
+  <MenuScale className={className} {...props} />
+);
+
 export const TimerIcon = ({ className, ...props }: IconProps) => (
   <Timer className={className} {...props} />
 );
@@ -242,6 +248,10 @@ export const ShareIcon = ({ className, ...props }: IconProps) => (
 
 export const GridXmarkIcon = ({ className, ...props }: IconProps) => (
   <GridXmark className={className} {...props} />
+);
+
+export const LockIcon = ({ className, ...props }: IconProps) => (
+  <Lock className={className} {...props} />
 );
 
 // Direct re-exports for convenience (maintaining Iconoir naming)

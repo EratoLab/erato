@@ -4,26 +4,42 @@ import clsx from "clsx";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useTheme, type ThemeMode } from "@/components/providers/ThemeProvider";
 import {
   fetchUpdateProfilePreferences,
   profileQuery,
   recentChatsQuery,
   useArchiveAllChatsEndpoint,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useUserPreferencesFeature } from "@/providers/FeatureConfigProvider";
 
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { FormField, Input, Textarea } from "../Input";
 import { ModalBase } from "../Modal/ModalBase";
+import {
+  ComputerIcon,
+  LockIcon,
+  MediaImageIcon,
+  MenuScaleIcon,
+  MoonIcon,
+  SunIcon,
+} from "../icons";
 
 import type {
   UpdateProfilePreferencesRequest,
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { KeyboardEvent, ReactNode } from "react";
 
-type PreferencesTab = "personalization" | "data";
+type PreferencesTab = "personalization" | "appearance" | "data";
 
-const PREFERENCES_TAB_ORDER: PreferencesTab[] = ["personalization", "data"];
+interface AppearanceOption {
+  description: string;
+  icon: ReactNode;
+  label: string;
+  value: ThemeMode;
+}
 
 interface UserPreferencesDialogProps {
   isOpen: boolean;
@@ -39,7 +55,9 @@ export function UserPreferencesDialog({
   const navigate = useNavigate();
   const tabGroupId = useId();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<PreferencesTab>("personalization");
+  const { enabled: personalizationEnabled } = useUserPreferencesFeature();
+  const { effectiveTheme, setThemeMode, themeMode } = useTheme();
+  const [activeTab, setActiveTab] = useState<PreferencesTab>("appearance");
   const [nickname, setNickname] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [customInstructions, setCustomInstructions] = useState("");
@@ -51,11 +69,20 @@ export function UserPreferencesDialog({
   const [isArchiving, setIsArchiving] = useState(false);
   const { mutateAsync: archiveAllChatsMutation } = useArchiveAllChatsEndpoint();
 
+  const visibleTabs = useMemo(
+    () =>
+      (personalizationEnabled
+        ? ["personalization", "appearance", "data"]
+        : ["appearance", "data"]) satisfies PreferencesTab[],
+    [personalizationEnabled],
+  );
+
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-    setActiveTab("personalization");
+
+    setActiveTab(visibleTabs[0]);
     setSaveError(null);
     setArchiveError(null);
     setArchiveSuccess(null);
@@ -67,7 +94,13 @@ export function UserPreferencesDialog({
     setAdditionalInformation(
       userProfile?.preference_assistant_additional_information ?? "",
     );
-  }, [isOpen, userProfile]);
+  }, [isOpen, userProfile, visibleTabs]);
+
+  useEffect(() => {
+    if (!visibleTabs.includes(activeTab)) {
+      setActiveTab(visibleTabs[0]);
+    }
+  }, [activeTab, visibleTabs]);
 
   const hasChanges = useMemo(
     () =>
@@ -96,17 +129,68 @@ export function UserPreferencesDialog({
       id: "preferences.dialog.tabs.personalization",
       message: "Personalization",
     }),
+    appearance: t({
+      id: "preferences.dialog.tabs.appearance",
+      message: "Appearance",
+    }),
     data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
   } satisfies Record<PreferencesTab, string>;
+
+  const tabIcons = {
+    personalization: <MenuScaleIcon className="size-4" />,
+    appearance: <MediaImageIcon className="size-4" />,
+    data: <LockIcon className="size-4" />,
+  } satisfies Record<PreferencesTab, ReactNode>;
+
+  const appearanceOptions = [
+    {
+      value: "light",
+      label: t({
+        id: "preferences.dialog.appearance.theme.light.label",
+        message: "Light mode",
+      }),
+      description: t({
+        id: "preferences.dialog.appearance.theme.light.description",
+        message: "Always use the light theme.",
+      }),
+      icon: <SunIcon className="size-5" />,
+    },
+    {
+      value: "dark",
+      label: t({
+        id: "preferences.dialog.appearance.theme.dark.label",
+        message: "Dark mode",
+      }),
+      description: t({
+        id: "preferences.dialog.appearance.theme.dark.description",
+        message: "Always use the dark theme.",
+      }),
+      icon: <MoonIcon className="size-5" />,
+    },
+    {
+      value: "system",
+      label: t({
+        id: "preferences.dialog.appearance.theme.system.label",
+        message: "System theme",
+      }),
+      description: t({
+        id: "preferences.dialog.appearance.theme.system.description",
+        message: "Match your device appearance settings.",
+      }),
+      icon: <ComputerIcon className="size-5" />,
+    },
+  ] satisfies AppearanceOption[];
 
   /* eslint-disable lingui/no-unlocalized-strings -- Internal DOM ids, not user-facing copy */
   const tabIds = {
     personalization: `${tabGroupId}-tab-personalization`,
+    appearance: `${tabGroupId}-tab-appearance`,
     data: `${tabGroupId}-tab-data`,
   } satisfies Record<PreferencesTab, string>;
 
   const panelIds = {
     personalization: `${tabGroupId}-panel-personalization`,
+    appearance: `${tabGroupId}-panel-appearance`,
     data: `${tabGroupId}-panel-data`,
   } satisfies Record<PreferencesTab, string>;
   /* eslint-enable lingui/no-unlocalized-strings */
@@ -116,33 +200,29 @@ export function UserPreferencesDialog({
   };
 
   const handleTabKeyDown = (
-    event: React.KeyboardEvent<HTMLButtonElement>,
+    event: KeyboardEvent<HTMLButtonElement>,
     currentTab: PreferencesTab,
   ) => {
-    const currentIndex = PREFERENCES_TAB_ORDER.indexOf(currentTab);
+    const currentIndex = visibleTabs.indexOf(currentTab);
     let nextTab: PreferencesTab | undefined;
 
     switch (event.key) {
       case "ArrowDown":
       case "ArrowRight":
-        nextTab =
-          PREFERENCES_TAB_ORDER[
-            (currentIndex + 1) % PREFERENCES_TAB_ORDER.length
-          ];
+        nextTab = visibleTabs[(currentIndex + 1) % visibleTabs.length];
         break;
       case "ArrowUp":
       case "ArrowLeft":
         nextTab =
-          PREFERENCES_TAB_ORDER[
-            (currentIndex - 1 + PREFERENCES_TAB_ORDER.length) %
-              PREFERENCES_TAB_ORDER.length
+          visibleTabs[
+            (currentIndex - 1 + visibleTabs.length) % visibleTabs.length
           ];
         break;
       case "Home":
-        nextTab = PREFERENCES_TAB_ORDER[0];
+        nextTab = visibleTabs[0];
         break;
       case "End":
-        nextTab = PREFERENCES_TAB_ORDER[PREFERENCES_TAB_ORDER.length - 1];
+        nextTab = visibleTabs[visibleTabs.length - 1];
         break;
       default:
         return;
@@ -220,7 +300,7 @@ export function UserPreferencesDialog({
       isOpen={isOpen}
       onClose={onClose}
       title={t({ id: "preferences.dialog.title", message: "Preferences" })}
-      contentClassName="max-w-4xl h-[80vh] max-h-[700px]"
+      contentClassName="h-[80vh] max-h-[700px] max-w-4xl"
     >
       <div className="flex h-full gap-5">
         <aside className="w-48 shrink-0 border-r border-theme-border pr-4">
@@ -233,7 +313,7 @@ export function UserPreferencesDialog({
             aria-orientation="vertical"
             className="space-y-1"
           >
-            {PREFERENCES_TAB_ORDER.map((tab) => {
+            {visibleTabs.map((tab) => {
               const isActive = activeTab === tab;
 
               return (
@@ -246,7 +326,7 @@ export function UserPreferencesDialog({
                   aria-controls={panelIds[tab]}
                   tabIndex={isActive ? 0 : -1}
                   className={clsx(
-                    "w-full cursor-pointer rounded-md px-3 py-2 text-left text-sm",
+                    "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm",
                     "theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
                     isActive
                       ? "bg-theme-bg-hover font-medium text-theme-fg-primary"
@@ -255,6 +335,9 @@ export function UserPreferencesDialog({
                   onClick={() => setActiveTab(tab)}
                   onKeyDown={(event) => handleTabKeyDown(event, tab)}
                 >
+                  <span aria-hidden="true" className="shrink-0">
+                    {tabIcons[tab]}
+                  </span>
                   {tabLabels[tab]}
                 </button>
               );
@@ -269,17 +352,17 @@ export function UserPreferencesDialog({
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
             {saveError ? <Alert type="error">{saveError}</Alert> : null}
 
-            <section
-              id={panelIds.personalization}
-              role="tabpanel"
-              aria-labelledby={tabIds.personalization}
-              hidden={activeTab !== "personalization"}
-              className={clsx(
-                "space-y-4",
-                activeTab !== "personalization" && "hidden",
-              )}
-            >
-              <>
+            {personalizationEnabled ? (
+              <section
+                id={panelIds.personalization}
+                role="tabpanel"
+                aria-labelledby={tabIds.personalization}
+                hidden={activeTab !== "personalization"}
+                className={clsx(
+                  "space-y-4",
+                  activeTab !== "personalization" && "hidden",
+                )}
+              >
                 <FormField
                   label={t({
                     id: "preferences.dialog.fields.nickname.label",
@@ -362,7 +445,97 @@ export function UserPreferencesDialog({
                     })}
                   />
                 </FormField>
-              </>
+              </section>
+            ) : null}
+
+            <section
+              id={panelIds.appearance}
+              role="tabpanel"
+              aria-labelledby={tabIds.appearance}
+              hidden={activeTab !== "appearance"}
+              className={clsx(
+                "space-y-4",
+                activeTab !== "appearance" && "hidden",
+              )}
+            >
+              <div className="space-y-1">
+                <h2 className="text-sm font-medium text-theme-fg-primary">
+                  {t({
+                    id: "preferences.dialog.appearance.theme.heading",
+                    message: "Color mode",
+                  })}
+                </h2>
+                <p className="text-sm text-theme-fg-secondary">
+                  {t({
+                    id: "preferences.dialog.appearance.theme.description",
+                    message: "Choose how Erato should look for your account.",
+                  })}
+                </p>
+              </div>
+
+              <div
+                role="radiogroup"
+                aria-label={t({
+                  id: "preferences.dialog.appearance.theme.heading",
+                  message: "Color mode",
+                })}
+                className="grid gap-3"
+              >
+                {appearanceOptions.map((option) => {
+                  const isSelected = themeMode === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      className={clsx(
+                        "flex items-start gap-3 rounded-lg border p-4 text-left",
+                        "theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
+                        isSelected
+                          ? "border-theme-border-focus bg-theme-bg-hover text-theme-fg-primary"
+                          : "border-theme-border bg-theme-bg-primary text-theme-fg-secondary hover:bg-theme-bg-hover",
+                      )}
+                      onClick={() => setThemeMode(option.value)}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={clsx(
+                          "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border",
+                          isSelected
+                            ? "border-theme-border-focus bg-theme-bg-secondary text-theme-fg-primary"
+                            : "border-theme-border bg-theme-bg-secondary text-theme-fg-secondary",
+                        )}
+                      >
+                        {option.icon}
+                      </span>
+
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="font-medium">{option.label}</span>
+                          {option.value === "system" && isSelected ? (
+                            <span className="text-xs text-theme-fg-muted">
+                              {effectiveTheme === "dark"
+                                ? t({
+                                    id: "preferences.dialog.appearance.theme.current.dark",
+                                    message: "Currently dark",
+                                  })
+                                : t({
+                                    id: "preferences.dialog.appearance.theme.current.light",
+                                    message: "Currently light",
+                                  })}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="mt-1 block text-sm text-theme-fg-muted">
+                          {option.description}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </section>
 
             <section
@@ -414,7 +587,7 @@ export function UserPreferencesDialog({
             </section>
           </div>
 
-          {activeTab === "personalization" ? (
+          {personalizationEnabled && activeTab === "personalization" ? (
             <div className="mt-3 flex justify-end gap-2 border-t border-theme-border pt-3">
               <Button
                 variant="secondary"

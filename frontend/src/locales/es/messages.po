@@ -699,6 +699,56 @@ msgstr "Guardando..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.current.dark"
+msgstr "Actualmente oscuro"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.current.light"
+msgstr "Actualmente claro"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.dark.description"
+msgstr "Usar siempre el tema oscuro."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.dark.label"
+msgstr "Modo oscuro"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.description"
+msgstr "Elige cómo debe verse Erato para tu cuenta."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.heading"
+msgstr "Modo de color"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.light.description"
+msgstr "Usar siempre el tema claro."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.light.label"
+msgstr "Modo claro"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.system.description"
+msgstr "Coincidir con la configuración de apariencia de tu dispositivo."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.appearance.theme.system.label"
+msgstr "Tema del sistema"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.archiving"
 msgstr "Archivando..."
 
@@ -799,6 +849,11 @@ msgstr "No se pudieron guardar las preferencias. Inténtalo de nuevo."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.appearance"
+msgstr "Apariencia"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.data"
 msgstr "Datos"
 
@@ -815,7 +870,7 @@ msgstr "Preferencias"
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 msgid "profile.menu.preferences"
-msgstr "Preferencias"
+msgstr "Configuración"
 
 #. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
@@ -1294,8 +1349,8 @@ msgid "Create your first assistant to get started"
 msgstr ""
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
-msgid "Dark mode"
-msgstr "Modo oscuro"
+#~ msgid "Dark mode"
+#~ msgstr "Modo oscuro"
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
@@ -1473,8 +1528,8 @@ msgid "Largest file context contributors:"
 msgstr "Mayores contribuciones de contexto de archivos:"
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
-msgid "Light mode"
-msgstr "Modo claro"
+#~ msgid "Light mode"
+#~ msgstr "Modo claro"
 
 #: src/components/ui/Message/MessageContent.tsx
 msgid "Link"
@@ -1740,8 +1795,8 @@ msgid "System Prompt"
 msgstr ""
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
-msgid "System theme"
-msgstr "Tema del sistema"
+#~ msgid "System theme"
+#~ msgstr "Tema del sistema"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Test Locale Changes:"
