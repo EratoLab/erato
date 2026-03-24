@@ -13,6 +13,7 @@ import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { UserPreferencesDialog } from "./UserPreferencesDialog";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type React from "react";
 import type { ReactNode } from "react";
 
 const mockNavigate = vi.fn();
@@ -31,6 +32,32 @@ vi.mock("react-router-dom", async () => {
 vi.mock("../Feedback/Alert", () => ({
   Alert: ({ children }: { children: ReactNode }) => (
     <div role="alert">{children}</div>
+  ),
+}));
+
+vi.mock("../Controls/Button", () => ({
+  Button: ({
+    children,
+    confirmAction,
+    confirmTitle: _confirmTitle,
+    confirmMessage: _confirmMessage,
+    onClick,
+    ...props
+  }: React.ComponentProps<"button"> & {
+    confirmAction?: boolean;
+    confirmTitle?: string;
+    confirmMessage?: string;
+  }) => (
+    <>
+      <button type="button" onClick={onClick} {...props}>
+        {children}
+      </button>
+      {confirmAction && (
+        <button type="button" onClick={onClick}>
+          Confirm action
+        </button>
+      )}
+    </>
   ),
 }));
 

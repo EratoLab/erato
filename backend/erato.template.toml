@@ -124,6 +124,12 @@ chat_provider_ids = ["test-token-limit"]
 # enabled = false
 # # Whether to show recent assistant items in the chat sidebar (default: false)
 # show_recent_items = false
+# # Threshold between 0.0 and 1.0 at or above which the assistant editor shows
+# # the overall context warning block (default: 0.5)
+# context_warning_threshold = 0.5
+# # Threshold between 0.0 and 1.0 at or above which a file is included in the
+# # "largest file context contributors" list (default: 0.05)
+# context_file_contributor_threshold = 0.05
 
 # Starter prompts feature configuration
 # [starter_prompts]

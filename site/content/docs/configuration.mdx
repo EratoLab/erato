@@ -1521,6 +1521,51 @@ Whether to enable the experimental assistants feature in the frontend. When enab
 enabled = true
 ```
 
+#### `experimental_assistants.show_recent_items`
+
+Whether to show recent assistant items in the chat sidebar.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[experimental_assistants]
+show_recent_items = true
+```
+
+#### `experimental_assistants.context_warning_threshold`
+
+Threshold between `0.0` and `1.0` at or above which the assistant editor shows the overall context warning block.
+
+**Default value:** `0.5`
+
+**Type:** `number`
+
+**Example:**
+
+```toml
+[experimental_assistants]
+context_warning_threshold = 0.6
+```
+
+#### `experimental_assistants.context_file_contributor_threshold`
+
+Threshold between `0.0` and `1.0` at or above which a file is included in the assistant editor's "largest file context contributors" list.
+
+**Default value:** `0.05`
+
+**Type:** `number`
+
+**Example:**
+
+```toml
+[experimental_assistants]
+context_file_contributor_threshold = 0.01
+```
+
 **Future Migration Plan:**
 
 Once the assistants feature has stabilized, this configuration will be replaced by:

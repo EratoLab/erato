@@ -29,6 +29,8 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   disableLogout: false,
   assistantsEnabled: false,
   assistantsShowRecentItems: false,
+  assistantContextWarningThreshold: 0.5,
+  assistantContextFileContributorThreshold: 0.05,
   starterPromptsEnabled: false,
   promptOptimizerEnabled: false,
   sharepointEnabled: false,

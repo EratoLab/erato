@@ -42,6 +42,10 @@ interface AssistantsFeatureConfig {
   enabled: boolean;
   /** Whether recent assistants should be shown in the sidebar */
   showRecentItems: boolean;
+  /** Threshold at or above which assistant editor context warnings are shown */
+  contextWarningThreshold: number;
+  /** Threshold at or above which files are listed as major context contributors */
+  contextFileContributorThreshold: number;
 }
 
 interface StarterPromptsFeatureConfig {
@@ -137,6 +141,8 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   assistants: {
     enabled: false,
     showRecentItems: false,
+    contextWarningThreshold: 0.5,
+    contextFileContributorThreshold: 0.05,
   },
   starterPrompts: {
     enabled: false,
@@ -198,6 +204,9 @@ function createFeatureConfig(
     assistants: {
       enabled: environment.assistantsEnabled,
       showRecentItems: environment.assistantsShowRecentItems,
+      contextWarningThreshold: environment.assistantContextWarningThreshold,
+      contextFileContributorThreshold:
+        environment.assistantContextFileContributorThreshold,
     },
     starterPrompts: {
       enabled: environment.starterPromptsEnabled,
