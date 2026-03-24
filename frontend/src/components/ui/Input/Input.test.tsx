@@ -48,6 +48,8 @@ describe("Input tokens", () => {
     expect(input.className).toContain(
       "[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
     );
+    expect(input.className).toContain("border-theme-border-field");
+    expect(input.className).toContain("focus:border-theme-border-field-focus");
   });
 
   it("applies the themed input radius and padding to Textarea", () => {
@@ -60,6 +62,10 @@ describe("Input tokens", () => {
     );
     expect(textarea.className).toContain(
       "[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
+    );
+    expect(textarea.className).toContain("border-theme-border-field");
+    expect(textarea.className).toContain(
+      "focus:border-theme-border-field-focus",
     );
   });
 

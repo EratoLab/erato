@@ -39,6 +39,7 @@ export interface DropdownMenuProps {
   };
   matchContentWidth?: boolean;
   noWrapItems?: boolean;
+  autoFocusFirstItem?: boolean;
   /** Callback fired when dropdown open state changes */
   onOpenChange?: (isOpen: boolean) => void;
 }
@@ -107,6 +108,7 @@ export const DropdownMenu = memo(
     preferredOrientation,
     matchContentWidth = false,
     noWrapItems = false,
+    autoFocusFirstItem = true,
     onOpenChange,
   }: DropdownMenuProps) => {
     const [isOpen, setIsOpenState] = useState(false);
@@ -221,7 +223,9 @@ export const DropdownMenu = memo(
             vertical: preferredOrientation?.vertical ?? "bottom",
             horizontal: preferredOrientation?.horizontal ?? align,
           }}
-          initialFocusSelector='[role="menuitem"]'
+          initialFocusSelector={
+            autoFocusFirstItem ? '[role="menuitem"]' : undefined
+          }
           panelRef={menuRef}
           panelStyle={{
             maxWidth:

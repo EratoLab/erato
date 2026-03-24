@@ -1,8 +1,9 @@
 import clsx from "clsx";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { ChatHistorySidebar } from "@/components/ui/Chat/ChatHistorySidebar";
+import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 import { useSidebar } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
@@ -24,6 +25,8 @@ export default function SearchPageStructure({
     navigateToChat: switchSession,
     archiveChat,
     createNewChat: createChat,
+    updateChatTitle,
+    refetchHistory,
     isHistoryLoading: chatHistoryLoading,
     historyError: chatHistoryError,
   } = useChatContext();
@@ -53,6 +56,9 @@ export default function SearchPageStructure({
     ? chatHistory.map((chat) => ({
         id: chat.id,
         title: chat.title_resolved,
+        titleResolved: chat.title_resolved,
+        titleBySummary: chat.title_by_summary,
+        titleByUserProvided: chat.title_by_user_provided,
         updatedAt: chat.last_message_at,
         messages: [],
         metadata: {
@@ -77,6 +83,43 @@ export default function SearchPageStructure({
   const handleArchiveSession = (sessionId: string) => {
     void archiveChat(sessionId);
   };
+
+  const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
+    null,
+  );
+  const [isUpdatingChatTitle, setIsUpdatingChatTitle] = useState(false);
+
+  const handleEditTitleSession = useCallback((sessionId: string) => {
+    setTitleDialogChatId(sessionId);
+  }, []);
+
+  const handleCloseEditTitleDialog = useCallback(() => {
+    if (isUpdatingChatTitle) return;
+    setTitleDialogChatId(null);
+  }, [isUpdatingChatTitle]);
+
+  const activeTitleDialogSession = useMemo(
+    () => sessions.find((session) => session.id === titleDialogChatId) ?? null,
+    [sessions, titleDialogChatId],
+  );
+
+  const handleSubmitEditTitleDialog = useCallback(
+    async (title: string) => {
+      if (!titleDialogChatId) {
+        return;
+      }
+
+      try {
+        setIsUpdatingChatTitle(true);
+        await updateChatTitle(titleDialogChatId, title);
+        await refetchHistory();
+        setTitleDialogChatId(null);
+      } finally {
+        setIsUpdatingChatTitle(false);
+      }
+    },
+    [refetchHistory, titleDialogChatId, updateChatTitle],
+  );
 
   // Handle creating a new chat
   const handleNewChat = async () => {
@@ -103,6 +146,7 @@ export default function SearchPageStructure({
         currentSessionId={currentChatId ?? ""}
         onSessionSelect={handleSessionSelect}
         onSessionArchive={handleArchiveSession}
+        onSessionEditTitle={handleEditTitleSession}
         showTimestamps={chatHistoryShowMetadata}
         isLoading={chatHistoryLoading}
         error={chatHistoryError instanceof Error ? chatHistoryError : undefined}
@@ -126,6 +170,17 @@ export default function SearchPageStructure({
       >
         {children}
       </div>
+
+      <EditChatTitleDialog
+        isOpen={titleDialogChatId !== null && activeTitleDialogSession !== null}
+        generatedTitle={activeTitleDialogSession?.titleBySummary ?? ""}
+        initialUserProvidedTitle={
+          activeTitleDialogSession?.titleByUserProvided ?? null
+        }
+        isSubmitting={isUpdatingChatTitle}
+        onClose={handleCloseEditTitleDialog}
+        onSubmit={handleSubmitEditTitleDialog}
+      />
     </div>
   );
 }

@@ -168,7 +168,7 @@ export const FacetSelector = ({
                 message: `Deselect ${facetDisplayName}`,
               })}
               className={clsx(
-                "max-w-[180px] border border-theme-border px-2",
+                "max-w-[180px] border border-transparent bg-theme-bg-secondary px-2 hover:bg-theme-bg-hover",
                 showFacetIndicatorWithDisplayName && "gap-1",
               )}
             >

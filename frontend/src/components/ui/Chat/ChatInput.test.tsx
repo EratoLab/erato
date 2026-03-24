@@ -244,10 +244,17 @@ describe("ChatInput", () => {
     expect(container.querySelector('[data-ui="chat-input-shell"]')).toHaveStyle(
       {
         backgroundColor: "var(--theme-shell-chat-input)",
+        borderColor: "var(--theme-border-chat-input)",
         borderRadius: "var(--theme-radius-input)",
         boxShadow: "var(--theme-elevation-input)",
       },
     );
+    expect(
+      container.querySelector('[data-ui="chat-input-shell"]')?.className,
+    ).toContain("border-[var(--theme-border-chat-input)]");
+    expect(
+      container.querySelector('[data-ui="chat-input-shell"]')?.className,
+    ).toContain("focus-within:border-[var(--theme-border-chat-input-focus)]");
     expect(
       container.querySelector('[data-ui="chat-input-shell"]')?.className,
     ).toContain("chat-input-shell-geometry");

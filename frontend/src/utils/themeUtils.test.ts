@@ -63,6 +63,11 @@ describe("mergeThemeWithOverrides", () => {
     expect(mergedTheme.colors.border.primary).toBe("#ea580c");
     expect(mergedTheme.colors.border.subtle).toBe("#ea580c");
     expect(mergedTheme.colors.border.divider).toBe("#ea580c");
+    expect(mergedTheme.colors.border.field).toBe("#ea580c");
+    expect(mergedTheme.colors.border.chatInput).toBe("#ea580c");
+    expect(mergedTheme.colors.border.dropdown).toBe("#d1d5db");
+    expect(mergedTheme.colors.border.media).toBe("#d1d5db");
+    expect(mergedTheme.colors.border.attachment).toBe("#ea580c");
   });
 
   it("preserves explicit new token overrides over legacy-derived values", () => {
@@ -89,6 +94,25 @@ describe("mergeThemeWithOverrides", () => {
     expect(mergedTheme.radius.shell).toBe("1.25rem");
     expect(mergedTheme.colors.shell.modal).toBe("#111827");
     expect(mergedTheme.colors.message.hover).toBe("#334155");
+  });
+
+  it("derives legacy border focus and surface borders into the expanded border token set", () => {
+    const mergedTheme = mergeThemeWithOverrides(defaultTheme, {
+      colors: {
+        border: {
+          default: "#94a3b8",
+          focus: "#64748b",
+        },
+      },
+    });
+
+    expect(mergedTheme.colors.border.field).toBe("#94a3b8");
+    expect(mergedTheme.colors.border.chatInput).toBe("#94a3b8");
+    expect(mergedTheme.colors.border.dropdown).toBe("#d1d5db");
+    expect(mergedTheme.colors.border.media).toBe("#d1d5db");
+    expect(mergedTheme.colors.border.attachment).toBe("#94a3b8");
+    expect(mergedTheme.colors.border.fieldFocus).toBe("#64748b");
+    expect(mergedTheme.colors.border.chatInputFocus).toBe("#64748b");
   });
 
   it("merges code highlight preset and block style overrides", () => {

@@ -99,6 +99,13 @@ export type ThemeColors = {
     strong: string;
     divider: string;
     focus: string;
+    field: string;
+    fieldFocus: string;
+    chatInput: string;
+    chatInputFocus: string;
+    dropdown: string;
+    media: string;
+    attachment: string;
   };
   shell: {
     app: string;
@@ -396,6 +403,13 @@ export const defaultTheme: Theme = {
       strong: colors.neutral[400],
       divider: colors.neutral[300],
       focus: stateColors.focus.light,
+      field: colors.neutral[300],
+      fieldFocus: stateColors.focus.light,
+      chatInput: colors.neutral[300],
+      chatInputFocus: stateColors.focus.light,
+      dropdown: colors.neutral[300],
+      media: colors.neutral[300],
+      attachment: colors.neutral[300],
     },
     shell: {
       app: colors.neutral[50],
@@ -592,6 +606,13 @@ export const darkTheme: Theme = {
       strong: colors.neutral[500],
       divider: colors.neutral[600],
       focus: colors.neutral[400],
+      field: colors.neutral[600],
+      fieldFocus: colors.neutral[400],
+      chatInput: colors.neutral[600],
+      chatInputFocus: colors.neutral[400],
+      dropdown: colors.neutral[600],
+      media: colors.neutral[600],
+      attachment: colors.neutral[600],
     },
     shell: {
       app: colors.neutral[900],

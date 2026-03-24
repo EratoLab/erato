@@ -297,7 +297,7 @@ export function AnchoredPopover({
       className={clsx("theme-transition fixed z-[9999] border", panelClassName)}
       style={{
         backgroundColor: "var(--theme-shell-dropdown)",
-        borderColor: "var(--theme-border-divider)",
+        borderColor: "var(--theme-border-dropdown)",
         borderRadius: "var(--theme-radius-base)",
         boxSizing: "border-box",
         boxShadow: "var(--theme-elevation-dropdown)",

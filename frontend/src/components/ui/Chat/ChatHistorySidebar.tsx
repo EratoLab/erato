@@ -8,6 +8,10 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 import { env } from "@/app/env";
 import { useTheme } from "@/components/providers/ThemeProvider";
+import {
+  componentRegistry,
+  resolveComponentOverride,
+} from "@/config/componentRegistry";
 import { defaultThemeConfig } from "@/config/themeConfig";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
 import {
@@ -17,7 +21,10 @@ import {
 import { createLogger } from "@/utils/debugLogger";
 import { checkFileExists } from "@/utils/themeUtils";
 
-import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
+import {
+  ChatHistoryList,
+  ChatHistoryListSkeleton,
+} from "./ChatHistoryList";
 import { FrequentAssistantsList } from "./FrequentAssistantsList";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
@@ -637,6 +644,12 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       [],
     );
 
+    const ResolvedChatHistoryList = useMemo(
+      () =>
+        resolveComponentOverride(componentRegistry.ChatHistoryList, ChatHistoryList),
+      [],
+    );
+
     return (
       <ErrorBoundary FallbackComponent={ErrorDisplay}>
         <div className="relative h-auto">
@@ -702,6 +715,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   "mx-2 my-1 border-t border-[var(--theme-border-divider)] transition-opacity duration-200",
                   isSlimMode && "pointer-events-none opacity-0",
                 )}
+                data-ui="sidebar-nav-divider"
               />
 
               {/* Optional recent assistants section */}
@@ -735,7 +749,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                     title={t({ id: "chat.history.recent", message: "Recent" })}
                     defaultExpanded={true}
                   >
-                    <ChatHistoryList
+                    <ResolvedChatHistoryList
                       sessions={sessions}
                       currentSessionId={currentSessionId}
                       onSessionSelect={onSessionSelect}

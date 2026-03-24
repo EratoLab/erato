@@ -779,8 +779,8 @@ export const ChatInput = ({
         <div
           className={clsx(
             "w-full",
-            "border border-[var(--theme-border)]",
-            "theme-transition focus-within:border-[var(--theme-border-focus)]",
+            "border border-[var(--theme-border-chat-input)]",
+            "theme-transition focus-within:border-[var(--theme-border-chat-input-focus)]",
             "flex flex-col",
             "chat-input-shell-geometry",
           )}

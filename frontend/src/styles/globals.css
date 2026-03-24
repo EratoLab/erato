@@ -157,6 +157,13 @@
   --theme-border-strong: #9ca3af;
   --theme-border-divider: var(--theme-border);
   --theme-border-focus: #6b7280; /* Monochrome focus */
+  --theme-border-field: var(--theme-border);
+  --theme-border-field-focus: var(--theme-border-focus);
+  --theme-border-chat-input: var(--theme-border);
+  --theme-border-chat-input-focus: var(--theme-border-focus);
+  --theme-border-dropdown: var(--theme-border-divider);
+  --theme-border-media: var(--theme-border-primary);
+  --theme-border-attachment: var(--theme-border);
 
   /* Shell and message surfaces */
   --theme-shell-app: var(--theme-bg-primary);
@@ -354,6 +361,13 @@
     --theme-border-strong: #6b7280;
     --theme-border-divider: var(--theme-border);
     --theme-border-focus: #9ca3af; /* Monochrome focus */
+    --theme-border-field: var(--theme-border);
+    --theme-border-field-focus: var(--theme-border-focus);
+    --theme-border-chat-input: var(--theme-border);
+    --theme-border-chat-input-focus: var(--theme-border-focus);
+    --theme-border-dropdown: var(--theme-border-divider);
+    --theme-border-media: var(--theme-border-primary);
+    --theme-border-attachment: var(--theme-border);
 
     /* Shell and message surfaces */
     --theme-shell-app: var(--theme-bg-primary);
