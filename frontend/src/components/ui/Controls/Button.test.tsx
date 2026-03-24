@@ -16,4 +16,21 @@ describe("Button", () => {
     expect(button.className).not.toContain("text-white");
     expect(button.className).not.toContain("hover:bg-neutral-700");
   });
+
+  it("uses square icon geometry for the icon-only variant", () => {
+    render(
+      <Button
+        variant="icon-only"
+        size="sm"
+        icon={<span>+</span>}
+        aria-label="Add"
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Add" });
+
+    expect(button.className).toContain("btn-geometry-icon-sm");
+    expect(button.className).toContain("justify-center");
+    expect(button.className).not.toContain("btn-geometry-sm");
+  });
 });

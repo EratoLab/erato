@@ -458,6 +458,13 @@ body {
     border-radius: var(--theme-radius-control);
   }
 
+  .btn-geometry-icon-sm {
+    width: calc(var(--theme-spacing-control-min-height) - 0.25rem);
+    height: calc(var(--theme-spacing-control-min-height) - 0.25rem);
+    padding: 0;
+    border-radius: var(--theme-radius-control);
+  }
+
   .btn-geometry-md {
     padding-inline: var(--theme-spacing-control-padding-x);
     padding-block: var(--theme-spacing-control-padding-y);
@@ -466,11 +473,25 @@ body {
     border-radius: var(--theme-radius-control);
   }
 
+  .btn-geometry-icon-md {
+    width: var(--theme-spacing-control-min-height);
+    height: var(--theme-spacing-control-min-height);
+    padding: 0;
+    border-radius: var(--theme-radius-control);
+  }
+
   .btn-geometry-lg {
     padding-inline: calc(var(--theme-spacing-control-padding-x) + 0.25rem);
     padding-block: calc(var(--theme-spacing-control-padding-y) + 0.25rem);
     min-height: calc(var(--theme-spacing-control-min-height) + 0.25rem);
     min-width: calc(var(--theme-spacing-control-min-height) + 0.25rem);
+    border-radius: var(--theme-radius-control);
+  }
+
+  .btn-geometry-icon-lg {
+    width: calc(var(--theme-spacing-control-min-height) + 0.25rem);
+    height: calc(var(--theme-spacing-control-min-height) + 0.25rem);
+    padding: 0;
     border-radius: var(--theme-radius-control);
   }
 
