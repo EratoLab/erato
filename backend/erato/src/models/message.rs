@@ -20,9 +20,20 @@ pub struct GenerationParameters {
     /// The chat provider ID that was used to generate the message
     #[serde(skip_serializing_if = "Option::is_none")]
     pub generation_chat_provider_id: Option<String>,
+    /// Request-scoped context for this generation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_context: Option<GenerationRequestContext>,
     /// Facets selected for this generation (facet_id -> enabled), includes all available facets
     #[serde(default)]
     pub selected_facets: HashMap<String, bool>,
+}
+
+/// Request-scoped context captured for a generation request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GenerationRequestContext {
+    /// The originating Erato platform for the request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

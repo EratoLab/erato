@@ -11,8 +11,8 @@ use crate::models::chat::{
 use crate::models::message::{
     ContentPart, ContentPartImage, ContentPartImageFilePointer, ContentPartText,
     GenerationErrorType, GenerationInputMessages, GenerationMetadata, GenerationParameters,
-    MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus, ToolUse,
-    get_generation_chat_provider_id_for_replaced_user_message,
+    GenerationRequestContext, MessageRole, MessageSchema, ToolCallStatus as MessageToolCallStatus,
+    ToolUse, get_generation_chat_provider_id_for_replaced_user_message,
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
     update_message_generation_metadata,
 };
@@ -48,6 +48,7 @@ use crate::services::prompt_composition::{
 use crate::services::sentry::capture_report;
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::response::Sse;
 use axum::response::sse::Event;
 use axum::{Extension, Json};
@@ -70,6 +71,9 @@ use tokio_stream::StreamExt as _;
 use tracing;
 use tracing::{Instrument, instrument};
 use utoipa::ToSchema;
+
+const X_ERATO_PLATFORM_HEADER: &str = "X-Erato-Platform";
+const DEFAULT_ERATO_PLATFORM: &str = "web";
 
 /// Input parameters extracted from MeProfile for chat request preparation.
 /// This type acts as a safeguard to only expose the specific attributes
@@ -1031,6 +1035,8 @@ pub struct PreparedChatRequest {
     generation_input_messages: GenerationInputMessages,
     // Our internal abstract representation of generation parameters
     generation_parameters: GenerationParameters,
+    // Request-scoped context used for persistence and tracing
+    generation_request_context: GenerationRequestContext,
     // Prepared `genai` `ChatRequest` (messages + available tools)
     chat_request: ChatRequest,
     // Prepared `genai` `ChatOptions` (e.g. reasoning effort)
@@ -1047,6 +1053,7 @@ impl PreparedChatRequest {
 struct LangfuseTraceEnrichment {
     base_tags: Vec<String>,
     filenames: Vec<String>,
+    platform: String,
 }
 
 impl LangfuseTraceEnrichment {
@@ -1069,7 +1076,27 @@ impl LangfuseTraceEnrichment {
     ) -> Option<JsonValue> {
         let mut tool_names: Vec<String> = tool_names.iter().cloned().collect();
         tool_names.sort();
-        create_trace_metadata(assistant_id, &tool_names, &self.filenames, was_aborted)
+        create_trace_metadata(
+            assistant_id,
+            &tool_names,
+            &self.filenames,
+            was_aborted,
+            Some(&self.platform),
+        )
+    }
+}
+
+fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationRequestContext {
+    let platform = headers
+        .get(X_ERATO_PLATFORM_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| DEFAULT_ERATO_PLATFORM.to_string());
+
+    GenerationRequestContext {
+        platform: Some(platform),
     }
 }
 
@@ -1079,8 +1106,13 @@ async fn build_langfuse_trace_enrichment(
     subject: &Subject,
     generation_input_messages: &GenerationInputMessages,
     assistant_id: Option<Uuid>,
+    generation_request_context: &GenerationRequestContext,
 ) -> Result<LangfuseTraceEnrichment, Report> {
-    let mut base_tags = BTreeSet::from(["frontend-platform-web".to_string()]);
+    let platform = generation_request_context
+        .platform
+        .clone()
+        .unwrap_or_else(|| DEFAULT_ERATO_PLATFORM.to_string());
+    let mut base_tags = BTreeSet::from([format!("frontend-platform-{}", platform)]);
     if assistant_id.is_some() {
         base_tags.insert("assistant".to_string());
     }
@@ -1126,6 +1158,7 @@ async fn build_langfuse_trace_enrichment(
     Ok(LangfuseTraceEnrichment {
         base_tags: base_tags.into_iter().collect(),
         filenames: filenames.into_iter().collect(),
+        platform,
     })
 }
 
@@ -1188,6 +1221,7 @@ fn prepare_chat_request<'a>(
     policy: &'a PolicyEngine,
     chat: &'a chats::Model,
     user_input: PromptCompositionUserInput,
+    generation_request_context: GenerationRequestContext,
     me_profile_input: &'a MeProfileChatRequestInput<'a>,
 ) -> std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<PreparedChatRequest, Report>> + Send + 'a>,
@@ -1236,6 +1270,7 @@ fn prepare_chat_request<'a>(
             app_state,
             chat,
             user_input,
+            generation_request_context,
             me_profile_input,
             assistant_config,
             &message_repo,
@@ -1251,6 +1286,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     app_state: &AppState,
     chat: &chats::Model,
     user_input: PromptCompositionUserInput,
+    generation_request_context: GenerationRequestContext,
     me_profile_input: &MeProfileChatRequestInput<'_>,
     assistant_config: Option<crate::models::assistant::AssistantWithFiles>,
     message_repo: &impl MessageRepository,
@@ -1355,6 +1391,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     // Create generation parameters with the determined chat provider ID
     let generation_parameters = GenerationParameters {
         generation_chat_provider_id: Some(chat_provider_id),
+        request_context: Some(generation_request_context.clone()),
         selected_facets: build_selected_facets(
             &app_state.config.experimental_facets,
             &effective_selected_facet_ids,
@@ -1366,6 +1403,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     Ok(PreparedChatRequest {
         generation_input_messages,
         generation_parameters,
+        generation_request_context,
         chat_request,
         chat_options,
     })
@@ -1810,6 +1848,7 @@ async fn stream_generate_chat_completion<
                                         None,
                                         assistant_id_for_langfuse,
                                         &accumulated_tool_names,
+                                        Some(&trace_enrichment.platform),
                                     )
                                     .await
                                 } else {
@@ -1823,12 +1862,13 @@ async fn stream_generate_chat_completion<
                                         .build_and_send(
                                             &client,
                                             &request,
-                                            &content,
-                                            None,
-                                            assistant_id_for_langfuse,
-                                            &accumulated_tool_names,
-                                        )
-                                        .await
+                                        &content,
+                                        None,
+                                        assistant_id_for_langfuse,
+                                        &accumulated_tool_names,
+                                        Some(&trace_enrichment.platform),
+                                    )
+                                    .await
                                 };
 
                                 if let Err(err) = result {
@@ -2050,6 +2090,7 @@ async fn stream_generate_chat_completion<
                 let request = current_turn_chat_request.clone();
                 let content = turn_content.to_vec();
                 let usage = turn_usage.cloned();
+                let trace_platform = langfuse_trace_enrichment.platform.clone();
 
                 // Send trace/observation asynchronously
                 let assistant_id_for_langfuse = assistant_id;
@@ -2069,6 +2110,7 @@ async fn stream_generate_chat_completion<
                             None, // completion_start_time
                             assistant_id_for_langfuse,
                             &turn_tool_names,
+                            Some(&trace_platform),
                         )
                         .await
                     } else {
@@ -2087,6 +2129,7 @@ async fn stream_generate_chat_completion<
                                 usage.as_ref(),
                                 assistant_id_for_langfuse,
                                 &turn_tool_names,
+                                Some(&trace_platform),
                             )
                             .await
                     };
@@ -3126,6 +3169,7 @@ pub async fn message_submit_sse(
     State(app_state): State<AppState>,
     Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
+    headers: HeaderMap,
     Json(request): Json<MessageSubmitRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, (axum::http::StatusCode, String)> {
     // Validate request parameters
@@ -3179,6 +3223,7 @@ pub async fn message_submit_sse(
     let me_user_bg = me_user.clone();
     let task_clone = Arc::clone(&task);
     let request_clone = request.clone();
+    let generation_request_context = generation_request_context_from_headers(&headers);
 
     // Spawn the background generation task
     tokio::spawn(
@@ -3190,6 +3235,7 @@ pub async fn message_submit_sse(
                 &policy_bg,
                 &me_user_bg,
                 &request_clone,
+                generation_request_context,
                 chat_id,
                 chat_was_created,
             )
@@ -3252,12 +3298,14 @@ pub async fn message_submit_sse(
 }
 
 /// Run the message submission task in the background
+#[allow(clippy::too_many_arguments)]
 async fn run_message_submit_task(
     task: &Arc<StreamingTask>,
     app_state: &AppState,
     policy: &PolicyEngine,
     me_user: &MeProfile,
     request: &MessageSubmitRequest,
+    generation_request_context: GenerationRequestContext,
     chat_id: Uuid,
     chat_was_created: bool,
 ) -> Result<(), String> {
@@ -3363,9 +3411,17 @@ async fn run_message_submit_task(
         chat_options,
         generation_input_messages,
         generation_parameters,
-    } = prepare_chat_request(app_state, policy, &chat, user_input, &me_profile_input)
-        .await
-        .map_err(|e| format!("Failed to prepare chat request: {}", e))?;
+        generation_request_context,
+    } = prepare_chat_request(
+        app_state,
+        policy,
+        &chat,
+        user_input,
+        generation_request_context,
+        &me_profile_input,
+    )
+    .await
+    .map_err(|e| format!("Failed to prepare chat request: {}", e))?;
 
     let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
         app_state,
@@ -3373,6 +3429,7 @@ async fn run_message_submit_task(
         &me_user.to_subject(),
         &generation_input_messages,
         chat.assistant_id,
+        &generation_request_context,
     )
     .await
     {
@@ -3663,6 +3720,7 @@ pub async fn regenerate_message_sse(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
+    headers: HeaderMap,
     Json(request): Json<RegenerateMessageRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, (axum::http::StatusCode, String)> {
     // Validate request parameters
@@ -3694,6 +3752,7 @@ pub async fn regenerate_message_sse(
     // Move validated messages into the task
     let previous_message = validation_result.previous_message;
     let current_message = validation_result.current_message;
+    let generation_request_context = generation_request_context_from_headers(&headers);
 
     let task_for_stream = task.clone();
     let app_state_for_cleanup = app_state.clone();
@@ -3724,9 +3783,15 @@ pub async fn regenerate_message_sse(
                 new_input_file_ids: input_files_for_previous_message,
                 selected_facet_ids: request.selected_facet_ids.clone(),
             };
-            let prepare_chat_request_res =
-                prepare_chat_request(&app_state, &policy, &chat, user_input, &me_profile_input)
-                    .await;
+            let prepare_chat_request_res = prepare_chat_request(
+                &app_state,
+                &policy,
+                &chat,
+                user_input,
+                generation_request_context.clone(),
+                &me_profile_input,
+            )
+            .await;
             if let Err(err) = prepare_chat_request_res {
                 let _ = tx.send(Err(err)).await;
                 return Err(());
@@ -3736,6 +3801,7 @@ pub async fn regenerate_message_sse(
                 chat_options,
                 generation_input_messages,
                 generation_parameters,
+                generation_request_context,
             } = prepare_chat_request_res.unwrap();
 
             let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
@@ -3744,6 +3810,7 @@ pub async fn regenerate_message_sse(
                 &me_user.to_subject(),
                 &generation_input_messages,
                 chat.assistant_id,
+                &generation_request_context,
             )
             .await
             {
@@ -3895,6 +3962,7 @@ pub async fn edit_message_sse(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
+    headers: HeaderMap,
     Json(request): Json<EditMessageRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Report>>>, (axum::http::StatusCode, String)> {
     // Validate request parameters
@@ -3928,6 +3996,7 @@ pub async fn edit_message_sse(
     let task_for_stream = task.clone();
     let app_state_for_cleanup = app_state.clone();
     let chat_id_for_cleanup = chat.id;
+    let generation_request_context = generation_request_context_from_headers(&headers);
 
     // Spawn a task to process the request and send events
     tokio::spawn(async move {
@@ -4007,9 +4076,15 @@ pub async fn edit_message_sse(
                 new_input_file_ids: replace_input_files_ids,
                 selected_facet_ids: request.selected_facet_ids.clone(),
             };
-            let prepare_chat_request_res =
-                prepare_chat_request(&app_state, &policy, &chat, user_input, &me_profile_input)
-                    .await;
+            let prepare_chat_request_res = prepare_chat_request(
+                &app_state,
+                &policy,
+                &chat,
+                user_input,
+                generation_request_context.clone(),
+                &me_profile_input,
+            )
+            .await;
             if let Err(err) = prepare_chat_request_res {
                 let _ = tx.send(Err(err)).await;
                 return Err(());
@@ -4019,6 +4094,7 @@ pub async fn edit_message_sse(
                 chat_options,
                 generation_input_messages,
                 generation_parameters,
+                generation_request_context,
             } = prepare_chat_request_res.unwrap();
 
             let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
@@ -4027,6 +4103,7 @@ pub async fn edit_message_sse(
                 &me_user.to_subject(),
                 &generation_input_messages,
                 chat.assistant_id,
+                &generation_request_context,
             )
             .await
             {
