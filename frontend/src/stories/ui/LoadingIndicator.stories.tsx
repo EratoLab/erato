@@ -30,7 +30,9 @@ const meta = {
               name: toolCallName,
               status: toolCallStatus,
               progressMessage:
-                toolCallStatus === "in_progress" ? toolCallProgressMessage : undefined,
+                toolCallStatus === "in_progress"
+                  ? toolCallProgressMessage
+                  : undefined,
             },
           }
         : undefined;
@@ -78,7 +80,12 @@ Use the "variant" control to switch between the default loading row and the tool
     },
     toolCallStatus: {
       control: "radio",
-      options: ["proposed", "in_progress", "success", "error"] as ToolCall["status"][],
+      options: [
+        "proposed",
+        "in_progress",
+        "success",
+        "error",
+      ] as ToolCall["status"][],
       description: "Semantic status color for the demo tool-call row",
       if: { arg: "variant", eq: "tool-call" },
     },

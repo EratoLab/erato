@@ -94,9 +94,9 @@ describe("LoadingIndicator", () => {
     expect(
       screen.getByText("Completed tool").closest("div")?.className,
     ).not.toContain("animate-pulse");
-    expect(screen.getByText("Failed tool").closest("div")?.className).not.toContain(
-      "animate-pulse",
-    );
+    expect(
+      screen.getByText("Failed tool").closest("div")?.className,
+    ).not.toContain("animate-pulse");
   });
 
   it("keeps the default loading indicator layout and copy intact", () => {
@@ -116,7 +116,9 @@ describe("LoadingIndicator", () => {
   });
 
   it("only pulses for active loading states", () => {
-    const { container, rerender } = render(<LoadingIndicator state="thinking" />);
+    const { container, rerender } = render(
+      <LoadingIndicator state="thinking" />,
+    );
 
     expect(container.firstElementChild?.className).toContain("animate-pulse");
 

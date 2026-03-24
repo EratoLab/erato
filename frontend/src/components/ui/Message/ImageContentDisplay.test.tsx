@@ -21,7 +21,9 @@ const images: UiImagePart[] = [
 
 describe("ImageContentDisplay", () => {
   it("uses theme-backed sizing hooks for chat image previews", () => {
-    const { container } = renderWithTheme(<ImageContentDisplay images={images} />);
+    const { container } = renderWithTheme(
+      <ImageContentDisplay images={images} />,
+    );
 
     const imageContainer = container.firstElementChild?.firstElementChild;
     const image = screen.getByRole("img", { name: "Message attachment" });
@@ -57,5 +59,17 @@ describe("ImageContentDisplay", () => {
     expect(screen.queryByRole("button")).toBeNull();
     expect(image).not.toHaveClass("cursor-pointer");
     expect(image).not.toHaveClass("hover:scale-105");
+  });
+
+  it("uses the same theme height hook for the error fallback", () => {
+    renderWithTheme(<ImageContentDisplay images={images} />);
+
+    fireEvent.error(screen.getByRole("img", { name: "Message attachment" }));
+
+    const fallback = screen.getByText("Failed to load image").parentElement;
+
+    expect(fallback).toHaveStyle({
+      height: "var(--theme-layout-chat-image-preview-max-height)",
+    });
   });
 });

@@ -18,6 +18,9 @@ const IMAGE_PREVIEW_CONTAINER_STYLE = {
 const IMAGE_PREVIEW_STYLE = {
   maxHeight: "var(--theme-layout-chat-image-preview-max-height)",
 } as const;
+const IMAGE_PREVIEW_ERROR_FALLBACK_STYLE = {
+  height: "var(--theme-layout-chat-image-preview-max-height)",
+} as const;
 
 const IMAGE_PREVIEW_FRAME_CLASS_NAME =
   "relative overflow-hidden rounded-lg border border-theme-border-primary";
@@ -53,7 +56,10 @@ export const ImageContentDisplay = memo<ImageContentDisplayProps>(
         {images.map((image) => {
           const hasError = loadErrors.has(image.id);
           const imageElement = hasError ? (
-            <div className="flex h-48 w-full items-center justify-center bg-theme-bg-tertiary p-4 text-center">
+            <div
+              className="flex w-full items-center justify-center bg-theme-bg-tertiary p-4 text-center"
+              style={IMAGE_PREVIEW_ERROR_FALLBACK_STYLE}
+            >
               <span className="text-sm text-theme-fg-muted">
                 {t(
                   msg({
@@ -73,7 +79,9 @@ export const ImageContentDisplay = memo<ImageContentDisplayProps>(
                 }),
               )}
               className={
-                onImageClick ? INTERACTIVE_IMAGE_CLASS_NAME : STATIC_IMAGE_CLASS_NAME
+                onImageClick
+                  ? INTERACTIVE_IMAGE_CLASS_NAME
+                  : STATIC_IMAGE_CLASS_NAME
               }
               style={IMAGE_PREVIEW_STYLE}
               onError={(e) => handleImageError(image.id, e)}

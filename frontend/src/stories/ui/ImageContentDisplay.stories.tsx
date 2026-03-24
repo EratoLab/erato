@@ -173,6 +173,8 @@ export const LoadErrorFallback: Story = {
 
     image.dispatchEvent(new Event("error"));
 
-    await expect(await canvas.findByText("Failed to load image")).toBeInTheDocument();
+    await expect(
+      await canvas.findByText("Failed to load image"),
+    ).toBeInTheDocument();
   },
 };

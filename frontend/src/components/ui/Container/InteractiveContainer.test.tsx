@@ -13,7 +13,9 @@ describe("InteractiveContainer", () => {
       </InteractiveContainer>,
     );
 
-    const buttonLikeDiv = screen.getByRole("button", { name: "Clickable item" });
+    const buttonLikeDiv = screen.getByRole("button", {
+      name: "Clickable item",
+    });
 
     expect(buttonLikeDiv).toHaveAttribute("tabindex", "0");
 
