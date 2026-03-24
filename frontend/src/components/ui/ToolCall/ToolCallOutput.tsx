@@ -24,7 +24,7 @@ export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
       <div
         className={clsx(
           "mb-2 text-xs font-medium",
-          isError ? "text-red-600" : "text-theme-fg-secondary",
+          isError ? "text-theme-error-fg" : "text-theme-fg-secondary",
         )}
       >
         {isError ? t`Error Output` : t`Output`}

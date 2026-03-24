@@ -243,6 +243,8 @@
   /* Layout */
   --theme-layout-chat-content-max-width: 48rem;
   --theme-layout-chat-input-max-width: 56rem;
+  --theme-layout-chat-image-preview-max-width: 24rem;
+  --theme-layout-chat-image-preview-max-height: 24rem;
   --theme-layout-sidebar-width: 17.5rem;
   --theme-layout-sidebar-slim-width: 4rem;
   --theme-layout-dropdown-min-width: 12rem;

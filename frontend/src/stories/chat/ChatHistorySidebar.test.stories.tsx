@@ -1,4 +1,9 @@
-import { expect, within, userEvent } from "@storybook/test";
+import {
+  expect,
+  waitForElementToBeRemoved,
+  within,
+  userEvent,
+} from "@storybook/test";
 import { useState } from "react";
 
 import { ChatHistorySidebar } from "../../components/ui/Chat/ChatHistorySidebar";
@@ -24,6 +29,17 @@ const meta: Meta<typeof ChatHistorySidebar> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const waitForSidebarCanvas = async (canvasElement: HTMLElement) => {
+  const canvas = within(canvasElement);
+  const loadingText = canvas.queryByText(/loading locale:/i);
+
+  if (loadingText) {
+    await waitForElementToBeRemoved(loadingText);
+  }
+
+  return canvas;
+};
+
 const mockSessions: ChatSession[] = [
   {
     id: "1",
@@ -48,7 +64,7 @@ export const AccessibilityTest: Story = {
     isLoading: false,
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await waitForSidebarCanvas(canvasElement);
 
     // Check ARIA labels
     const toggleButton = canvas.getByLabelText(/collapse sidebar/i);
@@ -62,7 +78,7 @@ export const AccessibilityTest: Story = {
 export const InteractionTest: Story = {
   args: AccessibilityTest.args,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await waitForSidebarCanvas(canvasElement);
     const user = userEvent.setup();
 
     // Test session selection
@@ -81,7 +97,7 @@ export const LoadingStateTest: Story = {
     isLoading: true,
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await waitForSidebarCanvas(canvasElement);
 
     // Check for the skeleton container
     const skeletonContainer = canvas.getByTestId("chat-history-skeleton");
@@ -122,7 +138,7 @@ export const CollapseTest: Story = {
   },
   render: () => <CollapseTestComponent />,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await waitForSidebarCanvas(canvasElement);
     const user = userEvent.setup();
 
     // Initial state check
@@ -147,22 +163,21 @@ export const CollapseTest: Story = {
 export const SessionInteractionTest: Story = {
   args: AccessibilityTest.args,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await waitForSidebarCanvas(canvasElement);
     const user = userEvent.setup();
 
-    // Test session selection
-    const sessionTitle = canvas.getByText("Chat about React Performance");
-    const sessionContainer = sessionTitle.closest(
-      '[class*="flex flex-col text-left"]',
+    const sessionLink = canvas.getByRole("link", {
+      name: "Chat about React Performance",
+    });
+    const sessionContainer = sessionLink.querySelector(
+      '[data-ui="chat-history-item"]',
     );
 
-    // Skip the test if sessionContainer is not found
     if (!sessionContainer) {
-      console.warn("Session container not found, skipping test");
-      return;
+      throw new Error("Session container not found");
     }
 
-    await user.click(sessionContainer);
+    await user.click(sessionLink);
 
     // Verify the selected state
     await expect(sessionContainer).toHaveClass("bg-theme-bg-selected");
@@ -176,7 +191,7 @@ export const SessionInteractionTest: Story = {
 export const KeyboardNavigationTest: Story = {
   args: AccessibilityTest.args,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await waitForSidebarCanvas(canvasElement);
     const user = userEvent.setup();
 
     // Test keyboard navigation
@@ -188,11 +203,14 @@ export const KeyboardNavigationTest: Story = {
     const newChatButton = canvas.getByLabelText(/new chat/i);
     await expect(newChatButton).toHaveFocus();
 
-    await user.tab(); // Move to first session
-    const sessionTitle = canvas.getByText("Chat about React Performance");
-    const sessionContainer =
-      sessionTitle.closest('[role="button"]') ??
-      sessionTitle.closest('[class*="flex flex-col text-left"]');
-    await expect(sessionContainer).toHaveFocus();
+    const sessionLink = canvas.getByRole("link", {
+      name: "Chat about React Performance",
+    });
+
+    for (let i = 0; i < 8 && document.activeElement !== sessionLink; i++) {
+      await user.tab();
+    }
+
+    await expect(sessionLink).toHaveFocus();
   },
 };

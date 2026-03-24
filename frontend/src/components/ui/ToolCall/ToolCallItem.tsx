@@ -35,20 +35,20 @@ export const ToolCallItem: React.FC<ToolCallItemProps> = ({
   const statusConfig = {
     success: {
       icon: <ResolvedIcon iconId={successIconId} className="size-3" />,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
+      color: "text-theme-success-fg",
+      bgColor: "bg-theme-success-bg",
       label: t`Success`,
     },
     error: {
       icon: <ResolvedIcon iconId={errorIconId} className="size-3" />,
-      color: "text-red-600",
-      bgColor: "bg-red-50",
+      color: "text-theme-error-fg",
+      bgColor: "bg-theme-error-bg",
       label: t`Error`,
     },
     in_progress: {
       icon: <ResolvedIcon iconId={inProgressIconId} className="size-3" />,
-      color: "text-yellow-600",
-      bgColor: "bg-yellow-50",
+      color: "text-theme-info-fg",
+      bgColor: "bg-theme-info-bg",
       label: t`In Progress`,
     },
   };

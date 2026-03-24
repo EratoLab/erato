@@ -183,6 +183,14 @@ const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
       theme.layout.chat.contentMaxWidth,
     ],
     ["--theme-layout-chat-input-max-width", theme.layout.chat.inputMaxWidth],
+    [
+      "--theme-layout-chat-image-preview-max-width",
+      theme.layout.chat.imagePreviewMaxWidth,
+    ],
+    [
+      "--theme-layout-chat-image-preview-max-height",
+      theme.layout.chat.imagePreviewMaxHeight,
+    ],
     ["--theme-layout-sidebar-width", theme.layout.sidebar.width],
     ["--theme-layout-sidebar-slim-width", theme.layout.sidebar.slimWidth],
     ["--theme-layout-dropdown-min-width", theme.layout.dropdown.minWidth],

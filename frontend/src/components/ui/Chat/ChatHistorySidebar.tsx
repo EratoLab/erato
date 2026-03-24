@@ -43,6 +43,8 @@ const compactShellPaddingStyle = {
   padding:
     "var(--theme-spacing-shell-compact-padding-y) var(--theme-spacing-shell-compact-padding-x)",
 } as const;
+const sidebarLinkClassName =
+  "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
 
 export interface ChatHistorySidebarProps {
   className?: string;
@@ -293,11 +295,13 @@ const SearchNavigationItem = memo<{
             logger.log("[CHAT_FLOW] Search navigation item clicked");
             onSearch?.();
           }}
+          className={sidebarLinkClassName}
           aria-label={t`Search`}
           title={isSlimMode ? t`Search` : undefined}
         >
           <InteractiveContainer
             useDiv={true}
+            showFocusRing={false}
             className={clsx(
               "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
               isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
@@ -379,11 +383,13 @@ const AssistantsNavigationItem = memo<{
             logger.log("[ASSISTANTS_FLOW] Assistants navigation item clicked");
             onAssistants?.();
           }}
+          className={sidebarLinkClassName}
           aria-label={t`Assistants`}
           title={isSlimMode ? t`Assistants` : undefined}
         >
           <InteractiveContainer
             useDiv={true}
+            showFocusRing={false}
             className={clsx(
               "theme-transition flex items-center text-left hover:bg-[var(--theme-shell-sidebar-hover)]",
               isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",

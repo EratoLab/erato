@@ -23,6 +23,8 @@ const sidebarListStyle = {
   padding:
     "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
 } as const;
+const sidebarRowLinkClassName =
+  "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
 
 const ChatItemIcon = memo(() => {
   // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifier, not user-facing text
@@ -109,11 +111,12 @@ const ChatHistoryListItem = memo<{
           e.preventDefault();
           onSelect();
         }}
-        className="block"
+        className={sidebarRowLinkClassName}
         aria-label={session.title || t`New Chat`}
       >
         <InteractiveContainer
           useDiv={true}
+          showFocusRing={false}
           className={clsx(
             "theme-transition flex flex-col px-3 py-1.5 pb-3.5 pr-1.5 text-left",
             "hover:bg-[var(--theme-shell-sidebar-hover)]",

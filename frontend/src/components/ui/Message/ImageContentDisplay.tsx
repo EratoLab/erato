@@ -1,6 +1,8 @@
 import { t, msg } from "@lingui/core/macro";
 import { useState, memo } from "react";
 
+import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
+
 import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
 
 interface ImageContentDisplayProps {
@@ -8,6 +10,23 @@ interface ImageContentDisplayProps {
   onImageClick?: (image: UiImagePart) => void;
   className?: string;
 }
+
+const IMAGE_PREVIEW_CONTAINER_STYLE = {
+  maxWidth: "var(--theme-layout-chat-image-preview-max-width)",
+} as const;
+
+const IMAGE_PREVIEW_STYLE = {
+  maxHeight: "var(--theme-layout-chat-image-preview-max-height)",
+} as const;
+const IMAGE_PREVIEW_ERROR_FALLBACK_STYLE = {
+  height: "var(--theme-layout-chat-image-preview-max-height)",
+} as const;
+
+const IMAGE_PREVIEW_FRAME_CLASS_NAME =
+  "relative overflow-hidden rounded-lg border border-theme-border-primary";
+const INTERACTIVE_IMAGE_CLASS_NAME =
+  "w-full cursor-pointer object-contain transition-transform hover:scale-105";
+const STATIC_IMAGE_CLASS_NAME = "w-full object-contain";
 
 /**
  * Displays images within message content
@@ -36,47 +55,62 @@ export const ImageContentDisplay = memo<ImageContentDisplayProps>(
       <div className={`my-4 flex flex-wrap gap-2 ${className}`}>
         {images.map((image) => {
           const hasError = loadErrors.has(image.id);
+          const imageElement = hasError ? (
+            <div
+              className="flex w-full items-center justify-center bg-theme-bg-tertiary p-4 text-center"
+              style={IMAGE_PREVIEW_ERROR_FALLBACK_STYLE}
+            >
+              <span className="text-sm text-theme-fg-muted">
+                {t(
+                  msg({
+                    id: "ui.image.loadError",
+                    message: "Failed to load image",
+                  }),
+                )}
+              </span>
+            </div>
+          ) : (
+            <img
+              src={image.src}
+              alt={t(
+                msg({
+                  id: "ui.image.messageAttachment",
+                  message: "Message attachment",
+                }),
+              )}
+              className={
+                onImageClick
+                  ? INTERACTIVE_IMAGE_CLASS_NAME
+                  : STATIC_IMAGE_CLASS_NAME
+              }
+              style={IMAGE_PREVIEW_STYLE}
+              onError={(e) => handleImageError(image.id, e)}
+              loading="lazy"
+            />
+          );
+
+          if (!onImageClick) {
+            return (
+              <div
+                key={image.id}
+                className={IMAGE_PREVIEW_FRAME_CLASS_NAME}
+                style={IMAGE_PREVIEW_CONTAINER_STYLE}
+              >
+                {imageElement}
+              </div>
+            );
+          }
 
           return (
-            <div
+            <InteractiveContainer
               key={image.id}
-              className="relative max-w-sm overflow-hidden rounded-lg border border-theme-border-primary"
-              onClick={() => onImageClick?.(image)}
-              role={onImageClick ? "button" : undefined}
-              tabIndex={onImageClick ? 0 : undefined}
-              onKeyDown={(e) => {
-                if (onImageClick && (e.key === "Enter" || e.key === " ")) {
-                  e.preventDefault();
-                  onImageClick(image);
-                }
-              }}
+              onClick={() => onImageClick(image)}
+              fullWidth={false}
+              className={IMAGE_PREVIEW_FRAME_CLASS_NAME}
+              style={IMAGE_PREVIEW_CONTAINER_STYLE}
             >
-              {hasError ? (
-                <div className="flex h-48 w-full items-center justify-center bg-theme-bg-tertiary p-4 text-center">
-                  <span className="text-sm text-theme-fg-muted">
-                    {t(
-                      msg({
-                        id: "ui.image.loadError",
-                        message: "Failed to load image",
-                      }),
-                    )}
-                  </span>
-                </div>
-              ) : (
-                <img
-                  src={image.src}
-                  alt={t(
-                    msg({
-                      id: "ui.image.messageAttachment",
-                      message: "Message attachment",
-                    }),
-                  )}
-                  className="max-h-96 w-full cursor-pointer object-contain transition-transform hover:scale-105"
-                  onError={(e) => handleImageError(image.id, e)}
-                  loading="lazy"
-                />
-              )}
-            </div>
+              {imageElement}
+            </InteractiveContainer>
           );
         })}
       </div>

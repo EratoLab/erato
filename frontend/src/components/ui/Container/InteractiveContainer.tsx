@@ -9,6 +9,8 @@ type BaseProps = {
   className?: string;
   interactive?: boolean; // Optional prop to control hover/focus states
   useDiv?: boolean; // Use div instead of button to prevent nesting buttons
+  fullWidth?: boolean;
+  showFocusRing?: boolean;
   onClick?: (e: React.MouseEvent<ContainerElement>) => void;
 };
 
@@ -29,42 +31,57 @@ export const InteractiveContainer = ({
   className,
   interactive = true,
   useDiv = false,
+  fullWidth = true,
+  showFocusRing = true,
   onClick,
   ...props
 }: InteractiveContainerProps) => {
+  const isClickable = typeof onClick === "function";
   const commonClassNames = clsx(
-    "w-full",
-    interactive && "focus:outline-none focus:ring-2",
+    fullWidth && "w-full",
+    interactive && showFocusRing && "focus-ring-tight",
     "disabled:cursor-not-allowed disabled:opacity-50",
     className,
   );
 
-  // Handle keyboard events for the div version (for accessibility)
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((e.key === "Enter" || e.key === " ") && onClick) {
-      e.preventDefault();
-      onClick(e as unknown as React.MouseEvent<HTMLDivElement>);
-    }
-
-    // Call the original onKeyDown if provided
-    if (props.onKeyDown) {
-      (props as DivProps).onKeyDown?.(e);
-    }
-  };
-
   // Use a div when explicitly requested
   if (useDiv) {
+    const {
+      onKeyDown: userOnKeyDown,
+      role: _explicitRole,
+      tabIndex: explicitTabIndex,
+      ...divProps
+    } = props as Omit<React.HTMLAttributes<HTMLDivElement>, "onClick">;
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+      userOnKeyDown?.(e);
+
+      if (e.defaultPrevented) {
+        return;
+      }
+
+      if (isClickable && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        onClick(e as unknown as React.MouseEvent<HTMLDivElement>);
+      }
+    };
+
+    if (!isClickable) {
+      return (
+        <div className={commonClassNames} {...divProps}>
+          {children}
+        </div>
+      );
+    }
+
     return (
       <div
         className={commonClassNames}
         role="button"
-        tabIndex={0}
+        tabIndex={explicitTabIndex ?? 0}
         onClick={onClick as React.MouseEventHandler<HTMLDivElement>}
         onKeyDown={handleKeyDown}
-        {...(props as Omit<
-          React.HTMLAttributes<HTMLDivElement>,
-          "onClick" | "onKeyDown"
-        >)}
+        {...divProps}
       >
         {children}
       </div>
@@ -74,7 +91,10 @@ export const InteractiveContainer = ({
   // Otherwise, use a button (default)
   return (
     <button
-      className={commonClassNames}
+      className={clsx(
+        "appearance-none border-0 bg-transparent p-0 text-inherit",
+        commonClassNames,
+      )}
       type="button"
       onClick={onClick as React.MouseEventHandler<HTMLButtonElement>}
       {...(props as Omit<
