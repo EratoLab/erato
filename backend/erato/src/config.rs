@@ -836,6 +836,10 @@ pub struct ChatProviderConfig {
     // The display name for the model shown to users.
     // Falls back to model_name if not provided.
     pub model_display_name: Option<String>,
+    // Optional description for the model shown to users in the frontend.
+    pub model_description: Option<String>,
+    // Optional icon identifier for the model shown to users in the frontend.
+    pub model_icon: Option<String>,
     // The model name to report to Langfuse for observability and tracing.
     // Falls back to model_name if not provided.
     // This is useful when the provider's model name differs from the standardized name
@@ -955,6 +959,8 @@ impl ChatProviderConfig {
             provider_kind: "openai".to_string(),
             model_name: self.model_name,
             model_display_name: self.model_display_name,
+            model_description: self.model_description,
+            model_icon: self.model_icon,
             model_name_langfuse: self.model_name_langfuse,
             base_url,
             region: self.region,

@@ -421,8 +421,8 @@ pub async fn create_assistant(
 
     // Determine if any available model supports image understanding
     let available_models = app_state.available_models(&me_user.groups);
-    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
-        let config = app_state.config.get_chat_provider(provider_id);
+    let supports_image_understanding = available_models.iter().any(|model| {
+        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding
     });
 
@@ -587,8 +587,8 @@ pub async fn get_assistant(
 
     // Determine if any available model supports image understanding
     let available_models = app_state.available_models(&me_user.groups);
-    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
-        let config = app_state.config.get_chat_provider(provider_id);
+    let supports_image_understanding = available_models.iter().any(|model| {
+        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding
     });
 
@@ -786,8 +786,8 @@ pub async fn update_assistant(
 
     // Determine if any available model supports image understanding
     let available_models = app_state.available_models(&me_user.groups);
-    let supports_image_understanding = available_models.iter().any(|(provider_id, _)| {
-        let config = app_state.config.get_chat_provider(provider_id);
+    let supports_image_understanding = available_models.iter().any(|model| {
+        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding
     });
 

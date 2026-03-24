@@ -113,6 +113,14 @@ pub struct AppState {
     pub file_processor: Arc<dyn crate::services::file_processor::FileProcessor>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AvailableModel {
+    pub chat_provider_id: String,
+    pub model_display_name: String,
+    pub model_description: Option<String>,
+    pub model_icon: Option<String>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct FileCacheKey {
     pub file_id: Uuid,
@@ -378,8 +386,7 @@ impl AppState {
     }
 
     /// Get available chat models for the user, taking into account any allowlist restrictions.
-    /// Returns a list of (provider_id, display_name) pairs.
-    pub fn available_models(&self, user_groups: &[String]) -> Vec<(String, String)> {
+    pub fn available_models(&self, user_groups: &[String]) -> Vec<AvailableModel> {
         let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user(user_groups);
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
@@ -393,8 +400,12 @@ impl AppState {
             .into_iter()
             .map(|provider_id| {
                 let config = self.config.get_chat_provider(provider_id);
-                let display_name = config.model_display_name().to_string();
-                (provider_id.to_string(), display_name)
+                AvailableModel {
+                    chat_provider_id: provider_id.to_string(),
+                    model_display_name: config.model_display_name().to_string(),
+                    model_description: config.model_description.clone(),
+                    model_icon: config.model_icon.clone(),
+                }
             })
             .collect()
     }

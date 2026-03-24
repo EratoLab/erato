@@ -60,6 +60,7 @@
     "react-use": "^17.6.0",
     "react-window": "^1.8.11",
     "remark-gfm": "^4.0.1",
+    "simple-icons": "^16.13.0",
     "sse.js": "^2.5.0",
     "use-debounce": "^10.0.4",
     "zustand": "^5.0.3"
@@ -69,9 +70,9 @@
     "@eslint/eslintrc": "^3",
     "@eslint/js": "^9.28.0",
     "@faker-js/faker": "^9.4.0",
-    "@lingui/core": "5.6.0",
     "@lingui/babel-plugin-lingui-macro": "^5.6.0",
     "@lingui/cli": "^5.6.0",
+    "@lingui/core": "5.6.0",
     "@lingui/react": "5.6.0",
     "@lingui/vite-plugin": "^5.6.0",
     "@openapi-codegen/cli": "^3.1.0",
@@ -124,8 +125,8 @@
   "peerDependencies": {
     "@lingui/core": "^5.6.0",
     "@lingui/react": "^5.6.0",
-    "@tanstack/query-sync-storage-persister": "5.69.0",
     "@tanstack/query-core": "5.75.7",
+    "@tanstack/query-sync-storage-persister": "5.69.0",
     "@tanstack/react-query": "5.75.7",
     "@tanstack/react-query-devtools": "5.75.7",
     "@tanstack/react-query-persist-client": "5.75.7",

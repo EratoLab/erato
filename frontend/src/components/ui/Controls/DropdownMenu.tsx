@@ -13,7 +13,8 @@ import type { ButtonVariant } from "./Button";
 import type React from "react";
 
 export interface DropdownMenuItem {
-  label: string;
+  id?: string;
+  label: React.ReactNode;
   icon?: React.ReactNode;
   onClick: () => void;
   variant?: "default" | "danger";
@@ -258,7 +259,7 @@ export const DropdownMenu = memo(
           >
             {items.map((item, index) => (
               <MenuItem
-                key={`${item.label}-${index}`}
+                key={item.id ?? String(index)}
                 item={item}
                 noWrap={noWrapItems}
                 onSelect={(e: React.MouseEvent) => handleMenuItemClick(item, e)}

@@ -63,18 +63,26 @@ const mockModels: ChatModel[] = [
   {
     chat_provider_id: "gpt-4",
     model_display_name: "GPT-4",
+    model_description: "General-purpose flagship model",
+    model_icon: "builtin-chatgpt",
   },
   {
     chat_provider_id: "gpt-3.5-turbo",
     model_display_name: "GPT-3.5 Turbo",
+    model_description: "Fast responses for lightweight tasks",
+    model_icon: "builtin-chatgpt",
   },
   {
     chat_provider_id: "claude-3-opus",
     model_display_name: "Claude 3 Opus",
+    model_description: "High capability reasoning model",
+    model_icon: "simpleicons-anthropic",
   },
   {
     chat_provider_id: "claude-3-sonnet",
     model_display_name: "Claude 3 Sonnet",
+    model_description: "Balanced speed and quality",
+    model_icon: "simpleicons-anthropic",
   },
 ];
 
