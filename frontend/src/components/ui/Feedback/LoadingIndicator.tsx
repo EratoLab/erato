@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/icons";
 
 import type { ToolCall } from "@/hooks/chat/store/messagingStore";
+import type { ReactNode } from "react";
 
 // Define loading state types locally
 export type LoadingState =
@@ -29,39 +30,87 @@ interface LoadingIndicatorProps {
   toolCalls?: Record<string, ToolCall>;
 }
 
+type LoadingStateConfig = {
+  shouldPulse: boolean;
+  getLabel: () => string;
+  renderIcon: () => ReactNode;
+};
+
+type ToolCallStatusConfig = {
+  colorClass: string;
+  shouldPulse: boolean;
+  renderIcon: () => ReactNode;
+};
+
+const LOADING_STATE_CONFIG = {
+  "tool-calling": {
+    shouldPulse: true,
+    getLabel: () => t`Using tools`,
+    renderIcon: () => <ToolsIcon className="size-4" />,
+  },
+  reasoning: {
+    shouldPulse: true,
+    getLabel: () => t`Thinking`,
+    renderIcon: () => <BrainIcon className="size-4" />,
+  },
+  typing: {
+    shouldPulse: true,
+    getLabel: () => t`Loading`,
+    renderIcon: () => <TimerIcon className="size-4" />,
+  },
+  thinking: {
+    shouldPulse: true,
+    getLabel: () => t`Loading`,
+    renderIcon: () => <TimerIcon className="size-4" />,
+  },
+  done: {
+    shouldPulse: false,
+    getLabel: () => t`Loading`,
+    renderIcon: () => <TimerIcon className="size-4" />,
+  },
+  error: {
+    shouldPulse: false,
+    getLabel: () => t`Loading`,
+    renderIcon: () => <TimerIcon className="size-4" />,
+  },
+} satisfies Record<LoadingState, LoadingStateConfig>;
+
+const TOOL_CALL_STATUS_CONFIG = {
+  proposed: {
+    colorClass: "text-theme-fg-secondary",
+    shouldPulse: true,
+    renderIcon: () => <ToolsIcon className="size-4" />,
+  },
+  in_progress: {
+    colorClass: "text-theme-info-fg",
+    shouldPulse: true,
+    renderIcon: () => <SettingsIcon className="size-4" />,
+  },
+  success: {
+    colorClass: "text-theme-success-fg",
+    shouldPulse: false,
+    renderIcon: () => <CheckCircleIcon className="size-4" />,
+  },
+  error: {
+    colorClass: "text-theme-error-fg",
+    shouldPulse: false,
+    renderIcon: () => <ErrorIcon className="size-4" />,
+  },
+} satisfies Record<ToolCall["status"], ToolCallStatusConfig>;
+
 // Tool call status indicator component
 const ToolCallIndicator = ({ toolCall }: { toolCall: ToolCall }) => {
-  const getStatusIcon = () => {
-    switch (toolCall.status) {
-      case "proposed":
-        return <ToolsIcon className="size-4" />;
-      case "in_progress":
-        return <SettingsIcon className="size-4" />;
-      case "success":
-        return <CheckCircleIcon className="size-4" />;
-      case "error":
-        return <ErrorIcon className="size-4" />;
-      default:
-        return <ToolsIcon className="size-4" />;
-    }
-  };
-
-  const getStatusColor = () => {
-    switch (toolCall.status) {
-      case "success":
-        return "text-green-600";
-      case "error":
-        return "text-red-600";
-      case "in_progress":
-        return "text-blue-600";
-      default:
-        return "text-theme-fg-secondary";
-    }
-  };
+  const statusConfig = TOOL_CALL_STATUS_CONFIG[toolCall.status];
 
   return (
-    <div className={clsx("flex items-center gap-2 text-sm", getStatusColor())}>
-      <span aria-hidden="true">{getStatusIcon()}</span>
+    <div
+      className={clsx(
+        "flex items-center gap-2 text-sm",
+        statusConfig.shouldPulse && "animate-pulse",
+        statusConfig.colorClass,
+      )}
+    >
+      <span aria-hidden="true">{statusConfig.renderIcon()}</span>
       <span className="font-medium">{toolCall.name}</span>
       {toolCall.progressMessage && (
         <div className="text-xs text-theme-fg-muted">
@@ -78,27 +127,7 @@ export const LoadingIndicator = ({
   className,
   toolCalls,
 }: LoadingIndicatorProps) => {
-  const getStateIcon = () => {
-    switch (state) {
-      case "tool-calling":
-        return <ToolsIcon className="size-4" />;
-      case "reasoning":
-        return <BrainIcon className="size-4" />;
-      default:
-        return <TimerIcon className="size-4" />;
-    }
-  };
-
-  const getStateLabel = () => {
-    switch (state) {
-      case "tool-calling":
-        return t`Using tools`;
-      case "reasoning":
-        return t`Thinking`;
-      default:
-        return t`Loading`;
-    }
-  };
+  const stateConfig = LOADING_STATE_CONFIG[state];
 
   // If we have tool calls to display, show them
   if (toolCalls && Object.keys(toolCalls).length > 0) {
@@ -121,12 +150,12 @@ export const LoadingIndicator = ({
     <div
       className={clsx(
         "flex items-center gap-2 text-sm text-theme-fg-secondary",
-        "animate-pulse",
+        stateConfig.shouldPulse && "animate-pulse",
         className,
       )}
     >
-      <span aria-hidden="true">{getStateIcon()}</span>
-      <span>{getStateLabel()}</span>
+      <span aria-hidden="true">{stateConfig.renderIcon()}</span>
+      <span>{stateConfig.getLabel()}</span>
       {context && <span className="text-theme-fg-muted">{context}</span>}
     </div>
   );
