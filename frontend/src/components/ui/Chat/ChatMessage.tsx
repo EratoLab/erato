@@ -172,6 +172,7 @@ export const ChatMessage = memo(function ChatMessage({
             <Alert
               type="error"
               title={getErrorTitle(message.error.error_type)}
+              geometryVariant="message"
               className="mb-3"
               data-testid="chat-message-error"
             >

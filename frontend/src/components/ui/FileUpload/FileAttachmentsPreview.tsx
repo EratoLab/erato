@@ -30,6 +30,8 @@ export interface FileAttachmentsPreviewProps {
   className?: string;
   /** Length to truncate filenames */
   filenameTruncateLength?: number;
+  /** Optional surface variant for chat message geometry */
+  surfaceVariant?: "default" | "message";
 }
 
 /**
@@ -46,15 +48,52 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
   showFileSizes = true,
   className = "",
   filenameTruncateLength = 25,
+  surfaceVariant = "default",
 }) => {
+  const attachmentsFrameStyle =
+    surfaceVariant === "message"
+      ? ({
+          borderRadius: "var(--theme-radius-message)",
+          padding:
+            "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
+        } as const)
+      : undefined;
+  const attachmentsHeaderStyle =
+    surfaceVariant === "message"
+      ? ({
+          gap: "var(--theme-spacing-control-gap)",
+          marginBottom: "var(--theme-spacing-control-gap)",
+        } as const)
+      : undefined;
+  const attachmentsListStyle =
+    surfaceVariant === "message"
+      ? ({
+          gap: "var(--theme-spacing-control-gap)",
+        } as const)
+      : undefined;
+
   // Don't render anything if no files
   if (attachedFiles.length === 0) {
     return null;
   }
 
   return (
-    <div className={clsx("mb-3", className)}>
-      <div className="mb-2 flex items-center justify-between">
+    <div
+      className={clsx(
+        "mb-3",
+        surfaceVariant === "message" &&
+          "border border-theme-border bg-theme-bg-primary",
+        className,
+      )}
+      style={attachmentsFrameStyle}
+    >
+      <div
+        className={clsx(
+          "flex items-center justify-between",
+          surfaceVariant === "message" ? "" : "mb-2",
+        )}
+        style={attachmentsHeaderStyle}
+      >
         <h3 className="text-sm font-medium text-[var(--theme-fg-secondary)]">
           {t`Attachments`} ({attachedFiles.length}/{maxFiles})
         </h3>
@@ -74,7 +113,13 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
         )}
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div
+        className={clsx(
+          "flex flex-col",
+          surfaceVariant === "message" ? "" : "gap-2",
+        )}
+        style={attachmentsListStyle}
+      >
         {attachedFiles.map((file) =>
           // Wrap in InteractiveContainer if preview handler is provided
           onFilePreview ? (
