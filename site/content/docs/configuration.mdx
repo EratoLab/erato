@@ -1118,6 +1118,104 @@ Model permissions rely on group information from the user's ID token. The `group
 
 If no `groups` claim is present in the ID token, the user is treated as having no group memberships, and only `allow-all` rules will grant them access.
 
+### `mcp_server_permissions`
+
+Configuration for controlling user access to configured MCP servers based on group membership. This is evaluated through the same policy engine as `model_permissions`, and affects which MCP servers can be attached to assistants or used during generation.
+
+**Type:** `object | None`
+
+**Default behavior:** If no MCP server permissions are configured, all users have access to all configured MCP servers.
+
+#### `mcp_server_permissions.rules`
+
+A map of permission rules, where each key is a unique rule name and the value is a rule configuration object. Rules are evaluated independently, and if any rule grants access to an MCP server, the user is allowed to use it.
+
+**Type:** `object<string, McpServerPermissionRule>`
+
+**Example:**
+
+```toml
+[mcp_server_permissions.rules.public_servers]
+rule_type = "allow-all"
+mcp_server_ids = ["filesystem", "company-search"]
+
+[mcp_server_permissions.rules.premium_servers]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["browser-automation", "code-execution"]
+groups = ["premium-users", "administrators"]
+```
+
+#### Rule Types
+
+`mcp_server_permissions` supports the same rule types as `model_permissions`:
+
+- `allow-all`
+- `allow-for-group-members`
+
+The only difference is the resource field name:
+
+- `mcp_server_ids` instead of `chat_provider_ids`
+
+**Example:**
+
+```toml
+[mcp_server_permissions.rules.restricted_server]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["browser-automation"]
+groups = ["security-reviewed-users"]
+```
+
+### `facet_permissions`
+
+Configuration for controlling which facets are visible and usable for different users. This is evaluated through the same policy engine as `model_permissions`, and affects facet visibility in `/me/facets`, starter prompts, and message generation.
+
+**Type:** `object | None`
+
+**Default behavior:** If no facet permissions are configured, all users have access to all configured facets.
+
+#### `facet_permissions.rules`
+
+A map of permission rules, where each key is a unique rule name and the value is a rule configuration object. Rules are evaluated independently, and if any rule grants access to a facet, the user is allowed to use it.
+
+**Type:** `object<string, FacetPermissionRule>`
+
+**Example:**
+
+```toml
+[facet_permissions.rules.default_facets]
+rule_type = "allow-all"
+facet_ids = ["extended_thinking"]
+
+[facet_permissions.rules.web_search]
+rule_type = "allow-for-group-members"
+facet_ids = ["web_search"]
+groups = ["premium-users", "research-team"]
+```
+
+#### Rule Types
+
+`facet_permissions` supports the same rule types as `model_permissions`:
+
+- `allow-all`
+- `allow-for-group-members`
+
+The only difference is the resource field name:
+
+- `facet_ids` instead of `chat_provider_ids`
+
+**Example:**
+
+```toml
+[facet_permissions.rules.image_generation]
+rule_type = "allow-for-group-members"
+facet_ids = ["image_generation"]
+groups = ["design-team"]
+```
+
+#### Integration with SSO/OIDC
+
+Like `model_permissions`, both `mcp_server_permissions` and `facet_permissions` use the `groups` claim from the user's ID token for `allow-for-group-members` rules. If no `groups` claim is present, only `allow-all` rules grant access.
+
 ### `integrations`
 
 Configuration for external service integrations.

@@ -1,6 +1,7 @@
 use crate::actors::manager::ActorManager;
 use crate::config::{AppConfig, ChatProviderConfig, PromptSourceSpecification};
 use crate::policy::engine::PolicyEngine;
+use crate::policy::types::Subject;
 use crate::query_metrics::install_postgres_query_metrics;
 use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
@@ -62,17 +63,18 @@ impl GlobalPolicyEngine {
     pub async fn get_engine_with_rebuild_check(
         &self,
         db: &DatabaseConnection,
+        config: &AppConfig,
         time_threshold: Duration,
     ) -> Result<PolicyEngine, Report> {
         let needs_time_rebuild = self.needs_time_based_rebuild(time_threshold).await;
 
         if needs_time_rebuild {
             tracing::debug!("Policy data needs time-based rebuild, rebuilding...");
-            self.engine.rebuild_data(db).await?;
+            self.engine.rebuild_data(db, config).await?;
             *self.last_rebuild_time.write().await = Some(Instant::now());
         } else {
             // Even if time hasn't elapsed, check if data was explicitly invalidated
-            self.engine.rebuild_data_if_needed(db).await?;
+            self.engine.rebuild_data_if_needed(db, config).await?;
         }
 
         // Use clone_for_request to create an independent data_needs_rebuild state
@@ -318,23 +320,28 @@ impl AppState {
         )
     }
 
-    pub fn genai_for_chatcompletion(
+    pub fn genai_for_chat_provider_id(
         &self,
-        requested_chat_provider: Option<&str>,
-        user_groups: &[String],
+        chat_provider_id: Option<&str>,
     ) -> Result<GenaiClient, Report> {
-        Self::build_genai_client(
-            self.chat_provider_for_chatcompletion(requested_chat_provider, user_groups)?
-                .chat_provider_config,
-        )
+        let chat_provider_id = chat_provider_id.unwrap_or_else(|| {
+            self.config
+                .determine_chat_provider(None, None)
+                .expect("Unable to choose default chat provider")
+        });
+        Self::build_genai_client(self.config.get_chat_provider(chat_provider_id).clone())
     }
 
-    pub fn chat_provider_for_chatcompletion(
+    pub async fn chat_provider_for_chatcompletion(
         &self,
-        requested_chat_provider: Option<&str>,
+        policy: &PolicyEngine,
+        subject: &Subject,
         user_groups: &[String],
+        requested_chat_provider: Option<&str>,
     ) -> Result<ChatProviderConfigWithId, Report> {
-        let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user(user_groups);
+        let chat_provider_allowlist = self
+            .determine_chat_provider_allowlist_for_user(policy, subject, user_groups)
+            .await?;
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
             .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -352,10 +359,12 @@ impl AppState {
     /// Determines chat provider allowlist for a user based on their group memberships.
     /// Uses the model_permissions configuration to filter available chat providers.
     #[instrument(skip_all)]
-    pub fn determine_chat_provider_allowlist_for_user(
+    pub async fn determine_chat_provider_allowlist_for_user(
         &self,
+        policy: &PolicyEngine,
+        subject: &Subject,
         user_groups: &[String],
-    ) -> Option<Vec<String>> {
+    ) -> Result<Option<Vec<String>>, Report> {
         // Get all available chat provider IDs
         let all_provider_ids: Vec<String> =
             if let Some(chat_providers) = &self.config.chat_providers {
@@ -367,27 +376,33 @@ impl AppState {
                 vec![]
             };
 
-        let allowed_providers = self
-            .config
-            .model_permissions
-            .filter_allowed_chat_provider_ids(&all_provider_ids, user_groups);
+        let allowed_providers = policy
+            .filter_authorized_chat_provider_ids(subject, user_groups, &all_provider_ids)
+            .await?;
 
         // If the filtered list is the same as the original list, return None (no restrictions)
         if allowed_providers.len() == all_provider_ids.len() {
             tracing::debug!("Model permissions allow all available chat providers");
-            None
+            Ok(None)
         } else {
             tracing::debug!(
                 ?allowed_providers,
                 "Model permissions filtered chat providers"
             );
-            Some(allowed_providers)
+            Ok(Some(allowed_providers))
         }
     }
 
     /// Get available chat models for the user, taking into account any allowlist restrictions.
-    pub fn available_models(&self, user_groups: &[String]) -> Vec<AvailableModel> {
-        let chat_provider_allowlist = self.determine_chat_provider_allowlist_for_user(user_groups);
+    pub async fn available_models(
+        &self,
+        policy: &PolicyEngine,
+        subject: &Subject,
+        user_groups: &[String],
+    ) -> Result<Vec<AvailableModel>, Report> {
+        let chat_provider_allowlist = self
+            .determine_chat_provider_allowlist_for_user(policy, subject, user_groups)
+            .await?;
         let allowlist_refs: Option<Vec<&str>> = chat_provider_allowlist
             .as_ref()
             .map(|list| list.iter().map(|s| s.as_str()).collect());
@@ -396,7 +411,7 @@ impl AppState {
             .config
             .available_chat_providers(allowlist_refs.as_deref());
 
-        available_provider_ids
+        Ok(available_provider_ids
             .into_iter()
             .map(|provider_id| {
                 let config = self.config.get_chat_provider(provider_id);
@@ -407,7 +422,7 @@ impl AppState {
                     model_icon: config.model_icon.clone(),
                 }
             })
-            .collect()
+            .collect())
     }
 
     pub fn default_file_storage_provider(&self) -> &FileStorage {

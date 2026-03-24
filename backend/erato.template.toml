@@ -47,6 +47,17 @@ cost_output_tokens_per_1m = 0.0
 rule_type = "allow-all"
 chat_provider_ids = ["test-token-limit"]
 
+# MCP server permissions
+# [mcp_server_permissions.rules.allow-file-provider-for-all]
+# rule_type = "allow-all"
+# mcp_server_ids = ["file_provider"]
+
+# Facet permissions
+# [facet_permissions.rules.allow-web-search-for-group]
+# rule_type = "allow-for-group-members"
+# facet_ids = ["web_search"]
+# groups = ["premium"]
+
 # Prompt optimizer configuration
 # [prompt_optimizer]
 # enabled = false

@@ -164,7 +164,9 @@ pub async fn get_file_upload_by_id(
         .await?
         .wrap_err("File upload not found")?;
 
-    policy.rebuild_data_if_needed(conn).await?;
+    policy
+        .rebuild_data_if_needed(conn, &crate::config::AppConfig::default())
+        .await?;
 
     authorize!(
         policy,

@@ -166,6 +166,14 @@ pub struct AppConfig {
     #[serde(default)]
     pub model_permissions: ModelPermissionsConfig,
 
+    // MCP server permissions configuration for controlling access to MCP servers based on user attributes.
+    #[serde(default)]
+    pub mcp_server_permissions: McpServerPermissionsConfig,
+
+    // Facet permissions configuration for controlling access to facets based on user attributes.
+    #[serde(default)]
+    pub facet_permissions: FacetPermissionsConfig,
+
     // Budget configuration for tracking and displaying per-user spending.
     #[serde(default)]
     pub budget: BudgetConfig,
@@ -372,6 +380,16 @@ impl AppConfig {
         // Validate model permissions configuration
         if let Err(e) = config.model_permissions.validate() {
             panic!("Invalid model permissions configuration: {}", e);
+        }
+
+        // Validate MCP server permissions configuration
+        if let Err(e) = config.mcp_server_permissions.validate() {
+            panic!("Invalid MCP server permissions configuration: {}", e);
+        }
+
+        // Validate facet permissions configuration
+        if let Err(e) = config.facet_permissions.validate() {
+            panic!("Invalid facet permissions configuration: {}", e);
         }
 
         // Validate budget configuration
@@ -2075,6 +2093,42 @@ pub enum ModelPermissionRule {
     },
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct McpServerPermissionsConfig {
+    #[serde(default)]
+    pub rules: HashMap<String, McpServerPermissionRule>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[serde(tag = "rule_type")]
+pub enum McpServerPermissionRule {
+    #[serde(rename = "allow-all")]
+    AllowAll { mcp_server_ids: Vec<String> },
+    #[serde(rename = "allow-for-group-members")]
+    AllowForGroupMembers {
+        mcp_server_ids: Vec<String>,
+        groups: Vec<String>,
+    },
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct FacetPermissionsConfig {
+    #[serde(default)]
+    pub rules: HashMap<String, FacetPermissionRule>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[serde(tag = "rule_type")]
+pub enum FacetPermissionRule {
+    #[serde(rename = "allow-all")]
+    AllowAll { facet_ids: Vec<String> },
+    #[serde(rename = "allow-for-group-members")]
+    AllowForGroupMembers {
+        facet_ids: Vec<String>,
+        groups: Vec<String>,
+    },
+}
+
 impl ModelPermissionsConfig {
     /// Validates the model permissions configuration.
     pub fn validate(&self) -> Result<(), Report> {
@@ -2131,6 +2185,36 @@ impl ModelPermissionsConfig {
             "Final allowed chat provider IDs for user"
         );
         allowed_providers
+    }
+}
+
+impl McpServerPermissionsConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        for (rule_name, rule) in &self.rules {
+            if let Err(e) = rule.validate() {
+                return Err(eyre!(
+                    "Invalid configuration for MCP server permission rule '{}': {}",
+                    rule_name,
+                    e
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl FacetPermissionsConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        for (rule_name, rule) in &self.rules {
+            if let Err(e) = rule.validate() {
+                return Err(eyre!(
+                    "Invalid configuration for facet permission rule '{}': {}",
+                    rule_name,
+                    e
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -2199,5 +2283,60 @@ impl ModelPermissionRule {
                 allows
             }
         }
+    }
+}
+
+impl McpServerPermissionRule {
+    pub fn validate(&self) -> Result<(), Report> {
+        match self {
+            McpServerPermissionRule::AllowAll { mcp_server_ids } => {
+                if mcp_server_ids.is_empty() {
+                    return Err(eyre!(
+                        "Allow-all rule must specify at least one mcp_server_id"
+                    ));
+                }
+            }
+            McpServerPermissionRule::AllowForGroupMembers {
+                mcp_server_ids,
+                groups,
+            } => {
+                if mcp_server_ids.is_empty() {
+                    return Err(eyre!(
+                        "Allow-for-group-members rule must specify at least one mcp_server_id"
+                    ));
+                }
+                if groups.is_empty() {
+                    return Err(eyre!(
+                        "Allow-for-group-members rule must specify at least one group"
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl FacetPermissionRule {
+    pub fn validate(&self) -> Result<(), Report> {
+        match self {
+            FacetPermissionRule::AllowAll { facet_ids } => {
+                if facet_ids.is_empty() {
+                    return Err(eyre!("Allow-all rule must specify at least one facet_id"));
+                }
+            }
+            FacetPermissionRule::AllowForGroupMembers { facet_ids, groups } => {
+                if facet_ids.is_empty() {
+                    return Err(eyre!(
+                        "Allow-for-group-members rule must specify at least one facet_id"
+                    ));
+                }
+                if groups.is_empty() {
+                    return Err(eyre!(
+                        "Allow-for-group-members rule must specify at least one group"
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 }

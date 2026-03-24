@@ -80,6 +80,7 @@ const DEFAULT_ERATO_PLATFORM: &str = "web";
 /// needed during chat generation, rather than passing the full MeProfile.
 #[derive(Debug, Clone)]
 pub struct MeProfileChatRequestInput<'a> {
+    pub subject: Subject,
     pub user_groups: &'a [String],
     pub organization_user_id: Option<&'a str>,
     pub organization_group_ids: &'a [String],
@@ -95,6 +96,7 @@ impl<'a> MeProfileChatRequestInput<'a> {
     /// Create a new MeProfileChatRequestInput from a MeProfile reference.
     pub fn from_me_profile(me_profile: &'a MeProfile) -> Self {
         Self {
+            subject: me_profile.to_subject(),
             user_groups: &me_profile.groups,
             organization_user_id: me_profile.organization_user_id.as_deref(),
             organization_group_ids: &me_profile.organization_group_ids,
@@ -513,10 +515,10 @@ async fn fetch_non_streaming_error(
     chat_options: &ChatOptions,
     message_id: Uuid,
     chat_provider_id: Option<&str>,
-    user_groups: &[String],
+    _user_groups: &[String],
 ) -> Option<MessageSubmitStreamingResponseError> {
     let client = app_state
-        .genai_for_chatcompletion(chat_provider_id, user_groups)
+        .genai_for_chat_provider_id(chat_provider_id)
         .ok()?;
     match client
         .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(chat_options))
@@ -1268,6 +1270,7 @@ fn prepare_chat_request<'a>(
 
         prepare_chat_request_with_adapters(
             app_state,
+            policy,
             chat,
             user_input,
             generation_request_context,
@@ -1284,6 +1287,7 @@ fn prepare_chat_request<'a>(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn prepare_chat_request_with_adapters(
     app_state: &AppState,
+    policy: &PolicyEngine,
     chat: &chats::Model,
     user_input: PromptCompositionUserInput,
     generation_request_context: GenerationRequestContext,
@@ -1298,6 +1302,13 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         &user_input.selected_facet_ids,
         assistant_config.as_ref(),
     );
+    let effective_selected_facet_ids = policy
+        .filter_authorized_facet_ids(
+            &me_profile_input.subject,
+            me_profile_input.user_groups,
+            &effective_selected_facet_ids,
+        )
+        .await?;
 
     // Determine the chat provider to use
     let requested_chat_provider_id = user_input.requested_chat_provider_id.as_deref();
@@ -1311,10 +1322,14 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     let ChatProviderConfigWithId {
         chat_provider_config,
         chat_provider_id,
-    } = app_state.chat_provider_for_chatcompletion(
-        effective_chat_provider_id,
-        me_profile_input.user_groups,
-    )?;
+    } = app_state
+        .chat_provider_for_chatcompletion(
+            policy,
+            &me_profile_input.subject,
+            me_profile_input.user_groups,
+            effective_chat_provider_id,
+        )
+        .await?;
 
     let facet_allowlist = build_mcp_tool_allowlist(
         &app_state.config.experimental_facets,
@@ -1329,6 +1344,27 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         .and_then(|assistant| assistant.mcp_server_ids.as_deref());
     let effective_server_filter =
         apply_assistant_server_filter(server_filter_from_allowlist, assistant_server_ids);
+    let authorized_server_ids: HashSet<String> = policy
+        .filter_authorized_mcp_server_ids(
+            &me_profile_input.subject,
+            me_profile_input.user_groups,
+            &app_state
+                .config
+                .mcp_servers
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+        )
+        .await?
+        .into_iter()
+        .collect();
+    let effective_server_filter = Some(match effective_server_filter {
+        Some(server_ids) => server_ids
+            .intersection(&authorized_server_ids)
+            .cloned()
+            .collect(),
+        None => authorized_server_ids,
+    });
 
     // Only discover tools for servers potentially needed in this request.
     let all_mcp_server_tools = app_state
@@ -1739,7 +1775,7 @@ async fn stream_generate_chat_completion<
         }
 
         let chat_stream = match app_state
-            .genai_for_chatcompletion(chat_provider_id, user_groups)
+            .genai_for_chat_provider_id(chat_provider_id)
             .expect("Unable to choose chat provider")
             .exec_chat_stream(
                 "PLACEHOLDER_MODEL",
@@ -3314,11 +3350,14 @@ async fn run_message_submit_task(
     // Rebuild policy data FIRST if a new chat was created (before trying to fetch the chat)
     if chat_was_created {
         tracing::info!("Rebuilding policy data for newly created chat");
-        policy.rebuild_data(&app_state.db).await.map_err(|e| {
-            let err_msg = format!("Failed to rebuild policy data after chat creation: {}", e);
-            tracing::error!("{}", err_msg);
-            err_msg
-        })?;
+        policy
+            .rebuild_data(&app_state.db, &app_state.config)
+            .await
+            .map_err(|e| {
+                let err_msg = format!("Failed to rebuild policy data after chat creation: {}", e);
+                tracing::error!("{}", err_msg);
+                err_msg
+            })?;
     }
 
     // Send ChatCreated event if the chat was just created
@@ -3456,7 +3495,13 @@ async fn run_message_submit_task(
         chat_provider_config,
         ..
     } = app_state
-        .chat_provider_for_chatcompletion(Some(&chat_provider_id), &me_user.groups)
+        .chat_provider_for_chatcompletion(
+            policy,
+            &me_user.to_subject(),
+            &me_user.groups,
+            Some(&chat_provider_id),
+        )
+        .await
         .map_err(|e| format!("Failed to get chat provider config: {}", e))?;
 
     // Check if image generation is enabled for this model
@@ -3518,7 +3563,7 @@ async fn run_message_submit_task(
             .with_quality("standard");
 
         let genai_client = app_state
-            .genai_for_chatcompletion(Some(&chat_provider_id), &me_user.groups)
+            .genai_for_chat_provider_id(Some(&chat_provider_id))
             .map_err(|e| format!("Failed to get genai client: {}", e))?;
 
         let image_response = genai_client

@@ -599,6 +599,8 @@ pub fn hermetic_app_config(
     mock_llm_config: Option<MockLlmConfig>,
     mock_url_str: Option<String>,
 ) -> AppConfig {
+    let mock_llm_config =
+        mock_llm_config.or_else(|| mock_url_str.as_ref().map(|_| MockLlmConfig::default()));
     let mut app_config = AppConfig::config_schema_builder(None, false).unwrap();
     if let Some(mock_llm_config) = mock_llm_config {
         app_config = app_config

@@ -54,7 +54,9 @@ pub async fn create_share_grant(
     role: String,
 ) -> Result<share_grants::Model, Report> {
     // Rebuild policy data if needed
-    policy.rebuild_data_if_needed(conn).await?;
+    policy
+        .rebuild_data_if_needed(conn, &crate::config::AppConfig::default())
+        .await?;
 
     // Get the user ID from subject
     let user_id_str = subject.user_id();
@@ -199,7 +201,9 @@ pub async fn delete_share_grant(
     grant_id: Uuid,
 ) -> Result<(), Report> {
     // Rebuild policy data if needed
-    policy.rebuild_data_if_needed(conn).await?;
+    policy
+        .rebuild_data_if_needed(conn, &crate::config::AppConfig::default())
+        .await?;
 
     // Get the user ID from subject
     let user_id_str = subject.user_id();
