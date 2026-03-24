@@ -3,6 +3,10 @@ import React, { useEffect, useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "../src/styles/globals.css";
+
+// Import Geist fonts
+import "non.geist"; // Imports Geist Sans Variable
+import "non.geist/mono"; // Imports Geist Mono Variable
 import {
   ThemeProvider,
   ThemeMode,
