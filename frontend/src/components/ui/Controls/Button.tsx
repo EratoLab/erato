@@ -54,10 +54,16 @@ const VARIANT_STYLES = {
 
 // Size geometry classes defined in globals.css @layer components
 // so consumer Tailwind utilities (e.g. p-0) can override them.
-const SIZE_STYLES = {
+const CONTROL_SIZE_STYLES = {
   sm: "btn-geometry-sm text-sm",
   md: "btn-geometry-md",
   lg: "btn-geometry-lg",
+} as const;
+
+const ICON_SIZE_STYLES = {
+  sm: "btn-geometry-icon-sm",
+  md: "btn-geometry-icon-md",
+  lg: "btn-geometry-icon-lg",
 } as const;
 
 const validateProps = (props: ButtonProps) => {
@@ -161,9 +167,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           VARIANT_STYLES[variant],
           variant === "list-item"
             ? "btn-geometry-list-item"
-            : SIZE_STYLES[size],
+            : variant === "icon-only"
+              ? ICON_SIZE_STYLES[size]
+              : CONTROL_SIZE_STYLES[size],
           {
             "bg-theme-bg-selected": ariaPressed === true,
+            "justify-center": variant === "icon-only",
           },
           showOnHover && "theme-transition opacity-0 group-hover:opacity-100",
           "disabled:cursor-not-allowed disabled:opacity-50",

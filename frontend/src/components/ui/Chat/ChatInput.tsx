@@ -759,12 +759,14 @@ export const ChatInput = ({
           onFilePreview={onFilePreview}
           disabled={isDisabled}
           showFileTypes={showFileTypes}
+          surfaceVariant="message"
         />
 
         {/* File error message */}
         {fileError && (
           <Alert
             type="error"
+            geometryVariant="message"
             dismissible
             onDismiss={() => setFileError(null)}
             className="mb-2"

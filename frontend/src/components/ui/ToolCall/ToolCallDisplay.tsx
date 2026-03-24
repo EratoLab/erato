@@ -34,6 +34,17 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   allowToggle = true,
 }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const toolCallFrameStyle = {
+    borderRadius: "var(--theme-radius-message)",
+  } as const;
+  const toolCallHeaderStyle = {
+    gap: "var(--theme-spacing-control-gap)",
+    padding:
+      "var(--theme-spacing-control-padding-y) var(--theme-spacing-message-padding-x)",
+  } as const;
+  const toolCallSummaryStyle = {
+    gap: "var(--theme-spacing-control-gap)",
+  } as const;
 
   if (!toolCalls || toolCalls.length === 0) {
     return null;
@@ -51,18 +62,20 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   const errorCount = toolCalls.filter((call) => call.status === "error").length;
 
   return (
-    <div className={clsx("mt-3 rounded-lg bg-theme-bg-hover", className)}>
+    <div
+      className={clsx("mt-3 overflow-hidden bg-theme-bg-hover", className)}
+      style={toolCallFrameStyle}
+    >
       {/* Header */}
       <div
         className={clsx(
-          "flex items-center justify-between px-3 py-2",
+          "flex items-center justify-between",
           "bg-theme-bg-accent",
           {
             "cursor-pointer hover:bg-theme-bg-selected": allowToggle,
-            "rounded-t-lg": true,
-            "rounded-b-lg": !isExpanded,
           },
         )}
+        style={toolCallHeaderStyle}
         onClick={toggleExpanded}
         role={allowToggle ? "button" : undefined}
         tabIndex={allowToggle ? 0 : undefined}
@@ -79,8 +92,8 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         aria-expanded={allowToggle ? isExpanded : undefined}
         aria-label={`${t`Tool calls`} (${toolCalls.length} ${t`total`}, ${successCount} ${t`successful`}, ${errorCount} ${t`failed`})`}
       >
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
+        <div className="flex items-center" style={toolCallSummaryStyle}>
+          <div className="flex items-center" style={toolCallSummaryStyle}>
             <span className="flex items-center gap-1 text-xs font-medium text-theme-fg-secondary">
               <ToolsIcon className="size-3" />
               {t`Tool Calls`}
@@ -89,7 +102,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
               {toolCalls.length}
             </span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center" style={toolCallSummaryStyle}>
             {successCount > 0 && (
               <span className="flex items-center gap-1 rounded-full bg-theme-success-bg px-1.5 py-0.5 text-xs font-medium text-theme-success-fg">
                 <CheckIcon className="size-3" />

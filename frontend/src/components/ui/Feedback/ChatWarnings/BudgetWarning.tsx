@@ -90,6 +90,7 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
     <Alert
       type={alertType}
       title={title}
+      geometryVariant="message"
       dismissible={!!onDismiss}
       onDismiss={onDismiss}
       className={clsx("mb-2", className)}

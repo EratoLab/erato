@@ -59,7 +59,7 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
     // Create a custom remove button using the Button component
     const customRemoveButton = (
       <Button
-        variant="ghost"
+        variant="icon-only"
         size="sm"
         icon={<CloseIcon className="size-4" />}
         aria-label={`${t`Remove`} ${(file as File).name || (file as FileUploadItem).filename}`}
@@ -69,7 +69,7 @@ export const FilePreviewButton = memo<FilePreviewButtonProps>(
           handleRemove();
         }}
         disabled={disabled}
-        className="rounded-full p-1"
+        className="rounded-full"
       />
     );
 

@@ -26,6 +26,8 @@ interface AlertProps {
   className?: string;
   /** Icon to display (if not provided, uses default for type) */
   icon?: ReactNode;
+  /** Optional geometry variant for chat message surfaces */
+  geometryVariant?: "default" | "message";
   /** Test ID for e2e testing */
   "data-testid"?: string;
 }
@@ -41,8 +43,19 @@ export const Alert: React.FC<AlertProps> = ({
   onDismiss,
   className = "",
   icon,
+  geometryVariant = "default",
   "data-testid": dataTestId,
 }) => {
+  const alertFrameStyle =
+    geometryVariant === "message"
+      ? ({
+          borderRadius: "var(--theme-radius-message)",
+          gap: "var(--theme-spacing-control-gap)",
+          padding:
+            "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
+        } as const)
+      : undefined;
+
   // Get themed icon IDs for each alert type
   const errorIconId = useThemedIcon("status", "error");
   const warningIconId = useThemedIcon("status", "warning");
@@ -80,10 +93,12 @@ export const Alert: React.FC<AlertProps> = ({
   return (
     <div
       className={clsx(
-        "flex items-start gap-3 rounded-md border p-3",
+        "flex items-start border",
+        geometryVariant === "message" ? "" : "gap-3 rounded-md p-3",
         styles[type].container,
         className,
       )}
+      style={alertFrameStyle}
       role="alert"
       data-testid={dataTestId}
     >
