@@ -9,6 +9,14 @@ interface ImageContentDisplayProps {
   className?: string;
 }
 
+const IMAGE_PREVIEW_CONTAINER_STYLE = {
+  maxWidth: "var(--theme-layout-chat-image-preview-max-width)",
+} as const;
+
+const IMAGE_PREVIEW_STYLE = {
+  maxHeight: "var(--theme-layout-chat-image-preview-max-height)",
+} as const;
+
 /**
  * Displays images within message content
  * Supports both base64 and URL-based images
@@ -40,7 +48,8 @@ export const ImageContentDisplay = memo<ImageContentDisplayProps>(
           return (
             <div
               key={image.id}
-              className="relative max-w-sm overflow-hidden rounded-lg border border-theme-border-primary"
+              className="relative overflow-hidden rounded-lg border border-theme-border-primary"
+              style={IMAGE_PREVIEW_CONTAINER_STYLE}
               onClick={() => onImageClick?.(image)}
               role={onImageClick ? "button" : undefined}
               tabIndex={onImageClick ? 0 : undefined}
@@ -71,7 +80,8 @@ export const ImageContentDisplay = memo<ImageContentDisplayProps>(
                       message: "Message attachment",
                     }),
                   )}
-                  className="max-h-96 w-full cursor-pointer object-contain transition-transform hover:scale-105"
+                  className="w-full cursor-pointer object-contain transition-transform hover:scale-105"
+                  style={IMAGE_PREVIEW_STYLE}
                   onError={(e) => handleImageError(image.id, e)}
                   loading="lazy"
                 />

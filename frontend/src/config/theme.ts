@@ -240,6 +240,8 @@ export type ThemeLayout = {
   chat: {
     contentMaxWidth: string;
     inputMaxWidth: string;
+    imagePreviewMaxWidth: string;
+    imagePreviewMaxHeight: string;
   };
   sidebar: {
     width: string;
@@ -534,6 +536,8 @@ export const defaultTheme: Theme = {
     chat: {
       contentMaxWidth: "48rem",
       inputMaxWidth: "56rem",
+      imagePreviewMaxWidth: "24rem",
+      imagePreviewMaxHeight: "24rem",
     },
     sidebar: {
       width: "17.5rem",
