@@ -36,6 +36,23 @@ import type React from "react";
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal form field key
 const FACET_IDS_FIELD: keyof AssistantFormData = "facetIds";
 
+function mergeUniqueFilesById(
+  existingFiles: FileUploadItem[],
+  newFiles: FileUploadItem[],
+) {
+  const seenFileIds = new Set(existingFiles.map((file) => file.id));
+  const uniqueNewFiles = newFiles.filter((file) => {
+    if (seenFileIds.has(file.id)) {
+      return false;
+    }
+
+    seenFileIds.add(file.id);
+    return true;
+  });
+
+  return [...existingFiles, ...uniqueNewFiles];
+}
+
 export interface AssistantFormData {
   name: string;
   description: string;
@@ -323,7 +340,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const handleFilesUploaded = useCallback((files: FileUploadItem[]) => {
     setFormData((prev) => ({
       ...prev,
-      files: [...prev.files, ...files],
+      files: mergeUniqueFilesById(prev.files, files),
     }));
   }, []);
 

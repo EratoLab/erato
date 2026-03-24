@@ -13,6 +13,23 @@ import type { FormEvent } from "react";
 
 const logger = createLogger("HOOK", "useChatInputHandlers");
 
+function mergeUniqueFilesById(
+  existingFiles: FileUploadItem[],
+  newFiles: FileUploadItem[],
+) {
+  const seenFileIds = new Set(existingFiles.map((file) => file.id));
+  const uniqueNewFiles = newFiles.filter((file) => {
+    if (seenFileIds.has(file.id)) {
+      return false;
+    }
+
+    seenFileIds.add(file.id);
+    return true;
+  });
+
+  return [...existingFiles, ...uniqueNewFiles];
+}
+
 interface UseChatInputHandlersResult {
   /** Currently attached files */
   attachedFiles: FileUploadItem[];
@@ -57,7 +74,7 @@ export function useChatInputHandlers(
       logger.log("handleFilesUploaded called with:", files);
       setAttachedFilesState((prevFiles) => {
         // Limit to maxFiles
-        const combinedFiles = [...prevFiles, ...files];
+        const combinedFiles = mergeUniqueFilesById(prevFiles, files);
         const limitedFiles = combinedFiles.slice(0, maxFiles);
 
         // Notify parent component if handler provided

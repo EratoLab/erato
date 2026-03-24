@@ -65,6 +65,11 @@ test.describe("Assistant Management", () => {
     await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible({
       timeout: 2000,
     });
+    await expect(
+      page.getByRole("button", {
+        name: /remove sample-report-compressed\.pdf/i,
+      }),
+    ).toHaveCount(1);
 
     // Submit the form
     await page.getByRole("button", { name: /create assistant/i }).click();
@@ -197,6 +202,11 @@ test.describe("Assistant Management", () => {
 
     // Wait for file to appear (text may be truncated with ellipsis)
     await expect(page.getByText(/sample.*compressed.*pdf/i)).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: /remove sample-report-compressed\.pdf/i,
+      }),
+    ).toHaveCount(1);
 
     // Remove the file
     await page
