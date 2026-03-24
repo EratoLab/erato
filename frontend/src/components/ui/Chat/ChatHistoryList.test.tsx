@@ -109,4 +109,28 @@ describe("ChatHistoryList", () => {
         "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
     });
   });
+
+  it("keeps session rows as links while the inner layout wrapper stays presentational", async () => {
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <I18nProvider i18n={i18n}>
+        <ChatHistoryList
+          sessions={sessions}
+          currentSessionId="chat-1"
+          onSessionSelect={vi.fn()}
+          onSessionArchive={vi.fn()}
+          onSessionEditTitle={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    const firstSessionLink = screen.getByRole("link", { name: "First chat" });
+    const firstSessionItem = container.querySelector(
+      '[data-chat-id="chat-1"]',
+    ) as HTMLElement;
+
+    expect(firstSessionLink).toHaveClass("focus-ring-tight");
+    expect(firstSessionItem).not.toHaveAttribute("role");
+    expect(firstSessionItem).not.toHaveAttribute("tabindex");
+  });
 });
