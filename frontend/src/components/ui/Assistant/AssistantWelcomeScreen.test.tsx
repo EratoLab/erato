@@ -15,6 +15,7 @@ i18n.activate("en");
 
 vi.mock("@/hooks/ui/usePageAlignment", () => ({
   usePageAlignment: () => ({
+    containerClasses: "max-w-4xl mx-auto",
     textAlignment: "text-left",
     flexAlignment: "items-start",
     justifyAlignment: "justify-start",
@@ -57,5 +58,8 @@ describe("AssistantWelcomeScreen", () => {
     expect(
       screen.getByText("Start typing below to begin a new conversation"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("assistant-welcome-screen-default").className,
+    ).toContain("w-full");
   });
 });

@@ -576,50 +576,52 @@ export const MessageList = memo<MessageListProps>(
         onCopy={handleCopyPlainText}
       >
         {renderMessageListHeader}
-        <div className="mx-auto w-full" style={contentWidthStyle}>
-          {showEmptyState && emptyStateComponent ? (
-            <div className="flex h-full min-h-[300px] items-center justify-end pb-6 pt-16 sm:pb-10 sm:pt-24">
-              {emptyStateComponent}
-            </div>
-          ) : shouldUseVirtualization ? (
-            <VirtualizedMessageList
-              messages={messages}
-              visibleData={visibleData}
-              containerSize={containerSize}
-              isNewlyLoaded={isNewlyLoaded}
-              getMessageClassName={getMessageClassName}
-              maxWidth={maxWidth}
-              showTimestamps={showTimestamps}
-              showAvatars={showAvatars}
-              userProfile={userProfile}
-              controls={controls}
-              messageRenderer={messageRenderer}
-              controlsContext={controlsContext}
-              onMessageAction={onMessageAction}
-              onFilePreview={onFilePreview}
-              onViewFeedback={onViewFeedback}
-              allFilesById={allFilesById}
-            />
-          ) : (
-            <StandardMessageList
-              messages={messages}
-              visibleData={visibleData}
-              isNewlyLoaded={isNewlyLoaded}
-              getMessageClassName={getMessageClassName}
-              maxWidth={maxWidth}
-              showTimestamps={showTimestamps}
-              showAvatars={showAvatars}
-              userProfile={userProfile}
-              controls={controls}
-              messageRenderer={messageRenderer}
-              controlsContext={controlsContext}
-              onMessageAction={onMessageAction}
-              onFilePreview={onFilePreview}
-              onViewFeedback={onViewFeedback}
-              allFilesById={allFilesById}
-            />
-          )}
-        </div>
+        {showEmptyState && emptyStateComponent ? (
+          <div className="flex min-h-[300px] w-full items-center justify-center pb-6 pt-16 sm:pb-10 sm:pt-24">
+            {emptyStateComponent}
+          </div>
+        ) : (
+          <div className="mx-auto w-full" style={contentWidthStyle}>
+            {shouldUseVirtualization ? (
+              <VirtualizedMessageList
+                messages={messages}
+                visibleData={visibleData}
+                containerSize={containerSize}
+                isNewlyLoaded={isNewlyLoaded}
+                getMessageClassName={getMessageClassName}
+                maxWidth={maxWidth}
+                showTimestamps={showTimestamps}
+                showAvatars={showAvatars}
+                userProfile={userProfile}
+                controls={controls}
+                messageRenderer={messageRenderer}
+                controlsContext={controlsContext}
+                onMessageAction={onMessageAction}
+                onFilePreview={onFilePreview}
+                onViewFeedback={onViewFeedback}
+                allFilesById={allFilesById}
+              />
+            ) : (
+              <StandardMessageList
+                messages={messages}
+                visibleData={visibleData}
+                isNewlyLoaded={isNewlyLoaded}
+                getMessageClassName={getMessageClassName}
+                maxWidth={maxWidth}
+                showTimestamps={showTimestamps}
+                showAvatars={showAvatars}
+                userProfile={userProfile}
+                controls={controls}
+                messageRenderer={messageRenderer}
+                controlsContext={controlsContext}
+                onMessageAction={onMessageAction}
+                onFilePreview={onFilePreview}
+                onViewFeedback={onViewFeedback}
+                allFilesById={allFilesById}
+              />
+            )}
+          </div>
+        )}
       </div>
     );
   },
