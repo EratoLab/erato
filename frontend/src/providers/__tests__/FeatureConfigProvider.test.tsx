@@ -15,6 +15,7 @@ import {
   useUploadFeature,
   useChatInputFeature,
   useAuthFeature,
+  useAssistantsFeature,
   useMessageFeedbackFeature,
   useSidebarFeature,
   useUserPreferencesFeature,
@@ -50,6 +51,8 @@ describe("FeatureConfigProvider", () => {
       disableLogout: false,
       assistantsEnabled: false,
       assistantsShowRecentItems: false,
+      assistantContextWarningThreshold: 0.5,
+      assistantContextFileContributorThreshold: 0.05,
       starterPromptsEnabled: false,
       sharepointEnabled: false,
       messageFeedbackEnabled: false,
@@ -104,6 +107,8 @@ describe("FeatureConfigProvider", () => {
         assistants: {
           enabled: false,
           showRecentItems: false,
+          contextWarningThreshold: 0.5,
+          contextFileContributorThreshold: 0.05,
         },
         starterPrompts: {
           enabled: false,
@@ -434,6 +439,60 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current.showLogout).toBe(false);
+    });
+  });
+
+  describe("useAssistantsFeature", () => {
+    it("should return assistants config with the default context warning threshold", () => {
+      const { result } = renderHook(() => useAssistantsFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current).toEqual({
+        enabled: false,
+        showRecentItems: false,
+        contextWarningThreshold: 0.5,
+        contextFileContributorThreshold: 0.05,
+      });
+    });
+
+    it("should return configured assistants thresholds", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        disableLogout: false,
+        assistantsEnabled: true,
+        assistantsShowRecentItems: true,
+        assistantContextWarningThreshold: 0.1,
+        assistantContextFileContributorThreshold: 0.02,
+        sharepointEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
+        messageFeedbackEditTimeLimitSeconds: null,
+        maxUploadSizeBytes: 20971520,
+        sidebarCollapsedMode: "hidden",
+        sidebarLogoPath: null,
+        sidebarLogoDarkPath: null,
+      });
+
+      const { result } = renderHook(() => useAssistantsFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current).toEqual({
+        enabled: true,
+        showRecentItems: true,
+        contextWarningThreshold: 0.1,
+        contextFileContributorThreshold: 0.02,
+      });
     });
   });
 

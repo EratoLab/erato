@@ -11,6 +11,8 @@ export type Env = {
   disableLogout: boolean;
   assistantsEnabled: boolean;
   assistantsShowRecentItems: boolean;
+  assistantContextWarningThreshold: number;
+  assistantContextFileContributorThreshold: number;
   starterPromptsEnabled: boolean;
   promptOptimizerEnabled: boolean;
   userPreferencesEnabled: boolean;
@@ -42,6 +44,8 @@ declare global {
     DISABLE_LOGOUT?: boolean;
     ASSISTANTS_ENABLED?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
+    ASSISTANTS_CONTEXT_WARNING_THRESHOLD?: number;
+    ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD?: number;
     STARTER_PROMPTS_ENABLED?: boolean;
     PROMPT_OPTIMIZER_ENABLED?: boolean;
     USER_PREFERENCES_ENABLED?: boolean;
@@ -123,6 +127,14 @@ export const env = (): Env => {
     import.meta.env.VITE_ASSISTANTS_SHOW_RECENT_ITEMS === "true"
       ? true
       : (window.ASSISTANTS_SHOW_RECENT_ITEMS ?? false);
+  const assistantContextWarningThreshold = import.meta.env
+    .VITE_ASSISTANTS_CONTEXT_WARNING_THRESHOLD
+    ? Number(import.meta.env.VITE_ASSISTANTS_CONTEXT_WARNING_THRESHOLD)
+    : (window.ASSISTANTS_CONTEXT_WARNING_THRESHOLD ?? 0.5);
+  const assistantContextFileContributorThreshold = import.meta.env
+    .VITE_ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD
+    ? Number(import.meta.env.VITE_ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD)
+    : (window.ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD ?? 0.05);
   const starterPromptsEnabled =
     import.meta.env.VITE_STARTER_PROMPTS_ENABLED === "true"
       ? true
@@ -196,6 +208,8 @@ export const env = (): Env => {
     disableLogout,
     assistantsEnabled,
     assistantsShowRecentItems,
+    assistantContextWarningThreshold,
+    assistantContextFileContributorThreshold,
     starterPromptsEnabled,
     promptOptimizerEnabled,
     userPreferencesEnabled,

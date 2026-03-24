@@ -379,6 +379,11 @@ impl AppConfig {
             panic!("Invalid budget configuration: {}", e);
         }
 
+        // Validate experimental assistants configuration
+        if let Err(e) = config.experimental_assistants.validate() {
+            panic!("Invalid experimental assistants configuration: {}", e);
+        }
+
         // Validate file processor configuration
         if config.file_processor.processor != "parser-core"
             && config.file_processor.processor != "kreuzberg"
@@ -1252,7 +1257,7 @@ fn default_sidebar_chat_history_show_metadata() -> bool {
     true
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Clone)]
 pub struct ExperimentalAssistantsConfig {
     // Whether the experimental assistants feature is enabled.
     // Defaults to `false`.
@@ -1263,6 +1268,58 @@ pub struct ExperimentalAssistantsConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub show_recent_items: bool,
+
+    // The threshold (between 0.0 and 1.0) at or above which the assistant editor
+    // shows the context usage warning block.
+    // Defaults to `0.5` (50%).
+    #[serde(default = "default_assistant_context_warning_threshold")]
+    pub context_warning_threshold: f64,
+
+    // The threshold (between 0.0 and 1.0) at or above which a file is included in
+    // the assistant editor's "largest file context contributors" list.
+    // Defaults to `0.05` (5%).
+    #[serde(default = "default_assistant_context_file_contributor_threshold")]
+    pub context_file_contributor_threshold: f64,
+}
+
+impl Default for ExperimentalAssistantsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            show_recent_items: false,
+            context_warning_threshold: default_assistant_context_warning_threshold(),
+            context_file_contributor_threshold:
+                default_assistant_context_file_contributor_threshold(),
+        }
+    }
+}
+
+fn default_assistant_context_warning_threshold() -> f64 {
+    0.5
+}
+
+fn default_assistant_context_file_contributor_threshold() -> f64 {
+    0.05
+}
+
+impl ExperimentalAssistantsConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if !(0.0..=1.0).contains(&self.context_warning_threshold) {
+            return Err(eyre!(
+                "context_warning_threshold must be between 0.0 and 1.0, got: {}",
+                self.context_warning_threshold
+            ));
+        }
+
+        if !(0.0..=1.0).contains(&self.context_file_contributor_threshold) {
+            return Err(eyre!(
+                "context_file_contributor_threshold must be between 0.0 and 1.0, got: {}",
+                self.context_file_contributor_threshold
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]

@@ -24,6 +24,7 @@ import {
   useFacets,
   usePromptOptimizer,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 
 import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
 import type {
@@ -32,7 +33,6 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
-const CONTEXT_WARNING_THRESHOLD = 0.5;
 // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal form field key
 const FACET_IDS_FIELD: keyof AssistantFormData = "facetIds";
 
@@ -153,6 +153,8 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   } = useFilePreviewModal();
   const promptOptimizer = usePromptOptimizer();
   const { data: facetsData } = useFacets({});
+  const { contextWarningThreshold, contextFileContributorThreshold } =
+    useAssistantsFeature();
   const {
     estimateTokenUsageFromParts,
     lastEstimation,
@@ -461,11 +463,13 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
           percentage,
         };
       })
-      .filter((file) => file.percentage > 5)
+      .filter(
+        (file) => file.percentage >= contextFileContributorThreshold * 100,
+      )
       .sort((a, b) => b.percentage - a.percentage);
-  }, [effectiveEstimation]);
+  }, [contextFileContributorThreshold, effectiveEstimation]);
   const showContextWarning =
-    usedContextPercentage >= CONTEXT_WARNING_THRESHOLD * 100;
+    usedContextPercentage >= contextWarningThreshold * 100;
 
   useEffect(() => {
     if (
