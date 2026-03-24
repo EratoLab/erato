@@ -34,7 +34,7 @@ describe("ImageContentDisplay", () => {
     });
   });
 
-  it("keeps the image click interaction intact", () => {
+  it("renders interactive previews as semantic buttons and forwards clicks", () => {
     const onImageClick = vi.fn();
 
     renderWithTheme(
@@ -43,12 +43,19 @@ describe("ImageContentDisplay", () => {
 
     const imageButton = screen.getByRole("button");
     fireEvent.click(imageButton);
-    fireEvent.keyDown(imageButton, { key: "Enter" });
-    fireEvent.keyDown(imageButton, { key: " " });
 
-    expect(onImageClick).toHaveBeenCalledTimes(3);
+    expect(imageButton.tagName).toBe("BUTTON");
+    expect(onImageClick).toHaveBeenCalledTimes(1);
     expect(onImageClick).toHaveBeenNthCalledWith(1, images[0]);
-    expect(onImageClick).toHaveBeenNthCalledWith(2, images[0]);
-    expect(onImageClick).toHaveBeenNthCalledWith(3, images[0]);
+  });
+
+  it("keeps static previews non-interactive", () => {
+    renderWithTheme(<ImageContentDisplay images={images} />);
+
+    const image = screen.getByRole("img", { name: "Message attachment" });
+
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(image).not.toHaveClass("cursor-pointer");
+    expect(image).not.toHaveClass("hover:scale-105");
   });
 });

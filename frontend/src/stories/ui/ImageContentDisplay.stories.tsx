@@ -128,7 +128,8 @@ export const ClickablePreview: Story = {
     });
 
     await expect(button).toBeInTheDocument();
-    await expect(button).toHaveAttribute("tabindex", "0");
+    await expect(button.tagName).toBe("BUTTON");
+    await expect(button).toHaveAttribute("type", "button");
     await expect(image).toBeInTheDocument();
     await userEvent.click(button);
     await expect(args.onImageClick).toHaveBeenCalledTimes(1);
