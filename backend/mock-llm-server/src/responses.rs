@@ -338,6 +338,9 @@ pub async fn stream_response(
         ResponseConfig::LongRunning(_) => {
             unreachable!("LongRunning responses should be resolved into Static in matcher")
         }
+        ResponseConfig::RandomOneLiner(_) => {
+            unreachable!("RandomOneLiner responses should be resolved into Static in matcher")
+        }
     };
 
     futures::stream::iter(actions).then(|action| async move {

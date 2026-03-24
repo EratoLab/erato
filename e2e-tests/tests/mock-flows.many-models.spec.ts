@@ -262,6 +262,82 @@ test(
 );
 
 test(
+  "Mock-LLM regenerating an assistant message creates a new active branch",
+  { tag: TAG_CI },
+  async ({ page }) => {
+    test.setTimeout(90000);
+
+    await page.goto("/");
+    await chatIsReadyToChat(page);
+    await selectMockModel(page);
+
+    const textbox = page.getByRole("textbox", { name: "Type a message..." });
+    await expect(textbox).toBeVisible();
+
+    await textbox.fill("random");
+    await textbox.press("Enter");
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 30000,
+    });
+
+    const assistantMessage = page.getByTestId("message-assistant").last();
+    await expect(assistantMessage).toBeVisible();
+    const initialAssistantMessageId =
+      await assistantMessage.getAttribute("data-message-id");
+    expect(initialAssistantMessageId).toBeTruthy();
+    const initialAssistantText = (await assistantMessage.textContent()) ?? "";
+    expect(initialAssistantText).toContain("Random mock line #");
+
+    let capturedRequestBody: Record<string, unknown> | null = null;
+    await page.route(
+      "**/api/v1beta/me/messages/regeneratestream",
+      async (route) => {
+        const postData = route.request().postData();
+        if (postData) {
+          capturedRequestBody = JSON.parse(postData) as Record<string, unknown>;
+        }
+        await route.continue();
+      },
+    );
+
+    await assistantMessage.hover();
+    const regenerateButton = assistantMessage.getByLabel("Regenerate response");
+    await regenerateButton.waitFor({ state: "visible", timeout: 10000 });
+    await regenerateButton.click();
+
+    await chatIsReadyToChat(page, {
+      expectAssistantResponse: true,
+      loadingTimeoutMs: 30000,
+    });
+
+    expect(capturedRequestBody).not.toBeNull();
+    expect(capturedRequestBody?.current_message_id).toBe(
+      initialAssistantMessageId,
+    );
+
+    await messageIsNotPresent(page, initialAssistantMessageId!);
+
+    const regeneratedAssistantMessage = page
+      .getByTestId("message-assistant")
+      .last();
+    await expect(regeneratedAssistantMessage).toBeVisible();
+    const regeneratedAssistantMessageId =
+      await regeneratedAssistantMessage.getAttribute("data-message-id");
+    expect(regeneratedAssistantMessageId).toBeTruthy();
+    expect(regeneratedAssistantMessageId).not.toBe(initialAssistantMessageId);
+    const regeneratedAssistantText =
+      (await regeneratedAssistantMessage.textContent()) ?? "";
+    expect(regeneratedAssistantText).toContain("Random mock line #");
+    expect(regeneratedAssistantText).not.toBe(initialAssistantText);
+
+    await expect(page.getByTestId("message-user")).toHaveCount(1);
+    await expect(page.getByTestId("message-assistant")).toHaveCount(1);
+  },
+);
+
+test(
   "Mock-LLM re-focuses chat input after streaming completes",
   { tag: TAG_CI },
   async ({ page }) => {

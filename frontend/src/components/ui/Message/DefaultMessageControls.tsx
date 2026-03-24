@@ -15,6 +15,7 @@ import {
   EditIcon,
   CheckIcon,
   CodeIcon,
+  RerunIcon,
 } from "../icons";
 
 import type { MessageControlsProps } from "@/types/message-controls";
@@ -83,7 +84,7 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
   }, [isCopied]);
 
   const handleAction = useCallback(
-    async (actionType: "copy" | "edit" | "like" | "dislike") => {
+    async (actionType: "copy" | "edit" | "regenerate" | "like" | "dislike") => {
       // Determine if user is clicking the same sentiment they already submitted
       const isClickingSameSentiment =
         (actionType === "like" && feedbackState === "liked") ||
@@ -217,6 +218,25 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
             aria-label={t({ id: "message.edit.aria", message: "Edit message" })}
             title={t({ id: "message.edit.aria", message: "Edit message" })}
             disabled={feedbackState !== null}
+            className={controlsButtonClassName}
+          />
+        )}
+
+        {!isUser && canEditChat && !context.isSharedDialog && (
+          <Button
+            onClick={() => void handleAction("regenerate")}
+            variant="icon-only"
+            icon={<RerunIcon />}
+            size="sm"
+            showOnHover={showOnHover}
+            aria-label={t({
+              id: "message.regenerate.aria",
+              message: "Regenerate response",
+            })}
+            title={t({
+              id: "message.regenerate.aria",
+              message: "Regenerate response",
+            })}
             className={controlsButtonClassName}
           />
         )}

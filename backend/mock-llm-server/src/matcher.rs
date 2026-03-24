@@ -1,4 +1,5 @@
 use colored::Colorize;
+use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -89,6 +90,21 @@ fn default_long_running_max_seconds() -> usize {
     3600
 }
 
+/// Random one-liner response configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RandomOneLinerResponseConfig {
+    /// Number of one-liner variants available for random selection
+    #[serde(default = "default_random_one_liner_variant_count")]
+    pub variant_count: usize,
+    /// Delay between chunks in milliseconds
+    #[serde(default)]
+    pub delay_ms: u64,
+}
+
+fn default_random_one_liner_variant_count() -> usize {
+    100
+}
+
 /// Configuration for a response to return when a pattern matches
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResponseConfig {
@@ -104,6 +120,8 @@ pub enum ResponseConfig {
     CiteFiles(CiteFilesResponseConfig),
     /// Dynamic long-running response configurable via `long running <seconds>`
     LongRunning(LongRunningResponseConfig),
+    /// Dynamic random one-liner chosen from a fixed pool of variants
+    RandomOneLiner(RandomOneLinerResponseConfig),
 }
 
 /// Match rule that checks user message pattern using substring matching
@@ -272,6 +290,14 @@ impl Mock {
                     config.delay_ms
                 );
             }
+            ResponseConfig::RandomOneLiner(config) => {
+                println!(
+                    "    {}: random one-liner from {} variants with {}ms delay",
+                    "Response".bold(),
+                    config.variant_count,
+                    config.delay_ms
+                );
+            }
         }
         println!();
     }
@@ -366,6 +392,16 @@ impl Matcher {
                     ..Default::default()
                 })
             }
+            ResponseConfig::RandomOneLiner(config) => {
+                ResponseConfig::Static(StaticResponseConfig {
+                    chunks: vec![Self::select_random_one_liner(
+                        config.variant_count,
+                        &self.extract_assistant_messages(request),
+                    )],
+                    delay_ms: config.delay_ms,
+                    ..Default::default()
+                })
+            }
             _ => response.clone(),
         }
     }
@@ -401,6 +437,45 @@ impl Matcher {
         }
 
         None
+    }
+
+    fn build_random_one_liner_variants(variant_count: usize) -> Vec<String> {
+        (1..=variant_count.max(1))
+            .map(|index| format!("Random mock line #{index}: concise variant {index}."))
+            .collect()
+    }
+
+    fn select_random_one_liner(
+        variant_count: usize,
+        prior_assistant_messages: &[String],
+    ) -> String {
+        let variants = Self::build_random_one_liner_variants(variant_count);
+        let previously_used = prior_assistant_messages.iter().collect::<HashSet<_>>();
+
+        let available_variants = variants
+            .iter()
+            .filter(|variant| !previously_used.contains(*variant))
+            .collect::<Vec<_>>();
+
+        let mut rng = rand::thread_rng();
+        if let Some(choice) = available_variants.choose(&mut rng) {
+            return (*choice).clone();
+        }
+
+        variants
+            .choose(&mut rng)
+            .cloned()
+            .unwrap_or_else(|| "Random mock line #1: concise variant 1.".to_string())
+    }
+
+    fn extract_assistant_messages(&self, request: &ChatCompletionRequest) -> Vec<String> {
+        request
+            .messages
+            .iter()
+            .filter(|message| message.role == "assistant")
+            .filter_map(|message| message.content.as_ref())
+            .map(|content| self.extract_content_text(content))
+            .collect()
     }
 
     /// Check if any of the match rules match the request
@@ -1221,6 +1296,44 @@ mod tests {
         match response {
             ResponseConfig::Static(config) => {
                 assert_eq!(config.chunks.len(), 90);
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
+    fn test_random_one_liner_avoids_previous_assistant_response_when_possible() {
+        let mocks = vec![Mock {
+            name: "RandomOneLiner".to_string(),
+            description: "Random one-liner".to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: "random".to_string(),
+            })],
+            response: ResponseConfig::RandomOneLiner(RandomOneLinerResponseConfig {
+                variant_count: 100,
+                delay_ms: 25,
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {"role": "user", "content": "random"},
+                {"role": "assistant", "content": "Random mock line #42: concise variant 42."},
+                {"role": "user", "content": "random"}
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0013");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_eq!(config.delay_ms, 25);
+                assert_eq!(config.chunks.len(), 1);
+                assert_ne!(
+                    config.chunks[0],
+                    "Random mock line #42: concise variant 42."
+                );
             }
             _ => panic!("Expected Static response"),
         }

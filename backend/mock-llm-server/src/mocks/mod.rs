@@ -2,8 +2,8 @@ use crate::image_data;
 use crate::matcher::{
     CiteFilesResponseConfig, ErrorResponseConfig, ImageMock, LongRunningResponseConfig, MatchRule,
     MatchRuleAnyUserMessageInCurrentTurnWithPattern, MatchRuleLastMessageIsUserWithPattern,
-    MatchRuleUserMessagePattern, Mock, ResponseConfig, StaticResponseConfig, ToolCallDef,
-    ToolCallResponseConfig, ToolCallsResponseConfig,
+    MatchRuleUserMessagePattern, Mock, RandomOneLinerResponseConfig, ResponseConfig,
+    StaticResponseConfig, ToolCallDef, ToolCallResponseConfig, ToolCallsResponseConfig,
 };
 use serde_json::json;
 
@@ -228,6 +228,19 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "RandomOneLiner".to_string(),
+            description:
+                "Returns one of 100 short responses and avoids reusing a prior assistant variant when possible"
+                    .to_string(),
+            match_rules: vec![MatchRule::UserMessagePattern(MatchRuleUserMessagePattern {
+                pattern: "random".to_string(),
+            })],
+            response: ResponseConfig::RandomOneLiner(RandomOneLinerResponseConfig {
+                variant_count: 100,
+                delay_ms: 20,
+            }),
+        },
+        Mock {
             name: "LongRunning".to_string(),
             description:
                 "Demonstrates very long streaming response (default 90s, supports: 'long running <seconds>')"
@@ -440,5 +453,11 @@ mod tests {
             assert!(!mock.pattern.is_empty());
             assert!(!mock.image_base64.is_empty());
         }
+    }
+
+    #[test]
+    fn test_default_mocks_include_random_one_liner() {
+        let mocks = get_default_mocks();
+        assert!(mocks.iter().any(|mock| mock.name == "RandomOneLiner"));
     }
 }

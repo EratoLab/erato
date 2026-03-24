@@ -664,6 +664,11 @@ msgstr "Nachricht bearbeiten"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
+msgid "message.regenerate.aria"
+msgstr "Antwort neu generieren"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.showFormatted.aria"
 msgstr "Formatiert anzeigen"
 

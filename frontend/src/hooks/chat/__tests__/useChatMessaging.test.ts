@@ -853,6 +853,36 @@ describe("useChatMessaging", () => {
     expect(result.current.isStreaming).toBe(true);
   });
 
+  it("should hide the old assistant message immediately when regenerating", async () => {
+    const { result } = setupChatMessagingTest();
+
+    expect(result.current.messages["msg2"]).toBeDefined();
+    expect(
+      useMessagingStore.getState().getApiMessages("chat1")["msg2"],
+    ).toBeDefined();
+
+    await act(async () => {
+      await result.current.regenerateMessage("msg2");
+    });
+
+    expect(result.current.messages["msg2"]).toBeUndefined();
+    expect(
+      useMessagingStore.getState().getApiMessages("chat1")["msg2"],
+    ).toBeDefined();
+    expect(
+      Object.values(result.current.messages).filter(
+        (m) => m.role === "assistant",
+      ),
+    ).toHaveLength(0);
+    expect(mockCreateSSEConnection).toHaveBeenCalledWith(
+      "/api/v1beta/me/messages/regeneratestream",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ current_message_id: "msg2" }),
+      }),
+    );
+  });
+
   it("should preserve per-chat streaming state when switching chats", async () => {
     mockUseChatMessages.mockReturnValue({
       data: undefined,
