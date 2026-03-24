@@ -191,10 +191,17 @@ export function useChatMessaging(
   const apiMessagesForRenderStream = useMessagingStore((state) =>
     state.getApiMessages(renderStreamKey),
   );
+  const hiddenMessageIdsSignatureForRenderStream = useMessagingStore(
+    (state) => state.hiddenMessageIdsByKey[renderStreamKey]?.join(",") ?? "",
+  );
   const getRenderableMessages = useMessagingStore(
     (state) => state.getRenderableMessages,
   );
   const setApiMessages = useMessagingStore((state) => state.setApiMessages);
+  const hideMessageId = useMessagingStore((state) => state.hideMessageId);
+  const clearHiddenMessageIds = useMessagingStore(
+    (state) => state.clearHiddenMessageIds,
+  );
   const error = useMessagingStore((state) => state.error);
   const setError = useMessagingStore((state) => state.setError);
   const setNewlyCreatedChatIdInStore = useMessagingStore(
@@ -532,6 +539,7 @@ export function useChatMessaging(
         if (refetchedApiMessages) {
           setApiMessages(refetchedApiMessages, effectiveStreamKey);
         }
+        clearHiddenMessageIds(effectiveStreamKey);
 
         // Only clear user messages during navigation transitions or new chat creation
         // For existing chats, let the merge handle deduplication naturally
@@ -577,6 +585,7 @@ export function useChatMessaging(
             `[DEBUG_REDIRECT] ${logContext} (new chat without active chatId for refetch), relevant for pending chat: ${newlyCreatedChatId}`,
           );
         }
+        clearHiddenMessageIds(effectiveStreamKey);
       }
 
       // Signal that finalization is complete - frontend is now fully ready
@@ -790,6 +799,7 @@ export function useChatMessaging(
     renderStreamKey,
     streaming,
     userMessages,
+    hiddenMessageIdsSignatureForRenderStream,
   ]);
 
   // --- Hoist messageOrder definition here ---
@@ -1768,6 +1778,10 @@ export function useChatMessaging(
         setSSECleanupForKey(streamKey, null);
       }
 
+      // Keep the old assistant out of the render tree while the replacement
+      // branch is streaming, without mutating the cached API snapshot.
+      hideMessageId(currentMessageId, streamKey);
+
       setSubmittingForKey(streamKey, true);
 
       try {
@@ -1855,6 +1869,8 @@ export function useChatMessaging(
       streamKey,
       getSSECleanupForKey,
       setSSECleanupForKey,
+      hideMessageId,
+      clearHiddenMessageIds,
     ],
   );
 

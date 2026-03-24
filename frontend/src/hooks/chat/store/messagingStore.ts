@@ -46,6 +46,7 @@ export interface MessagingStore {
   streaming: StreamingState;
   streamingByKey: Record<string, StreamingState>;
   apiMessagesByKey: Record<string, Record<string, Message>>;
+  hiddenMessageIdsByKey: Record<string, string[]>;
   streamKeyAliases: Record<string, string>;
   activeStreamKey: string;
   userMessages: Record<string, Message>; // Backward-compat mirror of active stream key user messages
@@ -66,7 +67,10 @@ export interface MessagingStore {
   resetStreaming: (streamKey?: string | null) => void;
   clearAllStreaming: () => void;
   getApiMessages: (streamKey?: string | null) => Record<string, Message>;
+  getHiddenMessageIds: (streamKey?: string | null) => string[];
   setApiMessages: (messages: Message[], streamKey?: string | null) => void;
+  hideMessageId: (messageId: string, streamKey?: string | null) => void;
+  clearHiddenMessageIds: (streamKey?: string | null) => void;
   clearApiMessages: (streamKey?: string | null) => void;
   clearAllApiMessages: () => void;
   getUserMessages: (streamKey?: string | null) => Record<string, Message>;
@@ -127,6 +131,13 @@ export const useMessagingStore = create<MessagingStore>()(
       const getApiMessagesForKey = (state: MessagingStore, streamKey: string) =>
         state.apiMessagesByKey[resolveStreamKeyFromState(state, streamKey)] ??
         EMPTY_MESSAGES;
+      const getHiddenMessageIdsForKey = (
+        state: MessagingStore,
+        streamKey: string,
+      ) =>
+        state.hiddenMessageIdsByKey[
+          resolveStreamKeyFromState(state, streamKey)
+        ] ?? [];
       const getUserMessagesForKey = (
         state: MessagingStore,
         streamKey: string,
@@ -142,8 +153,13 @@ export const useMessagingStore = create<MessagingStore>()(
         const localUserMessages = Object.values(
           getUserMessagesForKey(state, streamKey),
         );
+        const hiddenMessageIds = new Set(
+          getHiddenMessageIdsForKey(state, streamKey),
+        );
         const apiMessages = includeApiMessages
-          ? Object.values(getApiMessagesForKey(state, streamKey))
+          ? Object.values(getApiMessagesForKey(state, streamKey)).filter(
+              (message) => !hiddenMessageIds.has(message.id),
+            )
           : [];
         const combinedMessages = mergeDisplayMessages(
           apiMessages,
@@ -177,6 +193,7 @@ export const useMessagingStore = create<MessagingStore>()(
         streaming: initialStreamingState,
         streamingByKey: {},
         apiMessagesByKey: {},
+        hiddenMessageIdsByKey: {},
         streamKeyAliases: {},
         activeStreamKey: NEW_CHAT_STREAM_KEY,
         userMessages: {},
@@ -235,6 +252,14 @@ export const useMessagingStore = create<MessagingStore>()(
                 nextApiMessagesByKey[toKey] = fromApiMessages;
                 delete nextApiMessagesByKey[fromKey];
               }
+              const nextHiddenMessageIdsByKey = {
+                ...prev.hiddenMessageIdsByKey,
+              };
+              const fromHiddenMessageIds = nextHiddenMessageIdsByKey[fromKey];
+              if (fromHiddenMessageIds) {
+                nextHiddenMessageIdsByKey[toKey] = fromHiddenMessageIds;
+                delete nextHiddenMessageIdsByKey[fromKey];
+              }
               const nextUserMessagesByKey = { ...prev.userMessagesByKey };
               const fromUserMessages = nextUserMessagesByKey[fromKey];
               if (fromUserMessages) {
@@ -265,6 +290,7 @@ export const useMessagingStore = create<MessagingStore>()(
                 streamKeyAliases: nextAliases,
                 streamingByKey: nextStreamingByKey,
                 apiMessagesByKey: nextApiMessagesByKey,
+                hiddenMessageIdsByKey: nextHiddenMessageIdsByKey,
                 userMessagesByKey: nextUserMessagesByKey,
                 sseAbortCallbacksByKey: nextAbortCallbacks,
                 streaming:
@@ -363,6 +389,10 @@ export const useMessagingStore = create<MessagingStore>()(
           const state = get();
           return getApiMessagesForKey(state, resolveStreamKey(streamKey));
         },
+        getHiddenMessageIds: (streamKey) => {
+          const state = get();
+          return getHiddenMessageIdsForKey(state, resolveStreamKey(streamKey));
+        },
         setApiMessages: (messages, streamKey) =>
           set(
             (prev) => {
@@ -383,6 +413,50 @@ export const useMessagingStore = create<MessagingStore>()(
             },
             false,
             "messaging/setApiMessages",
+          ),
+        hideMessageId: (messageId, streamKey) =>
+          set(
+            (prev) => {
+              const inputKey = resolveStreamKey(streamKey);
+              const resolvedKey = resolveStreamKeyFromState(prev, inputKey);
+              const previousHiddenMessageIds =
+                prev.hiddenMessageIdsByKey[resolvedKey] ?? [];
+              if (previousHiddenMessageIds.includes(messageId)) {
+                return prev;
+              }
+
+              return {
+                ...prev,
+                hiddenMessageIdsByKey: {
+                  ...prev.hiddenMessageIdsByKey,
+                  [resolvedKey]: [...previousHiddenMessageIds, messageId],
+                },
+              };
+            },
+            false,
+            "messaging/hideMessageId",
+          ),
+        clearHiddenMessageIds: (streamKey) =>
+          set(
+            (prev) => {
+              const inputKey = resolveStreamKey(streamKey);
+              const resolvedKey = resolveStreamKeyFromState(prev, inputKey);
+              if (!prev.hiddenMessageIdsByKey[resolvedKey]) {
+                return prev;
+              }
+
+              const nextHiddenMessageIdsByKey = {
+                ...prev.hiddenMessageIdsByKey,
+              };
+              delete nextHiddenMessageIdsByKey[resolvedKey];
+
+              return {
+                ...prev,
+                hiddenMessageIdsByKey: nextHiddenMessageIdsByKey,
+              };
+            },
+            false,
+            "messaging/clearHiddenMessageIds",
           ),
         clearApiMessages: (streamKey) =>
           set(

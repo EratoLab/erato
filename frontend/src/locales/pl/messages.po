@@ -664,6 +664,11 @@ msgstr "Edytuj wiadomość"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
+msgid "message.regenerate.aria"
+msgstr "Wygeneruj odpowiedź ponownie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.showFormatted.aria"
 msgstr "Pokaż sformatowane"
 
