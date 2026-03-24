@@ -143,6 +143,7 @@ chat_provider_ids = ["test-token-limit"]
 # subtitle = "Prefill a research request with web search selected"
 # icon = "iconoir-globe"
 # prompt = "Research this topic and summarize the most important findings."
+# localized_prompts = { de = { source = "static", prompt = "Recherchiere dieses Thema und fasse die wichtigsten Erkenntnisse zusammen." } }
 # selected_facets = ["web_search"]
 #
 # [starter_prompts.prompts.draft_email]

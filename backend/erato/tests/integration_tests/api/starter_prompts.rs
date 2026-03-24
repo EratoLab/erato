@@ -11,7 +11,8 @@ use std::collections::HashMap;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, setup_mock_llm_server,
+    JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
+    setup_mock_llm_server,
 };
 
 /// Test retrieving configured starter prompts for the authenticated user.
@@ -22,6 +23,7 @@ use crate::test_utils::{
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_starter_prompts_endpoint(pool: Pool<Postgres>) {
     let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    let german_jwt = JwtTokenBuilder::new().preferred_language("de").build();
 
     let mut prompts = HashMap::new();
     prompts.insert(
@@ -33,6 +35,12 @@ async fn test_starter_prompts_endpoint(pool: Pool<Postgres>) {
             prompt: PromptSourceSpecification::Static {
                 content: "Research the latest information about this topic.".to_string(),
             },
+            localized_prompts: HashMap::from([(
+                "de".to_string(),
+                PromptSourceSpecification::Static {
+                    content: "Recherchiere die neuesten Informationen zu diesem Thema.".to_string(),
+                },
+            )]),
             selected_facets: vec!["web_search".to_string(), "missing".to_string()],
             chat_provider: Some("mock-llm".to_string()),
         },
@@ -46,6 +54,7 @@ async fn test_starter_prompts_endpoint(pool: Pool<Postgres>) {
             prompt: PromptSourceSpecification::Static {
                 content: "Draft a concise and friendly reply to this customer email.".to_string(),
             },
+            localized_prompts: HashMap::new(),
             selected_facets: vec![],
             chat_provider: Some("missing-provider".to_string()),
         },
@@ -105,5 +114,21 @@ async fn test_starter_prompts_endpoint(pool: Pool<Postgres>) {
     assert_eq!(
         starter_prompts[1]["prompt"],
         "Research the latest information about this topic."
+    );
+
+    let german_response = server
+        .get("/api/v1beta/me/starter-prompts")
+        .with_bearer_token(&german_jwt)
+        .await;
+    german_response.assert_status_ok();
+
+    let german_response_body: Value = german_response.json();
+    let german_starter_prompts = german_response_body
+        .get("starter_prompts")
+        .and_then(Value::as_array)
+        .expect("Missing German starter prompts list");
+    assert_eq!(
+        german_starter_prompts[1]["prompt"],
+        "Recherchiere die neuesten Informationen zu diesem Thema."
     );
 }

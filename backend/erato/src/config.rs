@@ -1370,6 +1370,12 @@ pub struct StarterPromptConfig {
     // Prompt content to prefill into the chat input.
     pub prompt: PromptSourceSpecification,
 
+    // Optional locale-specific prompt sources keyed by locale code
+    // (for example "de" or "en-US"). Resolved with exact-locale,
+    // base-language, then `prompt` fallback.
+    #[serde(default)]
+    pub localized_prompts: HashMap<String, PromptSourceSpecification>,
+
     // Facet IDs to preselect when the starter prompt is activated.
     #[serde(default)]
     pub selected_facets: Vec<String>,

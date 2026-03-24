@@ -1,6 +1,7 @@
 //! Configuration parsing and validation tests.
 
 use erato::config::{AppConfig, ModelReasoningEffort, ModelVerbosity, PromptSourceSpecification};
+use std::collections::HashMap;
 use std::io::Write;
 use tempfile::Builder;
 use test_log::test;
@@ -1743,6 +1744,7 @@ title = "Research a topic"
 subtitle = "Kick off with web search enabled"
 icon = "iconoir-globe"
 prompt = { source = "static", prompt = "Research this topic and summarize the findings." }
+localized_prompts = { de = { source = "static", prompt = "Recherchiere dieses Thema und fasse die Ergebnisse zusammen." } }
 selected_facets = ["web_search"]
 chat_provider = "mock-llm"
 
@@ -1788,6 +1790,15 @@ prompt = { source = "langfuse", prompt_name = "starter-draft-email", fallback = 
         PromptSourceSpecification::Static {
             content: "Research this topic and summarize the findings.".to_string()
         }
+    );
+    assert_eq!(
+        web_research.localized_prompts,
+        HashMap::from([(
+            "de".to_string(),
+            PromptSourceSpecification::Static {
+                content: "Recherchiere dieses Thema und fasse die Ergebnisse zusammen.".to_string()
+            }
+        )])
     );
     assert_eq!(web_research.selected_facets, vec!["web_search".to_string()]);
     assert_eq!(web_research.chat_provider, Some("mock-llm".to_string()));

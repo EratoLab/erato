@@ -78,13 +78,13 @@ pub struct UserProfile {
 
 impl UserProfile {
     pub fn from_id_token_profile(profile: IdTokenProfile, user_id: String) -> Self {
-        let preferred_language = profile.preferred_language.unwrap_or("en".to_string());
+        let preferred_language = profile.preferred_language;
         Self {
             id: user_id,
             email: profile.email,
             name: profile.name,
             picture: profile.picture,
-            preferred_language,
+            preferred_language: preferred_language.unwrap_or("en".to_string()),
             groups: profile.groups,
             organization_user_id: profile.organization_user_id,
             organization_group_ids: profile.organization_group_ids,
@@ -95,10 +95,11 @@ impl UserProfile {
         }
     }
 
-    pub fn determine_final_language(&mut self) {
-        // TODO: Include https://docs.rs/accept-language crate, and support at least a second language.
-        let _supported_languages = ["en"];
-        self.preferred_language = "en".to_string()
+    pub fn determine_final_language(&mut self, accept_language_header: Option<&str>) {
+        let resolved_language = normalize_supported_language(Some(&self.preferred_language))
+            .or_else(|| normalize_supported_language(accept_language_header))
+            .unwrap_or("en");
+        self.preferred_language = resolved_language.to_string();
     }
 
     pub fn apply_user_preferences(
@@ -160,6 +161,7 @@ impl MeProfile {
 pub async fn user_profile_from_token(
     app_state: &AppState,
     token: &str,
+    accept_language_header: Option<&str>,
 ) -> Result<UserProfile, StatusCode> {
     // Placeholder secret, as we don't validate signature anyway
     let secret = b"placeholder";
@@ -191,7 +193,7 @@ pub async fn user_profile_from_token(
 
     let user_id = user.id.to_string();
     let mut user_profile = UserProfile::from_id_token_profile(normalized_profile, user_id);
-    user_profile.determine_final_language();
+    user_profile.determine_final_language(accept_language_header);
     let prefs = get_user_preferences(&app_state.db, &user.id)
         .await
         .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -225,8 +227,19 @@ pub(crate) async fn user_profile_middleware(
         .get(X_FORWARDED_ACCESS_TOKEN)
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
+    let accept_language_header = req
+        .headers()
+        .get(http::header::ACCEPT_LANGUAGE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
 
-    if let Ok(current_user) = user_profile_from_token(&app_state, auth_header.token()).await {
+    if let Ok(current_user) = user_profile_from_token(
+        &app_state,
+        auth_header.token(),
+        accept_language_header.as_deref(),
+    )
+    .await
+    {
         req.extensions_mut().insert(MeProfile {
             profile: current_user,
             access_token: forwarded_access_token,
@@ -234,5 +247,65 @@ pub(crate) async fn user_profile_middleware(
         Ok(next.run(req).await)
     } else {
         Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
+const SUPPORTED_LANGUAGES: [&str; 5] = ["en", "de", "fr", "pl", "es"];
+
+fn normalize_supported_language(raw_language: Option<&str>) -> Option<&str> {
+    let raw_language = raw_language?;
+
+    for candidate in parse_language_candidates(raw_language) {
+        if let Some(language) = SUPPORTED_LANGUAGES.iter().copied().find(|supported| {
+            candidate == *supported
+                || candidate
+                    .strip_prefix(*supported)
+                    .is_some_and(|suffix| suffix.starts_with('-'))
+        }) {
+            return Some(language);
+        }
+    }
+
+    None
+}
+
+fn parse_language_candidates(raw_language: &str) -> Vec<String> {
+    raw_language
+        .split(',')
+        .filter_map(|entry| entry.split(';').next())
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| entry.replace('_', "-").to_ascii_lowercase())
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_supported_language, parse_language_candidates};
+
+    #[test]
+    fn parses_accept_language_candidates_in_priority_order() {
+        assert_eq!(
+            parse_language_candidates("de-DE,de;q=0.9,en;q=0.8"),
+            vec!["de-de".to_string(), "de".to_string(), "en".to_string()]
+        );
+    }
+
+    #[test]
+    fn normalizes_supported_language_from_exact_locale() {
+        assert_eq!(normalize_supported_language(Some("fr-FR")), Some("fr"));
+    }
+
+    #[test]
+    fn normalizes_supported_language_from_accept_language_header() {
+        assert_eq!(
+            normalize_supported_language(Some("it-IT,it;q=0.9,de-DE;q=0.8")),
+            Some("de")
+        );
+    }
+
+    #[test]
+    fn returns_none_for_unsupported_language() {
+        assert_eq!(normalize_supported_language(Some("it-IT,it;q=0.9")), None);
     }
 }
