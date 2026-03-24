@@ -1,5 +1,5 @@
-import clsx from "clsx";
 import { t } from "@lingui/core/macro";
+import clsx from "clsx";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
