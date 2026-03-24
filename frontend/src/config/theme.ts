@@ -60,7 +60,7 @@ const stateColors = {
     dark: "rgba(239, 68, 68, 0.2)",
   },
   selection: {
-    light: colors.neutral[200],
+    light: colors.neutral[300],
     dark: colors.neutral[700],
   },
   hover: {
@@ -401,7 +401,7 @@ export const defaultTheme: Theme = {
       app: colors.neutral[50],
       page: colors.neutral[100],
       sidebar: colors.neutral[200],
-      sidebarHover: colors.neutral[300],
+      sidebarHover: "#d7d9dd",
       sidebarSelected: stateColors.selection.light,
       chatHeader: colors.neutral[100],
       chatBody: colors.neutral[100],

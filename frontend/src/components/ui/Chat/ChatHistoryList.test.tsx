@@ -80,7 +80,7 @@ describe("ChatHistoryList", () => {
       borderRadius: "var(--theme-radius-shell)",
       backgroundColor: "var(--theme-shell-sidebar-selected)",
     });
-    expect(historyItem).toHaveClass(
+    expect(historyItem).not.toHaveClass(
       "hover:bg-[var(--theme-shell-sidebar-hover)]",
     );
     expect(
@@ -130,6 +130,7 @@ describe("ChatHistoryList", () => {
     ) as HTMLElement;
 
     expect(firstSessionLink).toHaveClass("focus-ring-tight");
+    expect(firstSessionLink).toHaveAttribute("aria-current", "page");
     expect(firstSessionItem).not.toHaveAttribute("role");
     expect(firstSessionItem).not.toHaveAttribute("tabindex");
   });

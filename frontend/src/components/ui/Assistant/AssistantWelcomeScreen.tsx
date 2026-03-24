@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import clsx from "clsx";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/Controls/Button";
@@ -42,8 +43,15 @@ export function AssistantWelcomeScreen({
   className = "",
 }: AssistantWelcomeScreenProps) {
   const navigate = useNavigate();
-  const { textAlignment, flexAlignment, justifyAlignment } =
-    usePageAlignment("headers");
+  const {
+    containerClasses: contentContainerClasses,
+    textAlignment: contentTextAlignment,
+  } = usePageAlignment("assistants");
+  const {
+    containerClasses: headerContainerClasses,
+    textAlignment: headerTextAlignment,
+    justifyAlignment: headerJustifyAlignment,
+  } = usePageAlignment("headers");
 
   const handleChatSelect = (chatId: string) => {
     navigate(getChatUrl(chatId, assistant.id));
@@ -55,32 +63,46 @@ export function AssistantWelcomeScreen({
 
   return (
     <div
-      className={`flex flex-col ${flexAlignment} ${justifyAlignment} p-12 ${className}`}
+      className={clsx(
+        "flex w-full flex-col py-8 sm:py-12",
+        contentContainerClasses,
+        className,
+      )}
       data-testid="assistant-welcome-screen-default"
     >
-      {/* Assistant Icon/Badge */}
-      <div className={`mb-6 flex ${justifyAlignment}`}>
-        <div className="flex size-20 items-center justify-center rounded-full bg-theme-bg-accent">
-          <EditIcon className="size-10 text-theme-fg-secondary" />
+      <div className={clsx("mb-8 w-full", headerContainerClasses)}>
+        {/* Assistant Icon/Badge */}
+        <div className={clsx("mb-6 flex", headerJustifyAlignment)}>
+          <div className="flex size-20 items-center justify-center rounded-full bg-theme-bg-accent">
+            <EditIcon className="size-10 text-theme-fg-secondary" />
+          </div>
         </div>
+
+        {/* Assistant Name */}
+        <h1
+          className={clsx(
+            "mb-2 text-2xl font-bold text-theme-fg-primary",
+            headerTextAlignment,
+          )}
+        >
+          {assistant.name}
+        </h1>
+
+        {/* Assistant Description */}
+        {assistant.description && (
+          <p
+            className={clsx(
+              "text-lg text-theme-fg-secondary",
+              headerTextAlignment,
+            )}
+          >
+            {assistant.description}
+          </p>
+        )}
       </div>
 
-      {/* Assistant Name */}
-      <h1
-        className={`mb-2 text-2xl font-bold text-theme-fg-primary ${textAlignment}`}
-      >
-        {assistant.name}
-      </h1>
-
-      {/* Assistant Description */}
-      {assistant.description && (
-        <p className={`mb-6 text-lg text-theme-fg-secondary ${textAlignment}`}>
-          {assistant.description}
-        </p>
-      )}
-
       {/* Assistant Details */}
-      <div className="mb-8 w-full rounded-lg border border-theme-border bg-theme-bg-primary p-6 text-left">
+      <div className="mb-8 w-full rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-6 text-left">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-theme-fg-muted">
           {t`Configuration`}
         </h2>
@@ -90,7 +112,7 @@ export function AssistantWelcomeScreen({
           <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
             {t`System Prompt`}
           </h3>
-          <div className="max-h-32 overflow-y-auto rounded border border-theme-border bg-theme-bg-secondary p-3">
+          <div className="max-h-32 overflow-y-auto rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
             <p className="whitespace-pre-wrap font-mono text-xs text-theme-fg-primary">
               {assistant.prompt.length > 500
                 ? `${assistant.prompt.slice(0, 500)}...`
@@ -109,7 +131,7 @@ export function AssistantWelcomeScreen({
               {assistant.files.map((file) => (
                 <span
                   key={file.id}
-                  className="rounded bg-theme-bg-accent px-2 py-1 text-xs text-theme-fg-secondary"
+                  className="rounded-[var(--theme-radius-pill)] bg-theme-bg-accent px-2 py-1 text-xs text-theme-fg-secondary"
                 >
                   {file.filename}
                 </span>
@@ -136,7 +158,10 @@ export function AssistantWelcomeScreen({
       {!isLoadingChats && pastChats.length > 0 && (
         <div className="w-full">
           <h2
-            className={`mb-4 text-lg font-semibold text-theme-fg-primary ${textAlignment}`}
+            className={clsx(
+              "mb-4 text-lg font-semibold text-theme-fg-primary",
+              contentTextAlignment,
+            )}
           >
             {t`Your conversations with this assistant`}
           </h2>
@@ -150,7 +175,7 @@ export function AssistantWelcomeScreen({
                   e.preventDefault();
                   handleChatSelect(chat.id);
                 }}
-                className="block rounded-lg border border-theme-border bg-theme-bg-primary p-4 text-left transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover"
+                className="block rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-4 text-left transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover"
               >
                 <div className="flex items-center justify-between gap-4">
                   <h3 className="flex-1 truncate font-medium text-theme-fg-primary">
@@ -167,7 +192,12 @@ export function AssistantWelcomeScreen({
           </div>
 
           {pastChats.length > 5 && (
-            <p className={`mt-4 text-sm text-theme-fg-muted ${textAlignment}`}>
+            <p
+              className={clsx(
+                "mt-4 text-sm text-theme-fg-muted",
+                contentTextAlignment,
+              )}
+            >
               {t`And`} {pastChats.length - 5} {t`more conversations...`}
             </p>
           )}
@@ -177,14 +207,14 @@ export function AssistantWelcomeScreen({
       {/* Loading State */}
       {isLoadingChats && (
         <div className="w-full">
-          <div className={`flex ${justifyAlignment} py-4`}>
+          <div className={clsx("flex py-4", headerJustifyAlignment)}>
             <div className="size-6 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
           </div>
         </div>
       )}
 
       {/* Start New Conversation Hint */}
-      <div className={`mt-8 text-theme-fg-muted ${textAlignment}`}>
+      <div className={clsx("mt-8 text-theme-fg-muted", contentTextAlignment)}>
         <p className="text-sm">{t`Start typing below to begin a new conversation`}</p>
       </div>
     </div>

@@ -19,6 +19,10 @@ const sidebarRowStyle = {
   minHeight: "var(--theme-spacing-sidebar-row-height)",
   borderRadius: "var(--theme-radius-shell)",
 } as const;
+const activeSidebarRowStyle = {
+  ...sidebarRowStyle,
+  backgroundColor: "var(--theme-shell-sidebar-selected)",
+} as const;
 const sidebarListStyle = {
   padding:
     "calc(var(--theme-spacing-shell-padding-y) / 2) calc(var(--theme-spacing-shell-padding-x) / 2)",
@@ -92,12 +96,7 @@ const ChatHistoryListItem = memo<{
     onShowDetails,
     showTimestamps = true,
   }) => {
-    const rowStyle = isActive
-      ? ({
-          ...sidebarRowStyle,
-          backgroundColor: "var(--theme-shell-sidebar-selected)",
-        } as const)
-      : sidebarRowStyle;
+    const rowStyle = isActive ? activeSidebarRowStyle : sidebarRowStyle;
 
     return (
       <a
@@ -113,13 +112,14 @@ const ChatHistoryListItem = memo<{
         }}
         className={sidebarRowLinkClassName}
         aria-label={session.title || t`New Chat`}
+        aria-current={isActive ? "page" : undefined}
       >
         <InteractiveContainer
           useDiv={true}
           showFocusRing={false}
           className={clsx(
             "theme-transition flex flex-col px-3 py-1.5 pb-3.5 pr-1.5 text-left",
-            "hover:bg-[var(--theme-shell-sidebar-hover)]",
+            !isActive && "hover:bg-[var(--theme-shell-sidebar-hover)]",
             layout === "compact" ? "gap-0.5" : "gap-1",
           )}
           style={rowStyle}
@@ -295,10 +295,7 @@ export const ChatHistoryListSkeleton = ({
         key={i}
         data-testid="chat-history-skeleton-item"
         className="w-full px-4 py-3"
-        style={{
-          ...sidebarRowStyle,
-          backgroundColor: "var(--theme-shell-sidebar-selected)",
-        }}
+        style={activeSidebarRowStyle}
       >
         <div className="flex w-full items-center justify-between gap-2">
           <div className="h-5 w-2/3 animate-pulse rounded bg-theme-bg-accent" />

@@ -107,4 +107,32 @@ describe("ChatHistorySidebar", () => {
     });
     expect(screen.getByTestId("history-list")).toBeInTheDocument();
   });
+
+  it("renders the active search nav item with the selected sidebar surface", async () => {
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <MemoryRouter initialEntries={["/search"]}>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    const searchItem = container.querySelector(
+      '[data-ui="sidebar-search-item"]',
+    );
+
+    expect(searchItem).toHaveStyle({
+      backgroundColor: "var(--theme-shell-sidebar-selected)",
+      minHeight: "var(--theme-spacing-sidebar-row-height)",
+      borderRadius: "var(--theme-radius-shell)",
+    });
+    expect(searchItem?.classList.contains("opacity-50")).toBe(false);
+  });
 });
