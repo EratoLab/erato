@@ -485,14 +485,27 @@ pub struct StarterPromptsResponse {
 )]
 pub async fn facets(
     State(app_state): State<AppState>,
-    Extension(_me_user): Extension<MeProfile>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<FacetsResponse>, StatusCode> {
     let config = &app_state.config.experimental_facets;
+    let authorized_facet_ids: HashSet<String> = policy
+        .filter_authorized_facet_ids(
+            &me_user.to_subject(),
+            &me_user.groups,
+            &config.facets.keys().cloned().collect::<Vec<_>>(),
+        )
+        .await
+        .map_err(log_internal_server_error)?
+        .into_iter()
+        .collect();
     let mut facets = Vec::new();
     let mut seen = HashSet::new();
 
     for facet_id in &config.priority_order {
-        if let Some(facet) = config.facets.get(facet_id) {
+        if authorized_facet_ids.contains(facet_id)
+            && let Some(facet) = config.facets.get(facet_id)
+        {
             let default_enabled = config.default_selected_facets.contains(facet_id);
             facets.push(FacetInfo {
                 id: facet_id.clone(),
@@ -507,7 +520,7 @@ pub async fn facets(
     let mut remaining: Vec<String> = config
         .facets
         .keys()
-        .filter(|facet_id| !seen.contains(*facet_id))
+        .filter(|facet_id| authorized_facet_ids.contains(*facet_id) && !seen.contains(*facet_id))
         .cloned()
         .collect();
     remaining.sort();
@@ -548,6 +561,7 @@ pub async fn facets(
 pub async fn starter_prompts(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<StarterPromptsResponse>, StatusCode> {
     let config = &app_state.config.starter_prompts;
     if !config.enabled {
@@ -562,6 +576,9 @@ pub async fn starter_prompts(
             starter_prompts.push(
                 build_starter_prompt_info(
                     &app_state,
+                    &policy,
+                    &me_user.to_subject(),
+                    &me_user.groups,
                     &me_user.preferred_language,
                     starter_prompt_id,
                     starter_prompt,
@@ -584,6 +601,9 @@ pub async fn starter_prompts(
             starter_prompts.push(
                 build_starter_prompt_info(
                     &app_state,
+                    &policy,
+                    &me_user.to_subject(),
+                    &me_user.groups,
                     &me_user.preferred_language,
                     &starter_prompt_id,
                     starter_prompt,
@@ -598,6 +618,9 @@ pub async fn starter_prompts(
 
 async fn build_starter_prompt_info(
     app_state: &AppState,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    user_groups: &[String],
     preferred_language: &str,
     starter_prompt_id: &str,
     starter_prompt: &crate::config::StarterPromptConfig,
@@ -616,31 +639,45 @@ async fn build_starter_prompt_info(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let available_facet_ids: HashSet<&str> = app_state
-        .config
-        .experimental_facets
-        .facets
-        .keys()
-        .map(String::as_str)
+    let available_facet_ids: HashSet<String> = policy
+        .filter_authorized_facet_ids(
+            subject,
+            user_groups,
+            &app_state
+                .config
+                .experimental_facets
+                .facets
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+        )
+        .await
+        .map_err(log_internal_server_error)?
+        .into_iter()
         .collect();
     let selected_facets = starter_prompt
         .selected_facets
         .iter()
-        .filter(|facet_id| available_facet_ids.contains(facet_id.as_str()))
+        .filter(|facet_id| available_facet_ids.contains(*facet_id))
         .cloned()
         .collect();
 
-    let chat_provider = starter_prompt
-        .chat_provider
-        .as_ref()
-        .and_then(|provider_id| {
-            app_state
-                .config
-                .chat_providers
-                .as_ref()
-                .and_then(|chat_providers| chat_providers.providers.get(provider_id))
-                .map(|_| provider_id.clone())
-        });
+    let chat_provider = match starter_prompt.chat_provider.as_ref() {
+        Some(provider_id)
+            if policy
+                .filter_authorized_chat_provider_ids(
+                    subject,
+                    user_groups,
+                    std::slice::from_ref(provider_id),
+                )
+                .await
+                .map_err(log_internal_server_error)?
+                .contains(provider_id) =>
+        {
+            Some(provider_id.clone())
+        }
+        _ => None,
+    };
 
     Ok(StarterPromptInfo {
         id: starter_prompt_id.to_string(),
@@ -1021,7 +1058,10 @@ pub async fn upload_file(
     };
 
     // Determine if any available model supports image understanding
-    let available_models = app_state.available_models(&me_user.groups);
+    let available_models = app_state
+        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .await
+        .map_err(log_internal_server_error)?;
     let supports_image_understanding = available_models.iter().any(|model| {
         let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding
@@ -1269,7 +1309,10 @@ async fn link_sharepoint_file_impl(
     use graph_rs_sdk::{GraphClient, GraphClientConfiguration};
 
     // Determine if any available model supports image understanding
-    let available_models = app_state.available_models(&me_user.groups);
+    let available_models = app_state
+        .available_models(policy, &me_user.to_subject(), &me_user.groups)
+        .await
+        .map_err(log_internal_server_error)?;
     let supports_image_understanding = available_models.iter().any(|model| {
         let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding
@@ -1470,7 +1513,9 @@ pub async fn submit_message_feedback(
     // Parse the message ID
     let message_id = Uuid::parse_str(&message_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    policy.rebuild_data_if_needed_req(&app_state.db).await?;
+    policy
+        .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
+        .await?;
 
     // Convert sentiment enum to string
     let sentiment_str: String = request.sentiment.into();
@@ -1556,7 +1601,9 @@ pub async fn chat_messages(
     // Parse the chat ID
     let chat_id = Uuid::parse_str(&chat_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    policy.rebuild_data_if_needed_req(&app_state.db).await?;
+    policy
+        .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
+        .await?;
 
     // Parse pagination parameters
     let limit = params.get("limit").and_then(|l| l.parse::<u64>().ok());
@@ -1596,7 +1643,10 @@ pub async fn chat_messages(
         .collect();
 
     // Determine if any available model supports image understanding
-    let available_models = app_state.available_models(&me_user.groups);
+    let available_models = app_state
+        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .await
+        .map_err(log_internal_server_error)?;
     let supports_image_understanding = available_models.iter().any(|model| {
         let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding
@@ -1723,7 +1773,7 @@ pub async fn recent_chats(
         .unwrap_or(false);
 
     policy
-        .rebuild_data_if_needed(&app_state.db)
+        .rebuild_data_if_needed(&app_state.db, &app_state.config)
         .await
         .map_err(|e| {
             tracing::error!("Failed to rebuild policy data: {}", e);
@@ -1747,7 +1797,10 @@ pub async fn recent_chats(
     .map_err(log_internal_server_error)?;
 
     // Convert from model RecentChat to API RecentChat
-    let available_models = app_state.available_models(&me_user.groups);
+    let available_models = app_state
+        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .await
+        .map_err(log_internal_server_error)?;
     let api_chats = extend_recent_chats_to_api_model(
         model_chats,
         &app_state.db,
@@ -1893,7 +1946,7 @@ pub async fn frequent_assistants(
         .unwrap_or(30);
 
     policy
-        .rebuild_data_if_needed(&app_state.db)
+        .rebuild_data_if_needed(&app_state.db, &app_state.config)
         .await
         .map_err(|e| {
             tracing::error!("Failed to rebuild policy data: {}", e);
@@ -1916,7 +1969,10 @@ pub async fn frequent_assistants(
     .map_err(log_internal_server_error)?;
 
     // Determine if any available model supports image understanding
-    let available_models = app_state.available_models(&me_user.groups);
+    let available_models = app_state
+        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .await
+        .map_err(log_internal_server_error)?;
     let supports_image_understanding = available_models.iter().any(|model| {
         let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding
@@ -2143,7 +2199,9 @@ pub async fn update_chat(
 ) -> Result<Json<UpdateChatResponse>, StatusCode> {
     let chat_id = Uuid::parse_str(&chat_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    policy.rebuild_data_if_needed_req(&app_state.db).await?;
+    policy
+        .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
+        .await?;
 
     let updated_chat = update_chat_title_by_user_provided(
         &app_state.db,
@@ -2203,7 +2261,10 @@ pub async fn get_file(
     let file_id = Uuid::parse_str(&file_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Determine if any available model supports image understanding
-    let available_models = app_state.available_models(&me_user.groups);
+    let available_models = app_state
+        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .await
+        .map_err(log_internal_server_error)?;
     let supports_image_understanding = available_models.iter().any(|model| {
         let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding
@@ -2411,7 +2472,7 @@ pub async fn archive_chat_endpoint(
     let chat_id = Uuid::parse_str(&chat_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     policy
-        .rebuild_data_if_needed(&app_state.db)
+        .rebuild_data_if_needed(&app_state.db, &app_state.config)
         .await
         .map_err(|e| {
             tracing::error!("Failed to rebuild policy data: {}", e);
@@ -2506,7 +2567,9 @@ pub async fn prompt_optimizer(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    policy.rebuild_data_if_needed_req(&app_state.db).await?;
+    policy
+        .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
+        .await?;
 
     authorize!(
         policy,
@@ -2591,9 +2654,12 @@ pub async fn prompt_optimizer(
 pub async fn available_models(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<Vec<ChatModel>>, StatusCode> {
     let models = app_state
-        .available_models(&me_user.groups)
+        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .await
+        .map_err(log_internal_server_error)?
         .into_iter()
         .map(|model| ChatModel {
             chat_provider_id: model.chat_provider_id,
@@ -2630,10 +2696,24 @@ pub async fn available_models(
 pub async fn file_capabilities(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     axum::extract::Query(params): axum::extract::Query<FileCapabilitiesQuery>,
 ) -> Result<Json<Vec<FileCapability>>, StatusCode> {
     // Determine if image understanding is supported
     let supports_image_understanding = if let Some(model_id) = params.model_id {
+        if !policy
+            .filter_authorized_chat_provider_ids(
+                &me_user.to_subject(),
+                &me_user.groups,
+                std::slice::from_ref(&model_id),
+            )
+            .await
+            .map_err(log_internal_server_error)?
+            .contains(&model_id)
+        {
+            return Err(StatusCode::NOT_FOUND);
+        }
+
         // Get the specific model's capabilities
         let provider_config = app_state.config.get_chat_provider(&model_id);
 
@@ -2642,7 +2722,10 @@ pub async fn file_capabilities(
             .supports_image_understanding
     } else {
         // Without a specific model, check if ANY available model supports image understanding
-        let available_models = app_state.available_models(&me_user.groups);
+        let available_models = app_state
+            .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+            .await
+            .map_err(log_internal_server_error)?;
 
         available_models.iter().any(|model| {
             let config = app_state.config.get_chat_provider(&model.chat_provider_id);

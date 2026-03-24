@@ -3,15 +3,21 @@
 use axum::Router;
 use axum::http;
 use axum_test::TestServer;
+use erato::config::{
+    ExperimentalFacetsConfig, FacetConfig, McpServerConfig, McpServerPermissionRule, ModelSettings,
+    PromptSourceSpecification,
+};
 use erato::policy::engine::PolicyEngine;
 use erato::server::router::router;
 use serde_json::{Value, json};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
+use std::collections::HashMap;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, hermetic_app_config,
+    JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
+    hermetic_app_config, setup_mock_llm_server,
 };
 
 /// Test creating an assistant via the model directly (bypassing API).
@@ -244,7 +250,53 @@ async fn test_get_assistant_endpoint(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.mcp_servers.insert(
+        "server1".to_string(),
+        McpServerConfig {
+            transport_type: "streamable_http".to_string(),
+            url: "http://127.0.0.1:8123/mcp/server1".to_string(),
+            http_headers: None,
+            max_session_idle_seconds: None,
+        },
+    );
+    app_config.experimental_facets = ExperimentalFacetsConfig {
+        facets: HashMap::from([
+            (
+                "web_search".to_string(),
+                FacetConfig {
+                    display_name: "Web search".to_string(),
+                    icon: Some("iconoir-globe".to_string()),
+                    additional_system_prompt: Some(PromptSourceSpecification::Static {
+                        content: "Please execute one or multiple web searches.".to_string(),
+                    }),
+                    tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
+                    model_settings: ModelSettings::default(),
+                    disable_facet_prompt_template: false,
+                },
+            ),
+            (
+                "image_generation".to_string(),
+                FacetConfig {
+                    display_name: "Image generation".to_string(),
+                    icon: Some("iconoir-image".to_string()),
+                    additional_system_prompt: Some(PromptSourceSpecification::Static {
+                        content: "Generate images when appropriate.".to_string(),
+                    }),
+                    tool_call_allowlist: vec![],
+                    model_settings: ModelSettings::default(),
+                    disable_facet_prompt_template: false,
+                },
+            ),
+        ]),
+        priority_order: vec!["web_search".to_string(), "image_generation".to_string()],
+        tool_call_allowlist: vec![],
+        facet_prompt_template: None,
+        only_single_facet: false,
+        show_facet_indicator_with_display_name: false,
+        default_selected_facets: vec![],
+    };
+    let app_state = test_app_state(app_config, pool).await;
 
     // Create a test user - use TEST_USER_SUBJECT to match TEST_JWT_TOKEN
     let issuer = TEST_USER_ISSUER;
@@ -264,7 +316,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
         "Original prompt".to_string(),
         Some(vec!["server1".to_string()]),
         Some(vec!["web_search".to_string()]),
-        Some("openai".to_string()),
+        Some("mock-llm".to_string()),
         false,
     )
     .await
@@ -585,7 +637,47 @@ async fn test_assistant_error_cases(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
     // Create app state with the database connection
-    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.mcp_servers.insert(
+        "server1".to_string(),
+        McpServerConfig {
+            transport_type: "streamable_http".to_string(),
+            url: "http://127.0.0.1:8123/mcp/server1".to_string(),
+            http_headers: None,
+            max_session_idle_seconds: None,
+        },
+    );
+    app_config.mcp_servers.insert(
+        "server2".to_string(),
+        McpServerConfig {
+            transport_type: "streamable_http".to_string(),
+            url: "http://127.0.0.1:8123/mcp/server2".to_string(),
+            http_headers: None,
+            max_session_idle_seconds: None,
+        },
+    );
+    app_config.experimental_facets = ExperimentalFacetsConfig {
+        facets: HashMap::from([(
+            "web_search".to_string(),
+            FacetConfig {
+                display_name: "Web search".to_string(),
+                icon: Some("iconoir-globe".to_string()),
+                additional_system_prompt: Some(PromptSourceSpecification::Static {
+                    content: "Please execute one or multiple web searches.".to_string(),
+                }),
+                tool_call_allowlist: vec!["web-search-mcp/*".to_string()],
+                model_settings: ModelSettings::default(),
+                disable_facet_prompt_template: false,
+            },
+        )]),
+        priority_order: vec!["web_search".to_string()],
+        tool_call_allowlist: vec![],
+        facet_prompt_template: None,
+        only_single_facet: false,
+        show_facet_indicator_with_display_name: false,
+        default_selected_facets: vec![],
+    };
+    let app_state = test_app_state(app_config, pool).await;
 
     // Create a test user - use TEST_USER_SUBJECT to match TEST_JWT_TOKEN
     let issuer = TEST_USER_ISSUER;
@@ -609,10 +701,9 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
         "prompt": "You are a helpful test assistant created via the API.",
         "mcp_server_ids": ["server1", "server2"],
         "facet_ids": ["web_search"],
-        "default_chat_provider": "openai",
+        "default_chat_provider": "mock-llm",
         "enforce_facet_settings": true
     });
-
     let response = server
         .post("/api/v1beta/assistants")
         .json(&create_request)
@@ -634,7 +725,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
         create_response["prompt"],
         "You are a helpful test assistant created via the API."
     );
-    assert_eq!(create_response["default_chat_provider"], "openai");
+    assert_eq!(create_response["default_chat_provider"], "mock-llm");
     assert_eq!(create_response["facet_ids"], json!(["web_search"]));
     assert_eq!(create_response["enforce_facet_settings"], true);
 
@@ -668,6 +759,67 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
     // Verify files field exists (should be empty since we didn't add any files)
     assert!(get_response_json["files"].is_array());
     assert_eq!(get_response_json["files"].as_array().unwrap().len(), 0);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_create_assistant_rejects_unauthorized_mcp_server(pool: Pool<Postgres>) {
+    let mut app_config = hermetic_app_config(None, None);
+    app_config.mcp_servers.insert(
+        "restricted-server".to_string(),
+        McpServerConfig {
+            transport_type: "streamable_http".to_string(),
+            url: "http://127.0.0.1:8123/mcp".to_string(),
+            http_headers: None,
+            max_session_idle_seconds: None,
+        },
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "premium-only".to_string(),
+        McpServerPermissionRule::AllowForGroupMembers {
+            mcp_server_ids: vec!["restricted-server".to_string()],
+            groups: vec!["premium".to_string()],
+        },
+    );
+
+    let app_state = test_app_state(app_config, pool).await;
+    let _user = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let create_request = json!({
+        "name": "Restricted Assistant",
+        "prompt": "You are restricted.",
+        "mcp_server_ids": ["restricted-server"],
+        "enforce_facet_settings": false
+    });
+
+    let response = server
+        .post("/api/v1beta/assistants")
+        .json(&create_request)
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(response.status_code(), http::StatusCode::BAD_REQUEST);
+
+    let premium_token = JwtTokenBuilder::new()
+        .groups(vec!["premium".to_string()])
+        .build();
+    let premium_response = server
+        .post("/api/v1beta/assistants")
+        .json(&create_request)
+        .with_bearer_token(&premium_token)
+        .await;
+    assert_eq!(premium_response.status_code(), http::StatusCode::CREATED);
 }
 
 /// Test the sharing_relation filter for listing assistants.

@@ -1,3 +1,4 @@
+use crate::config::{AppConfig, FacetPermissionRule, McpServerPermissionRule, ModelPermissionRule};
 use crate::db::entity::prelude::*;
 use crate::db::entity::{
     assistant_file_uploads, assistants, chat_file_uploads, file_uploads, share_grants,
@@ -182,6 +183,89 @@ async fn fetch_share_grants_policy_data(db: &DatabaseConnection) -> Result<JsonV
     Ok(json!(grants_array))
 }
 
+fn config_resources_policy_data(resource_ids: impl IntoIterator<Item = String>) -> JsonValue {
+    let mut attributes = serde_json::Map::new();
+    for resource_id in resource_ids {
+        attributes.insert(resource_id.clone(), json!({ "id": resource_id }));
+    }
+    json!(attributes)
+}
+
+fn model_permission_rule_to_json(rule: &ModelPermissionRule) -> JsonValue {
+    match rule {
+        ModelPermissionRule::AllowAll { chat_provider_ids } => json!({
+            "rule_type": "allow-all",
+            "resource_ids": chat_provider_ids,
+        }),
+        ModelPermissionRule::AllowForGroupMembers {
+            chat_provider_ids,
+            groups,
+        } => json!({
+            "rule_type": "allow-for-group-members",
+            "resource_ids": chat_provider_ids,
+            "groups": groups,
+        }),
+    }
+}
+
+fn mcp_server_permission_rule_to_json(rule: &McpServerPermissionRule) -> JsonValue {
+    match rule {
+        McpServerPermissionRule::AllowAll { mcp_server_ids } => json!({
+            "rule_type": "allow-all",
+            "resource_ids": mcp_server_ids,
+        }),
+        McpServerPermissionRule::AllowForGroupMembers {
+            mcp_server_ids,
+            groups,
+        } => json!({
+            "rule_type": "allow-for-group-members",
+            "resource_ids": mcp_server_ids,
+            "groups": groups,
+        }),
+    }
+}
+
+fn facet_permission_rule_to_json(rule: &FacetPermissionRule) -> JsonValue {
+    match rule {
+        FacetPermissionRule::AllowAll { facet_ids } => json!({
+            "rule_type": "allow-all",
+            "resource_ids": facet_ids,
+        }),
+        FacetPermissionRule::AllowForGroupMembers { facet_ids, groups } => json!({
+            "rule_type": "allow-for-group-members",
+            "resource_ids": facet_ids,
+            "groups": groups,
+        }),
+    }
+}
+
+fn build_config_permissions_policy_data(config: &AppConfig) -> JsonValue {
+    let chat_provider_rules: Vec<JsonValue> = config
+        .model_permissions
+        .rules
+        .values()
+        .map(model_permission_rule_to_json)
+        .collect();
+    let mcp_server_rules: Vec<JsonValue> = config
+        .mcp_server_permissions
+        .rules
+        .values()
+        .map(mcp_server_permission_rule_to_json)
+        .collect();
+    let facet_rules: Vec<JsonValue> = config
+        .facet_permissions
+        .rules
+        .values()
+        .map(facet_permission_rule_to_json)
+        .collect();
+
+    json!({
+        "chat_provider": chat_provider_rules,
+        "mcp_server": mcp_server_rules,
+        "facet": facet_rules,
+    })
+}
+
 // Define a macro that routes to the appropriate authorize implementation based on argument count
 macro_rules! authorize {
     // Pattern for the short form (3 arguments)
@@ -261,22 +345,42 @@ impl PolicyEngine {
     }
 
     #[instrument(skip_all)]
-    pub async fn rebuild_data(&self, db: &DatabaseConnection) -> Result<(), Report> {
+    pub async fn rebuild_data(
+        &self,
+        db: &DatabaseConnection,
+        config: &AppConfig,
+    ) -> Result<(), Report> {
         // Fetch policy data for each resource type
         let chat_data = fetch_chat_policy_data(db).await?;
         let assistant_data = fetch_assistant_policy_data(db).await?;
         let file_upload_data = fetch_file_upload_policy_data(db).await?;
         let share_grants_data = fetch_share_grants_policy_data(db).await?;
+        let chat_provider_data = config_resources_policy_data(
+            if let Some(chat_providers) = config.chat_providers.as_ref() {
+                chat_providers.providers.keys().cloned().collect()
+            } else if config.chat_provider.is_some() {
+                vec!["default".to_string()]
+            } else {
+                Vec::new()
+            },
+        );
+        let mcp_server_data = config_resources_policy_data(config.mcp_servers.keys().cloned());
+        let facet_data =
+            config_resources_policy_data(config.experimental_facets.facets.keys().cloned());
 
         // Combine all resource attributes
         let resource_attributes = json!({
             "chat": chat_data,
             "assistant": assistant_data,
-            "file_upload": file_upload_data
+            "file_upload": file_upload_data,
+            "chat_provider": chat_provider_data,
+            "mcp_server": mcp_server_data,
+            "facet": facet_data,
         });
         let policy_data = json!({
             "resource_attributes": resource_attributes,
-            "share_grants": share_grants_data
+            "share_grants": share_grants_data,
+            "config_permissions": build_config_permissions_policy_data(config),
         });
 
         self.set_data(policy_data).await?;
@@ -285,11 +389,15 @@ impl PolicyEngine {
     }
 
     #[instrument(skip_all)]
-    pub async fn rebuild_data_if_needed(&self, db: &DatabaseConnection) -> Result<(), Report> {
+    pub async fn rebuild_data_if_needed(
+        &self,
+        db: &DatabaseConnection,
+        config: &AppConfig,
+    ) -> Result<(), Report> {
         let data_needs_rebuild = { *self.data_needs_rebuild.read().await };
         tracing::trace!(data_needs_rebuild = data_needs_rebuild);
         if data_needs_rebuild {
-            self.rebuild_data(db).await?;
+            self.rebuild_data(db, config).await?;
         }
         Ok(())
     }
@@ -297,8 +405,9 @@ impl PolicyEngine {
     pub async fn rebuild_data_if_needed_req(
         &self,
         db: &DatabaseConnection,
+        config: &AppConfig,
     ) -> Result<(), StatusCode> {
-        self.rebuild_data_if_needed(db).await.map_err(|e| {
+        self.rebuild_data_if_needed(db, config).await.map_err(|e| {
             tracing::error!("Failed to rebuild policy data: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })
@@ -322,6 +431,7 @@ impl AuthorizeFull for PolicyEngine {
             resource_id,
             action,
             &[],
+            &[],
         )
         .await
     }
@@ -329,6 +439,7 @@ impl AuthorizeFull for PolicyEngine {
 
 impl PolicyEngine {
     /// Authorize with additional context (e.g., organization_group_ids).
+    #[allow(clippy::too_many_arguments)]
     pub async fn authorize_with_context(
         &self,
         subject_kind: SubjectKind,
@@ -337,6 +448,7 @@ impl PolicyEngine {
         resource_id: &ResourceId,
         action: Action,
         organization_group_ids: &[String],
+        groups: &[String],
     ) -> Result<(), Report> {
         // info!("Authorizing");
         if *self.data_needs_rebuild.read().await {
@@ -357,6 +469,7 @@ impl PolicyEngine {
             "resource_id": resource_id,
             "action": action,
             "organization_group_ids": organization_group_ids,
+            "groups": groups,
         });
 
         engine
@@ -372,6 +485,71 @@ impl PolicyEngine {
         } else {
             Err(eyre!("User is not authorized to perform this action"))
         }
+    }
+
+    async fn filter_authorized_config_resources(
+        &self,
+        subject: &Subject,
+        groups: &[String],
+        resource_ids: &[String],
+        to_resource: fn(String) -> Resource,
+    ) -> Result<Vec<String>, Report> {
+        let mut allowed = Vec::new();
+        let (subject_kind, subject_id) = subject.clone().into_parts();
+        for resource_id in resource_ids {
+            let (resource_kind, _) = to_resource(resource_id.clone()).into_parts();
+            if self
+                .authorize_with_context(
+                    subject_kind,
+                    &subject_id,
+                    resource_kind,
+                    &ResourceId(resource_id.clone()),
+                    Action::Read,
+                    subject.organization_group_ids(),
+                    groups,
+                )
+                .await
+                .is_ok()
+            {
+                allowed.push(resource_id.clone());
+            }
+        }
+        Ok(allowed)
+    }
+
+    pub async fn filter_authorized_chat_provider_ids(
+        &self,
+        subject: &Subject,
+        groups: &[String],
+        resource_ids: &[String],
+    ) -> Result<Vec<String>, Report> {
+        self.filter_authorized_config_resources(
+            subject,
+            groups,
+            resource_ids,
+            Resource::ChatProvider,
+        )
+        .await
+    }
+
+    pub async fn filter_authorized_mcp_server_ids(
+        &self,
+        subject: &Subject,
+        groups: &[String],
+        resource_ids: &[String],
+    ) -> Result<Vec<String>, Report> {
+        self.filter_authorized_config_resources(subject, groups, resource_ids, Resource::McpServer)
+            .await
+    }
+
+    pub async fn filter_authorized_facet_ids(
+        &self,
+        subject: &Subject,
+        groups: &[String],
+        resource_ids: &[String],
+    ) -> Result<Vec<String>, Report> {
+        self.filter_authorized_config_resources(subject, groups, resource_ids, Resource::Facet)
+            .await
     }
 }
 
@@ -418,6 +596,7 @@ impl AuthorizeShort for PolicyEngine {
             &resource_id,
             action,
             organization_group_ids,
+            &[],
         )
         .await
     }
@@ -441,6 +620,9 @@ pub const fn is_valid_resource_action(resource: ResourceKind, action: Action) ->
         (ResourceKind::ShareGrant, Action::Create) => true,
         (ResourceKind::ShareGrant, Action::Read) => true,
         (ResourceKind::ShareGrant, Action::Delete) => true,
+        (ResourceKind::ChatProvider, Action::Read) => true,
+        (ResourceKind::McpServer, Action::Read) => true,
+        (ResourceKind::Facet, Action::Read) => true,
         _ => false,
     }
 }
@@ -801,5 +983,77 @@ mod tests {
 
         let result = authorize!(engine, &subject, &resource, action);
         assert!(result.is_err());
+    }
+
+    async fn build_config_resource_test_engine() -> PolicyEngine {
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "chat_provider": {
+                        "mock-llm": { "id": "mock-llm" },
+                        "fallback-llm": { "id": "fallback-llm" }
+                    },
+                    "mcp_server": {
+                        "server-1": { "id": "server-1" },
+                        "server-2": { "id": "server-2" }
+                    },
+                    "facet": {
+                        "web_search": { "id": "web_search" },
+                        "extended_thinking": { "id": "extended_thinking" }
+                    }
+                },
+                "share_grants": [],
+                "config_permissions": {
+                    "chat_provider": [],
+                    "mcp_server": [],
+                    "facet": []
+                }
+            }))
+            .await
+            .unwrap();
+        engine
+    }
+
+    #[tokio::test]
+    async fn test_filter_authorized_chat_provider_ids_allows_all_when_no_rules_configured() {
+        let engine = build_config_resource_test_engine().await;
+        let subject = Subject::User("user_1".to_string());
+        let requested_ids = vec!["mock-llm".to_string(), "fallback-llm".to_string()];
+
+        let allowed = engine
+            .filter_authorized_chat_provider_ids(&subject, &[], &requested_ids)
+            .await
+            .unwrap();
+
+        assert_eq!(allowed, requested_ids);
+    }
+
+    #[tokio::test]
+    async fn test_filter_authorized_mcp_server_ids_allows_all_when_no_rules_configured() {
+        let engine = build_config_resource_test_engine().await;
+        let subject = Subject::User("user_1".to_string());
+        let requested_ids = vec!["server-1".to_string(), "server-2".to_string()];
+
+        let allowed = engine
+            .filter_authorized_mcp_server_ids(&subject, &[], &requested_ids)
+            .await
+            .unwrap();
+
+        assert_eq!(allowed, requested_ids);
+    }
+
+    #[tokio::test]
+    async fn test_filter_authorized_facet_ids_allows_all_when_no_rules_configured() {
+        let engine = build_config_resource_test_engine().await;
+        let subject = Subject::User("user_1".to_string());
+        let requested_ids = vec!["web_search".to_string(), "extended_thinking".to_string()];
+
+        let allowed = engine
+            .filter_authorized_facet_ids(&subject, &[], &requested_ids)
+            .await
+            .unwrap();
+
+        assert_eq!(allowed, requested_ids);
     }
 }

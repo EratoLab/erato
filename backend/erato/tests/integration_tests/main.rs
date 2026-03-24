@@ -184,13 +184,16 @@ async fn test_app_state_internal(
     // Do initial rebuild to populate policy data
     let policy_engine = app_state
         .global_policy_engine
-        .get_engine_with_rebuild_check(&db, std::time::Duration::ZERO)
+        .get_engine_with_rebuild_check(&db, &app_state.config, std::time::Duration::ZERO)
         .await
         .unwrap();
 
     // Ensure any invalidated state is rebuilt immediately
     // This handles the case where the policy engine might be in an invalidated state
-    policy_engine.rebuild_data_if_needed(&db).await.unwrap();
+    policy_engine
+        .rebuild_data_if_needed(&db, &app_state.config)
+        .await
+        .unwrap();
 
     app_state
 }

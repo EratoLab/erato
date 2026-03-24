@@ -25,7 +25,7 @@ pub(crate) async fn policy_engine_middleware(
     // Get a cloned PolicyEngine from the global instance, with rebuild check
     let policy_engine = app_state
         .global_policy_engine
-        .get_engine_with_rebuild_check(&app_state.db, POLICY_REBUILD_THRESHOLD)
+        .get_engine_with_rebuild_check(&app_state.db, &app_state.config, POLICY_REBUILD_THRESHOLD)
         .await
         .map_err(|e| {
             tracing::error!("Failed to get policy engine: {:?}", e);

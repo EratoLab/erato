@@ -13,6 +13,7 @@ use axum::{Extension, Json};
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
+use std::collections::HashSet;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::models::assistant::FileInfo;
@@ -305,6 +306,75 @@ async fn file_info_to_assistant_file(
     })
 }
 
+async fn validate_assistant_config_permissions(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    mcp_server_ids: Option<&[String]>,
+    facet_ids: Option<&[String]>,
+    default_chat_provider: Option<&str>,
+) -> Result<(), StatusCode> {
+    let subject = me_user.to_subject();
+
+    if let Some(provider_id) = default_chat_provider {
+        let allowed = policy
+            .filter_authorized_chat_provider_ids(
+                &subject,
+                &me_user.groups,
+                &[provider_id.to_string()],
+            )
+            .await
+            .map_err(log_internal_server_error)?;
+        if !allowed.iter().any(|allowed_id| allowed_id == provider_id) {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    if let Some(server_ids) = mcp_server_ids {
+        let requested_ids: Vec<String> = server_ids.to_vec();
+        let allowed: HashSet<String> = policy
+            .filter_authorized_mcp_server_ids(&subject, &me_user.groups, &requested_ids)
+            .await
+            .map_err(log_internal_server_error)?
+            .into_iter()
+            .collect();
+        if requested_ids
+            .iter()
+            .any(|server_id| !allowed.contains(server_id))
+            || requested_ids
+                .iter()
+                .any(|server_id| !app_state.config.mcp_servers.contains_key(server_id))
+        {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    if let Some(facet_ids) = facet_ids {
+        let requested_ids: Vec<String> = facet_ids.to_vec();
+        let allowed: HashSet<String> = policy
+            .filter_authorized_facet_ids(&subject, &me_user.groups, &requested_ids)
+            .await
+            .map_err(log_internal_server_error)?
+            .into_iter()
+            .collect();
+        if requested_ids
+            .iter()
+            .any(|facet_id| !allowed.contains(facet_id))
+            || requested_ids.iter().any(|facet_id| {
+                !app_state
+                    .config
+                    .experimental_facets
+                    .facets
+                    .contains_key(facet_id)
+            })
+        {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    Ok(())
+}
+
 /// Create a new assistant
 #[utoipa::path(
     post,
@@ -327,6 +397,16 @@ pub async fn create_assistant(
     Extension(policy): Extension<PolicyEngine>,
     Json(request): Json<CreateAssistantRequest>,
 ) -> Result<(StatusCode, Json<CreateAssistantResponse>), StatusCode> {
+    validate_assistant_config_permissions(
+        &app_state,
+        &policy,
+        &me_user,
+        request.mcp_server_ids.as_deref(),
+        request.facet_ids.as_deref(),
+        request.default_chat_provider.as_deref(),
+    )
+    .await?;
+
     // Create the assistant
     let created_assistant = assistant::create_assistant(
         &app_state.db,
@@ -420,7 +500,10 @@ pub async fn create_assistant(
     .map_err(log_internal_server_error)?;
 
     // Determine if any available model supports image understanding
-    let available_models = app_state.available_models(&me_user.groups);
+    let available_models = app_state
+        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .await
+        .map_err(log_internal_server_error)?;
     let supports_image_understanding = available_models.iter().any(|model| {
         let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding
@@ -586,7 +669,10 @@ pub async fn get_assistant(
     })?;
 
     // Determine if any available model supports image understanding
-    let available_models = app_state.available_models(&me_user.groups);
+    let available_models = app_state
+        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .await
+        .map_err(log_internal_server_error)?;
     let supports_image_understanding = available_models.iter().any(|model| {
         let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding
@@ -660,6 +746,22 @@ pub async fn update_assistant(
 ) -> Result<Json<UpdateAssistantResponse>, StatusCode> {
     // Parse the assistant ID
     let assistant_id = Uuid::parse_str(&assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    validate_assistant_config_permissions(
+        &app_state,
+        &policy,
+        &me_user,
+        request
+            .mcp_server_ids
+            .as_ref()
+            .and_then(|ids| ids.as_deref()),
+        request.facet_ids.as_ref().and_then(|ids| ids.as_deref()),
+        request
+            .default_chat_provider
+            .as_ref()
+            .and_then(|provider| provider.as_deref()),
+    )
+    .await?;
 
     // Update the assistant
     let updated_assistant = assistant::update_assistant(
@@ -785,7 +887,10 @@ pub async fn update_assistant(
     .map_err(log_internal_server_error)?;
 
     // Determine if any available model supports image understanding
-    let available_models = app_state.available_models(&me_user.groups);
+    let available_models = app_state
+        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+        .await
+        .map_err(log_internal_server_error)?;
     let supports_image_understanding = available_models.iter().any(|model| {
         let config = app_state.config.get_chat_provider(&model.chat_provider_id);
         config.model_capabilities.supports_image_understanding

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use synonym::Synonym;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum SubjectKind {
     User,
@@ -82,6 +82,12 @@ pub enum ResourceKind {
     AssistantSingleton,
     #[serde(rename = "share_grant")]
     ShareGrant,
+    #[serde(rename = "chat_provider")]
+    ChatProvider,
+    #[serde(rename = "mcp_server")]
+    McpServer,
+    #[serde(rename = "facet")]
+    Facet,
 }
 
 #[derive(Synonym, Serialize)]
@@ -104,6 +110,9 @@ pub enum Resource {
     FileUpload(String),
     AssistantSingleton,
     ShareGrant(String),
+    ChatProvider(String),
+    McpServer(String),
+    Facet(String),
 }
 
 impl From<&Resource> for Resource {
@@ -129,6 +138,9 @@ impl Resource {
                 (ResourceKind::AssistantSingleton, ResourceId::singleton())
             }
             Resource::ShareGrant(id) => (ResourceKind::ShareGrant, ResourceId(id)),
+            Resource::ChatProvider(id) => (ResourceKind::ChatProvider, ResourceId(id)),
+            Resource::McpServer(id) => (ResourceKind::McpServer, ResourceId(id)),
+            Resource::Facet(id) => (ResourceKind::Facet, ResourceId(id)),
         }
     }
 }

@@ -72,6 +72,9 @@ resource_kind_assistant := "assistant"
 resource_kind_file_upload := "file_upload"
 resource_kind_assistant_singleton := "assistant_singleton"
 resource_kind_share_grant := "share_grant"
+resource_kind_chat_provider := "chat_provider"
+resource_kind_mcp_server := "mcp_server"
+resource_kind_facet := "facet"
 # Placeholder; to be removed in the future once we have some implementation variance
 resource_kind_other := "other"
 
@@ -90,6 +93,37 @@ action_share := "share"
 
 # Default deny all access
 default allow = false
+
+config_permission_rule_applies(rule, resource_id) if {
+	rule.rule_type == "allow-all"
+	resource_id in rule.resource_ids
+}
+
+config_permission_rule_applies(rule, resource_id) if {
+	rule.rule_type == "allow-for-group-members"
+	resource_id in rule.resource_ids
+	some group_id in input.groups
+	group_id in rule.groups
+}
+
+allow_config_resource(resource_kind) if {
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+	input.resource_kind == resource_kind
+	input.action == action_read
+	data.resource_attributes[resource_kind][input.resource_id].id == input.resource_id
+	count(object.get(data.config_permissions, resource_kind, [])) == 0
+}
+
+allow_config_resource(resource_kind) if {
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+	input.resource_kind == resource_kind
+	input.action == action_read
+	data.resource_attributes[resource_kind][input.resource_id].id == input.resource_id
+	some rule in data.config_permissions[resource_kind]
+	config_permission_rule_applies(rule, input.resource_id)
+}
 
 can_read_assistant(assistant_id) if {
 	data.resource_attributes[resource_kind_assistant][assistant_id].owner_id == input.subject_id
@@ -273,6 +307,18 @@ allow if {
 	# Check for assistant create action on singleton resource
 	input.resource_kind == resource_kind_assistant_singleton
 	input.action == action_create
+}
+
+allow if {
+	allow_config_resource(resource_kind_chat_provider)
+}
+
+allow if {
+	allow_config_resource(resource_kind_mcp_server)
+}
+
+allow if {
+	allow_config_resource(resource_kind_facet)
 }
 
 # A user can create a share grant if they own the resource.

@@ -13,6 +13,12 @@ file_upload_1_id := "file-upload-1"
 file_upload_2_id := "file-upload-2"
 file_upload_3_id := "file-upload-3"
 file_upload_4_id := "file-upload-4"
+chat_provider_1_id := "mock-llm"
+chat_provider_2_id := "premium-llm"
+mcp_server_1_id := "public-mcp"
+mcp_server_2_id := "premium-mcp"
+facet_1_id := "web_search"
+facet_2_id := "image_generation"
 
 resource_attributes := {
 	"chat": {
@@ -57,6 +63,54 @@ resource_attributes := {
 			"linked_assistant_ids": [assistant_1_id],
 		},
 	},
+	"chat_provider": {
+		chat_provider_1_id: {
+			"id": chat_provider_1_id,
+		},
+		chat_provider_2_id: {
+			"id": chat_provider_2_id,
+		},
+	},
+	"mcp_server": {
+		mcp_server_1_id: {
+			"id": mcp_server_1_id,
+		},
+		mcp_server_2_id: {
+			"id": mcp_server_2_id,
+		},
+	},
+	"facet": {
+		facet_1_id: {
+			"id": facet_1_id,
+		},
+		facet_2_id: {
+			"id": facet_2_id,
+		},
+	},
+}
+
+empty_config_permissions := {
+	"chat_provider": [],
+	"mcp_server": [],
+	"facet": [],
+}
+
+group_config_permissions := {
+	"chat_provider": [{
+		"rule_type": "allow-for-group-members",
+		"resource_ids": [chat_provider_2_id],
+		"groups": ["premium"],
+	}],
+	"mcp_server": [{
+		"rule_type": "allow-for-group-members",
+		"resource_ids": [mcp_server_2_id],
+		"groups": ["premium"],
+	}],
+	"facet": [{
+		"rule_type": "allow-for-group-members",
+		"resource_ids": [facet_2_id],
+		"groups": ["premium"],
+	}],
 }
 
 # Share grants data - assistant_1 is shared with user_2 as viewer
@@ -481,4 +535,114 @@ test_user_in_org_group_cannot_update_shared_assistant if {
 		"organization_group_ids": [org_group_1_id],
 	} with data.resource_attributes as resource_attributes
 		with data.share_grants as share_grants_with_org_group
+}
+
+# --- Config Resource Permission Tests ---
+
+test_chat_provider_read_allowed_without_rules if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "chat_provider",
+		"resource_id": chat_provider_1_id,
+		"action": "read",
+		"groups": [],
+	} with data.resource_attributes as resource_attributes
+		with data.config_permissions as empty_config_permissions
+}
+
+test_mcp_server_read_allowed_without_rules if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "mcp_server",
+		"resource_id": mcp_server_1_id,
+		"action": "read",
+		"groups": [],
+	} with data.resource_attributes as resource_attributes
+		with data.config_permissions as empty_config_permissions
+}
+
+test_facet_read_allowed_without_rules if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "facet",
+		"resource_id": facet_1_id,
+		"action": "read",
+		"groups": [],
+	} with data.resource_attributes as resource_attributes
+		with data.config_permissions as empty_config_permissions
+}
+
+test_chat_provider_read_allowed_for_matching_group_rule if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "chat_provider",
+		"resource_id": chat_provider_2_id,
+		"action": "read",
+		"groups": ["premium"],
+	} with data.resource_attributes as resource_attributes
+		with data.config_permissions as group_config_permissions
+}
+
+test_chat_provider_read_denied_without_matching_group_rule if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "chat_provider",
+		"resource_id": chat_provider_2_id,
+		"action": "read",
+		"groups": [],
+	} with data.resource_attributes as resource_attributes
+		with data.config_permissions as group_config_permissions
+}
+
+test_mcp_server_read_allowed_for_matching_group_rule if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "mcp_server",
+		"resource_id": mcp_server_2_id,
+		"action": "read",
+		"groups": ["premium"],
+	} with data.resource_attributes as resource_attributes
+		with data.config_permissions as group_config_permissions
+}
+
+test_mcp_server_read_denied_without_matching_group_rule if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "mcp_server",
+		"resource_id": mcp_server_2_id,
+		"action": "read",
+		"groups": [],
+	} with data.resource_attributes as resource_attributes
+		with data.config_permissions as group_config_permissions
+}
+
+test_facet_read_allowed_for_matching_group_rule if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "facet",
+		"resource_id": facet_2_id,
+		"action": "read",
+		"groups": ["premium"],
+	} with data.resource_attributes as resource_attributes
+		with data.config_permissions as group_config_permissions
+}
+
+test_facet_read_denied_without_matching_group_rule if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "facet",
+		"resource_id": facet_2_id,
+		"action": "read",
+		"groups": [],
+	} with data.resource_attributes as resource_attributes
+		with data.config_permissions as group_config_permissions
 }

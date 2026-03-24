@@ -492,20 +492,34 @@ pub async fn token_usage_estimate(
             subject: &subject,
             access_token: me_user.access_token.as_deref(),
         };
+        let selected_facet_ids = policy
+            .filter_authorized_facet_ids(
+                &subject,
+                &me_user.groups,
+                &resolve_effective_selected_facet_ids(
+                    &app_state.config.experimental_facets,
+                    &request.selected_facet_ids,
+                    assistant_config.as_ref(),
+                ),
+            )
+            .await
+            .map_err(|err| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to filter authorized facets: {}", err),
+                )
+            })?;
         let user_input = PromptCompositionUserInput {
             just_submitted_user_message_id: synthetic_message_id,
             requested_chat_provider_id: request.chat_provider_id.clone(),
             new_input_file_ids: input_file_ids.clone(),
-            selected_facet_ids: resolve_effective_selected_facet_ids(
-                &app_state.config.experimental_facets,
-                &request.selected_facet_ids,
-                assistant_config.as_ref(),
-            ),
+            selected_facet_ids,
         };
         let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
 
         prepare_chat_request_with_adapters(
             &app_state,
+            &policy,
             chat,
             user_input,
             GenerationRequestContext { platform: None },
@@ -579,7 +593,13 @@ pub async fn token_usage_estimate(
         chat_provider_config,
         chat_provider_id,
     } = app_state
-        .chat_provider_for_chatcompletion(effective_chat_provider_id, &me_user.groups)
+        .chat_provider_for_chatcompletion(
+            &policy,
+            &me_user.to_subject(),
+            &me_user.groups,
+            effective_chat_provider_id,
+        )
+        .await
         .map_err(|err| {
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
