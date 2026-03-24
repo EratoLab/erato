@@ -60,7 +60,7 @@ use eyre::{Report, WrapErr};
 use genai::chat::{ChatMessage as GenAiChatMessage, ChatRequest};
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::types::{Uuid, chrono};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::instrument;
 use utoipa::{OpenApi, ToSchema};
@@ -543,7 +543,7 @@ pub async fn facets(
 )]
 pub async fn starter_prompts(
     State(app_state): State<AppState>,
-    Extension(_me_user): Extension<MeProfile>,
+    Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<StarterPromptsResponse>, StatusCode> {
     let config = &app_state.config.starter_prompts;
     if !config.enabled {
@@ -556,7 +556,13 @@ pub async fn starter_prompts(
     for starter_prompt_id in &config.priority_order {
         if let Some(starter_prompt) = config.prompts.get(starter_prompt_id) {
             starter_prompts.push(
-                build_starter_prompt_info(&app_state, starter_prompt_id, starter_prompt).await?,
+                build_starter_prompt_info(
+                    &app_state,
+                    &me_user.preferred_language,
+                    starter_prompt_id,
+                    starter_prompt,
+                )
+                .await?,
             );
             seen.insert(starter_prompt_id.clone());
         }
@@ -572,7 +578,13 @@ pub async fn starter_prompts(
     for starter_prompt_id in remaining {
         if let Some(starter_prompt) = config.prompts.get(&starter_prompt_id) {
             starter_prompts.push(
-                build_starter_prompt_info(&app_state, &starter_prompt_id, starter_prompt).await?,
+                build_starter_prompt_info(
+                    &app_state,
+                    &me_user.preferred_language,
+                    &starter_prompt_id,
+                    starter_prompt,
+                )
+                .await?,
             );
         }
     }
@@ -582,11 +594,14 @@ pub async fn starter_prompts(
 
 async fn build_starter_prompt_info(
     app_state: &AppState,
+    preferred_language: &str,
     starter_prompt_id: &str,
     starter_prompt: &crate::config::StarterPromptConfig,
 ) -> Result<StarterPromptInfo, StatusCode> {
+    let prompt_source =
+        resolve_starter_prompt_source_for_locale(starter_prompt, preferred_language);
     let prompt = app_state
-        .resolve_prompt_source(&starter_prompt.prompt)
+        .resolve_prompt_source(prompt_source)
         .await
         .map_err(|error| {
             tracing::error!(
@@ -632,6 +647,49 @@ async fn build_starter_prompt_info(
         selected_facets,
         chat_provider,
     })
+}
+
+fn resolve_starter_prompt_source_for_locale<'a>(
+    starter_prompt: &'a crate::config::StarterPromptConfig,
+    preferred_language: &str,
+) -> &'a crate::config::PromptSourceSpecification {
+    if let Some(localized_prompt) =
+        find_localized_prompt_source(&starter_prompt.localized_prompts, preferred_language)
+    {
+        return localized_prompt;
+    }
+
+    &starter_prompt.prompt
+}
+
+fn find_localized_prompt_source<'a>(
+    localized_prompts: &'a HashMap<String, crate::config::PromptSourceSpecification>,
+    preferred_language: &str,
+) -> Option<&'a crate::config::PromptSourceSpecification> {
+    let normalized_preferred_language = preferred_language.trim().to_ascii_lowercase();
+    if normalized_preferred_language.is_empty() {
+        return None;
+    }
+
+    find_prompt_source_by_locale_key(localized_prompts, &normalized_preferred_language).or_else(
+        || {
+            normalized_preferred_language
+                .split_once('-')
+                .and_then(|(base_language, _)| {
+                    find_prompt_source_by_locale_key(localized_prompts, base_language)
+                })
+        },
+    )
+}
+
+fn find_prompt_source_by_locale_key<'a>(
+    localized_prompts: &'a HashMap<String, crate::config::PromptSourceSpecification>,
+    locale: &str,
+) -> Option<&'a crate::config::PromptSourceSpecification> {
+    localized_prompts
+        .iter()
+        .find(|(configured_locale, _)| configured_locale.to_ascii_lowercase() == locale)
+        .map(|(_, prompt_source)| prompt_source)
 }
 
 #[derive(Serialize, ToSchema)]

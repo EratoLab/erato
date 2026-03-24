@@ -10,7 +10,8 @@ use sqlx::postgres::Postgres;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, hermetic_app_config,
+    JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
+    hermetic_app_config,
 };
 
 /// Test the user profile endpoint with JWT authentication.
@@ -59,6 +60,28 @@ async fn test_profile_endpoint(pool: Pool<Postgres>) {
         Value::String("admin@example.com".to_string())
     );
     assert_eq!(profile["preferred_language"].as_str().unwrap(), "en");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_profile_endpoint_uses_preferred_language_claim_when_supported(pool: Pool<Postgres>) {
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let german_jwt = JwtTokenBuilder::new().preferred_language("de").build();
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .get("/api/v1beta/me/profile")
+        .with_bearer_token(&german_jwt)
+        .await;
+
+    response.assert_status_ok();
+
+    let profile: Value = response.json();
+    assert_eq!(profile["preferred_language"].as_str().unwrap(), "de");
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

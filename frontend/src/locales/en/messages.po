@@ -1773,6 +1773,14 @@ msgstr "Something went wrong while loading the chat interface."
 msgid "Start typing below to begin a new conversation"
 msgstr "Start typing below to begin a new conversation"
 
+#: src/components/ui/Chat/StarterPromptsSection.tsx
+msgid "starter_prompts.<starter-prompt-id>.subtitle"
+msgstr "starter_prompts.<starter-prompt-id>.subtitle"
+
+#: src/components/ui/Chat/StarterPromptsSection.tsx
+msgid "starter_prompts.<starter-prompt-id>.title"
+msgstr "starter_prompts.<starter-prompt-id>.title"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Stop"
 msgstr "Stop"

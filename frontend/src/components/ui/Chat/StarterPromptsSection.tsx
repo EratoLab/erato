@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { skipToken } from "@tanstack/react-query";
 import clsx from "clsx";
 
@@ -7,13 +8,43 @@ import { useStarterPromptsFeature } from "@/providers/FeatureConfigProvider";
 import { ResolvedIcon } from "../icons";
 import { useChatInputControls } from "./ChatInputControlsContext";
 
+import type { StarterPromptInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
 export interface StarterPromptsSectionProps {
   className?: string;
+}
+
+function resolveStarterPromptTranslation(
+  translationId: string,
+  fallback: string,
+): string {
+  // eslint-disable-next-line lingui/no-single-variables-to-translate
+  const translatedValue = t({ id: translationId, message: "" });
+  if (translatedValue && translatedValue !== translationId) {
+    return translatedValue;
+  }
+
+  return fallback;
+}
+
+function getStarterPromptTitle(starterPrompt: StarterPromptInfo): string {
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- Translation key is dynamic by starter prompt ID
+  const translationId = `starter_prompts.${starterPrompt.id}.title`;
+  return resolveStarterPromptTranslation(translationId, starterPrompt.title);
+}
+
+function getStarterPromptSubtitle(starterPrompt: StarterPromptInfo): string {
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- Translation key is dynamic by starter prompt ID
+  const translationId = `starter_prompts.${starterPrompt.id}.subtitle`;
+  return resolveStarterPromptTranslation(translationId, starterPrompt.subtitle);
 }
 
 export function StarterPromptsSection({
   className = "",
 }: StarterPromptsSectionProps) {
+  // Keep these markers so Lingui extracts the dynamic starter prompt keys.
+  const _starterPromptTitleMarker = t`starter_prompts.<starter-prompt-id>.title`;
+  const _starterPromptSubtitleMarker = t`starter_prompts.<starter-prompt-id>.subtitle`;
   const { enabled } = useStarterPromptsFeature();
   const {
     setDraftMessage,
@@ -62,10 +93,10 @@ export function StarterPromptsSection({
             </div>
             <div className="min-w-0">
               <div className="font-extrabold [color:var(--theme-starter-prompt-title-fg)]">
-                {starterPrompt.title}
+                {getStarterPromptTitle(starterPrompt)}
               </div>
               <div className="mt-1 text-sm [color:var(--theme-starter-prompt-subtitle-fg)]">
-                {starterPrompt.subtitle}
+                {getStarterPromptSubtitle(starterPrompt)}
               </div>
             </div>
           </div>

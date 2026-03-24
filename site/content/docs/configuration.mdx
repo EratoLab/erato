@@ -1579,6 +1579,13 @@ enabled = true  # Will default to true once stable
 
 Configuration for welcome-screen starter prompts. Starter prompts prefill the chat input, optional facet selections, and an optional chat provider when clicked, but do not submit the message automatically.
 
+Starter prompt titles and subtitles can be translated in the frontend with Lingui message IDs derived from the starter prompt id:
+
+- `starter_prompts.<starter-prompt-id>.title`
+- `starter_prompts.<starter-prompt-id>.subtitle`
+
+If no translation exists for a given starter prompt id, the frontend falls back to the configured `title` and `subtitle`.
+
 #### `starter_prompts.enabled`
 
 Whether to enable starter prompts globally.
@@ -1608,6 +1615,7 @@ title = "Research a topic"
 subtitle = "Prefill a research request with web search selected"
 icon = "iconoir-globe"
 prompt = "Research this topic and summarize the most important findings."
+localized_prompts = { de = { source = "static", prompt = "Recherchiere dieses Thema und fasse die wichtigsten Erkenntnisse zusammen." } }
 selected_facets = ["web_search"]
 chat_provider = "mock-llm"
 
@@ -1627,6 +1635,22 @@ subtitle = "Turn rough notes into a structured summary"
 icon = "iconoir-page"
 prompt = { source = "langfuse", prompt_name = "starter-summarize-notes", label = "production", fallback = "Summarize these notes into clear action items and decisions." }
 ```
+
+Each starter prompt supports these fields:
+
+- `title` - Fallback title shown when no frontend translation exists
+- `subtitle` - Fallback subtitle shown when no frontend translation exists
+- `icon` - Optional icon id
+- `prompt` - Default prompt source specification
+- `localized_prompts` - Optional map of locale code to prompt source specification
+- `selected_facets` - Optional list of facet ids to preselect
+- `chat_provider` - Optional chat provider id to preselect
+
+`localized_prompts` is resolved in the backend against the authenticated user's profile locale. Resolution order is:
+
+1. Exact locale match, for example `de-DE`
+2. Base language match, for example `de`
+3. Fallback to `prompt`
 
 #### `starter_prompts.priority_order`
 
