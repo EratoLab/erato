@@ -347,9 +347,17 @@ export type ChatModel = {
    */
   chat_provider_id: string;
   /**
+   * Optional description of the model shown to users
+   */
+  model_description?: string | null | undefined;
+  /**
    * The display name of the model shown to users
    */
   model_display_name: string;
+  /**
+   * Optional icon identifier of the model shown to users
+   */
+  model_icon?: string | null | undefined;
 };
 
 export type ContentPart =

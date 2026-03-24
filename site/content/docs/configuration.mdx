@@ -269,6 +269,32 @@ The display name for the model shown to users. If not provided, falls back to `m
 
 **Example:** `"GPT-4 Omni (Production)"`
 
+#### `chat_provider.model_description`
+
+An optional description shown below the model display name in the frontend model selector.
+
+The frontend resolves this through a dynamic Lingui translation key using the chat provider id:
+`chat_models.<chat-provider-id>.description`. If no translation exists, the configured value is used as the fallback text.
+
+**Type:** `string | None`
+
+**Example:** `"Fast, lower-cost model for everyday questions"`
+
+#### `chat_provider.model_icon`
+
+An optional icon identifier shown next to the model in the frontend model selector.
+
+Supported formats:
+
+- `iconoir-*` for icons resolved from the `iconoir-react` library
+- `simpleicons-*` for icons resolved from the `simple-icons` library, for example `simpleicons-anthropic`
+- `builtin-chatgpt` for the built-in ChatGPT/OpenAI mark
+- `/path/to/icon.svg` for a custom SVG asset served by the frontend
+
+**Type:** `string | None`
+
+**Example:** `"builtin-chatgpt"`
+
 #### `chat_provider.model_name_langfuse`
 
 The model name to report to Langfuse for observability and tracing. If not provided, falls back to `model_name`.
@@ -377,6 +403,8 @@ priority_order = ["primary", "backup"]
 provider_kind = "openai"
 model_name = "gpt-4"
 model_display_name = "GPT-4 (Primary)"
+model_description = "Best quality for complex tasks"
+model_icon = "builtin-chatgpt"
 api_key = "sk-primary-key"
 
 [chat_providers.providers.primary.model_capabilities]
@@ -389,6 +417,8 @@ cost_output_tokens_per_1m = 60.0
 provider_kind = "openai"
 model_name = "gpt-3.5-turbo"
 model_display_name = "GPT-3.5 Turbo (Backup)"
+model_description = "Faster and cheaper fallback model"
+model_icon = "simpleicons-anthropic"
 api_key = "sk-backup-key"
 base_url = "https://api.backup-provider.com/v1/"
 
@@ -406,6 +436,8 @@ Each provider in `chat_providers.providers` supports the following fields:
 - **`provider_kind`** - The type of chat provider (`"openai"`, `"azure_openai"`, `"ollama"`)
 - **`model_name`** - The model identifier for the provider
 - **`model_display_name`** - Optional display name for the model (falls back to `model_name`)
+- **`model_description`** - Optional frontend description shown below the model name; translatable via `chat_models.<chat-provider-id>.description`
+- **`model_icon`** - Optional frontend icon id, for example `iconoir-*`, `simpleicons-*`, `builtin-chatgpt`, or `/path/to/icon.svg`
 - **`model_name_langfuse`** - Optional model name for Langfuse reporting (falls back to `model_name`)
 - **`api_key`** - Optional API key for authentication
 - **`base_url`** - Optional custom base URL for the provider API

@@ -249,7 +249,12 @@ export const MessageControls = ({
   ];
 
   const filteredDropdownItems = dropdownItems.filter((item) => {
-    if (item.label.includes("Delete") && !isUserMessage && !canEditChat) {
+    if (
+      typeof item.label === "string" &&
+      item.label.includes("Delete") &&
+      !isUserMessage &&
+      !canEditChat
+    ) {
       return false;
     }
     return true;

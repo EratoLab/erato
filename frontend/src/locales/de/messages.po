@@ -1269,6 +1269,10 @@ msgstr "Chat-Verlauf"
 msgid "Chat messages"
 msgstr "Chat-Nachrichten"
 
+#: src/components/ui/Chat/ModelSelector.tsx
+msgid "chat_models.<chat-provider-id>.description"
+msgstr ""
+
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Clear All"
 msgstr "Alle löschen"

@@ -2365,9 +2365,23 @@
             "type": "string",
             "description": "The unique ID of the chat provider"
           },
+          "model_description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional description of the model shown to users"
+          },
           "model_display_name": {
             "type": "string",
             "description": "The display name of the model shown to users"
+          },
+          "model_icon": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional icon identifier of the model shown to users"
           }
         }
       },

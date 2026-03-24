@@ -304,6 +304,8 @@ mod test_cases {
             provider_kind: "openai".to_string(),
             model_name: "gpt-4".to_string(),
             model_display_name: Some("GPT-4".to_string()),
+            model_description: None,
+            model_icon: None,
             model_name_langfuse: None,
             base_url: None,
             region: None,

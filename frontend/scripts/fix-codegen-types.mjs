@@ -57,6 +57,19 @@ const errorHandlingFix = `} catch (e) {
         };
       }`;
 
+// --- Fix nullable string fields that the generator incorrectly narrows to null | undefined ---
+const schemaFile = path.join(targetDir, "v1betaApiSchemas.ts");
+const schemaStringFieldFixes = [
+  {
+    from: "model_description?: null | undefined;",
+    to: "model_description?: string | null | undefined;",
+  },
+  {
+    from: "model_icon?: null | undefined;",
+    to: "model_icon?: string | null | undefined;",
+  },
+];
+
 async function patchVoidTypes(filePath) {
   try {
     const content = await fs.readFile(filePath, "utf8");
@@ -187,6 +200,33 @@ async function fixFetcherErrorHandling(filePath) {
   return false; // Indicate no change
 }
 
+async function fixSchemaStringFields(filePath) {
+  try {
+    let content = await fs.readFile(filePath, "utf8");
+    const relativeFilePath = path.relative(process.cwd(), filePath);
+    let changed = false;
+
+    for (const { from, to } of schemaStringFieldFixes) {
+      if (content.includes(from)) {
+        content = content.replaceAll(from, to);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await fs.writeFile(filePath, content, "utf8");
+      console.log(`Fixed schema string field types in: ${relativeFilePath}`);
+      return true;
+    }
+
+    console.log(`No schema string field fixes needed in: ${relativeFilePath}`);
+  } catch (error) {
+    console.error(`Error fixing schema string fields in ${filePath}:`, error);
+  }
+
+  return false;
+}
+
 async function run() {
   console.log(`Scanning ${targetDir} for post-processing...`);
   let changesMade = false;
@@ -221,6 +261,10 @@ async function run() {
 
     // Fix error handling in fetcher file
     if (await fixFetcherErrorHandling(fetcherFile)) {
+      changesMade = true;
+    }
+
+    if (await fixSchemaStringFields(schemaFile)) {
       changesMade = true;
     }
 

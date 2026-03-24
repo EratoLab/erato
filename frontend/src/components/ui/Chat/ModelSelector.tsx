@@ -8,6 +8,7 @@ import { t } from "@lingui/core/macro";
 import { useMemo, useState } from "react";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
+import { ResolvedIcon } from "../icons";
 
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
 import type { ChatModel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -25,6 +26,66 @@ interface ModelSelectorProps {
   className?: string;
 }
 
+function resolveModelDescription(model: ChatModel): string | null {
+  if (!model.model_description) {
+    return null;
+  }
+
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- Translation key is dynamic by chat provider ID
+  const translationId = `chat_models.${model.chat_provider_id}.description`;
+  // eslint-disable-next-line lingui/no-single-variables-to-translate
+  const translatedDescription = t({ id: translationId, message: "" });
+  if (translatedDescription && translatedDescription !== translationId) {
+    return translatedDescription;
+  }
+
+  return model.model_description;
+}
+
+export function ModelSelectorOptionContent({
+  model,
+  compact = false,
+  reserveIconSpace = false,
+}: {
+  model: ChatModel;
+  compact?: boolean;
+  reserveIconSpace?: boolean;
+}) {
+  const description = resolveModelDescription(model);
+  const shouldShowIconSlot = reserveIconSpace || Boolean(model.model_icon);
+
+  return (
+    <div className="flex min-w-0 max-w-[22rem] items-center gap-2">
+      {shouldShowIconSlot ? (
+        <div className="flex size-4 shrink-0 items-center justify-center">
+          {model.model_icon ? (
+            <ResolvedIcon
+              iconId={model.model_icon}
+              className="size-4 shrink-0 text-[var(--theme-fg-secondary)]"
+            />
+          ) : null}
+        </div>
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <div
+          className="truncate text-sm font-medium text-[var(--theme-fg-primary)]"
+          title={model.model_display_name}
+        >
+          {model.model_display_name}
+        </div>
+        {!compact && description ? (
+          <div
+            className="truncate text-xs font-normal text-[var(--theme-fg-muted)]"
+            title={description}
+          >
+            {description}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export const ModelSelector = ({
   availableModels,
   selectedModel,
@@ -32,17 +93,28 @@ export const ModelSelector = ({
   disabled = false,
   className = "",
 }: ModelSelectorProps) => {
+  // Keep this marker so Lingui extracts the dynamic model description keys.
+  const _modelDescriptionMarker = t`chat_models.<chat-provider-id>.description`;
   // Track dropdown open state for chevron rotation
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const shouldReserveIconSpace = useMemo(
+    () => availableModels.some((model) => Boolean(model.model_icon)),
+    [availableModels],
+  );
 
   // Convert available models to dropdown menu items
   const dropdownItems: DropdownMenuItem[] = useMemo(() => {
     return availableModels.map((model) => ({
-      label: model.model_display_name,
+      label: (
+        <ModelSelectorOptionContent
+          model={model}
+          reserveIconSpace={shouldReserveIconSpace}
+        />
+      ),
       onClick: () => onModelChange(model),
       checked: selectedModel?.chat_provider_id === model.chat_provider_id,
     }));
-  }, [availableModels, selectedModel, onModelChange]);
+  }, [availableModels, onModelChange, selectedModel, shouldReserveIconSpace]);
 
   // Don't render if no models available
   if (availableModels.length === 0) {
@@ -56,12 +128,9 @@ export const ModelSelector = ({
       <div
         className={`flex items-center px-2 py-1 text-sm text-[var(--theme-fg-secondary)] ${className}`}
       >
-        <span
-          className="max-w-32 truncate sm:max-w-40"
-          title={singleModel.model_display_name}
-        >
-          {singleModel.model_display_name}
-        </span>
+        <div className="max-w-40 sm:max-w-48">
+          <ModelSelectorOptionContent model={singleModel} compact />
+        </div>
       </div>
     );
   }
@@ -75,8 +144,15 @@ export const ModelSelector = ({
         items={dropdownItems}
         align="right"
         onOpenChange={setIsDropdownOpen}
+        matchContentWidth
         triggerIcon={
           <div className="flex items-center gap-1 px-2">
+            {selectedModel?.model_icon ? (
+              <ResolvedIcon
+                iconId={selectedModel.model_icon}
+                className="size-4 shrink-0 text-[var(--theme-fg-secondary)]"
+              />
+            ) : null}
             <span
               className="max-w-32 truncate text-sm font-medium text-[var(--theme-fg-primary)] sm:max-w-40"
               title={selectedModel?.model_display_name}
