@@ -57,7 +57,10 @@ export function UserPreferencesDialog({
   const queryClient = useQueryClient();
   const { enabled: personalizationEnabled } = useUserPreferencesFeature();
   const { effectiveTheme, setThemeMode, themeMode } = useTheme();
-  const [activeTab, setActiveTab] = useState<PreferencesTab>("appearance");
+  const defaultTab: PreferencesTab = personalizationEnabled
+    ? "personalization"
+    : "appearance";
+  const [activeTab, setActiveTab] = useState<PreferencesTab>(() => defaultTab);
   const [nickname, setNickname] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [customInstructions, setCustomInstructions] = useState("");
@@ -82,7 +85,7 @@ export function UserPreferencesDialog({
       return;
     }
 
-    setActiveTab(visibleTabs[0]);
+    setActiveTab(defaultTab);
     setSaveError(null);
     setArchiveError(null);
     setArchiveSuccess(null);
@@ -94,7 +97,7 @@ export function UserPreferencesDialog({
     setAdditionalInformation(
       userProfile?.preference_assistant_additional_information ?? "",
     );
-  }, [isOpen, userProfile, visibleTabs]);
+  }, [defaultTab, isOpen, userProfile]);
 
   useEffect(() => {
     if (!visibleTabs.includes(activeTab)) {

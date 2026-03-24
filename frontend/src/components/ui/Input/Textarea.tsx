@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { forwardRef, useEffect, useRef } from "react";
+import { forwardRef, useLayoutEffect, useRef } from "react";
 
 import type React from "react";
 
@@ -145,7 +145,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       [ariaDescribedBy, errorId].filter(Boolean).join(" ") || undefined;
 
     // Auto-resize functionality
-    useEffect(() => {
+    useLayoutEffect(() => {
       if (!autoResize) return;
       const textarea = textareaRef.current;
       if (textarea === null) return;
