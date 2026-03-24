@@ -39,6 +39,10 @@ const sidebarItemStyle = {
   minHeight: "var(--theme-spacing-sidebar-row-height)",
   borderRadius: "var(--theme-radius-shell)",
 } as const;
+const activeSidebarItemStyle = {
+  ...sidebarItemStyle,
+  backgroundColor: "var(--theme-shell-sidebar-selected)",
+} as const;
 const compactShellPaddingStyle = {
   padding:
     "var(--theme-spacing-shell-compact-padding-y) var(--theme-spacing-shell-compact-padding-x)",
@@ -259,12 +263,13 @@ const SearchNavigationItem = memo<{
           useDiv={true}
           interactive={false}
           className={clsx(
-            "flex items-center text-left opacity-50",
+            "flex items-center text-left",
             isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
           )}
-          style={sidebarItemStyle}
+          style={activeSidebarItemStyle}
           aria-label={t`Search`}
           title={isSlimMode ? t`Search` : undefined}
+          data-ui="sidebar-search-item"
         >
           <ResolvedIcon
             iconId={searchIconId}
@@ -307,6 +312,7 @@ const SearchNavigationItem = memo<{
               isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
             )}
             style={sidebarItemStyle}
+            data-ui="sidebar-search-item"
           >
             <ResolvedIcon
               iconId={searchIconId}
@@ -347,12 +353,13 @@ const AssistantsNavigationItem = memo<{
           useDiv={true}
           interactive={false}
           className={clsx(
-            "flex items-center text-left opacity-50",
+            "flex items-center text-left",
             isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
           )}
-          style={sidebarItemStyle}
+          style={activeSidebarItemStyle}
           aria-label={t`Assistants`}
           title={isSlimMode ? t`Assistants` : undefined}
+          data-ui="sidebar-assistants-item"
         >
           <ResolvedIcon
             iconId={assistantsIconId}
@@ -395,6 +402,7 @@ const AssistantsNavigationItem = memo<{
               isSlimMode ? "min-w-[44px] px-3 py-2" : "gap-3 px-3 py-2",
             )}
             style={sidebarItemStyle}
+            data-ui="sidebar-assistants-item"
           >
             <ResolvedIcon
               iconId={assistantsIconId}
