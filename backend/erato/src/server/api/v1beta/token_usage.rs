@@ -3,7 +3,8 @@ use crate::db::entity::messages;
 use crate::db::entity::prelude::*;
 use crate::models::chat::get_chat_by_message_id;
 use crate::models::message::{
-    ContentPart, ContentPartText, GenerationInputMessages, MessageRole, MessageSchema,
+    ContentPart, ContentPartText, GenerationInputMessages, GenerationRequestContext, MessageRole,
+    MessageSchema,
 };
 use crate::policy::engine::{PolicyEngine, authorize};
 use crate::policy::types::{Action, Resource};
@@ -507,6 +508,7 @@ pub async fn token_usage_estimate(
             &app_state,
             chat,
             user_input,
+            GenerationRequestContext { platform: None },
             &me_profile_input,
             assistant_config.clone(),
             &message_repo,

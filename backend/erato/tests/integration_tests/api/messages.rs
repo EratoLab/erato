@@ -316,6 +316,198 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
     );
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_platform_persisted_in_generation_parameters_and_defaults_to_web(
+    pool: Pool<Postgres>,
+) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let first_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header("X-Erato-Platform", "desktop")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "First turn" }))
+        .await;
+    first_response.assert_status_ok();
+
+    let first_events = parse_sse_events(&first_response);
+    let first_assistant_message_id = first_events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected assistant_message_completed event with message_id");
+
+    let second_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "previous_message_id": first_assistant_message_id,
+            "user_message": "Second turn"
+        }))
+        .await;
+    second_response.assert_status_ok();
+
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch messages with generation parameters");
+
+    assert_eq!(assistant_messages.len(), 2);
+
+    let first_params: GenerationParameters = serde_json::from_value(
+        assistant_messages[0]
+            .generation_parameters
+            .clone()
+            .expect("Missing generation_parameters"),
+    )
+    .expect("Failed to deserialize first generation parameters");
+    assert_eq!(
+        first_params
+            .request_context
+            .as_ref()
+            .and_then(|context| context.platform.as_deref()),
+        Some("desktop")
+    );
+
+    let second_params: GenerationParameters = serde_json::from_value(
+        assistant_messages[1]
+            .generation_parameters
+            .clone()
+            .expect("Missing generation_parameters"),
+    )
+    .expect("Failed to deserialize second generation parameters");
+    assert_eq!(
+        second_params
+            .request_context
+            .as_ref()
+            .and_then(|context| context.platform.as_deref()),
+        Some("web")
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_platform_persisted_for_regenerate_and_edit_generation_requests(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let submit_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "Original turn" }))
+        .await;
+    submit_response.assert_status_ok();
+
+    let submit_events = parse_sse_events(&submit_response);
+    let original_assistant_message_id = submit_events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected assistant_message_completed event with message_id");
+
+    let regenerate_response = server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .add_header("X-Erato-Platform", "mobile")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "current_message_id": original_assistant_message_id }))
+        .await;
+    regenerate_response.assert_status_ok();
+
+    let user_message_to_edit = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_null())
+        .order_by_desc(erato::db::entity::messages::Column::CreatedAt)
+        .one(&db)
+        .await
+        .expect("Failed to fetch latest user message")
+        .expect("Expected user message to edit");
+
+    let edit_response = server
+        .post("/api/v1beta/me/messages/editstream")
+        .add_header("X-Erato-Platform", "ios")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": user_message_to_edit.id,
+            "replace_user_message": "Edited turn"
+        }))
+        .await;
+    edit_response.assert_status_ok();
+
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch assistant messages");
+
+    assert_eq!(assistant_messages.len(), 3);
+
+    let regenerate_params: GenerationParameters = serde_json::from_value(
+        assistant_messages[1]
+            .generation_parameters
+            .clone()
+            .expect("Missing regenerate generation_parameters"),
+    )
+    .expect("Failed to deserialize regenerate generation parameters");
+    assert_eq!(
+        regenerate_params
+            .request_context
+            .as_ref()
+            .and_then(|context| context.platform.as_deref()),
+        Some("mobile")
+    );
+
+    let edit_params: GenerationParameters = serde_json::from_value(
+        assistant_messages[2]
+            .generation_parameters
+            .clone()
+            .expect("Missing edit generation_parameters"),
+    )
+    .expect("Failed to deserialize edit generation parameters");
+    assert_eq!(
+        edit_params
+            .request_context
+            .as_ref()
+            .and_then(|context| context.platform.as_deref()),
+        Some("ios")
+    );
+}
+
 /// Test facet prompt injection behavior across a two-turn chat.
 ///
 /// # Test Categories

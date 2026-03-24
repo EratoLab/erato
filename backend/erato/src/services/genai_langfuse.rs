@@ -188,8 +188,9 @@ pub fn create_metadata_with_assistant_and_tools(
     assistant_id: Option<Uuid>,
     tool_names: &[String],
     was_aborted: bool,
+    platform: Option<&str>,
 ) -> Option<JsonValue> {
-    if assistant_id.is_none() && tool_names.is_empty() && !was_aborted {
+    if assistant_id.is_none() && tool_names.is_empty() && !was_aborted && platform.is_none() {
         return None;
     }
 
@@ -200,6 +201,13 @@ pub fn create_metadata_with_assistant_and_tools(
         metadata.insert(
             "erato_assistant_id".to_string(),
             JsonValue::String(id.to_string()),
+        );
+    }
+
+    if let Some(platform) = platform {
+        metadata.insert(
+            "erato_platform".to_string(),
+            JsonValue::String(platform.to_string()),
         );
     }
 
@@ -225,13 +233,18 @@ pub fn create_trace_metadata(
     tool_names: &[String],
     filenames: &[String],
     was_aborted: bool,
+    platform: Option<&str>,
 ) -> Option<JsonValue> {
-    let mut metadata =
-        match create_metadata_with_assistant_and_tools(assistant_id, tool_names, was_aborted) {
-            Some(JsonValue::Object(metadata)) => metadata,
-            Some(_) => serde_json::Map::new(),
-            None => serde_json::Map::new(),
-        };
+    let mut metadata = match create_metadata_with_assistant_and_tools(
+        assistant_id,
+        tool_names,
+        was_aborted,
+        platform,
+    ) {
+        Some(JsonValue::Object(metadata)) => metadata,
+        Some(_) => serde_json::Map::new(),
+        None => serde_json::Map::new(),
+    };
 
     if !filenames.is_empty() {
         metadata.insert("filenames".to_string(), json!(filenames));
@@ -324,6 +337,7 @@ pub fn create_trace_request_from_chat(
     session_id: Option<String>,
     environment: Option<String>,
     assistant_id: Option<Uuid>,
+    platform: Option<&str>,
 ) -> Result<CreateTraceRequest> {
     // Generate a name for the trace from the first user message
     let name = generate_name_from_chat_request(chat_request);
@@ -336,7 +350,7 @@ pub fn create_trace_request_from_chat(
     });
 
     // Create metadata with assistant_id if present
-    let metadata = assistant_id.map(|id| json!({ "erato_assistant_id": id.to_string() }));
+    let metadata = create_metadata_with_assistant_and_tools(assistant_id, &[], false, platform);
 
     Ok(CreateTraceRequest {
         id: trace_id,
@@ -403,6 +417,7 @@ impl TracedGenerationBuilder {
     }
 
     /// Build and send the generation to Langfuse using the TracingLangfuseClient
+    #[allow(clippy::too_many_arguments)]
     pub async fn build_and_send(
         self,
         tracing_client: &TracingLangfuseClient,
@@ -411,6 +426,7 @@ impl TracedGenerationBuilder {
         usage: Option<&GenAiUsage>,
         assistant_id: Option<Uuid>,
         tool_names: &[String],
+        platform: Option<&str>,
     ) -> Result<()> {
         // Convert input to normalized OpenAI format
         let input_parts = into_openai_request_parts(chat_request)?;
@@ -431,7 +447,8 @@ impl TracedGenerationBuilder {
         let completion_start_time_str = self.completion_start_time.map(system_time_to_iso_string);
 
         // Create metadata with assistant_id and tool calls
-        let metadata = create_metadata_with_assistant_and_tools(assistant_id, tool_names, false);
+        let metadata =
+            create_metadata_with_assistant_and_tools(assistant_id, tool_names, false, platform);
 
         tracing_client
             .create_generation(
@@ -461,6 +478,7 @@ pub async fn create_trace_from_chat(
     chat_request: &ChatRequest,
     assistant_id: Option<Uuid>,
     tool_names: &[String],
+    platform: Option<&str>,
 ) -> Result<()> {
     // Generate a name for the trace from the first user message
     let name = generate_name_from_chat_request(chat_request);
@@ -473,7 +491,8 @@ pub async fn create_trace_from_chat(
     });
 
     // Create metadata with assistant_id and tool calls
-    let metadata = create_metadata_with_assistant_and_tools(assistant_id, tool_names, false);
+    let metadata =
+        create_metadata_with_assistant_and_tools(assistant_id, tool_names, false, platform);
 
     tracing_client
         .create_trace(
@@ -500,6 +519,7 @@ pub async fn create_trace_with_generation_from_chat(
     completion_start_time: Option<SystemTime>,
     assistant_id: Option<Uuid>,
     tool_names: &[String],
+    platform: Option<&str>,
 ) -> Result<()> {
     // Generate a name for the trace from the first user message
     let trace_name = generate_name_from_chat_request(chat_request);
@@ -523,7 +543,8 @@ pub async fn create_trace_with_generation_from_chat(
     let completion_start_time_str = completion_start_time.map(system_time_to_iso_string);
 
     // Create metadata with assistant_id and tool calls
-    let metadata = create_metadata_with_assistant_and_tools(assistant_id, tool_names, false);
+    let metadata =
+        create_metadata_with_assistant_and_tools(assistant_id, tool_names, false, platform);
 
     tracing_client
         .create_trace_with_generation(
@@ -664,6 +685,7 @@ mod tests {
             &["search".to_string()],
             &["report.pdf".to_string(), "notes.txt".to_string()],
             true,
+            Some("web"),
         )
         .unwrap();
 
@@ -671,6 +693,7 @@ mod tests {
             metadata,
             json!({
                 "tool_called_search": true,
+                "erato_platform": "web",
                 "erato_generation_aborted": true,
                 "filenames": ["report.pdf", "notes.txt"]
             })
