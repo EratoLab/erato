@@ -63,7 +63,7 @@ const MenuItem = memo(
         noWrap && "whitespace-nowrap",
         item.variant === "danger"
           ? "text-theme-error-fg hover:bg-theme-error-bg focus:bg-theme-error-bg"
-          : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:bg-theme-bg-accent focus:text-theme-fg-primary",
+          : "text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:text-theme-fg-primary",
       )}
       onClick={onSelect}
       disabled={item.disabled}

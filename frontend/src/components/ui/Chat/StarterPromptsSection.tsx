@@ -49,21 +49,22 @@ export function StarterPromptsSection({
             focusInput();
           }}
           className={clsx(
-            "group rounded-2xl border border-theme-border bg-theme-bg-primary p-4 text-center",
-            "transition-colors hover:border-theme-border-focus hover:bg-theme-bg-hover",
-            "focus:outline-none focus:ring-2 focus:ring-[var(--theme-border-focus)] focus:ring-offset-2 focus:ring-offset-[var(--theme-bg-primary)]",
+            "group rounded-2xl border p-4 text-center",
+            "[background:var(--theme-starter-prompt-bg)] [border-color:var(--theme-starter-prompt-border)]",
+            "transition-colors hover:[background:var(--theme-starter-prompt-hover-bg)] hover:[border-color:var(--theme-starter-prompt-hover-border)]",
+            "focus:outline-none focus:ring-2 focus:ring-[var(--theme-starter-prompt-focus-ring)] focus:ring-offset-2 focus:ring-offset-[var(--theme-starter-prompt-focus-offset)]",
           )}
           data-testid={`starter-prompt-${starterPrompt.id}`}
         >
           <div className="mb-3 flex flex-col items-center gap-3">
-            <div className="rounded-full bg-theme-bg-accent p-3 text-theme-fg-primary">
+            <div className="rounded-full p-3 [background:var(--theme-starter-prompt-icon-bg)] [color:var(--theme-starter-prompt-icon-fg)]">
               <ResolvedIcon iconId={starterPrompt.icon} className="size-7" />
             </div>
             <div className="min-w-0">
-              <div className="font-medium text-theme-fg-primary">
+              <div className="font-extrabold [color:var(--theme-starter-prompt-title-fg)]">
                 {starterPrompt.title}
               </div>
-              <div className="mt-1 text-sm text-theme-fg-secondary">
+              <div className="mt-1 text-sm [color:var(--theme-starter-prompt-subtitle-fg)]">
                 {starterPrompt.subtitle}
               </div>
             </div>

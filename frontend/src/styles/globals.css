@@ -304,6 +304,18 @@
   /* Focus */
   --theme-focus-ring: #6b7280; /* Monochrome focus ring */
   --theme-focus-ring-error: rgba(239, 68, 68, 0.2);
+
+  /* Starter prompts */
+  --theme-starter-prompt-bg: var(--theme-bg-primary);
+  --theme-starter-prompt-border: var(--theme-border);
+  --theme-starter-prompt-hover-bg: var(--theme-bg-hover);
+  --theme-starter-prompt-hover-border: var(--theme-border-focus);
+  --theme-starter-prompt-focus-ring: var(--theme-focus-ring);
+  --theme-starter-prompt-focus-offset: var(--theme-bg-primary);
+  --theme-starter-prompt-icon-bg: var(--theme-bg-accent);
+  --theme-starter-prompt-icon-fg: var(--theme-fg-primary);
+  --theme-starter-prompt-title-fg: var(--theme-fg-primary);
+  --theme-starter-prompt-subtitle-fg: var(--theme-fg-secondary);
 }
 
 @media (prefers-color-scheme: dark) {
