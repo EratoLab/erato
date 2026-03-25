@@ -11,6 +11,7 @@ import {
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
+import { componentRegistry } from "@/config/componentRegistry";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useOptionalTranslation } from "@/hooks/i18n";
@@ -744,6 +745,12 @@ export const ChatInput = ({
     return fileError;
   }, [externalUploadError, fileError]);
 
+  const ChatInputAttachmentPreview =
+    componentRegistry.ChatInputAttachmentPreview;
+  const hasAttachmentPreviewOverride = ChatInputAttachmentPreview !== null;
+  const hasTopLeftAccessoryOverride =
+    componentRegistry.ChatTopLeftAccessory !== null;
+
   const shellWrapperStyle = {
     maxWidth: "var(--theme-layout-chat-input-max-width)",
   } as const;
@@ -777,17 +784,18 @@ export const ChatInput = ({
         {/* Budget warning - shows when user approaches spending limit */}
         <BudgetWarning />
 
-        {/* File previews using our new component */}
-        <FileAttachmentsPreview
-          attachedFiles={attachedFiles}
-          maxFiles={maxFiles}
-          onRemoveFile={handleRemoveFileById}
-          onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
-          onFilePreview={onFilePreview}
-          disabled={isDisabled}
-          showFileTypes={showFileTypes}
-          surfaceVariant="message"
-        />
+        {!hasAttachmentPreviewOverride && (
+          <FileAttachmentsPreview
+            attachedFiles={attachedFiles}
+            maxFiles={maxFiles}
+            onRemoveFile={handleRemoveFileById}
+            onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
+            onFilePreview={onFilePreview}
+            disabled={isDisabled}
+            showFileTypes={showFileTypes}
+            surfaceVariant="message"
+          />
+        )}
 
         {/* File error message */}
         {fileError && (
@@ -814,6 +822,18 @@ export const ChatInput = ({
           style={inputShellStyle}
           data-ui="chat-input-shell"
         >
+          {hasAttachmentPreviewOverride && ChatInputAttachmentPreview && (
+            <ChatInputAttachmentPreview
+              attachedFiles={attachedFiles}
+              maxFiles={maxFiles}
+              onRemoveFile={handleRemoveFileById}
+              onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
+              onFilePreview={onFilePreview}
+              disabled={isDisabled}
+              showFileTypes={showFileTypes}
+            />
+          )}
+
           <textarea
             ref={textareaRef}
             value={message}
@@ -924,12 +944,14 @@ export const ChatInput = ({
                   {t`Cancel`}
                 </Button>
               )}
-              <ModelSelector
-                availableModels={availableModels}
-                selectedModel={selectedModel}
-                onModelChange={setSelectedModel}
-                disabled={!isSelectionReady}
-              />
+              {!hasTopLeftAccessoryOverride && (
+                <ModelSelector
+                  availableModels={availableModels}
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  disabled={!isSelectionReady}
+                />
+              )}
               {isPendingResponse ? (
                 <Button
                   type="button"
