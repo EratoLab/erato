@@ -52,24 +52,28 @@ export default function SearchPageStructure({
   }, [pathname]);
 
   // Convert the chat history data to the format expected by the sidebar
-  const sessions: ChatSession[] = Array.isArray(chatHistory)
-    ? chatHistory.map((chat) => ({
-        id: chat.id,
-        title: chat.title_resolved,
-        titleResolved: chat.title_resolved,
-        titleBySummary: chat.title_by_summary,
-        titleByUserProvided: chat.title_by_user_provided,
-        updatedAt: chat.last_message_at,
-        messages: [],
-        metadata: {
-          lastMessage: {
-            content: chat.title_resolved,
-            timestamp: chat.last_message_at,
-          },
-          fileCount: chat.file_uploads.length,
-        },
-      }))
-    : [];
+  const sessions: ChatSession[] = useMemo(
+    () =>
+      Array.isArray(chatHistory)
+        ? chatHistory.map((chat) => ({
+            id: chat.id,
+            title: chat.title_resolved,
+            titleResolved: chat.title_resolved,
+            titleBySummary: chat.title_by_summary,
+            titleByUserProvided: chat.title_by_user_provided,
+            updatedAt: chat.last_message_at,
+            messages: [],
+            metadata: {
+              lastMessage: {
+                content: chat.title_resolved,
+                timestamp: chat.last_message_at,
+              },
+              fileCount: chat.file_uploads.length,
+            },
+          }))
+        : [],
+    [chatHistory],
+  );
 
   // Handle session select
   const handleSessionSelect = (sessionId: string) => {

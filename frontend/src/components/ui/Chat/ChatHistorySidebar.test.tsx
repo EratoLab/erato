@@ -10,6 +10,8 @@ import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import type { ChatSession } from "@/types/chat";
 import type { Messages } from "@lingui/core";
 
+let mockedCollapsedMode = "hidden";
+
 vi.mock("@/components/providers/ThemeProvider", () => ({
   useTheme: () => ({
     effectiveTheme: "light",
@@ -34,7 +36,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
     showRecentItems: false,
   }),
   useSidebarFeature: () => ({
-    collapsedMode: "hidden",
+    collapsedMode: mockedCollapsedMode,
     logoPath: null,
     logoDarkPath: null,
   }),
@@ -68,6 +70,7 @@ const sessions: ChatSession[] = [
 
 describe("ChatHistorySidebar", () => {
   beforeEach(async () => {
+    mockedCollapsedMode = "hidden";
     const { i18n } = await import("@lingui/core");
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
@@ -93,7 +96,8 @@ describe("ChatHistorySidebar", () => {
 
     expect(sidebar).toHaveStyle({
       backgroundColor: "var(--theme-shell-sidebar)",
-      borderRightColor: "var(--theme-border-divider)",
+      borderRightColor:
+        "var(--theme-shell-sidebar-divider-color, var(--theme-border-divider))",
       boxShadow: "var(--theme-elevation-shell)",
       width: "var(--theme-layout-sidebar-width)",
     });
@@ -135,4 +139,36 @@ describe("ChatHistorySidebar", () => {
     });
     expect(searchItem?.classList.contains("opacity-50")).toBe(false);
   });
+
+  it("uses the original slim-mode row geometry for nav items", async () => {
+    mockedCollapsedMode = "slim";
+
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <MemoryRouter initialEntries={["/search"]}>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            isLoading={false}
+            collapsed={true}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    const searchItem = container.querySelector(
+      '[data-ui="sidebar-search-item"]',
+    );
+
+    expect(searchItem).toHaveClass("min-w-[44px]", "px-3", "py-2");
+    expect(searchItem).toHaveStyle({
+      backgroundColor: "var(--theme-shell-sidebar-selected)",
+      minHeight: "var(--theme-spacing-sidebar-row-height)",
+      borderRadius: "var(--theme-radius-shell)",
+    });
+  });
+
 });

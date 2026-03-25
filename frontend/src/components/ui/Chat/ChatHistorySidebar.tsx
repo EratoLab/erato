@@ -54,6 +54,15 @@ const compactShellPaddingStyle = {
   padding:
     "var(--theme-spacing-shell-compact-padding-y) var(--theme-spacing-shell-compact-padding-x)",
 } as const;
+const sidebarDividerColor =
+  "var(--theme-shell-sidebar-divider-color, var(--theme-border-divider))";
+const sidebarSectionBackground =
+  "var(--theme-shell-sidebar-section-bg, transparent)";
+const sidebarSectionStyle = {
+  ...compactShellPaddingStyle,
+  backgroundColor: sidebarSectionBackground,
+  borderColor: sidebarDividerColor,
+} as const;
 const sidebarLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
 
@@ -150,8 +159,8 @@ const ChatHistoryHeader = memo<{
 }>(
   ({ collapsed, isSlimMode, onToggleCollapse, showTitle, sidebarLogoPath }) => (
     <div
-      className="flex min-h-[60px] border-b border-[var(--theme-border-divider)]"
-      style={compactShellPaddingStyle}
+      className="flex min-h-[60px] border-b"
+      style={sidebarSectionStyle}
       data-ui="sidebar-header"
     >
       {/* In slim mode, show logo with hover toggle or just toggle button */}
@@ -480,8 +489,8 @@ const ChatHistoryFooter = memo<{
   isSlimMode?: boolean;
 }>(({ userProfile, onSignOut }) => (
   <div
-    className="border-t border-[var(--theme-border-divider)]"
-    style={compactShellPaddingStyle}
+    className="border-t"
+    style={sidebarSectionStyle}
     data-ui="sidebar-footer"
   >
     <UserProfileThemeDropdown
@@ -625,7 +634,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const sidebarShellStyle = useMemo(
       () => ({
         backgroundColor: "var(--theme-shell-sidebar)",
-        borderRightColor: "var(--theme-border-divider)",
+        borderColor: sidebarDividerColor,
         boxShadow: "var(--theme-elevation-shell)",
         width: isSlimMode
           ? "var(--theme-layout-sidebar-slim-width)"
@@ -692,7 +701,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             />
             <div className="flex min-h-0 flex-1 flex-col">
               {/* New Chat Item */}
-              <NewChatItem onNewChat={onNewChat} isSlimMode={isSlimMode} />
+              <NewChatItem
+                onNewChat={onNewChat}
+                isSlimMode={isSlimMode}
+              />
 
               {/* Search Navigation Item */}
               <SearchNavigationItem

@@ -20,6 +20,7 @@ const mockUseActiveModelSelection = vi.fn();
 const mockUseTokenManagement = vi.fn();
 const mockUseChatInputHandlers = vi.fn();
 const mockUseFacets = vi.fn();
+const mockModelSelector = vi.fn();
 
 vi.mock("@/providers/ChatProvider", () => ({
   useChatContext: () => mockUseChatContext(),
@@ -69,7 +70,10 @@ vi.mock("./FacetSelector", () => ({
 }));
 
 vi.mock("./ModelSelector", () => ({
-  ModelSelector: () => <div data-testid="model-selector" />,
+  ModelSelector: (props: unknown) => {
+    mockModelSelector(props);
+    return <div data-testid="model-selector" />;
+  },
 }));
 
 vi.mock("../Controls/Button", () => ({
@@ -211,6 +215,56 @@ describe("ChatInput", () => {
 
     expect(textarea).toHaveFocus();
     otherButton.remove();
+  });
+
+  it("uses externally controlled model selection when provided", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const onSendMessage = vi.fn();
+    const onControlledSelectedModelChange = vi.fn();
+    const controlledModel = {
+      chat_provider_id: "external-model",
+      model_display_name: "External Model",
+    };
+    const availableModels = [controlledModel];
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput
+            onSendMessage={onSendMessage}
+            controlledAvailableModels={availableModels as never}
+            controlledSelectedModel={controlledModel as never}
+            onControlledSelectedModelChange={
+              onControlledSelectedModelChange as never
+            }
+            controlledIsModelSelectionReady={false}
+          />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(mockModelSelector).toHaveBeenCalled();
+    const lastCallProps = mockModelSelector.mock.calls.at(-1)?.[0] as {
+      availableModels: typeof availableModels;
+      selectedModel: typeof controlledModel;
+      onModelChange: typeof onControlledSelectedModelChange;
+      disabled: boolean;
+    };
+
+    expect(lastCallProps.availableModels).toBe(availableModels);
+    expect(lastCallProps.selectedModel).toBe(controlledModel);
+    expect(lastCallProps.disabled).toBe(true);
+
+    lastCallProps.onModelChange(controlledModel);
+    expect(onControlledSelectedModelChange).toHaveBeenCalledWith(
+      controlledModel,
+    );
   });
 
   it("exposes stable shell hooks for theme.css selectors", async () => {

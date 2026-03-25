@@ -107,6 +107,10 @@ interface ChatInputProps {
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
   onSelectedChatProviderIdChange?: (chatProviderId: string | null) => void;
+  controlledAvailableModels?: ChatModel[];
+  controlledSelectedModel?: ChatModel | null;
+  onControlledSelectedModelChange?: (model: ChatModel) => void;
+  controlledIsModelSelectionReady?: boolean;
 }
 
 interface ComposeDraftState {
@@ -154,6 +158,10 @@ export const ChatInput = ({
   uploadFiles: externalUploadFiles,
   uploadError: externalUploadError = null,
   onSelectedChatProviderIdChange,
+  controlledAvailableModels,
+  controlledSelectedModel,
+  onControlledSelectedModelChange,
+  controlledIsModelSelectionReady,
   ref,
 }: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
@@ -191,10 +199,29 @@ export const ChatInput = ({
   const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
 
   // Use local model selection hook
-  const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
-    useActiveModelSelection({
-      initialModel,
-    });
+  const {
+    availableModels: internalAvailableModels,
+    selectedModel: internalSelectedModel,
+    setSelectedModel: setInternalSelectedModel,
+    isSelectionReady: internalIsSelectionReady,
+  } = useActiveModelSelection({
+    initialModel,
+  });
+
+  const availableModels = controlledAvailableModels ?? internalAvailableModels;
+  const selectedModel = controlledSelectedModel ?? internalSelectedModel;
+  const isSelectionReady =
+    controlledIsModelSelectionReady ?? internalIsSelectionReady;
+  const setSelectedModel = useCallback(
+    (model: ChatModel) => {
+      if (onControlledSelectedModelChange) {
+        onControlledSelectedModelChange(model);
+        return;
+      }
+      setInternalSelectedModel(model);
+    },
+    [onControlledSelectedModelChange, setInternalSelectedModel],
+  );
 
   // Use our token management hook
   const {
