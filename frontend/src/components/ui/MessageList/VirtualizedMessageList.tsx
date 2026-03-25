@@ -27,6 +27,7 @@ interface VirtualizedMessageListProps {
   showTimestamps?: boolean;
   showAvatars?: boolean;
   userProfile?: UserProfile;
+  userDisplayNameOverride?: string;
   controls?: MessageControlsComponent;
   messageRenderer?: ComponentType<ChatMessageProps>;
   controlsContext: MessageControlsContext;
@@ -45,6 +46,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   showTimestamps,
   showAvatars,
   userProfile,
+  userDisplayNameOverride,
   controls,
   messageRenderer,
   controlsContext,
@@ -69,6 +71,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
           showTimestamp={showTimestamps}
           showAvatar={showAvatars}
           userProfile={userProfile}
+          userDisplayNameOverride={userDisplayNameOverride}
           controls={controls}
           messageRenderer={messageRenderer}
           controlsContext={controlsContext}
@@ -89,6 +92,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
     showTimestamps,
     showAvatars,
     userProfile,
+    userDisplayNameOverride,
     controls,
     messageRenderer,
     controlsContext,

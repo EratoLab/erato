@@ -102,6 +102,11 @@ interface SidebarFeatureConfig {
   chatHistoryShowMetadata: boolean;
 }
 
+interface ChatSharingFeatureConfig {
+  /** Whether chat sharing is enabled */
+  enabled: boolean;
+}
+
 /**
  * Complete feature configuration interface
  */
@@ -124,6 +129,8 @@ export interface FeatureConfig {
   messageFeedback: MessageFeedbackFeatureConfig;
   /** Sidebar feature flags */
   sidebar: SidebarFeatureConfig;
+  /** Chat sharing feature flags */
+  chatSharing: ChatSharingFeatureConfig;
 }
 
 const FeatureConfigContext = createContext<FeatureConfig | null>(null);
@@ -166,6 +173,9 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     logoPath: null,
     logoDarkPath: null,
     chatHistoryShowMetadata: true,
+  },
+  chatSharing: {
+    enabled: false,
   },
 };
 
@@ -232,6 +242,9 @@ function createFeatureConfig(
       logoDarkPath: environment.sidebarLogoDarkPath,
       chatHistoryShowMetadata: environment.sidebarChatHistoryShowMetadata,
     },
+    chatSharing: {
+      enabled: environment.chatSharingEnabled,
+    },
   };
 }
 
@@ -268,6 +281,10 @@ function mergeFeatureConfig(overrides?: Partial<FeatureConfig>): FeatureConfig {
       ...overrides.messageFeedback,
     },
     sidebar: { ...defaultStaticFeatureConfig.sidebar, ...overrides.sidebar },
+    chatSharing: {
+      ...defaultStaticFeatureConfig.chatSharing,
+      ...overrides.chatSharing,
+    },
   };
 }
 
@@ -484,4 +501,9 @@ export function useMessageFeedbackFeature(): MessageFeedbackFeatureConfig {
 export function useSidebarFeature(): SidebarFeatureConfig {
   const config = useFeatureConfig();
   return config.sidebar;
+}
+
+export function useChatSharingFeature(): ChatSharingFeatureConfig {
+  const config = useFeatureConfig();
+  return config.chatSharing;
 }

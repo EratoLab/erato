@@ -198,6 +198,9 @@ pub struct AppConfig {
     #[serde(default)]
     pub experimental_facets: ExperimentalFacetsConfig,
 
+    #[serde(default)]
+    pub chat_sharing: ChatSharingConfig,
+
     // Caches configuration for file contents and token counts.
     #[serde(default)]
     pub caches: CachesConfig,
@@ -1448,6 +1451,12 @@ pub struct ExperimentalFacetsConfig {
     // Facets that should be selected by default in the frontend.
     #[serde(default)]
     pub default_selected_facets: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+pub struct ChatSharingConfig {
+    #[serde(default)]
+    pub enabled: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Default)]

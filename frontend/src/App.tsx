@@ -16,6 +16,7 @@ import ChatDetailPage from "./pages/ChatDetailPage";
 import HomePage from "./pages/HomePage";
 import NewChatPage from "./pages/NewChatPage";
 import SearchPage from "./pages/SearchPage";
+import SharedChatPage from "./pages/SharedChatPage";
 
 // Layout Imports
 
@@ -69,6 +70,7 @@ function AppRoutes() {
           <Route path="new" element={<NewChatPage />} />
           <Route path=":id" element={<ChatDetailPage />} />
         </Route>
+        <Route path="chat-share/:shareId" element={<SharedChatPage />} />
         {/* Assistant chat space - /a/:assistantId shows assistant welcome + past chats */}
         <Route path="a">
           <Route path=":assistantId" element={<AssistantChatLayout />}>

@@ -3463,6 +3463,284 @@ export const useDeleteShareGrant = (
   });
 };
 
+export type GetShareLinkForResourceQueryParams = {
+  /**
+   * The shared resource type
+   */
+  resource_type: string;
+  /**
+   * The shared resource ID
+   */
+  resource_id: string;
+};
+
+export type GetShareLinkForResourceError = Fetcher.ErrorWrapper<undefined>;
+
+export type GetShareLinkForResourceVariables = {
+  queryParams: GetShareLinkForResourceQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchGetShareLinkForResource = (
+  variables: GetShareLinkForResourceVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ShareLinkForResourceResponse,
+    GetShareLinkForResourceError,
+    undefined,
+    {},
+    GetShareLinkForResourceQueryParams,
+    {}
+  >({ url: "/api/v1beta/share-links", method: "get", ...variables, signal });
+
+export function getShareLinkForResourceQuery(
+  variables: GetShareLinkForResourceVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.ShareLinkForResourceResponse>;
+};
+
+export function getShareLinkForResourceQuery(
+  variables: GetShareLinkForResourceVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.ShareLinkForResourceResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function getShareLinkForResourceQuery(
+  variables: GetShareLinkForResourceVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/share-links",
+      operationId: "getShareLinkForResource",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchGetShareLinkForResource(variables, signal),
+  };
+}
+
+export const useSuspenseGetShareLinkForResource = <
+  TData = Schemas.ShareLinkForResourceResponse,
+>(
+  variables: GetShareLinkForResourceVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ShareLinkForResourceResponse,
+      GetShareLinkForResourceError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ShareLinkForResourceResponse,
+    GetShareLinkForResourceError,
+    TData
+  >({
+    ...getShareLinkForResourceQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGetShareLinkForResource = <
+  TData = Schemas.ShareLinkForResourceResponse,
+>(
+  variables: GetShareLinkForResourceVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ShareLinkForResourceResponse,
+      GetShareLinkForResourceError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ShareLinkForResourceResponse,
+    GetShareLinkForResourceError,
+    TData
+  >({
+    ...getShareLinkForResourceQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type SetShareLinkError = Fetcher.ErrorWrapper<undefined>;
+
+export type SetShareLinkVariables = {
+  body: Schemas.SetShareLinkRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchSetShareLink = (
+  variables: SetShareLinkVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.SetShareLinkResponse,
+    SetShareLinkError,
+    Schemas.SetShareLinkRequest,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/share-links", method: "put", ...variables, signal });
+
+export const useSetShareLink = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.SetShareLinkResponse,
+      SetShareLinkError,
+      SetShareLinkVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.SetShareLinkResponse,
+    SetShareLinkError,
+    SetShareLinkVariables
+  >({
+    mutationFn: (variables: SetShareLinkVariables) =>
+      fetchSetShareLink(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type ResolveShareLinkPathParams = {
+  /**
+   * The share link ID
+   */
+  shareLinkId: string;
+};
+
+export type ResolveShareLinkError = Fetcher.ErrorWrapper<undefined>;
+
+export type ResolveShareLinkVariables = {
+  pathParams: ResolveShareLinkPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchResolveShareLink = (
+  variables: ResolveShareLinkVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ResolveShareLinkResponse,
+    ResolveShareLinkError,
+    undefined,
+    {},
+    {},
+    ResolveShareLinkPathParams
+  >({
+    url: "/api/v1beta/share-links/{shareLinkId}",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function resolveShareLinkQuery(variables: ResolveShareLinkVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.ResolveShareLinkResponse>;
+};
+
+export function resolveShareLinkQuery(
+  variables: ResolveShareLinkVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ResolveShareLinkResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function resolveShareLinkQuery(
+  variables: ResolveShareLinkVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/share-links/{shareLinkId}",
+      operationId: "resolveShareLink",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchResolveShareLink(variables, signal),
+  };
+}
+
+export const useSuspenseResolveShareLink = <
+  TData = Schemas.ResolveShareLinkResponse,
+>(
+  variables: ResolveShareLinkVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ResolveShareLinkResponse,
+      ResolveShareLinkError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ResolveShareLinkResponse,
+    ResolveShareLinkError,
+    TData
+  >({
+    ...resolveShareLinkQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useResolveShareLink = <TData = Schemas.ResolveShareLinkResponse,>(
+  variables: ResolveShareLinkVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ResolveShareLinkResponse,
+      ResolveShareLinkError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ResolveShareLinkResponse,
+    ResolveShareLinkError,
+    TData
+  >({
+    ...resolveShareLinkQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type TokenUsageEstimateError = Fetcher.ErrorWrapper<undefined>;
 
 export type TokenUsageEstimateVariables = {
@@ -3693,6 +3971,16 @@ export type QueryOperation =
       path: "/api/v1beta/share-grants";
       operationId: "listShareGrants";
       variables: ListShareGrantsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/share-links";
+      operationId: "getShareLinkForResource";
+      variables: GetShareLinkForResourceVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/share-links/{shareLinkId}";
+      operationId: "resolveShareLink";
+      variables: ResolveShareLinkVariables | reactQuery.SkipToken;
     }
   | {
       path: "/health";

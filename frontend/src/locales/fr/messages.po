@@ -161,6 +161,7 @@ msgstr "Assistant"
 #: src/pages/AssistantsListPage.tsx
 #: src/pages/HomePage.tsx
 #: src/pages/NewChatPage.tsx
+#: src/pages/SharedChatPage.tsx
 msgid "branding.page_title_suffix"
 msgstr ""
 
@@ -361,6 +362,77 @@ msgid "chat.newChat.title"
 msgstr "Nouveau Chat"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.share.button"
+msgstr "Partager"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+msgid "chat.share.button.shared"
+msgstr "Partagé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.dialog.title"
+msgstr "Partager le chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.link.aria"
+msgstr "Lien du chat partagé"
+
+#. js-lingui-explicit-id
+#: src/pages/SharedChatPage.tsx
+msgid "chat.share.loading"
+msgstr "Chargement du chat partagé..."
+
+#. js-lingui-explicit-id
+#: src/pages/SharedChatPage.tsx
+msgid "chat.share.owner.unknown"
+msgstr "Utilisateur inconnu"
+
+#. js-lingui-explicit-id
+#: src/pages/SharedChatPage.tsx
+#~ msgid "chat.share.page.heading"
+#~ msgstr "Chat partagé - {title}"
+
+#. js-lingui-explicit-id
+#: src/pages/SharedChatPage.tsx
+msgid "chat.share.page.title"
+msgstr "Chat partagé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.toggle.aria"
+msgstr "Activer ou désactiver le partage du chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.toggle.description"
+msgstr "Toute personne connectée à cette organisation peut le consulter."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.toggle.label"
+msgstr "Activer le lien de partage"
+
+#. js-lingui-explicit-id
+#: src/pages/SharedChatPage.tsx
+msgid "chat.share.unavailable"
+msgstr "Ce chat partagé n'est pas disponible."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.warning.body"
+msgstr "Veuillez prendre un moment pour vérifier l'historique du chat afin d'y repérer d'éventuelles informations confidentielles avant de partager le lien."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.warning.title"
+msgstr "La conversation peut contenir des informations sensibles"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "chat.warning.budget.limit_reached.header"
 msgstr "Limite budgétaire atteinte"
@@ -506,6 +578,11 @@ msgstr "Naviguer vers le dossier parent"
 #: src/components/ui/CloudFilePicker/CloudNavigationBreadcrumb.tsx
 msgid "cloudNavigationBreadcrumb.selectDrive"
 msgstr "Sélectionnez un lecteur pour parcourir les fichiers"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "common.close"
+msgstr "Fermer"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -1729,6 +1806,14 @@ msgstr "Recherche en cours..."
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Send message"
 msgstr "Envoyer le message"
+
+#: src/pages/SharedChatPage.tsx
+msgid "Shared Chat - {effectiveSharedChatTitle}"
+msgstr ""
+
+#: src/pages/SharedChatPage.tsx
+#~ msgid "Shared Chat - {sharedChatTitle}"
+#~ msgstr "Chat partagé - {sharedChatTitle}"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show"

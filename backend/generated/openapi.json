@@ -1844,6 +1844,141 @@
         ]
       }
     },
+    "/api/v1beta/share-links": {
+      "get": {
+        "tags": [
+          "share_links"
+        ],
+        "operationId": "get_share_link_for_resource",
+        "parameters": [
+          {
+            "name": "resource_type",
+            "in": "query",
+            "description": "The shared resource type",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resource_id",
+            "in": "query",
+            "description": "The shared resource ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkForResourceResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "share_links"
+        ],
+        "operationId": "set_share_link",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetShareLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetShareLinkResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or feature disabled"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/share-links/{share_link_id}": {
+      "get": {
+        "tags": [
+          "share_links"
+        ],
+        "operationId": "resolve_share_link",
+        "parameters": [
+          {
+            "name": "share_link_id",
+            "in": "path",
+            "description": "The share link ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveShareLinkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid share link ID"
+          },
+          "404": {
+            "description": "Share link not found, disabled, or unavailable"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/token_usage/estimate": {
       "post": {
         "tags": [
@@ -4371,6 +4506,29 @@
           }
         ]
       },
+      "ResolveShareLinkResponse": {
+        "type": "object",
+        "required": [
+          "share_link"
+        ],
+        "properties": {
+          "owner_display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "share_link": {
+            "$ref": "#/components/schemas/ShareLink"
+          },
+          "title_resolved": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "ResumeStreamRequest": {
         "type": "object",
         "required": [
@@ -4382,6 +4540,36 @@
             "format": "uuid",
             "description": "The ID of the chat to resume streaming for.",
             "example": "00000000-0000-0000-0000-000000000000"
+          }
+        }
+      },
+      "SetShareLinkRequest": {
+        "type": "object",
+        "required": [
+          "resource_type",
+          "resource_id",
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "resource_id": {
+            "type": "string"
+          },
+          "resource_type": {
+            "type": "string"
+          }
+        }
+      },
+      "SetShareLinkResponse": {
+        "type": "object",
+        "required": [
+          "share_link"
+        ],
+        "properties": {
+          "share_link": {
+            "$ref": "#/components/schemas/ShareLink"
           }
         }
       },
@@ -4487,6 +4675,69 @@
           "subject_type": {
             "type": "string",
             "description": "The type of subject to grant access to (e.g., \"user\")"
+          }
+        }
+      },
+      "ShareLink": {
+        "type": "object",
+        "required": [
+          "id",
+          "resource_type",
+          "resource_id",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "resource_id": {
+            "type": "string"
+          },
+          "resource_type": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ShareLinkForResourceResponse": {
+        "type": "object",
+        "properties": {
+          "share_link": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ShareLink"
+              }
+            ]
+          }
+        }
+      },
+      "ShareLinkQuery": {
+        "type": "object",
+        "required": [
+          "resource_type",
+          "resource_id"
+        ],
+        "properties": {
+          "resource_id": {
+            "type": "string"
+          },
+          "resource_type": {
+            "type": "string"
           }
         }
       },

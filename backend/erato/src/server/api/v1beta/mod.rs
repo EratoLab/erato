@@ -8,6 +8,7 @@ pub mod message_streaming;
 mod message_streaming_file_extraction;
 pub mod policy_engine_middleware;
 pub mod share_grants;
+pub mod share_links;
 pub mod sharepoint;
 pub mod token_usage;
 
@@ -44,6 +45,11 @@ use crate::server::api::v1beta::message_streaming::{
 use crate::server::api::v1beta::share_grants::{
     CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
     create_share_grant, delete_share_grant, list_share_grants,
+};
+use crate::server::api::v1beta::share_links::{
+    ResolveShareLinkResponse, SetShareLinkRequest, SetShareLinkResponse, ShareLink,
+    ShareLinkForResourceResponse, ShareLinkQuery, get_share_link_for_resource, resolve_share_link,
+    set_share_link,
 };
 use crate::services::genai::build_chat_options_for_completion;
 use crate::services::sentry::log_internal_server_error;
@@ -154,6 +160,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/share-grants/{grant_id}",
             axum::routing::delete(delete_share_grant),
         )
+        .route("/share-links", get(get_share_link_for_resource))
+        .route("/share-links", put(set_share_link))
+        .route("/share-links/{share_link_id}", get(resolve_share_link))
         // Sharepoint/OneDrive integration routes
         .route(
             "/integrations/sharepoint/all-drives",
@@ -228,6 +237,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         share_grants::create_share_grant,
         share_grants::list_share_grants,
         share_grants::delete_share_grant,
+        share_links::get_share_link_for_resource,
+        share_links::set_share_link,
+        share_links::resolve_share_link,
         sharepoint::all_drives,
         sharepoint::get_drive_root,
         sharepoint::get_drive_item,
@@ -288,6 +300,12 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         CreateShareGrantRequest,
         CreateShareGrantResponse,
         ListShareGrantsResponse,
+        ShareLink,
+        ShareLinkForResourceResponse,
+        ShareLinkQuery,
+        SetShareLinkRequest,
+        SetShareLinkResponse,
+        ResolveShareLinkResponse,
         token_usage::TokenUsageRequest,
         token_usage::TokenUsageStats,
         token_usage::TokenUsageResponseFileItem,

@@ -106,6 +106,10 @@ export interface MessageListProps {
    * User profile information
    */
   userProfile?: UserProfile;
+  /**
+   * Optional override for the display name of user-authored messages
+   */
+  userDisplayNameOverride?: string;
 
   /**
    * Message controls component
@@ -276,6 +280,7 @@ export const MessageList = memo<MessageListProps>(
     showTimestamps = true,
     showAvatars = false,
     userProfile,
+    userDisplayNameOverride,
     controls,
     messageRenderer,
     controlsContext,
@@ -593,6 +598,7 @@ export const MessageList = memo<MessageListProps>(
                 showTimestamps={showTimestamps}
                 showAvatars={showAvatars}
                 userProfile={userProfile}
+                userDisplayNameOverride={userDisplayNameOverride}
                 controls={controls}
                 messageRenderer={messageRenderer}
                 controlsContext={controlsContext}
@@ -611,6 +617,7 @@ export const MessageList = memo<MessageListProps>(
                 showTimestamps={showTimestamps}
                 showAvatars={showAvatars}
                 userProfile={userProfile}
+                userDisplayNameOverride={userDisplayNameOverride}
                 controls={controls}
                 messageRenderer={messageRenderer}
                 controlsContext={controlsContext}

@@ -1,7 +1,7 @@
 use crate::config::{AppConfig, FacetPermissionRule, McpServerPermissionRule, ModelPermissionRule};
 use crate::db::entity::prelude::*;
 use crate::db::entity::{
-    assistant_file_uploads, assistants, chat_file_uploads, file_uploads, share_grants,
+    assistant_file_uploads, assistants, chat_file_uploads, file_uploads, share_grants, share_links,
 };
 use crate::db::entity_ext::chats;
 use crate::policy::types::{
@@ -25,6 +25,7 @@ const BACKEND_POLICY: &str = include_str!("../../../policy/backend/backend.rego"
 struct ChatPolicyAttributes {
     id: Uuid,
     owner_user_id: String,
+    archived_at: Option<sea_orm::prelude::DateTimeWithTimeZone>,
 }
 
 /// Fetch minimal chat data required for policy evaluation.
@@ -34,6 +35,7 @@ async fn fetch_chat_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Re
         .select_only()
         .column(chats::Column::Id)
         .column(chats::Column::OwnerUserId)
+        .column(chats::Column::ArchivedAt)
         .into_model::<ChatPolicyAttributes>()
         .all(db)
         .await?;
@@ -46,6 +48,7 @@ async fn fetch_chat_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Re
             json!({
                 "id": id_str,
                 "owner_id": chat.owner_user_id,
+                "archived_at": chat.archived_at,
             }),
         );
     }
@@ -181,6 +184,24 @@ async fn fetch_share_grants_policy_data(db: &DatabaseConnection) -> Result<JsonV
         .collect();
 
     Ok(json!(grants_array))
+}
+
+async fn fetch_share_links_policy_data(db: &DatabaseConnection) -> Result<JsonValue, Report> {
+    let links: Vec<share_links::Model> = ShareLinks::find().all(db).await?;
+
+    let links_array: Vec<JsonValue> = links
+        .into_iter()
+        .map(|link| {
+            json!({
+                "id": link.id.to_string(),
+                "resource_type": link.resource_type,
+                "resource_id": link.resource_id,
+                "enabled": link.enabled,
+            })
+        })
+        .collect();
+
+    Ok(json!(links_array))
 }
 
 fn config_resources_policy_data(resource_ids: impl IntoIterator<Item = String>) -> JsonValue {
@@ -355,6 +376,7 @@ impl PolicyEngine {
         let assistant_data = fetch_assistant_policy_data(db).await?;
         let file_upload_data = fetch_file_upload_policy_data(db).await?;
         let share_grants_data = fetch_share_grants_policy_data(db).await?;
+        let share_links_data = fetch_share_links_policy_data(db).await?;
         let chat_provider_data = config_resources_policy_data(
             if let Some(chat_providers) = config.chat_providers.as_ref() {
                 chat_providers.providers.keys().cloned().collect()
@@ -380,6 +402,12 @@ impl PolicyEngine {
         let policy_data = json!({
             "resource_attributes": resource_attributes,
             "share_grants": share_grants_data,
+            "share_links": share_links_data,
+            "config": {
+                "chat_sharing": {
+                    "enabled": config.chat_sharing.enabled,
+                },
+            },
             "config_permissions": build_config_permissions_policy_data(config),
         });
 
@@ -609,6 +637,7 @@ pub const fn is_valid_resource_action(resource: ResourceKind, action: Action) ->
         (ResourceKind::Chat, Action::Read) => true,
         (ResourceKind::Chat, Action::Update) => true,
         (ResourceKind::Chat, Action::SubmitMessage) => true,
+        (ResourceKind::Chat, Action::Share) => true,
         (ResourceKind::ChatSingleton, Action::Create) => true,
         (ResourceKind::PromptOptimizerSingleton, Action::Create) => true,
         (ResourceKind::MessageFeedback, Action::SubmitFeedback) => true,

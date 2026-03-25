@@ -10,7 +10,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ZYd2o8gFqKpVzywpGAsPpFAklWbPQh49utAY3n4O8iy8pTzoRAIGDbKARplWNoP
+\restrict np6fMCKvEDxceIEhwPMvNotTcZpCy5hefQkwTPQqcdX1qxA3DZBZCfCWI21S8e8
 
 -- Dumped from database version 17.2 (Debian 17.2-1.pgdg120+1)
 -- Dumped by pg_dump version 17.6
@@ -138,6 +138,38 @@ $_$;
 SET default_table_access_method = heap;
 
 --
+-- Name: assistant_file_uploads; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.assistant_file_uploads (
+    assistant_id uuid NOT NULL,
+    file_upload_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: assistants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.assistants (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    owner_user_id uuid NOT NULL,
+    name text NOT NULL,
+    description text,
+    prompt text NOT NULL,
+    mcp_server_ids text[],
+    default_chat_provider text,
+    archived_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    facet_ids text[],
+    enforce_facet_settings boolean DEFAULT false NOT NULL
+);
+
+
+--
 -- Name: chat_file_uploads; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -160,6 +192,8 @@ CREATE TABLE public.chats (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     title_by_summary text,
     archived_at timestamp with time zone,
+    assistant_configuration jsonb,
+    assistant_id uuid GENERATED ALWAYS AS (((assistant_configuration ->> 'assistant_id'::text))::uuid) STORED,
     title_by_user_provided text
 );
 
@@ -206,10 +240,42 @@ CREATE VIEW public.chats_latest_message AS
 
 CREATE TABLE public.file_uploads (
     id uuid DEFAULT public.uuidv7() NOT NULL,
-    owner_user_id text NOT NULL,
     filename text NOT NULL,
     file_storage_provider_id text NOT NULL,
     file_storage_path text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    owner_user_id text NOT NULL
+);
+
+
+--
+-- Name: message_feedbacks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_feedbacks (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    message_id uuid NOT NULL,
+    sentiment text NOT NULL,
+    comment text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT message_feedbacks_sentiment_check CHECK ((sentiment = ANY (ARRAY['positive'::text, 'negative'::text])))
+);
+
+
+--
+-- Name: share_grants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.share_grants (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    resource_type text NOT NULL,
+    resource_id text NOT NULL,
+    subject_type text NOT NULL,
+    subject_id_type text NOT NULL,
+    subject_id text NOT NULL,
+    role text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -233,6 +299,21 @@ CREATE VIEW public.user_daily_token_usage AS
   WHERE ((m.generation_metadata IS NOT NULL) AND (m.generation_metadata ? 'used_total_tokens'::text))
   GROUP BY c.owner_user_id, (date(m.created_at)), COALESCE((m.generation_parameters ->> 'generation_chat_provider_id'::text), 'unknown'::text)
   ORDER BY (date(m.created_at)) DESC, c.owner_user_id, COALESCE((m.generation_parameters ->> 'generation_chat_provider_id'::text), 'unknown'::text);
+
+
+--
+-- Name: user_preferences; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_preferences (
+    user_id uuid NOT NULL,
+    nickname text,
+    job_title text,
+    assistant_custom_instructions text,
+    assistant_additional_information text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
 
 
 --
@@ -271,6 +352,22 @@ COMMENT ON COLUMN public.users.email IS 'The user''s email address (optional, as
 
 
 --
+-- Name: assistant_file_uploads assistant_file_uploads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_file_uploads
+    ADD CONSTRAINT assistant_file_uploads_pkey PRIMARY KEY (assistant_id, file_upload_id);
+
+
+--
+-- Name: assistants assistants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistants
+    ADD CONSTRAINT assistants_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: chat_file_uploads chat_file_uploads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -295,6 +392,22 @@ ALTER TABLE ONLY public.file_uploads
 
 
 --
+-- Name: message_feedbacks message_feedbacks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_feedbacks
+    ADD CONSTRAINT message_feedbacks_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: message_feedbacks message_feedbacks_unique_message; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_feedbacks
+    ADD CONSTRAINT message_feedbacks_unique_message UNIQUE (message_id);
+
+
+--
 -- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -303,11 +416,70 @@ ALTER TABLE ONLY public.messages
 
 
 --
+-- Name: share_grants share_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.share_grants
+    ADD CONSTRAINT share_grants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: share_grants share_grants_unique_grant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.share_grants
+    ADD CONSTRAINT share_grants_unique_grant UNIQUE (resource_type, resource_id, subject_type, subject_id_type, subject_id, role);
+
+
+--
+-- Name: user_preferences user_preferences_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_preferences
+    ADD CONSTRAINT user_preferences_pkey PRIMARY KEY (user_id);
+
+
+--
 -- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_assistant_file_uploads_assistant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_file_uploads_assistant_id ON public.assistant_file_uploads USING btree (assistant_id);
+
+
+--
+-- Name: idx_assistant_file_uploads_file_upload_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistant_file_uploads_file_upload_id ON public.assistant_file_uploads USING btree (file_upload_id);
+
+
+--
+-- Name: idx_assistants_archived_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistants_archived_at ON public.assistants USING btree (archived_at);
+
+
+--
+-- Name: idx_assistants_owner_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistants_owner_user_id ON public.assistants USING btree (owner_user_id);
+
+
+--
+-- Name: idx_assistants_updated_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assistants_updated_at ON public.assistants USING btree (updated_at DESC);
 
 
 --
@@ -322,6 +494,34 @@ CREATE INDEX idx_chat_file_uploads_chat_id ON public.chat_file_uploads USING btr
 --
 
 CREATE INDEX idx_chat_file_uploads_file_upload_id ON public.chat_file_uploads USING btree (file_upload_id);
+
+
+--
+-- Name: idx_chats_assistant_configuration; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chats_assistant_configuration ON public.chats USING btree (((assistant_configuration ->> 'assistant_id'::text)));
+
+
+--
+-- Name: idx_file_uploads_owner_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_file_uploads_owner_user_id ON public.file_uploads USING btree (owner_user_id);
+
+
+--
+-- Name: idx_message_feedbacks_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_feedbacks_created_at ON public.message_feedbacks USING btree (created_at DESC);
+
+
+--
+-- Name: idx_message_feedbacks_message_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_message_feedbacks_message_id ON public.message_feedbacks USING btree (message_id);
 
 
 --
@@ -351,11 +551,26 @@ CREATE INDEX idx_messages_previous_message_id ON public.messages USING btree (pr
 
 CREATE INDEX idx_messages_sibling_message_id ON public.messages USING btree (sibling_message_id);
 
+
 --
--- Name: idx_file_uploads_owner_user_id; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_share_grants_created_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_file_uploads_owner_user_id ON public.file_uploads USING btree (owner_user_id);
+CREATE INDEX idx_share_grants_created_at ON public.share_grants USING btree (created_at DESC);
+
+
+--
+-- Name: idx_share_grants_resource; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_share_grants_resource ON public.share_grants USING btree (resource_type, resource_id);
+
+
+--
+-- Name: idx_share_grants_subject; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_share_grants_subject ON public.share_grants USING btree (subject_type, subject_id_type, subject_id);
 
 
 --
@@ -401,10 +616,69 @@ CREATE TRIGGER on_update_set_updated_columns BEFORE UPDATE ON public.users FOR E
 
 
 --
+-- Name: assistant_file_uploads on_update_set_updated_columns_assistant_file_uploads; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_assistant_file_uploads BEFORE UPDATE ON public.assistant_file_uploads FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: assistants on_update_set_updated_columns_assistants; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_assistants BEFORE UPDATE ON public.assistants FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
 -- Name: chat_file_uploads on_update_set_updated_columns_chat_file_uploads; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER on_update_set_updated_columns_chat_file_uploads BEFORE UPDATE ON public.chat_file_uploads FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: message_feedbacks on_update_set_updated_columns_message_feedbacks; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_message_feedbacks BEFORE UPDATE ON public.message_feedbacks FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: share_grants on_update_set_updated_columns_share_grants; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_share_grants BEFORE UPDATE ON public.share_grants FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: user_preferences set_updated_at_column; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at_column BEFORE UPDATE ON public.user_preferences FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: assistant_file_uploads assistant_file_uploads_assistant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_file_uploads
+    ADD CONSTRAINT assistant_file_uploads_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES public.assistants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: assistant_file_uploads assistant_file_uploads_file_upload_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistant_file_uploads
+    ADD CONSTRAINT assistant_file_uploads_file_upload_id_fkey FOREIGN KEY (file_upload_id) REFERENCES public.file_uploads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: assistants assistants_owner_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assistants
+    ADD CONSTRAINT assistants_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -421,6 +695,22 @@ ALTER TABLE ONLY public.chat_file_uploads
 
 ALTER TABLE ONLY public.chat_file_uploads
     ADD CONSTRAINT chat_file_uploads_file_upload_id_fkey FOREIGN KEY (file_upload_id) REFERENCES public.file_uploads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: chats chats_assistant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chats
+    ADD CONSTRAINT chats_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES public.assistants(id);
+
+
+--
+-- Name: message_feedbacks message_feedbacks_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_feedbacks
+    ADD CONSTRAINT message_feedbacks_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
 
 
 --
@@ -448,7 +738,16 @@ ALTER TABLE ONLY public.messages
 
 
 --
+-- Name: user_preferences user_preferences_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_preferences
+    ADD CONSTRAINT user_preferences_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ZYd2o8gFqKpVzywpGAsPpFAklWbPQh49utAY3n4O8iy8pTzoRAIGDbKARplWNoP
+\unrestrict np6fMCKvEDxceIEhwPMvNotTcZpCy5hefQkwTPQqcdX1qxA3DZBZCfCWI21S8e8
+

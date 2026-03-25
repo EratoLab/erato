@@ -6,6 +6,7 @@ pub mod message;
 pub mod message_feedback;
 pub mod permissions;
 pub mod share_grant;
+pub mod share_link;
 pub mod user;
 pub mod user_preference;
 

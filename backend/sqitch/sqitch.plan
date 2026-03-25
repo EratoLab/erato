@@ -20,3 +20,4 @@
 0017_add_user_preferences_table 2026-02-16T00:00:00Z System Administrator <root@localhost> # Add user_preferences table
 0018_add_owner_user_id_to_file_uploads 2026-03-05T00:00:00Z System Administrator <root@localhost> # Add owner_user_id to file_uploads
 0019_add_assistant_facets 2026-03-17T00:00:00Z System Administrator <root@localhost> # Add assistant facet configuration
+0020_add_share_links_table 2026-03-25T13:13:19Z System Administrator <root@localhost> # Add share_links table

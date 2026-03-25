@@ -3,6 +3,10 @@
     {
       "source": "/chat/:id",
       "destination": "/chat/next-static-fallback.html"
+    },
+    {
+      "source": "/chat-share/:shareId",
+      "destination": "/chat/next-static-fallback.html"
     }
   ]
 }

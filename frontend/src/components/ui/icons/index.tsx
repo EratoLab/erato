@@ -36,7 +36,7 @@ import {
   Search,
   NavArrowRight,
   Folder,
-  ShareAndroid,
+  ShareIos,
   GridXmark,
   MenuScale,
   Lock,
@@ -243,7 +243,7 @@ export const FileTextIcon = ({ className, ...props }: IconProps) => (
 );
 
 export const ShareIcon = ({ className, ...props }: IconProps) => (
-  <ShareAndroid className={className} {...props} />
+  <ShareIos className={className} {...props} />
 );
 
 export const GridXmarkIcon = ({ className, ...props }: IconProps) => (

@@ -18,6 +18,7 @@ export type Env = {
   promptOptimizerEnabled: boolean;
   userPreferencesEnabled: boolean;
   sharepointEnabled: boolean;
+  chatSharingEnabled: boolean;
   messageFeedbackEnabled: boolean;
   messageFeedbackCommentsEnabled: boolean;
   messageFeedbackEditTimeLimitSeconds: number | null;
@@ -52,6 +53,7 @@ declare global {
     PROMPT_OPTIMIZER_ENABLED?: boolean;
     USER_PREFERENCES_ENABLED?: boolean;
     SHAREPOINT_ENABLED?: boolean;
+    CHAT_SHARING_ENABLED?: boolean;
     MESSAGE_FEEDBACK_ENABLED?: boolean;
     MESSAGE_FEEDBACK_COMMENTS_ENABLED?: boolean;
     MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS?: number;
@@ -164,6 +166,10 @@ export const env = (): Env => {
     import.meta.env.VITE_SHAREPOINT_ENABLED === "true"
       ? true
       : (window.SHAREPOINT_ENABLED ?? false);
+  const chatSharingEnabled =
+    import.meta.env.VITE_CHAT_SHARING_ENABLED === "true"
+      ? true
+      : (window.CHAT_SHARING_ENABLED ?? false);
   const messageFeedbackEnabled =
     import.meta.env.VITE_MESSAGE_FEEDBACK_ENABLED === "true"
       ? true
@@ -228,6 +234,7 @@ export const env = (): Env => {
     promptOptimizerEnabled,
     userPreferencesEnabled,
     sharepointEnabled,
+    chatSharingEnabled,
     messageFeedbackEnabled,
     messageFeedbackCommentsEnabled,
     messageFeedbackEditTimeLimitSeconds,

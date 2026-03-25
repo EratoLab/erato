@@ -1,4 +1,5 @@
 use crate::db::entity::{chat_file_uploads, chats, messages};
+use crate::models::share_link;
 use chrono::{Duration, Utc};
 use ractor::{Actor, ActorProcessingErr, ActorRef};
 use sea_orm::{
@@ -80,6 +81,13 @@ pub async fn cleanup_archived_chats(
         .map_err(|e| {
             tracing::error!("Failed to delete messages for cleanup: {}", e);
             ActorProcessingErr::from(e)
+        })?;
+
+    share_link::delete_share_links_for_resources(&txn, "chat", &chat_ids)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete share links for cleanup: {}", e);
+            ActorProcessingErr::from(e.to_string())
         })?;
 
     chats::Entity::delete_many()

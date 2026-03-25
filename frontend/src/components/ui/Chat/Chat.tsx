@@ -21,11 +21,13 @@ import { useActiveModelSelection, useChatActions } from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
+import { useChatShareLink } from "@/hooks/useChatShareLink";
 import { useProfile } from "@/hooks/useProfile";
 import { chatMessagesQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
 import {
   useChatInputFeature,
+  useChatSharingFeature,
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
@@ -39,13 +41,15 @@ import {
   type ChatInputControlsHandle,
 } from "./ChatInputControlsContext";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
+import { ChatShareDialog } from "./ChatShareDialog";
 import { EditChatTitleDialog } from "./EditChatTitleDialog";
+import { Button } from "../Controls/Button";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
 import { FeedbackViewDialog } from "../Feedback/FeedbackViewDialog";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 import { MessageList } from "../MessageList/MessageList";
-import { DocumentIcon } from "../icons";
+import { DocumentIcon, ShareIcon } from "../icons";
 
 import type { ChatMessage } from "../MessageList/MessageList";
 import type {
@@ -108,6 +112,12 @@ export interface ChatProps {
   customSessionSelect?: (sessionId: string) => void;
   /** Optional custom component to show when there are no messages */
   emptyStateComponent?: React.ReactNode;
+  /** Force the centered empty-state layout regardless of feature config */
+  forceCenteredEmptyState?: boolean;
+  /** Optional content rendered at the top of the conversation area */
+  topContent?: React.ReactNode;
+  /** Optional override for the display name of user-authored messages */
+  userMessageDisplayName?: string;
   /** Optional assistant ID for context-aware sending */
   assistantId?: string;
   /** Optional initial model to use (overrides chat history model) */
@@ -118,6 +128,8 @@ export interface ChatProps {
   assistantConfiguredFacetIds?: string[];
   /** Whether the assistant facet selection is enforced for derived chats */
   assistantFacetSettingsEnforced?: boolean;
+  /** Whether the chat should be rendered in read-only mode */
+  readOnly?: boolean;
 }
 
 /**
@@ -143,11 +155,15 @@ export const Chat = ({
   acceptedFileTypes,
   customSessionSelect,
   emptyStateComponent,
+  forceCenteredEmptyState = false,
+  topContent,
+  userMessageDisplayName,
   assistantId,
   initialModelOverride,
   assistantFiles = [],
   assistantConfiguredFacetIds,
   assistantFacetSettingsEnforced = false,
+  readOnly = false,
 }: ChatProps) => {
   // Use the sidebar context
   const {
@@ -239,6 +255,7 @@ export const Chat = ({
   );
 
   const { profile } = useProfile();
+  const { enabled: chatSharingEnabled } = useChatSharingFeature();
 
   // Get sidebar feature configuration
   const { chatHistoryShowMetadata } = useSidebarFeature();
@@ -277,6 +294,11 @@ export const Chat = ({
   const canEditForCurrentChat = Array.isArray(chatHistory)
     ? !!chatHistory.find((c) => c.id === (currentChatId ?? ""))?.can_edit
     : false;
+  const { shareLink: currentChatShareLink } = useChatShareLink(
+    chatSharingEnabled && currentChatId && messageOrder.length > 0
+      ? currentChatId
+      : null,
+  );
 
   const currentChatLastSelectedFacets = useMemo(() => {
     if (!Array.isArray(chatHistory)) {
@@ -427,6 +449,9 @@ export const Chat = ({
   const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
     null,
   );
+  const [shareDialogChatId, setShareDialogChatId] = useState<string | null>(
+    null,
+  );
   const [isUpdatingChatTitle, setIsUpdatingChatTitle] = useState(false);
 
   const handleEditTitleSession = useCallback((sessionId: string) => {
@@ -437,6 +462,12 @@ export const Chat = ({
     if (isUpdatingChatTitle) return;
     setTitleDialogChatId(null);
   }, [isUpdatingChatTitle]);
+  const handleOpenShareDialog = useCallback((chatId: string) => {
+    setShareDialogChatId(chatId);
+  }, []);
+  const handleCloseShareDialog = useCallback(() => {
+    setShareDialogChatId(null);
+  }, []);
 
   const activeTitleDialogSession = useMemo(
     () => sessions.find((session) => session.id === titleDialogChatId) ?? null,
@@ -594,7 +625,7 @@ export const Chat = ({
   );
 
   const shouldRenderCenteredEmptyState =
-    emptyStateLayout === "centered" &&
+    (forceCenteredEmptyState || emptyStateLayout === "centered") &&
     !!emptyStateComponent &&
     messageOrder.length === 0 &&
     !chatLoading &&
@@ -611,6 +642,20 @@ export const Chat = ({
           ),
         })
       : emptyStateComponent;
+  const canShareCurrentChat =
+    chatSharingEnabled &&
+    !!currentChatId &&
+    messageOrder.length > 0 &&
+    canEditForCurrentChat;
+  const currentShareButtonLabel = currentChatShareLink?.enabled
+    ? t({
+        id: "chat.share.button.shared",
+        message: "Shared",
+      })
+    : t({
+        id: "chat.share.button",
+        message: "Share",
+      });
 
   const chatInputElement = (
     <ChatInput
@@ -667,6 +712,9 @@ export const Chat = ({
           onSessionSelect={handleSessionSelectWrapper}
           onSessionArchive={handleArchiveSession}
           onSessionEditTitle={handleEditTitleSession}
+          onSessionShare={
+            chatSharingEnabled ? handleOpenShareDialog : undefined
+          }
           showTimestamps={chatHistoryShowMetadata}
           isLoading={chatHistoryLoading}
           error={
@@ -739,11 +787,32 @@ export const Chat = ({
               >
                 <div className="flex w-full flex-col items-center justify-center gap-4">
                   {centeredEmptyStateContent}
-                  <div className="w-full shrink-0">{chatInputElement}</div>
+                  {!readOnly ? (
+                    <div className="w-full shrink-0">{chatInputElement}</div>
+                  ) : null}
                 </div>
               </div>
             ) : (
               <>
+                {topContent ? (
+                  <div className="relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 sm:px-4">
+                    {topContent}
+                  </div>
+                ) : null}
+                {canShareCurrentChat ? (
+                  <div className="absolute right-3 top-3 z-10 sm:right-4">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<ShareIcon className="size-4" />}
+                      onClick={() => {
+                        handleOpenShareDialog(currentChatId);
+                      }}
+                    >
+                      {currentShareButtonLabel}
+                    </Button>
+                  </div>
+                ) : null}
                 {/* Use the MessageList component */}
                 <MessageList
                   messages={messages}
@@ -757,6 +826,7 @@ export const Chat = ({
                   showTimestamps={showTimestamps}
                   showAvatars={showAvatars}
                   userProfile={profile}
+                  userDisplayNameOverride={userMessageDisplayName}
                   controls={resolvedMessageControls}
                   messageRenderer={resolvedMessageRenderer}
                   controlsContext={{
@@ -836,7 +906,10 @@ export const Chat = ({
                     }
                     return handleMessageAction(action);
                   }}
-                  className={layout}
+                  className={clsx(
+                    layout,
+                    canShareCurrentChat && "pt-12 sm:pt-14",
+                  )}
                   useVirtualization={messageOrder.length > 30}
                   virtualizationThreshold={30}
                   onScrollToBottomRef={handleMessageListRef}
@@ -846,7 +919,7 @@ export const Chat = ({
                   assistantFiles={assistantFiles}
                 />
 
-                {chatInputElement}
+                {!readOnly ? chatInputElement : null}
               </>
             )}
           </div>
@@ -898,6 +971,12 @@ export const Chat = ({
           isSubmitting={isUpdatingChatTitle}
           onClose={handleCloseEditTitleDialog}
           onSubmit={handleSubmitEditTitleDialog}
+        />
+
+        <ChatShareDialog
+          isOpen={shareDialogChatId !== null}
+          chatId={shareDialogChatId}
+          onClose={handleCloseShareDialog}
         />
       </div>
     </ChatInputControlsProvider>

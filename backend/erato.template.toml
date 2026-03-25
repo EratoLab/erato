@@ -133,6 +133,11 @@ chat_provider_ids = ["test-token-limit"]
 # # Example: message_feedback_edit_time_limit_seconds = 300  # 5 minutes
 # message_feedback_edit_time_limit_seconds = 300
 
+# Chat sharing feature configuration
+# When enabled, chat owners can generate organization-internal share links for chats.
+# [chat_sharing]
+# enabled = true
+
 # Experimental assistants feature configuration
 # [experimental_assistants]
 # # Whether to enable the experimental assistants feature in the frontend (default: false)
