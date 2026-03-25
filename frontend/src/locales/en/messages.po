@@ -1783,10 +1783,12 @@ msgid "Start typing below to begin a new conversation"
 msgstr "Start typing below to begin a new conversation"
 
 #: src/components/ui/Chat/StarterPromptsSection.tsx
+#: src/hooks/chat/useStarterPrompts.ts
 msgid "starter_prompts.<starter-prompt-id>.subtitle"
 msgstr "starter_prompts.<starter-prompt-id>.subtitle"
 
 #: src/components/ui/Chat/StarterPromptsSection.tsx
+#: src/hooks/chat/useStarterPrompts.ts
 msgid "starter_prompts.<starter-prompt-id>.title"
 msgstr "starter_prompts.<starter-prompt-id>.title"
 
