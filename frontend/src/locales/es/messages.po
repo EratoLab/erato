@@ -1780,13 +1780,15 @@ msgstr "Algo salió mal al cargar la interfaz de chat."
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Start typing below to begin a new conversation"
-msgstr ""
+msgstr "Empiece a escribir abajo para iniciar una nueva conversación"
 
 #: src/components/ui/Chat/StarterPromptsSection.tsx
+#: src/hooks/chat/useStarterPrompts.ts
 msgid "starter_prompts.<starter-prompt-id>.subtitle"
 msgstr ""
 
 #: src/components/ui/Chat/StarterPromptsSection.tsx
+#: src/hooks/chat/useStarterPrompts.ts
 msgid "starter_prompts.<starter-prompt-id>.title"
 msgstr ""
 
