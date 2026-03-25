@@ -65,4 +65,5 @@ In a customer fork:
 | `AssistantFileSourceSelector` | Assistant form | File source selector for default files |
 | `ChatFileSourceSelector`      | Chat input     | File source selector for chat uploads  |
 | `ChatWelcomeScreen`           | Chat           | Default chat empty state component     |
+| `StarterPrompts`              | Chat           | Prompt suggestions inside chat welcome |
 | `AssistantWelcomeScreen`      | Assistant chat | Assistant chat empty state component   |

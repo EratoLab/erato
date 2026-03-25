@@ -1,64 +1,32 @@
 import { t } from "@lingui/core/macro";
-import { skipToken } from "@tanstack/react-query";
 import clsx from "clsx";
 
-import { useStarterPrompts } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { useStarterPromptsFeature } from "@/providers/FeatureConfigProvider";
+import {
+  componentRegistry,
+  resolveComponentOverride,
+} from "@/config/componentRegistry";
+import {
+  useStarterPromptsData,
+  type ResolvedStarterPromptInfo,
+} from "@/hooks/chat/useStarterPrompts";
 
 import { ResolvedIcon } from "../icons";
-import { useChatInputControls } from "./ChatInputControlsContext";
-
-import type { StarterPromptInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export interface StarterPromptsSectionProps {
   className?: string;
 }
 
-function resolveStarterPromptTranslation(
-  translationId: string,
-  fallback: string,
-): string {
-  // eslint-disable-next-line lingui/no-single-variables-to-translate
-  const translatedValue = t({ id: translationId, message: "" });
-  if (translatedValue && translatedValue !== translationId) {
-    return translatedValue;
-  }
-
-  return fallback;
+export interface StarterPromptsRendererProps {
+  className?: string;
+  starterPrompts: ResolvedStarterPromptInfo[];
+  onStarterPromptSelect: (starterPrompt: ResolvedStarterPromptInfo) => void;
 }
 
-function getStarterPromptTitle(starterPrompt: StarterPromptInfo): string {
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- Translation key is dynamic by starter prompt ID
-  const translationId = `starter_prompts.${starterPrompt.id}.title`;
-  return resolveStarterPromptTranslation(translationId, starterPrompt.title);
-}
-
-function getStarterPromptSubtitle(starterPrompt: StarterPromptInfo): string {
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- Translation key is dynamic by starter prompt ID
-  const translationId = `starter_prompts.${starterPrompt.id}.subtitle`;
-  return resolveStarterPromptTranslation(translationId, starterPrompt.subtitle);
-}
-
-export function StarterPromptsSection({
+export function DefaultStarterPromptsSection({
   className = "",
-}: StarterPromptsSectionProps) {
-  // Keep these markers so Lingui extracts the dynamic starter prompt keys.
-  const _starterPromptTitleMarker = t`starter_prompts.<starter-prompt-id>.title`;
-  const _starterPromptSubtitleMarker = t`starter_prompts.<starter-prompt-id>.subtitle`;
-  const { enabled } = useStarterPromptsFeature();
-  const {
-    setDraftMessage,
-    setSelectedFacetIds,
-    setSelectedChatProviderId,
-    focusInput,
-  } = useChatInputControls();
-  const { data } = useStarterPrompts(enabled ? {} : skipToken);
-
-  const starterPrompts = data?.starter_prompts ?? [];
-  if (!enabled || starterPrompts.length === 0) {
-    return null;
-  }
-
+  starterPrompts,
+  onStarterPromptSelect,
+}: StarterPromptsRendererProps) {
   return (
     <div
       className={clsx(
@@ -71,14 +39,7 @@ export function StarterPromptsSection({
         <button
           key={starterPrompt.id}
           type="button"
-          onClick={() => {
-            setDraftMessage(starterPrompt.prompt, { focus: false });
-            setSelectedFacetIds(starterPrompt.selected_facets ?? []);
-            if (starterPrompt.chat_provider) {
-              setSelectedChatProviderId(starterPrompt.chat_provider);
-            }
-            focusInput();
-          }}
+          onClick={() => onStarterPromptSelect(starterPrompt)}
           className={clsx(
             "group rounded-2xl border p-4 text-center",
             "[background:var(--theme-starter-prompt-bg)] [border-color:var(--theme-starter-prompt-border)]",
@@ -93,15 +54,44 @@ export function StarterPromptsSection({
             </div>
             <div className="min-w-0">
               <div className="font-extrabold [color:var(--theme-starter-prompt-title-fg)]">
-                {getStarterPromptTitle(starterPrompt)}
+                {starterPrompt.resolvedTitle}
               </div>
               <div className="mt-1 text-sm [color:var(--theme-starter-prompt-subtitle-fg)]">
-                {getStarterPromptSubtitle(starterPrompt)}
+                {starterPrompt.resolvedSubtitle}
               </div>
             </div>
           </div>
         </button>
       ))}
     </div>
+  );
+}
+
+export function StarterPromptsSection({
+  className = "",
+}: StarterPromptsSectionProps) {
+  // Keep at least one static Lingui reference in this module so extraction continues
+  // if only the renderer is imported elsewhere.
+  void t`starter_prompts.<starter-prompt-id>.title`;
+  void t`starter_prompts.<starter-prompt-id>.subtitle`;
+
+  const { enabled, starterPrompts, handleStarterPromptSelect } =
+    useStarterPromptsData();
+
+  if (!enabled || starterPrompts.length === 0) {
+    return null;
+  }
+
+  const StarterPromptsRenderer = resolveComponentOverride(
+    componentRegistry.StarterPrompts,
+    DefaultStarterPromptsSection,
+  );
+
+  return (
+    <StarterPromptsRenderer
+      className={className}
+      starterPrompts={starterPrompts}
+      onStarterPromptSelect={handleStarterPromptSelect}
+    />
   );
 }

@@ -27,6 +27,7 @@ import type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/Assi
 import type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList";
 import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
 import type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
+import type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPromptsSection";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
 import type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachment-preview";
@@ -72,6 +73,12 @@ export interface ComponentRegistry {
    * Used when a chat has no messages.
    */
   ChatWelcomeScreen: ComponentType<WelcomeScreenProps> | null;
+
+  /**
+   * Override for the starter prompts section rendered inside the default chat welcome screen.
+   * Used to customize only the prompt suggestion presentation while keeping upstream data flow.
+   */
+  StarterPrompts: ComponentType<StarterPromptsRendererProps> | null;
 
   /**
    * Override for the assistant chat welcome/empty state component.
@@ -131,6 +138,7 @@ export const componentRegistry: ComponentRegistry = {
   ChatInputAttachmentPreview: null,
   ChatHistoryList: null,
   ChatWelcomeScreen: null,
+  StarterPrompts: null,
   AssistantWelcomeScreen: null,
   MessageControls: null,
   ChatMessageRenderer: null,

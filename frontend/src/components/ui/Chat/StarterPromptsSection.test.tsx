@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { componentRegistry } from "@/config/componentRegistry";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { ChatInputControlsProvider } from "./ChatInputControlsContext";
@@ -30,6 +31,7 @@ vi.mock("../icons", () => ({
 describe("StarterPromptsSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    componentRegistry.StarterPrompts = null;
     i18n.load("en", { ...(enMessages as unknown as Messages) });
     i18n.activate("en");
 
