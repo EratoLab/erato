@@ -170,5 +170,4 @@ describe("ChatHistorySidebar", () => {
       borderRadius: "var(--theme-radius-shell)",
     });
   });
-
 });

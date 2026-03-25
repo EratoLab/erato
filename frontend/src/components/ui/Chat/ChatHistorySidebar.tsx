@@ -21,10 +21,7 @@ import {
 import { createLogger } from "@/utils/debugLogger";
 import { checkFileExists } from "@/utils/themeUtils";
 
-import {
-  ChatHistoryList,
-  ChatHistoryListSkeleton,
-} from "./ChatHistoryList";
+import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
 import { FrequentAssistantsList } from "./FrequentAssistantsList";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { Button } from "../Controls/Button";
@@ -655,7 +652,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     const ResolvedChatHistoryList = useMemo(
       () =>
-        resolveComponentOverride(componentRegistry.ChatHistoryList, ChatHistoryList),
+        resolveComponentOverride(
+          componentRegistry.ChatHistoryList,
+          ChatHistoryList,
+        ),
       [],
     );
 
@@ -701,10 +701,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             />
             <div className="flex min-h-0 flex-1 flex-col">
               {/* New Chat Item */}
-              <NewChatItem
-                onNewChat={onNewChat}
-                isSlimMode={isSlimMode}
-              />
+              <NewChatItem onNewChat={onNewChat} isSlimMode={isSlimMode} />
 
               {/* Search Navigation Item */}
               <SearchNavigationItem

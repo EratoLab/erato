@@ -105,7 +105,7 @@ export default function AssistantsListPage() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-theme-bg-secondary">
+    <div className="flex h-full flex-col bg-theme-bg-primary">
       {/* Page Header */}
       <PageHeader
         title={t`Assistants`}

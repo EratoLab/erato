@@ -822,7 +822,7 @@ export const ChatInput = ({
           style={inputShellStyle}
           data-ui="chat-input-shell"
         >
-          {hasAttachmentPreviewOverride && ChatInputAttachmentPreview && (
+          {ChatInputAttachmentPreview && (
             <ChatInputAttachmentPreview
               attachedFiles={attachedFiles}
               maxFiles={maxFiles}

@@ -279,9 +279,7 @@ describe("ChatInput", () => {
     });
     const onSendMessage = vi.fn();
 
-    const MockTopLeftAccessory = () => (
-      <div data-testid="top-left-accessory" />
-    );
+    const MockTopLeftAccessory = () => <div data-testid="top-left-accessory" />;
     MockTopLeftAccessory.displayName = "MockTopLeftAccessory";
     componentRegistry.ChatTopLeftAccessory = MockTopLeftAccessory;
 
@@ -434,9 +432,11 @@ describe("ChatInput", () => {
       createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
     });
 
-    const MockAttachmentPreview = ({ attachedFiles: files }: { attachedFiles: unknown[] }) => (
-      <div data-testid="inline-attachment-preview">{files.length}</div>
-    );
+    const MockAttachmentPreview = ({
+      attachedFiles: files,
+    }: {
+      attachedFiles: unknown[];
+    }) => <div data-testid="inline-attachment-preview">{files.length}</div>;
     MockAttachmentPreview.displayName = "MockAttachmentPreview";
     componentRegistry.ChatInputAttachmentPreview = MockAttachmentPreview;
 

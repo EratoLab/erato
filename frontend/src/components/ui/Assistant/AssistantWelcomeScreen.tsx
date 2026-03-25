@@ -71,12 +71,7 @@ export function AssistantWelcomeScreen({
       )}
       data-testid="assistant-welcome-screen-default"
     >
-      <div
-        className={clsx(
-          "flex w-full flex-col",
-          contentContainerClasses,
-        )}
-      >
+      <div className={clsx("flex w-full flex-col", contentContainerClasses)}>
         <div className={clsx("mb-8 w-full", headerContainerClasses)}>
           {/* Assistant Icon/Badge */}
           <div className={clsx("mb-6 flex", headerJustifyAlignment)}>
@@ -109,7 +104,10 @@ export function AssistantWelcomeScreen({
         </div>
 
         {/* Assistant Details */}
-        <div className="mb-8 w-full rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-6 text-left">
+        <div
+          className="mb-8 w-full rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-6 text-left"
+          data-ui="assistant-detail-card"
+        >
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-theme-fg-muted">
             {t`Configuration`}
           </h2>
@@ -150,7 +148,7 @@ export function AssistantWelcomeScreen({
           {/* Edit Assistant Button - only show if user can edit */}
           {assistant.can_edit && (
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               icon={<EditIcon />}
               onClick={handleEditAssistant}
@@ -182,7 +180,8 @@ export function AssistantWelcomeScreen({
                     e.preventDefault();
                     handleChatSelect(chat.id);
                   }}
-                  className="block rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-4 text-left transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover"
+                  data-ui="assistant-past-chat-card"
+                  className="block rounded-[var(--theme-radius-shell)] bg-theme-bg-primary p-4 text-left transition-all hover:bg-theme-bg-hover"
                 >
                   <div className="flex items-center justify-between gap-4">
                     <h3 className="flex-1 truncate font-medium text-theme-fg-primary">

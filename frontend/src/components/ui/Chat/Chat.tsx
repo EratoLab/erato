@@ -210,14 +210,10 @@ export const Chat = ({
     currentChatLastModel,
   } = useChatContext();
 
-  const {
-    availableModels,
-    selectedModel,
-    setSelectedModel,
-    isSelectionReady,
-  } = useActiveModelSelection({
-    initialModel: initialModelOverride ?? currentChatLastModel,
-  });
+  const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
+    useActiveModelSelection({
+      initialModel: initialModelOverride ?? currentChatLastModel,
+    });
 
   const { uploadFiles, uploadError, isUploading } = useFileUploadWithTokenCheck(
     {
