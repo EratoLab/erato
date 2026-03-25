@@ -279,9 +279,11 @@ describe("ChatInput", () => {
     });
     const onSendMessage = vi.fn();
 
-    componentRegistry.ChatTopLeftAccessory = () => (
+    const MockTopLeftAccessory = () => (
       <div data-testid="top-left-accessory" />
     );
+    MockTopLeftAccessory.displayName = "MockTopLeftAccessory";
+    componentRegistry.ChatTopLeftAccessory = MockTopLeftAccessory;
 
     const { i18n } = await import("@lingui/core");
     render(
@@ -432,9 +434,11 @@ describe("ChatInput", () => {
       createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
     });
 
-    componentRegistry.ChatInputAttachmentPreview = ({ attachedFiles: files }) => (
+    const MockAttachmentPreview = ({ attachedFiles: files }: { attachedFiles: unknown[] }) => (
       <div data-testid="inline-attachment-preview">{files.length}</div>
     );
+    MockAttachmentPreview.displayName = "MockAttachmentPreview";
+    componentRegistry.ChatInputAttachmentPreview = MockAttachmentPreview;
 
     const onSendMessage = vi.fn();
     const { i18n } = await import("@lingui/core");
