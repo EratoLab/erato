@@ -19,6 +19,8 @@ function applyFrontendEnvToWindow() {
   window.DISABLE_UPLOAD = import.meta.env.VITE_DISABLE_UPLOAD === "true";
   window.DISABLE_CHAT_INPUT_AUTOFOCUS =
     import.meta.env.VITE_DISABLE_CHAT_INPUT_AUTOFOCUS === "true";
+  window.CHAT_INPUT_EMPTY_STATE_LAYOUT =
+    import.meta.env.VITE_CHAT_INPUT_EMPTY_STATE_LAYOUT ?? "bottom";
   window.DISABLE_LOGOUT = import.meta.env.VITE_DISABLE_LOGOUT === "true";
   window.ASSISTANTS_ENABLED =
     import.meta.env.VITE_ASSISTANTS_ENABLED === "true";

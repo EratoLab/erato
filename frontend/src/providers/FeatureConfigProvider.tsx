@@ -24,6 +24,8 @@ interface UploadFeatureConfig {
 interface ChatInputFeatureConfig {
   /** Whether the chat input should auto-focus on mount */
   autofocus: boolean;
+  /** Layout of the chat input before a conversation has started */
+  emptyStateLayout: "bottom" | "centered";
 }
 
 /**
@@ -134,6 +136,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   chatInput: {
     autofocus: true,
+    emptyStateLayout: "bottom",
   },
   auth: {
     showLogout: false,
@@ -197,6 +200,7 @@ function createFeatureConfig(
     },
     chatInput: {
       autofocus: !environment.disableChatInputAutofocus,
+      emptyStateLayout: environment.chatInputEmptyStateLayout,
     },
     auth: {
       showLogout: !environment.disableLogout,

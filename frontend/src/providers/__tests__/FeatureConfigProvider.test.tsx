@@ -48,6 +48,7 @@ describe("FeatureConfigProvider", () => {
       themeAssistantAvatarPath: null,
       disableUpload: false,
       disableChatInputAutofocus: false,
+      chatInputEmptyStateLayout: "bottom",
       disableLogout: false,
       assistantsEnabled: false,
       assistantsShowRecentItems: false,
@@ -100,6 +101,7 @@ describe("FeatureConfigProvider", () => {
         },
         chatInput: {
           autofocus: true,
+          emptyStateLayout: "bottom",
         },
         auth: {
           showLogout: true,
@@ -352,6 +354,7 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current).toEqual({
         autofocus: true,
+        emptyStateLayout: "bottom",
       });
     });
 
@@ -385,6 +388,39 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current.autofocus).toBe(false);
+    });
+
+    it("should return a centered empty-state layout when configured", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        chatInputEmptyStateLayout: "centered",
+        disableLogout: false,
+        assistantsEnabled: false,
+        assistantsShowRecentItems: false,
+        sharepointEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
+        messageFeedbackEditTimeLimitSeconds: null,
+        maxUploadSizeBytes: 20971520,
+        sidebarCollapsedMode: "hidden",
+        sidebarLogoPath: null,
+        sidebarLogoDarkPath: null,
+      });
+
+      const { result } = renderHook(() => useChatInputFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.emptyStateLayout).toBe("centered");
     });
   });
 

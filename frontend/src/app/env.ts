@@ -8,6 +8,7 @@ export type Env = {
   themeAssistantAvatarPath: string | null;
   disableUpload: boolean;
   disableChatInputAutofocus: boolean;
+  chatInputEmptyStateLayout: "bottom" | "centered";
   disableLogout: boolean;
   assistantsEnabled: boolean;
   assistantsShowRecentItems: boolean;
@@ -41,6 +42,7 @@ declare global {
     THEME_ASSISTANT_AVATAR_PATH?: string;
     DISABLE_UPLOAD?: boolean;
     DISABLE_CHAT_INPUT_AUTOFOCUS?: boolean;
+    CHAT_INPUT_EMPTY_STATE_LAYOUT?: string;
     DISABLE_LOGOUT?: boolean;
     ASSISTANTS_ENABLED?: boolean;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
@@ -67,6 +69,12 @@ declare global {
 
 // Default maximum body limit in bytes (20MB) - must match backend default
 const DEFAULT_MAX_BODY_LIMIT_BYTES = 20 * 1024 * 1024;
+
+function normalizeChatInputEmptyStateLayout(
+  value: string | null | undefined,
+): "bottom" | "centered" {
+  return value === "centered" ? "centered" : "bottom";
+}
 
 export const env = (): Env => {
   const apiRootUrl = import.meta.env.VITE_API_ROOT_URL ?? window.API_ROOT_URL;
@@ -115,6 +123,11 @@ export const env = (): Env => {
     import.meta.env.VITE_DISABLE_CHAT_INPUT_AUTOFOCUS === "true"
       ? true
       : (window.DISABLE_CHAT_INPUT_AUTOFOCUS ?? false);
+  const chatInputEmptyStateLayout = normalizeChatInputEmptyStateLayout(
+    import.meta.env.VITE_CHAT_INPUT_EMPTY_STATE_LAYOUT ??
+      window.CHAT_INPUT_EMPTY_STATE_LAYOUT ??
+      "bottom",
+  );
   const disableLogout =
     import.meta.env.VITE_DISABLE_LOGOUT === "true"
       ? true
@@ -205,6 +218,7 @@ export const env = (): Env => {
     themeAssistantAvatarPath,
     disableUpload,
     disableChatInputAutofocus,
+    chatInputEmptyStateLayout,
     disableLogout,
     assistantsEnabled,
     assistantsShowRecentItems,

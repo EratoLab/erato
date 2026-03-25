@@ -33,6 +33,7 @@ describe("themeConfig", () => {
     sidebarLogoDarkPath: null,
     disableUpload: false,
     disableChatInputAutofocus: false,
+    chatInputEmptyStateLayout: "bottom",
     disableLogout: false,
     assistantsEnabled: false,
     assistantsShowRecentItems: false,
