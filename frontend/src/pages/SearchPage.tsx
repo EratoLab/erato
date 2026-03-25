@@ -145,6 +145,7 @@ export default function SearchPage() {
           <div className="relative">
             <SearchIcon className="absolute left-4 top-1/2 size-5 -translate-y-1/2 text-theme-fg-muted" />
             <input
+              data-ui="search-input"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -215,6 +216,7 @@ export default function SearchPage() {
                   <a
                     key={result.id}
                     href={`/chat/${result.chatId}`}
+                    data-ui="search-result-card"
                     onClick={(e) => {
                       // Allow cmd/ctrl-click to open in new tab
                       if (e.metaKey || e.ctrlKey) {

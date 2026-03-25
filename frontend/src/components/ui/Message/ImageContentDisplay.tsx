@@ -23,7 +23,7 @@ const IMAGE_PREVIEW_ERROR_FALLBACK_STYLE = {
 } as const;
 
 const IMAGE_PREVIEW_FRAME_CLASS_NAME =
-  "relative overflow-hidden rounded-lg border border-theme-border-primary";
+  "relative overflow-hidden rounded-lg border [border-color:var(--theme-border-media)]";
 const INTERACTIVE_IMAGE_CLASS_NAME =
   "w-full cursor-pointer object-contain transition-transform hover:scale-105";
 const STATIC_IMAGE_CLASS_NAME = "w-full object-contain";

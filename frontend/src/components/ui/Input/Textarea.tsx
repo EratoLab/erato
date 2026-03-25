@@ -170,7 +170,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           rows={rows}
           aria-label={ariaLabel}
           aria-describedby={describedBy ?? undefined}
-          aria-invalid={!!error}
+          aria-invalid={error ? true : undefined}
           className={clsx(
             // Base styles
             "w-full",
@@ -182,7 +182,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             "border bg-theme-bg-secondary",
             error
               ? "border-theme-error-border focus:border-theme-error-border focus:ring-theme-focus-error"
-              : "border-theme-border focus:border-theme-border-focus focus:ring-theme-focus",
+              : "border-[var(--theme-border-field)] focus:border-[var(--theme-border-field-focus)] focus:ring-theme-focus",
             // Focus styles
             "focus:outline-none focus:ring-2",
             // Disabled styles

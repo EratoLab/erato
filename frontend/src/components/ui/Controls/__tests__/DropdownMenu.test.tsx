@@ -43,4 +43,30 @@ describe("DropdownMenu", () => {
       "dropdown-panel-chrome-geometry",
     );
   });
+
+  it("does not autofocus the first item when autoFocusFirstItem is disabled", async () => {
+    render(
+      <DropdownMenu
+        autoFocusFirstItem={false}
+        items={[
+          {
+            label: "Rename",
+            onClick: vi.fn(),
+          },
+          {
+            label: "Delete",
+            onClick: vi.fn(),
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    const firstItem = await screen.findByRole("menuitem", { name: "Rename" });
+
+    await waitFor(() => {
+      expect(firstItem).not.toHaveFocus();
+    });
+  });
 });

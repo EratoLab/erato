@@ -11,6 +11,7 @@ import {
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
+import { componentRegistry } from "@/config/componentRegistry";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useOptionalTranslation } from "@/hooks/i18n";
@@ -107,6 +108,10 @@ interface ChatInputProps {
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
   onSelectedChatProviderIdChange?: (chatProviderId: string | null) => void;
+  controlledAvailableModels?: ChatModel[];
+  controlledSelectedModel?: ChatModel | null;
+  onControlledSelectedModelChange?: (model: ChatModel) => void;
+  controlledIsModelSelectionReady?: boolean;
 }
 
 interface ComposeDraftState {
@@ -154,6 +159,10 @@ export const ChatInput = ({
   uploadFiles: externalUploadFiles,
   uploadError: externalUploadError = null,
   onSelectedChatProviderIdChange,
+  controlledAvailableModels,
+  controlledSelectedModel,
+  onControlledSelectedModelChange,
+  controlledIsModelSelectionReady,
   ref,
 }: ChatInputPropsWithRef) => {
   const [message, setMessage] = useState("");
@@ -191,10 +200,29 @@ export const ChatInput = ({
   const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
 
   // Use local model selection hook
-  const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
-    useActiveModelSelection({
-      initialModel,
-    });
+  const {
+    availableModels: internalAvailableModels,
+    selectedModel: internalSelectedModel,
+    setSelectedModel: setInternalSelectedModel,
+    isSelectionReady: internalIsSelectionReady,
+  } = useActiveModelSelection({
+    initialModel,
+  });
+
+  const availableModels = controlledAvailableModels ?? internalAvailableModels;
+  const selectedModel = controlledSelectedModel ?? internalSelectedModel;
+  const isSelectionReady =
+    controlledIsModelSelectionReady ?? internalIsSelectionReady;
+  const setSelectedModel = useCallback(
+    (model: ChatModel) => {
+      if (onControlledSelectedModelChange) {
+        onControlledSelectedModelChange(model);
+        return;
+      }
+      setInternalSelectedModel(model);
+    },
+    [onControlledSelectedModelChange, setInternalSelectedModel],
+  );
 
   // Use our token management hook
   const {
@@ -717,6 +745,12 @@ export const ChatInput = ({
     return fileError;
   }, [externalUploadError, fileError]);
 
+  const ChatInputAttachmentPreview =
+    componentRegistry.ChatInputAttachmentPreview;
+  const hasAttachmentPreviewOverride = ChatInputAttachmentPreview !== null;
+  const hasTopLeftAccessoryOverride =
+    componentRegistry.ChatTopLeftAccessory !== null;
+
   const shellWrapperStyle = {
     maxWidth: "var(--theme-layout-chat-input-max-width)",
   } as const;
@@ -750,17 +784,18 @@ export const ChatInput = ({
         {/* Budget warning - shows when user approaches spending limit */}
         <BudgetWarning />
 
-        {/* File previews using our new component */}
-        <FileAttachmentsPreview
-          attachedFiles={attachedFiles}
-          maxFiles={maxFiles}
-          onRemoveFile={handleRemoveFileById}
-          onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
-          onFilePreview={onFilePreview}
-          disabled={isDisabled}
-          showFileTypes={showFileTypes}
-          surfaceVariant="message"
-        />
+        {!hasAttachmentPreviewOverride && (
+          <FileAttachmentsPreview
+            attachedFiles={attachedFiles}
+            maxFiles={maxFiles}
+            onRemoveFile={handleRemoveFileById}
+            onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
+            onFilePreview={onFilePreview}
+            disabled={isDisabled}
+            showFileTypes={showFileTypes}
+            surfaceVariant="message"
+          />
+        )}
 
         {/* File error message */}
         {fileError && (
@@ -779,14 +814,26 @@ export const ChatInput = ({
         <div
           className={clsx(
             "w-full",
-            "border border-[var(--theme-border)]",
-            "theme-transition focus-within:border-[var(--theme-border-focus)]",
+            "border border-[var(--theme-border-chat-input)]",
+            "theme-transition focus-within:border-[var(--theme-border-chat-input-focus)]",
             "flex flex-col",
             "chat-input-shell-geometry",
           )}
           style={inputShellStyle}
           data-ui="chat-input-shell"
         >
+          {ChatInputAttachmentPreview && (
+            <ChatInputAttachmentPreview
+              attachedFiles={attachedFiles}
+              maxFiles={maxFiles}
+              onRemoveFile={handleRemoveFileById}
+              onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
+              onFilePreview={onFilePreview}
+              disabled={isDisabled}
+              showFileTypes={showFileTypes}
+            />
+          )}
+
           <textarea
             ref={textareaRef}
             value={message}
@@ -897,12 +944,14 @@ export const ChatInput = ({
                   {t`Cancel`}
                 </Button>
               )}
-              <ModelSelector
-                availableModels={availableModels}
-                selectedModel={selectedModel}
-                onModelChange={setSelectedModel}
-                disabled={!isSelectionReady}
-              />
+              {!hasTopLeftAccessoryOverride && (
+                <ModelSelector
+                  availableModels={availableModels}
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  disabled={!isSelectionReady}
+                />
+              )}
               {isPendingResponse ? (
                 <Button
                   type="button"

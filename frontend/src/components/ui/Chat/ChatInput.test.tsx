@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { componentRegistry } from "@/config/componentRegistry";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { ChatInput } from "./ChatInput";
@@ -20,6 +21,7 @@ const mockUseActiveModelSelection = vi.fn();
 const mockUseTokenManagement = vi.fn();
 const mockUseChatInputHandlers = vi.fn();
 const mockUseFacets = vi.fn();
+const mockModelSelector = vi.fn();
 
 vi.mock("@/providers/ChatProvider", () => ({
   useChatContext: () => mockUseChatContext(),
@@ -69,7 +71,10 @@ vi.mock("./FacetSelector", () => ({
 }));
 
 vi.mock("./ModelSelector", () => ({
-  ModelSelector: () => <div data-testid="model-selector" />,
+  ModelSelector: (props: unknown) => {
+    mockModelSelector(props);
+    return <div data-testid="model-selector" />;
+  },
 }));
 
 vi.mock("../Controls/Button", () => ({
@@ -103,6 +108,8 @@ vi.mock("../icons", () => ({
 describe("ChatInput", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    componentRegistry.ChatInputAttachmentPreview = null;
+    componentRegistry.ChatTopLeftAccessory = null;
 
     const { i18n } = await import("@lingui/core");
     i18n.load("en", enMessages as unknown as Messages);
@@ -213,6 +220,82 @@ describe("ChatInput", () => {
     otherButton.remove();
   });
 
+  it("uses externally controlled model selection when provided", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const onSendMessage = vi.fn();
+    const onControlledSelectedModelChange = vi.fn();
+    const controlledModel = {
+      chat_provider_id: "external-model",
+      model_display_name: "External Model",
+    };
+    const availableModels = [controlledModel];
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput
+            onSendMessage={onSendMessage}
+            controlledAvailableModels={availableModels as never}
+            controlledSelectedModel={controlledModel as never}
+            onControlledSelectedModelChange={
+              onControlledSelectedModelChange as never
+            }
+            controlledIsModelSelectionReady={false}
+          />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(mockModelSelector).toHaveBeenCalled();
+    const lastCallProps = mockModelSelector.mock.calls.at(-1)?.[0] as {
+      availableModels: typeof availableModels;
+      selectedModel: typeof controlledModel;
+      onModelChange: typeof onControlledSelectedModelChange;
+      disabled: boolean;
+    };
+
+    expect(lastCallProps.availableModels).toBe(availableModels);
+    expect(lastCallProps.selectedModel).toBe(controlledModel);
+    expect(lastCallProps.disabled).toBe(true);
+
+    lastCallProps.onModelChange(controlledModel);
+    expect(onControlledSelectedModelChange).toHaveBeenCalledWith(
+      controlledModel,
+    );
+  });
+
+  it("hides the inline model selector when a top-left accessory override is registered", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const onSendMessage = vi.fn();
+
+    const MockTopLeftAccessory = () => <div data-testid="top-left-accessory" />;
+    MockTopLeftAccessory.displayName = "MockTopLeftAccessory";
+    componentRegistry.ChatTopLeftAccessory = MockTopLeftAccessory;
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(mockModelSelector).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("model-selector")).toBeNull();
+  });
+
   it("exposes stable shell hooks for theme.css selectors", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -244,10 +327,17 @@ describe("ChatInput", () => {
     expect(container.querySelector('[data-ui="chat-input-shell"]')).toHaveStyle(
       {
         backgroundColor: "var(--theme-shell-chat-input)",
+        borderColor: "var(--theme-border-chat-input)",
         borderRadius: "var(--theme-radius-input)",
         boxShadow: "var(--theme-elevation-input)",
       },
     );
+    expect(
+      container.querySelector('[data-ui="chat-input-shell"]')?.className,
+    ).toContain("border-[var(--theme-border-chat-input)]");
+    expect(
+      container.querySelector('[data-ui="chat-input-shell"]')?.className,
+    ).toContain("focus-within:border-[var(--theme-border-chat-input-focus)]");
     expect(
       container.querySelector('[data-ui="chat-input-shell"]')?.className,
     ).toContain("chat-input-shell-geometry");
@@ -258,5 +348,120 @@ describe("ChatInput", () => {
       container.querySelector('[data-ui="chat-input-controls"] > div')
         ?.className,
     ).toContain("chat-input-controls-geometry");
+  });
+
+  it("renders the default external attachment preview when no override is registered", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const attachedFiles = [
+      {
+        id: "file-1",
+        filename: "report.pdf",
+        download_url: "/files/report.pdf",
+        preview_url: undefined,
+        file_capability: {
+          extensions: ["pdf"],
+          id: "pdf",
+          mime_types: ["application/pdf"],
+          operations: ["extract_text"],
+        },
+      },
+    ] satisfies FileUploadItem[];
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles,
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("attachments-preview")).toHaveTextContent("1");
+    expect(
+      container.querySelector('[data-testid="inline-attachment-preview"]'),
+    ).toBeNull();
+  });
+
+  it("renders the attachment preview override inline inside the input shell and suppresses the external preview", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const attachedFiles = [
+      {
+        id: "file-1",
+        filename: "diagram.png",
+        download_url: "/files/diagram.png",
+        preview_url: undefined,
+        file_capability: {
+          extensions: ["png"],
+          id: "image",
+          mime_types: ["image/png"],
+          operations: ["analyze_image"],
+        },
+      },
+    ] satisfies FileUploadItem[];
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles,
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+
+    const MockAttachmentPreview = ({
+      attachedFiles: files,
+    }: {
+      attachedFiles: unknown[];
+    }) => <div data-testid="inline-attachment-preview">{files.length}</div>;
+    MockAttachmentPreview.displayName = "MockAttachmentPreview";
+    componentRegistry.ChatInputAttachmentPreview = MockAttachmentPreview;
+
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByTestId("attachments-preview")).toBeNull();
+    expect(screen.getByTestId("inline-attachment-preview")).toHaveTextContent(
+      "1",
+    );
+
+    const shell = container.querySelector('[data-ui="chat-input-shell"]');
+    const inlinePreview = container.querySelector(
+      '[data-testid="inline-attachment-preview"]',
+    );
+    const textarea = container.querySelector("textarea");
+
+    expect(shell?.firstElementChild).toBe(inlinePreview);
+    expect(inlinePreview?.nextElementSibling).toBe(textarea);
   });
 });

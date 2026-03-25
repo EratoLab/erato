@@ -105,7 +105,7 @@ export default function AssistantsListPage() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-theme-bg-secondary">
+    <div className="flex h-full flex-col bg-theme-bg-primary">
       {/* Page Header */}
       <PageHeader
         title={t`Assistants`}
@@ -240,6 +240,7 @@ export default function AssistantsListPage() {
                     return (
                       <div
                         key={assistant.id}
+                        data-ui="assistant-list-card"
                         data-testid="assistant-list-item"
                         className="block rounded-lg border border-theme-border bg-theme-bg-primary p-4 transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover focus:bg-theme-bg-hover focus:outline-none focus:ring-2 focus:ring-theme-focus"
                       >

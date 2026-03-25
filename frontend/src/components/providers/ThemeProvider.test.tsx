@@ -341,6 +341,13 @@ describe("ThemeProvider", () => {
     expect(varsCss).toContain("--theme-action-primary-fg: #eef2ff;");
     expect(varsCss).toContain("--theme-action-primary-hover: #4338ca;");
     expect(varsCss).toContain("--theme-border-primary: #c4b5fd;");
+    expect(varsCss).toContain("--theme-border-field: #d1d5db;");
+    expect(varsCss).toContain("--theme-border-field-focus: #6b7280;");
+    expect(varsCss).toContain("--theme-border-chat-input: #d1d5db;");
+    expect(varsCss).toContain("--theme-border-chat-input-focus: #6b7280;");
+    expect(varsCss).toContain("--theme-border-dropdown: #d1d5db;");
+    expect(varsCss).toContain("--theme-border-media: #d1d5db;");
+    expect(varsCss).toContain("--theme-border-attachment: #d1d5db;");
     expect(varsCss).toContain("--theme-shell-modal: #ffffff;");
     expect(varsCss).toContain(
       "--theme-focus-ring-error: rgba(127, 29, 29, 0.24);",
@@ -441,6 +448,13 @@ describe("ThemeProvider", () => {
     expect(varsCss).toContain("--theme-message-hover: #c8d9cc;");
     expect(varsCss).toContain("--theme-border-primary: #cfddd1;");
     expect(varsCss).toContain("--theme-border-subtle: #cfddd1;");
+    expect(varsCss).toContain("--theme-border-field: #cfddd1;");
+    expect(varsCss).toContain("--theme-border-chat-input: #cfddd1;");
+    expect(varsCss).toContain("--theme-border-dropdown: #d1d5db;");
+    expect(varsCss).toContain("--theme-border-media: #d1d5db;");
+    expect(varsCss).toContain("--theme-border-attachment: #cfddd1;");
+    expect(varsCss).toContain("--theme-border-field-focus: #6b7280;");
+    expect(varsCss).toContain("--theme-border-chat-input-focus: #6b7280;");
     expect(varsCss).toContain("--theme-radius-shell: 1rem;");
   });
 });

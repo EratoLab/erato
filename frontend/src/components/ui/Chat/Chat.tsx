@@ -9,7 +9,7 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
-import { useChatActions } from "@/hooks/chat";
+import { useActiveModelSelection, useChatActions } from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
@@ -170,10 +170,6 @@ export const Chat = ({
     [],
   );
 
-  const [selectedChatProviderId, setSelectedChatProviderId] = useState<
-    string | null
-  >(initialModelOverride?.chat_provider_id ?? null);
-
   // Resolve message controls from registry if not explicitly provided
   const resolvedMessageControls = useMemo(
     () =>
@@ -194,6 +190,7 @@ export const Chat = ({
       ),
     [],
   );
+  const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
 
   // Get chat data and actions from context provider
   const {
@@ -213,31 +210,17 @@ export const Chat = ({
     currentChatLastModel,
   } = useChatContext();
 
-  useEffect(() => {
-    if (selectedChatProviderId) {
-      return;
-    }
-
-    const fallbackChatProviderId =
-      initialModelOverride?.chat_provider_id ??
-      currentChatLastModel?.chat_provider_id ??
-      null;
-
-    if (fallbackChatProviderId) {
-      setSelectedChatProviderId(fallbackChatProviderId);
-    }
-  }, [
-    currentChatLastModel?.chat_provider_id,
-    initialModelOverride?.chat_provider_id,
-    selectedChatProviderId,
-  ]);
+  const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
+    useActiveModelSelection({
+      initialModel: initialModelOverride ?? currentChatLastModel,
+    });
 
   const { uploadFiles, uploadError, isUploading } = useFileUploadWithTokenCheck(
     {
       message: "",
       chatId: currentChatId,
       assistantId,
-      chatProviderId: selectedChatProviderId ?? undefined,
+      chatProviderId: selectedModel?.chat_provider_id ?? undefined,
       acceptedFileTypes,
       multiple: true,
     },
@@ -672,6 +655,14 @@ export const Chat = ({
                 </div>
               </div>
             )}
+            {TopLeftAccessory ? (
+              <TopLeftAccessory
+                availableModels={availableModels}
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
+                isModelSelectionReady={isSelectionReady}
+              />
+            ) : null}
             {/* Use the MessageList component */}
             <MessageList
               messages={messages}
@@ -797,10 +788,13 @@ export const Chat = ({
                 editState.mode === "edit" ? editState.initialContent : undefined
               }
               initialModel={initialModelOverride ?? currentChatLastModel}
+              controlledAvailableModels={availableModels}
+              controlledSelectedModel={selectedModel}
+              onControlledSelectedModelChange={setSelectedModel}
+              controlledIsModelSelectionReady={isSelectionReady}
               initialSelectedFacetIds={effectiveInitialSelectedFacetIds}
               enforceSelectedFacetIds={assistantFacetSettingsEnforced}
               onFacetSelectionChange={setActiveSelectedFacetIds}
-              onSelectedChatProviderIdChange={setSelectedChatProviderId}
               uploadFiles={uploadFiles}
               uploadError={uploadError}
             />

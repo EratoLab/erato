@@ -62,4 +62,37 @@ describe("AssistantWelcomeScreen", () => {
       screen.getByTestId("assistant-welcome-screen-default").className,
     ).toContain("w-full");
   });
+
+  it("renders the edit assistant settings action as a secondary button", () => {
+    const assistant: AssistantWithFiles = {
+      id: "assistant-1",
+      name: "Budget Assistant",
+      description: "Helps with finance questions",
+      prompt: "Use the supplied policy docs to answer questions.",
+      created_at: "2026-03-23T08:00:00.000Z",
+      facet_ids: [],
+      enforce_facet_settings: false,
+      mcp_server_ids: [],
+      updated_at: "2026-03-23T09:00:00.000Z",
+      files: [],
+      can_edit: true,
+    };
+
+    render(
+      <I18nProvider i18n={i18n}>
+        <MemoryRouter>
+          <AssistantWelcomeScreen assistant={assistant} />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Edit Assistant Settings" }),
+    ).toHaveClass(
+      "bg-theme-bg-secondary",
+      "border",
+      "border-theme-border",
+      "text-theme-fg-secondary",
+    );
+  });
 });

@@ -82,7 +82,7 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
       className={clsx(
         "mb-3",
         surfaceVariant === "message" &&
-          "border border-theme-border bg-theme-bg-primary",
+          "border bg-theme-bg-primary [border-color:var(--theme-border-attachment)]",
         className,
       )}
       style={attachmentsFrameStyle}

@@ -208,7 +208,6 @@ export default function AssistantChatSpacePage() {
         showAvatars={true}
         showTimestamps={true}
         layout="default"
-        maxWidth={768}
         emptyStateComponent={
           assistant ? (
             <ChatEmptyState

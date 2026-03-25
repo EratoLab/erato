@@ -8,6 +8,10 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 import { env } from "@/app/env";
 import { useTheme } from "@/components/providers/ThemeProvider";
+import {
+  componentRegistry,
+  resolveComponentOverride,
+} from "@/config/componentRegistry";
 import { defaultThemeConfig } from "@/config/themeConfig";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
 import {
@@ -46,6 +50,15 @@ const activeSidebarItemStyle = {
 const compactShellPaddingStyle = {
   padding:
     "var(--theme-spacing-shell-compact-padding-y) var(--theme-spacing-shell-compact-padding-x)",
+} as const;
+const sidebarDividerColor =
+  "var(--theme-shell-sidebar-divider-color, var(--theme-border-divider))";
+const sidebarSectionBackground =
+  "var(--theme-shell-sidebar-section-bg, transparent)";
+const sidebarSectionStyle = {
+  ...compactShellPaddingStyle,
+  backgroundColor: sidebarSectionBackground,
+  borderColor: sidebarDividerColor,
 } as const;
 const sidebarLinkClassName =
   "focus-ring-tight block rounded-[var(--theme-radius-shell)]";
@@ -143,8 +156,8 @@ const ChatHistoryHeader = memo<{
 }>(
   ({ collapsed, isSlimMode, onToggleCollapse, showTitle, sidebarLogoPath }) => (
     <div
-      className="flex min-h-[60px] border-b border-[var(--theme-border-divider)]"
-      style={compactShellPaddingStyle}
+      className="flex min-h-[60px] border-b"
+      style={sidebarSectionStyle}
       data-ui="sidebar-header"
     >
       {/* In slim mode, show logo with hover toggle or just toggle button */}
@@ -473,8 +486,8 @@ const ChatHistoryFooter = memo<{
   isSlimMode?: boolean;
 }>(({ userProfile, onSignOut }) => (
   <div
-    className="border-t border-[var(--theme-border-divider)]"
-    style={compactShellPaddingStyle}
+    className="border-t"
+    style={sidebarSectionStyle}
     data-ui="sidebar-footer"
   >
     <UserProfileThemeDropdown
@@ -618,7 +631,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const sidebarShellStyle = useMemo(
       () => ({
         backgroundColor: "var(--theme-shell-sidebar)",
-        borderRightColor: "var(--theme-border-divider)",
+        borderColor: sidebarDividerColor,
         boxShadow: "var(--theme-elevation-shell)",
         width: isSlimMode
           ? "var(--theme-layout-sidebar-slim-width)"
@@ -634,6 +647,15 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
         borderRadius: "var(--theme-radius-shell)",
         boxShadow: "var(--theme-elevation-shell)",
       }),
+      [],
+    );
+
+    const ResolvedChatHistoryList = useMemo(
+      () =>
+        resolveComponentOverride(
+          componentRegistry.ChatHistoryList,
+          ChatHistoryList,
+        ),
       [],
     );
 
@@ -702,6 +724,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   "mx-2 my-1 border-t border-[var(--theme-border-divider)] transition-opacity duration-200",
                   isSlimMode && "pointer-events-none opacity-0",
                 )}
+                data-ui="sidebar-nav-divider"
               />
 
               {/* Optional recent assistants section */}
@@ -735,7 +758,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                     title={t({ id: "chat.history.recent", message: "Recent" })}
                     defaultExpanded={true}
                   >
-                    <ChatHistoryList
+                    <ResolvedChatHistoryList
                       sessions={sessions}
                       currentSessionId={currentSessionId}
                       onSessionSelect={onSessionSelect}

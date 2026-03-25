@@ -46,6 +46,7 @@ export function AssistantWelcomeScreen({
   const {
     containerClasses: contentContainerClasses,
     textAlignment: contentTextAlignment,
+    horizontalPadding: contentHorizontalPadding,
   } = usePageAlignment("assistants");
   const {
     containerClasses: headerContainerClasses,
@@ -64,158 +65,168 @@ export function AssistantWelcomeScreen({
   return (
     <div
       className={clsx(
-        "flex w-full flex-col py-8 sm:py-12",
-        contentContainerClasses,
+        "w-full py-8 sm:py-12",
+        contentHorizontalPadding,
         className,
       )}
       data-testid="assistant-welcome-screen-default"
     >
-      <div className={clsx("mb-8 w-full", headerContainerClasses)}>
-        {/* Assistant Icon/Badge */}
-        <div className={clsx("mb-6 flex", headerJustifyAlignment)}>
-          <div className="flex size-20 items-center justify-center rounded-full bg-theme-bg-accent">
-            <EditIcon className="size-10 text-theme-fg-secondary" />
+      <div className={clsx("flex w-full flex-col", contentContainerClasses)}>
+        <div className={clsx("mb-8 w-full", headerContainerClasses)}>
+          {/* Assistant Icon/Badge */}
+          <div className={clsx("mb-6 flex", headerJustifyAlignment)}>
+            <div className="flex size-20 items-center justify-center rounded-full bg-theme-bg-accent">
+              <EditIcon className="size-10 text-theme-fg-secondary" />
+            </div>
           </div>
-        </div>
 
-        {/* Assistant Name */}
-        <h1
-          className={clsx(
-            "mb-2 text-2xl font-bold text-theme-fg-primary",
-            headerTextAlignment,
-          )}
-        >
-          {assistant.name}
-        </h1>
-
-        {/* Assistant Description */}
-        {assistant.description && (
-          <p
+          {/* Assistant Name */}
+          <h1
             className={clsx(
-              "text-lg text-theme-fg-secondary",
+              "mb-2 text-2xl font-bold text-theme-fg-primary",
               headerTextAlignment,
             )}
           >
-            {assistant.description}
-          </p>
-        )}
-      </div>
+            {assistant.name}
+          </h1>
 
-      {/* Assistant Details */}
-      <div className="mb-8 w-full rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-6 text-left">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-theme-fg-muted">
-          {t`Configuration`}
-        </h2>
-
-        {/* System Prompt Preview */}
-        <div className="mb-4">
-          <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
-            {t`System Prompt`}
-          </h3>
-          <div className="max-h-32 overflow-y-auto rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
-            <p className="whitespace-pre-wrap font-mono text-xs text-theme-fg-primary">
-              {assistant.prompt.length > 500
-                ? `${assistant.prompt.slice(0, 500)}...`
-                : assistant.prompt}
+          {/* Assistant Description */}
+          {assistant.description && (
+            <p
+              className={clsx(
+                "text-lg text-theme-fg-secondary",
+                headerTextAlignment,
+              )}
+            >
+              {assistant.description}
             </p>
-          </div>
+          )}
         </div>
 
-        {/* Files */}
-        {assistant.files.length > 0 && (
+        {/* Assistant Details */}
+        <div
+          className="mb-8 w-full rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-6 text-left"
+          data-ui="assistant-detail-card"
+        >
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-theme-fg-muted">
+            {t`Configuration`}
+          </h2>
+
+          {/* System Prompt Preview */}
           <div className="mb-4">
             <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
-              {t`Default Files`} ({assistant.files.length})
+              {t`System Prompt`}
             </h3>
-            <div className="flex flex-wrap gap-2">
-              {assistant.files.map((file) => (
-                <span
-                  key={file.id}
-                  className="rounded-[var(--theme-radius-pill)] bg-theme-bg-accent px-2 py-1 text-xs text-theme-fg-secondary"
+            <div className="max-h-32 overflow-y-auto rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
+              <p className="whitespace-pre-wrap font-mono text-xs text-theme-fg-primary">
+                {assistant.prompt.length > 500
+                  ? `${assistant.prompt.slice(0, 500)}...`
+                  : assistant.prompt}
+              </p>
+            </div>
+          </div>
+
+          {/* Files */}
+          {assistant.files.length > 0 && (
+            <div className="mb-4">
+              <h3 className="mb-2 text-sm font-medium text-theme-fg-secondary">
+                {t`Default Files`} ({assistant.files.length})
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {assistant.files.map((file) => (
+                  <span
+                    key={file.id}
+                    className="rounded-[var(--theme-radius-pill)] bg-theme-bg-accent px-2 py-1 text-xs text-theme-fg-secondary"
+                  >
+                    {file.filename}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Edit Assistant Button - only show if user can edit */}
+          {assistant.can_edit && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<EditIcon />}
+              onClick={handleEditAssistant}
+              className="mt-2"
+            >
+              {t`Edit Assistant Settings`}
+            </Button>
+          )}
+        </div>
+
+        {/* Past Conversations Section */}
+        {!isLoadingChats && pastChats.length > 0 && (
+          <div className="w-full">
+            <h2
+              className={clsx(
+                "mb-4 text-lg font-semibold text-theme-fg-primary",
+                contentTextAlignment,
+              )}
+            >
+              {t`Your conversations with this assistant`}
+            </h2>
+            <div className="space-y-2">
+              {pastChats.slice(0, 5).map((chat) => (
+                <a
+                  key={chat.id}
+                  href={getChatUrl(chat.id, assistant.id)}
+                  onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey) return;
+                    e.preventDefault();
+                    handleChatSelect(chat.id);
+                  }}
+                  data-ui="assistant-past-chat-card"
+                  className="block rounded-[var(--theme-radius-shell)] bg-theme-bg-primary p-4 text-left transition-all hover:bg-theme-bg-hover"
                 >
-                  {file.filename}
-                </span>
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="flex-1 truncate font-medium text-theme-fg-primary">
+                      {chat.title || t`Untitled Chat`}
+                    </h3>
+                    <div className="shrink-0 text-xs text-theme-fg-muted">
+                      {chat.updatedAt && (
+                        <MessageTimestamp
+                          createdAt={new Date(chat.updatedAt)}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </a>
               ))}
+            </div>
+
+            {pastChats.length > 5 && (
+              <p
+                className={clsx(
+                  "mt-4 text-sm text-theme-fg-muted",
+                  contentTextAlignment,
+                )}
+              >
+                {t`And`} {pastChats.length - 5} {t`more conversations...`}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Loading State */}
+        {isLoadingChats && (
+          <div className="w-full">
+            <div className={clsx("flex py-4", headerJustifyAlignment)}>
+              <div className="size-6 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
             </div>
           </div>
         )}
 
-        {/* Edit Assistant Button - only show if user can edit */}
-        {assistant.can_edit && (
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<EditIcon />}
-            onClick={handleEditAssistant}
-            className="mt-2"
-          >
-            {t`Edit Assistant Settings`}
-          </Button>
-        )}
-      </div>
-
-      {/* Past Conversations Section */}
-      {!isLoadingChats && pastChats.length > 0 && (
-        <div className="w-full">
-          <h2
-            className={clsx(
-              "mb-4 text-lg font-semibold text-theme-fg-primary",
-              contentTextAlignment,
-            )}
-          >
-            {t`Your conversations with this assistant`}
-          </h2>
-          <div className="space-y-2">
-            {pastChats.slice(0, 5).map((chat) => (
-              <a
-                key={chat.id}
-                href={getChatUrl(chat.id, assistant.id)}
-                onClick={(e) => {
-                  if (e.metaKey || e.ctrlKey) return;
-                  e.preventDefault();
-                  handleChatSelect(chat.id);
-                }}
-                className="block rounded-[var(--theme-radius-shell)] border border-theme-border bg-theme-bg-primary p-4 text-left transition-all hover:border-theme-border-focus hover:bg-theme-bg-hover"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <h3 className="flex-1 truncate font-medium text-theme-fg-primary">
-                    {chat.title || t`Untitled Chat`}
-                  </h3>
-                  <div className="shrink-0 text-xs text-theme-fg-muted">
-                    {chat.updatedAt && (
-                      <MessageTimestamp createdAt={new Date(chat.updatedAt)} />
-                    )}
-                  </div>
-                </div>
-              </a>
-            ))}
-          </div>
-
-          {pastChats.length > 5 && (
-            <p
-              className={clsx(
-                "mt-4 text-sm text-theme-fg-muted",
-                contentTextAlignment,
-              )}
-            >
-              {t`And`} {pastChats.length - 5} {t`more conversations...`}
-            </p>
-          )}
+        {/* Start New Conversation Hint */}
+        <div className={clsx("mt-8 text-theme-fg-muted", contentTextAlignment)}>
+          <p className="text-sm">
+            {t`Start typing below to begin a new conversation`}
+          </p>
         </div>
-      )}
-
-      {/* Loading State */}
-      {isLoadingChats && (
-        <div className="w-full">
-          <div className={clsx("flex py-4", headerJustifyAlignment)}>
-            <div className="size-6 animate-spin rounded-full border-2 border-theme-border border-t-transparent"></div>
-          </div>
-        </div>
-      )}
-
-      {/* Start New Conversation Hint */}
-      <div className={clsx("mt-8 text-theme-fg-muted", contentTextAlignment)}>
-        <p className="text-sm">{t`Start typing below to begin a new conversation`}</p>
       </div>
     </div>
   );

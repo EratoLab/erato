@@ -53,6 +53,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         horizontalPadding,
         className,
       )}
+      data-ui="page-header"
     >
       <div className={clsx("w-full", containerClasses)}>
         <h1

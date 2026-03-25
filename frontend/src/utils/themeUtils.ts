@@ -212,6 +212,30 @@ const withLegacyColorCompatibility = (
     if (!colorsOverride.border.divider) {
       nextTheme.colors.border.divider = theme.colors.border.default;
     }
+    if (!colorsOverride.border.field) {
+      nextTheme.colors.border.field = theme.colors.border.default;
+    }
+    if (!colorsOverride.border.chatInput) {
+      nextTheme.colors.border.chatInput = theme.colors.border.default;
+    }
+    if (!colorsOverride.border.dropdown) {
+      nextTheme.colors.border.dropdown = theme.colors.border.divider;
+    }
+    if (!colorsOverride.border.media) {
+      nextTheme.colors.border.media = theme.colors.border.primary;
+    }
+    if (!colorsOverride.border.attachment) {
+      nextTheme.colors.border.attachment = theme.colors.border.default;
+    }
+  }
+
+  if (colorsOverride.border?.focus) {
+    if (!colorsOverride.border.fieldFocus) {
+      nextTheme.colors.border.fieldFocus = theme.colors.border.focus;
+    }
+    if (!colorsOverride.border.chatInputFocus) {
+      nextTheme.colors.border.chatInputFocus = theme.colors.border.focus;
+    }
   }
 
   return nextTheme;

@@ -24,9 +24,12 @@
  */
 
 import type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
+import type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList";
 import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
+import type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
+import type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachment-preview";
 import type { MessageControlsProps } from "@/types/message-controls";
 import type { ComponentType } from "react";
 
@@ -51,6 +54,18 @@ export interface ComponentRegistry {
    * Set to a custom component to replace the default dropdown layout.
    */
   ChatFileSourceSelector: ComponentType<FileSourceSelectorProps> | null;
+
+  /**
+   * Override for the inline attachment preview shown in the chat composer.
+   * Used to render custom attachment chips/thumbnails inside the chat input shell.
+   */
+  ChatInputAttachmentPreview: ComponentType<ChatInputAttachmentPreviewProps> | null;
+
+  /**
+   * Override for the chat history list shown in the sidebar.
+   * Used to customize row layout, metadata presentation, and action affordances.
+   */
+  ChatHistoryList: ComponentType<ChatHistoryListProps> | null;
 
   /**
    * Override for the default chat welcome/empty state component.
@@ -88,6 +103,12 @@ export interface ComponentRegistry {
    * including the resolved `controls` component as a building block.
    */
   ChatMessageRenderer: ComponentType<ChatMessageProps> | null;
+
+  /**
+   * Override for chat-level accessory UI positioned by the chat shell.
+   * Used for customer-specific chrome such as a floating model selector.
+   */
+  ChatTopLeftAccessory: ComponentType<ChatTopLeftAccessoryProps> | null;
 }
 
 export const resolveComponentOverride = <TProps>(
@@ -107,8 +128,11 @@ export const resolveComponentOverride = <TProps>(
 export const componentRegistry: ComponentRegistry = {
   AssistantFileSourceSelector: null,
   ChatFileSourceSelector: null,
+  ChatInputAttachmentPreview: null,
+  ChatHistoryList: null,
   ChatWelcomeScreen: null,
   AssistantWelcomeScreen: null,
   MessageControls: null,
   ChatMessageRenderer: null,
+  ChatTopLeftAccessory: null,
 };

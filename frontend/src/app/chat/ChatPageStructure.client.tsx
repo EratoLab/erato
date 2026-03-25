@@ -58,7 +58,6 @@ export default function ChatPageStructure({
         showAvatars={true}
         showTimestamps={true}
         layout="default"
-        maxWidth={768}
         emptyStateComponent={<ChatEmptyState variant="chat" />}
         onMessageAction={async (action: MessageAction) => {
           logger.log("Handling message action in ChatPageStructure:", action);

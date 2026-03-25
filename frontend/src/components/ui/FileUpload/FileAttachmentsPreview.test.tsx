@@ -86,6 +86,7 @@ describe("FileAttachmentsPreview", () => {
     const list = heading?.nextElementSibling;
 
     expect(frame).toHaveStyle({
+      borderColor: "var(--theme-border-attachment)",
       borderRadius: "var(--theme-radius-message)",
       padding:
         "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
