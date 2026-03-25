@@ -26,6 +26,7 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   msalAuthority: null,
   disableUpload: false,
   disableChatInputAutofocus: false,
+  chatInputEmptyStateLayout: "bottom",
   disableLogout: false,
   assistantsEnabled: false,
   assistantsShowRecentItems: false,

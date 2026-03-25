@@ -1232,6 +1232,11 @@ pub struct FrontendConfig {
     #[serde(default)]
     pub disable_chat_input_autofocus: bool,
 
+    // Layout of the chat input before a conversation has started: "bottom" (default)
+    // or "centered".
+    #[serde(default = "default_chat_input_empty_state_layout")]
+    pub chat_input_empty_state_layout: String,
+
     // Whether to hide logout functionality from the UI.
     // Defaults to `false`.
     #[serde(default)]
@@ -1275,6 +1280,10 @@ pub struct FrontendConfig {
 
 fn default_sidebar_collapsed_mode() -> String {
     "hidden".to_string()
+}
+
+fn default_chat_input_empty_state_layout() -> String {
+    "bottom".to_string()
 }
 
 fn default_sidebar_chat_history_show_metadata() -> bool {

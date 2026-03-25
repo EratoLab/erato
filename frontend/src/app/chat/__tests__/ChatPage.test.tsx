@@ -5,10 +5,14 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
+import { componentRegistry } from "@/config/componentRegistry";
 import { useChatMessaging } from "@/hooks/chat/useChatMessaging";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { useChatContext } from "@/providers/ChatProvider";
-import { FeatureConfigProvider } from "@/providers/FeatureConfigProvider";
+import {
+  FeatureConfigProvider,
+  StaticFeatureConfigProvider,
+} from "@/providers/FeatureConfigProvider";
 
 import ChatPageStructure from "../ChatPageStructure.client";
 
@@ -253,6 +257,7 @@ describe("ChatPage", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    componentRegistry.ChatWelcomeScreen = null;
 
     // Setup useChatContext mock
     (useChatContext as unknown as ReturnType<typeof vi.fn>).mockImplementation(
@@ -290,6 +295,7 @@ describe("ChatPage", () => {
         },
         messageOrder: ["msg1", "msg2"],
         isStreaming: false,
+        isPendingResponse: false,
         streamingContent: null,
         isMessagingLoading: false,
         messagingError: null,
@@ -408,6 +414,7 @@ describe("ChatPage", () => {
         messages: {},
         messageOrder: [],
         isStreaming: false,
+        isPendingResponse: false,
         streamingContent: null,
         isMessagingLoading: true, // Set loading to true
         messagingError: null,
@@ -464,6 +471,7 @@ describe("ChatPage", () => {
       messages: {},
       messageOrder: [],
       isStreaming: true, // Set streaming to true
+      isPendingResponse: false,
       streamingContent: "Generating response...",
       isMessagingLoading: false,
       messagingError: null,
@@ -498,6 +506,111 @@ describe("ChatPage", () => {
 
     // Check that the sidebar and input are rendered (basic structure test)
     expect(screen.getByTestId("chat-sidebar")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-input")).toBeInTheDocument();
+  });
+
+  it("centers the welcome state and hides the message list when configured", () => {
+    (useChatContext as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      () => ({
+        chats: [],
+        currentChatId: "test-chat-id",
+        isHistoryLoading: false,
+        historyError: null,
+        createNewChat: vi.fn(),
+        archiveChat: vi.fn(),
+        navigateToChat: vi.fn(),
+        refetchHistory: vi.fn(),
+        messages: {},
+        messageOrder: [],
+        isStreaming: false,
+        isPendingResponse: false,
+        streamingContent: null,
+        isMessagingLoading: false,
+        messagingError: null,
+        sendMessage: vi.fn(),
+        cancelMessage: vi.fn(),
+        refetchMessages: vi.fn(),
+        uploadFiles: vi.fn(),
+        isUploading: false,
+        uploadError: null,
+        uploadedFiles: [],
+        clearUploadedFiles: vi.fn(),
+        isLoading: false,
+        error: null,
+        silentChatId: null,
+        newChatCounter: 0,
+        mountKey: "test-mount-key",
+      }),
+    );
+
+    render(
+      <TestWrapper>
+        <StaticFeatureConfigProvider
+          config={{
+            chatInput: { autofocus: true, emptyStateLayout: "centered" },
+          }}
+        >
+          <ChatPageStructure>
+            <div />
+          </ChatPageStructure>
+        </StaticFeatureConfigProvider>
+      </TestWrapper>,
+    );
+
+    expect(screen.getByTestId("welcome-screen")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-input")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the message list once a first send is pending", () => {
+    (useChatContext as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      () => ({
+        chats: [],
+        currentChatId: "test-chat-id",
+        isHistoryLoading: false,
+        historyError: null,
+        createNewChat: vi.fn(),
+        archiveChat: vi.fn(),
+        navigateToChat: vi.fn(),
+        refetchHistory: vi.fn(),
+        messages: {},
+        messageOrder: [],
+        isStreaming: false,
+        isPendingResponse: true,
+        streamingContent: null,
+        isMessagingLoading: false,
+        messagingError: null,
+        sendMessage: vi.fn(),
+        cancelMessage: vi.fn(),
+        refetchMessages: vi.fn(),
+        uploadFiles: vi.fn(),
+        isUploading: false,
+        uploadError: null,
+        uploadedFiles: [],
+        clearUploadedFiles: vi.fn(),
+        isLoading: false,
+        error: null,
+        silentChatId: null,
+        newChatCounter: 0,
+        mountKey: "test-mount-key",
+      }),
+    );
+
+    render(
+      <TestWrapper>
+        <StaticFeatureConfigProvider
+          config={{
+            chatInput: { autofocus: true, emptyStateLayout: "centered" },
+          }}
+        >
+          <ChatPageStructure>
+            <div />
+          </ChatPageStructure>
+        </StaticFeatureConfigProvider>
+      </TestWrapper>,
+    );
+
+    expect(screen.getByTestId("message-list")).toBeInTheDocument();
     expect(screen.getByTestId("chat-input")).toBeInTheDocument();
   });
 });

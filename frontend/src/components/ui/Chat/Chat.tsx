@@ -1,7 +1,15 @@
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useDropzone } from "react-dropzone";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
@@ -16,7 +24,10 @@ import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { chatMessagesQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
-import { useSidebarFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useChatInputFeature,
+  useSidebarFeature,
+} from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -198,6 +209,7 @@ export const Chat = ({
     editMessage,
     regenerateMessage,
     isMessagingLoading: chatLoading,
+    isPendingResponse,
     chats: chatHistory,
     currentChatId,
     navigateToChat: switchSession,
@@ -230,6 +242,7 @@ export const Chat = ({
 
   // Get sidebar feature configuration
   const { chatHistoryShowMetadata } = useSidebarFeature();
+  const { emptyStateLayout } = useChatInputFeature();
 
   // Convert the chat history data to the format expected by the sidebar
   const sessions: ChatSession[] = useMemo(
@@ -580,6 +593,62 @@ export const Chat = ({
     [],
   );
 
+  const shouldRenderCenteredEmptyState =
+    emptyStateLayout === "centered" &&
+    !!emptyStateComponent &&
+    messageOrder.length === 0 &&
+    !chatLoading &&
+    !isPendingResponse &&
+    editState.mode === "compose";
+
+  const centeredEmptyStateContent =
+    shouldRenderCenteredEmptyState &&
+    isValidElement<{ className?: string }>(emptyStateComponent)
+      ? cloneElement(emptyStateComponent, {
+          className: clsx(
+            emptyStateComponent.props.className,
+            "!translate-y-0",
+          ),
+        })
+      : emptyStateComponent;
+
+  const chatInputElement = (
+    <ChatInput
+      ref={chatInputControlsRef}
+      onSendMessage={handleSendMessage}
+      onEditMessage={handleEditSubmit}
+      onCancelEdit={editState.mode === "edit" ? cancelEdit : undefined}
+      acceptedFileTypes={acceptedFileTypes}
+      onFilePreview={openPreviewModal}
+      handleFileAttachments={handleFileAttachments}
+      chatId={currentChatId}
+      assistantId={assistantId}
+      className="p-2 sm:p-4"
+      isLoading={chatLoading}
+      showControls
+      onRegenerate={onRegenerate}
+      showFileTypes={true}
+      initialFiles={editState.mode === "edit" ? editState.initialFiles : []}
+      mode={editState.mode}
+      editMessageId={
+        editState.mode === "edit" ? editState.messageId : undefined
+      }
+      editInitialContent={
+        editState.mode === "edit" ? editState.initialContent : undefined
+      }
+      initialModel={initialModelOverride ?? currentChatLastModel}
+      controlledAvailableModels={availableModels}
+      controlledSelectedModel={selectedModel}
+      onControlledSelectedModelChange={setSelectedModel}
+      controlledIsModelSelectionReady={isSelectionReady}
+      initialSelectedFacetIds={effectiveInitialSelectedFacetIds}
+      enforceSelectedFacetIds={assistantFacetSettingsEnforced}
+      onFacetSelectionChange={setActiveSelectedFacetIds}
+      uploadFiles={uploadFiles}
+      uploadError={uploadError}
+    />
+  );
+
   return (
     <ChatInputControlsProvider value={chatInputControls}>
       <div
@@ -663,141 +732,123 @@ export const Chat = ({
                 isModelSelectionReady={isSelectionReady}
               />
             ) : null}
-            {/* Use the MessageList component */}
-            <MessageList
-              messages={messages}
-              messageOrder={messageOrder}
-              loadOlderMessages={loadOlderMessages}
-              hasOlderMessages={hasOlderMessages}
-              isPending={chatLoading}
-              currentSessionId={currentChatId ?? ""}
-              pageSize={6}
-              maxWidth={maxWidth}
-              showTimestamps={showTimestamps}
-              showAvatars={showAvatars}
-              userProfile={profile}
-              controls={resolvedMessageControls}
-              messageRenderer={resolvedMessageRenderer}
-              controlsContext={{
-                ...controlsContext,
-                canEdit: canEditForCurrentChat,
-              }}
-              onMessageAction={async (action: MessageAction) => {
-                // Intercept edit/regenerate here to route to local handlers
-                if (action.type === "edit") {
-                  logger.log(
-                    `Edit action called with messageId: ${action.messageId}`,
-                  );
+            {shouldRenderCenteredEmptyState ? (
+              <div
+                className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-2 py-4 sm:px-4 sm:py-6"
+                data-ui="chat-empty-state-centered-shell"
+              >
+                <div className="flex w-full flex-col items-center justify-center gap-4">
+                  {centeredEmptyStateContent}
+                  <div className="w-full shrink-0">{chatInputElement}</div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Use the MessageList component */}
+                <MessageList
+                  messages={messages}
+                  messageOrder={messageOrder}
+                  loadOlderMessages={loadOlderMessages}
+                  hasOlderMessages={hasOlderMessages}
+                  isPending={chatLoading}
+                  currentSessionId={currentChatId ?? ""}
+                  pageSize={6}
+                  maxWidth={maxWidth}
+                  showTimestamps={showTimestamps}
+                  showAvatars={showAvatars}
+                  userProfile={profile}
+                  controls={resolvedMessageControls}
+                  messageRenderer={resolvedMessageRenderer}
+                  controlsContext={{
+                    ...controlsContext,
+                    canEdit: canEditForCurrentChat,
+                  }}
+                  onMessageAction={async (action: MessageAction) => {
+                    // Intercept edit/regenerate here to route to local handlers
+                    if (action.type === "edit") {
+                      logger.log(
+                        `Edit action called with messageId: ${action.messageId}`,
+                      );
 
-                  // Find the message directly from the messages object
-                  const messageToEdit = messages[action.messageId];
-                  logger.log(`Available message keys:`, Object.keys(messages));
-                  logger.log(`Looking up message:`, messageToEdit);
+                      // Find the message directly from the messages object
+                      const messageToEdit = messages[action.messageId];
+                      logger.log(
+                        `Available message keys:`,
+                        Object.keys(messages),
+                      );
+                      logger.log(`Looking up message:`, messageToEdit);
 
-                  if (messageToEdit.role === "user") {
-                    const messageFiles = (
-                      messageToEdit as ChatMessage & {
-                        files?: FileUploadItem[];
+                      if (messageToEdit.role === "user") {
+                        const messageFiles = (
+                          messageToEdit as ChatMessage & {
+                            files?: FileUploadItem[];
+                          }
+                        ).files;
+                        const initialFiles = Array.isArray(messageFiles)
+                          ? messageFiles
+                          : [];
+                        logger.log(
+                          `Setting editState: messageId=${action.messageId}, content="${extractTextFromContent(messageToEdit.content)}"`,
+                        );
+
+                        // Use React's functional update to ensure we get the latest state
+                        setEditState(() => ({
+                          mode: "edit",
+                          messageId: action.messageId,
+                          initialContent: messageToEdit.content,
+                          initialFiles,
+                        }));
+
+                        logger.log(`editState set successfully`);
+                      } else {
+                        logger.log(
+                          `Cannot edit message ${action.messageId}: not found or not a user message`,
+                          {
+                            messageToEdit,
+                            role: messageToEdit.role,
+                            available: Object.keys(messages),
+                          },
+                        );
                       }
-                    ).files;
-                    const initialFiles = Array.isArray(messageFiles)
-                      ? messageFiles
-                      : [];
-                    logger.log(
-                      `Setting editState: messageId=${action.messageId}, content="${extractTextFromContent(messageToEdit.content)}"`,
-                    );
+                      return true;
+                    }
+                    if (action.type === "regenerate") {
+                      handleRegenerate(action.messageId);
+                      return true;
+                    }
+                    // Handle like/dislike feedback actions
+                    if (action.type === "like" || action.type === "dislike") {
+                      const sentiment =
+                        action.type === "like" ? "positive" : "negative";
 
-                    // Use React's functional update to ensure we get the latest state
-                    setEditState(() => ({
-                      mode: "edit",
-                      messageId: action.messageId,
-                      initialContent: messageToEdit.content,
-                      initialFiles,
-                    }));
+                      // Submit feedback immediately (cache invalidation handled by onFeedbackSuccess callback)
+                      const result = await handleFeedbackSubmit(
+                        action.messageId,
+                        sentiment,
+                      );
 
-                    logger.log(`editState set successfully`);
-                  } else {
-                    logger.log(
-                      `Cannot edit message ${action.messageId}: not found or not a user message`,
-                      {
-                        messageToEdit,
-                        role: messageToEdit.role,
-                        available: Object.keys(messages),
-                      },
-                    );
-                  }
-                  return true;
-                }
-                if (action.type === "regenerate") {
-                  handleRegenerate(action.messageId);
-                  return true;
-                }
-                // Handle like/dislike feedback actions
-                if (action.type === "like" || action.type === "dislike") {
-                  const sentiment =
-                    action.type === "like" ? "positive" : "negative";
+                      // If comments are enabled, open the dialog for additional comment
+                      if (result.success && feedbackConfig.commentsEnabled) {
+                        openFeedbackDialog(action.messageId, sentiment);
+                      }
 
-                  // Submit feedback immediately (cache invalidation handled by onFeedbackSuccess callback)
-                  const result = await handleFeedbackSubmit(
-                    action.messageId,
-                    sentiment,
-                  );
+                      return result.success;
+                    }
+                    return handleMessageAction(action);
+                  }}
+                  className={layout}
+                  useVirtualization={messageOrder.length > 30}
+                  virtualizationThreshold={30}
+                  onScrollToBottomRef={handleMessageListRef}
+                  onFilePreview={openPreviewModal}
+                  onViewFeedback={openFeedbackViewDialog}
+                  emptyStateComponent={emptyStateComponent}
+                  assistantFiles={assistantFiles}
+                />
 
-                  // If comments are enabled, open the dialog for additional comment
-                  if (result.success && feedbackConfig.commentsEnabled) {
-                    openFeedbackDialog(action.messageId, sentiment);
-                  }
-
-                  return result.success;
-                }
-                return handleMessageAction(action);
-              }}
-              className={layout}
-              useVirtualization={messageOrder.length > 30}
-              virtualizationThreshold={30}
-              onScrollToBottomRef={handleMessageListRef}
-              onFilePreview={openPreviewModal}
-              onViewFeedback={openFeedbackViewDialog}
-              emptyStateComponent={emptyStateComponent}
-              assistantFiles={assistantFiles}
-            />
-
-            <ChatInput
-              ref={chatInputControlsRef}
-              onSendMessage={handleSendMessage}
-              onEditMessage={handleEditSubmit}
-              onCancelEdit={editState.mode === "edit" ? cancelEdit : undefined}
-              acceptedFileTypes={acceptedFileTypes}
-              onFilePreview={openPreviewModal}
-              handleFileAttachments={handleFileAttachments}
-              chatId={currentChatId}
-              assistantId={assistantId}
-              className="p-2 sm:p-4"
-              isLoading={chatLoading}
-              showControls
-              onRegenerate={onRegenerate}
-              showFileTypes={true}
-              initialFiles={
-                editState.mode === "edit" ? editState.initialFiles : []
-              }
-              mode={editState.mode}
-              editMessageId={
-                editState.mode === "edit" ? editState.messageId : undefined
-              }
-              editInitialContent={
-                editState.mode === "edit" ? editState.initialContent : undefined
-              }
-              initialModel={initialModelOverride ?? currentChatLastModel}
-              controlledAvailableModels={availableModels}
-              controlledSelectedModel={selectedModel}
-              onControlledSelectedModelChange={setSelectedModel}
-              controlledIsModelSelectionReady={isSelectionReady}
-              initialSelectedFacetIds={effectiveInitialSelectedFacetIds}
-              enforceSelectedFacetIds={assistantFacetSettingsEnforced}
-              onFacetSelectionChange={setActiveSelectedFacetIds}
-              uploadFiles={uploadFiles}
-              uploadError={uploadError}
-            />
+                {chatInputElement}
+              </>
+            )}
           </div>
         </ChatErrorBoundary>
 

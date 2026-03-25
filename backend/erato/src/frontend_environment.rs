@@ -20,6 +20,7 @@ const FRONTEND_ENV_KEY_API_ROOT_URL: &str = "API_ROOT_URL";
 const FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME: &str = "THEME_CUSTOMER_NAME";
 const FRONTEND_ENV_KEY_DISABLE_UPLOAD: &str = "DISABLE_UPLOAD";
 const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_AUTOFOCUS";
+const FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT: &str = "CHAT_INPUT_EMPTY_STATE_LAYOUT";
 const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
 const FRONTEND_ENV_KEY_ASSISTANTS_ENABLED: &str = "ASSISTANTS_ENABLED";
 const FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS: &str = "ASSISTANTS_SHOW_RECENT_ITEMS";
@@ -77,6 +78,10 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS.to_string(),
         Value::Bool(config.frontend.disable_chat_input_autofocus),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT.to_string(),
+        Value::String(config.frontend.chat_input_empty_state_layout.clone()),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_DISABLE_LOGOUT.to_string(),
