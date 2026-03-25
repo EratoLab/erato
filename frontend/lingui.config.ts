@@ -1,5 +1,7 @@
 import { defineConfig } from "@lingui/cli";
 import { formatter as poFormatter } from "@lingui/format-po";
+import fs from "node:fs";
+import path from "node:path";
 
 // ============================================================================
 // SECTIONED PO FORMATTER
@@ -227,6 +229,60 @@ function sectionedPoFormatter(options?: PoFormatterOptions): CatalogFormatter {
   };
 }
 
+const ROOT_DIR = process.cwd();
+const CUSTOMER_COMPONENTS_GLOB = "<rootDir>/src/customer/components/**";
+const COMMON_EXCLUDES = [
+  "**/node_modules/**",
+  "**/out/**",
+  "**/.next/**",
+  "**/test/**",
+  "**/*.example.*",
+];
+
+function resolveExplicitCustomerThemeName(): string | null {
+  const themeName =
+    process.env.LINGUI_CUSTOMER_THEME ??
+    process.env.VITE_CUSTOMER_NAME ??
+    process.env.THEME_CUSTOMER_NAME ??
+    null;
+
+  if (!themeName || themeName.trim() === "") {
+    return null;
+  }
+
+  return themeName.trim();
+}
+
+function listThemeNames(rootDir: string): string[] {
+  const customThemeDir = path.join(rootDir, "public", "custom-theme");
+  if (!fs.existsSync(customThemeDir)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(customThemeDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function buildThemeCatalogs(rootDir: string) {
+  const explicitCustomerTheme = resolveExplicitCustomerThemeName();
+
+  return listThemeNames(rootDir).map((themeName) => {
+    const include = [`<rootDir>/public/custom-theme/${themeName}/`];
+    if (!explicitCustomerTheme || themeName === explicitCustomerTheme) {
+      include.push("<rootDir>/src/customer/components/");
+    }
+
+    return {
+      path: `<rootDir>/public/custom-theme/${themeName}/locales/{locale}/messages`,
+      include,
+      exclude: COMMON_EXCLUDES,
+    };
+  });
+}
+
 // ============================================================================
 // LINGUI CONFIGURATION
 // ============================================================================
@@ -238,25 +294,9 @@ export default defineConfig({
     {
       path: "<rootDir>/src/locales/{locale}/messages",
       include: ["src"],
-      exclude: [
-        "**/node_modules/**",
-        "**/out/**",
-        "**/.next/**",
-        "**/test/**",
-        "**/*.example.*",
-      ],
+      exclude: [...COMMON_EXCLUDES, CUSTOMER_COMPONENTS_GLOB],
     },
-    {
-      path: "<rootDir>/public/custom-theme/{name}/locales/{locale}/messages",
-      include: ["<rootDir>/public/custom-theme/{name}/"],
-      exclude: [
-        "**/node_modules/**",
-        "**/out/**",
-        "**/.next/**",
-        "**/test/**",
-        "**/*.example.*",
-      ],
-    },
+    ...buildThemeCatalogs(ROOT_DIR),
   ],
   compileNamespace: "json", // Generate JSON files, as those can be more easily loaded dynamically for the custom-theme
   // Use sectioned PO format that groups explicit IDs and unstable IDs separately
