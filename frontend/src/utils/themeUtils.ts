@@ -160,9 +160,6 @@ const withLegacyColorCompatibility = (
     if (!colorsOverride.shell?.page) {
       nextTheme.colors.shell.page = theme.colors.background.secondary;
     }
-    if (!colorsOverride.shell?.chatHeader) {
-      nextTheme.colors.shell.chatHeader = theme.colors.background.secondary;
-    }
     if (!colorsOverride.shell?.chatBody) {
       nextTheme.colors.shell.chatBody = theme.colors.background.secondary;
     }
@@ -201,6 +198,9 @@ const withLegacyColorCompatibility = (
   if (legacyMessageHover && !colorsOverride.message?.hover) {
     nextTheme.colors.message.hover = legacyMessageHover;
   }
+
+  // Ensure chat header always matches chat body background
+  nextTheme.colors.shell.chatHeader = nextTheme.colors.shell.chatBody;
 
   if (colorsOverride.border?.default) {
     if (!colorsOverride.border.primary) {

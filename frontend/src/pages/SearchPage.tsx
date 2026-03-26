@@ -131,7 +131,7 @@ export default function SearchPage() {
   const isShowingRecent = !searchQuery.trim();
 
   return (
-    <div className="flex h-full flex-col bg-theme-bg-secondary">
+    <div className="flex h-full flex-col bg-theme-bg-primary">
       {/* Search Header */}
       <PageHeader
         title={t`Search Your Chats`}
