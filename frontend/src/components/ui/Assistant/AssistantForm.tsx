@@ -53,6 +53,21 @@ function mergeUniqueFilesById(
   return [...existingFiles, ...uniqueNewFiles];
 }
 
+function buildFormData(
+  initialData?: Partial<AssistantFormData>,
+): AssistantFormData {
+  return {
+    name: initialData?.name ?? "",
+    description: initialData?.description ?? "",
+    prompt: initialData?.prompt ?? "",
+    defaultModel: initialData?.defaultModel ?? null,
+    facetIds: initialData?.facetIds ?? [],
+    enforceFacetSettings: initialData?.enforceFacetSettings ?? false,
+    files: initialData?.files ?? [],
+    mcpServerIds: initialData?.mcpServerIds ?? [],
+  };
+}
+
 export interface AssistantFormData {
   name: string;
   description: string;
@@ -144,16 +159,11 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   disableLiveTokenUsageEstimation = false,
   className,
 }) => {
-  const [formData, setFormData] = useState<AssistantFormData>({
-    name: initialData?.name ?? "",
-    description: initialData?.description ?? "",
-    prompt: initialData?.prompt ?? "",
-    defaultModel: initialData?.defaultModel ?? null,
-    facetIds: initialData?.facetIds ?? [],
-    enforceFacetSettings: initialData?.enforceFacetSettings ?? false,
-    files: initialData?.files ?? [],
-    mcpServerIds: initialData?.mcpServerIds ?? [],
-  });
+  const initialFormData = useMemo(
+    () => buildFormData(initialData),
+    [initialData],
+  );
+  const [formData, setFormData] = useState<AssistantFormData>(initialFormData);
 
   const [errors, setErrors] = useState<
     Partial<Record<keyof AssistantFormData, string>>
@@ -191,6 +201,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const globalFacetSettings = facetsData?.global_facet_settings;
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTokenEstimateRequestKeyRef = useRef<string | null>(null);
+  const lastAppliedInitialFormDataRef = useRef(initialFormData);
   /* eslint-disable lingui/no-unlocalized-strings */
   const insertTextCommand = "insertText";
   const inputEventName = "input";
@@ -443,7 +454,8 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const effectiveEstimation = tokenUsageEstimationOverride ?? lastEstimation;
   const showLiveEstimationSpinner =
     tokenUsageEstimationOverride == null && isEstimatingTokenUsage;
-  const shouldShowEstimationPlaceholder = showLiveEstimationSpinner;
+  const shouldShowEstimationPlaceholder =
+    showLiveEstimationSpinner && effectiveEstimation == null;
   const rawUsedContextPercentage =
     effectiveEstimation?.tokenUsage != null
       ? Math.max(
@@ -489,6 +501,19 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     usedContextPercentage >= contextWarningThreshold * 100;
 
   useEffect(() => {
+    setFormData((previousFormData) => {
+      const previousInitialFormData = lastAppliedInitialFormDataRef.current;
+      const shouldHydrateFromProps =
+        JSON.stringify(previousFormData) ===
+        JSON.stringify(previousInitialFormData);
+
+      lastAppliedInitialFormDataRef.current = initialFormData;
+
+      return shouldHydrateFromProps ? initialFormData : previousFormData;
+    });
+  }, [initialFormData]);
+
+  useEffect(() => {
     if (
       isSubmitting ||
       disableLiveTokenUsageEstimation ||
@@ -508,7 +533,10 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     }
 
     const requestBody: Record<string, unknown> = {
-      new_chat: assistantId ? { assistant_id: assistantId } : {},
+      // Estimate from the draft form state. In edit mode, sending assistant_id
+      // would re-include persisted assistant files in addition to the explicit
+      // file list below, which overcounts unchanged attachments.
+      new_chat: {},
       system_prompt: debouncedPrompt,
       selected_facet_ids: formData.facetIds,
     };
