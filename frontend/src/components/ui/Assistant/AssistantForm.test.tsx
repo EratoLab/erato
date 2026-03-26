@@ -1,19 +1,32 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import { AssistantForm } from "./AssistantForm";
 
 import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
+
+const pdfFileCapability = {
+  id: "pdf",
+  extensions: ["pdf"],
+  mime_types: ["application/pdf"],
+  operations: ["extract_text"],
+};
+
+const estimateTokenUsageFromPartsMock = vi.fn();
+const clearLastEstimationMock = vi.fn();
+let mockedLastEstimation: TokenUsageEstimationResult | null = null;
+let mockedIsLoading = false;
 
 vi.mock("@/hooks/chat/useTokenUsageEstimation", () => ({
   useTokenUsageEstimation: () => ({
-    estimateTokenUsageFromParts: vi.fn(),
-    lastEstimation: null,
-    clearLastEstimation: vi.fn(),
-    isLoading: false,
+    estimateTokenUsageFromParts: estimateTokenUsageFromPartsMock,
+    lastEstimation: mockedLastEstimation,
+    clearLastEstimation: clearLastEstimationMock,
+    isLoading: mockedIsLoading,
   }),
 }));
 
@@ -65,7 +78,7 @@ function renderForm({
   contextWarningThreshold = 0.5,
   contextFileContributorThreshold = 0.05,
 }: {
-  tokenUsageEstimationOverride: TokenUsageEstimationResult;
+  tokenUsageEstimationOverride?: TokenUsageEstimationResult | null;
   contextWarningThreshold?: number;
   contextFileContributorThreshold?: number;
 }) {
@@ -82,13 +95,67 @@ function renderForm({
     >
       <AssistantForm
         onSubmit={vi.fn()}
-        tokenUsageEstimationOverride={tokenUsageEstimationOverride}
+        tokenUsageEstimationOverride={tokenUsageEstimationOverride ?? null}
       />
     </StaticFeatureConfigProvider>,
   );
 }
 
 describe("AssistantForm", () => {
+  beforeEach(() => {
+    estimateTokenUsageFromPartsMock.mockReset();
+    clearLastEstimationMock.mockReset();
+    mockedLastEstimation = null;
+    mockedIsLoading = false;
+  });
+
+  it("estimates edit-mode context from the draft files without assistant_id", async () => {
+    const existingFile = {
+      id: "file-1",
+      filename: "long-file-100k-words.pdf",
+      download_url: "https://example.com/file-1",
+      file_capability: pdfFileCapability,
+    } as FileUploadItem;
+
+    render(
+      <StaticFeatureConfigProvider
+        config={{
+          assistants: {
+            enabled: false,
+            showRecentItems: false,
+            contextWarningThreshold: 0.5,
+            contextFileContributorThreshold: 0.05,
+          },
+        }}
+      >
+        <AssistantForm
+          mode="edit"
+          assistantId="assistant-1"
+          initialData={{
+            name: "Existing assistant",
+            prompt:
+              "You are a helpful assistant that should use uploaded files.",
+            files: [existingFile],
+          }}
+          onSubmit={vi.fn()}
+        />
+      </StaticFeatureConfigProvider>,
+    );
+
+    await waitFor(() => {
+      expect(estimateTokenUsageFromPartsMock).toHaveBeenCalled();
+    });
+
+    expect(estimateTokenUsageFromPartsMock).toHaveBeenLastCalledWith({
+      new_chat: {},
+      system_prompt:
+        "You are a helpful assistant that should use uploaded files.",
+      new_message_content: "Existing assistant",
+      file: { input_files_ids: ["file-1"] },
+      selected_facet_ids: [],
+    });
+  });
+
   it("hides context warning details below the configured threshold", () => {
     renderForm({
       contextWarningThreshold: 0.5,
@@ -158,5 +225,126 @@ describe("AssistantForm", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("tiny-context.md: 4.0%")).toBeInTheDocument();
     expect(screen.getByText("bigger-context.md: 12.0%")).toBeInTheDocument();
+  });
+
+  it("clears previous estimates when the form becomes empty", async () => {
+    render(
+      <StaticFeatureConfigProvider
+        config={{
+          assistants: {
+            enabled: false,
+            showRecentItems: false,
+            contextWarningThreshold: 0.5,
+            contextFileContributorThreshold: 0.05,
+          },
+        }}
+      >
+        <AssistantForm onSubmit={vi.fn()} />
+      </StaticFeatureConfigProvider>,
+    );
+
+    await waitFor(() => {
+      expect(clearLastEstimationMock).toHaveBeenCalled();
+    });
+  });
+
+  it("rehydrates edit form state when initial data arrives after mount", async () => {
+    const { rerender } = render(
+      <StaticFeatureConfigProvider
+        config={{
+          assistants: {
+            enabled: false,
+            showRecentItems: false,
+            contextWarningThreshold: 0.5,
+            contextFileContributorThreshold: 0.05,
+          },
+        }}
+      >
+        <AssistantForm
+          mode="edit"
+          assistantId="assistant-1"
+          onSubmit={vi.fn()}
+        />
+      </StaticFeatureConfigProvider>,
+    );
+
+    const loadedFile = {
+      id: "file-2",
+      filename: "loaded.pdf",
+      download_url: "https://example.com/file-2",
+      file_capability: pdfFileCapability,
+    } as FileUploadItem;
+
+    rerender(
+      <StaticFeatureConfigProvider
+        config={{
+          assistants: {
+            enabled: false,
+            showRecentItems: false,
+            contextWarningThreshold: 0.5,
+            contextFileContributorThreshold: 0.05,
+          },
+        }}
+      >
+        <AssistantForm
+          mode="edit"
+          assistantId="assistant-1"
+          initialData={{
+            name: "Loaded assistant",
+            prompt: "You are a helpful assistant loaded after mount.",
+            files: [loadedFile],
+          }}
+          onSubmit={vi.fn()}
+        />
+      </StaticFeatureConfigProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Loaded assistant")).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(estimateTokenUsageFromPartsMock).toHaveBeenLastCalledWith({
+        new_chat: {},
+        system_prompt: "You are a helpful assistant loaded after mount.",
+        new_message_content: "Loaded assistant",
+        file: { input_files_ids: ["file-2"] },
+        selected_facet_ids: [],
+      });
+    });
+  });
+
+  it("shows the latest estimate instead of the loading placeholder when a refresh is in progress", () => {
+    mockedIsLoading = true;
+    mockedLastEstimation = {
+      tokenUsage: {
+        stats: {
+          total_tokens: 400,
+          user_message_tokens: 0,
+          history_tokens: 400,
+          file_tokens: 0,
+          max_tokens: 1000,
+          remaining_tokens: 600,
+          chat_provider_id: "mock-provider",
+        },
+        file_details: [],
+      },
+      isLoading: false,
+      error: null,
+      isApproachingLimit: false,
+      isCriticallyClose: false,
+      usagePercentage: 0.4,
+      exceedsLimit: false,
+    } as TokenUsageEstimationResult;
+
+    renderForm({
+      contextWarningThreshold: 0,
+      tokenUsageEstimationOverride: null,
+    });
+
+    expect(
+      screen.queryByText("Estimating token usage..."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Used context: 40%")).toBeInTheDocument();
   });
 });
