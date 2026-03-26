@@ -63,6 +63,7 @@ export interface ChatMessageProps {
   controlsContext: MessageControlsContext;
   onMessageAction: (action: MessageAction) => Promise<boolean>;
   userProfile?: UserProfile;
+  userDisplayNameOverride?: string;
   onFilePreview?: (file: FileUploadItem) => void;
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
   /** Map of all files from the entire conversation keyed by file ID */
@@ -82,6 +83,7 @@ export const ChatMessage = memo(function ChatMessage({
   onFilePreview,
   onViewFeedback,
   allFilesById = {},
+  userDisplayNameOverride,
 }: ChatMessageProps) {
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
@@ -96,7 +98,8 @@ export const ChatMessage = memo(function ChatMessage({
 
   // Get user display name - use profile name if available, otherwise use form of address
   const userDisplayName = isUser
-    ? (userProfile?.name ??
+    ? (userDisplayNameOverride ??
+      userProfile?.name ??
       t({ id: "branding.user_form_of_address", message: "You" }))
     : t({ id: "branding.assistant_name", message: "Assistant" });
 
@@ -159,7 +162,8 @@ export const ChatMessage = memo(function ChatMessage({
           <div className="flex items-start justify-between">
             <div className="mb-1 text-sm font-semibold text-theme-fg-primary">
               {isUser ? (
-                (userProfile?.name ?? (
+                (userDisplayNameOverride ??
+                userProfile?.name ?? (
                   <Trans id="branding.user_form_of_address">You</Trans>
                 ))
               ) : (

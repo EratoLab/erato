@@ -1,6 +1,8 @@
 # Basic test scenario - default configuration
 # This is the default scenario for k3d test environments
 
+[chat_sharing]
+enabled = true
+
 [frontend.additional_environment]
 K3D_TEST_SCENARIO = "basic"
-

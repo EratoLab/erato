@@ -24,6 +24,7 @@ interface StandardMessageListProps {
   showTimestamps?: boolean;
   showAvatars?: boolean;
   userProfile?: UserProfile;
+  userDisplayNameOverride?: string;
   controls?: MessageControlsComponent;
   messageRenderer?: ComponentType<ChatMessageProps>;
   controlsContext: MessageControlsContext;
@@ -42,6 +43,7 @@ export const StandardMessageList: React.FC<StandardMessageListProps> = ({
   showTimestamps,
   showAvatars,
   userProfile,
+  userDisplayNameOverride,
   controls,
   messageRenderer,
   controlsContext,
@@ -66,6 +68,7 @@ export const StandardMessageList: React.FC<StandardMessageListProps> = ({
             showTimestamp={showTimestamps}
             showAvatar={showAvatars}
             userProfile={userProfile}
+            userDisplayNameOverride={userDisplayNameOverride}
             controls={controls}
             messageRenderer={messageRenderer}
             controlsContext={controlsContext}

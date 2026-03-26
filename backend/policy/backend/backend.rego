@@ -48,6 +48,15 @@ package backend
 #     "role": "viewer"
 #   }
 # ]
+#
+# share_links := [
+#   {
+#     "id": "some-link-id",
+#     "resource_type": "chat",
+#     "resource_id": "some-chat-id",
+#     "enabled": true
+#   }
+# ]
 
 # `input` structure
 # {
@@ -90,6 +99,17 @@ action_submit_feedback := "submit_feedback"
 action_update := "update"
 action_delete := "delete"
 action_share := "share"
+
+chat_sharing_enabled if {
+	data.config.chat_sharing.enabled
+}
+
+has_enabled_share_link(resource_type, resource_id) if {
+	some link in data.share_links
+	link.resource_type == resource_type
+	link.resource_id == resource_id
+	link.enabled
+}
 
 # Default deny all access
 default allow = false
@@ -138,6 +158,12 @@ can_read_assistant(assistant_id) if {
 	grant.role == "viewer"
 }
 
+can_read_shared_chat(chat_id) if {
+	chat_sharing_enabled
+	has_enabled_share_link(resource_kind_chat, chat_id)
+	data.resource_attributes[resource_kind_chat][chat_id].archived_at == null
+}
+
 can_read_assistant(assistant_id) if {
 	some grant in data.share_grants
 	grant.resource_type == "assistant"
@@ -161,6 +187,24 @@ allow if {
 
 	# Check ownership
 	data.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
+}
+
+# A user can share chats they own.
+allow if {
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+	input.resource_kind == resource_kind_chat
+	input.action == action_share
+	data.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
+}
+
+# A logged-in user can read a chat when chat sharing is enabled and the chat has an active share link.
+allow if {
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+	input.resource_kind == resource_kind_chat
+	input.action == action_read
+	can_read_shared_chat(input.resource_id)
 }
 
 # A user can submit messages to chats they own.
@@ -240,6 +284,17 @@ allow if {
 	# Any linked chat owned by the subject grants access.
 	some chat_id in data.resource_attributes[resource_kind_file_upload][input.resource_id].linked_chat_ids
 	data.resource_attributes[resource_kind_chat][chat_id].owner_id == input.subject_id
+}
+
+# A user can read file uploads if they can access one of the linked shared chats.
+allow if {
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+	input.resource_kind == resource_kind_file_upload
+	input.action == action_read
+
+	some chat_id in data.resource_attributes[resource_kind_file_upload][input.resource_id].linked_chat_ids
+	can_read_shared_chat(chat_id)
 }
 
 # A user can read file uploads if they can access one of the linked assistants.

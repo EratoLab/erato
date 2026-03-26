@@ -10,7 +10,12 @@ import { createLogger } from "@/utils/debugLogger";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
 import { DropdownMenu } from "../Controls/DropdownMenu";
-import { LogOutIcon, ResolvedIcon, MultiplePagesIcon } from "../icons";
+import {
+  LogOutIcon,
+  ResolvedIcon,
+  MultiplePagesIcon,
+  ShareIcon,
+} from "../icons";
 
 import type { ChatSession } from "@/types/chat";
 
@@ -55,6 +60,7 @@ export interface ChatHistoryListProps {
   onSessionSelect: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void;
   onSessionEditTitle?: (sessionId: string) => void;
+  onSessionShare?: (sessionId: string) => void;
   onShowDetails?: (sessionId: string) => void;
   className?: string;
   /**
@@ -81,6 +87,7 @@ const ChatHistoryListItem = memo<{
   onSelect: () => void;
   onArchive?: () => void;
   onEditTitle?: () => void;
+  onShare?: () => void;
   canEdit?: boolean;
   onShowDetails?: () => void;
   showTimestamps?: boolean;
@@ -92,6 +99,7 @@ const ChatHistoryListItem = memo<{
     onSelect,
     onArchive,
     onEditTitle,
+    onShare,
     canEdit = true,
     onShowDetails,
     showTimestamps = true,
@@ -145,6 +153,19 @@ const ChatHistoryListItem = memo<{
             >
               <DropdownMenu
                 items={[
+                  ...(onShare
+                    ? [
+                        {
+                          label: t({
+                            id: "chat.share.button",
+                            message: "Share",
+                          }),
+                          icon: <ShareIcon className="size-4" />,
+                          onClick: onShare,
+                          disabled: !canEdit,
+                        },
+                      ]
+                    : []),
                   ...(onEditTitle
                     ? [
                         {
@@ -217,6 +238,7 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
     onSessionSelect,
     onSessionArchive,
     onSessionEditTitle,
+    onSessionShare,
     onShowDetails,
     className,
     layout = "default",
@@ -265,6 +287,9 @@ export const ChatHistoryList = memo<ChatHistoryListProps>(
               onSessionEditTitle
                 ? () => onSessionEditTitle(session.id)
                 : undefined
+            }
+            onShare={
+              onSessionShare ? () => onSessionShare(session.id) : undefined
             }
             canEdit={session.canEdit}
             onShowDetails={

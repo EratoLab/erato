@@ -65,6 +65,7 @@ describe("FeatureConfigProvider", () => {
       sidebarLogoPath: null,
       sidebarLogoDarkPath: null,
       sidebarChatHistoryShowMetadata: true,
+      chatSharingEnabled: false,
     });
   });
 
@@ -102,6 +103,9 @@ describe("FeatureConfigProvider", () => {
         chatInput: {
           autofocus: true,
           emptyStateLayout: "bottom",
+        },
+        chatSharing: {
+          enabled: false,
         },
         auth: {
           showLogout: true,

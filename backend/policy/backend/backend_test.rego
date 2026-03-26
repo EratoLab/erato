@@ -25,6 +25,7 @@ resource_attributes := {
 		chat_1_id: {
 			"id": chat_1_id,
 			"owner_id": user_1_id,
+			"archived_at": null,
 		},
 	},
 	"assistant": {
@@ -126,6 +127,27 @@ share_grants := [
 	},
 ]
 
+share_links := [
+	{
+		"id": "share-link-1",
+		"resource_type": "chat",
+		"resource_id": chat_1_id,
+		"enabled": true,
+	},
+]
+
+chat_sharing_enabled_config := {
+	"chat_sharing": {
+		"enabled": true,
+	},
+}
+
+chat_sharing_disabled_config := {
+	"chat_sharing": {
+		"enabled": false,
+	},
+}
+
 # Organization group IDs for testing
 org_group_1_id := "org-group-1"
 org_group_2_id := "org-group-2"
@@ -163,6 +185,71 @@ test_user_cannot_read_other_users_chat if {
 		"resource_id": chat_1_id,
 		"action": "read",
 	} with data.resource_attributes as resource_attributes
+		with data.share_links as []
+		with data.config as chat_sharing_enabled_config
+}
+
+test_user_can_read_shared_chat_when_feature_enabled if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as share_links
+		with data.config as chat_sharing_enabled_config
+}
+
+test_user_cannot_read_shared_chat_when_feature_disabled if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as share_links
+		with data.config as chat_sharing_disabled_config
+}
+
+test_user_cannot_read_shared_chat_when_share_link_disabled if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as [{
+			"id": "share-link-1",
+			"resource_type": "chat",
+			"resource_id": chat_1_id,
+			"enabled": false,
+		}]
+		with data.config as chat_sharing_enabled_config
+}
+
+test_owner_can_share_own_chat if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "share",
+	} with data.resource_attributes as resource_attributes
+}
+
+test_user_can_read_linked_file_via_shared_chat if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_2_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as share_links
+		with data.config as chat_sharing_enabled_config
 }
 
 # A logged-in user can create a chat.

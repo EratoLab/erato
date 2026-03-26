@@ -1308,6 +1308,12 @@ export type RegenerateMessageStreamingResponseMessage =
       message_type: "error";
     });
 
+export type ResolveShareLinkResponse = {
+  owner_display_name?: null | undefined;
+  share_link: ShareLink;
+  title_resolved?: null | undefined;
+};
+
 export type ResumeStreamRequest = {
   /**
    * The ID of the chat to resume streaming for.
@@ -1316,6 +1322,16 @@ export type ResumeStreamRequest = {
    * @example 00000000-0000-0000-0000-000000000000
    */
   chat_id: string;
+};
+
+export type SetShareLinkRequest = {
+  enabled: boolean;
+  resource_id: string;
+  resource_type: string;
+};
+
+export type SetShareLinkResponse = {
+  share_link: ShareLink;
 };
 
 /**
@@ -1386,6 +1402,30 @@ export type ShareGrantInput = {
    * The type of subject to grant access to (e.g., "user")
    */
   subject_type: string;
+};
+
+export type ShareLink = {
+  /**
+   * @format date-time
+   */
+  created_at: string;
+  enabled: boolean;
+  id: string;
+  resource_id: string;
+  resource_type: string;
+  /**
+   * @format date-time
+   */
+  updated_at: string;
+};
+
+export type ShareLinkForResourceResponse = {
+  share_link?: null | ShareLink;
+};
+
+export type ShareLinkQuery = {
+  resource_id: string;
+  resource_type: string;
 };
 
 /**

@@ -12,8 +12,162 @@ use sqlx::postgres::Postgres;
 use crate::test_app_state;
 use crate::test_utils::{
     JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
-    has_event_type, hermetic_app_config, parse_sse_events, setup_mock_llm_server,
+    extract_chat_id, has_event_type, hermetic_app_config, parse_sse_events, setup_mock_llm_server,
 };
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_chat_share_link_enable_disable_flow(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.chat_sharing.enabled = true;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let owner_subject = "chat-share-owner";
+    let recipient_subject = "chat-share-recipient";
+
+    let _owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        owner_subject,
+        None,
+    )
+    .await
+    .expect("Failed to create owner user");
+
+    let _recipient = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        recipient_subject,
+        None,
+    )
+    .await
+    .expect("Failed to create recipient user");
+
+    let owner_token = JwtTokenBuilder::new()
+        .subject(owner_subject)
+        .email("owner@example.com")
+        .name("owner")
+        .build();
+    let recipient_token = JwtTokenBuilder::new()
+        .subject(recipient_subject)
+        .email("recipient@example.com")
+        .name("recipient")
+        .build();
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let submit_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(&owner_token)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "previous_message_id": null,
+            "user_message": "Please respond with a short hello",
+        }))
+        .await;
+    submit_response.assert_status_ok();
+
+    let events = parse_sse_events(&submit_response);
+    let chat_id = extract_chat_id(&events).expect("Expected chat_created event");
+
+    let before_share_response = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(&recipient_token)
+        .await;
+    assert_eq!(
+        before_share_response.status_code(),
+        http::StatusCode::INTERNAL_SERVER_ERROR
+    );
+
+    let get_link_before_enable = server
+        .get(&format!(
+            "/api/v1beta/share-links?resource_type=chat&resource_id={chat_id}"
+        ))
+        .with_bearer_token(&owner_token)
+        .await;
+    get_link_before_enable.assert_status_ok();
+    let before_enable_json: Value = get_link_before_enable.json();
+    assert!(before_enable_json["share_link"].is_null());
+
+    let enable_response = server
+        .put("/api/v1beta/share-links")
+        .with_bearer_token(&owner_token)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "resource_type": "chat",
+            "resource_id": chat_id,
+            "enabled": true,
+        }))
+        .await;
+    enable_response.assert_status_ok();
+    let enabled_json: Value = enable_response.json();
+    let share_link_id = enabled_json["share_link"]["id"]
+        .as_str()
+        .expect("Missing share link id")
+        .to_string();
+    assert_eq!(enabled_json["share_link"]["enabled"], true);
+
+    let resolve_response = server
+        .get(&format!("/api/v1beta/share-links/{share_link_id}"))
+        .with_bearer_token(&recipient_token)
+        .await;
+    resolve_response.assert_status_ok();
+    let resolve_json: Value = resolve_response.json();
+    assert_eq!(resolve_json["share_link"]["resource_type"], "chat");
+    assert_eq!(resolve_json["share_link"]["resource_id"], chat_id);
+
+    let shared_messages_response = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(&recipient_token)
+        .await;
+    shared_messages_response.assert_status_ok();
+    let shared_messages_json: Value = shared_messages_response.json();
+    assert!(
+        shared_messages_json["messages"]
+            .as_array()
+            .expect("messages should be array")
+            .len()
+            >= 2
+    );
+
+    let disable_response = server
+        .put("/api/v1beta/share-links")
+        .with_bearer_token(&owner_token)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({
+            "resource_type": "chat",
+            "resource_id": chat_id,
+            "enabled": false,
+        }))
+        .await;
+    disable_response.assert_status_ok();
+    let disabled_json: Value = disable_response.json();
+    assert_eq!(disabled_json["share_link"]["id"], share_link_id);
+    assert_eq!(disabled_json["share_link"]["enabled"], false);
+
+    let get_link_after_disable = server
+        .get(&format!(
+            "/api/v1beta/share-links?resource_type=chat&resource_id={chat_id}"
+        ))
+        .with_bearer_token(&owner_token)
+        .await;
+    get_link_after_disable.assert_status_ok();
+    let after_disable_json: Value = get_link_after_disable.json();
+    assert_eq!(after_disable_json["share_link"]["id"], share_link_id);
+    assert_eq!(after_disable_json["share_link"]["enabled"], false);
+
+    let resolve_after_disable = server
+        .get(&format!("/api/v1beta/share-links/{share_link_id}"))
+        .with_bearer_token(&recipient_token)
+        .await;
+    assert_eq!(
+        resolve_after_disable.status_code(),
+        http::StatusCode::NOT_FOUND
+    );
+}
 
 /// Test the full sharing flow:
 /// 1. User A creates an assistant with files

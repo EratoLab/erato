@@ -161,6 +161,7 @@ msgstr "Asystent"
 #: src/pages/AssistantsListPage.tsx
 #: src/pages/HomePage.tsx
 #: src/pages/NewChatPage.tsx
+#: src/pages/SharedChatPage.tsx
 msgid "branding.page_title_suffix"
 msgstr ""
 
@@ -361,6 +362,77 @@ msgid "chat.newChat.title"
 msgstr "Nowy Czat"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+#: src/components/ui/Chat/ChatHistoryList.tsx
+msgid "chat.share.button"
+msgstr "Udostępnij"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/Chat.tsx
+msgid "chat.share.button.shared"
+msgstr "Udostępniono"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.dialog.title"
+msgstr "Udostępnij czat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.link.aria"
+msgstr "Link do udostępnionego czatu"
+
+#. js-lingui-explicit-id
+#: src/pages/SharedChatPage.tsx
+msgid "chat.share.loading"
+msgstr "Ładowanie udostępnionego czatu..."
+
+#. js-lingui-explicit-id
+#: src/pages/SharedChatPage.tsx
+msgid "chat.share.owner.unknown"
+msgstr "Nieznany użytkownik"
+
+#. js-lingui-explicit-id
+#: src/pages/SharedChatPage.tsx
+#~ msgid "chat.share.page.heading"
+#~ msgstr "Udostępniony czat - {title}"
+
+#. js-lingui-explicit-id
+#: src/pages/SharedChatPage.tsx
+msgid "chat.share.page.title"
+msgstr "Udostępniony czat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.toggle.aria"
+msgstr "Przełącz udostępnianie czatu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.toggle.description"
+msgstr "Każda osoba zalogowana w tej organizacji może go zobaczyć."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.toggle.label"
+msgstr "Włącz link udostępniania"
+
+#. js-lingui-explicit-id
+#: src/pages/SharedChatPage.tsx
+msgid "chat.share.unavailable"
+msgstr "Ten udostępniony czat jest niedostępny."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.warning.body"
+msgstr "Przed udostępnieniem linku poświęć chwilę na sprawdzenie historii czatu pod kątem poufnych informacji."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.warning.title"
+msgstr "Rozmowa może zawierać poufne informacje"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
 msgid "chat.warning.budget.limit_reached.header"
 msgstr "Osiągnięto limit budżetowy"
@@ -506,6 +578,11 @@ msgstr "Przejdź do folderu nadrzędnego"
 #: src/components/ui/CloudFilePicker/CloudNavigationBreadcrumb.tsx
 msgid "cloudNavigationBreadcrumb.selectDrive"
 msgstr "Wybierz dysk, aby przeglądać pliki"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "common.close"
+msgstr "Zamknij"
 
 #. js-lingui-explicit-id
 #: src/App.tsx
@@ -1729,6 +1806,14 @@ msgstr "Wyszukiwanie..."
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Send message"
 msgstr "Wyślij wiadomość"
+
+#: src/pages/SharedChatPage.tsx
+msgid "Shared Chat - {effectiveSharedChatTitle}"
+msgstr ""
+
+#: src/pages/SharedChatPage.tsx
+#~ msgid "Shared Chat - {sharedChatTitle}"
+#~ msgstr "Udostępniony czat - {sharedChatTitle}"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show"

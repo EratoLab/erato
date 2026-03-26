@@ -27,6 +27,7 @@ export interface MessageItemProps {
   showTimestamp?: boolean;
   showAvatar?: boolean;
   userProfile?: UserProfile;
+  userDisplayNameOverride?: string;
   controls?: MessageControlsComponent;
   messageRenderer?: ComponentType<ChatMessageProps>;
   controlsContext: MessageControlsContext;
@@ -48,6 +49,7 @@ export const MessageItem = memo<MessageItemProps>(
     showTimestamp,
     showAvatar,
     userProfile,
+    userDisplayNameOverride,
     controls: Controls,
     messageRenderer: Renderer = ChatMessage,
     controlsContext,
@@ -95,6 +97,7 @@ export const MessageItem = memo<MessageItemProps>(
           showAvatar={showAvatar}
           maxWidth={maxWidth}
           userProfile={userProfile}
+          userDisplayNameOverride={userDisplayNameOverride}
           controls={Controls}
           controlsContext={controlsContext}
           onMessageAction={onMessageAction}

@@ -32,6 +32,7 @@ const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED"
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_ENABLED: &str = "SHAREPOINT_ENABLED";
+const FRONTEND_ENV_KEY_CHAT_SHARING_ENABLED: &str = "CHAT_SHARING_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_ENABLED: &str = "MESSAGE_FEEDBACK_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_COMMENTS_ENABLED: &str =
     "MESSAGE_FEEDBACK_COMMENTS_ENABLED";
@@ -128,6 +129,10 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
                     .experimental_sharepoint
                     .file_upload_enabled,
         ),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_CHAT_SHARING_ENABLED.to_string(),
+        Value::Bool(config.chat_sharing.enabled),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_ENABLED.to_string(),
