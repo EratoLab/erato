@@ -355,16 +355,12 @@ export function UserPreferencesDialog({
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
             {saveError ? <Alert type="error">{saveError}</Alert> : null}
 
-            {personalizationEnabled ? (
+            {personalizationEnabled && activeTab === "personalization" ? (
               <section
                 id={panelIds.personalization}
                 role="tabpanel"
                 aria-labelledby={tabIds.personalization}
-                hidden={activeTab !== "personalization"}
-                className={clsx(
-                  "space-y-4",
-                  activeTab !== "personalization" && "hidden",
-                )}
+                className="space-y-4"
               >
                 <FormField
                   label={t({
@@ -451,143 +447,144 @@ export function UserPreferencesDialog({
               </section>
             ) : null}
 
-            <section
-              id={panelIds.appearance}
-              role="tabpanel"
-              aria-labelledby={tabIds.appearance}
-              hidden={activeTab !== "appearance"}
-              className={clsx(
-                "space-y-4",
-                activeTab !== "appearance" && "hidden",
-              )}
-            >
-              <div className="space-y-1">
-                <h2 className="text-sm font-medium text-theme-fg-primary">
-                  {t({
+            {activeTab === "appearance" ? (
+              <section
+                id={panelIds.appearance}
+                role="tabpanel"
+                aria-labelledby={tabIds.appearance}
+                className="space-y-4"
+              >
+                <div className="space-y-1">
+                  <h2 className="text-sm font-medium text-theme-fg-primary">
+                    {t({
+                      id: "preferences.dialog.appearance.theme.heading",
+                      message: "Color mode",
+                    })}
+                  </h2>
+                  <p className="text-sm text-theme-fg-secondary">
+                    {t({
+                      id: "preferences.dialog.appearance.theme.description",
+                      message: "Choose how Erato should look for your account.",
+                    })}
+                  </p>
+                </div>
+
+                <div
+                  role="radiogroup"
+                  aria-label={t({
                     id: "preferences.dialog.appearance.theme.heading",
                     message: "Color mode",
                   })}
-                </h2>
-                <p className="text-sm text-theme-fg-secondary">
-                  {t({
-                    id: "preferences.dialog.appearance.theme.description",
-                    message: "Choose how Erato should look for your account.",
-                  })}
-                </p>
-              </div>
-
-              <div
-                role="radiogroup"
-                aria-label={t({
-                  id: "preferences.dialog.appearance.theme.heading",
-                  message: "Color mode",
-                })}
-                className="grid gap-3"
-              >
-                {appearanceOptions.map((option) => {
-                  const isSelected = themeMode === option.value;
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={isSelected}
-                      className={clsx(
-                        "flex items-start gap-3 rounded-lg border p-4 text-left",
-                        "theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
-                        isSelected
-                          ? "border-theme-border-focus bg-theme-bg-hover text-theme-fg-primary"
-                          : "border-theme-border bg-theme-bg-primary text-theme-fg-secondary hover:bg-theme-bg-hover",
-                      )}
-                      onClick={() => setThemeMode(option.value)}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={clsx(
-                          "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border",
-                          isSelected
-                            ? "border-theme-border-focus bg-theme-bg-secondary text-theme-fg-primary"
-                            : "border-theme-border bg-theme-bg-secondary text-theme-fg-secondary",
-                        )}
-                      >
-                        {option.icon}
-                      </span>
-
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center justify-between gap-3">
-                          <span className="font-medium">{option.label}</span>
-                          {option.value === "system" && isSelected ? (
-                            <span className="text-xs text-theme-fg-muted">
-                              {effectiveTheme === "dark"
-                                ? t({
-                                    id: "preferences.dialog.appearance.theme.current.dark",
-                                    message: "Currently dark",
-                                  })
-                                : t({
-                                    id: "preferences.dialog.appearance.theme.current.light",
-                                    message: "Currently light",
-                                  })}
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="mt-1 block text-sm text-theme-fg-muted">
-                          {option.description}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section
-              id={panelIds.data}
-              role="tabpanel"
-              aria-labelledby={tabIds.data}
-              hidden={activeTab !== "data"}
-              className={clsx("space-y-4", activeTab !== "data" && "hidden")}
-            >
-              {archiveSuccess ? (
-                <Alert type="success">{archiveSuccess}</Alert>
-              ) : null}
-              {archiveError ? <Alert type="error">{archiveError}</Alert> : null}
-              <Alert type="info">
-                {t({
-                  id: "preferences.dialog.dataTab.archiveAll.help",
-                  message: "Archive all chats in your account.",
-                })}
-              </Alert>
-              <div className="flex justify-end">
-                <Button
-                  variant="danger"
-                  disabled={isArchiving}
-                  onClick={() => {
-                    void handleArchiveAllChats();
-                  }}
-                  confirmAction={true}
-                  confirmTitle={t({
-                    id: "preferences.dialog.dataTab.archiveAll.confirmTitle",
-                    message: "Archive all chats?",
-                  })}
-                  confirmMessage={t({
-                    id: "preferences.dialog.dataTab.archiveAll.confirmMessage",
-                    message:
-                      "This will archive every non-archived chat in your account.",
-                  })}
+                  className="grid gap-3"
                 >
-                  {isArchiving
-                    ? t({
-                        id: "preferences.dialog.dataTab.archiveAll.archiving",
-                        message: "Archiving...",
-                      })
-                    : t({
-                        id: "preferences.dialog.dataTab.archiveAll.button",
-                        message: "Archive all chats",
-                      })}
-                </Button>
-              </div>
-            </section>
+                  {appearanceOptions.map((option) => {
+                    const isSelected = themeMode === option.value;
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        className={clsx(
+                          "flex items-start gap-3 rounded-lg border p-4 text-left",
+                          "theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
+                          isSelected
+                            ? "border-theme-border-focus bg-theme-bg-hover text-theme-fg-primary"
+                            : "border-theme-border bg-theme-bg-primary text-theme-fg-secondary hover:bg-theme-bg-hover",
+                        )}
+                        onClick={() => setThemeMode(option.value)}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={clsx(
+                            "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border",
+                            isSelected
+                              ? "border-theme-border-focus bg-theme-bg-secondary text-theme-fg-primary"
+                              : "border-theme-border bg-theme-bg-secondary text-theme-fg-secondary",
+                          )}
+                        >
+                          {option.icon}
+                        </span>
+
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center justify-between gap-3">
+                            <span className="font-medium">{option.label}</span>
+                            {option.value === "system" && isSelected ? (
+                              <span className="text-xs text-theme-fg-muted">
+                                {effectiveTheme === "dark"
+                                  ? t({
+                                      id: "preferences.dialog.appearance.theme.current.dark",
+                                      message: "Currently dark",
+                                    })
+                                  : t({
+                                      id: "preferences.dialog.appearance.theme.current.light",
+                                      message: "Currently light",
+                                    })}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="mt-1 block text-sm text-theme-fg-muted">
+                            {option.description}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+
+            {activeTab === "data" ? (
+              <section
+                id={panelIds.data}
+                role="tabpanel"
+                aria-labelledby={tabIds.data}
+                className="space-y-4"
+              >
+                {archiveSuccess ? (
+                  <Alert type="success">{archiveSuccess}</Alert>
+                ) : null}
+                {archiveError ? (
+                  <Alert type="error">{archiveError}</Alert>
+                ) : null}
+                <Alert type="info">
+                  {t({
+                    id: "preferences.dialog.dataTab.archiveAll.help",
+                    message: "Archive all chats in your account.",
+                  })}
+                </Alert>
+                <div className="flex justify-end">
+                  <Button
+                    variant="danger"
+                    disabled={isArchiving}
+                    onClick={() => {
+                      void handleArchiveAllChats();
+                    }}
+                    confirmAction={true}
+                    confirmTitle={t({
+                      id: "preferences.dialog.dataTab.archiveAll.confirmTitle",
+                      message: "Archive all chats?",
+                    })}
+                    confirmMessage={t({
+                      id: "preferences.dialog.dataTab.archiveAll.confirmMessage",
+                      message:
+                        "This will archive every non-archived chat in your account.",
+                    })}
+                  >
+                    {isArchiving
+                      ? t({
+                          id: "preferences.dialog.dataTab.archiveAll.archiving",
+                          message: "Archiving...",
+                        })
+                      : t({
+                          id: "preferences.dialog.dataTab.archiveAll.button",
+                          message: "Archive all chats",
+                        })}
+                  </Button>
+                </div>
+              </section>
+            ) : null}
           </div>
 
           {personalizationEnabled && activeTab === "personalization" ? (
