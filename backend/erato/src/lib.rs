@@ -7,6 +7,7 @@ use crate::server::router::MAIN_ROUTER_DOC;
 
 pub mod actors;
 pub mod config;
+pub mod config_reference;
 pub mod db;
 pub mod frontend_environment;
 pub mod metrics;

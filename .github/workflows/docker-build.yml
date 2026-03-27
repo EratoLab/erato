@@ -334,6 +334,9 @@ jobs:
       - name: "Check if OpenAPI spec is up to date"
         working-directory: backend
         run: cargo run --bin gen-openapi -- --check
+      - name: "Check if config reference is up to date"
+        working-directory: backend
+        run: cargo run --bin gen-config-reference -- --check
 
   test-frontend:
     timeout-minutes: 10
