@@ -25,9 +25,17 @@ generate_db_schema:
 generate_open_api:
     cargo run --bin gen-openapi
 
+# Generates the config reference based on the source
+generate_config_reference:
+    cargo run --bin gen-config-reference
+
 # Generates the OpenAPI spec based on the source and check if it's up to date
 generate_open_api_check:
     cargo run --bin gen-openapi -- --check
+
+# Generates the config reference based on the source and check if it's up to date
+generate_config_reference_check:
+    cargo run --bin gen-config-reference -- --check
 
 test:
     cargo nextest run --retries 2

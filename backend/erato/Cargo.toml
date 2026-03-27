@@ -9,6 +9,10 @@ edition = "2024"
 name = "gen-openapi"
 path = "./src/gen_openapi.rs"
 
+[[bin]]
+name = "gen-config-reference"
+path = "./src/gen_config_reference.rs"
+
 [dependencies]
 axum = { version = "0.8.4", features = ["macros"] }
 axum-extra = { version = "0.10.1", features = ["typed-header", "multipart"] }
@@ -21,6 +25,7 @@ serde_json = "1.0.138"
 tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 tracing = "0.1.41"
+facet = "0.44.3"
 synonym = "0.1.5"
 regorus = "0.5.0"
 eyre = "0.6.12"

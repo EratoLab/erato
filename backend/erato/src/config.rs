@@ -1,9 +1,14 @@
+#![allow(deprecated)]
+
 use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment};
 use eyre::{OptionExt, Report, eyre};
+use facet::Facet;
 use serde::{Deserialize, Serialize, de};
 use std::collections::HashMap;
 use utoipa::ToSchema;
+
+use crate::config_facet_attrs as erato_config;
 
 const DEFAULT_PROMPT_OPTIMIZER_PROMPT: &str = r#"
 You are Lyra, a master-level AI prompt optimization specialist.
@@ -32,7 +37,9 @@ Output format:
 - Return only the optimized prompt as plain text.
 - No headings, no bullet points, no quotes, no explanations."#;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Facet)]
+#[facet(untagged)]
+#[repr(C)]
 pub enum PromptSourceSpecification {
     Static {
         content: String,
@@ -124,7 +131,7 @@ impl PromptSourceSpecification {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet)]
 pub struct AppConfig {
     // A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
     // but is never parsed/interpreted by the application to trigger environment-specific behavior.
@@ -223,6 +230,11 @@ pub struct AppConfig {
     //
     // If present, will enable Sentry for error reporting.
     #[deprecated(note = "Please use `integrations.sentry.sentry_dsn` instead.")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `integrations.sentry.sentry_dsn` instead.",
+        replacement_key = "integrations.sentry.sentry_dsn",
+        planned_removal_version = "0.6.0"
+    ))]
     pub sentry_dsn: Option<String>,
     // **Deprecated**: Please use `frontend.additional_environment` instead.
     //
@@ -230,6 +242,12 @@ pub struct AppConfig {
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
     #[serde(default)]
     #[deprecated(note = "Please use `frontend.additional_environment` instead.")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `frontend.additional_environment` instead.",
+        replacement_key = "frontend.additional_environment",
+        planned_removal_version = "0.6.0"
+    ))]
+    #[facet(opaque)]
     pub additional_frontend_environment: Option<HashMap<String, serde_json::Value>>,
 }
 
@@ -807,7 +825,7 @@ impl AppConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
 pub struct ChatProvidersConfig {
     // Priority order of chat providers to use.
     // Each string should match a key in the providers map.
@@ -819,7 +837,7 @@ pub struct ChatProvidersConfig {
     pub summary: SummaryConfig,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct SummaryConfig {
     // The chat provider ID to use for summary generation.
     // If not specified, uses the highest priority chat provider.
@@ -829,7 +847,7 @@ pub struct SummaryConfig {
     pub max_tokens: Option<u32>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct PromptOptimizerConfig {
     // Whether the prompt optimizer is enabled.
     // Defaults to `false`.
@@ -841,7 +859,7 @@ pub struct PromptOptimizerConfig {
     pub prompt: Option<PromptSourceSpecification>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet)]
 pub struct ChatProviderConfig {
     // May be one of:
     // - "openai" (applicable for both OpenAI and AzureGPT)
@@ -1072,7 +1090,7 @@ impl ChatProviderConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct FileStorageProviderConfig {
     // Name to display in the UI.
     pub display_name: Option<String>,
@@ -1110,13 +1128,14 @@ impl FileStorageProviderConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[repr(C)]
 pub enum StorageProviderSpecificConfig {
     S3(StorageProviderS3Config),
     AzBlob(StorageProviderAzBlobConfig),
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct StorageProviderAzBlobConfig {
     pub root: Option<String>,
     pub container: String,
@@ -1125,7 +1144,7 @@ pub struct StorageProviderAzBlobConfig {
     pub account_key: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct StorageProviderS3Config {
     pub endpoint: Option<String>,
     pub root: Option<String>,
@@ -1135,7 +1154,7 @@ pub struct StorageProviderS3Config {
     pub secret_access_key: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 /// Merged config for storage provider specific configs.
 pub struct StorageProviderSpecificConfigMerged {
     pub access_key_id: Option<String>,
@@ -1183,7 +1202,7 @@ impl StorageProviderSpecificConfigMerged {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct McpServerConfig {
     // The type of transport that the MCP server uses.
     // Supported values are:
@@ -1203,7 +1222,7 @@ pub struct McpServerConfig {
     pub max_session_idle_seconds: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct McpServersGlobalConfig {
     // Global default maximum idle time (in seconds) before MCP sessions are evicted.
     // Individual MCP servers can override this via `mcp_servers.<id>.max_session_idle_seconds`.
@@ -1212,7 +1231,7 @@ pub struct McpServersGlobalConfig {
     pub max_session_idle_seconds: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct FrontendConfig {
     // The name of a theme to use for the frontend.
     // Themes can be placed in `frontend/public/custom-theme/<THEME_NAME>` directories.
@@ -1222,6 +1241,7 @@ pub struct FrontendConfig {
     // This is a dictionary where each value can be a string or a map (string key, string value).
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
     #[serde(default)]
+    #[facet(opaque)]
     pub additional_environment: HashMap<String, serde_json::Value>,
 
     // Whether to disable file upload functionality in the UI.
@@ -1293,7 +1313,7 @@ fn default_sidebar_chat_history_show_metadata() -> bool {
     true
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
 pub struct ExperimentalAssistantsConfig {
     // Whether the experimental assistants feature is enabled.
     // Defaults to `false`.
@@ -1358,7 +1378,7 @@ impl ExperimentalAssistantsConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct UserPreferencesConfig {
     // Whether the user preferences feature is enabled.
     // Defaults to `true`.
@@ -1376,7 +1396,7 @@ fn default_user_preferences_enabled() -> bool {
     true
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
 pub struct StarterPromptsConfig {
     // Whether the starter prompts feature is enabled.
     // Defaults to `false`.
@@ -1392,7 +1412,7 @@ pub struct StarterPromptsConfig {
     pub priority_order: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
 pub struct StarterPromptConfig {
     // Human readable title for the starter prompt.
     pub title: String,
@@ -1420,7 +1440,7 @@ pub struct StarterPromptConfig {
     pub chat_provider: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
 pub struct ExperimentalFacetsConfig {
     // Map of facet id to facet configuration.
     #[serde(default)]
@@ -1453,13 +1473,13 @@ pub struct ExperimentalFacetsConfig {
     pub default_selected_facets: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct ChatSharingConfig {
     #[serde(default)]
     pub enabled: bool,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
 pub struct FacetConfig {
     // Human readable name for the facet.
     pub display_name: String,
@@ -1484,7 +1504,7 @@ pub struct FacetConfig {
     pub disable_facet_prompt_template: bool,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct CachesConfig {
     // Maximum size in MB for file bytes cache (raw file bytes for both text and images)
     // Defaults to 100MB
@@ -1535,7 +1555,7 @@ impl Default for CachesConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct FileProcessorConfig {
     /// File processor to use (currently only "kreuzberg" is supported)
     /// parser-core has been removed as it was unmaintained and yanked
@@ -1555,7 +1575,7 @@ impl Default for FileProcessorConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct ExperimentalSharepointConfig {
     // Whether the experimental Sharepoint/OneDrive integration is enabled.
     // Defaults to `false`.
@@ -1593,7 +1613,7 @@ impl ExperimentalSharepointConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct ExperimentalEntraIdConfig {
     // Whether the experimental Entra ID integration is enabled.
     // Defaults to `false`.
@@ -1630,7 +1650,7 @@ impl ExperimentalEntraIdConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct IntegrationsConfig {
     #[serde(default)]
     pub langfuse: LangfuseConfig,
@@ -1646,7 +1666,7 @@ pub struct IntegrationsConfig {
     pub experimental_entra_id: ExperimentalEntraIdConfig,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct OtelConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -1681,7 +1701,7 @@ fn default_service_name() -> String {
     "erato-backend".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct PrometheusConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -1735,7 +1755,7 @@ impl PrometheusConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct LangfuseConfig {
     // Whether Langfuse integration is enabled.
     // Defaults to `false`.
@@ -1763,13 +1783,13 @@ pub struct LangfuseConfig {
     pub enable_feedback: bool,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct LangfuseSystemPromptConfig {
     // The name of the prompt in Langfuse prompt management.
     pub prompt_name: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
 pub struct ModelCapabilities {
     // Maximum number of tokens that may be provided to the model
     #[serde(default = "default_context_size_tokens")]
@@ -1808,8 +1828,10 @@ impl Default for ModelCapabilities {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[facet(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
+#[repr(C)]
 pub enum ModelReasoningEffort {
     None,
     Minimal,
@@ -1818,15 +1840,17 @@ pub enum ModelReasoningEffort {
     High,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[facet(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
+#[repr(C)]
 pub enum ModelVerbosity {
     Low,
     Medium,
     High,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
 pub struct ModelSettings {
     // Whether the model should generate images instead of text
     #[serde(default)]
@@ -1841,13 +1865,13 @@ pub struct ModelSettings {
     pub verbosity: Option<ModelVerbosity>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct SentryConfig {
     // If present, will enable Sentry for error reporting.
     pub sentry_dsn: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
 pub struct BudgetConfig {
     // Whether budget tracking and display is enabled.
     // Defaults to `false`.
@@ -1877,8 +1901,10 @@ pub struct BudgetConfig {
     pub budget_period_days: u32,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, ToSchema, Default)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, ToSchema, Default, Facet)]
+#[facet(rename_all = "SCREAMING_SNAKE_CASE")]
 #[serde(rename_all = "UPPERCASE")]
+#[repr(C)]
 pub enum BudgetCurrency {
     EUR,
     #[default]
@@ -2087,22 +2113,26 @@ mod model_permissions_tests {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct ModelPermissionsConfig {
     // Map of rule name to rule configuration.
     #[serde(default)]
     pub rules: HashMap<String, ModelPermissionRule>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[facet(tag = "rule_type")]
 #[serde(tag = "rule_type")]
+#[repr(C)]
 pub enum ModelPermissionRule {
     #[serde(rename = "allow-all")]
+    #[facet(rename = "allow-all")]
     AllowAll {
         // List of chat provider IDs this rule grants access to
         chat_provider_ids: Vec<String>,
     },
     #[serde(rename = "allow-for-group-members")]
+    #[facet(rename = "allow-for-group-members")]
     AllowForGroupMembers {
         // List of chat provider IDs this rule grants access to
         chat_provider_ids: Vec<String>,
@@ -2111,36 +2141,44 @@ pub enum ModelPermissionRule {
     },
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct McpServerPermissionsConfig {
     #[serde(default)]
     pub rules: HashMap<String, McpServerPermissionRule>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[facet(tag = "rule_type")]
 #[serde(tag = "rule_type")]
+#[repr(C)]
 pub enum McpServerPermissionRule {
     #[serde(rename = "allow-all")]
+    #[facet(rename = "allow-all")]
     AllowAll { mcp_server_ids: Vec<String> },
     #[serde(rename = "allow-for-group-members")]
+    #[facet(rename = "allow-for-group-members")]
     AllowForGroupMembers {
         mcp_server_ids: Vec<String>,
         groups: Vec<String>,
     },
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct FacetPermissionsConfig {
     #[serde(default)]
     pub rules: HashMap<String, FacetPermissionRule>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[facet(tag = "rule_type")]
 #[serde(tag = "rule_type")]
+#[repr(C)]
 pub enum FacetPermissionRule {
     #[serde(rename = "allow-all")]
+    #[facet(rename = "allow-all")]
     AllowAll { facet_ids: Vec<String> },
     #[serde(rename = "allow-for-group-members")]
+    #[facet(rename = "allow-for-group-members")]
     AllowForGroupMembers {
         facet_ids: Vec<String>,
         groups: Vec<String>,
