@@ -41,8 +41,8 @@
     "i18n:watch": "lingui extract --watch"
   },
   "dependencies": {
-    "@lingui/detect-locale": "^5.6.0",
-    "@lingui/format-po": "^5.6.0",
+    "@lingui/detect-locale": "^5.9.4",
+    "@lingui/format-po": "^5.9.4",
     "@react-hook/resize-observer": "^2.0.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "clsx": "^2.1.1",
@@ -66,15 +66,17 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@babel/core": "^7.26.10",
     "@chromatic-com/storybook": "^3.2.4",
     "@eslint/eslintrc": "^3",
     "@eslint/js": "^9.28.0",
     "@faker-js/faker": "^9.4.0",
-    "@lingui/babel-plugin-lingui-macro": "^5.6.0",
-    "@lingui/cli": "^5.6.0",
-    "@lingui/core": "5.6.0",
-    "@lingui/react": "5.6.0",
-    "@lingui/vite-plugin": "^5.6.0",
+    "@lingui/babel-plugin-lingui-macro": "^5.9.4",
+    "@lingui/cli": "^5.9.4",
+    "@lingui/core": "5.9.4",
+    "@lingui/message-utils": "^5.9.4",
+    "@lingui/react": "5.9.4",
+    "@lingui/vite-plugin": "^5.9.4",
     "@openapi-codegen/cli": "^3.1.0",
     "@openapi-codegen/typescript": "^11.0.1",
     "@storybook/addon-a11y": "^8.6.14",
@@ -123,8 +125,8 @@
     "vitest": "^3.2.3"
   },
   "peerDependencies": {
-    "@lingui/core": "^5.6.0",
-    "@lingui/react": "^5.6.0",
+    "@lingui/core": "^5.9.4",
+    "@lingui/react": "^5.9.4",
     "@tanstack/query-core": "5.75.7",
     "@tanstack/query-sync-storage-persister": "5.69.0",
     "@tanstack/react-query": "5.75.7",

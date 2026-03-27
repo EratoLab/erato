@@ -16,7 +16,6 @@ msgstr ""
 # ==============================
 # Explicit IDs
 # ==============================
-
 #. js-lingui-explicit-id
 #: src/App.tsx
 msgid "about.title"
@@ -27,6 +26,7 @@ msgstr "Acerca de"
 msgid "assistant.form.button.save"
 msgstr "Guardar cambios"
 
+#. js-lingui-extra: optional_component=true
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.description.helpText"
@@ -1187,7 +1187,6 @@ msgstr "Tipo(s) de archivo no compatible(s): {filenames}"
 # ==============================
 # Unstable IDs
 # ==============================
-
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid " (more available)"
 msgstr " (más disponibles)"
