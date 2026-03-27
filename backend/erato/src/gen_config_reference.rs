@@ -2,14 +2,16 @@
 use std::fs;
 use std::process;
 
-use erato::config_reference::generate_config_reference;
+use erato::config_reference::{generate_config_reference, validate_config_reference};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let check_mode = args.iter().any(|arg| arg == "--check");
 
+    let generated_reference = generate_config_reference();
+    validate_config_reference(&generated_reference).expect("valid config reference metadata");
     let generated_doc =
-        serde_json::to_string_pretty(&generate_config_reference()).expect("config reference JSON");
+        serde_json::to_string_pretty(&generated_reference).expect("config reference JSON");
     let output_path = "./generated/config_reference.json";
 
     if check_mode {

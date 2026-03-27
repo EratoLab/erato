@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize, de};
 use std::collections::HashMap;
 use utoipa::ToSchema;
 
+use crate::config_facet_attrs as erato_config;
+
 const DEFAULT_PROMPT_OPTIMIZER_PROMPT: &str = r#"
 You are Lyra, a master-level AI prompt optimization specialist.
 Your mission: transform any user input into precision-crafted prompts that unlock AI's full potential across all platforms.
@@ -228,6 +230,11 @@ pub struct AppConfig {
     //
     // If present, will enable Sentry for error reporting.
     #[deprecated(note = "Please use `integrations.sentry.sentry_dsn` instead.")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `integrations.sentry.sentry_dsn` instead.",
+        replacement_key = "integrations.sentry.sentry_dsn",
+        planned_removal_version = "0.6.0"
+    ))]
     pub sentry_dsn: Option<String>,
     // **Deprecated**: Please use `frontend.additional_environment` instead.
     //
@@ -235,6 +242,11 @@ pub struct AppConfig {
     // These will be available on the frontend via the frontend_environment mechanism, and added to the `windows` object.
     #[serde(default)]
     #[deprecated(note = "Please use `frontend.additional_environment` instead.")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `frontend.additional_environment` instead.",
+        replacement_key = "frontend.additional_environment",
+        planned_removal_version = "0.6.0"
+    ))]
     #[facet(opaque)]
     pub additional_frontend_environment: Option<HashMap<String, serde_json::Value>>,
 }

@@ -1,5 +1,11 @@
 {
-  "additional_frontend_environment": {},
+  "additional_frontend_environment": {
+    "deprecated": {
+      "note": "Please use `frontend.additional_environment` instead.",
+      "planned_removal_version": "0.6.0",
+      "replacement_key": "frontend.additional_environment"
+    }
+  },
   "budget.budget_currency": {},
   "budget.budget_period_days": {},
   "budget.enabled": {},
@@ -178,7 +184,13 @@
   "prompt_optimizer.prompt.prompt": {},
   "prompt_optimizer.prompt.prompt_name": {},
   "prompt_optimizer.prompt.source": {},
-  "sentry_dsn": {},
+  "sentry_dsn": {
+    "deprecated": {
+      "note": "Please use `integrations.sentry.sentry_dsn` instead.",
+      "planned_removal_version": "0.6.0",
+      "replacement_key": "integrations.sentry.sentry_dsn"
+    }
+  },
   "starter_prompts.enabled": {},
   "starter_prompts.priority_order.[]": {},
   "starter_prompts.prompts.<prompt-id>.chat_provider": {},
