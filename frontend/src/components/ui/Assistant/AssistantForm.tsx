@@ -642,6 +642,9 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
           label={t`Description`}
           error={touched.description ? errors.description : undefined}
           helpText={t({
+            extra: {
+              optional_component: true,
+            },
             id: "assistant.form.description.helpText",
             message: "Optional: Describe what this assistant does",
           })}
