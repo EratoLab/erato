@@ -10,6 +10,7 @@ use erato::frontend_environment::{
 };
 use erato::models;
 use erato::services::sentry::{extend_with_sentry_layers, setup_sentry};
+use erato::startup_log;
 use erato::state::AppState;
 use erato::{ApiDoc, server};
 use tower_http::cors::CorsLayer;
@@ -40,9 +41,9 @@ fn configured_tokio_worker_threads() -> usize {
             });
             assert!(n > 0, "\"{ENV_WORKER_THREADS}\" cannot be set to 0");
             if n < MIN_TOKIO_WORKER_THREADS {
-                eprintln!(
+                startup_log::warn_preinit(format!(
                     "Warning: \"{ENV_WORKER_THREADS}\" is set to {n}, which is below the recommended minimum of {MIN_TOKIO_WORKER_THREADS} worker threads."
-                );
+                ));
             }
             n
         }
@@ -71,7 +72,7 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
     let loaded_dotenv_files = dotenv_flow::dotenv_flow().ok();
     if let Some(loaded_dotenv_files) = loaded_dotenv_files {
         for file in loaded_dotenv_files {
-            println!("Loaded dotenv file: {:?}", file);
+            startup_log::info_preinit(format!("Loaded dotenv file: {:?}", file));
         }
     }
 
@@ -79,6 +80,7 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
 
     // initialize tracing
     let _telemetry_guard = erato::telemetry::init_telemetry(&config)?;
+    startup_log::reemit_buffered_logs_if_json(&config.logging);
     erato::metrics::init_prometheus_metrics(&config)?;
 
     let mut _sentry_guard = None;
@@ -132,11 +134,9 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
     }
     .with_state(state);
 
-    println!();
-    println!("Tokio worker threads: {}", worker_threads);
-    println!("API docs: http://{}/scalar", local_addr);
-    println!("Frontend at: http://{}", local_addr);
-    println!("Listening on {}", local_addr);
+    tracing::info!(api_docs_url = %format!("http://{}/scalar", local_addr), "API docs available");
+    tracing::info!(frontend_url = %format!("http://{}", local_addr), "Frontend available");
+    tracing::info!(listen_addr = %local_addr, worker_threads, "Server listening");
     axum::serve(listener, app.into_make_service()).await?;
 
     Ok(())

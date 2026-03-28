@@ -1,4 +1,4 @@
-use crate::config::AppConfig;
+use crate::config::{AppConfig, LoggingFormat};
 use eyre::Result;
 use opentelemetry::KeyValue;
 use opentelemetry::trace::TracerProvider as _;
@@ -126,13 +126,24 @@ pub fn init_telemetry(config: &AppConfig) -> Result<TelemetryGuard> {
     let env_filter = EnvFilter::new(expanded_filter.clone());
 
     // 2. Setup Stdout Layer
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .with_target(true)
-        .with_thread_ids(true)
-        .with_line_number(true)
-        .with_file(true)
-        .compact()
-        .with_filter(env_filter);
+    let fmt_layer = match config.logging.format {
+        LoggingFormat::Plain => tracing_subscriber::fmt::layer()
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_line_number(true)
+            .with_file(true)
+            .compact()
+            .with_filter(env_filter)
+            .boxed(),
+        LoggingFormat::Json => tracing_subscriber::fmt::layer()
+            .json()
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_line_number(true)
+            .with_file(true)
+            .with_filter(env_filter)
+            .boxed(),
+    };
 
     // 3. Setup OTEL Layer (if enabled)
     let otel_layer = if config.integrations.otel.enabled {
