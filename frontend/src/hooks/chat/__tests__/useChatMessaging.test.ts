@@ -1451,13 +1451,17 @@ describe("useChatMessaging", () => {
      */
     const getSSECallOptions = () =>
       mockCreateSSEConnection.mock.calls
-        .filter(([url]: [string]) => !url.includes("/resumestream"))
-        .map(([, opts]: [string, Record<string, unknown>]) => opts);
+        .filter(
+          (call: unknown[]) => !(call[0] as string).includes("/resumestream"),
+        )
+        .map((call: unknown[]) => call[1] as Record<string, unknown>);
 
     const getResumeSSECallOptions = () =>
       mockCreateSSEConnection.mock.calls
-        .filter(([url]: [string]) => url.includes("/resumestream"))
-        .map(([, opts]: [string, Record<string, unknown>]) => opts);
+        .filter((call: unknown[]) =>
+          (call[0] as string).includes("/resumestream"),
+        )
+        .map((call: unknown[]) => call[1] as Record<string, unknown>);
 
     it('should default to "web" when called with a plain string chatId', () => {
       mockCreateSSEConnection.mockClear();
@@ -1541,7 +1545,7 @@ describe("useChatMessaging", () => {
       });
 
       const calls = mockCreateSSEConnection.mock.calls.filter(
-        ([url]: [string]) => url.includes("/editstream"),
+        (call: unknown[]) => (call[0] as string).includes("/editstream"),
       );
       expect(calls.length).toBe(1);
       expect(calls[0][1].headers).toEqual(
@@ -1565,7 +1569,7 @@ describe("useChatMessaging", () => {
       });
 
       const calls = mockCreateSSEConnection.mock.calls.filter(
-        ([url]: [string]) => url.includes("/regeneratestream"),
+        (call: unknown[]) => (call[0] as string).includes("/regeneratestream"),
       );
       expect(calls.length).toBe(1);
       expect(calls[0][1].headers).toEqual(
