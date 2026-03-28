@@ -1222,6 +1222,7 @@ export function useChatMessaging(
       modelId?: string,
       assistantId?: string,
       selectedFacetIds?: string[],
+      actionFacet?: { id: string; args?: Record<string, string> },
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingForKey(streamKey)) {
@@ -1343,6 +1344,7 @@ export function useChatMessaging(
           modelId,
           assistantId,
           selectedFacetIds,
+          actionFacet,
         );
 
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {
@@ -1585,6 +1587,7 @@ export function useChatMessaging(
       newContent: string,
       replaceInputFileIds?: string[],
       selectedFacetIds?: string[],
+      actionFacet?: { id: string; args?: Record<string, string> },
     ): Promise<void> => {
       if (isSubmittingForKey(streamKey)) {
         logger.warn("[DEBUG_STREAMING] Preventing duplicate edit submission");
@@ -1690,6 +1693,7 @@ export function useChatMessaging(
             ? { replace_input_files_ids: replaceInputFileIds }
             : {}),
           ...(selectedFacetIds ? { selected_facet_ids: selectedFacetIds } : {}),
+          ...(actionFacet ? { action_facet: actionFacet } : {}),
         } as const;
 
         const sseUrl = `/api/v1beta/me/messages/editstream`;
@@ -1778,6 +1782,7 @@ export function useChatMessaging(
     async (
       currentMessageId: string,
       selectedFacetIds?: string[],
+      actionFacet?: { id: string; args?: Record<string, string> },
     ): Promise<void> => {
       if (isSubmittingForKey(streamKey)) {
         logger.warn(
@@ -1804,6 +1809,7 @@ export function useChatMessaging(
         const requestBody = {
           current_message_id: currentMessageId,
           ...(selectedFacetIds ? { selected_facet_ids: selectedFacetIds } : {}),
+          ...(actionFacet ? { action_facet: actionFacet } : {}),
         };
 
         const sseUrl = `/api/v1beta/me/messages/regeneratestream`;

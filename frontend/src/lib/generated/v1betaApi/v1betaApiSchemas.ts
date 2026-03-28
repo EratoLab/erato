@@ -18,6 +18,22 @@ export type AbortStreamResponse = {
 };
 
 /**
+ * A facet action requested by the user for this generation.
+ */
+export type ActionFacetRequest = {
+  /**
+   * Key-value arguments for the action facet.
+   */
+  args?: {
+    [key: string]: string;
+  };
+  /**
+   * The unique identifier of the action facet.
+   */
+  id: string;
+};
+
+/**
  * Response for the all-drives endpoint
  */
 export type AllDrivesResponse = {
@@ -590,6 +606,7 @@ export type DriveItemsResponse = {
 };
 
 export type EditMessageRequest = {
+  action_facet?: null | ActionFacetRequest;
   /**
    * The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
    *
@@ -909,6 +926,7 @@ export type MessageFeedbackRequest = {
 };
 
 export type MessageSubmitRequest = {
+  action_facet?: null | ActionFacetRequest;
   /**
    * Optional assistant ID to associate with the chat when creating a new chat.
    * If provided with an existing_chat_id, this field is ignored.
@@ -1269,6 +1287,7 @@ export type RecentChatsResponse = {
 };
 
 export type RegenerateMessageRequest = {
+  action_facet?: null | ActionFacetRequest;
   /**
    * The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.
    *
@@ -1476,6 +1495,7 @@ export type TokenUsageNewChatInput = {
 };
 
 export type TokenUsageRequest = {
+  action_facet?: null | ActionFacetRequest;
   /**
    * The previous message ID to anchor chat history context.
    * Preferred over `previous_message_id` for new clients.
