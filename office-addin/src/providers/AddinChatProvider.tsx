@@ -17,10 +17,9 @@ import {
 } from "@erato/frontend/library";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useOffice } from "./OfficeProvider";
 
 import type { ReactNode } from "react";
-
-import { useOffice } from "./OfficeProvider";
 
 interface AddinChatMessage extends Message {
   sender: string;

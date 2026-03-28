@@ -170,7 +170,7 @@ export function useChatMessaging(
       : chatIdOrParams.silentChatId;
   const platform =
     typeof chatIdOrParams === "object" && chatIdOrParams !== null
-      ? chatIdOrParams.platform ?? "web"
+      ? (chatIdOrParams.platform ?? "web")
       : "web";
   const streamKey = useMemo(
     () => getStreamKey(chatId ?? silentChatId),
