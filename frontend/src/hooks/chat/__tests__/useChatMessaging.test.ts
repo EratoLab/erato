@@ -1443,4 +1443,134 @@ describe("useChatMessaging", () => {
     expect(Object.keys(result.current.messages)).toHaveLength(0);
     expect(result.current.messageOrder).toHaveLength(0);
   });
+
+  describe("X-Erato-Platform header", () => {
+    /**
+     * Helper: find all non-resumestream createSSEConnection calls and return
+     * the options object (second arg) for each.
+     */
+    const getSSECallOptions = () =>
+      mockCreateSSEConnection.mock.calls
+        .filter(([url]: [string]) => !url.includes("/resumestream"))
+        .map(([, opts]: [string, Record<string, unknown>]) => opts);
+
+    const getResumeSSECallOptions = () =>
+      mockCreateSSEConnection.mock.calls
+        .filter(([url]: [string]) => url.includes("/resumestream"))
+        .map(([, opts]: [string, Record<string, unknown>]) => opts);
+
+    it('should default to "web" when called with a plain string chatId', () => {
+      mockCreateSSEConnection.mockClear();
+
+      renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+
+      // resumestream fires on mount — its header should be "web"
+      const resumeCalls = getResumeSSECallOptions();
+      expect(resumeCalls.length).toBeGreaterThanOrEqual(1);
+      expect(resumeCalls[0].headers).toEqual(
+        expect.objectContaining({ "X-Erato-Platform": "web" }),
+      );
+    });
+
+    it('should default to "web" when platform is omitted from params object', () => {
+      mockCreateSSEConnection.mockClear();
+
+      renderHook(() => useChatMessaging({ chatId: "chat1" }), {
+        wrapper: TestWrapper,
+      });
+
+      const resumeCalls = getResumeSSECallOptions();
+      expect(resumeCalls.length).toBeGreaterThanOrEqual(1);
+      expect(resumeCalls[0].headers).toEqual(
+        expect.objectContaining({ "X-Erato-Platform": "web" }),
+      );
+    });
+
+    it("should send custom platform header on sendMessage (submitstream)", async () => {
+      mockCreateSSEConnection.mockClear();
+
+      const { result } = renderHook(
+        () => useChatMessaging({ chatId: "chat1", platform: "Mac" }),
+        { wrapper: TestWrapper },
+      );
+
+      // Clear calls from the initial resumestream so we only inspect submitstream
+      mockCreateSSEConnection.mockClear();
+
+      await act(async () => {
+        await result.current.sendMessage("Hello");
+      });
+
+      const calls = getSSECallOptions();
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+      expect(calls[0].headers).toEqual(
+        expect.objectContaining({ "X-Erato-Platform": "Mac" }),
+      );
+    });
+
+    it("should send custom platform header on resumestream", () => {
+      mockCreateSSEConnection.mockClear();
+
+      renderHook(
+        () => useChatMessaging({ chatId: "chat1", platform: "OfficeOnline" }),
+        { wrapper: TestWrapper },
+      );
+
+      const resumeCalls = getResumeSSECallOptions();
+      expect(resumeCalls.length).toBeGreaterThanOrEqual(1);
+      expect(resumeCalls[0].headers).toEqual(
+        expect.objectContaining({ "X-Erato-Platform": "OfficeOnline" }),
+      );
+    });
+
+    it("should send custom platform header on editMessage (editstream)", async () => {
+      mockCreateSSEConnection.mockClear();
+
+      const { result } = renderHook(
+        () => useChatMessaging({ chatId: "chat1", platform: "PC" }),
+        { wrapper: TestWrapper },
+      );
+
+      // Clear initial resumestream calls
+      mockCreateSSEConnection.mockClear();
+
+      await act(async () => {
+        await result.current.editMessage("msg1", "Edited text");
+      });
+
+      const calls = mockCreateSSEConnection.mock.calls.filter(
+        ([url]: [string]) => url.includes("/editstream"),
+      );
+      expect(calls.length).toBe(1);
+      expect(calls[0][1].headers).toEqual(
+        expect.objectContaining({ "X-Erato-Platform": "PC" }),
+      );
+    });
+
+    it("should send custom platform header on regenerateMessage (regeneratestream)", async () => {
+      mockCreateSSEConnection.mockClear();
+
+      const { result } = renderHook(
+        () => useChatMessaging({ chatId: "chat1", platform: "PC" }),
+        { wrapper: TestWrapper },
+      );
+
+      // Clear initial resumestream calls
+      mockCreateSSEConnection.mockClear();
+
+      await act(async () => {
+        await result.current.regenerateMessage("msg2");
+      });
+
+      const calls = mockCreateSSEConnection.mock.calls.filter(
+        ([url]: [string]) => url.includes("/regeneratestream"),
+      );
+      expect(calls.length).toBe(1);
+      expect(calls[0][1].headers).toEqual(
+        expect.objectContaining({ "X-Erato-Platform": "PC" }),
+      );
+    });
+  });
 });
