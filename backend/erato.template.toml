@@ -182,6 +182,14 @@ chat_provider_ids = ["test-token-limit"]
 # icon = "iconoir-page"
 # prompt = { source = "langfuse", prompt_name = "starter-summarize-notes", label = "production", fallback = "Summarize these notes into clear action items and decisions." }
 
+# Action facet definitions
+# Action facets define reusable action templates that can be triggered with arguments.
+# [action_facets.example_action]
+# display_name = "Summarize for Slack"
+# platform = "slack"
+# template = "Summarize the following content for posting to {{channel}}: {{content}}"
+# allowed_args = ["channel", "content"]
+
 # Experimental facets feature configuration
 # [experimental_facets]
 # # Whether only a single facet can be selected at the same time (default: false)
