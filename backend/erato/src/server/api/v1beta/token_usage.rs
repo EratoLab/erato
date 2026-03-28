@@ -11,7 +11,7 @@ use crate::policy::types::{Action, Resource};
 use crate::server::api::v1beta::file_resolution::format_successful_file_content;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming::{
-    FileContent, MeProfileChatRequestInput, prepare_chat_request_with_adapters,
+    ActionFacetRequest, FileContent, MeProfileChatRequestInput, prepare_chat_request_with_adapters,
     resolve_effective_selected_facet_ids,
 };
 use crate::services::file_processing_cached;
@@ -76,6 +76,8 @@ pub struct TokenUsageRequest {
     /// IDs of facets selected by the user for this estimation.
     #[serde(default)]
     selected_facet_ids: Vec<String>,
+    /// Optional action facet to apply during this estimation.
+    action_facet: Option<ActionFacetRequest>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -514,6 +516,12 @@ pub async fn token_usage_estimate(
             requested_chat_provider_id: request.chat_provider_id.clone(),
             new_input_file_ids: input_file_ids.clone(),
             selected_facet_ids,
+            action_facet: request.action_facet.as_ref().map(|af| {
+                crate::services::prompt_composition::types::ActionFacetUserInput {
+                    id: af.id.clone(),
+                    args: af.args.clone(),
+                }
+            }),
         };
         let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
 

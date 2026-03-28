@@ -26,6 +26,12 @@ pub struct GenerationParameters {
     /// Facets selected for this generation (facet_id -> enabled), includes all available facets
     #[serde(default)]
     pub selected_facets: HashMap<String, bool>,
+    /// The ID of the action facet used for this generation, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action_facet_id: Option<String>,
+    /// The arguments of the action facet used for this generation, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action_facet_args: Option<HashMap<String, String>>,
 }
 
 /// Request-scoped context captured for a generation request.

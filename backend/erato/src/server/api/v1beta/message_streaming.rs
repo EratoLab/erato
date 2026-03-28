@@ -72,6 +72,17 @@ use tracing;
 use tracing::{Instrument, instrument};
 use utoipa::ToSchema;
 
+/// A facet action requested by the user for this generation.
+#[derive(Clone, Debug, serde::Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ActionFacetRequest {
+    /// The unique identifier of the action facet.
+    pub id: String,
+    /// Key-value arguments for the action facet.
+    #[serde(default)]
+    pub args: HashMap<String, String>,
+}
+
 const X_ERATO_PLATFORM_HEADER: &str = "X-Erato-Platform";
 const DEFAULT_ERATO_PLATFORM: &str = "web";
 
@@ -270,6 +281,8 @@ pub struct MessageSubmitRequest {
     /// IDs of facets selected by the user for this generation.
     #[serde(default)]
     selected_facet_ids: Vec<String>,
+    /// Optional action facet to apply during this generation.
+    action_facet: Option<ActionFacetRequest>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -672,6 +685,8 @@ pub struct RegenerateMessageRequest {
     /// IDs of facets selected by the user for this generation.
     #[serde(default)]
     selected_facet_ids: Vec<String>,
+    /// Optional action facet to apply during this generation.
+    action_facet: Option<ActionFacetRequest>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -781,6 +796,8 @@ pub struct EditMessageRequest {
     /// IDs of facets selected by the user for this generation.
     #[serde(default)]
     selected_facet_ids: Vec<String>,
+    /// Optional action facet to apply during this generation.
+    action_facet: Option<ActionFacetRequest>,
 }
 
 #[derive(serde::Deserialize, ToSchema)]
@@ -1432,6 +1449,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             &app_state.config.experimental_facets,
             &effective_selected_facet_ids,
         ),
+        action_facet_id: user_input.action_facet.as_ref().map(|af| af.id.clone()),
+        action_facet_args: user_input.action_facet.as_ref().map(|af| af.args.clone()),
     };
 
     // Return the unresolved version for saving to DB (to avoid duplicating file contents)
@@ -3444,6 +3463,12 @@ async fn run_message_submit_task(
         requested_chat_provider_id: request.chat_provider_id.clone(),
         new_input_file_ids: request.input_files_ids.clone(),
         selected_facet_ids: request.selected_facet_ids.clone(),
+        action_facet: request.action_facet.as_ref().map(|af| {
+            crate::services::prompt_composition::types::ActionFacetUserInput {
+                id: af.id.clone(),
+                args: af.args.clone(),
+            }
+        }),
     };
     let PreparedChatRequest {
         chat_request,
@@ -3827,6 +3852,12 @@ pub async fn regenerate_message_sse(
                     .or(fallback_chat_provider_id),
                 new_input_file_ids: input_files_for_previous_message,
                 selected_facet_ids: request.selected_facet_ids.clone(),
+                action_facet: request.action_facet.as_ref().map(|af| {
+                    crate::services::prompt_composition::types::ActionFacetUserInput {
+                        id: af.id.clone(),
+                        args: af.args.clone(),
+                    }
+                }),
             };
             let prepare_chat_request_res = prepare_chat_request(
                 &app_state,
@@ -4120,6 +4151,12 @@ pub async fn edit_message_sse(
                     .or(fallback_chat_provider_id),
                 new_input_file_ids: replace_input_files_ids,
                 selected_facet_ids: request.selected_facet_ids.clone(),
+                action_facet: request.action_facet.as_ref().map(|af| {
+                    crate::services::prompt_composition::types::ActionFacetUserInput {
+                        id: af.id.clone(),
+                        args: af.args.clone(),
+                    }
+                }),
             };
             let prepare_chat_request_res = prepare_chat_request(
                 &app_state,
