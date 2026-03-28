@@ -5,9 +5,10 @@
 
 use super::traits::{FileResolver, MessageRepository, PromptProvider};
 use super::types::{
-    AbstractChatSequence, AbstractChatSequencePart, ConcreteChatRequest, PromptSpec,
-    ResolvedChatSequence,
+    AbstractChatSequence, AbstractChatSequencePart, ActionFacetUserInput, ConcreteChatRequest,
+    PromptSpec, ResolvedChatSequence,
 };
+use crate::config::ActionFacetConfig;
 use crate::config::ChatProviderConfig;
 use crate::config::ExperimentalFacetsConfig;
 use crate::db::entity::chats;
@@ -57,6 +58,8 @@ pub async fn build_abstract_sequence(
         None,
         None,
         None,
+        None,
+        &HashMap::new(),
     )
     .await
 }
@@ -79,6 +82,8 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     user_preference_assistant_custom_instructions: Option<&str>,
     user_preference_assistant_additional_information: Option<&str>,
     facet_tool_expansions: Option<&HashMap<String, Vec<String>>>,
+    action_facet: Option<&ActionFacetUserInput>,
+    action_facet_configs: &HashMap<String, ActionFacetConfig>,
 ) -> Result<AbstractChatSequence, Report> {
     let mut sequence = AbstractChatSequence::new();
 
@@ -214,6 +219,16 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
                 spec: PromptSpec::Static { content: prompt },
                 facet_id: facet_id.clone(),
             });
+        }
+    }
+
+    // 9.6 Inject action facet prompt (request-scoped, no toggle detection)
+    if let Some(af) = action_facet
+        && let Some(af_config) = action_facet_configs.get(&af.id)
+    {
+        let rendered = render_action_facet_template(&af_config.template, &af.args);
+        if !rendered.is_empty() {
+            sequence.push(AbstractChatSequencePart::ActionFacetPrompt { content: rendered });
         }
     }
 
@@ -430,6 +445,14 @@ pub async fn resolve_sequence(
                 has_system_message = true;
             }
 
+            AbstractChatSequencePart::ActionFacetPrompt { content } => {
+                input_messages.push(InputMessage {
+                    role: MessageRole::System,
+                    content: ContentPart::Text(ContentPartText { text: content }),
+                });
+                has_system_message = true;
+            }
+
             AbstractChatSequencePart::HistoricMessagesFromGenerationInputMessages {
                 message_id,
             } => {
@@ -595,6 +618,16 @@ fn detect_facet_toggle_states(
     }
 
     FacetToggleStates { states }
+}
+
+/// Renders an action facet template by replacing `{{key}}` placeholders with argument values.
+/// Values are treated as literal strings — no re-rendering to prevent `{{` injection.
+fn render_action_facet_template(template: &str, args: &HashMap<String, String>) -> String {
+    let mut result = template.to_string();
+    for (key, value) in args {
+        result = result.replace(&format!("{{{{{}}}}}", key), value);
+    }
+    result
 }
 
 fn render_facet_template(

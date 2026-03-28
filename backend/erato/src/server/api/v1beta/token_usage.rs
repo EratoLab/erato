@@ -199,6 +199,13 @@ pub async fn token_usage_estimate(
     Extension(policy): Extension<PolicyEngine>,
     Json(request): Json<TokenUsageRequest>,
 ) -> Result<Json<TokenUsageResponse>, (axum::http::StatusCode, String)> {
+    // Validate action facet (token estimation has no platform header, default to "web")
+    crate::server::api::v1beta::message_streaming::validate_action_facet(
+        &app_state.config,
+        request.action_facet.as_ref(),
+        "web",
+    )?;
+
     let subject = me_user.to_subject();
     let previous_message_id = request
         .chat_previous_message_id

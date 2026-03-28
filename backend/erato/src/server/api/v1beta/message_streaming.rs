@@ -1119,6 +1119,74 @@ fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationReq
     }
 }
 
+/// Maximum allowed size in bytes for a single action facet argument value.
+const ACTION_FACET_ARG_MAX_SIZE: usize = 10 * 1024; // 10 KB
+
+/// Validates an action facet request against the application configuration.
+///
+/// Returns `Ok(())` if no action facet is present or if the action facet is valid.
+/// Returns `Err((StatusCode::BAD_REQUEST, message))` if validation fails.
+pub(crate) fn validate_action_facet(
+    config: &crate::config::AppConfig,
+    action_facet: Option<&ActionFacetRequest>,
+    platform: &str,
+) -> Result<(), (axum::http::StatusCode, String)> {
+    let Some(af) = action_facet else {
+        return Ok(());
+    };
+
+    let Some(af_config) = config.action_facets.get(&af.id) else {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            format!("Unknown action facet: {}", af.id),
+        ));
+    };
+
+    // Validate platform match if configured
+    if let Some(ref required_platform) = af_config.platform
+        && required_platform != platform
+    {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            format!(
+                "Action facet '{}' requires platform '{}', but request has '{}'",
+                af.id, required_platform, platform
+            ),
+        ));
+    }
+
+    // Validate arg keys against allowed_args
+    for key in af.args.keys() {
+        if !af_config.allowed_args.contains(key) {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                format!(
+                    "Unexpected argument '{}' for action facet '{}'. Allowed: {:?}",
+                    key, af.id, af_config.allowed_args
+                ),
+            ));
+        }
+    }
+
+    // Validate arg value sizes
+    for (key, value) in &af.args {
+        if value.len() > ACTION_FACET_ARG_MAX_SIZE {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                format!(
+                    "Argument '{}' for action facet '{}' exceeds maximum size of {} bytes (got {} bytes)",
+                    key,
+                    af.id,
+                    ACTION_FACET_ARG_MAX_SIZE,
+                    value.len()
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 async fn build_langfuse_trace_enrichment(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -1413,6 +1481,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         me_profile_input.user_preference_assistant_custom_instructions,
         me_profile_input.user_preference_assistant_additional_information,
         Some(&facet_tool_expansions),
+        &app_state.config.action_facets,
     )
     .await?;
 
@@ -3236,6 +3305,14 @@ pub async fn message_submit_sse(
     )
     .await?;
 
+    // Validate action facet before spawning background task (returns HTTP 400 on failure)
+    let generation_request_context = generation_request_context_from_headers(&headers);
+    let platform = generation_request_context
+        .platform
+        .as_deref()
+        .unwrap_or(DEFAULT_ERATO_PLATFORM);
+    validate_action_facet(&app_state.config, request.action_facet.as_ref(), platform)?;
+
     // Determine the chat_id first so we can use it as the background task key
     let (chat_id, chat_was_created) = if let Some(existing_chat_id) = request.existing_chat_id {
         (existing_chat_id, false)
@@ -3278,7 +3355,6 @@ pub async fn message_submit_sse(
     let me_user_bg = me_user.clone();
     let task_clone = Arc::clone(&task);
     let request_clone = request.clone();
-    let generation_request_context = generation_request_context_from_headers(&headers);
 
     // Spawn the background generation task
     tokio::spawn(
@@ -3798,6 +3874,14 @@ pub async fn regenerate_message_sse(
         validate_regenerate_request(&app_state, &policy, &me_user, &request.current_message_id)
             .await?;
 
+    // Validate action facet before spawning background task (returns HTTP 400 on failure)
+    let generation_request_context = generation_request_context_from_headers(&headers);
+    let platform = generation_request_context
+        .platform
+        .as_deref()
+        .unwrap_or(DEFAULT_ERATO_PLATFORM);
+    validate_action_facet(&app_state.config, request.action_facet.as_ref(), platform)?;
+
     let chat = get_chat_by_message_id(
         &app_state.db,
         &policy,
@@ -3822,7 +3906,6 @@ pub async fn regenerate_message_sse(
     // Move validated messages into the task
     let previous_message = validation_result.previous_message;
     let current_message = validation_result.current_message;
-    let generation_request_context = generation_request_context_from_headers(&headers);
 
     let task_for_stream = task.clone();
     let app_state_for_cleanup = app_state.clone();
@@ -4045,6 +4128,14 @@ pub async fn edit_message_sse(
     let message_to_edit =
         validate_edit_request(&app_state, &policy, &me_user, &request.message_id).await?;
 
+    // Validate action facet before spawning background task (returns HTTP 400 on failure)
+    let generation_request_context = generation_request_context_from_headers(&headers);
+    let platform = generation_request_context
+        .platform
+        .as_deref()
+        .unwrap_or(DEFAULT_ERATO_PLATFORM);
+    validate_action_facet(&app_state.config, request.action_facet.as_ref(), platform)?;
+
     let chat = get_chat_by_message_id(
         &app_state.db,
         &policy,
@@ -4072,7 +4163,6 @@ pub async fn edit_message_sse(
     let task_for_stream = task.clone();
     let app_state_for_cleanup = app_state.clone();
     let chat_id_for_cleanup = chat.id;
-    let generation_request_context = generation_request_context_from_headers(&headers);
 
     // Spawn a task to process the request and send events
     tokio::spawn(async move {

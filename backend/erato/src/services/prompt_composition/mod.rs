@@ -38,7 +38,7 @@
 //! ).await?;
 //! ```
 
-use crate::config::ChatProviderConfig;
+use crate::config::{ActionFacetConfig, ChatProviderConfig};
 use crate::db::entity::chats;
 use crate::models::message::GenerationInputMessages;
 use eyre::Report;
@@ -89,6 +89,7 @@ pub async fn compose_prompt_messages(
     user_preference_assistant_custom_instructions: Option<&str>,
     user_preference_assistant_additional_information: Option<&str>,
     facet_tool_expansions: Option<&HashMap<String, Vec<String>>>,
+    action_facet_configs: &HashMap<String, ActionFacetConfig>,
 ) -> Result<GenerationInputMessages, Report> {
     // Phase 1: Build abstract sequence
     let abstract_seq = transforms::build_abstract_sequence_with_facet_tool_expansions(
@@ -106,6 +107,8 @@ pub async fn compose_prompt_messages(
         user_preference_assistant_custom_instructions,
         user_preference_assistant_additional_information,
         facet_tool_expansions,
+        user_input.action_facet.as_ref(),
+        action_facet_configs,
     )
     .await?;
 
