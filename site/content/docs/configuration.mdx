@@ -1462,6 +1462,31 @@ When the Entra ID integration is enabled, the user profile will include addition
 
 These fields enable sharing assistants with organization groups via share grants with `subject_type = "organization_group"` and `subject_id_type = "organization_group_id"`.
 
+### `logging`
+
+Configuration for backend log output formatting.
+
+#### `logging.format`
+
+Controls how application logs are formatted on stdout/stderr.
+
+Use `"plain"` for human-readable local development logs, or `"json"` for structured logs that are easier to ingest in production log pipelines.
+
+When `"json"` is enabled, startup messages that are emitted before the tracing subscriber is initialized are also re-emitted as structured log events once logging is ready.
+
+**Default value:** `"plain"`
+
+**Type:** `string`
+
+**Supported values:** `"plain"`, `"json"`
+
+**Example:**
+
+```toml
+[logging]
+format = "json"
+```
+
 ### `mcp_servers`
 
 Configuration for Model Context Protocol (MCP) servers that extend Erato's capabilities through custom tools and integrations.

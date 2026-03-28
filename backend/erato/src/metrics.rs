@@ -71,9 +71,9 @@ pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
 
     tokio::spawn(RuntimeMetricsReporterBuilder::default().describe_and_run());
 
-    println!(
-        "Prometheus metrics exporter enabled at http://{}/metrics",
-        listen_address
+    tracing::info!(
+        prometheus_metrics_url = %format!("http://{}/metrics", listen_address),
+        "Prometheus metrics exporter enabled"
     );
 
     Ok(())

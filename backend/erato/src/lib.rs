@@ -21,6 +21,7 @@ pub mod profiling;
 pub mod query_metrics;
 pub mod server;
 pub mod services;
+pub mod startup_log;
 pub mod state;
 pub mod system_prompt_renderer;
 pub mod telemetry;

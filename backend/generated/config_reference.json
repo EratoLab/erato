@@ -165,6 +165,7 @@
   "integrations.prometheus.host": {},
   "integrations.prometheus.port": {},
   "integrations.sentry.sentry_dsn": {},
+  "logging.format": {},
   "mcp_server_permissions.rules.<rule-name>.groups.[]": {},
   "mcp_server_permissions.rules.<rule-name>.mcp_server_ids.[]": {},
   "mcp_server_permissions.rules.<rule-name>.rule_type": {},

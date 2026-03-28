@@ -23,7 +23,7 @@ sqlx = { version = "0.8.5", features=["postgres", "runtime-tokio", "runtime-toki
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
 tokio = { version = "1.43.0", features = ["rt-multi-thread"] }
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = "0.1.41"
 facet = "0.44.3"
 synonym = "0.1.5"

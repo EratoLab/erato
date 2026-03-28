@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use utoipa::ToSchema;
 
 use crate::config_facet_attrs as erato_config;
+use crate::startup_log;
 
 const DEFAULT_PROMPT_OPTIMIZER_PROMPT: &str = r#"
 You are Lyra, a master-level AI prompt optimization specialist.
@@ -169,6 +170,9 @@ pub struct AppConfig {
     #[serde(default)]
     pub integrations: IntegrationsConfig,
 
+    #[serde(default)]
+    pub logging: LoggingConfig,
+
     // Model permissions configuration for controlling access to chat providers based on user attributes.
     #[serde(default)]
     pub model_permissions: ModelPermissionsConfig,
@@ -269,6 +273,7 @@ impl AppConfig {
             .set_default("frontend_bundle_path", "./public")?
             .set_default("cleanup_enabled", false)?
             .set_default("cleanup_archived_max_age_days", 30)?
+            .set_default("logging.format", "plain")?
             .set_default("prompt_optimizer.enabled", false)?
             .set_default("prompt_optimizer.prompt", DEFAULT_PROMPT_OPTIMIZER_PROMPT)?;
 
@@ -293,7 +298,7 @@ impl AppConfig {
         };
 
         for path in &config_files_to_load {
-            println!("Loading config from: {}", path);
+            startup_log::info_preinit(format!("Loading config from: {}", path));
             builder = builder.add_source(config::File::with_name(path).required(false));
         }
 
@@ -823,6 +828,22 @@ impl AppConfig {
             .as_ref()
             .or(self.sentry_dsn.as_ref())
     }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[facet(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+#[repr(C)]
+pub enum LoggingFormat {
+    #[default]
+    Plain,
+    Json,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct LoggingConfig {
+    #[serde(default)]
+    pub format: LoggingFormat,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Facet)]

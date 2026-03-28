@@ -96,6 +96,10 @@ chat_provider_ids = ["test-token-limit"]
 # host = "127.0.0.1"
 # port = 3131
 
+# Logging configuration
+# [logging]
+# format = "plain" # "plain" (default) or "json"
+
 # Experimental Sharepoint/OneDrive integration configuration
 # Allows users to attach files from their Microsoft OneDrive/Sharepoint to chats.
 # Requires the user's access token to have MS Graph API permissions.
