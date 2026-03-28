@@ -209,6 +209,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub experimental_facets: ExperimentalFacetsConfig,
 
+    // Action facet definitions.
+    #[serde(default)]
+    pub action_facets: HashMap<String, ActionFacetConfig>,
+
     #[serde(default)]
     pub chat_sharing: ChatSharingConfig,
 
@@ -436,6 +440,22 @@ impl AppConfig {
                 "Invalid file processor '{}'. Must be 'parser-core' or 'kreuzberg'",
                 config.file_processor.processor
             );
+        }
+
+        // Validate action facets configuration
+        for (id, action_facet) in &config.action_facets {
+            if action_facet.template.is_empty() {
+                panic!(
+                    "Action facet '{}' has an empty template. Please provide a non-empty template.",
+                    id
+                );
+            }
+            if action_facet.allowed_args.is_empty() {
+                panic!(
+                    "Action facet '{}' has no allowed_args. Please provide at least one allowed argument.",
+                    id
+                );
+            }
         }
 
         // Validate that Langfuse is configured if any chat provider uses it
@@ -1523,6 +1543,22 @@ pub struct FacetConfig {
     // Defaults to `false`.
     #[serde(default)]
     pub disable_facet_prompt_template: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct ActionFacetConfig {
+    // Human readable name for the action facet.
+    pub display_name: String,
+
+    // Optional platform identifier (e.g. "slack", "teams").
+    pub platform: Option<String>,
+
+    // Template string for the action facet.
+    pub template: String,
+
+    // List of allowed argument names for the template.
+    #[serde(default)]
+    pub allowed_args: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]

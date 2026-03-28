@@ -1,4 +1,8 @@
 {
+  "action_facets.<key>.allowed_args.[]": {},
+  "action_facets.<key>.display_name": {},
+  "action_facets.<key>.platform": {},
+  "action_facets.<key>.template": {},
   "additional_frontend_environment": {
     "deprecated": {
       "note": "Please use `frontend.additional_environment` instead.",
