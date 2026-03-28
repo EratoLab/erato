@@ -18,6 +18,8 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useOffice } from "./OfficeProvider";
+
 import type { ReactNode } from "react";
 
 interface AddinChatMessage extends Message {
@@ -33,6 +35,7 @@ interface AddinChatMessage extends Message {
 export function AddinChatProvider({ children }: { children: ReactNode }) {
   const { capabilities } = useFileCapabilitiesContext();
   const queryClient = useQueryClient();
+  const { platform: officePlatform } = useOffice();
 
   const acceptedFileTypes = useMemo(
     () => getSupportedFileTypes(capabilities),
@@ -124,6 +127,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   } = useChatMessaging({
     chatId: currentChatId,
     silentChatId,
+    platform: officePlatform ?? "office-addin",
   });
 
   useEffect(() => {

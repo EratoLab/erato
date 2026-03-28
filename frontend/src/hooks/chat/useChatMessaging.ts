@@ -59,6 +59,8 @@ const logger = createLogger("HOOK", "useChatMessaging");
 const COMPLETION_CLOSE_DEDUP_MS = 5000;
 const MAX_RESUME_ATTEMPTS_PER_KEY = 3;
 
+const X_ERATO_PLATFORM_HEADER = "X-Erato-Platform";
+
 const getAuthHeaders = (): Record<string, string> => {
   const idToken = getIdToken();
 
@@ -70,6 +72,8 @@ interface UseChatMessagingParams {
   chatId: string | null;
   // onChatCreated?: (newChatId: string) => void;
   silentChatId?: string | null;
+  /** Platform identifier sent via X-Erato-Platform header. Defaults to "web". */
+  platform?: string;
 }
 
 function resolveStreamAlias(
@@ -164,6 +168,10 @@ export function useChatMessaging(
     typeof chatIdOrParams === "string" || chatIdOrParams === null
       ? null
       : chatIdOrParams.silentChatId;
+  const platform =
+    typeof chatIdOrParams === "object" && chatIdOrParams !== null
+      ? (chatIdOrParams.platform ?? "web")
+      : "web";
   const streamKey = useMemo(
     () => getStreamKey(chatId ?? silentChatId),
     [chatId, silentChatId],
@@ -1088,6 +1096,9 @@ export function useChatMessaging(
         "/api/v1beta/me/messages/resumestream",
         {
           method: "POST",
+          headers: {
+            [X_ERATO_PLATFORM_HEADER]: platform,
+          },
           body: JSON.stringify({ chat_id: effectiveChatId }),
           onMessage: (sseEvent) =>
             processStreamEvent(sseEvent, resumeStreamKeyRef),
@@ -1144,6 +1155,7 @@ export function useChatMessaging(
       chatId,
       handleRefetchAndClear,
       newlyCreatedChatId,
+      platform,
       processStreamEvent,
       resetStreaming,
       setError,
@@ -1494,6 +1506,7 @@ export function useChatMessaging(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            [X_ERATO_PLATFORM_HEADER]: platform,
             ...getAuthHeaders(),
           },
           body: JSON.stringify(requestBody),
@@ -1549,6 +1562,7 @@ export function useChatMessaging(
       resetStreaming,
       findMostRecentAssistantMessageId,
       chatId,
+      platform,
       processStreamEvent,
       setError,
       handleRefetchAndClear,
@@ -1722,6 +1736,7 @@ export function useChatMessaging(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            [X_ERATO_PLATFORM_HEADER]: platform,
             ...getAuthHeaders(),
           },
           body: JSON.stringify(requestBody),
@@ -1743,6 +1758,7 @@ export function useChatMessaging(
     },
     [
       handleRefetchAndClear,
+      platform,
       processStreamEvent,
       resetStreaming,
       messages,
@@ -1838,6 +1854,7 @@ export function useChatMessaging(
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            [X_ERATO_PLATFORM_HEADER]: platform,
             ...getAuthHeaders(),
           },
           body: JSON.stringify(requestBody),
@@ -1861,6 +1878,7 @@ export function useChatMessaging(
     },
     [
       handleRefetchAndClear,
+      platform,
       processStreamEvent,
       resetStreaming,
       setError,
