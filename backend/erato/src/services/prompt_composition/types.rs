@@ -2,6 +2,7 @@ use crate::models::message::{GenerationInputMessages, InputMessage};
 use genai::chat::ChatRequest;
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Contains the latest user input data for prompt composition.
 ///
@@ -25,6 +26,18 @@ pub struct PromptCompositionUserInput {
 
     /// IDs of facets selected by the user for this generation.
     pub selected_facet_ids: Vec<String>,
+
+    /// Optional action facet requested by the user for this generation.
+    pub action_facet: Option<ActionFacetUserInput>,
+}
+
+/// Action facet input for prompt composition.
+#[derive(Debug, Clone)]
+pub struct ActionFacetUserInput {
+    /// The unique identifier of the action facet.
+    pub id: String,
+    /// Key-value arguments for the action facet.
+    pub args: HashMap<String, String>,
 }
 
 /// Represents the abstract sequence of chat messages before any I/O operations.

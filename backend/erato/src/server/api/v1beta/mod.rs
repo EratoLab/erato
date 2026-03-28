@@ -37,10 +37,10 @@ use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
     __path_abort_message_stream, __path_edit_message_sse, __path_message_submit_sse,
     __path_regenerate_message_sse, __path_resume_message_sse, AbortStreamRequest,
-    AbortStreamResponse, EditMessageRequest, EditMessageStreamingResponseMessage,
-    MessageSubmitRequest, MessageSubmitStreamingResponseMessage, ResumeStreamRequest,
-    abort_message_stream, edit_message_sse, message_submit_sse, regenerate_message_sse,
-    resume_message_sse,
+    AbortStreamResponse, ActionFacetRequest, EditMessageRequest,
+    EditMessageStreamingResponseMessage, MessageSubmitRequest,
+    MessageSubmitStreamingResponseMessage, ResumeStreamRequest, abort_message_stream,
+    edit_message_sse, message_submit_sse, regenerate_message_sse, resume_message_sse,
 };
 use crate::server::api::v1beta::share_grants::{
     CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
@@ -269,6 +269,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         UserProfile,
         UpdateProfilePreferencesRequest,
         MessageSubmitRequest,
+        ActionFacetRequest,
         EditMessageRequest,
         EditMessageStreamingResponseMessage,
         AbortStreamRequest,

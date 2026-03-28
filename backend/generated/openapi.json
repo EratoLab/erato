@@ -2084,6 +2084,29 @@
           }
         }
       },
+      "ActionFacetRequest": {
+        "type": "object",
+        "description": "A facet action requested by the user for this generation.",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "args": {
+            "type": "object",
+            "description": "Key-value arguments for the action facet.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string",
+            "description": "The unique identifier of the action facet."
+          }
+        }
+      },
       "AllDrivesResponse": {
         "type": "object",
         "description": "Response for the all-drives endpoint",
@@ -2954,6 +2977,17 @@
           "replace_user_message"
         ],
         "properties": {
+          "action_facet": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ActionFacetRequest",
+                "description": "Optional action facet to apply during this generation."
+              }
+            ]
+          },
           "chat_provider_id": {
             "type": "string",
             "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
@@ -3637,6 +3671,17 @@
           "user_message"
         ],
         "properties": {
+          "action_facet": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ActionFacetRequest",
+                "description": "Optional action facet to apply during this generation."
+              }
+            ]
+          },
           "assistant_id": {
             "type": "string",
             "format": "uuid",
@@ -4344,6 +4389,17 @@
           "current_message_id"
         ],
         "properties": {
+          "action_facet": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ActionFacetRequest",
+                "description": "Optional action facet to apply during this generation."
+              }
+            ]
+          },
           "chat_provider_id": {
             "type": "string",
             "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
@@ -4839,6 +4895,17 @@
       "TokenUsageRequest": {
         "type": "object",
         "properties": {
+          "action_facet": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ActionFacetRequest",
+                "description": "Optional action facet to apply during this estimation."
+              }
+            ]
+          },
           "chat_previous_message_id": {
             "type": [
               "string",
