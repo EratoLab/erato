@@ -361,10 +361,7 @@ export function UserPreferencesDialog({
                 role="tabpanel"
                 aria-labelledby={tabIds.personalization}
                 hidden={activeTab !== "personalization"}
-                className={clsx(
-                  "space-y-4",
-                  activeTab !== "personalization" && "hidden",
-                )}
+                className="space-y-4"
               >
                 <FormField
                   label={t({
@@ -456,10 +453,7 @@ export function UserPreferencesDialog({
               role="tabpanel"
               aria-labelledby={tabIds.appearance}
               hidden={activeTab !== "appearance"}
-              className={clsx(
-                "space-y-4",
-                activeTab !== "appearance" && "hidden",
-              )}
+              className="space-y-4"
             >
               <div className="space-y-1">
                 <h2 className="text-sm font-medium text-theme-fg-primary">
@@ -546,7 +540,7 @@ export function UserPreferencesDialog({
               role="tabpanel"
               aria-labelledby={tabIds.data}
               hidden={activeTab !== "data"}
-              className={clsx("space-y-4", activeTab !== "data" && "hidden")}
+              className="space-y-4"
             >
               {archiveSuccess ? (
                 <Alert type="success">{archiveSuccess}</Alert>
