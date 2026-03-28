@@ -545,9 +545,7 @@ export function UserPreferencesDialog({
               {archiveSuccess ? (
                 <Alert type="success">{archiveSuccess}</Alert>
               ) : null}
-              {archiveError ? (
-                <Alert type="error">{archiveError}</Alert>
-              ) : null}
+              {archiveError ? <Alert type="error">{archiveError}</Alert> : null}
               <Alert type="info">
                 {t({
                   id: "preferences.dialog.dataTab.archiveAll.help",
