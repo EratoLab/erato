@@ -71,7 +71,7 @@ function parseRecipients(
   }));
 }
 
-function isMessageRead(
+export function isMessageRead(
   item: Office.MessageRead | Office.MessageCompose,
 ): item is Office.MessageRead {
   return typeof (item as Office.MessageRead).subject === "string";
