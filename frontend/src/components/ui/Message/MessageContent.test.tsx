@@ -242,4 +242,42 @@ describe("MessageContent", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
+
+  it("renders erato-email code blocks as EratoEmailSuggestion instead of syntax highlighter", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "```erato-email\nHere is a rewritten version of your email.\n```",
+        )}
+      />,
+    );
+
+    // Should NOT render as a syntax-highlighted code block
+    expect(
+      container.querySelector("pre.message-content-code-block code"),
+    ).toBeNull();
+
+    // Should render the suggestion text
+    expect(screen.getByText(/Here is a rewritten version/)).toBeInTheDocument();
+
+    // Should have a Copy button
+    expect(screen.getByRole("button", { name: /Copy/ })).toBeInTheDocument();
+  });
+
+  it("still renders other hyphenated language tags as code blocks", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          "```objective-c\n#import <Foundation/Foundation.h>\n```",
+        )}
+      />,
+    );
+
+    expect(
+      container.querySelector("pre.message-content-code-block"),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector("pre.message-content-code-block code"),
+    ).toHaveTextContent(/#import/);
+  });
 });
