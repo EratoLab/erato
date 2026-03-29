@@ -446,11 +446,13 @@ pub async fn resolve_sequence(
             }
 
             AbstractChatSequencePart::ActionFacetPrompt { content } => {
+                // Do NOT set has_system_message — action facet prompts are
+                // per-request additive instructions that must not suppress
+                // the base system prompt replayed from history.
                 input_messages.push(InputMessage {
                     role: MessageRole::System,
                     content: ContentPart::Text(ContentPartText { text: content }),
                 });
-                has_system_message = true;
             }
 
             AbstractChatSequencePart::HistoricMessagesFromGenerationInputMessages {

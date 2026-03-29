@@ -2169,13 +2169,9 @@ mod test_cases {
     }
 
     #[tokio::test]
-    async fn test_action_facet_suppresses_historical_system_prompt_on_multi_turn() {
-        // When a second turn has an action facet but no fresh base system prompt
-        // (because most_recent_history_message exists), the action facet sets
-        // has_system_message=true BEFORE HistoricMessagesFromGenerationInputMessages
-        // is processed, causing historical system prompts to be stripped.
-        //
-        // This test documents and asserts the current behavior.
+    async fn test_action_facet_preserves_historical_system_prompt_on_multi_turn() {
+        // Action facet prompts are per-request additive instructions.
+        // They must NOT suppress the base system prompt replayed from history.
         let mut message_repo = MockMessageRepository::new();
         let file_resolver = MockFileResolver::new();
         let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
@@ -2260,24 +2256,19 @@ mod test_cases {
             .await
             .expect("Failed to resolve second sequence");
 
-        // Count system messages and identify them
+        // Count system messages
         let system_messages: Vec<_> = resolved2
             .messages
             .iter()
             .filter(|m| matches!(m.role, MessageRole::System))
             .collect();
 
-        // Document current behavior: action facet prompt suppresses historical
-        // system prompt replay because it sets has_system_message=true before
-        // HistoricMessagesFromGenerationInputMessages is processed.
-        //
-        // The only system message should be the action facet prompt.
-        // The base "You are helpful." from turn 1's generation_input_messages
-        // is suppressed.
+        // Both the base system prompt (from history) and the action facet prompt
+        // should be present — action facets are additive, not replacing.
         assert_eq!(
             system_messages.len(),
-            1,
-            "Expected 1 system message (action facet only), found {}. Messages: {:#?}",
+            2,
+            "Expected 2 system messages (base + action facet), found {}. Messages: {:#?}",
             system_messages.len(),
             resolved2
                 .messages
@@ -2286,27 +2277,25 @@ mod test_cases {
                 .collect::<Vec<_>>()
         );
 
-        // Verify the surviving system message is the action facet, not the base prompt
-        match &system_messages[0].content {
-            ContentPart::Text(text) => {
-                assert!(
-                    text.text.contains("Compose a reply with tone: formal"),
-                    "Expected action facet prompt, got: {}",
-                    text.text
-                );
-                assert!(
-                    !text.text.contains("You are helpful"),
-                    "Base system prompt should have been suppressed"
-                );
-            }
-            other => panic!("Expected text content, got: {:?}", other),
-        }
+        // Verify base system prompt is replayed from history
+        let has_base_prompt = system_messages.iter().any(|m| match &m.content {
+            ContentPart::Text(text) => text.text.contains("You are helpful"),
+            _ => false,
+        });
+        assert!(has_base_prompt, "Base system prompt should be present from history");
 
-        // Full sequence should be: action_facet_system + user1 + assistant + user2
+        // Verify action facet prompt is present
+        let has_action_facet = system_messages.iter().any(|m| match &m.content {
+            ContentPart::Text(text) => text.text.contains("Compose a reply with tone: formal"),
+            _ => false,
+        });
+        assert!(has_action_facet, "Action facet prompt should be present");
+
+        // Full sequence: base_system + action_facet + user1 + assistant + user2
         assert_eq!(
             resolved2.messages.len(),
-            4,
-            "Expected 4 messages (action_facet + user1 + assistant + user2), found {}",
+            5,
+            "Expected 5 messages (base_system + action_facet + user1 + assistant + user2), found {}",
             resolved2.messages.len()
         );
     }
