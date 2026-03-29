@@ -6,7 +6,7 @@ End-to-end tests for Erato using [Playwright](https://playwright.dev/).
 
 ### Prerequisites
 
-- Node.js 22.10.0 or later
+- Node.js 22.22.2 or later
 - pnpm
 - A running Erato instance (k3d cluster or local development)
 

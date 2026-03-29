@@ -36,7 +36,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           # Source of truth is at /site/.node-version
-          node-version: '22.10.0'
+          node-version: '22.22.2'
           cache: 'pnpm'
           cache-dependency-path: './site/pnpm-lock.yaml'
 

@@ -63,7 +63,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           # Source of truth is at /frontend/.node-version
-          node-version: '22.10.0'
+          node-version: '22.22.2'
           cache: 'pnpm'
           cache-dependency-path: |
             ./frontend/pnpm-lock.yaml
@@ -355,7 +355,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           # Source of truth is at /frontend/.node-version
-          node-version: '22.10.0'
+          node-version: '22.22.2'
           cache: 'pnpm'
           cache-dependency-path: './frontend/pnpm-lock.yaml'
 
@@ -444,7 +444,7 @@ jobs:
       - name: "Setup Node.js"
         uses: actions/setup-node@v4
         with:
-          node-version: '22.10.0'
+          node-version: '22.22.2'
           cache: 'pnpm'
           cache-dependency-path: './e2e-tests/pnpm-lock.yaml'
 
