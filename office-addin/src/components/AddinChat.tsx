@@ -94,8 +94,10 @@ export function AddinChat() {
     messageOrder.length === 0 &&
     editState.mode === "compose";
 
-  const { handleSendMessage: baseHandleSendMessage, handleMessageAction } =
-    useChatActions({ switchSession: navigateToChat, sendMessage });
+  const { handleMessageAction } = useChatActions({
+    switchSession: navigateToChat,
+    sendMessage,
+  });
 
   const handleSendMessage = useCallback(
     (
@@ -103,16 +105,18 @@ export function AddinChat() {
       inputFileIds?: string[],
       modelId?: string,
       selectedFacetIds?: string[],
+      actionFacet?: { id: string; args?: Record<string, string> },
     ) => {
-      void baseHandleSendMessage(
+      void sendMessage(
         message,
         inputFileIds,
         modelId,
         undefined,
         selectedFacetIds,
+        actionFacet,
       ).then(() => refetchHistory());
     },
-    [baseHandleSendMessage, refetchHistory],
+    [refetchHistory, sendMessage],
   );
 
   const cancelEdit = useCallback(() => setEditState({ mode: "compose" }), []);

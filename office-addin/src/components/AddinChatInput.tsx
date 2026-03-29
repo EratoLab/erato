@@ -12,8 +12,9 @@ import {
   type FileType,
   type FileUploadItem,
 } from "@erato/frontend/library";
-import { forwardRef, useCallback, useMemo, useState } from "react";
+import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 
+import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOutlookEmailSource } from "../hooks/useOutlookEmailSource";
 import { useOffice } from "../providers/OfficeProvider";
 
@@ -23,6 +24,7 @@ interface AddinChatInputProps {
     inputFileIds?: string[],
     modelId?: string,
     selectedFacetIds?: string[],
+    actionFacet?: { id: string; args?: Record<string, string> },
   ) => void;
   onEditMessage?: (
     messageId: string,
@@ -59,6 +61,20 @@ export const AddinChatInput = forwardRef<
 ) {
   const { host } = useOffice();
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
+  const composeSelection = useOutlookComposeSelection();
+  const [isSelectionDismissed, setIsSelectionDismissed] = useState(false);
+  const hasActiveSelection =
+    composeSelection.data.length > 0 && !isSelectionDismissed;
+
+  // Reset dismiss when selection changes (user selects new text)
+  const lastSelectionDataRef = useRef(composeSelection.data);
+  if (
+    composeSelection.data !== lastSelectionDataRef.current &&
+    composeSelection.data.length > 0
+  ) {
+    lastSelectionDataRef.current = composeSelection.data;
+    setIsSelectionDismissed(false);
+  }
   const {
     hasSelectedEmailSource,
     isEmailBodyIncluded,
@@ -132,12 +148,24 @@ export const AddinChatInput = forwardRef<
       modelId?: string,
       selectedFacetIds?: string[],
     ) => {
+      // Build action facet payload from active selection
+      const actionFacet = hasActiveSelection
+        ? {
+            id: "outlook_rewrite_selection",
+            args: {
+              selected_text: composeSelection.data,
+              source_property: composeSelection.sourceProperty,
+            },
+          }
+        : undefined;
+
       if (!shouldUseSuggestedEmailSource) {
         chatInputProps.onSendMessage(
           message,
           inputFileIds,
           modelId,
           selectedFacetIds,
+          actionFacet,
         );
         return;
       }
@@ -187,11 +215,15 @@ export const AddinChatInput = forwardRef<
         mergedFileIds.length > 0 ? mergedFileIds : undefined,
         modelId,
         selectedFacetIds,
+        actionFacet,
       );
     },
     [
       chatId,
       chatInputProps,
+      composeSelection.data,
+      composeSelection.sourceProperty,
+      hasActiveSelection,
       resolveSelectedFilesForSend,
       shouldUseSuggestedEmailSource,
     ],
@@ -247,6 +279,26 @@ export const AddinChatInput = forwardRef<
             )}
           </div>
         )}
+
+      {host === "Outlook" && hasActiveSelection && (
+        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+          <div className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
+            <span className="shrink-0">&#x2702;</span>
+            <span className="min-w-0 truncate">
+              &ldquo;{composeSelection.data.slice(0, 80)}
+              {composeSelection.data.length > 80 ? "..." : ""}&rdquo;
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsSelectionDismissed(true)}
+              className="ml-auto shrink-0 rounded p-0.5 hover:bg-theme-bg-tertiary"
+              aria-label="Dismiss selection"
+            >
+              &#x2715;
+            </button>
+          </div>
+        </div>
+      )}
 
       <ChatInput
         ref={ref}
