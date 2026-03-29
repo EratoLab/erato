@@ -21,6 +21,7 @@
 /build
 /dist-library
 /dist-package
+/storybook-static
 
 # misc
 .DS_Store
