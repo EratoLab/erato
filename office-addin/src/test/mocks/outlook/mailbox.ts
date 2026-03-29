@@ -23,12 +23,20 @@ export function installMockMailbox() {
 
   const mailbox = {
     item: null as unknown,
-    addHandlerAsync: vi.fn((_eventType: unknown, _handler: unknown, callback?: (result: unknown) => void) => {
-      callback?.({ status: Office.AsyncResultStatus.Succeeded });
-    }),
-    removeHandlerAsync: vi.fn((_eventType: unknown, callback?: (result: unknown) => void) => {
-      callback?.({ status: Office.AsyncResultStatus.Succeeded });
-    }),
+    addHandlerAsync: vi.fn(
+      (
+        _eventType: unknown,
+        _handler: unknown,
+        callback?: (result: unknown) => void,
+      ) => {
+        callback?.({ status: Office.AsyncResultStatus.Succeeded });
+      },
+    ),
+    removeHandlerAsync: vi.fn(
+      (_eventType: unknown, callback?: (result: unknown) => void) => {
+        callback?.({ status: Office.AsyncResultStatus.Succeeded });
+      },
+    ),
   };
 
   (Office.context as unknown as Record<string, unknown>).mailbox = mailbox;

@@ -28,9 +28,7 @@ describe("callOfficeAsync", () => {
   it("rejects with a default message when error has no message", async () => {
     await expect(
       callOfficeAsync<string>((callback) => {
-        callback(
-          createMockAsyncResult(null as unknown as string, "failed"),
-        );
+        callback(createMockAsyncResult(null as unknown as string, "failed"));
       }),
     ).rejects.toThrow("Office async call failed");
   });

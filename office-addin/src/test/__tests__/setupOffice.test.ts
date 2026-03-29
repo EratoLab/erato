@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
+import { createMockAsyncResult } from "../helpers/asyncResult";
 import { createMockMessageCompose } from "../mocks/outlook/composeMail";
-import { createMockMessageRead } from "../mocks/outlook/readMail";
 import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../mocks/outlook/mailbox";
-import { createMockAsyncResult } from "../helpers/asyncResult";
+import { createMockMessageRead } from "../mocks/outlook/readMail";
 
 describe("Office.js test setup", () => {
   it("exposes the Office global with shared enums", () => {
