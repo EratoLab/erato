@@ -13,6 +13,7 @@ import {
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { parseContent } from "@/utils/adapters/contentPartAdapter";
 
+import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
 import { ImageContentDisplay } from "./ImageContentDisplay";
 
 import type {
@@ -78,7 +79,7 @@ function MarkdownCode({
   const { effectiveTheme, theme } = useTheme();
   const isBlockCode = React.useContext(BlockCodeContext);
   const codeContent = String(children).replace(/\n$/, "");
-  const match = /language-(\w+)/.exec(className ?? "");
+  const match = /language-([\w-]+)/.exec(className ?? "");
   const language = match ? match[1] : "";
   const fallbackPreset =
     effectiveTheme === "dark"
@@ -92,6 +93,10 @@ function MarkdownCode({
     ...BASE_BLOCK_CODE_CUSTOM_STYLE,
     ...theme.codeHighlight.blockStyle,
   };
+
+  if (isBlockCode && language === "erato-email") {
+    return <EratoEmailSuggestion content={codeContent} />;
+  }
 
   if (isBlockCode) {
     return (

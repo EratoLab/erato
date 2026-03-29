@@ -34,6 +34,11 @@ import type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachm
 import type { MessageControlsProps } from "@/types/message-controls";
 import type { ComponentType } from "react";
 
+export interface EratoEmailCodeBlockProps {
+  /** The raw text content inside the erato-email code block. */
+  content: string;
+}
+
 /**
  * Registry of overridable components.
  * Each key maps to either a custom component or null (use default).
@@ -116,6 +121,19 @@ export interface ComponentRegistry {
    * Used for customer-specific chrome such as a floating model selector.
    */
   ChatTopLeftAccessory: ComponentType<ChatTopLeftAccessoryProps> | null;
+
+  /**
+   * Override for rendering `erato-email` fenced code blocks in message content.
+   * When set, intercepts code blocks with language tag `erato-email` and renders
+   * a custom component instead of the default syntax highlighter.
+   *
+   * Used by the Office addin to render action buttons (Replace Selection, Insert
+   * at Cursor) that interact with the Outlook compose body via Office.js APIs.
+   *
+   * When null, `erato-email` blocks render as plain preformatted text with a
+   * Copy button.
+   */
+  EratoEmailCodeBlock: ComponentType<EratoEmailCodeBlockProps> | null;
 }
 
 export const resolveComponentOverride = <TProps>(
@@ -143,4 +161,5 @@ export const componentRegistry: ComponentRegistry = {
   MessageControls: null,
   ChatMessageRenderer: null,
   ChatTopLeftAccessory: null,
+  EratoEmailCodeBlock: null,
 };

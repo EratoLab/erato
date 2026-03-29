@@ -1415,6 +1415,14 @@ msgstr "Context usage"
 msgid "Context usage exceeds model capacity. The assistant can't be created like this."
 msgstr "Context usage exceeds model capacity. The assistant can't be created like this."
 
+#: src/components/ui/Message/EratoEmailSuggestion.tsx
+msgid "Copied!"
+msgstr "Copied!"
+
+#: src/components/ui/Message/EratoEmailSuggestion.tsx
+msgid "Copy"
+msgstr "Copy"
+
 #: src/pages/AssistantsListPage.tsx
 msgid "Create and manage custom assistants with specific instructions and capabilities"
 msgstr "Create and manage custom assistants with specific instructions and capabilities"

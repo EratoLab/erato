@@ -1415,6 +1415,14 @@ msgstr "Wykorzystanie kontekstu"
 msgid "Context usage exceeds model capacity. The assistant can't be created like this."
 msgstr "Wykorzystanie kontekstu przekracza pojemność modelu. Asystent nie może zostać utworzony w tej formie."
 
+#: src/components/ui/Message/EratoEmailSuggestion.tsx
+msgid "Copied!"
+msgstr ""
+
+#: src/components/ui/Message/EratoEmailSuggestion.tsx
+msgid "Copy"
+msgstr ""
+
 #: src/pages/AssistantsListPage.tsx
 msgid "Create and manage custom assistants with specific instructions and capabilities"
 msgstr ""
