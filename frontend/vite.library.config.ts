@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => {
         entry: path.resolve(__dirname, "./src/library/index.ts"),
         formats: ["es"],
         fileName: () => "library.js",
+        cssFileName: "style",
       },
       rollupOptions: {
         external: [
