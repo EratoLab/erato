@@ -71,6 +71,7 @@ export interface ChatContextValue {
     modelId?: string,
     assistantId?: string,
     selectedFacetIds?: string[],
+    actionFacet?: { id: string; args?: Record<string, string> },
   ) => Promise<string | undefined>;
   editMessage: (
     messageId: string,
