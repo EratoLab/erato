@@ -626,7 +626,10 @@ fn detect_facet_toggle_states(
 ///
 /// Uses single-pass replacement to guarantee that substituted values are never
 /// re-scanned for further `{{…}}` patterns, preventing injection via arg values.
-pub(crate) fn render_action_facet_template(template: &str, args: &HashMap<String, String>) -> String {
+pub(crate) fn render_action_facet_template(
+    template: &str,
+    args: &HashMap<String, String>,
+) -> String {
     let mut result = String::with_capacity(template.len());
     let mut rest = template;
 

@@ -3097,7 +3097,7 @@ mod tests {
     // ========================================================================
 
     mod validate_action_facet_tests {
-        use super::super::{validate_action_facet, ActionFacetRequest, ACTION_FACET_ARG_MAX_SIZE};
+        use super::super::{ACTION_FACET_ARG_MAX_SIZE, ActionFacetRequest, validate_action_facet};
         use crate::config::{ActionFacetConfig, AppConfig};
         use std::collections::HashMap;
 

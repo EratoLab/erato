@@ -2282,7 +2282,10 @@ mod test_cases {
             ContentPart::Text(text) => text.text.contains("You are helpful"),
             _ => false,
         });
-        assert!(has_base_prompt, "Base system prompt should be present from history");
+        assert!(
+            has_base_prompt,
+            "Base system prompt should be present from history"
+        );
 
         // Verify action facet prompt is present
         let has_action_facet = system_messages.iter().any(|m| match &m.content {
