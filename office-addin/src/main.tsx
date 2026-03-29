@@ -6,6 +6,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import App from "./App";
 import { AddinFileSourceSelector } from "./components/AddinFileSourceSelector";
+import { OutlookEratoEmailRenderer } from "./components/OutlookEratoEmailRenderer";
 
 function applyFrontendEnvToWindow() {
   window.API_ROOT_URL = import.meta.env.VITE_API_ROOT_URL;
@@ -64,6 +65,7 @@ function applyFrontendEnvToWindow() {
 
 applyFrontendEnvToWindow();
 componentRegistry.ChatFileSourceSelector = AddinFileSourceSelector;
+componentRegistry.EratoEmailCodeBlock = OutlookEratoEmailRenderer;
 
 const rootElement = document.getElementById("root");
 
