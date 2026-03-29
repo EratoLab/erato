@@ -190,6 +190,32 @@ chat_provider_ids = ["test-token-limit"]
 # template = "Summarize the following content for posting to {{channel}}: {{content}}"
 # allowed_args = ["channel", "content"]
 
+# Outlook compose mode: rewrite selected text
+# [action_facets.outlook_rewrite_selection]
+# display_name = "Outlook Rewrite Selection"
+# platform = "outlook"
+# template = """
+# The user has selected the following text from the email {{source_property}} they are currently composing:
+#
+# {{selected_text}}
+#
+# When the user asks to rewrite, rephrase, improve, or suggest alternatives for this text, output each suggestion inside a fenced code block with language tag erato-email. The block should contain only the replacement text, no explanations or markdown inside the block. You may provide multiple alternatives as separate erato-email blocks.
+# """
+# allowed_args = ["selected_text", "source_property"]
+
+# Outlook compose mode: review full draft (follow-up feature)
+# [action_facets.outlook_review_draft]
+# display_name = "Outlook Review Draft"
+# platform = "outlook"
+# template = """
+# The user is composing an email (format: {{body_format}}). The full draft body is:
+#
+# {{full_body}}
+#
+# When suggesting specific rewrites for parts of the email, output each suggestion inside a fenced code block with language tag erato-email. For general feedback (tone, completeness, structure), use plain text.
+# """
+# allowed_args = ["full_body", "body_format"]
+
 # Experimental facets feature configuration
 # [experimental_facets]
 # # Whether only a single facet can be selected at the same time (default: false)
