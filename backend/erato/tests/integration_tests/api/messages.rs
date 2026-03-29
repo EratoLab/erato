@@ -4,7 +4,8 @@ use axum::Router;
 use axum::http;
 use axum_test::TestServer;
 use erato::config::{
-    ExperimentalFacetsConfig, FacetConfig, ModelSettings, PromptSourceSpecification,
+    ActionFacetConfig, ExperimentalFacetsConfig, FacetConfig, ModelSettings,
+    PromptSourceSpecification,
 };
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
 use erato::models::user::get_or_create_user;
@@ -2043,4 +2044,429 @@ async fn test_abort_stream_persists_partial_message(pool: Pool<Postgres>) {
     assert_eq!(saved_content[0]["content_type"], json!("text"));
 
     server_handle.abort();
+}
+
+// --- Action-Facet tests ---
+
+/// Helper to set up an app with action facets configured.
+fn add_action_facets(app_config: &mut erato::config::AppConfig) {
+    app_config.action_facets.insert(
+        "summarize_selection".to_string(),
+        ActionFacetConfig {
+            display_name: "Summarize Selection".to_string(),
+            platform: Some("outlook".to_string()),
+            template: "Please summarize the following selection:\n\n{{selected_text}}".to_string(),
+            allowed_args: vec!["selected_text".to_string()],
+        },
+    );
+    app_config.action_facets.insert(
+        "rewrite".to_string(),
+        ActionFacetConfig {
+            display_name: "Rewrite".to_string(),
+            platform: None, // accepts any platform
+            template: "Rewrite the following in a {{tone}} tone:\n\n{{content}}".to_string(),
+            allowed_args: vec!["tone".to_string(), "content".to_string()],
+        },
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_action_facet_unknown_id_returns_400(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Hello",
+            "action_facet": { "id": "nonexistent_facet", "args": {} }
+        }))
+        .await;
+    response.assert_status(http::StatusCode::BAD_REQUEST);
+    let body = response.text();
+    assert!(
+        body.contains("Unknown action facet"),
+        "Expected 'Unknown action facet' in: {body}"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_action_facet_platform_mismatch_returns_400(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // summarize_selection requires platform "outlook", but we send "web"
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header("X-Erato-Platform", "web")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Hello",
+            "action_facet": {
+                "id": "summarize_selection",
+                "args": { "selected_text": "some text" }
+            }
+        }))
+        .await;
+    response.assert_status(http::StatusCode::BAD_REQUEST);
+    let body = response.text();
+    assert!(
+        body.contains("requires platform"),
+        "Expected platform mismatch error in: {body}"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_action_facet_no_platform_accepts_any(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // "rewrite" has no platform restriction — should succeed from any platform
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header("X-Erato-Platform", "outlook")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Hello",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "formal", "content": "hi there" }
+            }
+        }))
+        .await;
+    response.assert_status_ok();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_action_facet_unexpected_arg_returns_400(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Hello",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "formal", "content": "hi", "evil_key": "injected" }
+            }
+        }))
+        .await;
+    response.assert_status(http::StatusCode::BAD_REQUEST);
+    let body = response.text();
+    assert!(
+        body.contains("Unexpected argument"),
+        "Expected 'Unexpected argument' error in: {body}"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_action_facet_oversized_arg_returns_400(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // 10KB + 1 byte exceeds the limit
+    let oversized_value = "x".repeat(10 * 1024 + 1);
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Hello",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "formal", "content": oversized_value }
+            }
+        }))
+        .await;
+    response.assert_status(http::StatusCode::BAD_REQUEST);
+    let body = response.text();
+    assert!(
+        body.contains("exceeds maximum size"),
+        "Expected size limit error in: {body}"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_action_facet_persisted_in_generation_parameters(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Hello",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "casual", "content": "Hello world" }
+            }
+        }))
+        .await;
+    response.assert_status_ok();
+
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationParameters.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch messages");
+
+    assert!(
+        !assistant_messages.is_empty(),
+        "Expected at least one assistant message"
+    );
+
+    let params: GenerationParameters = serde_json::from_value(
+        assistant_messages[0]
+            .generation_parameters
+            .clone()
+            .expect("Missing generation_parameters"),
+    )
+    .expect("Failed to deserialize generation parameters");
+
+    assert_eq!(params.action_facet_id.as_deref(), Some("rewrite"));
+    let args = params
+        .action_facet_args
+        .expect("Expected action_facet_args");
+    assert_eq!(args.get("tone").map(|s| s.as_str()), Some("casual"));
+    assert_eq!(args.get("content").map(|s| s.as_str()), Some("Hello world"));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_action_facet_rendered_prompt_in_generation_input(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Rewrite this",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "professional", "content": "yo whats up" }
+            }
+        }))
+        .await;
+    response.assert_status_ok();
+
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationInputMessages.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch messages");
+
+    assert!(
+        !assistant_messages.is_empty(),
+        "Expected at least one message"
+    );
+
+    let gen_input_value = assistant_messages[0]
+        .generation_input_messages
+        .clone()
+        .expect("Missing generation_input_messages");
+
+    let system_texts: Vec<String> = gen_input_value["messages"]
+        .as_array()
+        .expect("Expected messages array")
+        .iter()
+        .filter(|msg| msg["role"].as_str() == Some("system"))
+        .filter_map(|msg| {
+            if msg["content"]["content_type"].as_str() == Some("text") {
+                msg["content"]["text"].as_str().map(str::to_string)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let found = system_texts.iter().any(|text| {
+        text.contains("Rewrite the following in a professional tone")
+            && text.contains("yo whats up")
+    });
+    assert!(
+        found,
+        "Expected rendered action facet prompt as system message. System texts: {system_texts:?}"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_action_facet_template_literal_values_no_rerendering(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Send args with {{ in values — should be treated as literals, not re-rendered
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Test injection",
+            "action_facet": {
+                "id": "rewrite",
+                "args": { "tone": "{{content}}", "content": "actual content" }
+            }
+        }))
+        .await;
+    response.assert_status_ok();
+
+    let assistant_messages = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::GenerationInputMessages.is_not_null())
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&db)
+        .await
+        .expect("Failed to fetch messages");
+
+    let gen_input_value = assistant_messages[0]
+        .generation_input_messages
+        .clone()
+        .expect("Missing generation_input_messages");
+
+    let system_texts: Vec<String> = gen_input_value["messages"]
+        .as_array()
+        .expect("Expected messages array")
+        .iter()
+        .filter(|msg| msg["role"].as_str() == Some("system"))
+        .filter_map(|msg| {
+            if msg["content"]["content_type"].as_str() == Some("text") {
+                msg["content"]["text"].as_str().map(str::to_string)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // The rendered template should contain the literal "{{content}}" from the tone arg,
+    // not "actual content" substituted again
+    let found = system_texts
+        .iter()
+        .any(|text| text.contains("{{content}}") && text.contains("actual content"));
+    assert!(
+        found,
+        "Expected literal '{{{{content}}}}' in rendered prompt (no re-rendering). System texts: {system_texts:?}"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_action_facet_platform_match_succeeds(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    add_action_facets(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // summarize_selection requires "outlook" — send matching header
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .add_header("X-Erato-Platform", "outlook")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Summarize",
+            "action_facet": {
+                "id": "summarize_selection",
+                "args": { "selected_text": "The quick brown fox." }
+            }
+        }))
+        .await;
+    response.assert_status_ok();
 }
