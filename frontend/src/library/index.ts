@@ -95,6 +95,7 @@ export {
   componentRegistry,
   resolveComponentOverride,
   type ComponentRegistry,
+  type EratoEmailCodeBlockProps,
 } from "@/config/componentRegistry";
 export { createLogger } from "@/utils/debugLogger";
 export {
