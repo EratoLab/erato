@@ -31,6 +31,12 @@ type-check:
 check:
     pnpm run check
 
+test:
+    pnpm run test
+
+test-watch:
+    pnpm run test:watch
+
 build:
     pnpm run build
 
