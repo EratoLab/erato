@@ -1960,6 +1960,81 @@ Facets that should be selected by default in the frontend (no backend logic is a
 default_selected_facets = ["web_search"]
 ```
 
+### `action_facets`
+
+Configuration for action facets. Action facets are non-user-visible, parameterized extensions of the facets system that inject context-aware additional system prompts based on client-supplied action ID and arguments. Unlike regular facets, action facets are not selectable by the user — they are resolved from client context at request time.
+
+Clients send an `action_facet` object (containing `id` and `args`) alongside the user's message on `submit`, `edit`, and `regenerate` requests. The backend resolves the configured prompt template, validates the arguments against the allowed list, and injects the rendered prompt as an additional system prompt before generation.
+
+**Note:** Action facet prompts are per-request and ephemeral. They do not replace or suppress any other prompt in the composition pipeline — the base system prompt is always preserved regardless of whether an action facet is active.
+
+#### `action_facets.<id>`
+
+Map of action facet configurations, keyed by action facet id. Each action facet defines a prompt template with declared argument variables.
+
+**Type:** `object`
+
+**Example:**
+
+```toml
+[action_facets.excel_rewrite_selection]
+display_name = "Excel Rewrite Selection"
+platform = "excel"
+template = """
+The user is working in Excel on sheet "{{sheet_name}}".
+The current selection type is "{{selection_type}}".
+Rewrite the following selected content:
+{{selected_text}}
+"""
+allowed_args = ["sheet_name", "selection_type", "selected_text"]
+```
+
+Each action facet supports these fields:
+
+- `display_name` - Human-readable name for the action facet
+- `platform` - Optional platform identifier (e.g. `"excel"`, `"outlook"`)
+- `template` - Prompt template with `{{variable}}` placeholders
+- `allowed_args` - List of allowed argument names for the template
+
+#### Template Rendering
+
+Templates use `{{variable}}` placeholders that are replaced with argument values supplied in the request. Rendering uses single-pass left-to-right scanning — substituted values are never re-scanned for further `{{…}}` patterns, preventing injection via argument values.
+
+#### Validation
+
+The backend validates each request against the action facet configuration:
+
+1. The `action_facet.id` must match a configured action facet — unknown IDs are rejected
+2. All keys in `args` must be present in `allowed_args` — unexpected keys are rejected
+3. Argument values are subject to a maximum size limit (10 KB per value)
+
+#### Request Shape
+
+The `action_facet` field is accepted on `submit`, `edit`, and `regenerate` endpoints. It is not accepted on `resume`, since the prompt was already composed when the generation started.
+
+```json
+{
+  "action_facet": {
+    "id": "excel_rewrite_selection",
+    "args": {
+      "selection_type": "cell_text",
+      "sheet_name": "Q1 Plan",
+      "selected_text": "badly phrased content here"
+    }
+  }
+}
+```
+
+#### Differences from Regular Facets
+
+| Aspect | Regular Facets | Action Facets |
+| --- | --- | --- |
+| User-visible | Yes, selectable in UI | No, resolved from client context |
+| Parameterized | No, behavior is config-time only | Yes, runtime args from request |
+| Request field | `selected_facet_ids` | `action_facet` |
+| Prompt lifecycle | Toggle-state based, persistent across messages | Per-request, ephemeral |
+| Base system prompt | May suppress historical replay on newly-enabled turn | Never suppresses — always additive |
+
 ### `budget`
 
 Configuration for budget tracking and display functionality. This feature allows you to track and display per-user spending based on token usage and model pricing.
