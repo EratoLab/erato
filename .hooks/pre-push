@@ -135,6 +135,68 @@ check_frontend_changes() {
     return 0
 }
 
+check_office_addin_changes() {
+    local changed_files=("$@")
+    local addin_files=()
+    local initial_dir=$(pwd)
+
+    # Check if any files in office-addin directory were modified
+    for file in "${changed_files[@]}"; do
+        if [[ $file == office-addin/* ]]; then
+            addin_files+=("$file")
+        fi
+    done
+
+    if [ ${#addin_files[@]} -eq 0 ]; then
+        echo "No office-addin files were modified. Proceeding..."
+        return 0
+    fi
+
+    echo "The following office-addin files were modified:"
+    printf '%s\n' "${addin_files[@]}"
+    echo
+
+    # Store the modified files for preview
+    local modified_files=$(printf '%s\n' "${addin_files[@]}")
+
+    # Present interactive selection for tests/lint with preview window
+    local selected=$(printf "Run check (format + lint + typecheck)\nRun tests" | fzf \
+        --multi \
+        --header="Select actions to perform (use TAB to select multiple, ENTER to confirm, ESC to skip)" \
+        --preview "echo 'Modified office-addin files:'; echo '$modified_files'" \
+        --preview-window=right:50%:wrap)
+
+    # Check if fzf was cancelled (ESC pressed)
+    if [ $? -eq 130 ]; then
+        echo "Skipping all checks..."
+        return 0
+    fi
+
+    if [ -n "$selected" ]; then
+        if echo "$selected" | grep -q "Run check"; then
+            echo "Running format, lint, and type check..."
+            cd office-addin && pnpm run check
+            if [ $? -ne 0 ]; then
+                echo "Check failed. Fix the issues before pushing."
+                return 1
+            fi
+            cd "$initial_dir"
+        fi
+
+        if echo "$selected" | grep -q "Run tests"; then
+            echo "Running tests..."
+            cd office-addin && pnpm run test
+            if [ $? -ne 0 ]; then
+                echo "Tests failed. Fix the issues before pushing."
+                return 1
+            fi
+            cd "$initial_dir"
+        fi
+    fi
+
+    return 0
+}
+
 # Check if fzf is installed
 if ! command -v fzf >/dev/null 2>&1; then
     echo "fzf is required for interactive selection. Please install it first to get the hook working."
@@ -171,6 +233,13 @@ fi
 check_frontend_changes "${changed_files[@]}"
 if [ $? -ne 0 ]; then
     echo "Frontend checks failed. Push aborted."
+    exit 1
+fi
+
+# Check office-addin changes
+check_office_addin_changes "${changed_files[@]}"
+if [ $? -ne 0 ]; then
+    echo "Office add-in checks failed. Push aborted."
     exit 1
 fi
 
