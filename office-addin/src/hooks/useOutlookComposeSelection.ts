@@ -54,7 +54,8 @@ export function useOutlookComposeSelection(): OutlookComposeSelection {
     const poll = () => {
       if (cancelled) return;
 
-      const composeItem = Office.context.mailbox.item as Office.MessageCompose | null;
+      const composeItem = Office.context.mailbox
+        .item as Office.MessageCompose | null;
       if (!composeItem) return;
 
       composeItem.getSelectedDataAsync(
