@@ -149,6 +149,11 @@ jobs:
         if: success() || failure()
         run: pnpm run typecheck
 
+      - name: "Office add-in tests"
+        working-directory: ./office-addin
+        if: success() || failure()
+        run: pnpm run test
+
       - name: "sqitch db summary up-to-date"
         working-directory: ./backend/sqitch
         if: success() || failure()
