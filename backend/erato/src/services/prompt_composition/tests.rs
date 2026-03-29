@@ -2072,4 +2072,82 @@ mod test_cases {
 
         assert_no_orphaned_tool_messages(&openai_parts.messages);
     }
+
+    // ============================================================================
+    // render_action_facet_template tests
+    // ============================================================================
+
+    mod render_action_facet_template_tests {
+        use super::super::super::transforms::render_action_facet_template;
+        use std::collections::HashMap;
+
+        #[test]
+        fn basic_substitution() {
+            let args = HashMap::from([("name".to_string(), "Alice".to_string())]);
+            assert_eq!(
+                render_action_facet_template("Hello {{name}}!", &args),
+                "Hello Alice!"
+            );
+        }
+
+        #[test]
+        fn multiple_placeholders() {
+            let args = HashMap::from([
+                ("greeting".to_string(), "Hi".to_string()),
+                ("name".to_string(), "Bob".to_string()),
+            ]);
+            assert_eq!(
+                render_action_facet_template("{{greeting}}, {{name}}!", &args),
+                "Hi, Bob!"
+            );
+        }
+
+        #[test]
+        fn empty_args_leaves_template_unchanged() {
+            let args = HashMap::new();
+            assert_eq!(
+                render_action_facet_template("Hello {{name}}!", &args),
+                "Hello {{name}}!"
+            );
+        }
+
+        #[test]
+        fn missing_key_leaves_placeholder() {
+            let args = HashMap::from([("other".to_string(), "val".to_string())]);
+            assert_eq!(
+                render_action_facet_template("Hello {{name}}!", &args),
+                "Hello {{name}}!"
+            );
+        }
+
+        #[test]
+        fn no_reexpansion_of_injected_values() {
+            // A value containing {{other}} must NOT be re-expanded
+            let args = HashMap::from([
+                ("first".to_string(), "{{second}}".to_string()),
+                ("second".to_string(), "LEAKED".to_string()),
+            ]);
+            let result = render_action_facet_template("Result: {{first}}", &args);
+            assert!(
+                !result.contains("LEAKED"),
+                "Value containing {{{{second}}}} was re-expanded: {result}"
+            );
+            assert_eq!(result, "Result: {{second}}");
+        }
+
+        #[test]
+        fn empty_template_returns_empty() {
+            let args = HashMap::from([("k".to_string(), "v".to_string())]);
+            assert_eq!(render_action_facet_template("", &args), "");
+        }
+
+        #[test]
+        fn value_with_special_chars() {
+            let args = HashMap::from([("code".to_string(), "a < b && c > d".to_string())]);
+            assert_eq!(
+                render_action_facet_template("Check: {{code}}", &args),
+                "Check: a < b && c > d"
+            );
+        }
+    }
 }

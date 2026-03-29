@@ -3091,6 +3091,175 @@ mod tests {
             ]
         );
     }
+
+    // ========================================================================
+    // validate_action_facet tests
+    // ========================================================================
+
+    mod validate_action_facet_tests {
+        use super::super::{validate_action_facet, ActionFacetRequest, ACTION_FACET_ARG_MAX_SIZE};
+        use crate::config::{ActionFacetConfig, AppConfig};
+        use std::collections::HashMap;
+
+        fn config_with_facet(id: &str, af: ActionFacetConfig) -> AppConfig {
+            let mut config = AppConfig::default();
+            config.action_facets.insert(id.to_string(), af);
+            config
+        }
+
+        #[test]
+        fn none_action_facet_is_ok() {
+            let config = AppConfig::default();
+            assert!(validate_action_facet(&config, None, "web").is_ok());
+        }
+
+        #[test]
+        fn unknown_id_is_rejected() {
+            let config = AppConfig::default();
+            let af = ActionFacetRequest {
+                id: "nonexistent".to_string(),
+                args: HashMap::new(),
+            };
+            let err = validate_action_facet(&config, Some(&af), "web").unwrap_err();
+            assert_eq!(err.0, axum::http::StatusCode::BAD_REQUEST);
+            assert!(err.1.contains("Unknown action facet"));
+        }
+
+        #[test]
+        fn valid_facet_no_platform_constraint() {
+            let config = config_with_facet(
+                "summarize",
+                ActionFacetConfig {
+                    display_name: "Summarize".to_string(),
+                    platform: None,
+                    template: "Summarize this".to_string(),
+                    allowed_args: vec![],
+                },
+            );
+            let af = ActionFacetRequest {
+                id: "summarize".to_string(),
+                args: HashMap::new(),
+            };
+            assert!(validate_action_facet(&config, Some(&af), "web").is_ok());
+            assert!(validate_action_facet(&config, Some(&af), "teams").is_ok());
+        }
+
+        #[test]
+        fn platform_mismatch_is_rejected() {
+            let config = config_with_facet(
+                "teams_reply",
+                ActionFacetConfig {
+                    display_name: "Teams Reply".to_string(),
+                    platform: Some("teams".to_string()),
+                    template: "Reply".to_string(),
+                    allowed_args: vec![],
+                },
+            );
+            let af = ActionFacetRequest {
+                id: "teams_reply".to_string(),
+                args: HashMap::new(),
+            };
+            let err = validate_action_facet(&config, Some(&af), "web").unwrap_err();
+            assert_eq!(err.0, axum::http::StatusCode::BAD_REQUEST);
+            assert!(err.1.contains("requires platform 'teams'"));
+        }
+
+        #[test]
+        fn platform_match_passes() {
+            let config = config_with_facet(
+                "teams_reply",
+                ActionFacetConfig {
+                    display_name: "Teams Reply".to_string(),
+                    platform: Some("teams".to_string()),
+                    template: "Reply".to_string(),
+                    allowed_args: vec![],
+                },
+            );
+            let af = ActionFacetRequest {
+                id: "teams_reply".to_string(),
+                args: HashMap::new(),
+            };
+            assert!(validate_action_facet(&config, Some(&af), "teams").is_ok());
+        }
+
+        #[test]
+        fn unexpected_arg_key_is_rejected() {
+            let config = config_with_facet(
+                "compose",
+                ActionFacetConfig {
+                    display_name: "Compose".to_string(),
+                    platform: None,
+                    template: "Write about {{topic}}".to_string(),
+                    allowed_args: vec!["topic".to_string()],
+                },
+            );
+            let af = ActionFacetRequest {
+                id: "compose".to_string(),
+                args: HashMap::from([("rogue_key".to_string(), "value".to_string())]),
+            };
+            let err = validate_action_facet(&config, Some(&af), "web").unwrap_err();
+            assert_eq!(err.0, axum::http::StatusCode::BAD_REQUEST);
+            assert!(err.1.contains("Unexpected argument 'rogue_key'"));
+        }
+
+        #[test]
+        fn allowed_arg_passes() {
+            let config = config_with_facet(
+                "compose",
+                ActionFacetConfig {
+                    display_name: "Compose".to_string(),
+                    platform: None,
+                    template: "Write about {{topic}}".to_string(),
+                    allowed_args: vec!["topic".to_string()],
+                },
+            );
+            let af = ActionFacetRequest {
+                id: "compose".to_string(),
+                args: HashMap::from([("topic".to_string(), "rust".to_string())]),
+            };
+            assert!(validate_action_facet(&config, Some(&af), "web").is_ok());
+        }
+
+        #[test]
+        fn oversized_arg_value_is_rejected() {
+            let config = config_with_facet(
+                "paste",
+                ActionFacetConfig {
+                    display_name: "Paste".to_string(),
+                    platform: None,
+                    template: "{{content}}".to_string(),
+                    allowed_args: vec!["content".to_string()],
+                },
+            );
+            let oversized = "x".repeat(ACTION_FACET_ARG_MAX_SIZE + 1);
+            let af = ActionFacetRequest {
+                id: "paste".to_string(),
+                args: HashMap::from([("content".to_string(), oversized)]),
+            };
+            let err = validate_action_facet(&config, Some(&af), "web").unwrap_err();
+            assert_eq!(err.0, axum::http::StatusCode::BAD_REQUEST);
+            assert!(err.1.contains("exceeds maximum size"));
+        }
+
+        #[test]
+        fn arg_value_at_exact_limit_passes() {
+            let config = config_with_facet(
+                "paste",
+                ActionFacetConfig {
+                    display_name: "Paste".to_string(),
+                    platform: None,
+                    template: "{{content}}".to_string(),
+                    allowed_args: vec!["content".to_string()],
+                },
+            );
+            let at_limit = "x".repeat(ACTION_FACET_ARG_MAX_SIZE);
+            let af = ActionFacetRequest {
+                id: "paste".to_string(),
+                args: HashMap::from([("content".to_string(), at_limit)]),
+            };
+            assert!(validate_action_facet(&config, Some(&af), "web").is_ok());
+        }
+    }
 }
 
 // ===== UNIFIED VALIDATION HELPERS =====
