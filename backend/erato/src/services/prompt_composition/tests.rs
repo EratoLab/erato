@@ -1,8 +1,11 @@
 #[cfg(test)]
 mod test_cases {
     use super::super::traits::{FileResolver, MessageRepository, PromptProvider};
-    use super::super::transforms::{build_abstract_sequence, resolve_sequence};
-    use super::super::types::{AbstractChatSequencePart, PromptSpec};
+    use super::super::transforms::{
+        build_abstract_sequence, build_abstract_sequence_with_facet_tool_expansions,
+        resolve_sequence,
+    };
+    use super::super::types::{AbstractChatSequencePart, ActionFacetUserInput, PromptSpec};
     use crate::config::{ChatProviderConfig, ExperimentalFacetsConfig, PromptSourceSpecification};
     use crate::db::entity::{chats, messages};
     use crate::models::assistant::{AssistantWithFiles, FileInfo};
@@ -2071,5 +2074,310 @@ mod test_cases {
             into_openai_request_parts(&request).expect("Failed to normalize OpenAI request");
 
         assert_no_orphaned_tool_messages(&openai_parts.messages);
+    }
+
+    // ============================================================================
+    // Action facet prompt composition integration tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_action_facet_prompt_injected_into_resolved_sequence() {
+        // Verify that an action facet prompt appears as a System message
+        // in the resolved sequence on the first turn.
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let msg1_id = Uuid::new_v4();
+        message_repo.add_message(msg1_id, None, MessageRole::User, "Draft an email");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        let action_facet = ActionFacetUserInput {
+            id: "email_compose".to_string(),
+            args: HashMap::from([("context".to_string(), "meeting notes".to_string())]),
+        };
+        let action_facet_configs = HashMap::from([(
+            "email_compose".to_string(),
+            crate::config::ActionFacetConfig {
+                display_name: "Email Compose".to_string(),
+                platform: None,
+                template: "You are composing an email. Context: {{context}}".to_string(),
+                allowed_args: vec!["context".to_string()],
+            },
+        )]);
+
+        let abstract_seq = build_abstract_sequence_with_facet_tool_expansions(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg1_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&action_facet),
+            &action_facet_configs,
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+
+        // Verify ActionFacetPrompt is in the abstract sequence
+        let has_action_facet_part = abstract_seq.parts.iter().any(|p| {
+            matches!(p, AbstractChatSequencePart::ActionFacetPrompt { content }
+                if content.contains("meeting notes"))
+        });
+        assert!(
+            has_action_facet_part,
+            "ActionFacetPrompt not found in abstract sequence"
+        );
+
+        let (resolved, _) = resolve_sequence(abstract_seq, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve sequence");
+
+        // Should have: base system prompt + action facet system prompt + user message
+        assert_eq!(
+            resolved.messages.len(),
+            3,
+            "Expected 3 messages (system + action_facet + user), found {}",
+            resolved.messages.len()
+        );
+        assert!(matches!(resolved.messages[0].role, MessageRole::System));
+        assert!(matches!(resolved.messages[1].role, MessageRole::System));
+        assert!(matches!(resolved.messages[2].role, MessageRole::User));
+
+        // The action facet prompt should contain the rendered template
+        match &resolved.messages[1].content {
+            ContentPart::Text(text) => {
+                assert!(
+                    text.text
+                        .contains("You are composing an email. Context: meeting notes"),
+                    "Action facet prompt not rendered correctly: {}",
+                    text.text
+                );
+            }
+            other => panic!("Expected text content for action facet, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_action_facet_preserves_historical_system_prompt_on_multi_turn() {
+        // Action facet prompts are per-request additive instructions.
+        // They must NOT suppress the base system prompt replayed from history.
+        let mut message_repo = MockMessageRepository::new();
+        let file_resolver = MockFileResolver::new();
+        let prompt_provider = MockPromptProvider::new().with_system_prompt("You are helpful.");
+
+        let chat = create_test_chat();
+        let config = create_test_chat_provider_config();
+
+        // --- Turn 1: normal first message (no action facet) ---
+        let msg1_id = Uuid::new_v4();
+        message_repo.add_message(msg1_id, None, MessageRole::User, "Hello");
+
+        let abstract_seq1 = build_abstract_sequence(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg1_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+        )
+        .await
+        .expect("Failed to build first abstract sequence");
+
+        let (resolved1, _) = resolve_sequence(abstract_seq1, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve first sequence");
+
+        // First turn: system + user
+        assert_eq!(resolved1.messages.len(), 2);
+        assert!(matches!(resolved1.messages[0].role, MessageRole::System));
+
+        // Simulate assistant response with persisted generation_input_messages
+        let msg2_id = Uuid::new_v4();
+        message_repo.add_message(msg2_id, Some(msg1_id), MessageRole::Assistant, "Hi there!");
+        let assistant_gen_input = GenerationInputMessages {
+            messages: resolved1.messages.clone(),
+        };
+        message_repo.update_generation_input_messages(msg2_id, &assistant_gen_input);
+
+        // --- Turn 2: user message WITH action facet ---
+        let msg3_id = Uuid::new_v4();
+        message_repo.add_message(msg3_id, Some(msg2_id), MessageRole::User, "Draft a reply");
+
+        let action_facet = ActionFacetUserInput {
+            id: "reply_compose".to_string(),
+            args: HashMap::from([("tone".to_string(), "formal".to_string())]),
+        };
+        let action_facet_configs = HashMap::from([(
+            "reply_compose".to_string(),
+            crate::config::ActionFacetConfig {
+                display_name: "Reply Compose".to_string(),
+                platform: None,
+                template: "Compose a reply with tone: {{tone}}".to_string(),
+                allowed_args: vec!["tone".to_string()],
+            },
+        )]);
+
+        let abstract_seq2 = build_abstract_sequence_with_facet_tool_expansions(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg3_id,
+            vec![],
+            &config,
+            &ExperimentalFacetsConfig::default(),
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&action_facet),
+            &action_facet_configs,
+        )
+        .await
+        .expect("Failed to build second abstract sequence");
+
+        let (resolved2, _) = resolve_sequence(abstract_seq2, &message_repo, &file_resolver)
+            .await
+            .expect("Failed to resolve second sequence");
+
+        // Count system messages
+        let system_messages: Vec<_> = resolved2
+            .messages
+            .iter()
+            .filter(|m| matches!(m.role, MessageRole::System))
+            .collect();
+
+        // Both the base system prompt (from history) and the action facet prompt
+        // should be present — action facets are additive, not replacing.
+        assert_eq!(
+            system_messages.len(),
+            2,
+            "Expected 2 system messages (base + action facet), found {}. Messages: {:#?}",
+            system_messages.len(),
+            resolved2
+                .messages
+                .iter()
+                .map(|m| format!("{:?}: {:?}", m.role, m.content))
+                .collect::<Vec<_>>()
+        );
+
+        // Verify base system prompt is replayed from history
+        let has_base_prompt = system_messages.iter().any(|m| match &m.content {
+            ContentPart::Text(text) => text.text.contains("You are helpful"),
+            _ => false,
+        });
+        assert!(
+            has_base_prompt,
+            "Base system prompt should be present from history"
+        );
+
+        // Verify action facet prompt is present
+        let has_action_facet = system_messages.iter().any(|m| match &m.content {
+            ContentPart::Text(text) => text.text.contains("Compose a reply with tone: formal"),
+            _ => false,
+        });
+        assert!(has_action_facet, "Action facet prompt should be present");
+
+        // Full sequence: base_system + action_facet + user1 + assistant + user2
+        assert_eq!(
+            resolved2.messages.len(),
+            5,
+            "Expected 5 messages (base_system + action_facet + user1 + assistant + user2), found {}",
+            resolved2.messages.len()
+        );
+    }
+
+    // ============================================================================
+    // render_action_facet_template tests
+    // ============================================================================
+
+    mod render_action_facet_template_tests {
+        use super::super::super::transforms::render_action_facet_template;
+        use std::collections::HashMap;
+
+        #[test]
+        fn basic_substitution() {
+            let args = HashMap::from([("name".to_string(), "Alice".to_string())]);
+            assert_eq!(
+                render_action_facet_template("Hello {{name}}!", &args),
+                "Hello Alice!"
+            );
+        }
+
+        #[test]
+        fn multiple_placeholders() {
+            let args = HashMap::from([
+                ("greeting".to_string(), "Hi".to_string()),
+                ("name".to_string(), "Bob".to_string()),
+            ]);
+            assert_eq!(
+                render_action_facet_template("{{greeting}}, {{name}}!", &args),
+                "Hi, Bob!"
+            );
+        }
+
+        #[test]
+        fn empty_args_leaves_template_unchanged() {
+            let args = HashMap::new();
+            assert_eq!(
+                render_action_facet_template("Hello {{name}}!", &args),
+                "Hello {{name}}!"
+            );
+        }
+
+        #[test]
+        fn missing_key_leaves_placeholder() {
+            let args = HashMap::from([("other".to_string(), "val".to_string())]);
+            assert_eq!(
+                render_action_facet_template("Hello {{name}}!", &args),
+                "Hello {{name}}!"
+            );
+        }
+
+        #[test]
+        fn no_reexpansion_of_injected_values() {
+            // A value containing {{other}} must NOT be re-expanded
+            let args = HashMap::from([
+                ("first".to_string(), "{{second}}".to_string()),
+                ("second".to_string(), "LEAKED".to_string()),
+            ]);
+            let result = render_action_facet_template("Result: {{first}}", &args);
+            assert!(
+                !result.contains("LEAKED"),
+                "Value containing {{{{second}}}} was re-expanded: {result}"
+            );
+            assert_eq!(result, "Result: {{second}}");
+        }
+
+        #[test]
+        fn empty_template_returns_empty() {
+            let args = HashMap::from([("k".to_string(), "v".to_string())]);
+            assert_eq!(render_action_facet_template("", &args), "");
+        }
+
+        #[test]
+        fn value_with_special_chars() {
+            let args = HashMap::from([("code".to_string(), "a < b && c > d".to_string())]);
+            assert_eq!(
+                render_action_facet_template("Check: {{code}}", &args),
+                "Check: a < b && c > d"
+            );
+        }
     }
 }

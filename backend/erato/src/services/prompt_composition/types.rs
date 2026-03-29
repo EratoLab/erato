@@ -71,6 +71,9 @@ pub enum AbstractChatSequencePart {
     /// Facet-specific additional system prompt
     FacetAdditionalSystemPrompt { spec: PromptSpec, facet_id: String },
 
+    /// Action-facet rendered prompt (request-scoped, parameterized)
+    ActionFacetPrompt { content: String },
+
     /// File attached to the current user input
     UserFile { file_id: Uuid },
 
