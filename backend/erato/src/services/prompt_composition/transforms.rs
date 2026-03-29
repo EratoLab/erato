@@ -621,12 +621,33 @@ fn detect_facet_toggle_states(
 }
 
 /// Renders an action facet template by replacing `{{key}}` placeholders with argument values.
-/// Values are treated as literal strings — no re-rendering to prevent `{{` injection.
-fn render_action_facet_template(template: &str, args: &HashMap<String, String>) -> String {
-    let mut result = template.to_string();
-    for (key, value) in args {
-        result = result.replace(&format!("{{{{{}}}}}", key), value);
+///
+/// Uses single-pass replacement to guarantee that substituted values are never
+/// re-scanned for further `{{…}}` patterns, preventing injection via arg values.
+pub(crate) fn render_action_facet_template(template: &str, args: &HashMap<String, String>) -> String {
+    let mut result = String::with_capacity(template.len());
+    let mut rest = template;
+
+    while let Some(open) = rest.find("{{") {
+        result.push_str(&rest[..open]);
+        let after_open = &rest[open + 2..];
+        if let Some(close) = after_open.find("}}") {
+            let key = &after_open[..close];
+            if let Some(value) = args.get(key) {
+                result.push_str(value);
+            } else {
+                // Preserve unmatched placeholder as-is
+                result.push_str(&rest[open..open + 2 + close + 2]);
+            }
+            rest = &after_open[close + 2..];
+        } else {
+            // No closing `}}` — emit remainder as-is
+            result.push_str(&rest[open..]);
+            rest = "";
+            break;
+        }
     }
+    result.push_str(rest);
     result
 }
 
