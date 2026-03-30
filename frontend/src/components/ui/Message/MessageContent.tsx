@@ -94,7 +94,10 @@ function MarkdownCode({
     ...theme.codeHighlight.blockStyle,
   };
 
-  if (isBlockCode && (language === "erato-email" || language === "erato-email-html")) {
+  if (
+    isBlockCode &&
+    (language === "erato-email" || language === "erato-email-html")
+  ) {
     return (
       <EratoEmailSuggestion
         content={codeContent}
