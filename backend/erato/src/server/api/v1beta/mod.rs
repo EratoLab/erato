@@ -253,6 +253,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         RecentChat,
         FacetInfo,
         GlobalFacetSettings,
+        ActionFacetInfo,
         FacetsResponse,
         StarterPromptInfo,
         StarterPromptsResponse,
@@ -465,9 +466,19 @@ pub struct GlobalFacetSettings {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
+pub struct ActionFacetInfo {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    platform: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
 pub struct FacetsResponse {
     global_facet_settings: GlobalFacetSettings,
     facets: Vec<FacetInfo>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    action_facets: Vec<ActionFacetInfo>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -555,12 +566,24 @@ pub async fn facets(
         }
     }
 
+    let mut action_facets: Vec<ActionFacetInfo> = app_state
+        .config
+        .action_facets
+        .iter()
+        .map(|(id, af)| ActionFacetInfo {
+            id: id.clone(),
+            platform: af.platform.clone(),
+        })
+        .collect();
+    action_facets.sort_by(|a, b| a.id.cmp(&b.id));
+
     Ok(Json(FacetsResponse {
         global_facet_settings: GlobalFacetSettings {
             only_single_facet: config.only_single_facet,
             show_facet_indicator_with_display_name: config.show_facet_indicator_with_display_name,
         },
         facets,
+        action_facets,
     }))
 }
 
