@@ -2084,6 +2084,20 @@
           }
         }
       },
+      "ActionFacetInfo": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          }
+        }
+      },
       "ActionFacetRequest": {
         "type": "object",
         "description": "A facet action requested by the user for this generation.",
@@ -3216,6 +3230,12 @@
           "facets"
         ],
         "properties": {
+          "action_facets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActionFacetInfo"
+            }
+          },
           "facets": {
             "type": "array",
             "items": {

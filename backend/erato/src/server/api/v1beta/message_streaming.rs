@@ -1119,6 +1119,38 @@ fn generation_request_context_from_headers(headers: &HeaderMap) -> GenerationReq
     }
 }
 
+/// Returns whether the given platform string is a known platform value.
+///
+/// Known platforms are `"web"` (always valid) plus any `platform` values declared
+/// on configured action facets in `erato.toml`.
+pub(crate) fn is_known_platform(config: &crate::config::AppConfig, platform: &str) -> bool {
+    if platform == DEFAULT_ERATO_PLATFORM {
+        return true;
+    }
+
+    config
+        .action_facets
+        .values()
+        .filter_map(|af| af.platform.as_deref())
+        .any(|p| p == platform)
+}
+
+/// Logs a warning if the `X-Erato-Platform` header value is not a known platform.
+pub(crate) fn warn_unknown_platform(config: &crate::config::AppConfig, platform: &str) {
+    if !is_known_platform(config, platform) {
+        tracing::warn!(
+            platform = platform,
+            "Unknown X-Erato-Platform value '{}'. Known platforms: 'web' + action facet platforms {:?}",
+            platform,
+            config
+                .action_facets
+                .values()
+                .filter_map(|af| af.platform.as_deref())
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
 /// Maximum allowed size in bytes for a single action facet argument value.
 const ACTION_FACET_ARG_MAX_SIZE: usize = 10 * 1024; // 10 KB
 
@@ -3260,6 +3292,80 @@ mod tests {
             assert!(validate_action_facet(&config, Some(&af), "web").is_ok());
         }
     }
+
+    mod is_known_platform_tests {
+        use super::super::is_known_platform;
+        use crate::config::{ActionFacetConfig, AppConfig};
+
+        fn config_with_outlook() -> AppConfig {
+            let mut config = AppConfig::default();
+            config.action_facets.insert(
+                "outlook_rewrite".to_string(),
+                ActionFacetConfig {
+                    display_name: "Rewrite".to_string(),
+                    platform: Some("outlook".to_string()),
+                    template: "Rewrite {{text}}".to_string(),
+                    allowed_args: vec!["text".to_string()],
+                },
+            );
+            config
+        }
+
+        #[test]
+        fn web_is_always_known() {
+            let config = AppConfig::default();
+            assert!(is_known_platform(&config, "web"));
+        }
+
+        #[test]
+        fn web_is_known_even_with_action_facets() {
+            let config = config_with_outlook();
+            assert!(is_known_platform(&config, "web"));
+        }
+
+        #[test]
+        fn configured_action_facet_platform_is_known() {
+            let config = config_with_outlook();
+            assert!(is_known_platform(&config, "outlook"));
+        }
+
+        #[test]
+        fn unconfigured_platform_is_unknown() {
+            let config = config_with_outlook();
+            assert!(!is_known_platform(&config, "excel"));
+        }
+
+        #[test]
+        fn office_runtime_values_are_not_known() {
+            let config = config_with_outlook();
+            assert!(!is_known_platform(&config, "OfficeOnline"));
+            assert!(!is_known_platform(&config, "PC"));
+            assert!(!is_known_platform(&config, "Mac"));
+        }
+
+        #[test]
+        fn no_action_facets_only_web_is_known() {
+            let config = AppConfig::default();
+            assert!(is_known_platform(&config, "web"));
+            assert!(!is_known_platform(&config, "outlook"));
+        }
+
+        #[test]
+        fn action_facet_without_platform_does_not_add_known_values() {
+            let mut config = AppConfig::default();
+            config.action_facets.insert(
+                "generic".to_string(),
+                ActionFacetConfig {
+                    display_name: "Generic".to_string(),
+                    platform: None,
+                    template: "Do something".to_string(),
+                    allowed_args: vec![],
+                },
+            );
+            assert!(is_known_platform(&config, "web"));
+            assert!(!is_known_platform(&config, "outlook"));
+        }
+    }
 }
 
 // ===== UNIFIED VALIDATION HELPERS =====
@@ -3480,6 +3586,7 @@ pub async fn message_submit_sse(
         .platform
         .as_deref()
         .unwrap_or(DEFAULT_ERATO_PLATFORM);
+    warn_unknown_platform(&app_state.config, platform);
     validate_action_facet(&app_state.config, request.action_facet.as_ref(), platform)?;
 
     // Determine the chat_id first so we can use it as the background task key
@@ -4049,6 +4156,7 @@ pub async fn regenerate_message_sse(
         .platform
         .as_deref()
         .unwrap_or(DEFAULT_ERATO_PLATFORM);
+    warn_unknown_platform(&app_state.config, platform);
     validate_action_facet(&app_state.config, request.action_facet.as_ref(), platform)?;
 
     let chat = get_chat_by_message_id(
@@ -4303,6 +4411,7 @@ pub async fn edit_message_sse(
         .platform
         .as_deref()
         .unwrap_or(DEFAULT_ERATO_PLATFORM);
+    warn_unknown_platform(&app_state.config, platform);
     validate_action_facet(&app_state.config, request.action_facet.as_ref(), platform)?;
 
     let chat = get_chat_by_message_id(

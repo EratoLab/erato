@@ -17,6 +17,11 @@ export type AbortStreamResponse = {
   abort_requested: boolean;
 };
 
+export type ActionFacetInfo = {
+  id: string;
+  platform?: string;
+};
+
 /**
  * A facet action requested by the user for this generation.
  */
@@ -669,6 +674,7 @@ export type FacetInfo = {
 };
 
 export type FacetsResponse = {
+  action_facets?: ActionFacetInfo[];
   facets: FacetInfo[];
   global_facet_settings: GlobalFacetSettings;
 };
