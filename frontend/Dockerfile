@@ -6,14 +6,21 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN npm install --global corepack@latest
 RUN corepack enable
 COPY . /app
-WORKDIR /app
 
 FROM base AS build
+WORKDIR /app/frontend
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN pnpm run build:lib
 RUN pnpm run build
 
-# Final stage - empty image with just the static files
+WORKDIR /app/office-addin
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --no-frozen-lockfile --lockfile=false
+RUN pnpm run build
+
+# Final stage - empty image with just the static files for all served frontends
 FROM scratch
-COPY --from=build /app/out /public 
-COPY --from=build /app/out/index.html /public/404.html
-COPY --from=build /app/serve.edited.json /public/serve.json
+COPY --from=build /app/frontend/out /public
+COPY --from=build /app/frontend/out/index.html /public/404.html
+COPY --from=build /app/frontend/serve.edited.json /public/serve.json
+COPY --from=build /app/office-addin/dist /public-office-addin
+COPY --from=build /app/office-addin/dist/index.html /public-office-addin/404.html

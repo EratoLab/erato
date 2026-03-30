@@ -70,11 +70,58 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(config.environment, "development");
     assert_eq!(config.http_host, "127.0.0.1");
     assert_eq!(config.http_port, 3130);
-    assert_eq!(config.frontend_bundle_path, "./public");
+    assert_eq!(config.frontend.web_frontend_bundle_path, "./public");
+    assert_eq!(
+        config.integrations.ms_office.addin.frontend_bundle_path,
+        "./public-office-addin"
+    );
+    assert_eq!(
+        config.integrations.ms_office.addin.msal_authority,
+        "https://login.microsoftonline.com/common"
+    );
     assert!(!config.cleanup_enabled);
     assert_eq!(config.cleanup_archived_max_age_days, 30);
 
     // The temp file will be automatically cleaned up when temp_file goes out of scope
+}
+
+#[test]
+fn test_deprecated_frontend_bundle_path_migrates_to_web_frontend_bundle_path() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+frontend_bundle_path = "./legacy-public"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "o4-mini"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize::<AppConfig>()
+        .expect("Failed to deserialize config")
+        .migrate();
+
+    assert_eq!(config.frontend.web_frontend_bundle_path, "./legacy-public");
 }
 
 /// Tests OpenAI provider configuration with custom base URL.
@@ -156,7 +203,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
 
     // Verify other defaults are still applied
     assert_eq!(config.http_host, "127.0.0.1");
-    assert_eq!(config.frontend_bundle_path, "./public");
+    assert_eq!(config.frontend.web_frontend_bundle_path, "./public");
 }
 
 /// Tests configuration with minimal required fields.

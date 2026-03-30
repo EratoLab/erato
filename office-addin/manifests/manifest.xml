@@ -10,8 +10,8 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Erato Office Extension" />
   <Description DefaultValue="Erato AI assistant for Outlook" />
-  <IconUrl DefaultValue="https://localhost:3002/assets/color-icon-192x192.png" />
-  <HighResolutionIconUrl DefaultValue="https://localhost:3002/assets/color-icon-192x192.png" />
+  <IconUrl DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
   <SupportUrl DefaultValue="https://erato.app" />
   <Hosts>
     <Host Name="Mailbox" />
@@ -93,9 +93,9 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="icon16" DefaultValue="https://localhost:3002/assets/outline-icon-32x32.png" />
-        <bt:Image id="icon32" DefaultValue="https://localhost:3002/assets/outline-icon-32x32.png" />
-        <bt:Image id="icon80" DefaultValue="https://localhost:3002/assets/color-icon-192x192.png" />
+        <bt:Image id="icon16" DefaultValue="https://localhost:3002/office-addin/assets/outline-icon-32x32.png" />
+        <bt:Image id="icon32" DefaultValue="https://localhost:3002/office-addin/assets/outline-icon-32x32.png" />
+        <bt:Image id="icon80" DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
       </bt:Images>
       <bt:Urls>
         <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/office-addin/" />
@@ -169,9 +169,9 @@
       </Hosts>
       <Resources>
         <bt:Images>
-          <bt:Image id="icon16" DefaultValue="https://localhost:3002/assets/outline-icon-32x32.png" />
-          <bt:Image id="icon32" DefaultValue="https://localhost:3002/assets/outline-icon-32x32.png" />
-          <bt:Image id="icon80" DefaultValue="https://localhost:3002/assets/color-icon-192x192.png" />
+          <bt:Image id="icon16" DefaultValue="https://localhost:3002/office-addin/assets/outline-icon-32x32.png" />
+          <bt:Image id="icon32" DefaultValue="https://localhost:3002/office-addin/assets/outline-icon-32x32.png" />
+          <bt:Image id="icon80" DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
         </bt:Images>
         <bt:Urls>
           <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/office-addin/" />

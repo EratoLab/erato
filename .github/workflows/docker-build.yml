@@ -81,6 +81,10 @@ jobs:
         working-directory: ./office-addin
         run: pnpm install --no-frozen-lockfile --lockfile=false
 
+      - name: "Build office-addin"
+        working-directory: ./office-addin
+        run: pnpm run build
+
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
         working-directory: backend
@@ -581,7 +585,8 @@ jobs:
       - name: Build and push Frontend image
         uses: docker/build-push-action@v6.15.0
         with:
-          context: ./frontend
+          context: .
+          file: ./frontend/Dockerfile
           push: true
           platforms: linux/amd64
           tags: |
@@ -644,7 +649,8 @@ jobs:
       - name: Build and push Frontend image
         uses: docker/build-push-action@v6.15.0
         with:
-          context: ./frontend
+          context: .
+          file: ./frontend/Dockerfile
           push: true
           platforms: linux/arm64
           tags: |

@@ -143,9 +143,6 @@ pub struct AppConfig {
     // The HTTP port to listen on.
     // Defaults to `3130`.
     pub http_port: i32,
-    // Where to find the static frontend files to serve.
-    // Defaults to `./public`
-    pub frontend_bundle_path: String,
     pub database_url: String,
     pub chat_providers: Option<ChatProvidersConfig>,
     // A list of file storage providers to use.
@@ -257,6 +254,15 @@ pub struct AppConfig {
     ))]
     #[facet(opaque)]
     pub additional_frontend_environment: Option<HashMap<String, serde_json::Value>>,
+    // **Deprecated**: Please use `frontend.web_frontend_bundle_path` instead.
+    #[serde(default)]
+    #[deprecated(note = "Please use `frontend.web_frontend_bundle_path` instead.")]
+    #[facet(erato_config::deprecated(
+        note = "Please use `frontend.web_frontend_bundle_path` instead.",
+        replacement_key = "frontend.web_frontend_bundle_path",
+        planned_removal_version = "0.6.0"
+    ))]
+    pub frontend_bundle_path: Option<String>,
 }
 
 impl AppConfig {
@@ -274,7 +280,7 @@ impl AppConfig {
             .set_default("environment", "development")?
             .set_default("http_host", "127.0.0.1")?
             .set_default("http_port", "3130")?
-            .set_default("frontend_bundle_path", "./public")?
+            .set_default("frontend.web_frontend_bundle_path", "./public")?
             .set_default("cleanup_enabled", false)?
             .set_default("cleanup_archived_max_age_days", 30)?
             .set_default("logging.format", "plain")?
@@ -351,6 +357,20 @@ impl AppConfig {
                 .extend(additional_frontend_env);
         }
         config.additional_frontend_environment = None;
+
+        if let Some(frontend_bundle_path) = config.frontend_bundle_path.clone() {
+            tracing::warn!(
+                "Config key `frontend_bundle_path` is deprecated. Please use `frontend.web_frontend_bundle_path` instead."
+            );
+            if config.frontend.web_frontend_bundle_path == default_web_frontend_bundle_path() {
+                config.frontend.web_frontend_bundle_path = frontend_bundle_path;
+            } else {
+                tracing::warn!(
+                    "Ignoring deprecated config key `frontend_bundle_path` because `frontend.web_frontend_bundle_path` is already set."
+                );
+            }
+        }
+        config.frontend_bundle_path = None;
 
         if let Some(serde_json::Value::String(theme_name)) = config
             .frontend
@@ -1274,6 +1294,11 @@ pub struct McpServersGlobalConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct FrontendConfig {
+    // Where to find the static web frontend files to serve.
+    // Defaults to `./public`
+    #[serde(default = "default_web_frontend_bundle_path")]
+    pub web_frontend_bundle_path: String,
+
     // The name of a theme to use for the frontend.
     // Themes can be placed in `frontend/public/custom-theme/<THEME_NAME>` directories.
     pub theme: Option<String>,
@@ -1344,6 +1369,10 @@ pub struct FrontendConfig {
 
 fn default_sidebar_collapsed_mode() -> String {
     "hidden".to_string()
+}
+
+fn default_web_frontend_bundle_path() -> String {
+    "./public".to_string()
 }
 
 fn default_chat_input_empty_state_layout() -> String {
@@ -1721,6 +1750,44 @@ pub struct IntegrationsConfig {
     pub experimental_sharepoint: ExperimentalSharepointConfig,
     #[serde(default)]
     pub experimental_entra_id: ExperimentalEntraIdConfig,
+    #[serde(default)]
+    pub ms_office: MsOfficeConfig,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct MsOfficeConfig {
+    #[serde(default)]
+    pub addin: MsOfficeAddinConfig,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct MsOfficeAddinConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    pub msal_client_id: Option<String>,
+    #[serde(default = "default_ms_office_addin_msal_authority")]
+    pub msal_authority: String,
+    #[serde(default = "default_ms_office_addin_frontend_bundle_path")]
+    pub frontend_bundle_path: String,
+}
+
+impl Default for MsOfficeAddinConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            msal_client_id: None,
+            msal_authority: default_ms_office_addin_msal_authority(),
+            frontend_bundle_path: default_ms_office_addin_frontend_bundle_path(),
+        }
+    }
+}
+
+fn default_ms_office_addin_msal_authority() -> String {
+    "https://login.microsoftonline.com/common".to_string()
+}
+
+fn default_ms_office_addin_frontend_bundle_path() -> String {
+    "./public-office-addin".to_string()
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
