@@ -35,7 +35,7 @@ interface AddinChatMessage extends Message {
 export function AddinChatProvider({ children }: { children: ReactNode }) {
   const { capabilities } = useFileCapabilitiesContext();
   const queryClient = useQueryClient();
-  const { platform: officePlatform } = useOffice();
+  const { host } = useOffice();
 
   const acceptedFileTypes = useMemo(
     () => getSupportedFileTypes(capabilities),
@@ -127,7 +127,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   } = useChatMessaging({
     chatId: currentChatId,
     silentChatId,
-    platform: officePlatform ?? "office-addin",
+    platform: host?.toLowerCase() ?? "office-addin",
   });
 
   useEffect(() => {
