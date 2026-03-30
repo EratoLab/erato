@@ -67,7 +67,7 @@ describe("outlookComposeWrite", () => {
   });
 
   describe("replaceComposeSelection", () => {
-    it("calls setSelectedDataAsync with Html coercion for html body", async () => {
+    it("uses Text coercion for plain content into html body", async () => {
       const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
         callback(createMockAsyncResult(undefined)),
       );
@@ -83,7 +83,31 @@ describe("outlookComposeWrite", () => {
       });
       mailbox.item = item;
 
-      await replaceComposeSelection("<b>bold</b>");
+      await replaceComposeSelection("plain text");
+      expect(setSelectedDataAsync).toHaveBeenCalledWith(
+        "plain text",
+        { coercionType: Office.CoercionType.Text },
+        expect.any(Function),
+      );
+    });
+
+    it("uses Html coercion for html content into html body", async () => {
+      const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
+        callback(createMockAsyncResult(undefined)),
+      );
+      const item = createMockMessageCompose({
+        body: {
+          getAsync: vi.fn(),
+          getTypeAsync: vi.fn((callback) =>
+            callback(createMockAsyncResult(Office.CoercionType.Html)),
+          ),
+          setSelectedDataAsync,
+          prependAsync: vi.fn(),
+        },
+      });
+      mailbox.item = item;
+
+      await replaceComposeSelection("<b>bold</b>", true);
       expect(setSelectedDataAsync).toHaveBeenCalledWith(
         "<b>bold</b>",
         { coercionType: Office.CoercionType.Html },
@@ -91,7 +115,7 @@ describe("outlookComposeWrite", () => {
       );
     });
 
-    it("calls setSelectedDataAsync with Text coercion for text body", async () => {
+    it("uses Text coercion for plain content into text body", async () => {
       const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
         callback(createMockAsyncResult(undefined)),
       );
@@ -110,6 +134,30 @@ describe("outlookComposeWrite", () => {
       await replaceComposeSelection("plain text");
       expect(setSelectedDataAsync).toHaveBeenCalledWith(
         "plain text",
+        { coercionType: Office.CoercionType.Text },
+        expect.any(Function),
+      );
+    });
+
+    it("strips HTML tags when inserting html content into text body", async () => {
+      const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
+        callback(createMockAsyncResult(undefined)),
+      );
+      const item = createMockMessageCompose({
+        body: {
+          getAsync: vi.fn(),
+          getTypeAsync: vi.fn((callback) =>
+            callback(createMockAsyncResult(Office.CoercionType.Text)),
+          ),
+          setSelectedDataAsync,
+          prependAsync: vi.fn(),
+        },
+      });
+      mailbox.item = item;
+
+      await replaceComposeSelection("<b>bold</b> text", true);
+      expect(setSelectedDataAsync).toHaveBeenCalledWith(
+        "bold text",
         { coercionType: Office.CoercionType.Text },
         expect.any(Function),
       );

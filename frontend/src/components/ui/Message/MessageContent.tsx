@@ -94,8 +94,13 @@ function MarkdownCode({
     ...theme.codeHighlight.blockStyle,
   };
 
-  if (isBlockCode && language === "erato-email") {
-    return <EratoEmailSuggestion content={codeContent} />;
+  if (isBlockCode && (language === "erato-email" || language === "erato-email-html")) {
+    return (
+      <EratoEmailSuggestion
+        content={codeContent}
+        isHtml={language === "erato-email-html"}
+      />
+    );
   }
 
   if (isBlockCode) {
