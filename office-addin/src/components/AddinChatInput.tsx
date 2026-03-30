@@ -17,6 +17,7 @@ import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useOutlookEmailSource } from "../hooks/useOutlookEmailSource";
 import { useOffice } from "../providers/OfficeProvider";
+import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 
 interface AddinChatInputProps {
   onSendMessage: (
@@ -62,6 +63,7 @@ export const AddinChatInput = forwardRef<
   const { host } = useOffice();
   const [isUploadingEmail, setIsUploadingEmail] = useState(false);
   const composeSelection = useOutlookComposeSelection();
+  const { mailItem } = useOutlookMailItem();
   const [isSelectionDismissed, setIsSelectionDismissed] = useState(false);
   const hasActiveSelection =
     composeSelection.data.length > 0 && !isSelectionDismissed;
@@ -148,16 +150,28 @@ export const AddinChatInput = forwardRef<
       modelId?: string,
       selectedFacetIds?: string[],
     ) => {
-      // Build action facet payload from active selection
-      const actionFacet = hasActiveSelection
-        ? {
-            id: "outlook_rewrite_selection",
-            args: {
-              selected_text: composeSelection.data,
-              source_property: composeSelection.sourceProperty,
-            },
-          }
-        : undefined;
+      // Build action facet payload: selection-based rewrite or full-body review
+      let actionFacet: { id: string; args: Record<string, string> } | undefined;
+
+      if (hasActiveSelection) {
+        actionFacet = {
+          id: "outlook_rewrite_selection",
+          args: {
+            selected_text: composeSelection.data,
+            source_property: composeSelection.sourceProperty,
+          },
+        };
+      } else if (mailItem?.bodyText || mailItem?.bodyHtml) {
+        const fullBody = mailItem.bodyText ?? mailItem.bodyHtml ?? "";
+        const bodyFormat = mailItem.bodyHtml ? "html" : "text";
+        actionFacet = {
+          id: "outlook_review_draft",
+          args: {
+            full_body: fullBody,
+            body_format: bodyFormat,
+          },
+        };
+      }
 
       if (!shouldUseSuggestedEmailSource) {
         chatInputProps.onSendMessage(
@@ -224,6 +238,8 @@ export const AddinChatInput = forwardRef<
       composeSelection.data,
       composeSelection.sourceProperty,
       hasActiveSelection,
+      mailItem?.bodyText,
+      mailItem?.bodyHtml,
       resolveSelectedFilesForSend,
       shouldUseSuggestedEmailSource,
     ],
