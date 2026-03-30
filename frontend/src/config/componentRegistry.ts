@@ -37,6 +37,8 @@ import type { ComponentType } from "react";
 export interface EratoEmailCodeBlockProps {
   /** The raw text content inside the erato-email code block. */
   content: string;
+  /** Whether the content is HTML (from `erato-email-html` language tag). */
+  isHtml?: boolean;
 }
 
 /**

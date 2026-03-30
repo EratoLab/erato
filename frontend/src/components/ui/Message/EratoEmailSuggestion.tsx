@@ -43,11 +43,14 @@ function DefaultEratoEmailCodeBlock({ content }: EratoEmailCodeBlockProps) {
   );
 }
 
-export function EratoEmailSuggestion({ content }: EratoEmailCodeBlockProps) {
+export function EratoEmailSuggestion({
+  content,
+  isHtml,
+}: EratoEmailCodeBlockProps) {
   const CustomRenderer = componentRegistry.EratoEmailCodeBlock;
 
   if (CustomRenderer) {
-    return <CustomRenderer content={content} />;
+    return <CustomRenderer content={content} isHtml={isHtml} />;
   }
 
   return <DefaultEratoEmailCodeBlock content={content} />;

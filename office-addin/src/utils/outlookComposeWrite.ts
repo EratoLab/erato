@@ -1,3 +1,4 @@
+import { stripHtmlTags } from "./htmlStrip";
 import { callOfficeAsync } from "./officeAsync";
 
 export type BodyFormat = "html" | "text";
@@ -21,24 +22,44 @@ export async function getComposeBodyType(): Promise<BodyFormat> {
 
 /**
  * Replaces the current selection in the compose body (or inserts at cursor
- * if nothing is selected) with the given text.
+ * if nothing is selected).
  *
- * Automatically detects the body format and uses the matching coercion type
- * to avoid inserting raw HTML tags into plain text or losing formatting in
- * HTML bodies.
+ * Automatically detects the body format and adapts:
+ * - HTML body + plain text content → inserts as-is (safe)
+ * - HTML body + HTML content → inserts as HTML
+ * - Plain text body + HTML content → strips tags before inserting
+ * - Plain text body + plain text content → inserts as-is
+ *
+ * @param data The content to insert.
+ * @param isHtml Whether `data` contains HTML markup. When true and the body
+ *               is plain text, HTML tags are stripped automatically.
  */
-export async function replaceComposeSelection(data: string): Promise<void> {
+export async function replaceComposeSelection(
+  data: string,
+  isHtml = false,
+): Promise<void> {
   const item = Office.context.mailbox.item as Office.MessageCompose | null;
   if (!item) {
     throw new Error("No compose item available");
   }
 
   const bodyFormat = await getComposeBodyType();
-  const coercionType =
-    bodyFormat === "html" ? Office.CoercionType.Html : Office.CoercionType.Text;
+
+  let insertData = data;
+  let coercionType: Office.CoercionType;
+
+  if (bodyFormat === "html") {
+    coercionType = isHtml ? Office.CoercionType.Html : Office.CoercionType.Text;
+    // Plain text into HTML body is safe — Office wraps it automatically.
+  } else {
+    coercionType = Office.CoercionType.Text;
+    if (isHtml) {
+      insertData = stripHtmlTags(data);
+    }
+  }
 
   await callOfficeAsync<void>((callback) =>
-    item.body.setSelectedDataAsync(data, { coercionType }, callback),
+    item.body.setSelectedDataAsync(insertData, { coercionType }, callback),
   );
 }
 

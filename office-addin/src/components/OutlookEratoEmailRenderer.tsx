@@ -17,6 +17,7 @@ import type { EratoEmailCodeBlockProps } from "@erato/frontend/library";
  */
 export function OutlookEratoEmailRenderer({
   content,
+  isHtml,
 }: EratoEmailCodeBlockProps) {
   const composeSelection = useOutlookComposeSelection();
   const hasSelection = composeSelection.data.length > 0;
@@ -29,9 +30,7 @@ export function OutlookEratoEmailRenderer({
   const handleInsert = useCallback(async () => {
     setStatus("inserting");
     try {
-      // setSelectedDataAsync replaces the selection if present,
-      // otherwise inserts at the cursor position.
-      await replaceComposeSelection(content);
+      await replaceComposeSelection(content, isHtml);
       setStatus("done");
       setTimeout(() => setStatus("idle"), 2000);
     } catch (err) {
@@ -39,7 +38,7 @@ export function OutlookEratoEmailRenderer({
       setStatus("error");
       setTimeout(() => setStatus("idle"), 2000);
     }
-  }, [content]);
+  }, [content, isHtml]);
 
   const handleCopy = useCallback(() => {
     void navigator.clipboard
