@@ -2407,6 +2407,20 @@
           "files"
         ],
         "properties": {
+          "action_facet_args": {
+            "type": "object",
+            "description": "The action facet arguments used for this generation, if any",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "action_facet_id": {
+            "type": "string",
+            "description": "The action facet ID used for this generation, if any"
+          },
           "chat_id": {
             "type": "string",
             "description": "The ID of the chat this message belongs to"

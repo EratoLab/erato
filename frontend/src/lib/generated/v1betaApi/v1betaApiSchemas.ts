@@ -259,6 +259,16 @@ export type Chat = {
  */
 export type ChatMessage = {
   /**
+   * The action facet arguments used for this generation, if any
+   */
+  action_facet_args?: {
+    [key: string]: string;
+  };
+  /**
+   * The action facet ID used for this generation, if any
+   */
+  action_facet_id?: string;
+  /**
    * The ID of the chat this message belongs to
    */
   chat_id: string;

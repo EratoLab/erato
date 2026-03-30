@@ -23,7 +23,9 @@ use crate::models::chat::{
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
 };
-use crate::models::message::{ContentPart, GenerationErrorType, GenerationMetadata, MessageSchema};
+use crate::models::message::{
+    ContentPart, GenerationErrorType, GenerationMetadata, GenerationParameters, MessageSchema,
+};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
 use crate::policy::engine::authorize;
@@ -920,6 +922,14 @@ pub struct ChatMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     feedback: Option<MessageFeedback>,
+    /// The action facet ID used for this generation, if any
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    action_facet_id: Option<String>,
+    /// The action facet arguments used for this generation, if any
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    action_facet_args: Option<HashMap<String, String>>,
 }
 
 /// Statistics for a list of chat messages
@@ -1497,6 +1507,10 @@ impl ChatMessage {
                 serde_json::from_value::<GenerationMetadata>(metadata.clone()).ok()
             })
             .and_then(|metadata| metadata.error);
+        let gen_params = msg
+            .generation_parameters
+            .as_ref()
+            .and_then(|p| serde_json::from_value::<GenerationParameters>(p.clone()).ok());
         Ok(ChatMessage {
             id: msg.id.to_string(),
             chat_id: msg.chat_id.to_string(),
@@ -1522,6 +1536,8 @@ impl ChatMessage {
                 created_at: f.created_at,
                 updated_at: f.updated_at,
             }),
+            action_facet_id: gen_params.as_ref().and_then(|p| p.action_facet_id.clone()),
+            action_facet_args: gen_params.and_then(|p| p.action_facet_args),
         })
     }
 }

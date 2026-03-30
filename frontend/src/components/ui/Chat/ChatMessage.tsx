@@ -15,6 +15,7 @@ import { isImageFile } from "@/utils/file/fileTypeUtils";
 import { Alert } from "../Feedback/Alert";
 import { Avatar } from "../Feedback/Avatar";
 import { LoadingIndicator } from "../Feedback/LoadingIndicator";
+import { ActionFacetContext } from "../Message/ActionFacetContext";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 import { ImageLightbox } from "../Message/ImageLightbox";
 import { MessageContent } from "../Message/MessageContent";
@@ -189,6 +190,10 @@ export const ChatMessage = memo(function ChatMessage({
                 message.error.filter_details,
               )}
             </Alert>
+          )}
+
+          {!isUser && message.action_facet_args && (
+            <ActionFacetContext actionFacetArgs={message.action_facet_args} />
           )}
 
           <MessageContent

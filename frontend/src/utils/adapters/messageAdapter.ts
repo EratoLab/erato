@@ -28,6 +28,10 @@ export interface UiChatMessage extends Message {
   toolCalls?: UiToolCall[];
   /** Existing feedback for this message, if any */
   feedback?: MessageFeedback;
+  /** The action facet ID used for this generation, if any */
+  action_facet_id?: string;
+  /** The action facet arguments used for this generation, if any */
+  action_facet_args?: Record<string, string>;
 }
 
 /**
@@ -65,6 +69,8 @@ export function mapApiMessageToUiMessage(
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     feedback: apiMessage.feedback ?? undefined,
     error: isMessageError(error) ? error : undefined,
+    action_facet_id: apiMessage.action_facet_id ?? undefined,
+    action_facet_args: apiMessage.action_facet_args ?? undefined,
   };
 }
 
