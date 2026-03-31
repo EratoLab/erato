@@ -199,7 +199,7 @@ chat_provider_ids = ["test-token-limit"]
 #
 # {{selected_text}}
 #
-# For this reply only, output each rewrite suggestion inside a fenced code block with language tag erato-email. The block must contain only the replacement text — no explanations, labels, or markdown inside the block. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
+# Rewrite ONLY the selected text above — do not include surrounding email content such as greetings, sign-offs, or other paragraphs. For this reply only, output the rewrite inside a fenced code block with language tag erato-email. The block must contain only the replacement text — no explanations, labels, or markdown inside the block. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
 # """
 # allowed_args = ["selected_text", "source_property"]
 
