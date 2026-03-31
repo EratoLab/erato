@@ -1,3 +1,4 @@
+import { plainTextToHtml } from "./htmlConvert";
 import { stripHtmlTags } from "./htmlStrip";
 import { callOfficeAsync } from "./officeAsync";
 
@@ -25,7 +26,7 @@ export async function getComposeBodyType(): Promise<BodyFormat> {
  * if nothing is selected).
  *
  * Automatically detects the body format and adapts:
- * - HTML body + plain text content → inserts as-is (safe)
+ * - HTML body + plain text content → converts newlines to `<br>`, inserts as HTML
  * - HTML body + HTML content → inserts as HTML
  * - Plain text body + HTML content → strips tags before inserting
  * - Plain text body + plain text content → inserts as-is
@@ -49,8 +50,11 @@ export async function replaceComposeSelection(
   let coercionType: Office.CoercionType;
 
   if (bodyFormat === "html") {
-    coercionType = isHtml ? Office.CoercionType.Html : Office.CoercionType.Text;
-    // Plain text into HTML body is safe — Office wraps it automatically.
+    coercionType = Office.CoercionType.Html;
+    if (!isHtml) {
+      // Plain text → HTML: escape special chars and convert newlines to <br>
+      insertData = plainTextToHtml(data);
+    }
   } else {
     coercionType = Office.CoercionType.Text;
     if (isHtml) {

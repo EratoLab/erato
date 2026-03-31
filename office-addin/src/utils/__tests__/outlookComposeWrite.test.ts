@@ -67,7 +67,7 @@ describe("outlookComposeWrite", () => {
   });
 
   describe("replaceComposeSelection", () => {
-    it("uses Text coercion for plain content into html body", async () => {
+    it("converts plain text to HTML with line breaks for html body", async () => {
       const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
         callback(createMockAsyncResult(undefined)),
       );
@@ -83,10 +83,10 @@ describe("outlookComposeWrite", () => {
       });
       mailbox.item = item;
 
-      await replaceComposeSelection("plain text");
+      await replaceComposeSelection("line one\nline two");
       expect(setSelectedDataAsync).toHaveBeenCalledWith(
-        "plain text",
-        { coercionType: Office.CoercionType.Text },
+        "line one<br>\nline two",
+        { coercionType: Office.CoercionType.Html },
         expect.any(Function),
       );
     });
