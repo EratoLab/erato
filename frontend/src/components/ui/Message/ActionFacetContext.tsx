@@ -1,0 +1,33 @@
+import { t } from "@lingui/core/macro";
+
+interface ActionFacetContextProps {
+  actionFacetArgs?: Record<string, string>;
+}
+
+/**
+ * Renders a quote block showing the contextual text that was sent alongside
+ * an action facet request (e.g., selected text from Outlook compose, cell
+ * content from Excel). Displays any arg named `selected_text` as a blockquote.
+ *
+ * Returns null when no displayable context is present.
+ */
+export function ActionFacetContext({
+  actionFacetArgs,
+}: ActionFacetContextProps) {
+  const selectedText = actionFacetArgs?.selected_text;
+
+  if (!selectedText) {
+    return null;
+  }
+
+  return (
+    <div className="mb-2 rounded-md border-l-2 border-theme-border bg-theme-bg-secondary px-3 py-2">
+      <div className="mb-0.5 text-xs font-medium text-theme-fg-muted">
+        {t`Selection`}
+      </div>
+      <div className="line-clamp-3 text-sm text-theme-fg-secondary">
+        {selectedText}
+      </div>
+    </div>
+  );
+}

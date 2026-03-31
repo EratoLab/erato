@@ -34,6 +34,22 @@ pub struct GenerationParameters {
     pub action_facet_args: Option<HashMap<String, String>>,
 }
 
+/// User-provided input context stored on user messages.
+///
+/// Captures contextual information the user supplied alongside their message,
+/// such as action facet payloads (e.g., selected text from Outlook compose).
+/// Semantically distinct from `GenerationParameters` which records how the
+/// assistant response was produced.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InputParameters {
+    /// The action facet ID supplied with this message, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action_facet_id: Option<String>,
+    /// The action facet arguments supplied with this message, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action_facet_args: Option<HashMap<String, String>>,
+}
+
 /// Request-scoped context captured for a generation request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GenerationRequestContext {
@@ -293,6 +309,7 @@ pub async fn submit_message(
     input_files_ids: &[Uuid],
     generation_parameters: Option<GenerationParameters>,
     generation_metadata: Option<GenerationMetadata>,
+    input_parameters: Option<InputParameters>,
 ) -> Result<messages::Model, Report> {
     // Validate the message format
     MessageSchema::validate(&raw_message)?;
@@ -302,6 +319,7 @@ pub async fn submit_message(
         generation_parameters.map(to_value).transpose()?;
     let generation_metadata_json: Option<JsonValue> =
         generation_metadata.map(to_value).transpose()?;
+    let input_parameters_json: Option<JsonValue> = input_parameters.map(to_value).transpose()?;
 
     // Authorize that the subject can submit messages to this chat
     authorize!(
@@ -415,6 +433,7 @@ pub async fn submit_message(
         }),
         generation_parameters: ActiveValue::Set(generation_parameters_json),
         generation_metadata: ActiveValue::Set(generation_metadata_json),
+        input_parameters: ActiveValue::Set(input_parameters_json),
         ..Default::default()
     };
 

@@ -78,6 +78,7 @@ mod test_cases {
                     sibling_message_id: None,
                     is_message_in_active_thread: true,
                     input_file_uploads: None,
+                    input_parameters: None,
                     created_at: chrono::Utc::now().into(),
                     updated_at: chrono::Utc::now().into(),
                 },

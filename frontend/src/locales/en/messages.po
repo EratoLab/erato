@@ -1810,6 +1810,10 @@ msgstr "Search Your Chats"
 msgid "Searching..."
 msgstr "Searching..."
 
+#: src/components/ui/Message/ActionFacetContext.tsx
+msgid "Selection"
+msgstr "Selection"
+
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Send message"
 msgstr "Send message"
