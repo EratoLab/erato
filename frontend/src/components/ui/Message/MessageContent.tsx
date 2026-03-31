@@ -50,12 +50,37 @@ type MarkdownPreProps = React.ComponentPropsWithoutRef<"pre"> & {
   node?: unknown;
 };
 
+function isEratoEmailCodeChild(children: React.ReactNode): boolean {
+  const child = React.Children.only(children) as React.ReactElement<{
+    className?: string;
+  }>;
+  const cls = child.props.className ?? "";
+  return cls.includes("language-erato-email");
+}
+
 function MarkdownPre({
   node: _node,
   className,
   children,
   ...props
 }: MarkdownPreProps) {
+  // erato-email blocks render a custom component, not a code block —
+  // use a plain <div> to avoid inheriting <pre> monospace font and
+  // horizontal scroll from message-content-code-block styling.
+  try {
+    if (isEratoEmailCodeChild(children)) {
+      return (
+        <div>
+          <BlockCodeContext.Provider value={true}>
+            {children}
+          </BlockCodeContext.Provider>
+        </div>
+      );
+    }
+  } catch {
+    // Children structure didn't match — fall through to default <pre>.
+  }
+
   return (
     <pre
       className={["message-content-code-block", className]
