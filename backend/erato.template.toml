@@ -75,6 +75,8 @@ chat_provider_ids = ["test-token-limit"]
 # [mcp_servers.file_provider]
 # transport_type = "sse"
 # url = "http://127.0.0.1:63490/sse"
+# [mcp_servers.file_provider.authentication]
+# mode = "none"
 # # Optional per-server override (seconds)
 # max_session_idle_seconds = 900
 

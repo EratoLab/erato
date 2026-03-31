@@ -777,6 +777,7 @@ def main():
                 config_dict['client_id'] = f'"{secrets["entra_id_client_id"]}"'
                 config_dict['client_secret'] = f'"{secrets["entra_id_client_secret"]}"'
                 config_dict['skip_oidc_discovery'] = 'false'
+                config_dict['scope'] = '"openid profile email offline_access"'
 
                 # Remove Dex-specific fields that Entra ID doesn't need
                 config_dict.pop('login_url', None)

@@ -4,8 +4,8 @@ use axum::Router;
 use axum::http;
 use axum_test::TestServer;
 use erato::config::{
-    ExperimentalFacetsConfig, FacetConfig, McpServerConfig, McpServerPermissionRule, ModelSettings,
-    PromptSourceSpecification,
+    ExperimentalFacetsConfig, FacetConfig, McpServerAuthenticationConfig, McpServerConfig,
+    McpServerPermissionRule, ModelSettings, PromptSourceSpecification,
 };
 use erato::policy::engine::PolicyEngine;
 use erato::server::router::router;
@@ -257,6 +257,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
             transport_type: "streamable_http".to_string(),
             url: "http://127.0.0.1:8123/mcp/server1".to_string(),
             http_headers: None,
+            authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
         },
     );
@@ -644,6 +645,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
             transport_type: "streamable_http".to_string(),
             url: "http://127.0.0.1:8123/mcp/server1".to_string(),
             http_headers: None,
+            authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
         },
     );
@@ -653,6 +655,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
             transport_type: "streamable_http".to_string(),
             url: "http://127.0.0.1:8123/mcp/server2".to_string(),
             http_headers: None,
+            authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
         },
     );
@@ -770,6 +773,7 @@ async fn test_create_assistant_rejects_unauthorized_mcp_server(pool: Pool<Postgr
             transport_type: "streamable_http".to_string(),
             url: "http://127.0.0.1:8123/mcp".to_string(),
             http_headers: None,
+            authentication: McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
         },
     );

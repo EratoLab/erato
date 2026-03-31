@@ -2081,6 +2081,7 @@ dependencies = [
  "ractor",
  "ractor_actors",
  "regorus",
+ "reqwest 0.12.28",
  "reqwest 0.13.1",
  "rmcp",
  "sea-orm",
@@ -4303,11 +4304,13 @@ name = "mock-mcp-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "colored",
  "rmcp",
  "serde",
  "serde_json",
  "tokio",
+ "tower 0.5.3",
  "tracing",
  "tracing-subscriber",
 ]
@@ -6778,6 +6781,7 @@ checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
 dependencies = [
  "base64 0.22.1",
  "bytes",
+ "encoding_rs",
  "futures-channel",
  "futures-core",
  "futures-util",
@@ -6791,6 +6795,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime",
  "native-tls",
  "percent-encoding",
  "pin-project-lite",

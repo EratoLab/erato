@@ -9,6 +9,12 @@ use sea_orm::prelude::Uuid;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct McpRequestAuthContext<'a> {
+    pub oidc_token: Option<&'a str>,
+    pub access_token: Option<&'a str>,
+}
+
 /// Wrapper struct that provides a high-level API for MCP operations
 #[derive(Clone, Debug)]
 pub struct McpServers {
@@ -48,8 +54,12 @@ impl McpServers {
     }
 
     /// List all available tools for a specific chat
-    pub async fn list_tools(&self, chat_id: Uuid) -> Vec<ManagedTool> {
-        self.session_manager.list_tools(chat_id).await
+    pub async fn list_tools(
+        &self,
+        chat_id: Uuid,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> Result<Vec<ManagedTool>, Report> {
+        self.session_manager.list_tools(chat_id, auth_context).await
     }
 
     /// List tools for a chat, optionally restricted to a set of server IDs.
@@ -57,9 +67,10 @@ impl McpServers {
         &self,
         chat_id: Uuid,
         server_ids: Option<&HashSet<String>>,
-    ) -> Vec<ManagedTool> {
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> Result<Vec<ManagedTool>, Report> {
         self.session_manager
-            .list_tools_for_server_ids(chat_id, server_ids)
+            .list_tools_for_server_ids(chat_id, server_ids, auth_context)
             .await
     }
 
@@ -68,8 +79,9 @@ impl McpServers {
         &self,
         chat_id: Uuid,
         tool_call: GenaiToolCall,
+        auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<ManagedToolCall, Report> {
-        let all_tools = self.list_tools(chat_id).await;
+        let all_tools = self.list_tools(chat_id, auth_context).await?;
 
         let managed_tool = all_tools
             .iter()
@@ -94,6 +106,7 @@ impl McpServers {
         &self,
         chat_id: Uuid,
         managed_tool_call: ManagedToolCall,
+        auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<rmcp::model::CallToolResult, Report> {
         let params = CallToolRequestParam {
             name: managed_tool_call.tool_call.fn_name.clone().into(),
@@ -105,7 +118,7 @@ impl McpServers {
         };
 
         self.session_manager
-            .call_tool(chat_id, &managed_tool_call.server_id, params)
+            .call_tool(chat_id, &managed_tool_call.server_id, params, auth_context)
             .await
     }
 }

@@ -1255,12 +1255,60 @@ pub struct McpServerConfig {
     // For `transport_type = "streamable_http"`, this should be the base HTTP endpoint.
     pub url: String,
     // Optional static HTTP headers to be sent with every request.
-    // This is useful for authentication or API keys.
+    // This is useful for non-authentication headers that should accompany MCP requests.
     pub http_headers: Option<HashMap<String, String>>,
+    // Authentication settings for requests to this MCP server.
+    #[serde(default)]
+    pub authentication: McpServerAuthenticationConfig,
     // Maximum idle time (in seconds) for sessions created for this server.
     // When omitted, the global `mcp_servers_global.max_session_idle_seconds` is used.
     #[serde(default)]
     pub max_session_idle_seconds: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, Default)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+#[repr(C)]
+pub enum McpServerAuthenticationConfig {
+    #[default]
+    None,
+    Forwarded {
+        forwarded: McpServerForwardedAuthenticationConfig,
+    },
+    Fixed {
+        fixed: McpServerFixedAuthenticationConfig,
+    },
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct McpServerForwardedAuthenticationConfig {
+    pub credential: McpServerForwardedCredential,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum McpServerForwardedCredential {
+    AccessToken,
+    #[serde(alias = "oidc_token")]
+    OidcIdToken,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct McpServerFixedAuthenticationConfig {
+    pub api_key: String,
+    #[serde(default = "default_mcp_fixed_auth_header_name")]
+    pub header_name: String,
+    #[serde(default = "default_mcp_fixed_auth_prefix")]
+    pub prefix: String,
+}
+
+fn default_mcp_fixed_auth_header_name() -> String {
+    "Authorization".to_string()
+}
+
+fn default_mcp_fixed_auth_prefix() -> String {
+    "Bearer ".to_string()
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]

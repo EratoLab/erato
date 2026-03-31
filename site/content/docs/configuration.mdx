@@ -1523,7 +1523,14 @@ url = "http://127.0.0.1:63490/sse"
 [mcp_servers.filesystem]
 transport_type = "sse"
 url = "https://my-mcp-server.example.com/sse"
-http_headers = { "Authorization" = "Bearer token123", "X-API-Key" = "key456" }
+[mcp_servers.filesystem.authentication]
+mode = "fixed"
+
+[mcp_servers.filesystem.authentication.fixed]
+api_key = "token123"
+header_name = "Authorization"
+prefix = "Bearer "
+
 max_session_idle_seconds = 1800
 ```
 
@@ -1553,18 +1560,86 @@ The URL endpoint for the MCP server.
 
 #### `mcp_servers.<server_id>.http_headers`
 
-Optional static HTTP headers to include with every request to the MCP server. This is useful for authentication or API keys.
+Optional static HTTP headers to include with every request to the MCP server. Use this for non-authentication headers. Prefer `mcp_servers.<server_id>.authentication` for credentials.
 
 **Type:** `object<string, string> | None`
 
 **Example:**
 
 ```toml
-[mcp_servers.authenticated_server]
+[mcp_servers.custom_headers_server]
 transport_type = "sse"
-url = "https://secure-mcp-server.example.com/sse"
-http_headers = { "Authorization" = "Bearer your-token", "X-API-Key" = "your-api-key" }
+url = "https://mcp-server.example.com/sse"
+http_headers = { "X-Tenant-ID" = "tenant-123", "X-Environment" = "production" }
 ```
+
+#### `mcp_servers.<server_id>.authentication`
+
+Authentication settings for the MCP server.
+
+**Type:** `McpServerAuthenticationConfig`
+
+**Supported values:**
+
+- `mode = "none"`: No credentials are attached to MCP requests.
+- `mode = "forwarded"`: Forward credentials from the current user session.
+- `mode = "fixed"`: Attach a configured fixed API key using the configured header and prefix.
+
+**Examples:**
+
+```toml
+[mcp_servers.public_tools.authentication]
+mode = "none"
+
+[mcp_servers.intranet.authentication]
+mode = "forwarded"
+
+[mcp_servers.intranet.authentication.forwarded]
+credential = "oidc_id_token"
+
+[mcp_servers.partner_api.authentication]
+mode = "fixed"
+
+[mcp_servers.partner_api.authentication.fixed]
+api_key = "your-api-key"
+header_name = "Authorization"
+prefix = "Bearer "
+```
+
+#### `mcp_servers.<server_id>.authentication.forwarded.credential`
+
+Selects which user credential to forward when `authentication.mode = "forwarded"`.
+
+**Type:** `string`
+
+**Supported values:**
+
+- `"access_token"`
+- `"oidc_id_token"`
+
+#### `mcp_servers.<server_id>.authentication.fixed.api_key`
+
+The fixed API key to attach when `authentication.mode = "fixed"`.
+
+**Type:** `string`
+
+#### `mcp_servers.<server_id>.authentication.fixed.header_name`
+
+The HTTP header to use when `authentication.mode = "fixed"`.
+
+**Type:** `string`
+
+**Default value:** `"Authorization"`
+
+#### `mcp_servers.<server_id>.authentication.fixed.prefix`
+
+The prefix prepended to `authentication.fixed.api_key` when `authentication.mode = "fixed"`.
+
+This defaults to bearer-token formatting, so the default fixed auth header is `Authorization: Bearer <api_key>`.
+
+**Type:** `string`
+
+**Default value:** `"Bearer "`
 
 #### `mcp_servers.<server_id>.max_session_idle_seconds`
 
