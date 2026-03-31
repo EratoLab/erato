@@ -1,5 +1,11 @@
 import { t } from "@lingui/core/macro";
 
+/** Well-known action facet arg keys used for display purposes. */
+export const ACTION_FACET_ARG_KEYS = {
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  SELECTED_TEXT: "selected_text",
+} as const;
+
 interface ActionFacetContextProps {
   actionFacetArgs?: Record<string, string>;
 }
@@ -14,7 +20,7 @@ interface ActionFacetContextProps {
 export function ActionFacetContext({
   actionFacetArgs,
 }: ActionFacetContextProps) {
-  const selectedText = actionFacetArgs?.selected_text;
+  const selectedText = actionFacetArgs?.[ACTION_FACET_ARG_KEYS.SELECTED_TEXT];
 
   if (!selectedText) {
     return null;

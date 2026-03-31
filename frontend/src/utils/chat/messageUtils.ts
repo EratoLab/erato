@@ -1,5 +1,6 @@
 import { extractTextFromContent } from "../adapters/contentPartAdapter";
 
+import type { ActionFacetRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 
 /**
@@ -99,7 +100,7 @@ export interface SubmitStreamRequestBody {
   chat_provider_id?: string;
   assistant_id?: string;
   selected_facet_ids?: string[];
-  action_facet?: { id: string; args?: Record<string, string> };
+  action_facet?: ActionFacetRequest;
 }
 
 /**
@@ -120,7 +121,7 @@ export function constructSubmitStreamRequestBody(
   modelId?: string,
   assistantId?: string,
   selectedFacetIds?: string[],
-  actionFacet?: { id: string; args?: Record<string, string> },
+  actionFacet?: ActionFacetRequest,
 ): SubmitStreamRequestBody {
   const body: SubmitStreamRequestBody = {
     user_message: userMessageContent,
