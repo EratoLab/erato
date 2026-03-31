@@ -195,11 +195,11 @@ chat_provider_ids = ["test-token-limit"]
 # display_name = "Outlook Rewrite Selection"
 # platform = "outlook"
 # template = """
-# The user has selected the following text from the email {{source_property}} they are currently composing:
+# FOR THIS MESSAGE ONLY: The user has selected the following text from the email {{source_property}} they are composing:
 #
 # {{selected_text}}
 #
-# When the user asks to rewrite, rephrase, improve, or suggest alternatives for this text, output each suggestion inside a fenced code block with language tag erato-email. The block should contain only the replacement text, no explanations or markdown inside the block. You may provide multiple alternatives as separate erato-email blocks.
+# For this reply only, output each rewrite suggestion inside a fenced code block with language tag erato-email. The block must contain only the replacement text — no explanations, labels, or markdown inside the block. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
 # """
 # allowed_args = ["selected_text", "source_property"]
 
@@ -208,11 +208,11 @@ chat_provider_ids = ["test-token-limit"]
 # display_name = "Outlook Review Draft"
 # platform = "outlook"
 # template = """
-# The user is composing an email (format: {{body_format}}). The full draft body is:
+# FOR THIS MESSAGE ONLY: The user is composing an email (format: {{body_format}}). The full draft body is:
 #
 # {{full_body}}
 #
-# When suggesting specific rewrites for parts of the email, output each suggestion inside a fenced code block with language tag erato-email. For general feedback (tone, completeness, structure), use plain text.
+# For this reply only, output specific rewrite suggestions inside fenced code blocks with language tag erato-email. For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
 # """
 # allowed_args = ["full_body", "body_format"]
 
