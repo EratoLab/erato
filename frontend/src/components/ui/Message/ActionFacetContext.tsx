@@ -23,7 +23,10 @@ export function ActionFacetContext({
   return (
     <div className="mb-2 rounded-md border-l-2 border-theme-border bg-theme-bg-secondary px-3 py-2">
       <div className="mb-0.5 text-xs font-medium text-theme-fg-muted">
-        {t`Selection`}
+        {t({
+          id: "chat.message.action_facet.selection_label",
+          message: "Selection",
+        })}
       </div>
       <div className="line-clamp-3 text-sm text-theme-fg-secondary">
         {selectedText}

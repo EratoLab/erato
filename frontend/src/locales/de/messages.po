@@ -277,6 +277,11 @@ msgid "chat.history.rename.userProvided.placeholder"
 msgstr "Leer lassen, um den generierten Titel zu verwenden"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ActionFacetContext.tsx
+msgid "chat.message.action_facet.selection_label"
+msgstr "Auswahl"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 msgid "chat.message.aria"
 msgstr "Nachricht"
@@ -1811,8 +1816,8 @@ msgid "Searching..."
 msgstr "Suchen..."
 
 #: src/components/ui/Message/ActionFacetContext.tsx
-msgid "Selection"
-msgstr ""
+#~ msgid "Selection"
+#~ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Send message"
