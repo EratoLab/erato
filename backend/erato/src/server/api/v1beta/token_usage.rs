@@ -480,6 +480,7 @@ pub async fn token_usage_estimate(
             input_file_uploads: None,
             generation_parameters: None,
             generation_metadata: None,
+            input_parameters: None,
         };
 
         let base_repo = DatabaseMessageRepository {

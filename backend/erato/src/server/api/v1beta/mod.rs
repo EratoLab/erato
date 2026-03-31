@@ -920,6 +920,14 @@ pub struct ChatMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     feedback: Option<MessageFeedback>,
+    /// The action facet ID supplied with this user message, if any
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    action_facet_id: Option<String>,
+    /// The action facet arguments supplied with this user message, if any
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    action_facet_args: Option<HashMap<String, String>>,
 }
 
 /// Statistics for a list of chat messages
@@ -1522,6 +1530,22 @@ impl ChatMessage {
                 created_at: f.created_at,
                 updated_at: f.updated_at,
             }),
+            action_facet_id: msg
+                .input_parameters
+                .as_ref()
+                .and_then(|p| {
+                    serde_json::from_value::<crate::models::message::InputParameters>(p.clone())
+                        .ok()
+                })
+                .and_then(|p| p.action_facet_id),
+            action_facet_args: msg
+                .input_parameters
+                .as_ref()
+                .and_then(|p| {
+                    serde_json::from_value::<crate::models::message::InputParameters>(p.clone())
+                        .ok()
+                })
+                .and_then(|p| p.action_facet_args),
         })
     }
 }

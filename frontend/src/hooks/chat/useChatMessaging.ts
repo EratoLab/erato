@@ -50,6 +50,7 @@ import {
 import { useExplicitNavigation } from "./useExplicitNavigation";
 
 import type {
+  ActionFacetRequest,
   MessageSubmitStreamingResponseMessage,
   MessageSubmitStreamingResponseError,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -1222,7 +1223,7 @@ export function useChatMessaging(
       modelId?: string,
       assistantId?: string,
       selectedFacetIds?: string[],
-      actionFacet?: { id: string; args?: Record<string, string> },
+      actionFacet?: ActionFacetRequest,
     ): Promise<string | undefined> => {
       // Prevent duplicate submissions
       if (isSubmittingForKey(streamKey)) {
@@ -1587,7 +1588,7 @@ export function useChatMessaging(
       newContent: string,
       replaceInputFileIds?: string[],
       selectedFacetIds?: string[],
-      actionFacet?: { id: string; args?: Record<string, string> },
+      actionFacet?: ActionFacetRequest,
     ): Promise<void> => {
       if (isSubmittingForKey(streamKey)) {
         logger.warn("[DEBUG_STREAMING] Preventing duplicate edit submission");
@@ -1782,7 +1783,7 @@ export function useChatMessaging(
     async (
       currentMessageId: string,
       selectedFacetIds?: string[],
-      actionFacet?: { id: string; args?: Record<string, string> },
+      actionFacet?: ActionFacetRequest,
     ): Promise<void> => {
       if (isSubmittingForKey(streamKey)) {
         logger.warn(

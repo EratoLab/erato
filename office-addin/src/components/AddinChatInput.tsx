@@ -9,6 +9,7 @@ import {
   type ChatModel,
   type ContentPart,
   type FileAttachmentGroupItem,
+  type ActionFacetRequest,
   type FileType,
   type FileUploadItem,
 } from "@erato/frontend/library";
@@ -25,7 +26,7 @@ interface AddinChatInputProps {
     inputFileIds?: string[],
     modelId?: string,
     selectedFacetIds?: string[],
-    actionFacet?: { id: string; args?: Record<string, string> },
+    actionFacet?: ActionFacetRequest,
   ) => void;
   onEditMessage?: (
     messageId: string,
@@ -151,7 +152,7 @@ export const AddinChatInput = forwardRef<
       selectedFacetIds?: string[],
     ) => {
       // Build action facet payload: selection-based rewrite or full-body review
-      let actionFacet: { id: string; args: Record<string, string> } | undefined;
+      let actionFacet: ActionFacetRequest | undefined;
 
       if (hasActiveSelection) {
         actionFacet = {

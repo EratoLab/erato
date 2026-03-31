@@ -14,6 +14,7 @@ import {
   useFilePreviewModal,
   useMessageFeedback,
   useProfile,
+  type ActionFacetRequest,
   type ChatInputControlsHandle,
   type ContentPart,
   type FileUploadItem,
@@ -105,7 +106,7 @@ export function AddinChat() {
       inputFileIds?: string[],
       modelId?: string,
       selectedFacetIds?: string[],
-      actionFacet?: { id: string; args?: Record<string, string> },
+      actionFacet?: ActionFacetRequest,
     ) => {
       void sendMessage(
         message,

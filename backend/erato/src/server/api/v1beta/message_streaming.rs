@@ -920,6 +920,7 @@ async fn bg_stream_save_user_message(
     previous_message_id: Option<&Uuid>,
     user_message: &str,
     input_files_ids: &[Uuid],
+    input_parameters: Option<crate::models::message::InputParameters>,
 ) -> Result<messages::Model, String> {
     let user_message_json = json!({
         "role": "user",
@@ -941,6 +942,7 @@ async fn bg_stream_save_user_message(
         input_files_ids,
         None,
         None,
+        input_parameters,
     )
     .await
     .map_err(|e| format!("Failed to submit user message: {}", e))?;
@@ -3762,6 +3764,14 @@ async fn run_message_submit_task(
 
     // Save user message
     tracing::info!("Saving user message");
+    let user_input_parameters =
+        request
+            .action_facet
+            .as_ref()
+            .map(|af| crate::models::message::InputParameters {
+                action_facet_id: Some(af.id.clone()),
+                action_facet_args: Some(af.args.clone()),
+            });
     let saved_user_message = bg_stream_save_user_message(
         task,
         app_state,
@@ -3771,6 +3781,7 @@ async fn run_message_submit_task(
         request.previous_message_id.as_ref(),
         &request.user_message,
         &request.input_files_ids,
+        user_input_parameters,
     )
     .await
     .map_err(|e| {
@@ -3924,6 +3935,7 @@ async fn run_message_submit_task(
             &[],
             Some(generation_parameters),
             None,
+            None, // input_parameters: not applicable for assistant messages
         )
         .await
         .map_err(|e| format!("Failed to submit initial assistant message: {}", e))?;
@@ -4016,6 +4028,7 @@ async fn run_message_submit_task(
         Some(generation_input_messages.clone()),
         &[],
         Some(generation_parameters),
+        None,
         None,
     )
     .await
@@ -4276,6 +4289,7 @@ pub async fn regenerate_message_sse(
                     &[],
                     Some(generation_parameters),
                     None,
+                    None,
                 )
                 .await
                 {
@@ -4438,6 +4452,14 @@ pub async fn edit_message_sse(
     // Move request data into the task
     let replace_user_message = request.replace_user_message;
     let replace_input_files_ids = request.replace_input_files_ids;
+    let edit_input_parameters =
+        request
+            .action_facet
+            .as_ref()
+            .map(|af| crate::models::message::InputParameters {
+                action_facet_id: Some(af.id.clone()),
+                action_facet_args: Some(af.args.clone()),
+            });
     let task_for_stream = task.clone();
     let app_state_for_cleanup = app_state.clone();
     let chat_id_for_cleanup = chat.id;
@@ -4466,6 +4488,7 @@ pub async fn edit_message_sse(
                 &replace_input_files_ids,
                 None,
                 None,
+                edit_input_parameters,
             )
             .await
             {
@@ -4581,6 +4604,7 @@ pub async fn edit_message_sse(
                 Some(generation_input_messages.clone()),
                 &[],
                 Some(generation_parameters),
+                None,
                 None,
             )
             .await

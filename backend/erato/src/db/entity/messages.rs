@@ -22,6 +22,8 @@ pub struct Model {
     pub generation_parameters: Option<Json>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub generation_metadata: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub input_parameters: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
