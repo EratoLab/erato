@@ -80,6 +80,13 @@ async fn main() {
                     post(endpoints::images::generate_images),
                 ),
         )
+        .nest(
+            "/base-vertex",
+            Router::new().route(
+                "/v1/publishers/google/{*path}",
+                post(endpoints::vertex::vertex_generate_content),
+            ),
+        )
         .fallback(fallback_404)
         .with_state(matcher)
         .layer(middleware::from_fn(request_id::request_id_middleware));
@@ -99,6 +106,12 @@ async fn main() {
     println!("model_name = \"placeholder\"");
     println!("model_display_name = \"Mock-LLM\"");
     println!("base_url = \"http://localhost:44320/base-openai/v1/placeholder\"");
+    println!();
+    println!("[chat_providers.providers.mock-llm-vertex]");
+    println!("provider_kind = \"vertex_ai\"");
+    println!("model_name = \"gemini-2.5-flash\"");
+    println!("model_display_name = \"Mock Vertex\"");
+    println!("base_url = \"http://localhost:44320/base-vertex/v1/publishers/google/\"");
     println!("```");
     println!();
 

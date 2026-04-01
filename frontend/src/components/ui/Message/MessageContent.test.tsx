@@ -23,6 +23,9 @@ const textContent = (text: string): ContentPart[] => [
   { content_type: "text", text },
 ];
 
+const multipleTextContent = (...texts: string[]): ContentPart[] =>
+  texts.map((text) => ({ content_type: "text", text }));
+
 const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   id: "file_123",
   filename: "sample-report-compressed.pdf",
@@ -177,6 +180,19 @@ describe("MessageContent", () => {
     expect(
       container.querySelector("pre.message-content-raw-block"),
     ).toHaveClass("whitespace-pre-wrap");
+  });
+
+  it("renders distinct text content parts with paragraph spacing between them", () => {
+    renderWithTheme(
+      <MessageContent
+        content={multipleTextContent("First text part.", "Second text part.")}
+      />,
+    );
+
+    const paragraphs = screen.getAllByText(/text part\./);
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0].tagName).toBe("P");
+    expect(paragraphs[1].tagName).toBe("P");
   });
 
   it("passes PDF page anchors through to the preview callback for erato-file links", () => {
