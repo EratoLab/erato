@@ -147,7 +147,14 @@
   "frontend.sidebar_logo_dark_path": {},
   "frontend.sidebar_logo_path": {},
   "frontend.theme": {},
-  "frontend_bundle_path": {},
+  "frontend.web_frontend_bundle_path": {},
+  "frontend_bundle_path": {
+    "deprecated": {
+      "note": "Please use `frontend.web_frontend_bundle_path` instead.",
+      "planned_removal_version": "0.6.0",
+      "replacement_key": "frontend.web_frontend_bundle_path"
+    }
+  },
   "http_host": {},
   "http_port": {},
   "integrations.experimental_entra_id.auth_via_access_token": {},
@@ -161,6 +168,10 @@
   "integrations.langfuse.public_key": {},
   "integrations.langfuse.secret_key": {},
   "integrations.langfuse.tracing_enabled": {},
+  "integrations.ms_office.addin.enabled": {},
+  "integrations.ms_office.addin.frontend_bundle_path": {},
+  "integrations.ms_office.addin.msal_authority": {},
+  "integrations.ms_office.addin.msal_client_id": {},
   "integrations.otel.enabled": {},
   "integrations.otel.endpoint": {},
   "integrations.otel.protocol": {},

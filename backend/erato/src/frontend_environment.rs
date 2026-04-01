@@ -44,6 +44,8 @@ const FRONTEND_ENV_KEY_SIDEBAR_LOGO_PATH: &str = "SIDEBAR_LOGO_PATH";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_DARK_PATH: &str = "SIDEBAR_LOGO_DARK_PATH";
 const FRONTEND_ENV_KEY_SIDEBAR_CHAT_HISTORY_SHOW_METADATA: &str =
     "SIDEBAR_CHAT_HISTORY_SHOW_METADATA";
+const FRONTEND_ENV_KEY_MSAL_CLIENT_ID: &str = "MSAL_CLIENT_ID";
+const FRONTEND_ENV_KEY_MSAL_AUTHORITY: &str = "MSAL_AUTHORITY";
 
 #[derive(Debug, Clone, Default)]
 /// Map of values that will be provided as environment-variable-like global variables to the frontend.
@@ -55,7 +57,70 @@ pub struct FrontedEnvironment {
     pub additional_environment: ListOrderedMultimap<String, Value>,
 }
 
-pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FrontendKind {
+    Web,
+    OfficeAddin,
+}
+
+#[derive(Debug, Clone)]
+pub struct ServedFrontend {
+    pub bundle_path: String,
+    pub environment: FrontedEnvironment,
+    pub mount_path: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct FrontendRegistry {
+    frontends: Vec<ServedFrontend>,
+}
+
+impl FrontendRegistry {
+    fn resolve(&self, request_path: &str) -> Option<&ServedFrontend> {
+        if let Some(frontend) = self
+            .frontends
+            .iter()
+            .filter(|frontend| frontend.mount_path != "/")
+            .find(|frontend| matches_mount_path(request_path, &frontend.mount_path))
+        {
+            return frontend.enabled.then_some(frontend);
+        }
+
+        self.frontends
+            .iter()
+            .find(|frontend| frontend.mount_path == "/" && frontend.enabled)
+    }
+}
+
+pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
+    FrontendRegistry {
+        frontends: vec![
+            ServedFrontend {
+                bundle_path: config
+                    .integrations
+                    .ms_office
+                    .addin
+                    .frontend_bundle_path
+                    .clone(),
+                environment: build_frontend_environment(config, FrontendKind::OfficeAddin),
+                mount_path: "/office-addin".to_string(),
+                enabled: config.integrations.ms_office.addin.enabled,
+            },
+            ServedFrontend {
+                bundle_path: config.frontend.web_frontend_bundle_path.clone(),
+                environment: build_frontend_environment(config, FrontendKind::Web),
+                mount_path: "/".to_string(),
+                enabled: true,
+            },
+        ],
+    }
+}
+
+fn build_frontend_environment(
+    config: &AppConfig,
+    frontend_kind: FrontendKind,
+) -> FrontedEnvironment {
     let mut env = FrontedEnvironment::default();
 
     let api_root_url = "/api/".to_string();
@@ -188,11 +253,21 @@ pub fn build_frontend_environment(config: &AppConfig) -> FrontedEnvironment {
             .insert(key.clone(), value.clone());
     }
 
+    if frontend_kind == FrontendKind::OfficeAddin {
+        if let Some(msal_client_id) = &config.integrations.ms_office.addin.msal_client_id {
+            env.additional_environment.insert(
+                FRONTEND_ENV_KEY_MSAL_CLIENT_ID.to_string(),
+                Value::String(msal_client_id.clone()),
+            );
+        }
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_MSAL_AUTHORITY.to_string(),
+            Value::String(config.integrations.ms_office.addin.msal_authority.clone()),
+        );
+    }
+
     env
 }
-
-#[derive(Debug, Clone)]
-pub struct FrontendBundlePath(pub String);
 
 #[derive(Debug, Clone)]
 pub struct DeploymentVersion(pub Option<String>);
@@ -215,6 +290,14 @@ struct ServerConfig {
 struct RewriteRule {
     source: String,
     destination: String,
+}
+
+fn matches_mount_path(request_path: &str, mount_path: &str) -> bool {
+    mount_path == "/"
+        || request_path == mount_path
+        || request_path
+            .strip_prefix(mount_path)
+            .is_some_and(|suffix| suffix.starts_with('/'))
 }
 
 fn load_server_config(bundle_path: String) -> Option<ServerConfig> {
@@ -289,7 +372,7 @@ pub mod axum {
     use super::*;
     use ::axum::body::{Body, Bytes};
 
-    use ::axum::http::{HeaderValue, Request};
+    use ::axum::http::{HeaderValue, Request, Uri};
     use ::axum::response::Response;
     use ::axum::{BoxError, Extension, http};
     use http_body_util::BodyExt;
@@ -298,18 +381,58 @@ pub mod axum {
     use std::path::PathBuf;
     use tower_http::services::{ServeDir, ServeFile};
 
+    fn rewrite_request_path(req: Request<Body>, mount_path: &str) -> Request<Body> {
+        if mount_path == "/" {
+            return req;
+        }
+
+        let (mut parts, body) = req.into_parts();
+        let stripped_path = parts
+            .uri
+            .path()
+            .strip_prefix(mount_path)
+            .unwrap_or(parts.uri.path());
+        let normalized_path = if stripped_path.is_empty() {
+            "/"
+        } else {
+            stripped_path
+        };
+        let path_and_query = match parts.uri.query() {
+            Some(query) => format!("{normalized_path}?{query}"),
+            None => normalized_path.to_string(),
+        };
+        parts.uri = path_and_query
+            .parse::<Uri>()
+            .expect("rewritten static asset path should be a valid URI");
+        Request::from_parts(parts, body)
+    }
+
     /// Static file handler that injects a script tag with environment variables into HTML files.
     /// Also handles cache headers for static files based on deployment version.
     pub async fn serve_files_with_script(
-        Extension(frontend_environment): Extension<FrontedEnvironment>,
-        Extension(frontend_bundle_path): Extension<FrontendBundlePath>,
+        Extension(frontend_registry): Extension<FrontendRegistry>,
         Extension(deployment_version): Extension<DeploymentVersion>,
         req: Request<Body>,
     ) -> Result<Response<UnsyncBoxBody<Bytes, BoxError>>, Infallible> {
-        let bundle_dir_path = PathBuf::from(frontend_bundle_path.0.clone())
+        let request_path = req.uri().path().to_string();
+        let Some(frontend) = frontend_registry.resolve(&request_path) else {
+            let response = Response::builder()
+                .status(http::StatusCode::NOT_FOUND)
+                .header(http::header::CONTENT_TYPE, "text/plain; charset=utf-8")
+                .body(
+                    http_body_util::Full::from(Bytes::from_static(b"Not Found"))
+                        .map_err(|never| match never {})
+                        .boxed_unsync(),
+                )
+                .unwrap();
+            return Ok(response);
+        };
+
+        let frontend_environment = frontend.environment.clone();
+        let bundle_dir_path = PathBuf::from(frontend.bundle_path.clone())
             .canonicalize()
             .expect("Unable to normalize frontend bundle path");
-        let fallback_path = PathBuf::from(frontend_bundle_path.0.clone())
+        let fallback_path = PathBuf::from(frontend.bundle_path.clone())
             .join("404.html")
             .canonicalize()
             .expect("Unable to normalize frontend bundle path for 404.html");
@@ -318,13 +441,24 @@ pub mod axum {
         let client_etag = req.headers().get(http::header::IF_NONE_MATCH).cloned();
 
         // Check if we have any rewrite rules that match
-        let path = req.uri().path().to_string();
+        let stripped_path = req
+            .uri()
+            .path()
+            .strip_prefix(&frontend.mount_path)
+            .unwrap_or(req.uri().path())
+            .to_string();
+        let stripped_path = if stripped_path.is_empty() {
+            "/".to_string()
+        } else {
+            stripped_path
+        };
+        let req = rewrite_request_path(req, &frontend.mount_path);
         let rewritten_path =
-            if let Some(server_config) = load_server_config(frontend_bundle_path.0.clone()) {
+            if let Some(server_config) = load_server_config(frontend.bundle_path.clone()) {
                 let matching_rule = server_config
                     .rewrites
                     .iter()
-                    .find(|rule| matches_rewrite_rule(&path, rule));
+                    .find(|rule| matches_rewrite_rule(&stripped_path, rule));
                 matching_rule.map(|rule| rule.destination.clone())
             } else {
                 None
@@ -332,7 +466,7 @@ pub mod axum {
 
         // Create the static files service with the rewritten path if applicable
         let res = if let Some(rewritten_path) = rewritten_path {
-            let rewritten_file_path = PathBuf::from(frontend_bundle_path.0.clone())
+            let rewritten_file_path = PathBuf::from(frontend.bundle_path.clone())
                 .join(rewritten_path.trim_start_matches('/'))
                 .canonicalize()
                 .unwrap();
@@ -433,5 +567,57 @@ pub mod axum {
 
             Ok(res)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn specific_mount_path_matches_before_root() {
+        let registry = FrontendRegistry {
+            frontends: vec![
+                ServedFrontend {
+                    bundle_path: "./public-office-addin".to_string(),
+                    environment: FrontedEnvironment::default(),
+                    mount_path: "/office-addin".to_string(),
+                    enabled: true,
+                },
+                ServedFrontend {
+                    bundle_path: "./public".to_string(),
+                    environment: FrontedEnvironment::default(),
+                    mount_path: "/".to_string(),
+                    enabled: true,
+                },
+            ],
+        };
+
+        let frontend = registry
+            .resolve("/office-addin/assets/app.js")
+            .expect("office add-in route should resolve");
+        assert_eq!(frontend.mount_path, "/office-addin");
+    }
+
+    #[test]
+    fn disabled_specific_mount_path_does_not_fall_back_to_root() {
+        let registry = FrontendRegistry {
+            frontends: vec![
+                ServedFrontend {
+                    bundle_path: "./public-office-addin".to_string(),
+                    environment: FrontedEnvironment::default(),
+                    mount_path: "/office-addin".to_string(),
+                    enabled: false,
+                },
+                ServedFrontend {
+                    bundle_path: "./public".to_string(),
+                    environment: FrontedEnvironment::default(),
+                    mount_path: "/".to_string(),
+                    enabled: true,
+                },
+            ],
+        };
+
+        assert!(registry.resolve("/office-addin").is_none());
     }
 }

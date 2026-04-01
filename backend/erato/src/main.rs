@@ -6,7 +6,7 @@ use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use erato::config::AppConfig;
 use erato::frontend_environment::{
-    DeploymentVersion, FrontendBundlePath, build_frontend_environment, serve_files_with_script,
+    DeploymentVersion, build_frontend_registry, serve_files_with_script,
 };
 use erato::models;
 use erato::services::sentry::{extend_with_sentry_layers, setup_sentry};
@@ -116,11 +116,8 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
             axum::routing::get(move || async move { axum::Json(spec.clone()) }),
         )
         .fallback_service(serve_files_with_script.into_service())
-        .layer(Extension(FrontendBundlePath(
-            config.frontend_bundle_path.clone(),
-        )))
+        .layer(Extension(build_frontend_registry(&config)))
         .layer(Extension(DeploymentVersion::from_env()))
-        .layer(Extension(build_frontend_environment(&config)))
         .layer(CorsLayer::very_permissive());
 
     let app = if config.integrations.otel.enabled {
