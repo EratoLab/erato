@@ -58,7 +58,14 @@ backend:
         [mcp_servers.private_api]
         transport_type = "sse"
         url = "https://private-api.example.com/sse"
-        http_headers = { "Authorization" = "Bearer secret-token" }
+        
+        [mcp_servers.private_api.authentication]
+        mode = "fixed"
+        
+        [mcp_servers.private_api.authentication.fixed]
+        api_key = "secret-token"
+        header_name = "Authorization"
+        prefix = "Bearer "
 ```
 
 ### MCP Server Use Case
@@ -86,7 +93,14 @@ url = "http://file-server:8080/sse"
 [mcp_servers.database_tools]
 transport_type = "sse"
 url = "http://db-tools:9090/sse"
-http_headers = { "X-API-Key" = "database-access-key" }
+
+[mcp_servers.database_tools.authentication]
+mode = "fixed"
+
+[mcp_servers.database_tools.authentication.fixed]
+api_key = "database-access-key"
+header_name = "Authorization"
+prefix = "Bearer "
 ```
 
 ### Configuration Sources

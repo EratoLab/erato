@@ -1,5 +1,8 @@
-use crate::config::{AppConfig, McpServerConfig};
+use crate::config::{
+    AppConfig, McpServerAuthenticationConfig, McpServerConfig, McpServerForwardedCredential,
+};
 use crate::metrics::report_mcp_active_sessions_for_server;
+use crate::services::mcp_manager::McpRequestAuthContext;
 use crate::services::mcp_transports::{EmptyClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
 use futures::future::join_all;
@@ -36,6 +39,7 @@ impl McpSession {
     async fn new(
         server_id: String,
         config: &McpServerConfig,
+        auth_context: &McpRequestAuthContext<'_>,
         default_max_idle_seconds: u64,
     ) -> Result<Self, Report> {
         debug!(
@@ -44,7 +48,7 @@ impl McpSession {
             "Creating MCP service connection"
         );
 
-        let service = create_mcp_service(config)
+        let service = create_mcp_service(config, auth_context)
             .await
             .map_err(|e| eyre!("Failed to create MCP service: {}", e))?;
 
@@ -122,8 +126,8 @@ impl McpSession {
     }
 }
 
-/// Key for identifying a unique session (chat_id, server_id)
-type SessionKey = (Uuid, String);
+type SessionAuthKey = Option<String>;
+type SessionKey = (Uuid, String, SessionAuthKey);
 
 /// Manages MCP sessions on a per-chat basis
 #[derive(Debug)]
@@ -139,6 +143,27 @@ pub struct McpSessionManager {
 }
 
 impl McpSessionManager {
+    fn session_auth_key(
+        config: &McpServerConfig,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> Result<SessionAuthKey, Report> {
+        match &config.authentication {
+            McpServerAuthenticationConfig::None | McpServerAuthenticationConfig::Fixed { .. } => {
+                Ok(None)
+            }
+            McpServerAuthenticationConfig::Forwarded { forwarded } => match forwarded.credential {
+                McpServerForwardedCredential::AccessToken => auth_context
+                    .access_token
+                    .map(|token| Some(format!("access_token:{token}")))
+                    .ok_or_else(|| eyre!("Missing forwarded access token for MCP server")),
+                McpServerForwardedCredential::OidcIdToken => auth_context
+                    .oidc_token
+                    .map(|token| Some(format!("oidc_id_token:{token}")))
+                    .ok_or_else(|| eyre!("Missing forwarded OIDC token for MCP server")),
+            },
+        }
+    }
+
     /// Create a new session manager with the given configuration
     pub fn new(config: &AppConfig) -> Self {
         let server_configs = config.mcp_servers.clone();
@@ -172,7 +197,7 @@ impl McpSessionManager {
     ) {
         let mut active_sessions_per_server = HashMap::new();
 
-        for (_, server_id) in sessions.keys() {
+        for (_, server_id, _) in sessions.keys() {
             *active_sessions_per_server
                 .entry(server_id.as_str())
                 .or_insert(0usize) += 1;
@@ -201,7 +226,7 @@ impl McpSessionManager {
             let initial_count = sessions_guard.len();
 
             // Remove inactive sessions
-            sessions_guard.retain(|(chat_id, server_id), session| {
+            sessions_guard.retain(|(chat_id, server_id, _), session| {
                 let should_keep = !session.is_inactive();
                 if !should_keep {
                     info!(
@@ -229,22 +254,29 @@ impl McpSessionManager {
     }
 
     /// Get or create a session for the given chat and server
-    async fn get_or_create_session(&self, chat_id: Uuid, server_id: &str) -> Result<(), Report> {
-        let key = (chat_id, server_id.to_string());
+    async fn get_or_create_session(
+        &self,
+        chat_id: Uuid,
+        server_id: &str,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> Result<SessionKey, Report> {
+        let config = self
+            .server_configs
+            .get(server_id)
+            .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))?;
+        let key = (
+            chat_id,
+            server_id.to_string(),
+            Self::session_auth_key(config, auth_context)?,
+        );
 
         // Check if session already exists
         {
             let sessions_guard = self.sessions.read().await;
             if sessions_guard.contains_key(&key) {
-                return Ok(());
+                return Ok(key);
             }
         }
-
-        // Session doesn't exist, create it
-        let config = self
-            .server_configs
-            .get(server_id)
-            .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))?;
 
         debug!(
             chat_id = %chat_id,
@@ -252,11 +284,16 @@ impl McpSessionManager {
             "Creating new MCP session"
         );
 
-        let session =
-            McpSession::new(server_id.to_string(), config, self.default_max_idle_seconds).await?;
+        let session = McpSession::new(
+            server_id.to_string(),
+            config,
+            auth_context,
+            self.default_max_idle_seconds,
+        )
+        .await?;
 
         let mut sessions_guard = self.sessions.write().await;
-        sessions_guard.insert(key, session);
+        sessions_guard.insert(key.clone(), session);
         Self::update_active_session_metrics(&sessions_guard, self.server_configs.keys().cloned());
 
         info!(
@@ -265,29 +302,33 @@ impl McpSessionManager {
             "Created new MCP session"
         );
 
-        Ok(())
+        Ok(key)
     }
 
     /// Remove a session from the cache (used when a session becomes invalid)
-    async fn invalidate_session(&self, chat_id: Uuid, server_id: &str) {
-        let key = (chat_id, server_id.to_string());
+    async fn invalidate_session(&self, key: &SessionKey) {
         let mut sessions_guard = self.sessions.write().await;
-        if sessions_guard.remove(&key).is_some() {
+        if sessions_guard.remove(key).is_some() {
             Self::update_active_session_metrics(
                 &sessions_guard,
                 self.server_configs.keys().cloned(),
             );
             info!(
-                chat_id = %chat_id,
-                server_id = %server_id,
+                chat_id = %key.0,
+                server_id = %key.1,
                 "Invalidated MCP session (will be recreated on next request)"
             );
         }
     }
 
     /// List all available tools for a chat across all configured MCP servers
-    pub async fn list_tools(&self, chat_id: Uuid) -> Vec<ManagedTool> {
-        self.list_tools_for_server_ids(chat_id, None).await
+    pub async fn list_tools(
+        &self,
+        chat_id: Uuid,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> Result<Vec<ManagedTool>, Report> {
+        self.list_tools_for_server_ids(chat_id, None, auth_context)
+            .await
     }
 
     /// List all available tools for a chat, optionally restricted to a set of server IDs.
@@ -295,8 +336,10 @@ impl McpSessionManager {
         &self,
         chat_id: Uuid,
         server_id_filter: Option<&HashSet<String>>,
-    ) -> Vec<ManagedTool> {
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> Result<Vec<ManagedTool>, Report> {
         let mut all_tools = Vec::new();
+        let mut errors = Vec::new();
         let server_ids: Vec<String> = self
             .server_configs
             .keys()
@@ -311,24 +354,45 @@ impl McpSessionManager {
         let creation_results = join_all(server_ids.iter().map(|server_id| async move {
             (
                 server_id.clone(),
-                self.get_or_create_session(chat_id, server_id).await,
+                self.get_or_create_session(chat_id, server_id, auth_context)
+                    .await,
             )
         }))
         .await;
 
         let sessions_guard = self.sessions.read().await;
         for (server_id, creation_result) in creation_results {
-            if let Err(e) = creation_result {
-                warn!(
-                    chat_id = %chat_id,
-                    server_id = %server_id,
-                    error = %e,
-                    "Failed to create session for listing tools"
-                );
-                continue;
-            }
-
-            let key = (chat_id, server_id.clone());
+            let key = match creation_result {
+                Ok(key) => key,
+                Err(e) => {
+                    if Self::is_missing_forwarded_credential_error(&e) {
+                        debug!(
+                            chat_id = %chat_id,
+                            server_id = %server_id,
+                            error = %e,
+                            "Skipping MCP server because the required forwarded credential is unavailable"
+                        );
+                        continue;
+                    }
+                    if Self::is_auth_denied_error(&e) {
+                        warn!(
+                            chat_id = %chat_id,
+                            server_id = %server_id,
+                            error = %e,
+                            "Skipping MCP server during tool discovery because authentication failed"
+                        );
+                        continue;
+                    }
+                    warn!(
+                        chat_id = %chat_id,
+                        server_id = %server_id,
+                        error = %e,
+                        "Failed to create session for listing tools"
+                    );
+                    errors.push(format!("{}: {}", server_id, e));
+                    continue;
+                }
+            };
             if let Some(session) = sessions_guard.get(&key) {
                 for tool in &session.tools {
                     all_tools.push(ManagedTool {
@@ -345,7 +409,22 @@ impl McpSessionManager {
             "Listed tools for chat"
         );
 
-        all_tools
+        if errors.is_empty() {
+            Ok(all_tools)
+        } else {
+            Err(eyre!("Failed to discover MCP tools: {}", errors.join("; ")))
+        }
+    }
+
+    fn is_missing_forwarded_credential_error(error: &Report) -> bool {
+        let error_msg = error.to_string();
+        error_msg.contains("Missing forwarded access token for MCP server")
+            || error_msg.contains("Missing forwarded OIDC token for MCP server")
+    }
+
+    fn is_auth_denied_error(error: &Report) -> bool {
+        let error_msg = error.to_string();
+        error_msg.contains("401 Unauthorized") || error_msg.contains("403 Forbidden")
     }
 
     /// Check if an error indicates the session is invalid and should be recreated
@@ -367,14 +446,23 @@ impl McpSessionManager {
         chat_id: Uuid,
         server_id: &str,
         params: CallToolRequestParam,
+        auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<CallToolResult, Report> {
         // Try calling the tool with the current session
         match self
-            .call_tool_internal(chat_id, server_id, params.clone())
+            .call_tool_internal(chat_id, server_id, params.clone(), auth_context)
             .await
         {
             Ok(result) => Ok(result),
             Err(e) if Self::is_session_invalid_error(&e) => {
+                let config = self.server_configs.get(server_id).ok_or_else(|| {
+                    eyre!("MCP server '{}' not found in configuration", server_id)
+                })?;
+                let key = (
+                    chat_id,
+                    server_id.to_string(),
+                    Self::session_auth_key(config, auth_context)?,
+                );
                 warn!(
                     chat_id = %chat_id,
                     server_id = %server_id,
@@ -383,10 +471,11 @@ impl McpSessionManager {
                 );
 
                 // Invalidate the session
-                self.invalidate_session(chat_id, server_id).await;
+                self.invalidate_session(&key).await;
 
                 // Retry with a new session
-                self.call_tool_internal(chat_id, server_id, params).await
+                self.call_tool_internal(chat_id, server_id, params, auth_context)
+                    .await
             }
             Err(e) => Err(e),
         }
@@ -398,13 +487,15 @@ impl McpSessionManager {
         chat_id: Uuid,
         server_id: &str,
         params: CallToolRequestParam,
+        auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<CallToolResult, Report> {
         // Ensure session exists
-        self.get_or_create_session(chat_id, server_id).await?;
+        let key = self
+            .get_or_create_session(chat_id, server_id, auth_context)
+            .await?;
 
         // Call the tool
         let mut sessions_guard = self.sessions.write().await;
-        let key = (chat_id, server_id.to_string());
 
         let session = sessions_guard
             .get_mut(&key)
@@ -415,10 +506,26 @@ impl McpSessionManager {
 
     /// Manually refresh the tools list for a specific chat and server
     /// Automatically retries once with a new session if the session has become invalid
-    pub async fn refresh_tools(&self, chat_id: Uuid, server_id: &str) -> Result<(), Report> {
-        match self.refresh_tools_internal(chat_id, server_id).await {
+    pub async fn refresh_tools(
+        &self,
+        chat_id: Uuid,
+        server_id: &str,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> Result<(), Report> {
+        match self
+            .refresh_tools_internal(chat_id, server_id, auth_context)
+            .await
+        {
             Ok(()) => Ok(()),
             Err(e) if Self::is_session_invalid_error(&e) => {
+                let config = self.server_configs.get(server_id).ok_or_else(|| {
+                    eyre!("MCP server '{}' not found in configuration", server_id)
+                })?;
+                let key = (
+                    chat_id,
+                    server_id.to_string(),
+                    Self::session_auth_key(config, auth_context)?,
+                );
                 warn!(
                     chat_id = %chat_id,
                     server_id = %server_id,
@@ -427,21 +534,28 @@ impl McpSessionManager {
                 );
 
                 // Invalidate the session
-                self.invalidate_session(chat_id, server_id).await;
+                self.invalidate_session(&key).await;
 
                 // Retry with a new session
-                self.refresh_tools_internal(chat_id, server_id).await
+                self.refresh_tools_internal(chat_id, server_id, auth_context)
+                    .await
             }
             Err(e) => Err(e),
         }
     }
 
     /// Internal implementation of refresh_tools without retry logic
-    async fn refresh_tools_internal(&self, chat_id: Uuid, server_id: &str) -> Result<(), Report> {
-        self.get_or_create_session(chat_id, server_id).await?;
+    async fn refresh_tools_internal(
+        &self,
+        chat_id: Uuid,
+        server_id: &str,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> Result<(), Report> {
+        let key = self
+            .get_or_create_session(chat_id, server_id, auth_context)
+            .await?;
 
         let mut sessions_guard = self.sessions.write().await;
-        let key = (chat_id, server_id.to_string());
 
         if let Some(session) = sessions_guard.get_mut(&key) {
             session.refresh_tools().await?;
@@ -465,6 +579,16 @@ impl McpSessionManager {
         );
 
         for (server_id, config) in &self.server_configs {
+            if matches!(
+                config.authentication,
+                McpServerAuthenticationConfig::Forwarded { .. }
+            ) {
+                info!(
+                    server_id = %server_id,
+                    "Skipping MCP connectivity check because this server requires request-scoped forwarded authentication"
+                );
+                continue;
+            }
             info!(
                 server_id = %server_id,
                 transport_type = %config.transport_type,
@@ -474,12 +598,15 @@ impl McpSessionManager {
 
             // Use a dummy chat_id for the connectivity check
             let test_chat_id = Uuid::nil();
+            let auth_context = McpRequestAuthContext::default();
 
-            match self.get_or_create_session(test_chat_id, server_id).await {
-                Ok(_) => {
+            match self
+                .get_or_create_session(test_chat_id, server_id, &auth_context)
+                .await
+            {
+                Ok(key) => {
                     // Get the session to check how many tools are available
                     let sessions_guard = self.sessions.read().await;
-                    let key = (test_chat_id, server_id.clone());
 
                     if let Some(session) = sessions_guard.get(&key) {
                         info!(
@@ -501,7 +628,10 @@ impl McpSessionManager {
             }
 
             // Drop the startup connectivity-check session immediately.
-            self.invalidate_session(test_chat_id, server_id).await;
+            if let Ok(session_auth_key) = Self::session_auth_key(config, &auth_context) {
+                let key = (test_chat_id, server_id.clone(), session_auth_key);
+                self.invalidate_session(&key).await;
+            }
         }
 
         info!("MCP server connectivity checks complete");

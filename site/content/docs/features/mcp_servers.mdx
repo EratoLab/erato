@@ -56,7 +56,7 @@ MCP servers are configured in your `erato.toml` file under the `[mcp_servers]` s
 1. A unique identifier (used as the configuration key)
 2. Transport type specification
 3. Server URL endpoint
-4. Optional authentication headers
+4. Authentication configuration
 5. Optional per-server idle timeout override
 
 **Example:**
@@ -70,16 +70,32 @@ max_session_idle_seconds = 1200
 transport_type = "sse"
 url = "http://127.0.0.1:63490/sse"
 
+[mcp_servers.file_provider.authentication]
+mode = "none"
+
 [mcp_servers.api_integration]
 transport_type = "sse"
 url = "https://api.example.com/mcp/sse"
-http_headers = { "Authorization" = "Bearer your-api-token" }
+
+[mcp_servers.api_integration.authentication]
+mode = "fixed"
+
+[mcp_servers.api_integration.authentication.fixed]
+api_key = "your-api-token"
+header_name = "Authorization"
+prefix = "Bearer "
+
 max_session_idle_seconds = 600
 
 [mcp_servers.advanced_service]
 transport_type = "streamable_http"
 url = "https://api.example.com/mcp"
-http_headers = { "Authorization" = "Bearer your-api-token" }
+
+[mcp_servers.advanced_service.authentication]
+mode = "forwarded"
+
+[mcp_servers.advanced_service.authentication.forwarded]
+credential = "oidc_id_token"
 ```
 
 See the [Configuration Reference](../configuration#mcp_servers) for detailed configuration options.
@@ -132,10 +148,76 @@ It is designed to support advanced use cases and improved performance compared t
 [mcp_servers.advanced_service]
 transport_type = "streamable_http"
 url = "https://api.example.com/mcp"
-http_headers = { "Authorization" = "Bearer your-api-token" }
+
+[mcp_servers.advanced_service.authentication]
+mode = "fixed"
+
+[mcp_servers.advanced_service.authentication.fixed]
+api_key = "your-api-token"
 ```
 
 Both SSE and Streamable HTTP transports are fully supported in Erato, allowing you to choose the transport that best fits your deployment needs.
+
+## Authentication
+
+Erato currently supports three MCP authentication modes.
+
+### `none`
+
+No credentials are attached to requests for that MCP server.
+
+```toml
+[mcp_servers.public_tools.authentication]
+mode = "none"
+```
+
+### `forwarded`
+
+Forward credentials from the current user session to the MCP server. This supports forwarding either the user's access token or the OIDC ID token that authenticated the Erato session. The selected token is sent as `Authorization: Bearer <token>`.
+
+```toml
+[mcp_servers.intranet.authentication]
+mode = "forwarded"
+
+[mcp_servers.intranet.authentication.forwarded]
+credential = "access_token"
+```
+
+```toml
+[mcp_servers.intranet.authentication]
+mode = "forwarded"
+
+[mcp_servers.intranet.authentication.forwarded]
+credential = "oidc_id_token"
+```
+
+> [!WARNING]
+>
+> Only use `forwarded` authentication when it is strictly necessary, and preferably only for internally maintained MCP servers.
+>
+> Even then, prefer forwarding the `oidc_id_token` over the `access_token` whenever the server can work with it, to reduce the risk of permission leakage into downstream systems.
+
+### `fixed`
+
+Attach a configured fixed API key for all requests to that MCP server. By default Erato sends `Authorization: Bearer <api_key>`, but you can configure a different header name and prefix when required by the MCP server.
+
+```toml
+[mcp_servers.partner_api.authentication]
+mode = "fixed"
+
+[mcp_servers.partner_api.authentication.fixed]
+api_key = "your-api-key"
+```
+
+```toml
+[mcp_servers.partner_api.authentication]
+mode = "fixed"
+
+[mcp_servers.partner_api.authentication.fixed]
+api_key = "your-api-key"
+header_name = "X-API-Key"
+prefix = "Token "
+```
 
 ### stdio
 

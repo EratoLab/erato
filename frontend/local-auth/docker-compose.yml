@@ -1,7 +1,7 @@
 services:
   dex:
     # https://github.com/dexidp/dex/releases
-    image: dexidp/dex:v2.41.1
+    image: dexidp/dex:v2.45.1
     network_mode: host
     volumes:
       - ./dex-config.yml:/etc/dex/config.yml

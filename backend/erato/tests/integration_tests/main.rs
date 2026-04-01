@@ -10,6 +10,7 @@ use erato::config::{AppConfig, LangfuseConfig};
 use erato::services::background_tasks::BackgroundTaskManager;
 use erato::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use erato::services::langfuse::LangfuseClient;
+use erato::services::mcp_manager::McpServers;
 use erato::state::{AppState, FileCacheKey, GlobalPolicyEngine};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
@@ -162,7 +163,7 @@ async fn test_app_state_internal(
         db: db.clone(),
         default_file_storage_provider: None,
         file_storage_providers,
-        mcp_servers: Arc::new(Default::default()),
+        mcp_servers: Arc::new(McpServers::new(&app_config)),
         config: app_config,
         actor_manager,
         langfuse_client,

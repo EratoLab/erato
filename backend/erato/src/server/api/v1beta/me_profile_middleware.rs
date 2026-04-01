@@ -124,6 +124,8 @@ pub const X_FORWARDED_ACCESS_TOKEN: &str = "X-Forwarded-Access-Token";
 pub struct MeProfile {
     /// The user profile extracted from the JWT token.
     pub profile: UserProfile,
+    /// The raw OIDC token received via the Authorization header.
+    pub oidc_token: String,
     /// The raw access token for external APIs like MS Graph.
     /// This is extracted from the X-Forwarded-Access-Token header,
     /// which is typically set by oauth2-proxy when configured to forward
@@ -242,6 +244,7 @@ pub(crate) async fn user_profile_middleware(
     {
         req.extensions_mut().insert(MeProfile {
             profile: current_user,
+            oidc_token: auth_header.token().to_string(),
             access_token: forwarded_access_token,
         });
         Ok(next.run(req).await)

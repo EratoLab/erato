@@ -377,6 +377,69 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "McpAuthNoneToolCall".to_string(),
+            description: "Returns a tool call to auth_none_probe for MCP none-auth coverage"
+                .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "mcp auth none".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "auth_none_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "McpAuthFixedToolCall".to_string(),
+            description:
+                "Returns a tool call to auth_fixed_api_key_probe for MCP fixed-auth coverage"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "mcp auth fixed".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "auth_fixed_api_key_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "McpAuthForwardedAccessToolCall".to_string(),
+            description:
+                "Returns a tool call to auth_forwarded_access_probe for MCP forwarded access coverage"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "mcp auth forwarded access".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "auth_forwarded_access_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
+            name: "McpAuthForwardedOidcToolCall".to_string(),
+            description:
+                "Returns a tool call to auth_forwarded_oidc_probe for MCP forwarded OIDC coverage"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "mcp auth forwarded oidc".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "auth_forwarded_oidc_probe".to_string(),
+                arguments: "{}".to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
             name: "ToolResultResponse".to_string(),
             description: "Returns a text response when the last message is a tool result"
                 .to_string(),

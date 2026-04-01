@@ -34,7 +34,7 @@ use crate::services::genai_langfuse::{
     langfuse_tool_called_tag,
 };
 use crate::services::langfuse::TracingLangfuseClient;
-use crate::services::mcp_manager::convert_mcp_tools_to_genai_tools;
+use crate::services::mcp_manager::{McpRequestAuthContext, convert_mcp_tools_to_genai_tools};
 use crate::services::prompt_composition::traits::{
     FileResolver, MessageRepository, PromptProvider,
 };
@@ -95,6 +95,7 @@ pub struct MeProfileChatRequestInput<'a> {
     pub user_groups: &'a [String],
     pub organization_user_id: Option<&'a str>,
     pub organization_group_ids: &'a [String],
+    pub oidc_token: &'a str,
     pub access_token: Option<&'a str>,
     pub preferred_language: &'a str,
     pub user_preference_nickname: Option<&'a str>,
@@ -111,6 +112,7 @@ impl<'a> MeProfileChatRequestInput<'a> {
             user_groups: &me_profile.groups,
             organization_user_id: me_profile.organization_user_id.as_deref(),
             organization_group_ids: &me_profile.organization_group_ids,
+            oidc_token: &me_profile.oidc_token,
             access_token: me_profile.access_token.as_deref(),
             preferred_language: &me_profile.preferred_language,
             user_preference_nickname: me_profile.preference_nickname.as_deref(),
@@ -1484,12 +1486,17 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             .collect(),
         None => authorized_server_ids,
     });
+    let mcp_auth_context = McpRequestAuthContext {
+        oidc_token: Some(me_profile_input.oidc_token),
+        access_token: me_profile_input.access_token,
+    };
 
     // Only discover tools for servers potentially needed in this request.
     let all_mcp_server_tools = app_state
         .mcp_servers
-        .list_tools_for_server_ids(chat.id, effective_server_filter.as_ref())
-        .await;
+        .list_tools_for_server_ids(chat.id, effective_server_filter.as_ref(), &mcp_auth_context)
+        .await
+        .map_err(|e| eyre!("Failed to discover MCP tools: {}", e))?;
     let filtered_mcp_tools =
         filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
     let generation_mcp_tools =
@@ -1588,6 +1595,7 @@ async fn stream_generate_chat_completion<
     chat_id: Uuid,
     chat_provider_id: Option<&str>,
     user_groups: &[String],
+    mcp_auth_context: McpRequestAuthContext<'_>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
@@ -1755,15 +1763,31 @@ async fn stream_generate_chat_completion<
                 message.send_event(tx.clone()).await?;
             }
 
-            let managed_tool_call = app_state
+            let managed_tool_call = match app_state
                 .mcp_servers
-                .convert_tool_call_to_managed_tool_call(chat_id, unfinished_tool_call.clone())
+                .convert_tool_call_to_managed_tool_call(
+                    chat_id,
+                    unfinished_tool_call.clone(),
+                    &mcp_auth_context,
+                )
                 .await
-                .unwrap();
+            {
+                Ok(managed_tool_call) => managed_tool_call,
+                Err(err) => {
+                    let _ = tx
+                        .send(Err(eyre!(
+                            "Failed to resolve MCP tool call '{}': {}",
+                            unfinished_tool_call.fn_name,
+                            err
+                        )))
+                        .await;
+                    return Err(());
+                }
+            };
             let output_schema = managed_tool_call.tool.output_schema.clone();
             match app_state
                 .mcp_servers
-                .call_tool(chat_id, managed_tool_call)
+                .call_tool(chat_id, managed_tool_call, &mcp_auth_context)
                 .await
             {
                 Ok(tool_call_result) => {
@@ -4052,6 +4076,10 @@ async fn run_message_submit_task(
     });
 
     let subject = me_user.to_subject();
+    let mcp_auth_context = McpRequestAuthContext {
+        oidc_token: Some(&me_user.oidc_token),
+        access_token: me_user.access_token.as_deref(),
+    };
     let generation_task = stream_generate_chat_completion::<MessageSubmitStreamingResponseMessage>(
         temp_tx2.clone(),
         app_state,
@@ -4065,6 +4093,7 @@ async fn run_message_submit_task(
         chat.id,
         Some(chat_provider_id.as_str()),
         &me_user.groups,
+        mcp_auth_context,
         Some(task),
         chat.assistant_id,
     );
@@ -4314,6 +4343,10 @@ pub async fn regenerate_message_sse(
             }
 
             let subject = me_user.to_subject();
+            let mcp_auth_context = McpRequestAuthContext {
+                oidc_token: Some(&me_user.oidc_token),
+                access_token: me_user.access_token.as_deref(),
+            };
             let (end_content, generation_metadata) =
                 stream_generate_chat_completion::<RegenerateMessageStreamingResponseMessage>(
                     tx.clone(),
@@ -4328,6 +4361,7 @@ pub async fn regenerate_message_sse(
                     chat.id,
                     Some(chat_provider_id.as_str()),
                     &me_user.groups,
+                    mcp_auth_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
                 )
@@ -4631,6 +4665,10 @@ pub async fn edit_message_sse(
             }
 
             let subject = me_user.to_subject();
+            let mcp_auth_context = McpRequestAuthContext {
+                oidc_token: Some(&me_user.oidc_token),
+                access_token: me_user.access_token.as_deref(),
+            };
             let (end_content, generation_metadata) =
                 stream_generate_chat_completion::<EditMessageStreamingResponseMessage>(
                     tx.clone(),
@@ -4645,6 +4683,7 @@ pub async fn edit_message_sse(
                     chat.id,
                     Some(chat_provider_id.as_str()),
                     &me_user.groups,
+                    mcp_auth_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
                 )
