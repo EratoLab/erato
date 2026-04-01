@@ -158,67 +158,6 @@ api_key = "your-api-token"
 
 Both SSE and Streamable HTTP transports are fully supported in Erato, allowing you to choose the transport that best fits your deployment needs.
 
-## Authentication
-
-Erato currently supports three MCP authentication modes.
-
-### `none`
-
-No credentials are attached to requests for that MCP server.
-
-```toml
-[mcp_servers.public_tools.authentication]
-mode = "none"
-```
-
-### `forwarded`
-
-Forward credentials from the current user session to the MCP server. This supports forwarding either the user's access token or the OIDC ID token that authenticated the Erato session. The selected token is sent as `Authorization: Bearer <token>`.
-
-```toml
-[mcp_servers.intranet.authentication]
-mode = "forwarded"
-
-[mcp_servers.intranet.authentication.forwarded]
-credential = "access_token"
-```
-
-```toml
-[mcp_servers.intranet.authentication]
-mode = "forwarded"
-
-[mcp_servers.intranet.authentication.forwarded]
-credential = "oidc_id_token"
-```
-
-> [!WARNING]
->
-> Only use `forwarded` authentication when it is strictly necessary, and preferably only for internally maintained MCP servers.
->
-> Even then, prefer forwarding the `oidc_id_token` over the `access_token` whenever the server can work with it, to reduce the risk of permission leakage into downstream systems.
-
-### `fixed`
-
-Attach a configured fixed API key for all requests to that MCP server. By default Erato sends `Authorization: Bearer <api_key>`, but you can configure a different header name and prefix when required by the MCP server.
-
-```toml
-[mcp_servers.partner_api.authentication]
-mode = "fixed"
-
-[mcp_servers.partner_api.authentication.fixed]
-api_key = "your-api-key"
-```
-
-```toml
-[mcp_servers.partner_api.authentication]
-mode = "fixed"
-
-[mcp_servers.partner_api.authentication.fixed]
-api_key = "your-api-key"
-header_name = "X-API-Key"
-prefix = "Token "
-```
-
 ### stdio
 
 [Section in MCP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#stdio).
@@ -238,3 +177,155 @@ Erato does **not natively support** the `stdio` transport type.
 > in Erato.
 >
 > For most scenarios, use MCP servers that support the `sse` transport type directly, if possible.
+
+## Authentication
+
+Erato currently supports three MCP authentication modes, that offer different trade-offs in terms of ease-of-use and security.
+
+Separate to authentication, access to MCP servers may also be secured on a network level to lock down access only to Erato and/or other known MCP clients.
+
+### `none`
+
+No credentials are attached to requests for that MCP server.
+
+To forego authentication can be suitable for utility services that do not expose confidential data in the organization and have no user-dependent authorization needs.
+
+Examples:
+- Weather service
+- News service
+
+```toml
+[mcp_servers.public_tools.authentication]
+mode = "none"
+```
+
+```mermaid
+flowchart LR
+    U1[User A]
+    U2[User B]
+    AS[Authorization Server]
+    E[Erato]
+    MCP[MCP Server]
+
+    U1 -->|Sign in| AS
+    U2 -->|Sign in| AS
+    AS -->|Session for Erato| E
+    E -->|MCP request without auth header| MCP
+    MCP -->|Same data or tools for all users| E
+```
+
+### `fixed`
+
+Attach a configured fixed API key for all requests to that MCP server. By default Erato sends `Authorization: Bearer <api_key>`, but you can configure a different header name and prefix when required by the MCP server.
+
+This can be a suitable easy to set up authentication mechanism for data that should be available to anyone in an organization, e.g. key company information, RAG data from company-wide knowledge base.
+
+As this uses one shared API key for all users, it is not suitable for identity-aware authorization, where different users should have access to different resources on the server.
+
+For a complete example server implementation, see the [`api-key-server` example project](https://github.com/EratoLab/example-mcp-servers/tree/main/api-key-server).
+
+```toml
+[mcp_servers.partner_api.authentication]
+mode = "fixed"
+
+[mcp_servers.partner_api.authentication.fixed]
+api_key = "your-api-key"
+```
+
+```toml
+[mcp_servers.partner_api.authentication]
+mode = "fixed"
+
+[mcp_servers.partner_api.authentication.fixed]
+api_key = "your-api-key"
+header_name = "X-API-Key"
+prefix = "Token "
+```
+
+```mermaid
+flowchart LR
+    U1[User A]
+    U2[User B]
+    AS[Authorization Server]
+    E[Erato]
+    MCP[MCP Server]
+
+    U1 -->|Sign in| AS
+    U2 -->|Sign in| AS
+    AS -->|Session for Erato| E
+    E -->|Shared API key in configured header| MCP
+    MCP -->|Identifies the Erato deployment, not individual users| E
+```
+
+### `forwarded`
+
+Forward credentials from the current user session to the MCP server. The selected token is sent as `Authorization: Bearer <token>`, so the MCP server can validate the token and make user-specific authorization decisions.
+
+### `forwarded` with `oidc_id_token`
+
+Forward the OIDC ID token that authenticated the user's Erato session.
+
+This is the preferred forwarded mode when the MCP server can work with an ID token, because it forwards user identity without also forwarding a broader downstream access token.
+
+For a complete example server implementation, see the [`oidc-id-token-server` example project](https://github.com/EratoLab/example-mcp-servers/tree/main/oidc-id-token-server).
+
+```toml
+[mcp_servers.intranet.authentication]
+mode = "forwarded"
+
+[mcp_servers.intranet.authentication.forwarded]
+credential = "oidc_id_token"
+```
+
+```mermaid
+flowchart LR
+    U1[User A]
+    U2[User B]
+    AS[Authorization Server]
+    E[Erato]
+    MCP[MCP Server]
+
+    U1 -->|Sign in| AS
+    U2 -->|Sign in| AS
+    AS -->|OIDC ID token for each user| E
+    E -->|Authorization: Bearer user ID token| MCP
+    MCP -->|Validates token and distinguishes User A vs User B| E
+```
+
+### `forwarded` with `access_token`
+
+Forward the user's access token from the current Erato session.
+
+This can be useful when the MCP server needs to access downstream APIs on behalf of the user and those APIs expect an access token. Because access tokens are often broader than ID tokens, this should only be used when the MCP server actually needs that kind of delegated access.
+
+```toml
+[mcp_servers.intranet.authentication]
+mode = "forwarded"
+
+[mcp_servers.intranet.authentication.forwarded]
+credential = "access_token"
+```
+
+```mermaid
+flowchart LR
+    U1[User A]
+    U2[User B]
+    AS[Authorization Server]
+    E[Erato]
+    MCP[MCP Server]
+    RS[Downstream Resource Server<br/>Example: MS Graph API]
+
+    U1 -->|Sign in| AS
+    U2 -->|Sign in| AS
+    AS -->|Access token for each user| E
+    E -->|Authorization: Bearer user access token| MCP
+    MCP -->|Calls downstream API with forwarded user access token| RS
+    RS -->|Returns user-specific resources| MCP
+    MCP -->|Distinguishes User A vs User B via downstream access| E
+```
+
+> [!WARNING]
+>
+> Only use `forwarded` authentication when it is strictly necessary, and preferably only for internally maintained MCP servers.
+>
+> Even then, prefer forwarding the `oidc_id_token` over the `access_token` whenever the server can work with it, to reduce the risk of permission leakage into downstream systems.
