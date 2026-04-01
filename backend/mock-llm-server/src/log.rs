@@ -67,5 +67,10 @@ pub fn log_startup(addr: &str) {
         "POST".bright_cyan(),
         "/base-openai/v1/images/generations".bright_yellow()
     );
+    println!(
+        "  {} {}",
+        "POST".bright_cyan(),
+        "/base-vertex/v1/publishers/google/{*path}".bright_yellow()
+    );
     println!();
 }

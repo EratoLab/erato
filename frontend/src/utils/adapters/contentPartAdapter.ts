@@ -40,7 +40,7 @@ export function extractTextFromContent(content?: ContentPart[] | null): string {
   return content
     .filter((part) => part.content_type === "text")
     .map((part) => (part as ContentPartText).text)
-    .join("");
+    .join("\n\n");
 }
 
 /**
@@ -166,7 +166,7 @@ export function parseContent(content?: ContentPart[] | null): {
   });
 
   return {
-    text: textParts.join(""),
+    text: textParts.join("\n\n"),
     images,
   };
 }

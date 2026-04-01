@@ -2338,11 +2338,21 @@ async fn stream_generate_chat_completion<
                         all_tool_names.insert(tool_call.fn_name.clone());
                     }
 
+                    let assistant_turn_content = stream_end
+                        .captured_content
+                        .as_ref()
+                        .map(|captured_content| {
+                            MessageContent::from_parts(captured_content.parts().clone())
+                        })
+                        .unwrap_or_else(|| {
+                            MessageContent::from_tool_calls(
+                                captured_tool_calls.clone().into_iter().cloned().collect(),
+                            )
+                        });
+
                     current_turn_chat_request.messages.push(GenAiChatMessage {
                         role: ChatRole::Assistant,
-                        content: MessageContent::from_tool_calls(
-                            captured_tool_calls.clone().into_iter().cloned().collect(),
-                        ),
+                        content: assistant_turn_content,
                         options: None,
                     });
                     unfinished_tool_calls.extend(
