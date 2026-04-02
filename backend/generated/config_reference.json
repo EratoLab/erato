@@ -212,6 +212,7 @@
       "replacement_key": "integrations.sentry.sentry_dsn"
     }
   },
+  "server.encryption_key": {},
   "starter_prompts.enabled": {},
   "starter_prompts.priority_order.[]": {},
   "starter_prompts.prompts.<prompt-id>.chat_provider": {},

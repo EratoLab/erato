@@ -32,6 +32,33 @@ In that case, each nesting level is separated by double underscores (`__`). E.g.
 
 🚧Work in progress; Covers ~80% of available configuration options 🚧
 
+### `server`
+
+#### `server.encryption_key`
+
+Optional encryption key used by the backend for encrypting application data before storing it in the database.
+
+The key must be base64-encoded and must decode to exactly 32 bytes. This matches the AES-256-GCM-SIV key size used by the backend.
+
+To generate a suitable key:
+
+```bash
+openssl rand -base64 32
+```
+
+When providing this value via an environment variable, use `SERVER__ENCRYPTION_KEY`.
+
+**Default value:** `None`
+
+**Type:** `string | None`
+
+**Example**
+
+```toml
+[server]
+encryption_key = "replace-with-openssl-output"
+```
+
 ### `frontend`
 
 #### `frontend.theme`

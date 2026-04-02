@@ -257,6 +257,7 @@ mod tests {
         assert!(keys.contains(&"chat_providers.providers.<provider-id>.model_name".to_string()));
         assert!(keys.contains(&"experimental_facets.facets.<facet-id>.display_name".to_string()));
         assert!(keys.contains(&"model_permissions.rules.<rule-name>.rule_type".to_string()));
+        assert!(keys.contains(&"server.encryption_key".to_string()));
         assert!(keys.contains(&"chat_providers.priority_order.[]".to_string()));
         assert!(keys.windows(2).all(|window| window[0] <= window[1]));
     }
