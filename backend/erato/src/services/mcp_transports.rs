@@ -1,12 +1,12 @@
 use crate::config::{McpServerAuthenticationConfig, McpServerConfig, McpServerForwardedCredential};
 use crate::services::mcp_manager::McpRequestAuthContext;
 use eyre::{Report, eyre};
-use reqwest_012::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use rmcp::ClientHandler;
 use rmcp::service::{RoleClient, RunningService, ServiceExt};
-use rmcp::transport::sse_client::SseClientConfig;
+use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
-use rmcp::transport::{SseClientTransport, StreamableHttpClientTransport};
+use rmcp_sse::{SseClientConfig, SseClientTransport};
 use std::sync::Arc;
 
 fn apply_auth_header(
@@ -55,7 +55,7 @@ fn apply_auth_headers(
 fn build_reqwest_client(
     config: &McpServerConfig,
     auth_context: &McpRequestAuthContext<'_>,
-) -> Result<reqwest_012::Client, Report> {
+) -> Result<reqwest::Client, Report> {
     let mut default_headers = HeaderMap::new();
     if let Some(http_headers) = &config.http_headers {
         for (name, value) in http_headers {
@@ -69,7 +69,7 @@ fn build_reqwest_client(
     }
     apply_auth_headers(&mut default_headers, config, auth_context)?;
 
-    reqwest_012::Client::builder()
+    reqwest::Client::builder()
         .default_headers(default_headers)
         .build()
         .map_err(|e| eyre!("Failed to build MCP reqwest client: {}", e))
@@ -137,14 +137,10 @@ async fn create_streamable_http_service(
     debug!(url = %config.url, "Creating Streamable HTTP transport");
 
     let client = build_reqwest_client(config, auth_context)?;
-    let transport = StreamableHttpClientTransport::with_client(
-        client,
-        StreamableHttpClientTransportConfig {
-            uri: Arc::<str>::from(config.url.as_str()),
-            auth_header: None,
-            ..Default::default()
-        },
-    );
+    let mut transport_config = StreamableHttpClientTransportConfig::default();
+    transport_config.uri = Arc::<str>::from(config.url.as_str());
+    transport_config.auth_header = None;
+    let transport = StreamableHttpClientTransport::with_client(client, transport_config);
 
     debug!("Streamable HTTP transport created, initializing service");
 

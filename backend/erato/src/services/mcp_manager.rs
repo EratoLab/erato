@@ -4,7 +4,7 @@ use eyre::{Report, eyre};
 use genai::chat::Tool as GenaiTool;
 use genai::chat::ToolCall as GenaiToolCall;
 use genai::chat::ToolName as GenaiToolName;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use sea_orm::prelude::Uuid;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -108,14 +108,13 @@ impl McpServers {
         managed_tool_call: ManagedToolCall,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<rmcp::model::CallToolResult, Report> {
-        let params = CallToolRequestParam {
-            name: managed_tool_call.tool_call.fn_name.clone().into(),
-            arguments: managed_tool_call
-                .tool_call
-                .fn_arguments
-                .as_object()
-                .cloned(),
-        };
+        let mut params = CallToolRequestParams::default();
+        params.name = managed_tool_call.tool_call.fn_name.clone().into();
+        params.arguments = managed_tool_call
+            .tool_call
+            .fn_arguments
+            .as_object()
+            .cloned();
 
         self.session_manager
             .call_tool(chat_id, &managed_tool_call.server_id, params, auth_context)
