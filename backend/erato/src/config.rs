@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment};
 use eyre::{OptionExt, Report, eyre};
@@ -160,6 +161,9 @@ pub struct AppConfig {
     // Global settings for MCP servers.
     #[serde(default)]
     pub mcp_servers_global: McpServersGlobalConfig,
+
+    #[serde(default)]
+    pub server: ServerConfig,
 
     #[serde(default)]
     pub frontend: FrontendConfig,
@@ -412,6 +416,10 @@ impl AppConfig {
         // Validate Prometheus configuration
         if let Err(e) = config.integrations.prometheus.validate(config.http_port) {
             panic!("Invalid Prometheus configuration: {}", e);
+        }
+
+        if let Err(e) = config.server.validate() {
+            panic!("Invalid server configuration: {}", e);
         }
 
         // Migrate single chat_provider to new chat_providers structure and handle Azure OpenAI migration
@@ -867,6 +875,40 @@ impl AppConfig {
             .sentry_dsn
             .as_ref()
             .or(self.sentry_dsn.as_ref())
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct ServerConfig {
+    // Optional AES-256-GCM-SIV encryption key for encrypting application data at rest.
+    //
+    // The value must be base64-encoded and decode to exactly 32 bytes.
+    // Example generation command:
+    // `openssl rand -base64 32`
+    pub encryption_key: Option<String>,
+}
+
+impl ServerConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        let Some(encryption_key) = &self.encryption_key else {
+            return Ok(());
+        };
+
+        let decoded = STANDARD.decode(encryption_key).map_err(|error| {
+            eyre!(
+                "server.encryption_key must be valid base64 for a 32-byte AES-256-GCM-SIV key: {}",
+                error
+            )
+        })?;
+
+        if decoded.len() != 32 {
+            return Err(eyre!(
+                "server.encryption_key must decode to exactly 32 bytes, got {} bytes",
+                decoded.len()
+            ));
+        }
+
+        Ok(())
     }
 }
 

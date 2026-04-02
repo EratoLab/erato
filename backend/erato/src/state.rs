@@ -8,6 +8,9 @@ use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
 use crate::system_prompt_renderer::{RenderContext, SystemPromptRenderer};
+use aes_gcm_siv::aead::{Aead, KeyInit, OsRng, rand_core::RngCore};
+use aes_gcm_siv::{Aes256GcmSiv, Nonce};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use eyre::{OptionExt, Report};
 use genai::adapter::AdapterKind;
 use genai::resolver::{AuthData, Endpoint, ServiceTargetResolver};
@@ -24,6 +27,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Semaphore};
 use tracing::instrument;
+
+const ENCRYPTED_VALUE_PREFIX: &str = "enc-v1";
 
 /// Wrapper around PolicyEngine that tracks when it was last rebuilt
 /// This is used for the global policy engine instance in AppState
@@ -247,6 +252,79 @@ impl AppState {
             file_processing_pipeline_semaphore,
             file_processor,
         })
+    }
+
+    pub fn encrypt(&self, value: &str) -> Result<String, Report> {
+        let cipher = self.encryption_cipher()?;
+        let mut nonce_bytes = [0u8; 12];
+        OsRng.fill_bytes(&mut nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let ciphertext = cipher
+            .encrypt(nonce, value.as_bytes())
+            .map_err(|error| eyre::eyre!("Failed to encrypt value: {}", error))?;
+
+        Ok(format!(
+            "{}:{}:{}",
+            ENCRYPTED_VALUE_PREFIX,
+            STANDARD.encode(nonce_bytes),
+            STANDARD.encode(ciphertext)
+        ))
+    }
+
+    pub fn decrypt(&self, value: &str) -> Result<String, Report> {
+        let cipher = self.encryption_cipher()?;
+        let mut parts = value.splitn(3, ':');
+        let prefix = parts
+            .next()
+            .ok_or_eyre("Encrypted value is missing prefix")?;
+        let nonce_b64 = parts
+            .next()
+            .ok_or_eyre("Encrypted value is missing nonce")?;
+        let ciphertext_b64 = parts
+            .next()
+            .ok_or_eyre("Encrypted value is missing ciphertext")?;
+
+        if prefix != ENCRYPTED_VALUE_PREFIX {
+            return Err(eyre::eyre!(
+                "Unsupported encrypted value format '{}'",
+                prefix
+            ));
+        }
+
+        let nonce_bytes = STANDARD
+            .decode(nonce_b64)
+            .map_err(|error| eyre::eyre!("Failed to decode encryption nonce: {}", error))?;
+        if nonce_bytes.len() != 12 {
+            return Err(eyre::eyre!(
+                "Encryption nonce must decode to 12 bytes, got {} bytes",
+                nonce_bytes.len()
+            ));
+        }
+
+        let ciphertext = STANDARD
+            .decode(ciphertext_b64)
+            .map_err(|error| eyre::eyre!("Failed to decode encrypted payload: {}", error))?;
+        let plaintext = cipher
+            .decrypt(Nonce::from_slice(&nonce_bytes), ciphertext.as_ref())
+            .map_err(|error| eyre::eyre!("Failed to decrypt value: {}", error))?;
+
+        String::from_utf8(plaintext)
+            .map_err(|error| eyre::eyre!("Decrypted value is not valid UTF-8: {}", error))
+    }
+
+    fn encryption_cipher(&self) -> Result<Aes256GcmSiv, Report> {
+        let encryption_key = self
+            .config
+            .server
+            .encryption_key
+            .as_deref()
+            .ok_or_eyre("server.encryption_key is not configured")?;
+        let key_bytes = STANDARD
+            .decode(encryption_key)
+            .map_err(|error| eyre::eyre!("Failed to decode server.encryption_key: {}", error))?;
+
+        Aes256GcmSiv::new_from_slice(&key_bytes)
+            .map_err(|error| eyre::eyre!("Invalid server.encryption_key: {}", error))
     }
 
     pub fn chat_provider_for_summary(&self) -> Result<ChatProviderConfigWithId, Report> {

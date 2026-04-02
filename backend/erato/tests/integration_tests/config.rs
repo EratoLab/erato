@@ -1,6 +1,10 @@
 //! Configuration parsing and validation tests.
 
+use crate::test_utils::hermetic_app_config;
+use crate::{MIGRATOR, test_app_state};
 use erato::config::{AppConfig, ModelReasoningEffort, ModelVerbosity, PromptSourceSpecification};
+use sqlx::Pool;
+use sqlx::postgres::Postgres;
 use std::collections::HashMap;
 use std::io::Write;
 use tempfile::Builder;
@@ -2212,4 +2216,105 @@ allowed_args = []
         .expect("Failed to deserialize config");
 
     let _ = config.migrate(); // should panic
+}
+
+#[test]
+fn test_config_server_encryption_key_parses() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[server]
+encryption_key = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize::<AppConfig>()
+        .expect("Failed to deserialize config")
+        .migrate();
+
+    assert_eq!(
+        config.server.encryption_key.as_deref(),
+        Some("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+    );
+}
+
+#[test]
+#[should_panic(expected = "server.encryption_key must decode to exactly 32 bytes")]
+fn test_config_server_encryption_key_rejects_wrong_length() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[server]
+encryption_key = "YWJj"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    let _ = config.migrate();
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_app_state_encrypt_decrypt_round_trip(pool: Pool<Postgres>) {
+    let mut app_config = hermetic_app_config(None, None);
+    app_config.server.encryption_key =
+        Some("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=".to_string());
+
+    let app_state = test_app_state(app_config, pool).await;
+
+    let encrypted = app_state
+        .encrypt("secret-value")
+        .expect("value should encrypt");
+    let decrypted = app_state.decrypt(&encrypted).expect("value should decrypt");
+
+    assert_eq!(decrypted, "secret-value");
+    assert_ne!(encrypted, "secret-value");
+    assert!(encrypted.starts_with("enc-v1:"));
 }
