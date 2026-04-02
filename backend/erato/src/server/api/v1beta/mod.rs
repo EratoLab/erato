@@ -3,6 +3,7 @@ pub mod assistants;
 pub mod budget;
 pub mod entra_id;
 mod file_resolution;
+pub mod mcp_servers;
 pub mod me_profile_middleware;
 pub mod message_streaming;
 mod message_streaming_file_extraction;
@@ -32,6 +33,11 @@ use crate::server::api::v1beta::assistants::{
     ArchiveAssistantResponse, Assistant, AssistantFile, AssistantWithFiles, CreateAssistantRequest,
     CreateAssistantResponse, UpdateAssistantRequest, UpdateAssistantResponse, archive_assistant,
     create_assistant, get_assistant, list_assistants, update_assistant,
+};
+use crate::server::api::v1beta::mcp_servers::{
+    CompleteMcpServerOauthResponse, ListMcpServersResponse, McpServerStatus, McpServerStatusValue,
+    StartMcpServerOauthResponse, complete_mcp_server_oauth, list_mcp_servers,
+    start_mcp_server_oauth,
 };
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
@@ -105,6 +111,15 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
         .route("/models", get(available_models))
+        .route("/mcp_servers", get(list_mcp_servers))
+        .route(
+            "/mcp_servers/{server_id}/oauth/start",
+            post(start_mcp_server_oauth),
+        )
+        .route(
+            "/mcp_servers/{server_id}/oauth/callback",
+            get(complete_mcp_server_oauth),
+        )
         .route("/file-capabilities", get(file_capabilities))
         .route("/budget", get(budget::budget_status))
         .route(
@@ -227,6 +242,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         token_usage::token_usage_estimate,
         prompt_optimizer,
         available_models,
+        mcp_servers::list_mcp_servers,
+        mcp_servers::start_mcp_server_oauth,
+        mcp_servers::complete_mcp_server_oauth,
         file_capabilities,
         budget::budget_status,
         assistants::create_assistant,
@@ -284,6 +302,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         ArchiveChatResponse,
         ArchiveAllChatsResponse,
         ChatModel,
+        McpServerStatusValue,
+        McpServerStatus,
+        ListMcpServersResponse,
+        StartMcpServerOauthResponse,
+        CompleteMcpServerOauthResponse,
         FileCapability,
         FileOperation,
         FileCapabilitiesQuery,

@@ -1,5 +1,6 @@
 use crate::config::{McpServerAuthenticationConfig, McpServerConfig, McpServerForwardedCredential};
 use crate::services::mcp_manager::McpRequestAuthContext;
+use crate::services::mcp_oauth::resolve_oauth_access_token;
 use eyre::{Report, eyre};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use rmcp::ClientHandler;
@@ -23,8 +24,9 @@ fn apply_auth_header(
     Ok(())
 }
 
-fn apply_auth_headers(
+async fn apply_auth_headers(
     default_headers: &mut HeaderMap,
+    server_id: &str,
     config: &McpServerConfig,
     auth_context: &McpRequestAuthContext<'_>,
 ) -> Result<(), Report> {
@@ -49,10 +51,49 @@ fn apply_auth_headers(
             &fixed.header_name,
             &format!("{}{}", fixed.prefix, fixed.api_key),
         ),
+        McpServerAuthenticationConfig::Oauth2 { oauth2 } => {
+            let app_state = auth_context
+                .app_state
+                .ok_or_else(|| eyre!("Missing application state for MCP OAuth2 authentication"))?;
+            let user_id = auth_context
+                .user_id
+                .ok_or_else(|| eyre!("Missing user ID for MCP OAuth2 authentication"))?;
+            let access_token =
+                resolve_oauth_access_token(app_state, user_id, server_id, config, oauth2)
+                    .await
+                    .map_err(|error| eyre!(error.to_string()))?;
+            apply_auth_header(
+                default_headers,
+                "Authorization",
+                &format!("Bearer {access_token}"),
+            )
+        }
     }
 }
 
-fn build_reqwest_client(
+pub fn build_oauth_supporting_reqwest_client(
+    config: &McpServerConfig,
+) -> Result<reqwest::Client, Report> {
+    let mut default_headers = HeaderMap::new();
+    if let Some(http_headers) = &config.http_headers {
+        for (name, value) in http_headers {
+            default_headers.insert(
+                HeaderName::from_bytes(name.as_bytes())
+                    .map_err(|e| eyre!("Invalid MCP HTTP header name '{}': {}", name, e))?,
+                HeaderValue::from_str(value)
+                    .map_err(|e| eyre!("Invalid MCP HTTP header value for '{}': {}", name, e))?,
+            );
+        }
+    }
+
+    reqwest::Client::builder()
+        .default_headers(default_headers)
+        .build()
+        .map_err(|e| eyre!("Failed to build MCP reqwest client: {}", e))
+}
+
+async fn build_reqwest_client(
+    server_id: &str,
     config: &McpServerConfig,
     auth_context: &McpRequestAuthContext<'_>,
 ) -> Result<reqwest::Client, Report> {
@@ -67,8 +108,7 @@ fn build_reqwest_client(
             );
         }
     }
-    apply_auth_headers(&mut default_headers, config, auth_context)?;
-
+    apply_auth_headers(&mut default_headers, server_id, config, auth_context).await?;
     reqwest::Client::builder()
         .default_headers(default_headers)
         .build()
@@ -78,12 +118,13 @@ fn build_reqwest_client(
 /// Create an MCP client service based on the transport type specified in the configuration
 /// Returns a RunningService which must be kept alive to maintain the connection
 pub async fn create_mcp_service(
+    server_id: &str,
     config: &McpServerConfig,
     auth_context: &McpRequestAuthContext<'_>,
 ) -> Result<RunningService<RoleClient, EmptyClientHandler>, Report> {
     match config.transport_type.as_str() {
-        "sse" => create_sse_service(config, auth_context).await,
-        "streamable_http" => create_streamable_http_service(config, auth_context).await,
+        "sse" => create_sse_service(server_id, config, auth_context).await,
+        "streamable_http" => create_streamable_http_service(server_id, config, auth_context).await,
         other => Err(eyre!(
             "Unsupported transport type '{}'. Supported types are 'sse' and 'streamable_http'",
             other
@@ -93,6 +134,7 @@ pub async fn create_mcp_service(
 
 /// Create an MCP service using SSE (Server-Sent Events) transport
 async fn create_sse_service(
+    server_id: &str,
     config: &McpServerConfig,
     auth_context: &McpRequestAuthContext<'_>,
 ) -> Result<RunningService<RoleClient, EmptyClientHandler>, Report> {
@@ -100,7 +142,7 @@ async fn create_sse_service(
 
     debug!(url = %config.url, "Starting SSE transport");
 
-    let client = build_reqwest_client(config, auth_context)?;
+    let client = build_reqwest_client(server_id, config, auth_context).await?;
     let transport = SseClientTransport::start_with_client(
         client,
         SseClientConfig {
@@ -129,6 +171,7 @@ async fn create_sse_service(
 
 /// Create an MCP service using Streamable HTTP transport
 async fn create_streamable_http_service(
+    server_id: &str,
     config: &McpServerConfig,
     auth_context: &McpRequestAuthContext<'_>,
 ) -> Result<RunningService<RoleClient, EmptyClientHandler>, Report> {
@@ -136,7 +179,7 @@ async fn create_streamable_http_service(
 
     debug!(url = %config.url, "Creating Streamable HTTP transport");
 
-    let client = build_reqwest_client(config, auth_context)?;
+    let client = build_reqwest_client(server_id, config, auth_context).await?;
     let mut transport_config = StreamableHttpClientTransportConfig::default();
     transport_config.uri = Arc::<str>::from(config.url.as_str());
     transport_config.auth_header = None;

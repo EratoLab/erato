@@ -3,6 +3,7 @@ use crate::config::{
 };
 use crate::metrics::report_mcp_active_sessions_for_server;
 use crate::services::mcp_manager::McpRequestAuthContext;
+use crate::services::mcp_oauth::resolve_oauth_access_token;
 use crate::services::mcp_transports::{EmptyClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
 use futures::future::join_all;
@@ -15,6 +16,13 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpServerConnectionStatus {
+    Success,
+    Failure,
+    NeedsAuthentication,
+}
 
 /// Represents a single MCP session for a specific chat and server
 #[derive(Debug)]
@@ -48,7 +56,7 @@ impl McpSession {
             "Creating MCP service connection"
         );
 
-        let service = create_mcp_service(config, auth_context)
+        let service = create_mcp_service(&server_id, config, auth_context)
             .await
             .map_err(|e| eyre!("Failed to create MCP service: {}", e))?;
 
@@ -143,7 +151,8 @@ pub struct McpSessionManager {
 }
 
 impl McpSessionManager {
-    fn session_auth_key(
+    async fn session_auth_key(
+        server_id: &str,
         config: &McpServerConfig,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<SessionAuthKey, Report> {
@@ -161,6 +170,19 @@ impl McpSessionManager {
                     .map(|token| Some(format!("oidc_id_token:{token}")))
                     .ok_or_else(|| eyre!("Missing forwarded OIDC token for MCP server")),
             },
+            McpServerAuthenticationConfig::Oauth2 { oauth2 } => {
+                let app_state = auth_context.app_state.ok_or_else(|| {
+                    eyre!("Missing application state for MCP OAuth2 authentication")
+                })?;
+                let user_id = auth_context
+                    .user_id
+                    .ok_or_else(|| eyre!("Missing user ID for MCP OAuth2 authentication"))?;
+                let token =
+                    resolve_oauth_access_token(app_state, user_id, server_id, config, oauth2)
+                        .await
+                        .map_err(|error| eyre!(error.to_string()))?;
+                Ok(Some(format!("oauth2:{token}")))
+            }
         }
     }
 
@@ -267,7 +289,7 @@ impl McpSessionManager {
         let key = (
             chat_id,
             server_id.to_string(),
-            Self::session_auth_key(config, auth_context)?,
+            Self::session_auth_key(server_id, config, auth_context).await?,
         );
 
         // Check if session already exists
@@ -374,6 +396,15 @@ impl McpSessionManager {
                         );
                         continue;
                     }
+                    if Self::is_oauth_authorization_required_error(&e) {
+                        debug!(
+                            chat_id = %chat_id,
+                            server_id = %server_id,
+                            error = %e,
+                            "Skipping MCP server during tool discovery because OAuth authorization is required"
+                        );
+                        continue;
+                    }
                     if Self::is_auth_denied_error(&e) {
                         warn!(
                             chat_id = %chat_id,
@@ -427,6 +458,12 @@ impl McpSessionManager {
         error_msg.contains("401 Unauthorized") || error_msg.contains("403 Forbidden")
     }
 
+    fn is_oauth_authorization_required_error(error: &Report) -> bool {
+        let error_msg = error.to_string();
+        error_msg.contains("OAuth authorization required")
+            || error_msg.contains("OAuth token refresh failed")
+    }
+
     /// Check if an error indicates the session is invalid and should be recreated
     fn is_session_invalid_error(error: &Report) -> bool {
         let error_msg = error.to_string().to_lowercase();
@@ -461,7 +498,7 @@ impl McpSessionManager {
                 let key = (
                     chat_id,
                     server_id.to_string(),
-                    Self::session_auth_key(config, auth_context)?,
+                    Self::session_auth_key(server_id, config, auth_context).await?,
                 );
                 warn!(
                     chat_id = %chat_id,
@@ -524,7 +561,7 @@ impl McpSessionManager {
                 let key = (
                     chat_id,
                     server_id.to_string(),
-                    Self::session_auth_key(config, auth_context)?,
+                    Self::session_auth_key(server_id, config, auth_context).await?,
                 );
                 warn!(
                     chat_id = %chat_id,
@@ -582,10 +619,11 @@ impl McpSessionManager {
             if matches!(
                 config.authentication,
                 McpServerAuthenticationConfig::Forwarded { .. }
+                    | McpServerAuthenticationConfig::Oauth2 { .. }
             ) {
                 info!(
                     server_id = %server_id,
-                    "Skipping MCP connectivity check because this server requires request-scoped forwarded authentication"
+                    "Skipping MCP connectivity check because this server requires request-scoped or user-scoped authentication"
                 );
                 continue;
             }
@@ -628,13 +666,52 @@ impl McpSessionManager {
             }
 
             // Drop the startup connectivity-check session immediately.
-            if let Ok(session_auth_key) = Self::session_auth_key(config, &auth_context) {
+            if let Ok(session_auth_key) =
+                Self::session_auth_key(server_id, config, &auth_context).await
+            {
                 let key = (test_chat_id, server_id.clone(), session_auth_key);
                 self.invalidate_session(&key).await;
             }
         }
 
         info!("MCP server connectivity checks complete");
+    }
+
+    pub async fn probe_connection(
+        &self,
+        server_id: &str,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> McpServerConnectionStatus {
+        let Some(config) = self.server_configs.get(server_id) else {
+            return McpServerConnectionStatus::Failure;
+        };
+
+        let probe_chat_id = Uuid::nil();
+        let result = self
+            .get_or_create_session(probe_chat_id, server_id, auth_context)
+            .await;
+
+        let session_auth_key = Self::session_auth_key(server_id, config, auth_context)
+            .await
+            .ok();
+        if let Some(session_auth_key) = session_auth_key {
+            self.invalidate_session(&(probe_chat_id, server_id.to_string(), session_auth_key))
+                .await;
+        }
+
+        match result {
+            Ok(_) => McpServerConnectionStatus::Success,
+            Err(error) if Self::is_missing_forwarded_credential_error(&error) => {
+                McpServerConnectionStatus::NeedsAuthentication
+            }
+            Err(error) if Self::is_auth_denied_error(&error) => {
+                McpServerConnectionStatus::NeedsAuthentication
+            }
+            Err(error) if Self::is_oauth_authorization_required_error(&error) => {
+                McpServerConnectionStatus::NeedsAuthentication
+            }
+            Err(_) => McpServerConnectionStatus::Failure,
+        }
     }
 }
 

@@ -1128,6 +1128,124 @@
         ]
       }
     },
+    "/api/v1beta/me/mcp_servers": {
+      "get": {
+        "tags": [
+          "mcp_servers"
+        ],
+        "operationId": "list_mcp_servers",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListMcpServersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/mcp_servers/{server_id}/oauth/callback": {
+      "get": {
+        "tags": [
+          "mcp_servers"
+        ],
+        "operationId": "complete_mcp_server_oauth",
+        "parameters": [
+          {
+            "name": "server_id",
+            "in": "path",
+            "description": "Configured MCP server ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteMcpServerOauthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server is not configured for oauth2"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "The user is not authorized to access the MCP server"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/mcp_servers/{server_id}/oauth/start": {
+      "post": {
+        "tags": [
+          "mcp_servers"
+        ],
+        "operationId": "start_mcp_server_oauth",
+        "parameters": [
+          {
+            "name": "server_id",
+            "in": "path",
+            "description": "Configured MCP server ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartMcpServerOauthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server is not configured for oauth2"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "The user is not authorized to access the MCP server"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/abortstream": {
       "post": {
         "tags": [],
@@ -2634,6 +2752,17 @@
           }
         }
       },
+      "CompleteMcpServerOauthResponse": {
+        "type": "object",
+        "required": [
+          "connection_status"
+        ],
+        "properties": {
+          "connection_status": {
+            "$ref": "#/components/schemas/McpServerStatusValue"
+          }
+        }
+      },
       "ContentPart": {
         "oneOf": [
           {
@@ -3678,6 +3807,20 @@
           }
         }
       },
+      "ListMcpServersResponse": {
+        "type": "object",
+        "required": [
+          "servers"
+        ],
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpServerStatus"
+            }
+          }
+        }
+      },
       "ListShareGrantsResponse": {
         "type": "object",
         "description": "Response when listing share grants",
@@ -3693,6 +3836,33 @@
             "description": "The list of share grants"
           }
         }
+      },
+      "McpServerStatus": {
+        "type": "object",
+        "required": [
+          "id",
+          "authentication_mode",
+          "connection_status"
+        ],
+        "properties": {
+          "authentication_mode": {
+            "type": "string"
+          },
+          "connection_status": {
+            "$ref": "#/components/schemas/McpServerStatusValue"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "McpServerStatusValue": {
+        "type": "string",
+        "enum": [
+          "SUCCESS",
+          "FAILURE",
+          "NEEDS_AUTHENTICATION"
+        ]
       },
       "Message": {
         "type": "object",
@@ -4909,6 +5079,17 @@
           "item_id": {
             "type": "string",
             "description": "The ID of the file item"
+          }
+        }
+      },
+      "StartMcpServerOauthResponse": {
+        "type": "object",
+        "required": [
+          "authorization_url"
+        ],
+        "properties": {
+          "authorization_url": {
+            "type": "string"
           }
         }
       },

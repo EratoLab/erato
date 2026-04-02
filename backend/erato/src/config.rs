@@ -1340,6 +1340,9 @@ pub enum McpServerAuthenticationConfig {
     Fixed {
         fixed: McpServerFixedAuthenticationConfig,
     },
+    Oauth2 {
+        oauth2: McpServerOauth2AuthenticationConfig,
+    },
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
@@ -1363,6 +1366,15 @@ pub struct McpServerFixedAuthenticationConfig {
     pub header_name: String,
     #[serde(default = "default_mcp_fixed_auth_prefix")]
     pub prefix: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct McpServerOauth2AuthenticationConfig {
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    pub client_name: Option<String>,
 }
 
 fn default_mcp_fixed_auth_header_name() -> String {

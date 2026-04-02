@@ -20,7 +20,8 @@
     "deploy/0018_add_owner_user_id_to_file_uploads.sql",
     "deploy/0019_add_assistant_facets.sql",
     "deploy/0020_add_share_links_table.sql",
-    "deploy/0021_add_input_parameters_to_messages.sql"
+    "deploy/0021_add_input_parameters_to_messages.sql",
+    "deploy/0022_add_mcp_server_oauth_tables.sql"
   ],
-  "latest_change": "4766b04a96450bc596fc58b02610b70bc35434fe"
+  "latest_change": "7ff3f7037709399d48832a5f7d7a4a4d023057b5"
 }
