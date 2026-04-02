@@ -6,7 +6,7 @@ use crate::services::mcp_manager::McpRequestAuthContext;
 use crate::services::mcp_transports::{EmptyClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
 use futures::future::join_all;
-use rmcp::model::{CallToolRequestParam, CallToolResult, Tool};
+use rmcp::model::{CallToolRequestParams, CallToolResult, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
 use sea_orm::prelude::Uuid;
 use std::collections::{HashMap, HashSet};
@@ -114,7 +114,7 @@ impl McpSession {
     }
 
     /// Call a tool on this session
-    async fn call_tool(&mut self, params: CallToolRequestParam) -> Result<CallToolResult, Report> {
+    async fn call_tool(&mut self, params: CallToolRequestParams) -> Result<CallToolResult, Report> {
         let result = self
             .peer
             .call_tool(params)
@@ -445,7 +445,7 @@ impl McpSessionManager {
         &self,
         chat_id: Uuid,
         server_id: &str,
-        params: CallToolRequestParam,
+        params: CallToolRequestParams,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<CallToolResult, Report> {
         // Try calling the tool with the current session
@@ -486,7 +486,7 @@ impl McpSessionManager {
         &self,
         chat_id: Uuid,
         server_id: &str,
-        params: CallToolRequestParam,
+        params: CallToolRequestParams,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<CallToolResult, Report> {
         // Ensure session exists

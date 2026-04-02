@@ -12,7 +12,7 @@ use colored::Colorize;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{
-        CallToolRequestParam, CallToolResult, ListToolsResult, Meta, PaginatedRequestParam,
+        CallToolRequestParams, CallToolResult, ListToolsResult, Meta, PaginatedRequestParams,
         ProgressNotificationParam, ServerCapabilities, ServerInfo,
     },
     schemars,
@@ -87,13 +87,21 @@ where
     ListToolsResult {
         tools: tool_router.list_all(),
         next_cursor: None,
+        meta: None,
     }
+}
+
+fn server_info(instructions: &str) -> ServerInfo {
+    let mut info = ServerInfo::default();
+    info.instructions = Some(instructions.into());
+    info.capabilities = ServerCapabilities::builder().enable_tools().build();
+    info
 }
 
 async fn call_tool_from_router<S>(
     service: &S,
     tool_router: &ToolRouter<S>,
-    request: CallToolRequestParam,
+    request: CallToolRequestParams,
     context: RequestContext<RoleServer>,
 ) -> Result<CallToolResult, McpError>
 where
@@ -141,7 +149,7 @@ impl FileServer {
 impl ServerHandler for FileServer {
     fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
@@ -149,18 +157,14 @@ impl ServerHandler for FileServer {
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
     }
 
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Mock MCP file server".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        server_info("Mock MCP file server")
     }
 }
 
@@ -202,7 +206,7 @@ impl ErrorFileServer {
 impl ServerHandler for ErrorFileServer {
     fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
@@ -210,18 +214,14 @@ impl ServerHandler for ErrorFileServer {
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
     }
 
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Mock MCP error simulation server".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        server_info("Mock MCP error simulation server")
     }
 }
 
@@ -277,7 +277,7 @@ impl ProgressFileServer {
 impl ServerHandler for ProgressFileServer {
     fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
@@ -285,18 +285,14 @@ impl ServerHandler for ProgressFileServer {
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
     }
 
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Mock MCP progress simulation server".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        server_info("Mock MCP progress simulation server")
     }
 }
 
@@ -334,7 +330,7 @@ impl ContentFilterFileServer {
 impl ServerHandler for ContentFilterFileServer {
     fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
@@ -342,18 +338,14 @@ impl ServerHandler for ContentFilterFileServer {
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
     }
 
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Mock MCP content filter simulation server".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        server_info("Mock MCP content filter simulation server")
     }
 }
 
@@ -382,7 +374,7 @@ impl NoneAuthProbeServer {
 impl ServerHandler for NoneAuthProbeServer {
     fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
@@ -390,18 +382,14 @@ impl ServerHandler for NoneAuthProbeServer {
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
     }
 
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Mock MCP none-auth probe server".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        server_info("Mock MCP none-auth probe server")
     }
 }
 
@@ -435,7 +423,7 @@ impl FixedApiKeyProbeServer {
 impl ServerHandler for FixedApiKeyProbeServer {
     fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
@@ -443,18 +431,14 @@ impl ServerHandler for FixedApiKeyProbeServer {
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
     }
 
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Mock MCP fixed-auth probe server".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        server_info("Mock MCP fixed-auth probe server")
     }
 }
 
@@ -485,7 +469,7 @@ impl ForwardedAccessProbeServer {
 impl ServerHandler for ForwardedAccessProbeServer {
     fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
@@ -493,18 +477,14 @@ impl ServerHandler for ForwardedAccessProbeServer {
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
     }
 
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Mock MCP forwarded-access probe server".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        server_info("Mock MCP forwarded-access probe server")
     }
 }
 
@@ -533,7 +513,7 @@ impl ForwardedOidcProbeServer {
 impl ServerHandler for ForwardedOidcProbeServer {
     fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         call_tool_from_router(self, &self.tool_router, request, context)
@@ -541,18 +521,14 @@ impl ServerHandler for ForwardedOidcProbeServer {
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
     }
 
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Mock MCP forwarded-oidc probe server".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        server_info("Mock MCP forwarded-oidc probe server")
     }
 }
 
@@ -562,7 +538,7 @@ struct EmptyToolServer;
 impl ServerHandler for EmptyToolServer {
     fn call_tool(
         &self,
-        _request: CallToolRequestParam,
+        _request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         std::future::ready(Err(McpError::internal_error(
@@ -573,21 +549,18 @@ impl ServerHandler for EmptyToolServer {
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         std::future::ready(Ok(ListToolsResult {
             tools: Vec::new(),
             next_cursor: None,
+            meta: None,
         }))
     }
 
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Mock MCP empty tool server".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        server_info("Mock MCP empty tool server")
     }
 }
 
@@ -597,14 +570,11 @@ fn create_streamable_http_service<S>(
 where
     S: ServerHandler + Send + Sync + 'static,
 {
-    StreamableHttpService::new(
-        factory,
-        Default::default(),
-        StreamableHttpServerConfig {
-            stateful_mode: true,
-            sse_keep_alive: None,
-        },
-    )
+    let mut config = StreamableHttpServerConfig::default();
+    config.stateful_mode = true;
+    config.sse_keep_alive = None;
+
+    StreamableHttpService::new(factory, Default::default(), config)
 }
 
 fn unauthorized(message: &str) -> Response {
