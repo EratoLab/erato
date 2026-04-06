@@ -13,7 +13,7 @@ use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeSet;
-use tracing::warn;
+use tracing::{Level, trace};
 use url::form_urlencoded::Serializer;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,7 +183,7 @@ pub async fn start_oauth_authorization(
 ) -> Result<String, AuthError> {
     let mut manager = authorization_manager(app_state, user_id, mcp_server_id, config).await?;
     let metadata = manager.discover_metadata().await?;
-    warn!(
+    trace!(
         mcp_server_id,
         user_id = %user_id,
         mcp_server_url = %config.url,
@@ -208,7 +208,7 @@ pub async fn start_oauth_authorization(
     if let Some(client_config) =
         load_or_build_client_config(app_state, mcp_server_id, oauth2, redirect_uri).await?
     {
-        warn!(
+        trace!(
             mcp_server_id,
             user_id = %user_id,
             redirect_uri,
@@ -223,7 +223,7 @@ pub async fn start_oauth_authorization(
             .client_name
             .as_deref()
             .unwrap_or("Erato MCP OAuth Client");
-        warn!(
+        trace!(
             mcp_server_id,
             user_id = %user_id,
             redirect_uri,
@@ -234,7 +234,7 @@ pub async fn start_oauth_authorization(
         let registered_client = manager
             .register_client(requested_client_name, redirect_uri, &scope_refs)
             .await?;
-        warn!(
+        trace!(
             mcp_server_id,
             user_id = %user_id,
             redirect_uri = %registered_client.redirect_uri,
@@ -318,7 +318,7 @@ async fn configured_authorization_manager(
 ) -> Result<AuthorizationManager, AuthError> {
     let mut manager = authorization_manager(app_state, user_id, mcp_server_id, config).await?;
     let metadata = manager.discover_metadata().await?;
-    warn!(
+    trace!(
         mcp_server_id,
         user_id = %user_id,
         mcp_server_url = %config.url,
@@ -329,7 +329,7 @@ async fn configured_authorization_manager(
     let client_config = load_or_build_client_config(app_state, mcp_server_id, oauth2, redirect_uri)
         .await?
         .ok_or(AuthError::AuthorizationRequired)?;
-    warn!(
+    trace!(
         mcp_server_id,
         user_id = %user_id,
         redirect_uri,
@@ -373,7 +373,7 @@ async fn load_or_build_client_config(
     redirect_uri: &str,
 ) -> Result<Option<OAuthClientConfig>, AuthError> {
     if let Some(client_id) = &oauth2.client_id {
-        warn!(
+        trace!(
             mcp_server_id,
             redirect_uri,
             client_id,
@@ -393,7 +393,7 @@ async fn load_or_build_client_config(
         .await
         .map_err(report_to_auth_error)?
     else {
-        warn!(
+        trace!(
             mcp_server_id,
             redirect_uri,
             configured_scopes = ?oauth2.scopes,
@@ -402,7 +402,7 @@ async fn load_or_build_client_config(
         return Ok(None);
     };
 
-    warn!(
+    trace!(
         mcp_server_id,
         redirect_uri = %stored_client.redirect_uri,
         client_id = %stored_client.client_id,
@@ -428,7 +428,7 @@ async fn persist_client_config(
     mcp_server_id: &str,
     client_config: &OAuthClientConfig,
 ) -> Result<(), AuthError> {
-    warn!(
+    trace!(
         mcp_server_id,
         redirect_uri = %client_config.redirect_uri,
         client_id = %client_config.client_id,
@@ -475,10 +475,14 @@ async fn debug_log_token_metadata(
     redirect_uri: &str,
     access_token: &str,
 ) {
+    if !tracing::enabled!(Level::TRACE) {
+        return;
+    }
+
     let client = match build_oauth_supporting_reqwest_client(config) {
         Ok(client) => client,
         Err(error) => {
-            warn!(
+            trace!(
                 mcp_server_id,
                 user_id = %user_id,
                 error = %error,
@@ -492,7 +496,7 @@ async fn debug_log_token_metadata(
         match load_or_build_client_config(app_state, mcp_server_id, oauth2, redirect_uri).await {
             Ok(client_config) => client_config,
             Err(error) => {
-                warn!(
+                trace!(
                     mcp_server_id,
                     user_id = %user_id,
                     error = %error,
@@ -505,7 +509,7 @@ async fn debug_log_token_metadata(
     let base_url = match Url::parse(&config.url) {
         Ok(url) => url,
         Err(error) => {
-            warn!(
+            trace!(
                 mcp_server_id,
                 user_id = %user_id,
                 mcp_server_url = %config.url,
@@ -523,7 +527,7 @@ async fn debug_log_token_metadata(
         let response = match client.get(discovery_url.clone()).send().await {
             Ok(response) => response,
             Err(error) => {
-                warn!(
+                trace!(
                     mcp_server_id,
                     user_id = %user_id,
                     discovery_url = %discovery_url,
@@ -538,7 +542,7 @@ async fn debug_log_token_metadata(
         let body = match response.text().await {
             Ok(body) => body,
             Err(error) => {
-                warn!(
+                trace!(
                     mcp_server_id,
                     user_id = %user_id,
                     discovery_url = %discovery_url,
@@ -550,7 +554,7 @@ async fn debug_log_token_metadata(
             }
         };
 
-        warn!(
+        trace!(
             mcp_server_id,
             user_id = %user_id,
             discovery_url = %discovery_url,
@@ -562,7 +566,7 @@ async fn debug_log_token_metadata(
         let json: Value = match serde_json::from_str(&body) {
             Ok(json) => json,
             Err(error) => {
-                warn!(
+                trace!(
                     mcp_server_id,
                     user_id = %user_id,
                     discovery_url = %discovery_url,
@@ -592,7 +596,7 @@ async fn debug_log_token_metadata(
         {
             Ok(response) => response,
             Err(error) => {
-                warn!(
+                trace!(
                     mcp_server_id,
                     user_id = %user_id,
                     userinfo_endpoint,
@@ -607,7 +611,7 @@ async fn debug_log_token_metadata(
         let body = match response.text().await {
             Ok(body) => body,
             Err(error) => {
-                warn!(
+                trace!(
                     mcp_server_id,
                     user_id = %user_id,
                     userinfo_endpoint,
@@ -619,7 +623,7 @@ async fn debug_log_token_metadata(
             }
         };
 
-        warn!(
+        trace!(
             mcp_server_id,
             user_id = %user_id,
             userinfo_endpoint,
@@ -654,7 +658,7 @@ async fn debug_log_token_metadata(
         let response = match request.send().await {
             Ok(response) => response,
             Err(error) => {
-                warn!(
+                trace!(
                     mcp_server_id,
                     user_id = %user_id,
                     introspection_endpoint,
@@ -669,7 +673,7 @@ async fn debug_log_token_metadata(
         let body = match response.text().await {
             Ok(body) => body,
             Err(error) => {
-                warn!(
+                trace!(
                     mcp_server_id,
                     user_id = %user_id,
                     introspection_endpoint,
@@ -681,7 +685,7 @@ async fn debug_log_token_metadata(
             }
         };
 
-        warn!(
+        trace!(
             mcp_server_id,
             user_id = %user_id,
             introspection_endpoint,
