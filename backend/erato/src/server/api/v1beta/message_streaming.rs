@@ -4091,7 +4091,7 @@ async fn run_message_submit_task(
 
     let subject = me_user.to_subject();
     let mcp_auth_context = McpRequestAuthContext {
-        app_state: Some(&app_state),
+        app_state: Some(app_state),
         user_id: Uuid::parse_str(&me_user.id).ok(),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),

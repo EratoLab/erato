@@ -1,8 +1,12 @@
 import { t } from "@lingui/core/macro";
 import { clsx } from "clsx";
-import { memo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import { useAuthFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useAuthFeature,
+  useUserPreferencesFeature,
+} from "@/providers/FeatureConfigProvider";
 
 import { DropdownMenu } from "./DropdownMenu";
 import { Avatar } from "../Feedback/Avatar";
@@ -19,11 +23,48 @@ interface UserProfileDropdownProps {
 
 export const UserProfileDropdown = memo<UserProfileDropdownProps>(
   ({ userProfile, onSignOut, className }) => {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [isPreferencesDialogOpen, setIsPreferencesDialogOpen] =
       useState(false);
+    /* eslint-disable lingui/no-unlocalized-strings -- URL query parameter keys */
+    const requestedPreferencesTab = searchParams.get("preferencesTab");
+    const pendingMcpOauthCallback = useMemo(() => {
+      const serverId = searchParams.get("mcpOauthServerId");
+      const code = searchParams.get("code");
+      const state = searchParams.get("state");
+      if (!serverId || !code || !state) {
+        return null;
+      }
+      return { code, serverId, state };
+    }, [searchParams]);
+
+    useEffect(() => {
+      if (searchParams.get("preferencesDialog") === "open") {
+        setIsPreferencesDialogOpen(true);
+      }
+    }, [searchParams]);
+
+    const clearPreferencesDialogSearchParams = useCallback(() => {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("preferencesDialog");
+      nextParams.delete("preferencesTab");
+      nextParams.delete("mcpOauthServerId");
+      nextParams.delete("code");
+      nextParams.delete("state");
+      setSearchParams(nextParams, { replace: true });
+    }, [searchParams, setSearchParams]);
+
+    const closePreferencesDialog = useCallback(() => {
+      setIsPreferencesDialogOpen(false);
+      if (searchParams.get("preferencesDialog") === "open") {
+        clearPreferencesDialogSearchParams();
+      }
+    }, [clearPreferencesDialogSearchParams, searchParams]);
+    /* eslint-enable lingui/no-unlocalized-strings */
 
     // Check if logout should be shown
     const { showLogout } = useAuthFeature();
+    const { mcpServersTabEnabled } = useUserPreferencesFeature();
 
     // Create dropdown items array
     const dropdownItems = [
@@ -67,7 +108,17 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
         />
         <UserPreferencesDialog
           isOpen={isPreferencesDialogOpen}
-          onClose={() => setIsPreferencesDialogOpen(false)}
+          onClose={closePreferencesDialog}
+          initialTab={
+            requestedPreferencesTab === "mcpServers" && mcpServersTabEnabled
+              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal tab id
+                "mcpServers"
+              : undefined
+          }
+          pendingMcpOauthCallback={
+            mcpServersTabEnabled ? pendingMcpOauthCallback : null
+          }
+          onMcpOauthCallbackHandled={clearPreferencesDialogSearchParams}
           userProfile={userProfile}
         />
       </div>

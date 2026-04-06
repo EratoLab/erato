@@ -35,9 +35,9 @@ use crate::server::api::v1beta::assistants::{
     create_assistant, get_assistant, list_assistants, update_assistant,
 };
 use crate::server::api::v1beta::mcp_servers::{
-    CompleteMcpServerOauthResponse, ListMcpServersResponse, McpServerStatus, McpServerStatusValue,
-    StartMcpServerOauthResponse, complete_mcp_server_oauth, list_mcp_servers,
-    start_mcp_server_oauth,
+    CompleteMcpServerOauthResponse, DisconnectMcpServerOauthResponse, ListMcpServersResponse,
+    McpServerStatus, McpServerStatusValue, StartMcpServerOauthResponse, complete_mcp_server_oauth,
+    disconnect_mcp_server_oauth, list_mcp_servers, start_mcp_server_oauth,
 };
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
@@ -119,6 +119,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route(
             "/mcp_servers/{server_id}/oauth/callback",
             get(complete_mcp_server_oauth),
+        )
+        .route(
+            "/mcp_servers/{server_id}/oauth",
+            axum::routing::delete(disconnect_mcp_server_oauth),
         )
         .route("/file-capabilities", get(file_capabilities))
         .route("/budget", get(budget::budget_status))
@@ -245,6 +249,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         mcp_servers::list_mcp_servers,
         mcp_servers::start_mcp_server_oauth,
         mcp_servers::complete_mcp_server_oauth,
+        mcp_servers::disconnect_mcp_server_oauth,
         file_capabilities,
         budget::budget_status,
         assistants::create_assistant,
@@ -307,6 +312,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         ListMcpServersResponse,
         StartMcpServerOauthResponse,
         CompleteMcpServerOauthResponse,
+        DisconnectMcpServerOauthResponse,
         FileCapability,
         FileOperation,
         FileCapabilitiesQuery,

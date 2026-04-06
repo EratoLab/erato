@@ -198,6 +198,7 @@
   "mcp_servers.<server-id>.transport_type": {},
   "mcp_servers.<server-id>.url": {},
   "mcp_servers_global.max_session_idle_seconds": {},
+  "mcp_servers_global.show_frontend_tab": {},
   "model_permissions.rules.<rule-name>.chat_provider_ids.[]": {},
   "model_permissions.rules.<rule-name>.groups.[]": {},
   "model_permissions.rules.<rule-name>.rule_type": {},

@@ -343,6 +343,28 @@ impl McpSessionManager {
         }
     }
 
+    pub async fn invalidate_oauth_sessions_for_token(&self, server_id: &str, access_token: &str) {
+        let session_auth_key = format!("oauth2:{access_token}");
+        let mut sessions_guard = self.sessions.write().await;
+        let initial_count = sessions_guard.len();
+
+        sessions_guard.retain(|(_, existing_server_id, existing_auth_key), _| {
+            !(existing_server_id == server_id
+                && existing_auth_key.as_deref() == Some(session_auth_key.as_str()))
+        });
+
+        if sessions_guard.len() != initial_count {
+            Self::update_active_session_metrics(
+                &sessions_guard,
+                self.server_configs.keys().cloned(),
+            );
+            info!(
+                server_id = %server_id,
+                "Invalidated cached OAuth-backed MCP sessions for disconnected user"
+            );
+        }
+    }
+
     /// List all available tools for a chat across all configured MCP servers
     pub async fn list_tools(
         &self,

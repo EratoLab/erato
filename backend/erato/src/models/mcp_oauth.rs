@@ -182,3 +182,13 @@ pub async fn clear_oauth_authorization_states_for_server(
         .await?;
     Ok(())
 }
+
+pub async fn clear_oauth_state_for_server(
+    conn: &DatabaseConnection,
+    user_id: Uuid,
+    mcp_server_id: &str,
+) -> Result<(), Report> {
+    delete_oauth_credentials(conn, user_id, mcp_server_id).await?;
+    clear_oauth_authorization_states_for_server(conn, user_id, mcp_server_id).await?;
+    Ok(())
+}

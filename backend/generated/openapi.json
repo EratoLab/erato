@@ -1156,6 +1156,51 @@
         ]
       }
     },
+    "/api/v1beta/me/mcp_servers/{server_id}/oauth": {
+      "delete": {
+        "tags": [
+          "mcp_servers"
+        ],
+        "operationId": "disconnect_mcp_server_oauth",
+        "parameters": [
+          {
+            "name": "server_id",
+            "in": "path",
+            "description": "Configured MCP server ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisconnectMcpServerOauthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server is not configured for oauth2"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "The user is not authorized to access the MCP server"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/mcp_servers/{server_id}/oauth/callback": {
       "get": {
         "tags": [
@@ -1167,6 +1212,24 @@
             "name": "server_id",
             "in": "path",
             "description": "Configured MCP server ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "description": "OAuth authorization code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "OAuth authorization state",
             "required": true,
             "schema": {
               "type": "string"
@@ -3084,6 +3147,17 @@
           }
         ],
         "description": "Response when creating a share grant"
+      },
+      "DisconnectMcpServerOauthResponse": {
+        "type": "object",
+        "required": [
+          "connection_status"
+        ],
+        "properties": {
+          "connection_status": {
+            "$ref": "#/components/schemas/McpServerStatusValue"
+          }
+        }
       },
       "Drive": {
         "type": "object",

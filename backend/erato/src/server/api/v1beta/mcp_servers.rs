@@ -2,7 +2,10 @@ use crate::config::{McpServerAuthenticationConfig, McpServerConfig};
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::mcp_manager::McpRequestAuthContext;
-use crate::services::mcp_oauth::{complete_oauth_authorization, start_oauth_authorization};
+use crate::services::mcp_oauth::{
+    CompleteOauthAuthorizationParams, complete_oauth_authorization, disconnect_oauth_authorization,
+    start_oauth_authorization,
+};
 use crate::services::mcp_session_manager::McpServerConnectionStatus;
 use crate::state::AppState;
 use axum::extract::{Path, Query, State};
@@ -39,6 +42,11 @@ pub struct StartMcpServerOauthResponse {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct CompleteMcpServerOauthResponse {
+    pub connection_status: McpServerStatusValue,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DisconnectMcpServerOauthResponse {
     pub connection_status: McpServerStatusValue,
 }
 
@@ -135,7 +143,9 @@ pub async fn start_mcp_server_oauth(
     get,
     path = "/me/mcp_servers/{server_id}/oauth/callback",
     params(
-        ("server_id" = String, Path, description = "Configured MCP server ID")
+        ("server_id" = String, Path, description = "Configured MCP server ID"),
+        ("code" = String, Query, description = "OAuth authorization code"),
+        ("state" = String, Query, description = "OAuth authorization state")
     ),
     responses(
         (status = OK, body = CompleteMcpServerOauthResponse),
@@ -162,16 +172,16 @@ pub async fn complete_mcp_server_oauth(
     };
 
     let redirect_uri = oauth_callback_url(&headers, &server_id)?;
-    complete_oauth_authorization(
-        &app_state,
+    complete_oauth_authorization(CompleteOauthAuthorizationParams {
+        app_state: &app_state,
         user_id,
-        &server_id,
+        mcp_server_id: &server_id,
         config,
         oauth2,
-        &redirect_uri,
-        &query.code,
-        &query.state,
-    )
+        redirect_uri: &redirect_uri,
+        code: &query.code,
+        csrf_token: &query.state,
+    })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -181,6 +191,66 @@ pub async fn complete_mcp_server_oauth(
         .await;
 
     Ok(Json(CompleteMcpServerOauthResponse {
+        connection_status: map_status(connection_status),
+    }))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/me/mcp_servers/{server_id}/oauth",
+    params(
+        ("server_id" = String, Path, description = "Configured MCP server ID")
+    ),
+    responses(
+        (status = OK, body = DisconnectMcpServerOauthResponse),
+        (status = BAD_REQUEST, description = "The server is not configured for oauth2"),
+        (status = FORBIDDEN, description = "The user is not authorized to access the MCP server"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn disconnect_mcp_server_oauth(
+    State(app_state): State<AppState>,
+    Path(server_id): Path<String>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+) -> Result<Json<DisconnectMcpServerOauthResponse>, StatusCode> {
+    let user_id = parse_user_id(&me_user)?;
+    let config = authorized_oauth_server_config(&app_state, &me_user, &policy, &server_id).await?;
+    let McpServerAuthenticationConfig::Oauth2 { .. } = &config.authentication else {
+        return Err(StatusCode::BAD_REQUEST);
+    };
+
+    let active_oauth_token =
+        if let McpServerAuthenticationConfig::Oauth2 { oauth2 } = &config.authentication {
+            crate::services::mcp_oauth::resolve_oauth_access_token(
+                &app_state, user_id, &server_id, config, oauth2,
+            )
+            .await
+            .ok()
+        } else {
+            None
+        };
+
+    disconnect_oauth_authorization(&app_state, user_id, &server_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some(access_token) = active_oauth_token.as_deref() {
+        app_state
+            .mcp_servers
+            .invalidate_oauth_sessions_for_token(&server_id, access_token)
+            .await;
+    }
+
+    let connection_status = app_state
+        .mcp_servers
+        .probe_connection(&server_id, &auth_context(&app_state, &me_user, user_id))
+        .await;
+
+    Ok(Json(DisconnectMcpServerOauthResponse {
         connection_status: map_status(connection_status),
     }))
 }
@@ -274,10 +344,9 @@ fn oauth_callback_url(headers: &HeaderMap, server_id: &str) -> Result<String, St
         .unwrap_or("");
 
     Ok(format!(
-        "{}://{}{}{}",
+        "{}://{}{}?preferencesDialog=open&preferencesTab=mcpServers&mcpOauthServerId={server_id}",
         scheme,
         host,
         prefix.trim_end_matches('/'),
-        format!("/api/v1beta/me/mcp_servers/{server_id}/oauth/callback")
     ))
 }

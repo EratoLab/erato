@@ -1392,6 +1392,11 @@ pub struct McpServersGlobalConfig {
     // Defaults to 3600 seconds (1 hour) when not set.
     #[serde(default)]
     pub max_session_idle_seconds: Option<u64>,
+
+    // Whether the MCP servers tab should be shown in the frontend preferences dialog.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub show_frontend_tab: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]

@@ -31,6 +31,7 @@ const FRONTEND_ENV_KEY_ASSISTANTS_CONTEXT_FILE_CONTRIBUTOR_THRESHOLD: &str =
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
+const FRONTEND_ENV_KEY_MCP_SERVERS_TAB_ENABLED: &str = "MCP_SERVERS_TAB_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_ENABLED: &str = "SHAREPOINT_ENABLED";
 const FRONTEND_ENV_KEY_CHAT_SHARING_ENABLED: &str = "CHAT_SHARING_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_ENABLED: &str = "MESSAGE_FEEDBACK_ENABLED";
@@ -184,6 +185,10 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED.to_string(),
         Value::Bool(config.user_preferences.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_MCP_SERVERS_TAB_ENABLED.to_string(),
+        Value::Bool(config.mcp_servers_global.show_frontend_tab),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_SHAREPOINT_ENABLED.to_string(),

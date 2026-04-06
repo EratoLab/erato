@@ -26,7 +26,9 @@ const UserPreferencesDialogStory = ({
 
   return (
     <StaticFeatureConfigProvider
-      config={{ userPreferences: { enabled: true } }}
+      config={{
+        userPreferences: { enabled: true, mcpServersTabEnabled: true },
+      }}
     >
       <ThemeProvider persistThemeMode={false} enableCustomTheme={false}>
         <QueryClientProvider client={queryClient}>

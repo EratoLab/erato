@@ -1540,6 +1540,16 @@ Server-specific settings can override this value via `mcp_servers.<server_id>.ma
 
 **Operational note:** For MCP servers where each session allocates substantial resources (e.g. memory-heavy tools, expensive backend handles), use a lower idle timeout to reclaim server capacity faster.
 
+#### `mcp_servers_global.show_frontend_tab`
+
+Whether the MCP servers tab should be shown in the frontend preferences dialog.
+
+This only controls frontend visibility of the tab. It does not change backend MCP server availability, authorization, or permissions.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
 **Example:**
 
 ```toml

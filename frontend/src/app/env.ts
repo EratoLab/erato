@@ -17,6 +17,7 @@ export type Env = {
   starterPromptsEnabled: boolean;
   promptOptimizerEnabled: boolean;
   userPreferencesEnabled: boolean;
+  mcpServersTabEnabled: boolean;
   sharepointEnabled: boolean;
   chatSharingEnabled: boolean;
   messageFeedbackEnabled: boolean;
@@ -52,6 +53,7 @@ declare global {
     STARTER_PROMPTS_ENABLED?: boolean;
     PROMPT_OPTIMIZER_ENABLED?: boolean;
     USER_PREFERENCES_ENABLED?: boolean;
+    MCP_SERVERS_TAB_ENABLED?: boolean;
     SHAREPOINT_ENABLED?: boolean;
     CHAT_SHARING_ENABLED?: boolean;
     MESSAGE_FEEDBACK_ENABLED?: boolean;
@@ -162,6 +164,10 @@ export const env = (): Env => {
     import.meta.env.VITE_USER_PREFERENCES_ENABLED === "false"
       ? false
       : (window.USER_PREFERENCES_ENABLED ?? true);
+  const mcpServersTabEnabled =
+    import.meta.env.VITE_MCP_SERVERS_TAB_ENABLED === "true"
+      ? true
+      : (window.MCP_SERVERS_TAB_ENABLED ?? false);
   const sharepointEnabled =
     import.meta.env.VITE_SHAREPOINT_ENABLED === "true"
       ? true
@@ -233,6 +239,7 @@ export const env = (): Env => {
     starterPromptsEnabled,
     promptOptimizerEnabled,
     userPreferencesEnabled,
+    mcpServersTabEnabled,
     sharepointEnabled,
     chatSharingEnabled,
     messageFeedbackEnabled,

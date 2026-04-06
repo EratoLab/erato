@@ -66,6 +66,12 @@ impl McpServers {
             .await
     }
 
+    pub async fn invalidate_oauth_sessions_for_token(&self, server_id: &str, access_token: &str) {
+        self.session_manager
+            .invalidate_oauth_sessions_for_token(server_id, access_token)
+            .await;
+    }
+
     /// List all available tools for a specific chat
     pub async fn list_tools(
         &self,
