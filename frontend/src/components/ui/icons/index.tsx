@@ -40,6 +40,8 @@ import {
   GridXmark,
   MenuScale,
   Lock,
+  Link,
+  LinkSlash,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -244,6 +246,14 @@ export const FileTextIcon = ({ className, ...props }: IconProps) => (
 
 export const ShareIcon = ({ className, ...props }: IconProps) => (
   <ShareIos className={className} {...props} />
+);
+
+export const LinkIcon = ({ className, ...props }: IconProps) => (
+  <Link className={className} {...props} />
+);
+
+export const LinkSlashIcon = ({ className, ...props }: IconProps) => (
+  <LinkSlash className={className} {...props} />
 );
 
 export const GridXmarkIcon = ({ className, ...props }: IconProps) => (

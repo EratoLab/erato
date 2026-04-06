@@ -39,6 +39,7 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   messageFeedbackEnabled: false,
   messageFeedbackCommentsEnabled: false,
   userPreferencesEnabled: true,
+  mcpServersTabEnabled: false,
   messageFeedbackEditTimeLimitSeconds: null,
   maxUploadSizeBytes: 20971520,
   sidebarCollapsedMode: "hidden",

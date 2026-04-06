@@ -1540,6 +1540,16 @@ Server-specific settings can override this value via `mcp_servers.<server_id>.ma
 
 **Operational note:** For MCP servers where each session allocates substantial resources (e.g. memory-heavy tools, expensive backend handles), use a lower idle timeout to reclaim server capacity faster.
 
+#### `mcp_servers_global.show_frontend_tab`
+
+Whether the MCP servers tab should be shown in the frontend preferences dialog.
+
+This only controls frontend visibility of the tab. It does not change backend MCP server availability, authorization, or permissions.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
 **Example:**
 
 ```toml
@@ -1611,6 +1621,7 @@ Authentication settings for the MCP server.
 - `mode = "none"`: No credentials are attached to MCP requests.
 - `mode = "forwarded"`: Forward credentials from the current user session.
 - `mode = "fixed"`: Attach a configured fixed API key using the configured header and prefix.
+- `mode = "oauth2"`: Use an OAuth 2.0 authorization flow managed by Erato and persist credentials per user.
 
 **Examples:**
 
@@ -1631,6 +1642,13 @@ mode = "fixed"
 api_key = "your-api-key"
 header_name = "Authorization"
 prefix = "Bearer "
+
+[mcp_servers.jira.authentication]
+mode = "oauth2"
+
+[mcp_servers.jira.authentication.oauth2]
+client_name = "Erato Jira MCP"
+scopes = ["read:jira-work"]
 ```
 
 #### `mcp_servers.<server_id>.authentication.forwarded.credential`
@@ -1667,6 +1685,52 @@ This defaults to bearer-token formatting, so the default fixed auth header is `A
 **Type:** `string`
 
 **Default value:** `"Bearer "`
+
+#### `mcp_servers.<server_id>.authentication.oauth2.client_id`
+
+Optional statically configured OAuth client ID for `authentication.mode = "oauth2"`.
+
+If omitted, Erato attempts dynamic client registration and persists the returned client identity for later reuse.
+
+**Type:** `string | None`
+
+#### `mcp_servers.<server_id>.authentication.oauth2.client_secret`
+
+Optional statically configured OAuth client secret for `authentication.mode = "oauth2"`.
+
+Use this for confidential clients that are pre-registered with the MCP server's authorization server.
+
+**Type:** `string | None`
+
+#### `mcp_servers.<server_id>.authentication.oauth2.client_name`
+
+Optional display name used during dynamic client registration when `authentication.mode = "oauth2"` and no static `client_id` is configured.
+
+**Type:** `string | None`
+
+**Default behavior:** Falls back to `"Erato MCP OAuth Client"`
+
+#### `mcp_servers.<server_id>.authentication.oauth2.scopes`
+
+Optional list of OAuth scopes requested during authorization for `authentication.mode = "oauth2"`.
+
+If omitted, Erato relies on the scope guidance advertised by the MCP server and its authorization metadata.
+
+**Type:** `array<string>`
+
+**Example:**
+
+```toml
+[mcp_servers.jira.authentication]
+mode = "oauth2"
+
+[mcp_servers.jira.authentication.oauth2]
+client_id = "erato-jira"
+client_secret = "super-secret"
+scopes = ["read:jira-work", "offline_access"]
+```
+
+**Operational note:** `oauth2` authentication requires `server.encryption_key` to be configured because Erato stores registered client secrets, authorization state, and user credentials encrypted at rest.
 
 #### `mcp_servers.<server_id>.max_session_idle_seconds`
 

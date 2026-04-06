@@ -118,6 +118,8 @@ async fn test_mcp_auth_variants_execute_expected_tools(pool: Pool<Postgres>) {
         let chat_id = Uuid::new_v4();
         let server_filter = HashSet::from([server_id.to_string()]);
         let auth_context = McpRequestAuthContext {
+            app_state: None,
+            user_id: None,
             oidc_token: Some(&allowed_oidc_token),
             access_token,
         };
@@ -200,6 +202,8 @@ async fn test_forwarded_mcp_auth_filters_tools_by_identity(pool: Pool<Postgres>)
             chat_id,
             None,
             &McpRequestAuthContext {
+                app_state: None,
+                user_id: None,
                 oidc_token: Some(&oidc_allowed_token),
                 access_token: Some("access:allowed-user"),
             },
@@ -211,6 +215,8 @@ async fn test_forwarded_mcp_auth_filters_tools_by_identity(pool: Pool<Postgres>)
             chat_id,
             None,
             &McpRequestAuthContext {
+                app_state: None,
+                user_id: None,
                 oidc_token: Some(&oidc_denied_token),
                 access_token: Some("access:denied-user"),
             },
@@ -233,6 +239,8 @@ async fn test_forwarded_mcp_auth_filters_tools_by_identity(pool: Pool<Postgres>)
             chat_id,
             None,
             &McpRequestAuthContext {
+                app_state: None,
+                user_id: None,
                 oidc_token: Some(&oidc_allowed_token),
                 access_token: Some("access:allowed-user"),
             },
@@ -244,6 +252,8 @@ async fn test_forwarded_mcp_auth_filters_tools_by_identity(pool: Pool<Postgres>)
             chat_id,
             None,
             &McpRequestAuthContext {
+                app_state: None,
+                user_id: None,
                 oidc_token: Some(&oidc_denied_token),
                 access_token: Some("access:allowed-user"),
             },

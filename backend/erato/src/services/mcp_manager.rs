@@ -1,5 +1,6 @@
 use crate::config::AppConfig;
 use crate::services::mcp_session_manager::{ManagedTool, McpSessionManager};
+use crate::state::AppState;
 use eyre::{Report, eyre};
 use genai::chat::Tool as GenaiTool;
 use genai::chat::ToolCall as GenaiToolCall;
@@ -11,6 +12,8 @@ use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct McpRequestAuthContext<'a> {
+    pub app_state: Option<&'a AppState>,
+    pub user_id: Option<Uuid>,
     pub oidc_token: Option<&'a str>,
     pub access_token: Option<&'a str>,
 }
@@ -51,6 +54,22 @@ impl McpServers {
     /// This should be called during application startup
     pub async fn check_connectivity(&self) {
         self.session_manager.check_connectivity().await;
+    }
+
+    pub async fn probe_connection(
+        &self,
+        server_id: &str,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> crate::services::mcp_session_manager::McpServerConnectionStatus {
+        self.session_manager
+            .probe_connection(server_id, auth_context)
+            .await
+    }
+
+    pub async fn invalidate_oauth_sessions_for_token(&self, server_id: &str, access_token: &str) {
+        self.session_manager
+            .invalidate_oauth_sessions_for_token(server_id, access_token)
+            .await;
     }
 
     /// List all available tools for a specific chat

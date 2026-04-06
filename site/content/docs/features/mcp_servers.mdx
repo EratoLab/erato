@@ -180,7 +180,7 @@ Erato does **not natively support** the `stdio` transport type.
 
 ## Authentication
 
-Erato currently supports three MCP authentication modes, that offer different trade-offs in terms of ease-of-use and security.
+Erato currently supports four MCP authentication modes, that offer different trade-offs in terms of ease-of-use and security.
 
 Separate to authentication, access to MCP servers may also be secured on a network level to lock down access only to Erato and/or other known MCP clients.
 
@@ -329,3 +329,74 @@ flowchart LR
 > Only use `forwarded` authentication when it is strictly necessary, and preferably only for internally maintained MCP servers.
 >
 > Even then, prefer forwarding the `oidc_id_token` over the `access_token` whenever the server can work with it, to reduce the risk of permission leakage into downstream systems.
+
+### `oauth2`
+
+Use an OAuth 2.0 authorization flow managed by Erato for the MCP server.
+
+This mode is intended for MCP servers that expose OAuth-protected endpoints and expect Erato to obtain, store, and refresh user-specific credentials. Erato persists the registered OAuth client identity and the per-user OAuth credential state in its database, encrypted at rest using `server.encryption_key`.
+
+This is the right choice when:
+
+- The MCP server follows the MCP OAuth authorization flow
+- Users need to authorize Erato against the MCP server separately from their Erato sign-in
+- The MCP server requires refreshable user credentials rather than a forwarded Erato session token
+
+Erato supports both:
+
+- Statically configured OAuth clients via `client_id` and optional `client_secret`
+- Dynamic client registration when no `client_id` is configured and the authorization server supports registration
+
+```toml
+[mcp_servers.jira.authentication]
+mode = "oauth2"
+
+[mcp_servers.jira.authentication.oauth2]
+client_name = "Erato Jira MCP"
+scopes = ["read:jira-work"]
+```
+
+```toml
+[mcp_servers.salesforce.authentication]
+mode = "oauth2"
+
+[mcp_servers.salesforce.authentication.oauth2]
+client_id = "erato-salesforce"
+client_secret = "super-secret"
+scopes = ["api", "refresh_token"]
+```
+
+```mermaid
+flowchart LR
+    U[User]
+    E[Erato]
+    MCP[MCP Server]
+    AS[Authorization Server]
+
+    U -->|Starts MCP auth from Erato UI| E
+    E -->|Discover metadata / optional DCR| AS
+    E -->|Redirect user to authorize| AS
+    AS -->|Authorization code callback| E
+    E -->|Stores encrypted OAuth credentials| E
+    E -->|Authorization: Bearer refreshed user token| MCP
+```
+
+#### Backend flow support
+
+For OAuth-backed MCP servers, the backend now exposes endpoints that let the frontend list server connectivity and drive the authorization flow:
+
+- `GET /api/v1beta/me/mcp_servers`
+- `POST /api/v1beta/me/mcp_servers/{server_id}/oauth/start`
+- `GET /api/v1beta/me/mcp_servers/{server_id}/oauth/callback`
+
+The list endpoint evaluates each authorized MCP server and returns one of these status values:
+
+- `SUCCESS`
+- `FAILURE`
+- `NEEDS_AUTHENTICATION`
+
+#### Operational notes
+
+- Configure `server.encryption_key` before using `oauth2`, otherwise Erato cannot persist OAuth secrets and tokens.
+- Dynamic client registration is optional. If your provider requires a pre-registered client, set `client_id` and `client_secret` explicitly.
+- Erato closes the temporary MCP session created for status checks immediately after evaluating connectivity, so status checks do not keep idle probe sessions around.

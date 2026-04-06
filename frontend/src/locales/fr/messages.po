@@ -931,6 +931,136 @@ msgstr "Comment l’assistant doit-il vous appeler ? ex. Max Mustermann"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.authenticationMode"
+msgstr "Mode d’authentification"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.description"
+msgstr "Consultez les serveurs MCP disponibles pour votre compte et terminez toute autorisation nécessaire."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.empty"
+msgstr "Aucun serveur MCP n’est actuellement disponible pour vous."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.heading"
+msgstr "Connexions aux serveurs MCP"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.load.error"
+msgstr "Impossible de charger les serveurs MCP. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.loading"
+msgstr "Chargement de l’état des serveurs MCP..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.oauth.authorize"
+msgstr "Autoriser"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.oauth.authorizing"
+msgstr "Autorisation en cours..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#~ msgid "preferences.dialog.mcpServers.oauth.closed"
+#~ msgstr "La fenêtre d’autorisation a été fermée avant la fin de la connexion."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.oauth.disconnect"
+msgstr "Déconnecter"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.oauth.disconnectError"
+msgstr "Impossible de se déconnecter. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.oauth.disconnecting"
+msgstr "Déconnexion..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.oauth.disconnectSuccess"
+msgstr "Déconnexion réussie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.oauth.failureAfterCallback"
+msgstr "L’autorisation est terminée, mais le serveur est toujours indisponible. Essayez d’actualiser son état."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.oauth.incompleteAfterCallback"
+msgstr "L’autorisation ne s’est pas terminée correctement. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#~ msgid "preferences.dialog.mcpServers.oauth.popupBlocked"
+#~ msgstr "Impossible d’ouvrir la fenêtre d’autorisation. Autorisez les pop-ups et réessayez."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.oauth.startError"
+msgstr "Impossible de démarrer l’autorisation. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.oauth.success"
+msgstr "Autorisation terminée. Le serveur est prêt à être utilisé."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.refresh"
+msgstr "Actualiser l’état"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.refreshing"
+msgstr "Actualisation..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.status.failure.description"
+msgstr "Le serveur est configuré, mais le backend n’a pas pu s’y connecter."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.status.failure.label"
+msgstr "Échec de la connexion"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.status.needsAuthentication.description"
+msgstr "Une autorisation est requise avant de pouvoir utiliser ce serveur."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.status.needsAuthentication.label"
+msgstr "Authentification requise"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.status.success.description"
+msgstr "Connecté et prêt à être utilisé."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.mcpServers.status.success.label"
+msgstr "Connecté"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.save.error"
 msgstr "Impossible d’enregistrer les préférences. Veuillez réessayer."
 
@@ -943,6 +1073,11 @@ msgstr "Apparence"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.data"
 msgstr "Données"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.mcpServers"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

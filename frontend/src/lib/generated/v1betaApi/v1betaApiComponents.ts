@@ -2163,6 +2163,346 @@ export const useFrequentAssistants = <
   });
 };
 
+export type ListMcpServersError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListMcpServersVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchListMcpServers = (
+  variables: ListMcpServersVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ListMcpServersResponse,
+    ListMcpServersError,
+    undefined,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/me/mcp_servers", method: "get", ...variables, signal });
+
+export function listMcpServersQuery(variables: ListMcpServersVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.ListMcpServersResponse>;
+};
+
+export function listMcpServersQuery(
+  variables: ListMcpServersVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ListMcpServersResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listMcpServersQuery(
+  variables: ListMcpServersVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/mcp_servers",
+      operationId: "listMcpServers",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListMcpServers(variables, signal),
+  };
+}
+
+export const useSuspenseListMcpServers = <
+  TData = Schemas.ListMcpServersResponse,
+>(
+  variables: ListMcpServersVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ListMcpServersResponse,
+      ListMcpServersError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ListMcpServersResponse,
+    ListMcpServersError,
+    TData
+  >({
+    ...listMcpServersQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useListMcpServers = <TData = Schemas.ListMcpServersResponse,>(
+  variables: ListMcpServersVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ListMcpServersResponse,
+      ListMcpServersError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ListMcpServersResponse,
+    ListMcpServersError,
+    TData
+  >({
+    ...listMcpServersQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type DisconnectMcpServerOauthPathParams = {
+  /**
+   * Configured MCP server ID
+   */
+  serverId: string;
+};
+
+export type DisconnectMcpServerOauthError = Fetcher.ErrorWrapper<undefined>;
+
+export type DisconnectMcpServerOauthVariables = {
+  pathParams: DisconnectMcpServerOauthPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchDisconnectMcpServerOauth = (
+  variables: DisconnectMcpServerOauthVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.DisconnectMcpServerOauthResponse,
+    DisconnectMcpServerOauthError,
+    undefined,
+    {},
+    {},
+    DisconnectMcpServerOauthPathParams
+  >({
+    url: "/api/v1beta/me/mcp_servers/{serverId}/oauth",
+    method: "delete",
+    ...variables,
+    signal,
+  });
+
+export const useDisconnectMcpServerOauth = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.DisconnectMcpServerOauthResponse,
+      DisconnectMcpServerOauthError,
+      DisconnectMcpServerOauthVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.DisconnectMcpServerOauthResponse,
+    DisconnectMcpServerOauthError,
+    DisconnectMcpServerOauthVariables
+  >({
+    mutationFn: (variables: DisconnectMcpServerOauthVariables) =>
+      fetchDisconnectMcpServerOauth(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type CompleteMcpServerOauthPathParams = {
+  /**
+   * Configured MCP server ID
+   */
+  serverId: string;
+};
+
+export type CompleteMcpServerOauthQueryParams = {
+  /**
+   * OAuth authorization code
+   */
+  code: string;
+  /**
+   * OAuth authorization state
+   */
+  state: string;
+};
+
+export type CompleteMcpServerOauthError = Fetcher.ErrorWrapper<undefined>;
+
+export type CompleteMcpServerOauthVariables = {
+  pathParams: CompleteMcpServerOauthPathParams;
+  queryParams: CompleteMcpServerOauthQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchCompleteMcpServerOauth = (
+  variables: CompleteMcpServerOauthVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.CompleteMcpServerOauthResponse,
+    CompleteMcpServerOauthError,
+    undefined,
+    {},
+    CompleteMcpServerOauthQueryParams,
+    CompleteMcpServerOauthPathParams
+  >({
+    url: "/api/v1beta/me/mcp_servers/{serverId}/oauth/callback",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function completeMcpServerOauthQuery(
+  variables: CompleteMcpServerOauthVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.CompleteMcpServerOauthResponse>;
+};
+
+export function completeMcpServerOauthQuery(
+  variables: CompleteMcpServerOauthVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.CompleteMcpServerOauthResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function completeMcpServerOauthQuery(
+  variables: CompleteMcpServerOauthVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/mcp_servers/{serverId}/oauth/callback",
+      operationId: "completeMcpServerOauth",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchCompleteMcpServerOauth(variables, signal),
+  };
+}
+
+export const useSuspenseCompleteMcpServerOauth = <
+  TData = Schemas.CompleteMcpServerOauthResponse,
+>(
+  variables: CompleteMcpServerOauthVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.CompleteMcpServerOauthResponse,
+      CompleteMcpServerOauthError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.CompleteMcpServerOauthResponse,
+    CompleteMcpServerOauthError,
+    TData
+  >({
+    ...completeMcpServerOauthQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useCompleteMcpServerOauth = <
+  TData = Schemas.CompleteMcpServerOauthResponse,
+>(
+  variables: CompleteMcpServerOauthVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.CompleteMcpServerOauthResponse,
+      CompleteMcpServerOauthError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.CompleteMcpServerOauthResponse,
+    CompleteMcpServerOauthError,
+    TData
+  >({
+    ...completeMcpServerOauthQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type StartMcpServerOauthPathParams = {
+  /**
+   * Configured MCP server ID
+   */
+  serverId: string;
+};
+
+export type StartMcpServerOauthError = Fetcher.ErrorWrapper<undefined>;
+
+export type StartMcpServerOauthVariables = {
+  pathParams: StartMcpServerOauthPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchStartMcpServerOauth = (
+  variables: StartMcpServerOauthVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.StartMcpServerOauthResponse,
+    StartMcpServerOauthError,
+    undefined,
+    {},
+    {},
+    StartMcpServerOauthPathParams
+  >({
+    url: "/api/v1beta/me/mcp_servers/{serverId}/oauth/start",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useStartMcpServerOauth = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.StartMcpServerOauthResponse,
+      StartMcpServerOauthError,
+      StartMcpServerOauthVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.StartMcpServerOauthResponse,
+    StartMcpServerOauthError,
+    StartMcpServerOauthVariables
+  >({
+    mutationFn: (variables: StartMcpServerOauthVariables) =>
+      fetchStartMcpServerOauth(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type AbortMessageStreamError = Fetcher.ErrorWrapper<undefined>;
 
 export type AbortMessageStreamVariables = {
@@ -4039,6 +4379,16 @@ export type QueryOperation =
       path: "/api/v1beta/me/frequent_assistants";
       operationId: "frequentAssistants";
       variables: FrequentAssistantsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/mcp_servers";
+      operationId: "listMcpServers";
+      variables: ListMcpServersVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/mcp_servers/{serverId}/oauth/callback";
+      operationId: "completeMcpServerOauth";
+      variables: CompleteMcpServerOauthVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/models";

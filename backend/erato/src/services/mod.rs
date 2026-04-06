@@ -7,6 +7,7 @@ pub mod genai;
 pub mod genai_langfuse;
 pub mod langfuse;
 pub mod mcp_manager;
+pub mod mcp_oauth;
 pub mod mcp_session_manager;
 pub mod mcp_transports;
 pub mod prompt_composition;

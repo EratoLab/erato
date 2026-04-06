@@ -1340,6 +1340,9 @@ pub enum McpServerAuthenticationConfig {
     Fixed {
         fixed: McpServerFixedAuthenticationConfig,
     },
+    Oauth2 {
+        oauth2: McpServerOauth2AuthenticationConfig,
+    },
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
@@ -1365,6 +1368,15 @@ pub struct McpServerFixedAuthenticationConfig {
     pub prefix: String,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct McpServerOauth2AuthenticationConfig {
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    pub client_name: Option<String>,
+}
+
 fn default_mcp_fixed_auth_header_name() -> String {
     "Authorization".to_string()
 }
@@ -1380,6 +1392,11 @@ pub struct McpServersGlobalConfig {
     // Defaults to 3600 seconds (1 hour) when not set.
     #[serde(default)]
     pub max_session_idle_seconds: Option<u64>,
+
+    // Whether the MCP servers tab should be shown in the frontend preferences dialog.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub show_frontend_tab: bool,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]

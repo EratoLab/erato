@@ -1,15 +1,19 @@
 import { t } from "@lingui/core/macro";
-import { useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useTheme, type ThemeMode } from "@/components/providers/ThemeProvider";
 import {
+  fetchCompleteMcpServerOauth,
   fetchUpdateProfilePreferences,
   profileQuery,
   recentChatsQuery,
   useArchiveAllChatsEndpoint,
+  useDisconnectMcpServerOauth,
+  useListMcpServers,
+  useStartMcpServerOauth,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useUserPreferencesFeature } from "@/providers/FeatureConfigProvider";
 
@@ -19,20 +23,28 @@ import { FormField, Input, Textarea } from "../Input";
 import { ModalBase } from "../Modal/ModalBase";
 import {
   ComputerIcon,
+  ErrorIcon,
   LockIcon,
+  LinkIcon,
+  LinkSlashIcon,
   MediaImageIcon,
   MenuScaleIcon,
   MoonIcon,
+  ResolvedIcon,
   SunIcon,
+  CheckCircleIcon,
+  WarningCircleIcon,
 } from "../icons";
 
 import type {
+  McpServerStatus,
+  McpServerStatusValue,
   UpdateProfilePreferencesRequest,
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { KeyboardEvent, ReactNode } from "react";
 
-type PreferencesTab = "personalization" | "appearance" | "data";
+type PreferencesTab = "personalization" | "appearance" | "mcpServers" | "data";
 
 interface AppearanceOption {
   description: string;
@@ -43,19 +55,30 @@ interface AppearanceOption {
 
 interface UserPreferencesDialogProps {
   isOpen: boolean;
+  initialTab?: PreferencesTab;
+  onMcpOauthCallbackHandled?: () => void;
   onClose: () => void;
+  pendingMcpOauthCallback?: {
+    code: string;
+    serverId: string;
+    state: string;
+  } | null;
   userProfile?: UserProfile;
 }
 
 export function UserPreferencesDialog({
   isOpen,
+  initialTab,
+  onMcpOauthCallbackHandled,
   onClose,
+  pendingMcpOauthCallback,
   userProfile,
 }: UserPreferencesDialogProps) {
   const navigate = useNavigate();
   const tabGroupId = useId();
   const queryClient = useQueryClient();
-  const { enabled: personalizationEnabled } = useUserPreferencesFeature();
+  const { enabled: personalizationEnabled, mcpServersTabEnabled } =
+    useUserPreferencesFeature();
   const { effectiveTheme, setThemeMode, themeMode } = useTheme();
   const defaultTab: PreferencesTab = personalizationEnabled
     ? "personalization"
@@ -67,26 +90,67 @@ export function UserPreferencesDialog({
   const [additionalInformation, setAdditionalInformation] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [mcpError, setMcpError] = useState<string | null>(null);
+  const [mcpSuccess, setMcpSuccess] = useState<string | null>(null);
+  const [authorizingServerId, setAuthorizingServerId] = useState<string | null>(
+    null,
+  );
+  const [disconnectingServerId, setDisconnectingServerId] = useState<
+    string | null
+  >(null);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [archiveSuccess, setArchiveSuccess] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const { mutateAsync: archiveAllChatsMutation } = useArchiveAllChatsEndpoint();
+  const { mutateAsync: disconnectMcpServerOauthMutation } =
+    useDisconnectMcpServerOauth();
+  const { mutateAsync: startMcpServerOauthMutation } = useStartMcpServerOauth();
+  const {
+    data: mcpServersResponse,
+    error: mcpServersError,
+    isLoading: isMcpServersLoading,
+    isRefetching: isMcpServersRefetching,
+    refetch: refetchMcpServers,
+  } = useListMcpServers(isOpen && activeTab === "mcpServers" ? {} : skipToken, {
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
 
   const visibleTabs = useMemo(
     () =>
       (personalizationEnabled
-        ? ["personalization", "appearance", "data"]
-        : ["appearance", "data"]) satisfies PreferencesTab[],
-    [personalizationEnabled],
+        ? [
+            "personalization",
+            "appearance",
+            ...(mcpServersTabEnabled
+              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
+                (["mcpServers"] as const)
+              : []),
+            "data",
+          ]
+        : [
+            "appearance",
+            ...(mcpServersTabEnabled
+              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
+                (["mcpServers"] as const)
+              : []),
+            "data",
+          ]) satisfies PreferencesTab[],
+    [mcpServersTabEnabled, personalizationEnabled],
   );
+  const handledOauthCallbackKeyRef = useRef<string | null>(null);
+  const requestedDefaultTab =
+    initialTab && visibleTabs.includes(initialTab) ? initialTab : defaultTab;
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
 
-    setActiveTab(defaultTab);
+    setActiveTab(requestedDefaultTab);
     setSaveError(null);
+    setMcpError(null);
+    setMcpSuccess(null);
     setArchiveError(null);
     setArchiveSuccess(null);
     setNickname(userProfile?.preference_nickname ?? "");
@@ -97,13 +161,88 @@ export function UserPreferencesDialog({
     setAdditionalInformation(
       userProfile?.preference_assistant_additional_information ?? "",
     );
-  }, [defaultTab, isOpen, userProfile]);
+  }, [isOpen, requestedDefaultTab, userProfile]);
 
   useEffect(() => {
     if (!visibleTabs.includes(activeTab)) {
       setActiveTab(visibleTabs[0]);
     }
   }, [activeTab, visibleTabs]);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== "mcpServers" || !pendingMcpOauthCallback) {
+      return;
+    }
+
+    const callbackKey = [
+      pendingMcpOauthCallback.serverId,
+      pendingMcpOauthCallback.code,
+      pendingMcpOauthCallback.state,
+    ].join(":");
+    if (handledOauthCallbackKeyRef.current === callbackKey) {
+      return;
+    }
+    handledOauthCallbackKeyRef.current = callbackKey;
+
+    const completeOauthCallback = async () => {
+      setMcpError(null);
+      setMcpSuccess(null);
+
+      try {
+        const response = await fetchCompleteMcpServerOauth({
+          pathParams: { serverId: pendingMcpOauthCallback.serverId },
+          queryParams: {
+            code: pendingMcpOauthCallback.code,
+            state: pendingMcpOauthCallback.state,
+          },
+        });
+        await refetchMcpServers();
+
+        if (response.connection_status === "SUCCESS") {
+          setMcpSuccess(
+            t({
+              id: "preferences.dialog.mcpServers.oauth.success",
+              message: "Authorization complete. The server is ready to use.",
+            }),
+          );
+        } else if (response.connection_status === "NEEDS_AUTHENTICATION") {
+          setMcpError(
+            t({
+              id: "preferences.dialog.mcpServers.oauth.incompleteAfterCallback",
+              message:
+                "Authorization did not complete successfully. Please try again.",
+            }),
+          );
+        } else {
+          setMcpError(
+            t({
+              id: "preferences.dialog.mcpServers.oauth.failureAfterCallback",
+              message:
+                "Authorization finished, but the server is still unavailable. Try refreshing its status.",
+            }),
+          );
+        }
+      } catch {
+        setMcpError(
+          t({
+            id: "preferences.dialog.mcpServers.oauth.incompleteAfterCallback",
+            message:
+              "Authorization did not complete successfully. Please try again.",
+          }),
+        );
+      } finally {
+        onMcpOauthCallbackHandled?.();
+      }
+    };
+
+    void completeOauthCallback();
+  }, [
+    activeTab,
+    isOpen,
+    onMcpOauthCallbackHandled,
+    pendingMcpOauthCallback,
+    refetchMcpServers,
+  ]);
 
   const hasChanges = useMemo(
     () =>
@@ -136,12 +275,22 @@ export function UserPreferencesDialog({
       id: "preferences.dialog.tabs.appearance",
       message: "Appearance",
     }),
+    mcpServers: t({
+      id: "preferences.dialog.tabs.mcpServers",
+      message: "MCP servers",
+    }),
     data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
   } satisfies Record<PreferencesTab, string>;
 
   const tabIcons = {
     personalization: <MenuScaleIcon className="size-4" />,
     appearance: <MediaImageIcon className="size-4" />,
+    mcpServers: (
+      <ResolvedIcon
+        iconId="simpleicons-modelcontextprotocol"
+        className="size-4"
+      />
+    ),
     data: <LockIcon className="size-4" />,
   } satisfies Record<PreferencesTab, ReactNode>;
 
@@ -188,15 +337,19 @@ export function UserPreferencesDialog({
   const tabIds = {
     personalization: `${tabGroupId}-tab-personalization`,
     appearance: `${tabGroupId}-tab-appearance`,
+    mcpServers: `${tabGroupId}-tab-mcp-servers`,
     data: `${tabGroupId}-tab-data`,
   } satisfies Record<PreferencesTab, string>;
 
   const panelIds = {
     personalization: `${tabGroupId}-panel-personalization`,
     appearance: `${tabGroupId}-panel-appearance`,
+    mcpServers: `${tabGroupId}-panel-mcp-servers`,
     data: `${tabGroupId}-panel-data`,
   } satisfies Record<PreferencesTab, string>;
   /* eslint-enable lingui/no-unlocalized-strings */
+
+  const mcpServers = mcpServersResponse?.servers ?? [];
 
   const focusTab = (tab: PreferencesTab) => {
     document.getElementById(tabIds[tab])?.focus();
@@ -295,6 +448,55 @@ export function UserPreferencesDialog({
       );
     } finally {
       setIsArchiving(false);
+    }
+  };
+
+  const handleStartMcpOauth = async (serverId: string) => {
+    setMcpError(null);
+    setMcpSuccess(null);
+    setAuthorizingServerId(serverId);
+
+    try {
+      const response = await startMcpServerOauthMutation({
+        pathParams: { serverId },
+      });
+      window.location.href = response.authorization_url;
+    } catch {
+      setAuthorizingServerId(null);
+      setMcpError(
+        t({
+          id: "preferences.dialog.mcpServers.oauth.startError",
+          message: "Could not start authorization. Please try again.",
+        }),
+      );
+    }
+  };
+
+  const handleDisconnectMcpOauth = async (serverId: string) => {
+    setMcpError(null);
+    setMcpSuccess(null);
+    setDisconnectingServerId(serverId);
+
+    try {
+      await disconnectMcpServerOauthMutation({
+        pathParams: { serverId },
+      });
+      await refetchMcpServers();
+      setMcpSuccess(
+        t({
+          id: "preferences.dialog.mcpServers.oauth.disconnectSuccess",
+          message: "Disconnected successfully.",
+        }),
+      );
+    } catch {
+      setMcpError(
+        t({
+          id: "preferences.dialog.mcpServers.oauth.disconnectError",
+          message: "Could not disconnect. Please try again.",
+        }),
+      );
+    } finally {
+      setDisconnectingServerId(null);
     }
   };
 
@@ -536,6 +738,100 @@ export function UserPreferencesDialog({
             </section>
 
             <section
+              id={panelIds.mcpServers}
+              role="tabpanel"
+              aria-labelledby={tabIds.mcpServers}
+              hidden={activeTab !== "mcpServers"}
+              className="space-y-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <h2 className="text-sm font-medium text-theme-fg-primary">
+                    {t({
+                      id: "preferences.dialog.mcpServers.heading",
+                      message: "MCP server connections",
+                    })}
+                  </h2>
+                  <p className="text-sm text-theme-fg-secondary">
+                    {t({
+                      id: "preferences.dialog.mcpServers.description",
+                      message:
+                        "Review the MCP servers available to your account and complete any required authorization.",
+                    })}
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    void refetchMcpServers();
+                  }}
+                  disabled={isMcpServersLoading || isMcpServersRefetching}
+                >
+                  {isMcpServersRefetching
+                    ? t({
+                        id: "preferences.dialog.mcpServers.refreshing",
+                        message: "Refreshing...",
+                      })
+                    : t({
+                        id: "preferences.dialog.mcpServers.refresh",
+                        message: "Refresh status",
+                      })}
+                </Button>
+              </div>
+
+              {mcpSuccess ? <Alert type="success">{mcpSuccess}</Alert> : null}
+              {mcpError ? <Alert type="error">{mcpError}</Alert> : null}
+              {mcpServersError ? (
+                <Alert type="error">
+                  {t({
+                    id: "preferences.dialog.mcpServers.load.error",
+                    message: "Could not load MCP servers. Please try again.",
+                  })}
+                </Alert>
+              ) : null}
+
+              {isMcpServersLoading ? (
+                <Alert type="info">
+                  {t({
+                    id: "preferences.dialog.mcpServers.loading",
+                    message: "Loading MCP server status...",
+                  })}
+                </Alert>
+              ) : null}
+
+              {!isMcpServersLoading &&
+              !mcpServersError &&
+              mcpServers.length === 0 ? (
+                <Alert type="info">
+                  {t({
+                    id: "preferences.dialog.mcpServers.empty",
+                    message: "No MCP servers are currently available to you.",
+                  })}
+                </Alert>
+              ) : null}
+
+              {!isMcpServersLoading && !mcpServersError ? (
+                <div className="space-y-3">
+                  {mcpServers.map((server) => (
+                    <McpServerCard
+                      key={server.id}
+                      server={server}
+                      isAuthorizing={authorizingServerId === server.id}
+                      isDisconnecting={disconnectingServerId === server.id}
+                      onAuthorize={() => {
+                        void handleStartMcpOauth(server.id);
+                      }}
+                      onDisconnect={() => {
+                        void handleDisconnectMcpOauth(server.id);
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </section>
+
+            <section
               id={panelIds.data}
               role="tabpanel"
               aria-labelledby={tabIds.data}
@@ -625,3 +921,144 @@ export function UserPreferencesDialog({
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 UserPreferencesDialog.displayName = "UserPreferencesDialog";
+
+function McpServerCard({
+  isAuthorizing,
+  isDisconnecting,
+  onDisconnect,
+  onAuthorize,
+  server,
+}: {
+  isAuthorizing: boolean;
+  isDisconnecting: boolean;
+  onDisconnect: () => void;
+  onAuthorize: () => void;
+  server: McpServerStatus;
+}) {
+  const statusTone = {
+    SUCCESS: {
+      badgeClass:
+        "border-theme-success-border bg-theme-success-bg text-theme-success-fg",
+      description: t({
+        id: "preferences.dialog.mcpServers.status.success.description",
+        message: "Connected and ready to use.",
+      }),
+      icon: <CheckCircleIcon className="size-4" />,
+      label: t({
+        id: "preferences.dialog.mcpServers.status.success.label",
+        message: "Connected",
+      }),
+    },
+    NEEDS_AUTHENTICATION: {
+      badgeClass:
+        "border-theme-warning-border bg-theme-warning-bg text-theme-warning-fg",
+      description: t({
+        id: "preferences.dialog.mcpServers.status.needsAuthentication.description",
+        message: "Authorization is required before this server can be used.",
+      }),
+      icon: <WarningCircleIcon className="size-4" />,
+      label: t({
+        id: "preferences.dialog.mcpServers.status.needsAuthentication.label",
+        message: "Needs authentication",
+      }),
+    },
+    FAILURE: {
+      badgeClass:
+        "border-theme-error-border bg-theme-error-bg text-theme-error-fg",
+      description: t({
+        id: "preferences.dialog.mcpServers.status.failure.description",
+        message:
+          "The server is configured, but the backend could not connect to it.",
+      }),
+      icon: <ErrorIcon className="size-4" />,
+      label: t({
+        id: "preferences.dialog.mcpServers.status.failure.label",
+        message: "Connection failed",
+      }),
+    },
+  } satisfies Record<
+    McpServerStatusValue,
+    {
+      badgeClass: string;
+      description: string;
+      icon: ReactNode;
+      label: string;
+    }
+  >;
+
+  const status = statusTone[server.connection_status];
+
+  return (
+    <article className="rounded-lg border border-theme-border bg-theme-bg-primary p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ResolvedIcon
+              iconId="simpleicons-modelcontextprotocol"
+              className="size-4 text-theme-fg-secondary"
+            />
+            <h3 className="font-medium text-theme-fg-primary">{server.id}</h3>
+            <span
+              className={clsx(
+                "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium",
+                status.badgeClass,
+              )}
+            >
+              <span aria-hidden="true">{status.icon}</span>
+              {status.label}
+            </span>
+          </div>
+          <p className="text-sm text-theme-fg-secondary">
+            {status.description}
+          </p>
+          <p className="text-xs uppercase tracking-wide text-theme-fg-muted">
+            {t({
+              id: "preferences.dialog.mcpServers.authenticationMode",
+              message: "Authentication mode",
+            })}
+            {": "}
+            {server.authentication_mode}
+          </p>
+        </div>
+
+        {server.connection_status === "NEEDS_AUTHENTICATION" ? (
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<LinkIcon className="size-4" />}
+            disabled={isAuthorizing}
+            onClick={onAuthorize}
+          >
+            {isAuthorizing
+              ? t({
+                  id: "preferences.dialog.mcpServers.oauth.authorizing",
+                  message: "Authorizing...",
+                })
+              : t({
+                  id: "preferences.dialog.mcpServers.oauth.authorize",
+                  message: "Authorize",
+                })}
+          </Button>
+        ) : server.authentication_mode === "oauth2" ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<LinkSlashIcon className="size-4" />}
+            disabled={isDisconnecting}
+            onClick={onDisconnect}
+          >
+            {isDisconnecting
+              ? t({
+                  id: "preferences.dialog.mcpServers.oauth.disconnecting",
+                  message: "Disconnecting...",
+                })
+              : t({
+                  id: "preferences.dialog.mcpServers.oauth.disconnect",
+                  message: "Disconnect",
+                })}
+          </Button>
+        ) : null}
+      </div>
+    </article>
+  );
+}

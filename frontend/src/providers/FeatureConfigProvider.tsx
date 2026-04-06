@@ -61,6 +61,8 @@ interface StarterPromptsFeatureConfig {
 interface UserPreferencesFeatureConfig {
   /** Whether the user preferences feature is enabled */
   enabled: boolean;
+  /** Whether the MCP servers tab is shown in the preferences dialog */
+  mcpServersTabEnabled: boolean;
 }
 
 /**
@@ -159,6 +161,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   userPreferences: {
     enabled: false,
+    mcpServersTabEnabled: false,
   },
   cloudProviders: {
     availableProviders: [],
@@ -227,6 +230,7 @@ function createFeatureConfig(
     },
     userPreferences: {
       enabled: environment.userPreferencesEnabled,
+      mcpServersTabEnabled: environment.mcpServersTabEnabled,
     },
     cloudProviders: {
       availableProviders,

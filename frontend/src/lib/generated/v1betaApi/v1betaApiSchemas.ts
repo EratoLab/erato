@@ -391,6 +391,10 @@ export type ChatModel = {
   model_icon?: string | null | undefined;
 };
 
+export type CompleteMcpServerOauthResponse = {
+  connection_status: McpServerStatusValue;
+};
+
 export type ContentPart =
   | (ContentPartText & {
       content_type: "text";
@@ -539,6 +543,10 @@ export type CreateShareGrantRequest = {
  * A share grant model
  */
 export type CreateShareGrantResponse = ShareGrant;
+
+export type DisconnectMcpServerOauthResponse = {
+  connection_status: McpServerStatusValue;
+};
 
 /**
  * A drive accessible to the user (OneDrive, Sharepoint, etc.)
@@ -883,6 +891,10 @@ export type LinkFileRequest = {
   source: string;
 };
 
+export type ListMcpServersResponse = {
+  servers: McpServerStatus[];
+};
+
 /**
  * Response when listing share grants
  */
@@ -892,6 +904,17 @@ export type ListShareGrantsResponse = {
    */
   grants: ShareGrant[];
 };
+
+export type McpServerStatus = {
+  authentication_mode: string;
+  connection_status: McpServerStatusValue;
+  id: string;
+};
+
+export type McpServerStatusValue =
+  | "SUCCESS"
+  | "FAILURE"
+  | "NEEDS_AUTHENTICATION";
 
 export type Message = {
   id: string;
@@ -1475,6 +1498,10 @@ export type SharepointProviderMetadata = {
    * The ID of the file item
    */
   item_id: string;
+};
+
+export type StartMcpServerOauthResponse = {
+  authorization_url: string;
 };
 
 export type StarterPromptInfo = {

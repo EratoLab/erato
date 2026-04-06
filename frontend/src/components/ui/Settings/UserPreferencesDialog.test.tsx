@@ -83,6 +83,11 @@ const createJsonResponse = (payload: unknown, status = 200) =>
   });
 
 function renderDialog({
+  initialEntries = ["/"],
+  initialTab,
+  mcpServersTabEnabled = true,
+  onMcpOauthCallbackHandled,
+  pendingMcpOauthCallback = null,
   queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, refetchOnWindowFocus: false },
@@ -93,6 +98,15 @@ function renderDialog({
   themeMode = "light",
   userPreferencesEnabled = true,
 }: {
+  initialEntries?: string[];
+  initialTab?: "personalization" | "appearance" | "mcpServers" | "data";
+  mcpServersTabEnabled?: boolean;
+  onMcpOauthCallbackHandled?: () => void;
+  pendingMcpOauthCallback?: {
+    code: string;
+    serverId: string;
+    state: string;
+  } | null;
   queryClient?: QueryClient;
   onClose?: () => void;
   profile?: UserProfile;
@@ -100,9 +114,14 @@ function renderDialog({
   userPreferencesEnabled?: boolean;
 } = {}) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <StaticFeatureConfigProvider
-        config={{ userPreferences: { enabled: userPreferencesEnabled } }}
+        config={{
+          userPreferences: {
+            enabled: userPreferencesEnabled,
+            mcpServersTabEnabled,
+          },
+        }}
       >
         <ThemeProvider
           initialThemeMode={themeMode}
@@ -112,7 +131,10 @@ function renderDialog({
           <QueryClientProvider client={queryClient}>
             <UserPreferencesDialog
               isOpen={true}
+              initialTab={initialTab}
+              onMcpOauthCallbackHandled={onMcpOauthCallbackHandled}
               onClose={onClose}
+              pendingMcpOauthCallback={pendingMcpOauthCallback}
               userProfile={profile}
             />
           </QueryClientProvider>
@@ -125,6 +147,7 @@ function renderDialog({
 afterEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe("UserPreferencesDialog", () => {
@@ -136,6 +159,7 @@ describe("UserPreferencesDialog", () => {
       name: "Personalization",
     });
     const appearanceTab = screen.getByRole("tab", { name: "Appearance" });
+    const mcpServersTab = screen.getByRole("tab", { name: "MCP servers" });
     const dataTab = screen.getByRole("tab", { name: "Data" });
     const personalizationPanel = screen.getByRole("tabpanel", {
       name: "Personalization",
@@ -148,10 +172,16 @@ describe("UserPreferencesDialog", () => {
     const dataPanelId = dataTab.getAttribute("aria-controls");
     const dataPanel =
       dataPanelId !== null ? document.getElementById(dataPanelId) : null;
+    const mcpServersPanelId = mcpServersTab.getAttribute("aria-controls");
+    const mcpServersPanel =
+      mcpServersPanelId !== null
+        ? document.getElementById(mcpServersPanelId)
+        : null;
 
     expect(tablist).toHaveAttribute("aria-orientation", "vertical");
     expect(personalizationTab).toHaveAttribute("aria-selected", "true");
     expect(appearanceTab).toHaveAttribute("aria-selected", "false");
+    expect(mcpServersTab).toHaveAttribute("aria-selected", "false");
     expect(dataTab).toHaveAttribute("aria-selected", "false");
     expect(personalizationTab).toHaveAttribute(
       "aria-controls",
@@ -159,10 +189,13 @@ describe("UserPreferencesDialog", () => {
     );
     expect(appearancePanel).not.toBeNull();
     expect(appearanceTab).toHaveAttribute("aria-controls", appearancePanel?.id);
+    expect(mcpServersPanel).not.toBeNull();
+    expect(mcpServersTab).toHaveAttribute("aria-controls", mcpServersPanel?.id);
     expect(dataPanel).not.toBeNull();
     expect(dataTab).toHaveAttribute("aria-controls", dataPanel?.id);
     expect(personalizationPanel).not.toHaveAttribute("hidden");
     expect(appearancePanel).toHaveAttribute("hidden");
+    expect(mcpServersPanel).toHaveAttribute("hidden");
     expect(dataPanel).toHaveAttribute("hidden");
   });
 
@@ -224,6 +257,16 @@ describe("UserPreferencesDialog", () => {
     ).toHaveTextContent("Currently light");
   });
 
+  it("hides the MCP servers tab when the feature flag is disabled", () => {
+    renderDialog({
+      mcpServersTabEnabled: false,
+    });
+
+    expect(
+      screen.queryByRole("tab", { name: "MCP servers" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("updates the selected theme mode from the appearance pane", () => {
     renderDialog({ themeMode: "light" });
 
@@ -234,6 +277,242 @@ describe("UserPreferencesDialog", () => {
       "aria-checked",
       "true",
     );
+  });
+
+  it("loads MCP server statuses in the MCP servers tab", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      createJsonResponse({
+        servers: [
+          {
+            id: "notion",
+            authentication_mode: "oauth2",
+            connection_status: "NEEDS_AUTHENTICATION",
+          },
+          {
+            id: "slack",
+            authentication_mode: "forwarded",
+            connection_status: "SUCCESS",
+          },
+          {
+            id: "legacy",
+            authentication_mode: "fixed",
+            connection_status: "FAILURE",
+          },
+        ],
+      }),
+    );
+
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("tab", { name: "MCP servers" }));
+
+    expect(
+      await screen.findByText(
+        "Authorization is required before this server can be used.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("notion")).toBeInTheDocument();
+    expect(screen.getByText("slack")).toBeInTheDocument();
+    expect(screen.getByText("legacy")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Authorize" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByTitle("Model Context Protocol").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+    expect(screen.getByText("Connection failed")).toBeInTheDocument();
+  });
+
+  it("starts OAuth in the current tab", async () => {
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...originalLocation, href: "http://localhost/" },
+    });
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+
+        if (
+          url === "/api/v1beta/me/mcp_servers" &&
+          method === "GET" &&
+          fetchMock.mock.calls.filter(
+            ([calledUrl, calledInit]) =>
+              String(calledUrl) === "/api/v1beta/me/mcp_servers" &&
+              (calledInit?.method ?? "GET") === "GET",
+          ).length === 1
+        ) {
+          return createJsonResponse({
+            servers: [
+              {
+                id: "notion",
+                authentication_mode: "oauth2",
+                connection_status: "NEEDS_AUTHENTICATION",
+              },
+            ],
+          });
+        }
+
+        if (url === "/api/v1beta/me/mcp_servers/notion/oauth/start") {
+          return createJsonResponse({
+            authorization_url: "https://auth.example.com/oauth/authorize",
+          });
+        }
+
+        if (url === "/api/v1beta/me/mcp_servers" && method === "GET") {
+          return createJsonResponse({
+            servers: [
+              {
+                id: "notion",
+                authentication_mode: "oauth2",
+                connection_status: "SUCCESS",
+              },
+            ],
+          });
+        }
+
+        throw new Error(`Unexpected request: ${method} ${url}`);
+      });
+
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("tab", { name: "MCP servers" }));
+    await screen.findByRole("button", { name: "Authorize" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1beta/me/mcp_servers/notion/oauth/start",
+        expect.objectContaining({
+          method: "POST",
+        }),
+      );
+      expect(window.location.href).toBe(
+        "https://auth.example.com/oauth/authorize",
+      );
+    });
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
+    });
+  });
+
+  it("disconnects an OAuth-backed MCP server", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+
+        if (url === "/api/v1beta/me/mcp_servers" && method === "GET") {
+          return createJsonResponse({
+            servers: [
+              {
+                id: "notion",
+                authentication_mode: "oauth2",
+                connection_status: "SUCCESS",
+              },
+            ],
+          });
+        }
+
+        if (
+          url === "/api/v1beta/me/mcp_servers/notion/oauth" &&
+          method === "DELETE"
+        ) {
+          return createJsonResponse({
+            connection_status: "NEEDS_AUTHENTICATION",
+          });
+        }
+
+        throw new Error(`Unexpected request: ${method} ${url}`);
+      });
+
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("tab", { name: "MCP servers" }));
+    await screen.findByRole("button", { name: "Disconnect" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1beta/me/mcp_servers/notion/oauth",
+        expect.objectContaining({
+          method: "DELETE",
+        }),
+      );
+    });
+
+    expect(
+      await screen.findByText("Disconnected successfully."),
+    ).toBeInTheDocument();
+  });
+
+  it("completes an OAuth callback after returning to the MCP servers tab", async () => {
+    const onMcpOauthCallbackHandled = vi.fn();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+
+        if (url === "/api/v1beta/me/mcp_servers" && method === "GET") {
+          return createJsonResponse({
+            servers: [
+              {
+                id: "notion",
+                authentication_mode: "oauth2",
+                connection_status: "SUCCESS",
+              },
+            ],
+          });
+        }
+
+        if (
+          url ===
+            "/api/v1beta/me/mcp_servers/notion/oauth/callback?code=oauth-code&state=oauth-state" &&
+          method === "GET"
+        ) {
+          return createJsonResponse({
+            connection_status: "SUCCESS",
+          });
+        }
+
+        throw new Error(`Unexpected request: ${method} ${url}`);
+      });
+
+    renderDialog({
+      initialTab: "mcpServers",
+      onMcpOauthCallbackHandled,
+      pendingMcpOauthCallback: {
+        code: "oauth-code",
+        serverId: "notion",
+        state: "oauth-state",
+      },
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1beta/me/mcp_servers/notion/oauth/callback?code=oauth-code&state=oauth-state",
+        expect.objectContaining({
+          method: "GET",
+        }),
+      );
+    });
+
+    expect(
+      await screen.findByText(
+        "Authorization complete. The server is ready to use.",
+      ),
+    ).toBeInTheDocument();
+    expect(onMcpOauthCallbackHandled).toHaveBeenCalled();
   });
 
   it("archives chats, refreshes recent chats, and redirects to a new chat", async () => {

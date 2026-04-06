@@ -92,6 +92,7 @@ const DEFAULT_ERATO_PLATFORM: &str = "web";
 #[derive(Debug, Clone)]
 pub struct MeProfileChatRequestInput<'a> {
     pub subject: Subject,
+    pub user_id: Option<Uuid>,
     pub user_groups: &'a [String],
     pub organization_user_id: Option<&'a str>,
     pub organization_group_ids: &'a [String],
@@ -109,6 +110,7 @@ impl<'a> MeProfileChatRequestInput<'a> {
     pub fn from_me_profile(me_profile: &'a MeProfile) -> Self {
         Self {
             subject: me_profile.to_subject(),
+            user_id: Uuid::parse_str(&me_profile.id).ok(),
             user_groups: &me_profile.groups,
             organization_user_id: me_profile.organization_user_id.as_deref(),
             organization_group_ids: &me_profile.organization_group_ids,
@@ -1487,6 +1489,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         None => authorized_server_ids,
     });
     let mcp_auth_context = McpRequestAuthContext {
+        app_state: Some(app_state),
+        user_id: me_profile_input.user_id,
         oidc_token: Some(me_profile_input.oidc_token),
         access_token: me_profile_input.access_token,
     };
@@ -4087,6 +4091,8 @@ async fn run_message_submit_task(
 
     let subject = me_user.to_subject();
     let mcp_auth_context = McpRequestAuthContext {
+        app_state: Some(app_state),
+        user_id: Uuid::parse_str(&me_user.id).ok(),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
     };
@@ -4354,6 +4360,8 @@ pub async fn regenerate_message_sse(
 
             let subject = me_user.to_subject();
             let mcp_auth_context = McpRequestAuthContext {
+                app_state: Some(&app_state),
+                user_id: Uuid::parse_str(&me_user.id).ok(),
                 oidc_token: Some(&me_user.oidc_token),
                 access_token: me_user.access_token.as_deref(),
             };
@@ -4676,6 +4684,8 @@ pub async fn edit_message_sse(
 
             let subject = me_user.to_subject();
             let mcp_auth_context = McpRequestAuthContext {
+                app_state: Some(&app_state),
+                user_id: Uuid::parse_str(&me_user.id).ok(),
                 oidc_token: Some(&me_user.oidc_token),
                 access_token: me_user.access_token.as_deref(),
             };
