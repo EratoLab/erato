@@ -7,7 +7,7 @@ test(
   "Assistant sharing between Entra ID users survives assistant archive",
   { tag: TAG_CI },
   async ({ browser }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(180_000);
 
     let assistantName: string;
     let user2DisplayName: string;

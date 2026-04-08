@@ -17,9 +17,15 @@ export type CloudProvider = "sharepoint" | "googledrive";
 
 /**
  * A cloud storage drive with provider information
- * Extends the generated Drive type with provider field
+ * Extends the generated Drive type with provider field and drive metadata
+ * that may lag behind codegen until the OpenAPI generator catches up.
  */
-export type CloudDrive = Drive & { provider: CloudProvider };
+export type CloudDrive = Drive & {
+  kind: string;
+  provider: CloudProvider;
+  site_name?: string;
+  web_url?: string;
+};
 
 /**
  * A cloud drive item with provider and drive information

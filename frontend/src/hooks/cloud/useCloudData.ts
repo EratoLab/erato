@@ -13,7 +13,7 @@ import {
   useGetDriveItemChildren,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
-import type { CloudProvider } from "@/lib/api/cloudProviders/types";
+import type { CloudDrive, CloudProvider } from "@/lib/api/cloudProviders/types";
 import type {
   Drive,
   DriveItem,
@@ -30,7 +30,7 @@ interface UseCloudDataOptions {
 
 interface UseCloudDataResult {
   /** Available drives */
-  drives: (Drive & { provider: CloudProvider })[];
+  drives: CloudDrive[];
   /** Items in current location */
   items: (DriveItem & { provider: CloudProvider; drive_id: string })[];
   /** Loading state */
@@ -89,10 +89,19 @@ export function useCloudData({
   // Combine drives data with provider field
   const drives = useMemo(() => {
     if (!drivesData) return [];
-    return drivesData.drives.map((drive) => ({
-      ...drive,
-      provider,
-    }));
+    return drivesData.drives.map((drive) => {
+      const cloudDrive = drive as Drive & {
+        kind?: string;
+        site_name?: string;
+        web_url?: string;
+      };
+
+      return {
+        ...cloudDrive,
+        kind: cloudDrive.kind ?? "other",
+        provider,
+      };
+    });
   }, [drivesData, provider]);
 
   // Combine items data with provider and drive_id fields

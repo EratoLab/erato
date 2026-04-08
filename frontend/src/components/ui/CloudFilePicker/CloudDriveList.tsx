@@ -7,7 +7,7 @@
 import { t } from "@lingui/core/macro";
 import { memo } from "react";
 
-import { FolderIcon } from "../icons";
+import { FolderIcon, OpenNewWindowIcon } from "../icons";
 
 import type { CloudDrive } from "@/lib/api/cloudProviders/types";
 
@@ -18,26 +18,79 @@ interface CloudDriveListProps {
   className?: string;
 }
 
-function getDriveBadgeColor(_driveType: string): string {
-  // Use theme accent color for all drive type badges
-  // This ensures badges adapt to any theme without hardcoded colors
-  return "bg-theme-bg-accent text-theme-fg-primary";
+function getDriveBadgeColor(kind: string): string {
+  switch (kind) {
+    case "personal_onedrive":
+      return "bg-theme-bg-accent text-theme-fg-primary";
+    case "teams_group_library":
+      return "bg-theme-bg-accent text-theme-fg-primary";
+    case "microsoft_365_group_library":
+      return "bg-theme-bg-accent text-theme-fg-primary";
+    case "sharepoint_site_library":
+      return "bg-theme-bg-accent text-theme-fg-primary";
+    case "sharepoint_list":
+      return "bg-theme-bg-accent text-theme-fg-primary";
+    default:
+      return "bg-theme-bg-accent text-theme-fg-primary";
+  }
 }
 
-function getDriveTypeLabel(driveType: string): string {
-  switch (driveType) {
-    case "personal":
+function getDriveKindLabel(kind: string): string {
+  switch (kind) {
+    case "personal_onedrive":
       return t({
-        id: "cloudDriveList.driveType.personal",
-        message: "Personal",
+        id: "cloudDriveList.driveKind.personalOneDrive",
+        message: "Personal OneDrive",
       });
-    case "documentLibrary":
-      return t({ id: "cloudDriveList.driveType.shared", message: "Shared" });
-    case "shared":
-      return t({ id: "cloudDriveList.driveType.shared", message: "Shared" });
+    case "teams_group_library":
+      return t({
+        id: "cloudDriveList.driveKind.teamsGroupLibrary",
+        message: "Teams library",
+      });
+    case "microsoft_365_group_library":
+      return t({
+        id: "cloudDriveList.driveKind.microsoft365GroupLibrary",
+        message: "Group library",
+      });
+    case "sharepoint_site_library":
+      return t({
+        id: "cloudDriveList.driveKind.sharepointSiteLibrary",
+        message: "SharePoint site",
+      });
+    case "sharepoint_list":
+      return t({
+        id: "cloudDriveList.driveKind.sharepointList",
+        message: "SharePoint list",
+      });
+    case "business_library":
+      return t({
+        id: "cloudDriveList.driveKind.businessLibrary",
+        message: "Business library",
+      });
+    case "other":
+      return t({
+        id: "cloudDriveList.driveKind.other",
+        message: "Other",
+      });
     default:
-      return driveType;
+      return kind;
   }
+}
+
+function getDriveDetailLines(drive: CloudDrive): string[] {
+  const lines: string[] = [];
+  const siteLabel = t({ id: "cloudDriveList.siteLabel", message: "Site" });
+  const ownerLabel = t({ id: "cloudDriveList.ownerLabel", message: "Owner" });
+
+  if (drive.site_name) {
+    lines.push(`${siteLabel}: ${drive.site_name}`);
+  }
+
+  if (drive.owner_name) {
+    lines.push(`${ownerLabel}: ${drive.owner_name}`);
+  }
+
+  return lines;
 }
 
 const DriveCardSkeleton = memo(() => (
@@ -86,46 +139,75 @@ export const CloudDriveList = memo<CloudDriveListProps>(
     return (
       <div className={`grid gap-3 ${className}`}>
         {drives.map((drive) => (
-          <button
+          <div
             key={drive.id}
-            type="button"
-            onClick={() => onSelectDrive(drive)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onSelectDrive(drive);
-              }
-            }}
-            className="theme-transition focus-ring rounded-lg border border-theme-border p-4 text-left hover:bg-theme-bg-hover"
-            aria-label={t({
-              id: "cloudDriveList.openDrive",
-              message: "Open drive",
-            })}
+            className="rounded-lg border border-theme-border bg-theme-bg-primary"
           >
-            <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded bg-theme-bg-secondary">
-                <FolderIcon className="size-6 text-theme-fg-primary" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center gap-2">
-                  <h3 className="truncate font-medium text-theme-fg-primary">
-                    {drive.name}
-                  </h3>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs ${getDriveBadgeColor(drive.drive_type)}`}
-                  >
-                    {getDriveTypeLabel(drive.drive_type)}
-                  </span>
+            <button
+              type="button"
+              onClick={() => onSelectDrive(drive)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectDrive(drive);
+                }
+              }}
+              className="theme-transition focus-ring w-full rounded-lg p-4 text-left hover:bg-theme-bg-hover"
+              aria-label={t({
+                id: "cloudDriveList.openDrive",
+                message: "Open drive",
+              })}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded bg-theme-bg-secondary">
+                  <FolderIcon className="size-6 text-theme-fg-primary" />
                 </div>
-                {drive.owner_name && (
-                  <p className="truncate text-sm text-theme-fg-muted">
-                    {t({ id: "cloudDriveList.owner", message: "Owner:" })}{" "}
-                    {drive.owner_name}
-                  </p>
-                )}
+                <div className="min-w-0 flex-1">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <h3 className="min-w-0 flex-1 truncate font-medium text-theme-fg-primary">
+                      {drive.name}
+                    </h3>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs ${getDriveBadgeColor(drive.kind)}`}
+                    >
+                      {getDriveKindLabel(drive.kind)}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    {getDriveDetailLines(drive).map((line) => (
+                      <p
+                        key={line}
+                        className="truncate text-sm text-theme-fg-muted"
+                      >
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          </button>
+            </button>
+            {drive.web_url && (
+              <div className="flex justify-end border-t border-theme-border px-4 py-2">
+                <a
+                  href={drive.web_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                  }}
+                  className="theme-transition inline-flex items-center gap-1.5 rounded text-sm text-theme-fg-secondary hover:text-theme-fg-primary"
+                >
+                  <span>
+                    {t({
+                      id: "cloudDriveList.viewInSharepoint",
+                      message: "View in Sharepoint",
+                    })}
+                  </span>
+                  <OpenNewWindowIcon className="size-4" />
+                </a>
+              </div>
+            )}
+          </div>
         ))}
       </div>
     );

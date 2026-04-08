@@ -21,8 +21,8 @@ const meta = {
 Sub-component that displays a list of available drives (OneDrive, SharePoint document libraries, etc.).
 
 **Features:**
-- Drive cards with icons and badges
-- Shows drive type (Personal, Shared) and owner information
+- Drive cards with icons and drive-kind badges
+- Shows owner, SharePoint site, and location metadata
 - Loading skeleton states
 - Empty state for no drives
 - Hover effects and focus states
@@ -50,6 +50,25 @@ export const Default: Story = {
     drives: mockDrives.map((d) => ({ ...d, provider: "sharepoint" as const })),
     onSelectDrive: (drive) => console.log("Selected drive:", drive),
     isLoading: false,
+  },
+};
+
+/**
+ * Variation gallery covering all currently supported drive kinds
+ */
+export const DriveKindsGallery: Story = {
+  args: {
+    drives: mockDrives.map((d) => ({ ...d, provider: "sharepoint" as const })),
+    onSelectDrive: (drive) => console.log("Selected drive:", drive),
+    isLoading: false,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Shows personal OneDrive, Teams-backed libraries, Microsoft 365 group libraries, SharePoint site libraries, list-backed drives, and generic business libraries in one place.",
+      },
+    },
   },
 };
 

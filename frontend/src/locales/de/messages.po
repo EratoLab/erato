@@ -454,13 +454,48 @@ msgstr " Dies gilt für deine {days}-Tage-Budgetperiode."
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
-msgid "cloudDriveList.driveType.personal"
-msgstr "Persönlich"
+msgid "cloudDriveList.driveKind.businessLibrary"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
-msgid "cloudDriveList.driveType.shared"
-msgstr "Geteilt"
+msgid "cloudDriveList.driveKind.microsoft365GroupLibrary"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.driveKind.other"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.driveKind.personalOneDrive"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.driveKind.sharepointList"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.driveKind.sharepointSiteLibrary"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.driveKind.teamsGroupLibrary"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+#~ msgid "cloudDriveList.driveType.personal"
+#~ msgstr "Persönlich"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+#~ msgid "cloudDriveList.driveType.shared"
+#~ msgstr "Geteilt"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
@@ -469,13 +504,48 @@ msgstr "Keine Laufwerke verfügbar"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+#~ msgid "cloudDriveList.location"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+#~ msgid "cloudDriveList.locationLabel"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
 msgid "cloudDriveList.openDrive"
 msgstr "Laufwerk öffnen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudDriveList.tsx
-msgid "cloudDriveList.owner"
-msgstr "Besitzer:"
+#~ msgid "cloudDriveList.owner"
+#~ msgstr "Besitzer:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.ownerLabel"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+#~ msgid "cloudDriveList.ownerLine"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+#~ msgid "cloudDriveList.site"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.siteLabel"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudDriveList.tsx
+msgid "cloudDriveList.viewInSharepoint"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx

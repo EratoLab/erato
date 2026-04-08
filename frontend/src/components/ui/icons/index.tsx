@@ -42,6 +42,7 @@ import {
   Lock,
   Link,
   LinkSlash,
+  OpenNewWindow,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -218,6 +219,10 @@ export const ArrowLeftIcon = ({ className, ...props }: IconProps) => (
 
 export const ChevronRightIcon = ({ className, ...props }: IconProps) => (
   <NavArrowRight className={className} {...props} />
+);
+
+export const OpenNewWindowIcon = ({ className, ...props }: IconProps) => (
+  <OpenNewWindow className={className} {...props} />
 );
 
 export const FolderIcon = ({ className, ...props }: IconProps) => (
