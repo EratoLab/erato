@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -48,6 +49,11 @@ MANIFEST_FUNNEL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.xml"
 ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
 ENTRA_CONFIG_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.cfg"
 REQUIRED_COMMANDS = ("docker", "pnpm", "tailscale")
+EXPECTED_OAUTH2_PROXY_UPSTREAMS = """upstreams = [
+    "http://localhost:3002/office-addin/#/",
+    "http://localhost:3130/office-addin/manifest.xml#/office-addin/manifest.xml",
+    "http://localhost:3130/api/#/api/"
+]"""
 
 
 def run_command(
@@ -91,6 +97,7 @@ def read_required_value(label: str, env_names: tuple[str, ...]) -> str:
 
 def ensure_entra_proxy_config() -> None:
     if ENTRA_CONFIG_PATH.exists():
+        sync_entra_proxy_upstreams()
         return
 
     template = ENTRA_TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -121,7 +128,24 @@ def ensure_entra_proxy_config() -> None:
 
     ENTRA_CONFIG_PATH.write_text(rendered, encoding="utf-8")
     ENTRA_CONFIG_PATH.chmod(0o600)
+    sync_entra_proxy_upstreams()
     print(f"Generated {ENTRA_CONFIG_PATH.relative_to(OFFICE_ADDIN_DIR)}")
+
+
+def sync_entra_proxy_upstreams() -> None:
+    config_text = ENTRA_CONFIG_PATH.read_text(encoding="utf-8")
+    updated_config_text, replacements = re.subn(
+        r"upstreams\s*=\s*\[(?:.|\n)*?\]",
+        EXPECTED_OAUTH2_PROXY_UPSTREAMS,
+        config_text,
+        count=1,
+    )
+
+    if replacements == 0 or updated_config_text == config_text:
+        return
+
+    ENTRA_CONFIG_PATH.write_text(updated_config_text, encoding="utf-8")
+    print("Updated oauth2-proxy upstreams for add-in manifest routing")
 
 
 def start_auth_proxy() -> None:
