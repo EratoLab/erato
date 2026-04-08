@@ -494,7 +494,7 @@
           "sharepoint"
         ],
         "summary": "Get all drives accessible to the user.",
-        "description": "This includes:\n- The user's personal OneDrive\n- Drives shared with the user\n- Recent items (as a pseudo-drive)",
+        "description": "This exhaustively walks the Microsoft Graph drive discovery surfaces that are\nrelevant for the current user:\n- `GET /me/drive`: https://learn.microsoft.com/graph/api/drive-get\n- `GET /me/drives`, `GET /groups/{id}/drives`, `GET /sites/{id}/drives`:\n  https://learn.microsoft.com/graph/api/drive-list\n- `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme\n- `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams\n- `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search",
         "operationId": "all_drives",
         "responses": {
           "200": {
@@ -3165,7 +3165,8 @@
         "required": [
           "id",
           "name",
-          "drive_type"
+          "drive_type",
+          "kind"
         ],
         "properties": {
           "drive_type": {
@@ -3176,6 +3177,10 @@
             "type": "string",
             "description": "The unique ID of the drive"
           },
+          "kind": {
+            "type": "string",
+            "description": "Best-effort classification of the drive based on Graph drive, site, and group metadata"
+          },
           "name": {
             "type": "string",
             "description": "The display name of the drive"
@@ -3183,6 +3188,14 @@
           "owner_name": {
             "type": "string",
             "description": "The owner of the drive, if available"
+          },
+          "site_name": {
+            "type": "string",
+            "description": "The SharePoint site name for document libraries, if available"
+          },
+          "web_url": {
+            "type": "string",
+            "description": "The web URL to access this drive in OneDrive/SharePoint"
           }
         }
       },

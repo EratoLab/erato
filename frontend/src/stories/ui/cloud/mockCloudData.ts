@@ -9,7 +9,10 @@ export interface MockDrive {
   id: string;
   name: string;
   drive_type: string;
+  kind: string;
   owner_name?: string;
+  site_name?: string;
+  web_url?: string;
 }
 
 export interface MockDriveItem {
@@ -26,21 +29,60 @@ export interface MockDriveItem {
 export const mockDrives: MockDrive[] = [
   {
     id: "drive_personal_001",
-    name: "My OneDrive",
-    drive_type: "personal",
+    name: "Dokumente",
+    drive_type: "business",
+    kind: "personal_onedrive",
     owner_name: "John Doe",
+    site_name: "John Doe",
+    web_url: "https://contoso-my.sharepoint.com/personal/john_doe/Documents",
   },
   {
-    id: "drive_shared_001",
-    name: "Sales Team Documents",
+    id: "drive_team_001",
+    name: "Dokumente",
     drive_type: "documentLibrary",
+    kind: "teams_group_library",
     owner_name: "Sales Team",
+    site_name: "Sales Collaboration",
+    web_url:
+      "https://contoso.sharepoint.com/sites/sales/Freigegebene%20Dokumente",
   },
   {
-    id: "drive_shared_002",
-    name: "Engineering Resources",
+    id: "drive_group_001",
+    name: "Dokumente",
     drive_type: "documentLibrary",
-    owner_name: "Engineering",
+    kind: "microsoft_365_group_library",
+    owner_name: "Product Launch Group",
+    site_name: "Product Launch",
+    web_url:
+      "https://contoso.sharepoint.com/sites/productlaunch/Freigegebene%20Dokumente",
+  },
+  {
+    id: "drive_site_001",
+    name: "Dokumente",
+    drive_type: "documentLibrary",
+    kind: "sharepoint_site_library",
+    owner_name: "Communications Owners",
+    site_name: "Corporate Communications",
+    web_url:
+      "https://contoso.sharepoint.com/sites/comms/Freigegebene%20Dokumente",
+  },
+  {
+    id: "drive_list_001",
+    name: "Issue Tracker",
+    drive_type: "business",
+    kind: "sharepoint_list",
+    owner_name: "Operations",
+    site_name: "Operations Hub",
+    web_url: "https://contoso.sharepoint.com/sites/ops/Lists/IssueTracker",
+  },
+  {
+    id: "drive_other_001",
+    name: "Archive",
+    drive_type: "business",
+    kind: "business_library",
+    owner_name: "Finance",
+    site_name: "Records Center",
+    web_url: "https://contoso.sharepoint.com/sites/records/Archive",
   },
 ];
 

@@ -45,7 +45,10 @@ const runMcpAuthFlow = async (
   ).toHaveCount(0);
 };
 
-const createDexAuthenticatedContext = async (browser: Browser, email: string) => {
+const createDexAuthenticatedContext = async (
+  browser: Browser,
+  email: string,
+) => {
   const context = await browser.newContext({
     storageState: { cookies: [], origins: [] },
   });

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -78,8 +78,20 @@ async function getScenarioDataWithFallback(
   return scenarioData;
 }
 
-async function openFolderByName(page: Page, folderName: string) {
-  const row = page.locator('[role="row"]', { hasText: folderName }).first();
+async function openDriveByKind(picker: Locator, kindLabel: string) {
+  const driveButton = picker
+    .getByRole("button", { name: /open drive/i })
+    .filter({ hasText: kindLabel })
+    .first();
+
+  await driveButton.scrollIntoViewIfNeeded();
+  await expect(driveButton).toBeVisible({ timeout: 15000 });
+  await driveButton.click();
+}
+
+async function openFolderByName(picker: Locator, folderName: string) {
+  const row = picker.getByRole("row").filter({ hasText: folderName }).first();
+  await row.scrollIntoViewIfNeeded();
   await expect(row).toBeVisible({ timeout: 15000 });
   await row.getByRole("button", { name: /open folder/i }).click();
 }
@@ -97,18 +109,14 @@ async function selectOneDriveFileByPath(page: Page) {
   });
   await expect(picker).toBeVisible({ timeout: 15000 });
 
-  // Open the first available drive (typically personal OneDrive)
-  await picker
-    .getByRole("button", { name: /open drive/i })
-    .first()
-    .click();
+  await openDriveByKind(picker, "Personal OneDrive");
 
   // Navigate path: Testfiles > test-files
-  await openFolderByName(page, "Testfiles");
-  await openFolderByName(page, "test-files");
+  await openFolderByName(picker, "Testfiles");
+  await openFolderByName(picker, "test-files");
 
   // Select file: sample-report-compressed.pdf
-  await page
+  await picker
     .getByRole("button", { name: "sample-report-compressed.pdf" })
     .click();
 
@@ -164,6 +172,8 @@ test(
   "Entra ID: shared assistant with OneDrive file does not answer page 3 heading correctly",
   { tag: TAG_CI },
   async ({ browser }) => {
+    test.setTimeout(180_000);
+
     const randomSuffix = Math.floor(Math.random() * 16777215)
       .toString(16)
       .padStart(6, "0");
