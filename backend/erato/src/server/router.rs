@@ -1,7 +1,9 @@
 use super::api::v1beta::ApiV1ApiDoc;
+use crate::frontend_environment::DeploymentVersion;
 #[cfg(all(feature = "profiling", target_os = "linux"))]
 use crate::profiling::{memory_profile_flamegraph, memory_profile_pprof};
 use crate::state::AppState;
+use axum::Extension;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -27,6 +29,7 @@ async fn health() -> &'static str {
 }
 
 const OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL: &str = "https://localhost:3002";
+const OFFICE_ADDIN_MANIFEST_VERSION_PLACEHOLDER: &str = "{{OFFICE_ADDIN_MANIFEST_VERSION}}";
 
 #[derive(Debug, Deserialize, IntoParams)]
 struct OfficeAddinManifestQuery {
@@ -65,14 +68,58 @@ fn derive_manifest_base_url(headers: &HeaderMap) -> Result<String, String> {
     normalize_manifest_base_url(&format!("{scheme}://{host}{prefix}"))
 }
 
-fn render_office_addin_manifest(template: &str, base_url: &str) -> String {
+fn parse_manifest_version_prefix(version: &str) -> (u16, u16, u16) {
+    let mut parts = version.split('.');
+    let parse_part = |part: Option<&str>| -> u16 {
+        part.unwrap_or("0")
+            .chars()
+            .take_while(|char| char.is_ascii_digit())
+            .collect::<String>()
+            .parse::<u16>()
+            .unwrap_or(0)
+    };
+
+    (
+        parse_part(parts.next()),
+        parse_part(parts.next()),
+        parse_part(parts.next()),
+    )
+}
+
+fn deployment_version_component(deployment_version: Option<&str>) -> u16 {
+    let Some(deployment_version) = deployment_version.filter(|value| !value.is_empty()) else {
+        return 0;
+    };
+
+    if let Ok(parsed) = deployment_version.parse::<u16>() {
+        return parsed;
+    }
+
+    deployment_version.bytes().fold(0_u16, |accumulator, byte| {
+        accumulator.wrapping_mul(31).wrapping_add(u16::from(byte))
+    })
+}
+
+fn office_addin_manifest_version(deployment_version: Option<&str>) -> String {
+    let (major, minor, patch) = parse_manifest_version_prefix(env!("CARGO_PKG_VERSION"));
+    let deployment = deployment_version_component(deployment_version);
+    format!("{major}.{minor}.{patch}.{deployment}")
+}
+
+fn render_office_addin_manifest(
+    template: &str,
+    base_url: &str,
+    deployment_version: Option<&str>,
+) -> String {
     let office_addin_base_url = format!("{}/office-addin", base_url.trim_end_matches('/'));
     let office_addin_asset_base_url = format!("{office_addin_base_url}/assets");
+    let manifest_version = office_addin_manifest_version(deployment_version);
 
     template
         .replace(OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL, base_url)
         .replace("{{BASE_URL}}", base_url)
         .replace("{{OFFICE_ADDIN_BASE_URL}}", &office_addin_base_url)
+        .replace(OFFICE_ADDIN_MANIFEST_VERSION_PLACEHOLDER, &manifest_version)
         .replace(
             "{{OFFICE_ADDIN_ASSET_BASE_URL}}",
             &office_addin_asset_base_url,
@@ -82,7 +129,7 @@ fn render_office_addin_manifest(template: &str, base_url: &str) -> String {
 /// Get the Office add-in manifest with runtime URL substitutions.
 #[utoipa::path(
     get,
-    path = "/office-addin/manifest.xml",
+    path = "office-addin/manifest.xml",
     params(OfficeAddinManifestQuery),
     responses(
         (status = OK, description = "Rendered Office add-in manifest", body = str, content_type = "application/xml"),
@@ -93,6 +140,7 @@ fn render_office_addin_manifest(template: &str, base_url: &str) -> String {
 )]
 async fn office_addin_manifest(
     State(app_state): State<AppState>,
+    Extension(deployment_version): Extension<DeploymentVersion>,
     headers: HeaderMap,
     Query(query): Query<OfficeAddinManifestQuery>,
 ) -> Response {
@@ -141,7 +189,11 @@ async fn office_addin_manifest(
         }
     };
 
-    let rendered_manifest = render_office_addin_manifest(&manifest_template, &base_url);
+    let rendered_manifest = render_office_addin_manifest(
+        &manifest_template,
+        &base_url,
+        deployment_version.0.as_deref(),
+    );
     (
         [(
             header::CONTENT_TYPE,
@@ -196,12 +248,14 @@ mod tests {
     fn render_office_addin_manifest_rewrites_taskpane_and_asset_urls() {
         let template = r#"
         <OfficeApp>
+          <Version>{{OFFICE_ADDIN_MANIFEST_VERSION}}</Version>
           <IconUrl DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
           <SourceLocation DefaultValue="https://localhost:3002/office-addin/" />
         </OfficeApp>
         "#;
 
-        let rendered = render_office_addin_manifest(template, "https://app.example.com/base");
+        let rendered =
+            render_office_addin_manifest(template, "https://app.example.com/base", Some("42"));
 
         assert!(
             rendered.contains(
@@ -209,7 +263,21 @@ mod tests {
             )
         );
         assert!(rendered.contains("https://app.example.com/base/office-addin/"));
+        assert!(rendered.contains("<Version>0.5.2.42</Version>"));
         assert!(!rendered.contains(OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL));
+    }
+
+    #[test]
+    fn office_addin_manifest_version_hashes_non_numeric_deployment_version() {
+        assert_eq!(
+            office_addin_manifest_version(Some("dev-build")),
+            "0.5.2.15030"
+        );
+    }
+
+    #[test]
+    fn office_addin_manifest_version_defaults_deployment_component_to_zero() {
+        assert_eq!(office_addin_manifest_version(None), "0.5.2.0");
     }
 
     #[test]

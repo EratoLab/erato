@@ -12,7 +12,7 @@
   <Description DefaultValue="Erato AI assistant for Outlook (local development)" />
   <IconUrl DefaultValue="https://localhost:3002/assets/color-icon-192x192.png" />
   <HighResolutionIconUrl DefaultValue="https://localhost:3002/assets/color-icon-192x192.png" />
-  <SupportUrl DefaultValue="https://erato.app" />
+  <SupportUrl DefaultValue="https://erato.chat" />
   <Hosts>
     <Host Name="Mailbox" />
   </Hosts>

@@ -65,3 +65,153 @@ body {
 .office-status--error {
   color: #b91c1c;
 }
+
+.office-setup-page {
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 100%;
+  width: 100%;
+  overflow: auto;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.office-setup-card {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 16px;
+  width: min(100%, 960px);
+  margin-inline: auto;
+  padding: 24px;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+}
+
+.office-setup-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.office-setup-eyebrow {
+  margin: 0;
+  color: #1d4ed8;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.office-setup-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.office-setup-copy {
+  margin: 0;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.office-setup-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #1e293b;
+  line-height: 1.6;
+}
+
+.office-setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.office-setup-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: #0f62fe;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.office-setup-button:hover {
+  background: #0b4fcc;
+}
+
+.office-setup-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.office-setup-button--secondary {
+  border-color: #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+}
+
+.office-setup-button--secondary:hover {
+  background: #f8fafc;
+}
+
+.office-setup-link {
+  color: #0f62fe;
+}
+
+.office-setup-preview-label {
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.office-setup-preview {
+  min-height: 420px;
+  width: 100%;
+  padding: 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family:
+    ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .office-setup-page {
+    padding: 16px;
+  }
+
+  .office-setup-card {
+    padding: 18px;
+  }
+
+  .office-setup-title {
+    font-size: 1.4rem;
+  }
+
+  .office-setup-button {
+    width: 100%;
+  }
+}

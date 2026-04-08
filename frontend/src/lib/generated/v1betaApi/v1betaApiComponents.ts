@@ -18,109 +18,6 @@ type QueryFnOptions = {
   signal?: AbortController["signal"];
 };
 
-export type OfficeAddinManifestQueryParams = {
-  /**
-   * Optional externally reachable deployment base URL used to rewrite the manifest.
-   * Example: https://app.example.com
-   */
-  base_url?: null | undefined;
-};
-
-export type OfficeAddinManifestError = Fetcher.ErrorWrapper<undefined>;
-
-export type OfficeAddinManifestVariables = {
-  queryParams?: OfficeAddinManifestQueryParams;
-} & V1betaApiContext["fetcherOptions"];
-
-export const fetchOfficeAddinManifest = (
-  variables: OfficeAddinManifestVariables,
-  signal?: AbortSignal,
-) =>
-  v1betaApiFetch<
-    undefined,
-    OfficeAddinManifestError,
-    undefined,
-    {},
-    OfficeAddinManifestQueryParams,
-    {}
-  >({
-    url: "//office-addin/manifest.xml",
-    method: "get",
-    ...variables,
-    signal,
-  });
-
-export function officeAddinManifestQuery(
-  variables: OfficeAddinManifestVariables,
-): {
-  queryKey: reactQuery.QueryKey;
-  queryFn: (options: QueryFnOptions) => Promise<undefined>;
-};
-
-export function officeAddinManifestQuery(
-  variables: OfficeAddinManifestVariables | reactQuery.SkipToken,
-): {
-  queryKey: reactQuery.QueryKey;
-  queryFn:
-    | ((options: QueryFnOptions) => Promise<undefined>)
-    | reactQuery.SkipToken;
-};
-
-export function officeAddinManifestQuery(
-  variables: OfficeAddinManifestVariables | reactQuery.SkipToken,
-) {
-  return {
-    queryKey: queryKeyFn({
-      path: "//office-addin/manifest.xml",
-      operationId: "officeAddinManifest",
-      variables,
-    }),
-    queryFn:
-      variables === reactQuery.skipToken
-        ? reactQuery.skipToken
-        : ({ signal }: QueryFnOptions) =>
-            fetchOfficeAddinManifest(variables, signal),
-  };
-}
-
-export const useSuspenseOfficeAddinManifest = <TData = undefined,>(
-  variables: OfficeAddinManifestVariables,
-  options?: Omit<
-    reactQuery.UseQueryOptions<undefined, OfficeAddinManifestError, TData>,
-    "queryKey" | "queryFn" | "initialData"
-  >,
-) => {
-  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
-  return reactQuery.useSuspenseQuery<
-    undefined,
-    OfficeAddinManifestError,
-    TData
-  >({
-    ...officeAddinManifestQuery(deepMerge(fetcherOptions, variables)),
-    ...options,
-    ...queryOptions,
-  });
-};
-
-export const useOfficeAddinManifest = <TData = undefined,>(
-  variables: OfficeAddinManifestVariables | reactQuery.SkipToken,
-  options?: Omit<
-    reactQuery.UseQueryOptions<undefined, OfficeAddinManifestError, TData>,
-    "queryKey" | "queryFn" | "initialData"
-  >,
-) => {
-  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
-  return reactQuery.useQuery<undefined, OfficeAddinManifestError, TData>({
-    ...officeAddinManifestQuery(
-      variables === reactQuery.skipToken
-        ? variables
-        : deepMerge(fetcherOptions, variables),
-    ),
-    ...options,
-    ...queryOptions,
-  });
-};
-
 export type ListAssistantsQueryParams = {
   /**
    * Filter assistants by sharing relation
@@ -4304,12 +4201,105 @@ export const useHealth = <TData = undefined,>(
   });
 };
 
+export type OfficeAddinManifestQueryParams = {
+  /**
+   * Optional externally reachable deployment base URL used to rewrite the manifest.
+   * Example: https://app.example.com
+   */
+  base_url?: null | undefined;
+};
+
+export type OfficeAddinManifestError = Fetcher.ErrorWrapper<undefined>;
+
+export type OfficeAddinManifestVariables = {
+  queryParams?: OfficeAddinManifestQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchOfficeAddinManifest = (
+  variables: OfficeAddinManifestVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    OfficeAddinManifestError,
+    undefined,
+    {},
+    OfficeAddinManifestQueryParams,
+    {}
+  >({ url: "/office-addin/manifest.xml", method: "get", ...variables, signal });
+
+export function officeAddinManifestQuery(
+  variables: OfficeAddinManifestVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<undefined>;
+};
+
+export function officeAddinManifestQuery(
+  variables: OfficeAddinManifestVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<undefined>)
+    | reactQuery.SkipToken;
+};
+
+export function officeAddinManifestQuery(
+  variables: OfficeAddinManifestVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/office-addin/manifest.xml",
+      operationId: "officeAddinManifest",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchOfficeAddinManifest(variables, signal),
+  };
+}
+
+export const useSuspenseOfficeAddinManifest = <TData = undefined,>(
+  variables: OfficeAddinManifestVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<undefined, OfficeAddinManifestError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    undefined,
+    OfficeAddinManifestError,
+    TData
+  >({
+    ...officeAddinManifestQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useOfficeAddinManifest = <TData = undefined,>(
+  variables: OfficeAddinManifestVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<undefined, OfficeAddinManifestError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<undefined, OfficeAddinManifestError, TData>({
+    ...officeAddinManifestQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type QueryOperation =
-  | {
-      path: "//office-addin/manifest.xml";
-      operationId: "officeAddinManifest";
-      variables: OfficeAddinManifestVariables | reactQuery.SkipToken;
-    }
   | {
       path: "/api/v1beta/assistants";
       operationId: "listAssistants";
@@ -4444,4 +4434,9 @@ export type QueryOperation =
       path: "/health";
       operationId: "health";
       variables: HealthVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/office-addin/manifest.xml";
+      operationId: "officeAddinManifest";
+      variables: OfficeAddinManifestVariables | reactQuery.SkipToken;
     };

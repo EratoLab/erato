@@ -5,14 +5,14 @@
   xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
   xsi:type="MailApp">
   <Id>ee94d041-bd77-446c-8854-421648f50e7c</Id>
-  <Version>1.0.0.4</Version>
+  <Version>{{OFFICE_ADDIN_MANIFEST_VERSION}}</Version>
   <ProviderName>Erato</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Erato Office Extension" />
   <Description DefaultValue="Erato AI assistant for Outlook" />
   <IconUrl DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
   <HighResolutionIconUrl DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
-  <SupportUrl DefaultValue="https://erato.app" />
+  <SupportUrl DefaultValue="https://erato.chat" />
   <Hosts>
     <Host Name="Mailbox" />
   </Hosts>

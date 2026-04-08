@@ -11,6 +11,11 @@ export default defineConfig(({ mode }) => {
   const apiProxy =
     apiRootUrl && !apiRootUrl.startsWith("http://localhost:3002")
       ? {
+          "/office-addin/manifest.xml": {
+            target: new URL(apiRootUrl).origin,
+            changeOrigin: true,
+            secure: false,
+          },
           "/api/": {
             target: new URL(apiRootUrl).origin,
             changeOrigin: true,

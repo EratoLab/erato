@@ -7,6 +7,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import App from "./App";
 import { AddinFileSourceSelector } from "./components/AddinFileSourceSelector";
 import { OutlookEratoEmailRenderer } from "./components/OutlookEratoEmailRenderer";
+import { AddinSetupPage } from "./pages/AddinSetupPage";
 componentRegistry.ChatFileSourceSelector = AddinFileSourceSelector;
 componentRegistry.EratoEmailCodeBlock = OutlookEratoEmailRenderer;
 
@@ -21,6 +22,7 @@ ReactDOM.createRoot(rootElement).render(
     <BrowserRouter basename="/office-addin">
       <Routes>
         <Route path="/" element={<App />} />
+        <Route path="/setup" element={<AddinSetupPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
