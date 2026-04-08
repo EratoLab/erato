@@ -1,8 +1,9 @@
 {
-  "action_facets.<key>.allowed_args.[]": {},
-  "action_facets.<key>.display_name": {},
-  "action_facets.<key>.platform": {},
-  "action_facets.<key>.template": {},
+  "action_facets.enable_builtin_ms_office_addin": {},
+  "action_facets.facets.<facet-id>.allowed_args.[]": {},
+  "action_facets.facets.<facet-id>.display_name": {},
+  "action_facets.facets.<facet-id>.platform": {},
+  "action_facets.facets.<facet-id>.template": {},
   "additional_frontend_environment": {
     "deprecated": {
       "note": "Please use `frontend.additional_environment` instead.",

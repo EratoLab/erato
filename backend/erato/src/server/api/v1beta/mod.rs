@@ -598,6 +598,7 @@ pub async fn facets(
     let mut action_facets: Vec<ActionFacetInfo> = app_state
         .config
         .action_facets
+        .facets
         .iter()
         .map(|(id, af)| ActionFacetInfo {
             id: id.clone(),

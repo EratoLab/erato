@@ -2134,7 +2134,15 @@ Clients send an `action_facet` object (containing `id` and `args`) alongside the
 
 **Note:** Action facet prompts are per-request and ephemeral. They do not replace or suppress any other prompt in the composition pipeline — the base system prompt is always preserved regardless of whether an action facet is active.
 
-#### `action_facets.<id>`
+#### `action_facets.enable_builtin_ms_office_addin`
+
+Whether to inject the builtin Outlook action facets used by the Microsoft Office add-in.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
+#### `action_facets.facets.<id>`
 
 Map of action facet configurations, keyed by action facet id. Each action facet defines a prompt template with declared argument variables.
 
@@ -2143,7 +2151,7 @@ Map of action facet configurations, keyed by action facet id. Each action facet 
 **Example:**
 
 ```toml
-[action_facets.excel_rewrite_selection]
+[action_facets.facets.excel_rewrite_selection]
 display_name = "Excel Rewrite Selection"
 platform = "excel"
 template = """
@@ -2154,6 +2162,11 @@ Rewrite the following selected content:
 """
 allowed_args = ["sheet_name", "selection_type", "selected_text"]
 ```
+
+When `action_facets.enable_builtin_ms_office_addin = true`, the backend also injects these builtin Outlook action facets unless the same IDs are explicitly configured under `action_facets.facets`:
+
+- `outlook_rewrite_selection`
+- `outlook_review_draft`
 
 Each action facet supports these fields:
 

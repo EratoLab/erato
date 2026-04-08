@@ -39,6 +39,22 @@ Output format:
 - Return only the optimized prompt as plain text.
 - No headings, no bullet points, no quotes, no explanations."#;
 
+const BUILTIN_OUTLOOK_REWRITE_SELECTION_TEMPLATE: &str = r#"
+FOR THIS MESSAGE ONLY: The user has selected the following text from the email {{source_property}} they are composing:
+
+{{selected_text}}
+
+Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs. For this reply only, output the rewrite inside a fenced code block with language tag erato-email. The block must contain only the replacement text - no explanations, labels, or markdown inside the block. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
+"#;
+
+const BUILTIN_OUTLOOK_REVIEW_DRAFT_TEMPLATE: &str = r#"
+FOR THIS MESSAGE ONLY: The user is composing an email (format: {{body_format}}). The full draft body is:
+
+{{full_body}}
+
+For this reply only, output specific rewrite suggestions inside fenced code blocks with language tag erato-email. For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
+"#;
+
 #[derive(Debug, Clone, PartialEq, Eq, Facet)]
 #[facet(untagged)]
 #[repr(C)]
@@ -212,7 +228,7 @@ pub struct AppConfig {
 
     // Action facet definitions.
     #[serde(default)]
-    pub action_facets: HashMap<String, ActionFacetConfig>,
+    pub action_facets: ActionFacetsConfig,
 
     #[serde(default)]
     pub chat_sharing: ChatSharingConfig,
@@ -424,6 +440,7 @@ impl AppConfig {
 
         // Migrate single chat_provider to new chat_providers structure and handle Azure OpenAI migration
         config = config.migrate_chat_providers();
+        config.action_facets.inject_builtin_ms_office_addin_facets();
 
         // Validate chat providers configuration
         if let Err(e) = config.validate_chat_providers() {
@@ -471,7 +488,7 @@ impl AppConfig {
         }
 
         // Validate action facets configuration
-        for (id, action_facet) in &config.action_facets {
+        for (id, action_facet) in &config.action_facets.facets {
             if action_facet.template.is_empty() {
                 panic!(
                     "Action facet '{}' has an empty template. Please provide a non-empty template.",
@@ -1648,6 +1665,69 @@ pub struct ExperimentalFacetsConfig {
     // Facets that should be selected by default in the frontend.
     #[serde(default)]
     pub default_selected_facets: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Default, Facet)]
+pub struct ActionFacetsConfig {
+    // Map of action facet id to action facet configuration.
+    pub facets: HashMap<String, ActionFacetConfig>,
+
+    // Enables the builtin Outlook action facets for the Microsoft Office add-in.
+    pub enable_builtin_ms_office_addin: bool,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct ActionFacetsConfigInput {
+    #[serde(default)]
+    facets: HashMap<String, ActionFacetConfig>,
+    #[serde(default)]
+    enable_builtin_ms_office_addin: bool,
+    #[serde(flatten)]
+    legacy_facets: HashMap<String, ActionFacetConfig>,
+}
+
+impl<'de> Deserialize<'de> for ActionFacetsConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        let input = ActionFacetsConfigInput::deserialize(deserializer)?;
+        let mut facets = input.legacy_facets;
+        facets.extend(input.facets);
+
+        Ok(Self {
+            facets,
+            enable_builtin_ms_office_addin: input.enable_builtin_ms_office_addin,
+        })
+    }
+}
+
+impl ActionFacetsConfig {
+    fn inject_builtin_ms_office_addin_facets(&mut self) {
+        if !self.enable_builtin_ms_office_addin {
+            return;
+        }
+
+        self.facets
+            .entry("outlook_rewrite_selection".to_string())
+            .or_insert_with(|| ActionFacetConfig {
+                display_name: "Outlook Rewrite Selection".to_string(),
+                platform: Some("outlook".to_string()),
+                template: BUILTIN_OUTLOOK_REWRITE_SELECTION_TEMPLATE
+                    .trim()
+                    .to_string(),
+                allowed_args: vec!["selected_text".to_string(), "source_property".to_string()],
+            });
+
+        self.facets
+            .entry("outlook_review_draft".to_string())
+            .or_insert_with(|| ActionFacetConfig {
+                display_name: "Outlook Review Draft".to_string(),
+                platform: Some("outlook".to_string()),
+                template: BUILTIN_OUTLOOK_REVIEW_DRAFT_TEMPLATE.trim().to_string(),
+                allowed_args: vec!["full_body".to_string(), "body_format".to_string()],
+            });
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
