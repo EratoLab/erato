@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const INTEGRATED_APPS_URL =
   "https://admin.cloud.microsoft/?#/Settings/IntegratedApps";
@@ -7,10 +7,15 @@ function getManifestUrl(): string {
   return new URL("manifest.xml", window.location.href).toString();
 }
 
+function getSpaRedirectUri(): string {
+  return `brk-multihub://${window.location.host}`;
+}
+
 export function AddinSetupPage() {
   const [manifestXml, setManifestXml] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const spaRedirectUri = getSpaRedirectUri();
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -78,6 +83,10 @@ export function AddinSetupPage() {
         </div>
 
         <ol className="office-setup-steps">
+          <li>
+            In the Entra ID app registration, add the SPA redirect URI:
+            <CopyableCodeField content={spaRedirectUri} />
+          </li>
           <li>Review the generated manifest XML below.</li>
           <li>
             Download it as <code>manifest.xml</code>.
@@ -132,6 +141,37 @@ export function AddinSetupPage() {
           value={isLoading ? "Loading manifest..." : manifestXml}
           spellCheck={false}
         />
+      </div>
+    </div>
+  );
+}
+
+function CopyableCodeField({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    void navigator.clipboard
+      .writeText(content)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {
+        // ignore clipboard errors
+      });
+  }, [content]);
+
+  return (
+    <div className="office-setup-code-field">
+      <div className="office-setup-code-value">{content}</div>
+      <div className="office-setup-code-actions">
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="office-setup-code-button"
+        >
+          {copied ? "Copied!" : "Copy"}
+        </button>
       </div>
     </div>
   );

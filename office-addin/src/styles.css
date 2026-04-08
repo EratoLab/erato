@@ -120,10 +120,15 @@ body {
 }
 
 .office-setup-steps {
+  list-style: decimal;
   margin: 0;
   padding-left: 1.25rem;
   color: #1e293b;
   line-height: 1.6;
+}
+
+.office-setup-steps li + li {
+  margin-top: 0.35rem;
 }
 
 .office-setup-actions {
@@ -173,6 +178,46 @@ body {
 
 .office-setup-link {
   color: #0f62fe;
+}
+
+.office-setup-code-field {
+  margin-top: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.office-setup-code-value {
+  margin-bottom: 10px;
+  color: #0f172a;
+  font-family:
+    ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.office-setup-code-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.office-setup-code-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.office-setup-code-button:hover {
+  background: #e2e8f0;
 }
 
 .office-setup-preview-label {
