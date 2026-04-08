@@ -2050,7 +2050,7 @@ async fn test_abort_stream_persists_partial_message(pool: Pool<Postgres>) {
 
 /// Helper to set up an app with action facets configured.
 fn add_action_facets(app_config: &mut erato::config::AppConfig) {
-    app_config.action_facets.insert(
+    app_config.action_facets.facets.insert(
         "rewrite".to_string(),
         ActionFacetConfig {
             display_name: "Rewrite".to_string(),

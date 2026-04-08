@@ -1136,6 +1136,7 @@ pub(crate) fn is_known_platform(config: &crate::config::AppConfig, platform: &st
 
     config
         .action_facets
+        .facets
         .values()
         .filter_map(|af| af.platform.as_deref())
         .any(|p| p == platform)
@@ -1150,6 +1151,7 @@ pub(crate) fn warn_unknown_platform(config: &crate::config::AppConfig, platform:
             platform,
             config
                 .action_facets
+                .facets
                 .values()
                 .filter_map(|af| af.platform.as_deref())
                 .collect::<Vec<_>>()
@@ -1173,7 +1175,7 @@ pub(crate) fn validate_action_facet(
         return Ok(());
     };
 
-    let Some(af_config) = config.action_facets.get(&af.id) else {
+    let Some(af_config) = config.action_facets.facets.get(&af.id) else {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
             format!("Unknown action facet: {}", af.id),
@@ -1526,7 +1528,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         me_profile_input.user_preference_assistant_custom_instructions,
         me_profile_input.user_preference_assistant_additional_information,
         Some(&facet_tool_expansions),
-        &app_state.config.action_facets,
+        &app_state.config.action_facets.facets,
     )
     .await?;
 
@@ -3175,7 +3177,7 @@ mod tests {
 
         fn config_with_facet(id: &str, af: ActionFacetConfig) -> AppConfig {
             let mut config = AppConfig::default();
-            config.action_facets.insert(id.to_string(), af);
+            config.action_facets.facets.insert(id.to_string(), af);
             config
         }
 
@@ -3339,7 +3341,7 @@ mod tests {
 
         fn config_with_outlook() -> AppConfig {
             let mut config = AppConfig::default();
-            config.action_facets.insert(
+            config.action_facets.facets.insert(
                 "outlook_rewrite".to_string(),
                 ActionFacetConfig {
                     display_name: "Rewrite".to_string(),
@@ -3393,7 +3395,7 @@ mod tests {
         #[test]
         fn action_facet_without_platform_does_not_add_known_values() {
             let mut config = AppConfig::default();
-            config.action_facets.insert(
+            config.action_facets.facets.insert(
                 "generic".to_string(),
                 ActionFacetConfig {
                     display_name: "Generic".to_string(),
