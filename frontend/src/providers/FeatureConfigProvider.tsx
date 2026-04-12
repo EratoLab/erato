@@ -26,6 +26,8 @@ interface ChatInputFeatureConfig {
   autofocus: boolean;
   /** Layout of the chat input before a conversation has started */
   emptyStateLayout: "bottom" | "centered";
+  /** Whether to show the AI usage advisory below the chat input */
+  showUsageAdvisory: boolean;
 }
 
 /**
@@ -135,6 +137,10 @@ export interface FeatureConfig {
   chatSharing: ChatSharingFeatureConfig;
 }
 
+type FeatureConfigOverrides = {
+  [K in keyof FeatureConfig]?: Partial<FeatureConfig[K]>;
+};
+
 const FeatureConfigContext = createContext<FeatureConfig | null>(null);
 
 export const defaultStaticFeatureConfig: FeatureConfig = {
@@ -146,6 +152,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   chatInput: {
     autofocus: true,
     emptyStateLayout: "bottom",
+    showUsageAdvisory: true,
   },
   auth: {
     showLogout: false,
@@ -214,6 +221,7 @@ function createFeatureConfig(
     chatInput: {
       autofocus: !environment.disableChatInputAutofocus,
       emptyStateLayout: environment.chatInputEmptyStateLayout,
+      showUsageAdvisory: true,
     },
     auth: {
       showLogout: !environment.disableLogout,
@@ -252,7 +260,7 @@ function createFeatureConfig(
   };
 }
 
-function mergeFeatureConfig(overrides?: Partial<FeatureConfig>): FeatureConfig {
+function mergeFeatureConfig(overrides?: FeatureConfigOverrides): FeatureConfig {
   if (!overrides) {
     return defaultStaticFeatureConfig;
   }
@@ -317,7 +325,7 @@ export function FeatureConfigProvider({
   config,
 }: {
   children: ReactNode;
-  config?: Partial<FeatureConfig>;
+  config?: FeatureConfigOverrides;
 }) {
   const resolvedConfig = useMemo<FeatureConfig>(
     () => (config ? mergeFeatureConfig(config) : createFeatureConfig(env())),
@@ -336,7 +344,7 @@ export function StaticFeatureConfigProvider({
   config,
 }: {
   children: ReactNode;
-  config?: Partial<FeatureConfig>;
+  config?: FeatureConfigOverrides;
 }) {
   const mergedConfig = useMemo(() => mergeFeatureConfig(config), [config]);
 

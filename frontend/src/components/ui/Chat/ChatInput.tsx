@@ -190,7 +190,8 @@ export const ChatInput = ({
 
   // Get feature configurations
   const { enabled: uploadEnabled } = useUploadFeature();
-  const { autofocus: shouldAutofocus } = useChatInputFeature();
+  const { autofocus: shouldAutofocus, showUsageAdvisory = true } =
+    useChatInputFeature();
   // Dummy for i18n:extract
   const _aiUsageAdvisoryDefault = t({
     id: "chat.ai_usage_advisory",
@@ -995,7 +996,7 @@ export const ChatInput = ({
           )}
         </div>
       </form>
-      {aiUsageAdvisory && (
+      {showUsageAdvisory && aiUsageAdvisory && (
         <div className="relative h-10">
           <p className="absolute inset-0 flex items-center justify-center text-center text-xs text-theme-fg-muted">
             {aiUsageAdvisory}

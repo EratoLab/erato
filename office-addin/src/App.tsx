@@ -54,7 +54,9 @@ export default function App() {
         initialThemeMode="light"
         persistThemeMode={false}
       >
-        <FeatureConfigProvider>
+        <FeatureConfigProvider
+          config={{ chatInput: { showUsageAdvisory: false } }}
+        >
           <ApiProvider enableDevtools={false}>
             <OfficeProvider>
               <MsalNaaProvider>
