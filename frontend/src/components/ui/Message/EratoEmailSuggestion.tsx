@@ -1,7 +1,8 @@
 import { t } from "@lingui/core/macro";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
+import { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 
 import type { EratoEmailCodeBlockProps } from "@/config/componentRegistry";
 
@@ -12,8 +13,15 @@ import type { EratoEmailCodeBlockProps } from "@/config/componentRegistry";
  * The Office addin registers a richer version via componentRegistry that
  * adds "Replace Selection" and "Insert at Cursor" buttons.
  */
-function DefaultEratoEmailCodeBlock({ content }: EratoEmailCodeBlockProps) {
+function DefaultEratoEmailCodeBlock({
+  content,
+  isHtml,
+}: EratoEmailCodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const previewHtml = useMemo(
+    () => sanitizeHtmlPreview(content),
+    [content],
+  );
 
   const handleCopy = useCallback(() => {
     void navigator.clipboard
@@ -29,7 +37,14 @@ function DefaultEratoEmailCodeBlock({ content }: EratoEmailCodeBlockProps) {
 
   return (
     <div className="my-2 rounded-lg border border-theme-border bg-theme-bg-secondary p-3">
-      <div className="mb-2 whitespace-pre-wrap text-sm">{content}</div>
+      {isHtml ? (
+        <div
+          className="mb-2 text-sm [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
+          dangerouslySetInnerHTML={{ __html: previewHtml }}
+        />
+      ) : (
+        <div className="mb-2 whitespace-pre-wrap text-sm">{content}</div>
+      )}
       <div className="flex gap-2">
         <button
           type="button"
@@ -53,5 +68,5 @@ export function EratoEmailSuggestion({
     return <CustomRenderer content={content} isHtml={isHtml} />;
   }
 
-  return <DefaultEratoEmailCodeBlock content={content} />;
+  return <DefaultEratoEmailCodeBlock content={content} isHtml={isHtml} />;
 }

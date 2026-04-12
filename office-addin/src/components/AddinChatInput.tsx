@@ -19,6 +19,7 @@ import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection"
 import { useOutlookEmailSource } from "../hooks/useOutlookEmailSource";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { getComposeBodyType } from "../utils/outlookComposeWrite";
 
 interface AddinChatInputProps {
   onSendMessage: (
@@ -153,6 +154,7 @@ export const AddinChatInput = forwardRef<
     ) => {
       // Build action facet payload: selection-based rewrite or full-body review
       let actionFacet: ActionFacetRequest | undefined;
+      const bodyFormat = mailItem ? await getComposeBodyType() : undefined;
 
       if (hasActiveSelection) {
         actionFacet = {
@@ -160,16 +162,19 @@ export const AddinChatInput = forwardRef<
           args: {
             selected_text: composeSelection.data,
             source_property: composeSelection.sourceProperty,
+            ...(bodyFormat ? { body_format: bodyFormat } : {}),
           },
         };
       } else if (mailItem?.bodyText || mailItem?.bodyHtml) {
-        const fullBody = mailItem.bodyText ?? mailItem.bodyHtml ?? "";
-        const bodyFormat = mailItem.bodyHtml ? "html" : "text";
+        const fullBody =
+          bodyFormat === "html"
+            ? mailItem.bodyHtml ?? mailItem.bodyText ?? ""
+            : mailItem.bodyText ?? mailItem.bodyHtml ?? "";
         actionFacet = {
           id: "outlook_review_draft",
           args: {
             full_body: fullBody,
-            body_format: bodyFormat,
+            body_format: bodyFormat ?? "text",
           },
         };
       }

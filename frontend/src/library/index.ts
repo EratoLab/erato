@@ -98,6 +98,7 @@ export {
   type EratoEmailCodeBlockProps,
 } from "@/config/componentRegistry";
 export { createLogger } from "@/utils/debugLogger";
+export { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
 export {
   extractTextFromContent,
   parseContent,
