@@ -137,6 +137,10 @@ export interface FeatureConfig {
   chatSharing: ChatSharingFeatureConfig;
 }
 
+type FeatureConfigOverrides = {
+  [K in keyof FeatureConfig]?: Partial<FeatureConfig[K]>;
+};
+
 const FeatureConfigContext = createContext<FeatureConfig | null>(null);
 
 export const defaultStaticFeatureConfig: FeatureConfig = {
@@ -256,7 +260,7 @@ function createFeatureConfig(
   };
 }
 
-function mergeFeatureConfig(overrides?: Partial<FeatureConfig>): FeatureConfig {
+function mergeFeatureConfig(overrides?: FeatureConfigOverrides): FeatureConfig {
   if (!overrides) {
     return defaultStaticFeatureConfig;
   }
@@ -321,7 +325,7 @@ export function FeatureConfigProvider({
   config,
 }: {
   children: ReactNode;
-  config?: Partial<FeatureConfig>;
+  config?: FeatureConfigOverrides;
 }) {
   const resolvedConfig = useMemo<FeatureConfig>(
     () => (config ? mergeFeatureConfig(config) : createFeatureConfig(env())),
@@ -340,7 +344,7 @@ export function StaticFeatureConfigProvider({
   config,
 }: {
   children: ReactNode;
-  config?: Partial<FeatureConfig>;
+  config?: FeatureConfigOverrides;
 }) {
   const mergedConfig = useMemo(() => mergeFeatureConfig(config), [config]);
 

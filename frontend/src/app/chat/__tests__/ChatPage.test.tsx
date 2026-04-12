@@ -258,6 +258,12 @@ describe("ChatPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     componentRegistry.ChatWelcomeScreen = null;
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    });
 
     // Setup useChatContext mock
     (useChatContext as unknown as ReturnType<typeof vi.fn>).mockImplementation(
@@ -547,7 +553,11 @@ describe("ChatPage", () => {
       <TestWrapper>
         <StaticFeatureConfigProvider
           config={{
-            chatInput: { autofocus: true, emptyStateLayout: "centered" },
+            chatInput: {
+              autofocus: true,
+              emptyStateLayout: "centered",
+              showUsageAdvisory: true,
+            },
           }}
         >
           <ChatPageStructure>
@@ -600,7 +610,11 @@ describe("ChatPage", () => {
       <TestWrapper>
         <StaticFeatureConfigProvider
           config={{
-            chatInput: { autofocus: true, emptyStateLayout: "centered" },
+            chatInput: {
+              autofocus: true,
+              emptyStateLayout: "centered",
+              showUsageAdvisory: true,
+            },
           }}
         >
           <ChatPageStructure>

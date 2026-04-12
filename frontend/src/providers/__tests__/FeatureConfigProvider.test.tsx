@@ -26,7 +26,9 @@ import type { ReactNode } from "react";
 const mockEnv = env as ReturnType<typeof vi.fn>;
 
 // Helper to create wrapper with provider
-function createWrapper(config?: Parameters<typeof FeatureConfigProvider>[0]["config"]) {
+function createWrapper(
+  config?: Parameters<typeof FeatureConfigProvider>[0]["config"],
+) {
   // eslint-disable-next-line react/display-name
   return ({ children }: { children: ReactNode }) => (
     <FeatureConfigProvider config={config}>{children}</FeatureConfigProvider>
