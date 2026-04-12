@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { sanitizeHtmlPreview } from "@erato/frontend/library";
+import { useCallback, useMemo, useState } from "react";
 
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { replaceComposeSelection } from "../utils/outlookComposeWrite";
@@ -26,6 +27,10 @@ export function OutlookEratoEmailRenderer({
     "idle" | "inserting" | "done" | "copied" | "error"
   >("idle");
   const isBusy = status === "inserting";
+  const previewHtml = useMemo(
+    () => (isHtml ? sanitizeHtmlPreview(content) : null),
+    [content, isHtml],
+  );
 
   const handleInsert = useCallback(async () => {
     setStatus("inserting");
@@ -60,7 +65,16 @@ export function OutlookEratoEmailRenderer({
 
   return (
     <div className="my-2 rounded-lg border border-theme-border bg-theme-bg-secondary p-3">
-      <div className="mb-2 whitespace-pre-wrap text-sm">{content}</div>
+      {isHtml ? (
+        <div
+          className="mb-2 text-sm [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
+          // Sanitized with DOMPurify before rendering.
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: previewHtml ?? "" }}
+        />
+      ) : (
+        <div className="mb-2 whitespace-pre-wrap text-sm">{content}</div>
+      )}
       <div className="flex gap-2">
         <button
           type="button"

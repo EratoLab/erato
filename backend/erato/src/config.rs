@@ -40,11 +40,17 @@ Output format:
 - No headings, no bullet points, no quotes, no explanations."#;
 
 const BUILTIN_OUTLOOK_REWRITE_SELECTION_TEMPLATE: &str = r#"
-FOR THIS MESSAGE ONLY: The user has selected the following text from the email {{source_property}} they are composing:
+FOR THIS MESSAGE ONLY: The user is composing an email in {{body_format}} format and has selected the following text from the email {{source_property}}:
 
 {{selected_text}}
 
-Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs. For this reply only, output the rewrite inside a fenced code block with language tag erato-email. The block must contain only the replacement text - no explanations, labels, or markdown inside the block. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
+Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs.
+
+If {{body_format}} is "text", output the rewrite inside exactly one fenced code block with language tag erato-email. The block must contain only plain text replacement content - no HTML tags, no explanations, no labels, and no markdown inside the block.
+
+If {{body_format}} is "html", output the rewrite inside exactly one fenced code block with language tag erato-email-html. The block must contain only a simple HTML fragment suitable for inserting into an existing Outlook email body - no markdown, no explanations, no labels, and no full document wrappers such as <html> or <body>.
+
+Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
 "#;
 
 const BUILTIN_OUTLOOK_REVIEW_DRAFT_TEMPLATE: &str = r#"
@@ -52,7 +58,12 @@ FOR THIS MESSAGE ONLY: The user is composing an email (format: {{body_format}}).
 
 {{full_body}}
 
-For this reply only, output specific rewrite suggestions inside fenced code blocks with language tag erato-email. For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
+For this reply only:
+
+- If {{body_format}} is "text", output specific rewrite suggestions inside fenced code blocks with language tag erato-email. Each such block must contain only plain text suggestion content - no HTML tags, no labels, and no markdown inside the block.
+- If {{body_format}} is "html", output specific rewrite suggestions inside fenced code blocks with language tag erato-email-html. Each such block must contain only a simple HTML fragment suitable for inserting into an existing Outlook email body - no labels, no markdown inside the block, and no full document wrappers such as <html> or <body>.
+
+For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
 "#;
 
 #[derive(Debug, Clone, PartialEq, Eq, Facet)]
@@ -1716,7 +1727,11 @@ impl ActionFacetsConfig {
                 template: BUILTIN_OUTLOOK_REWRITE_SELECTION_TEMPLATE
                     .trim()
                     .to_string(),
-                allowed_args: vec!["selected_text".to_string(), "source_property".to_string()],
+                allowed_args: vec![
+                    "selected_text".to_string(),
+                    "source_property".to_string(),
+                    "body_format".to_string(),
+                ],
             });
 
         self.facets
