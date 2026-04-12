@@ -44,7 +44,7 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
   const [loginHint, setLoginHint] = useState<string | undefined>();
 
   useEffect(() => {
-    const clientId = env().msalClientId;
+    const clientId = import.meta.env.VITE_MSAL_CLIENT_ID ?? env().msalClientId;
     if (!clientId) {
       setError("MSAL client ID is not configured");
       setIsInitialized(true);
@@ -72,7 +72,9 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
     }
 
     const authority =
-      env().msalAuthority ?? "https://login.microsoftonline.com/common";
+      import.meta.env.VITE_MSAL_AUTHORITY ??
+      env().msalAuthority ??
+      "https://login.microsoftonline.com/common";
 
     const msalConfig = {
       auth: {
