@@ -110,6 +110,12 @@ describe("ChatInput", () => {
     vi.clearAllMocks();
     componentRegistry.ChatInputAttachmentPreview = null;
     componentRegistry.ChatTopLeftAccessory = null;
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    });
 
     const { i18n } = await import("@lingui/core");
     i18n.load("en", enMessages as unknown as Messages);
@@ -123,7 +129,10 @@ describe("ChatInput", () => {
     });
 
     mockUseUploadFeature.mockReturnValue({ enabled: false });
-    mockUseChatInputFeature.mockReturnValue({ autofocus: false });
+    mockUseChatInputFeature.mockReturnValue({
+      autofocus: false,
+      showUsageAdvisory: true,
+    });
     mockUseOptionalTranslation.mockReturnValue(null);
     mockUseActiveModelSelection.mockReturnValue({
       availableModels: [],
@@ -218,6 +227,60 @@ describe("ChatInput", () => {
 
     expect(textarea).toHaveFocus();
     otherButton.remove();
+  });
+
+  it("renders the AI usage advisory when enabled", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const onSendMessage = vi.fn();
+    const advisory =
+      "You are interacting with an AI chatbot. Generated answers may contain factual errors and should be verified before use.";
+
+    mockUseOptionalTranslation.mockReturnValue(advisory);
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText(advisory)).toBeInTheDocument();
+  });
+
+  it("hides the AI usage advisory when disabled by feature config", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const onSendMessage = vi.fn();
+    const advisory =
+      "You are interacting with an AI chatbot. Generated answers may contain factual errors and should be verified before use.";
+
+    mockUseChatInputFeature.mockReturnValue({
+      autofocus: false,
+      showUsageAdvisory: false,
+    });
+    mockUseOptionalTranslation.mockReturnValue(advisory);
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByText(advisory)).not.toBeInTheDocument();
   });
 
   it("uses externally controlled model selection when provided", async () => {

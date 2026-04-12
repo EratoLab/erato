@@ -26,6 +26,8 @@ interface ChatInputFeatureConfig {
   autofocus: boolean;
   /** Layout of the chat input before a conversation has started */
   emptyStateLayout: "bottom" | "centered";
+  /** Whether to show the AI usage advisory below the chat input */
+  showUsageAdvisory: boolean;
 }
 
 /**
@@ -146,6 +148,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   chatInput: {
     autofocus: true,
     emptyStateLayout: "bottom",
+    showUsageAdvisory: true,
   },
   auth: {
     showLogout: false,
@@ -214,6 +217,7 @@ function createFeatureConfig(
     chatInput: {
       autofocus: !environment.disableChatInputAutofocus,
       emptyStateLayout: environment.chatInputEmptyStateLayout,
+      showUsageAdvisory: true,
     },
     auth: {
       showLogout: !environment.disableLogout,

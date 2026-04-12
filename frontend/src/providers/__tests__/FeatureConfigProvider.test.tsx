@@ -26,10 +26,10 @@ import type { ReactNode } from "react";
 const mockEnv = env as ReturnType<typeof vi.fn>;
 
 // Helper to create wrapper with provider
-function createWrapper() {
+function createWrapper(config?: Parameters<typeof FeatureConfigProvider>[0]["config"]) {
   // eslint-disable-next-line react/display-name
   return ({ children }: { children: ReactNode }) => (
-    <FeatureConfigProvider>{children}</FeatureConfigProvider>
+    <FeatureConfigProvider config={config}>{children}</FeatureConfigProvider>
   );
 }
 
@@ -103,6 +103,7 @@ describe("FeatureConfigProvider", () => {
         chatInput: {
           autofocus: true,
           emptyStateLayout: "bottom",
+          showUsageAdvisory: true,
         },
         chatSharing: {
           enabled: false,
@@ -204,7 +205,22 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current.upload.enabled).toBe(true);
       expect(result.current.chatInput.autofocus).toBe(false);
+      expect(result.current.chatInput.showUsageAdvisory).toBe(true);
       expect(result.current.auth.showLogout).toBe(true);
+    });
+
+    it("should allow overriding chat input advisory visibility", () => {
+      const { result } = renderHook(() => useFeatureConfig(), {
+        wrapper: createWrapper({
+          chatInput: { showUsageAdvisory: false },
+        }),
+      });
+
+      expect(result.current.chatInput).toEqual({
+        autofocus: true,
+        emptyStateLayout: "bottom",
+        showUsageAdvisory: false,
+      });
     });
 
     it("should return config with logout hidden when disableLogout is true", () => {
@@ -359,6 +375,7 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         autofocus: true,
         emptyStateLayout: "bottom",
+        showUsageAdvisory: true,
       });
     });
 
