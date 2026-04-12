@@ -168,8 +168,8 @@ export const AddinChatInput = forwardRef<
       } else if (mailItem?.bodyText || mailItem?.bodyHtml) {
         const fullBody =
           bodyFormat === "html"
-            ? mailItem.bodyHtml ?? mailItem.bodyText ?? ""
-            : mailItem.bodyText ?? mailItem.bodyHtml ?? "";
+            ? (mailItem.bodyHtml ?? mailItem.bodyText ?? "")
+            : (mailItem.bodyText ?? mailItem.bodyHtml ?? "");
         actionFacet = {
           id: "outlook_review_draft",
           args: {
@@ -244,8 +244,7 @@ export const AddinChatInput = forwardRef<
       composeSelection.data,
       composeSelection.sourceProperty,
       hasActiveSelection,
-      mailItem?.bodyText,
-      mailItem?.bodyHtml,
+      mailItem,
       resolveSelectedFilesForSend,
       shouldUseSuggestedEmailSource,
     ],

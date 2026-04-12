@@ -18,10 +18,7 @@ function DefaultEratoEmailCodeBlock({
   isHtml,
 }: EratoEmailCodeBlockProps) {
   const [copied, setCopied] = useState(false);
-  const previewHtml = useMemo(
-    () => sanitizeHtmlPreview(content),
-    [content],
-  );
+  const previewHtml = useMemo(() => sanitizeHtmlPreview(content), [content]);
 
   const handleCopy = useCallback(() => {
     void navigator.clipboard
@@ -40,6 +37,8 @@ function DefaultEratoEmailCodeBlock({
       {isHtml ? (
         <div
           className="mb-2 text-sm [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
+          // Sanitized with DOMPurify before rendering.
+          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: previewHtml }}
         />
       ) : (

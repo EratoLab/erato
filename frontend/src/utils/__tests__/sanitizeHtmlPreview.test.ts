@@ -18,8 +18,8 @@ describe("sanitizeHtmlPreview", () => {
   });
 
   it("removes unsafe href values", () => {
-    expect(
-      sanitizeHtmlPreview('<a href="javascript:alert(1)">Click</a>'),
-    ).toBe("<a>Click</a>");
+    expect(sanitizeHtmlPreview('<a href="javascript:alert(1)">Click</a>')).toBe(
+      "<a>Click</a>",
+    );
   });
 });
