@@ -23,3 +23,4 @@
 0020_add_share_links_table 2026-03-25T13:13:19Z System Administrator <root@localhost> # Add share_links table
 0021_add_input_parameters_to_messages 2026-03-31T00:00:00Z System Administrator <root@localhost> # Add input_parameters to messages for user-provided context
 0022_add_mcp_server_oauth_tables 2026-04-02T00:00:00Z System Administrator <root@localhost> # Add MCP server oauth persistence tables
+0023_optimize_active_thread_siblings_constraint 2026-04-13T00:00:00Z System Administrator <root@localhost> # Optimize active thread sibling constraint
