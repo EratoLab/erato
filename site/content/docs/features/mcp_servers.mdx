@@ -1,6 +1,6 @@
 # MCP Servers
 
-Erato supports connecting to MCP (Model Context Protocol) servers, allowing you to extend the capabilities of your AI assistant with custom tools and integrations.
+Erato supports connecting to [MCP (Model Context Protocol)](https://modelcontextprotocol.io/specification/2025-11-25) servers, allowing you to extend the capabilities of your AI assistant with custom tools and integrations.
 
 ## Overview
 
@@ -31,6 +31,8 @@ For services that don't natively support MCP, there is still the option of using
 Standalone MCP servers are also the common option for MCP servers that provide tools that are unrelated to data storage (e.g. a file conversion tool).
 
 Integrating a standalone MCP server with an Erato deployment usually involves deploying the MCP server and Erato seperately and then configuring Erato to connect to the MCP server.
+
+If you are building your own MCP server, prefer `oauth2` as the authentication mechanism when possible. It is the best fit for user-scoped authorization in Erato and avoids relying on shared credentials or forwarded session tokens.
 
 ## Capabilities
 
@@ -102,6 +104,48 @@ See the [Configuration Reference](../configuration#mcp_servers) for detailed con
 
 **Session timeout guidance:** If an MCP server allocates a lot of resources per session, set `mcp_servers_global.max_session_idle_seconds` (or that server's `max_session_idle_seconds`) to a low value so idle sessions are cleaned up quickly.
 
+## Access to MCP servers
+
+Authentication controls how Erato connects to an MCP server. Access control decides which users are allowed to see and use that server in the first place.
+
+Erato uses `mcp_server_permissions.rules` for this. These rules are evaluated by the same policy engine used for other configuration-backed resources.
+
+### How rules work
+
+- If no `mcp_server_permissions` are configured, all authenticated users can access all configured MCP servers.
+- Each rule targets one or more MCP servers via `mcp_server_ids`.
+- Rules are evaluated independently. If any rule grants access to a given server, the user can use it.
+- `allow-all` grants access to the listed MCP servers for every authenticated user.
+- `allow-for-group-members` grants access only when the user belongs to at least one of the configured `groups`.
+
+Group membership is taken from the `groups` claim in the user's ID token. See [SSO / OIDC](./sso_oidc) for the authentication setup behind that.
+
+### Example
+
+```toml
+[mcp_server_permissions.rules.default_tools]
+rule_type = "allow-all"
+mcp_server_ids = ["filesystem", "company-search"]
+
+[mcp_server_permissions.rules.engineering_tools]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["internal-git", "kubernetes"]
+groups = ["engineering", "platform-team"]
+
+[mcp_server_permissions.rules.finance_tools]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["finance-reports"]
+groups = ["finance", "leadership"]
+```
+
+With this setup:
+
+- All users can access `filesystem` and `company-search`.
+- Only users in `engineering` or `platform-team` can access `internal-git` and `kubernetes`.
+- Only users in `finance` or `leadership` can access `finance-reports`.
+
+This affects which MCP servers can be attached to assistants and which servers are available during generation for a given user.
+
 ## Deployment Considerations
 
 When deploying Erato with MCP servers:
@@ -117,25 +161,14 @@ For Kubernetes/Helm deployments, you can use the multi-configuration file suppor
 
 The MCP standard features the following transport protocols:
 
-### Server-Sent Events (SSE, aka HTTP+SSE)
-
-[Section in MCP specification](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#http-with-sse)
-
-For Erato, this is currently the recommended transport protocol for connecting with MCP servers.
-
-The SSE transport uses HTTP with Server-Sent Events for bidirectional communication with MCP servers.
-
-- **Transport Type:** `"sse"`
-- **Protocol:** HTTP/HTTPS with Server-Sent Events
-- **Use Cases:** Web-based MCP servers, cloud-hosted services
-- **Configuration:** Requires a URL endpoint (conventionally ending with `/sse`)
-
 ### Streamable HTTP
 
 [Section in MCP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http).
 
 The **Streamable HTTP** transport is a modern protocol for efficient, bidirectional streaming of data between Erato and MCP servers over HTTP.
 It is designed to support advanced use cases and improved performance compared to traditional Server-Sent Events (SSE).
+
+For Erato, this is currently the recommended transport protocol for connecting with MCP servers.
 
 - **Transport Type:** `"streamable_http"`
 - **Protocol:** HTTP/HTTPS with full-duplex streaming (see MCP spec)
@@ -155,6 +188,17 @@ mode = "fixed"
 [mcp_servers.advanced_service.authentication.fixed]
 api_key = "your-api-token"
 ```
+
+### Server-Sent Events (SSE, aka HTTP+SSE)
+
+[Section in MCP specification](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#http-with-sse)
+
+The SSE transport uses HTTP with Server-Sent Events for bidirectional communication with MCP servers.
+
+- **Transport Type:** `"sse"`
+- **Protocol:** HTTP/HTTPS with Server-Sent Events
+- **Use Cases:** Web-based MCP servers, cloud-hosted services
+- **Configuration:** Requires a URL endpoint (conventionally ending with `/sse`)
 
 Both SSE and Streamable HTTP transports are fully supported in Erato, allowing you to choose the transport that best fits your deployment needs.
 
@@ -176,13 +220,20 @@ Erato does **not natively support** the `stdio` transport type.
 > If you nevertheless want to connect a MCP server that only supports the `stdio` transport, you can proxy it via tools such as [mcp-remote](https://github.com/geelen/mcp-remote) and configure Erato with the resulting `sse`/`http` transport/endpoint
 > in Erato.
 >
-> For most scenarios, use MCP servers that support the `sse` transport type directly, if possible.
+> For most scenarios, use MCP servers that support the `streamable_http` transport type directly, if possible.
 
 ## Authentication
 
 Erato currently supports four MCP authentication modes, that offer different trade-offs in terms of ease-of-use and security.
 
 Separate to authentication, access to MCP servers may also be secured on a network level to lock down access only to Erato and/or other known MCP clients.
+
+### Choosing a mode
+
+- `oauth2`: Preferred option when the MCP server supports it. Erato manages the OAuth flow and stores credentials per user.
+- `forwarded`: Reuses a credential from the user's current Erato session. Best for tightly controlled internal setups.
+- `fixed`: Uses one shared API key for all requests from the Erato deployment.
+- `none`: Sends no credentials at all. Only suitable for public or otherwise unauthenticated MCP servers.
 
 ### `none`
 
@@ -191,6 +242,7 @@ No credentials are attached to requests for that MCP server.
 To forego authentication can be suitable for utility services that do not expose confidential data in the organization and have no user-dependent authorization needs.
 
 Examples:
+
 - Weather service
 - News service
 
@@ -261,6 +313,14 @@ flowchart LR
 
 Forward credentials from the current user session to the MCP server. The selected token is sent as `Authorization: Bearer <token>`, so the MCP server can validate the token and make user-specific authorization decisions.
 
+> [!WARNING]
+>
+> Only use `forwarded` authentication when it is strictly necessary, and preferably only for internally maintained MCP servers.
+>
+> Even then, prefer forwarding the `oidc_id_token` over the `access_token` whenever the server can work with it, to reduce the risk of permission leakage into downstream systems.
+>
+> Among other issues, the MCP project documents ["Token Passthrough"](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices#token-passthrough) as an auth anti-pattern. In a similar manner, if using forwarded credentials, the whole authentication of Erato and all MCP servers sharing the forwarded credentials is as weak as it's least secure individual component.
+
 ### `forwarded` with `oidc_id_token`
 
 Forward the OIDC ID token that authenticated the user's Erato session.
@@ -324,15 +384,11 @@ flowchart LR
     MCP -->|Distinguishes User A vs User B via downstream access| E
 ```
 
-> [!WARNING]
->
-> Only use `forwarded` authentication when it is strictly necessary, and preferably only for internally maintained MCP servers.
->
-> Even then, prefer forwarding the `oidc_id_token` over the `access_token` whenever the server can work with it, to reduce the risk of permission leakage into downstream systems.
-
 ### `oauth2`
 
 Use an OAuth 2.0 authorization flow managed by Erato for the MCP server.
+
+This is the preferred authentication mode whenever the MCP server supports it.
 
 This mode is intended for MCP servers that expose OAuth-protected endpoints and expect Erato to obtain, store, and refresh user-specific credentials. Erato persists the registered OAuth client identity and the per-user OAuth credential state in its database, encrypted at rest using `server.encryption_key`.
 
@@ -346,6 +402,8 @@ Erato supports both:
 
 - Statically configured OAuth clients via `client_id` and optional `client_secret`
 - Dynamic client registration when no `client_id` is configured and the authorization server supports registration
+
+For a complete example server implementation, see the [`oauth2-keycloak-dcr-server` example project](https://github.com/EratoLab/example-mcp-servers/tree/main/oauth2-keycloak-dcr-server).
 
 ```toml
 [mcp_servers.jira.authentication]

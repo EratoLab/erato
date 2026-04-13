@@ -2206,12 +2206,12 @@ The `action_facet` field is accepted on `submit`, `edit`, and `regenerate` endpo
 
 #### Differences from Regular Facets
 
-| Aspect | Regular Facets | Action Facets |
-| --- | --- | --- |
-| User-visible | Yes, selectable in UI | No, resolved from client context |
-| Parameterized | No, behavior is config-time only | Yes, runtime args from request |
-| Request field | `selected_facet_ids` | `action_facet` |
-| Prompt lifecycle | Toggle-state based, persistent across messages | Per-request, ephemeral |
+| Aspect             | Regular Facets                                       | Action Facets                      |
+| ------------------ | ---------------------------------------------------- | ---------------------------------- |
+| User-visible       | Yes, selectable in UI                                | No, resolved from client context   |
+| Parameterized      | No, behavior is config-time only                     | Yes, runtime args from request     |
+| Request field      | `selected_facet_ids`                                 | `action_facet`                     |
+| Prompt lifecycle   | Toggle-state based, persistent across messages       | Per-request, ephemeral             |
 | Base system prompt | May suppress historical replay on newly-enabled turn | Never suppresses — always additive |
 
 ### `budget`
