@@ -49,42 +49,32 @@ CREATE FUNCTION public.check_active_thread_siblings_constraint() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 DECLARE
+    affected_group_ids uuid[];
     violation_found boolean;
 BEGIN
-    -- Check if there are any sibling groups with multiple active messages
+    affected_group_ids := array_remove(
+        ARRAY[
+            COALESCE(NEW.sibling_message_id, NEW.id),
+            CASE
+                WHEN TG_OP = 'UPDATE' THEN COALESCE(OLD.sibling_message_id, OLD.id)
+                ELSE NULL
+            END
+        ],
+        NULL
+    );
+
+    -- Only validate the sibling groups touched by this row.
     SELECT EXISTS (
-        WITH sibling_groups AS (
-            -- Find all sibling relationships
-            SELECT 
-                CASE 
-                    WHEN m1.sibling_message_id IS NOT NULL THEN m1.sibling_message_id
-                    ELSE m1.id
-                END AS group_id,
-                m1.id,
-                m1.is_message_in_active_thread
-            FROM public.messages m1
-            
-            UNION
-            
-            SELECT 
-                CASE 
-                    WHEN m2.sibling_message_id IS NOT NULL THEN m2.sibling_message_id
-                    ELSE m2.id
-                END AS group_id,
-                m2.id,
-                m2.is_message_in_active_thread
-            FROM public.messages m2
-            WHERE m2.sibling_message_id IS NOT NULL
-        ),
-        -- Count active messages per group
-        active_counts AS (
-            SELECT 
-                group_id,
+        WITH active_counts AS (
+            SELECT
+                COALESCE(sibling_message_id, id) AS group_id,
                 SUM(CASE WHEN is_message_in_active_thread THEN 1 ELSE 0 END) AS active_count
-            FROM sibling_groups
-            GROUP BY group_id
+            FROM public.messages
+            WHERE
+                id = ANY(affected_group_ids)
+                OR sibling_message_id = ANY(affected_group_ids)
+            GROUP BY COALESCE(sibling_message_id, id)
         )
-        -- Find groups with more than one active message
         SELECT 1
         FROM active_counts
         WHERE active_count > 1
@@ -750,4 +740,3 @@ ALTER TABLE ONLY public.user_preferences
 --
 
 \unrestrict np6fMCKvEDxceIEhwPMvNotTcZpCy5hefQkwTPQqcdX1qxA3DZBZCfCWI21S8e8
-
