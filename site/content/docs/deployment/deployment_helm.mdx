@@ -58,10 +58,10 @@ backend:
         [mcp_servers.private_api]
         transport_type = "sse"
         url = "https://private-api.example.com/sse"
-        
+
         [mcp_servers.private_api.authentication]
         mode = "fixed"
-        
+
         [mcp_servers.private_api.authentication.fixed]
         api_key = "secret-token"
         header_name = "Authorization"
