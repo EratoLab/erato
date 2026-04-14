@@ -98,7 +98,7 @@ export function useCloudData({
 
       return {
         ...cloudDrive,
-        kind: cloudDrive.kind ?? "other",
+        kind: cloudDrive.kind,
         provider,
       };
     });

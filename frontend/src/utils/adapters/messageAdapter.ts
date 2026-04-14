@@ -32,6 +32,8 @@ export interface UiChatMessage extends Message {
   action_facet_id?: string;
   /** The action facet arguments supplied with this user message, if any */
   action_facet_args?: Record<string, string>;
+  /** MCP server IDs that were unavailable while preparing this generation */
+  mcp_servers_unavailable?: string[];
 }
 
 /**
@@ -69,6 +71,7 @@ export function mapApiMessageToUiMessage(
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     feedback: apiMessage.feedback ?? undefined,
     error: isMessageError(error) ? error : undefined,
+    mcp_servers_unavailable: apiMessage.mcp_servers_unavailable ?? undefined,
     action_facet_id: apiMessage.action_facet_id ?? undefined,
     action_facet_args: apiMessage.action_facet_args ?? undefined,
   };

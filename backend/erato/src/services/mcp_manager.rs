@@ -31,6 +31,12 @@ pub struct ManagedToolCall {
     pub tool: rmcp::model::Tool,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct ToolDiscoveryResult {
+    pub tools: Vec<ManagedTool>,
+    pub unavailable_server_ids: Vec<String>,
+}
+
 impl Default for McpServers {
     /// Create a default instance with an empty configuration (useful for tests)
     fn default() -> Self {
@@ -90,6 +96,18 @@ impl McpServers {
     ) -> Result<Vec<ManagedTool>, Report> {
         self.session_manager
             .list_tools_for_server_ids(chat_id, server_ids, auth_context)
+            .await
+    }
+
+    /// Discover tools for a chat while tolerating unavailable MCP servers.
+    pub async fn discover_tools_for_server_ids(
+        &self,
+        chat_id: Uuid,
+        server_ids: Option<&HashSet<String>>,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> ToolDiscoveryResult {
+        self.session_manager
+            .discover_tools_for_server_ids(chat_id, server_ids, auth_context)
             .await
     }
 

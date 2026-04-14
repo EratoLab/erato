@@ -238,6 +238,13 @@ dex:
       groups:
       - "mcp-auth-forwarded-oidc"
 
+    - email: "mcp-unavailable-resilience@example.com"
+      hash: "$2y$10$EI3YbB3STkWvAzAyZ/fU/ehRT6M5ActxvZS9rZ1fXmTV2zxYNgUaK" # password: admin
+      username: "mcp-unavailable-resilience"
+      userID: "08a8684b-db88-4b73-90a9-3cd166300005"
+      groups:
+      - "mcp-unavailable-resilience"
+
 # Nginx-based authentication (alternative to oauth2-proxy/Dex)
 # When enabled, replaces oauth2-proxy with JWT generation from URL parameters/headers
 nginxAuth:

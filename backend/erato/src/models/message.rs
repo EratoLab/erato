@@ -133,6 +133,9 @@ pub struct GenerationMetadata {
     /// Error information if generation failed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<GenerationErrorType>,
+    /// MCP server IDs that were unavailable while preparing this generation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_servers_unavailable: Option<Vec<String>>,
 }
 
 /// Role of the message author (as defined by the LLM providers)

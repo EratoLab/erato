@@ -4,8 +4,8 @@ use axum::Router;
 use axum::http;
 use axum_test::TestServer;
 use erato::config::{
-    ActionFacetConfig, ExperimentalFacetsConfig, FacetConfig, ModelSettings,
-    PromptSourceSpecification,
+    ActionFacetConfig, ExperimentalFacetsConfig, FacetConfig, McpServerAuthenticationConfig,
+    McpServerConfig, ModelSettings, PromptSourceSpecification,
 };
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
 use erato::models::user::get_or_create_user;
@@ -16,12 +16,32 @@ use serde_json::{Value, json};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
 use std::collections::HashMap;
+use std::env;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt, extract_chat_id,
-    parse_sse_events, setup_mock_llm_server,
+    JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
+    extract_chat_id, parse_sse_events, setup_mock_llm_server,
 };
+
+fn mock_mcp_base_url() -> String {
+    env::var("TEST_MOCK_MCP_SERVER_BASE_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:44321".to_string())
+}
+
+fn mcp_server_config(
+    base_url: &str,
+    path: &str,
+    authentication: McpServerAuthenticationConfig,
+) -> McpServerConfig {
+    McpServerConfig {
+        transport_type: "streamable_http".to_string(),
+        url: format!("{base_url}{path}"),
+        http_headers: None,
+        authentication,
+        max_session_idle_seconds: None,
+    }
+}
 
 /// Test message submission with SSE streaming.
 ///
@@ -2044,6 +2064,152 @@ async fn test_abort_stream_persists_partial_message(pool: Pool<Postgres>) {
     assert_eq!(saved_content[0]["content_type"], json!("text"));
 
     server_handle.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_message_submit_tolerates_unavailable_mcp_server_and_records_metadata(
+    pool: Pool<Postgres>,
+) {
+    let mock_mcp_base_url = mock_mcp_base_url();
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+
+    let chat_providers = app_config
+        .chat_providers
+        .as_mut()
+        .expect("Expected chat providers in test config");
+    let primary_provider_id = chat_providers
+        .priority_order
+        .first()
+        .cloned()
+        .expect("Expected at least one chat provider");
+    let secondary_provider = chat_providers
+        .providers
+        .get(&primary_provider_id)
+        .cloned()
+        .expect("Expected primary chat provider config");
+    chat_providers
+        .providers
+        .insert("secondary".to_string(), secondary_provider);
+    chat_providers.priority_order.push("secondary".to_string());
+
+    app_config.mcp_servers.insert(
+        "healthy-file".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url,
+            "/mcp/file",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_servers.insert(
+        "failing-500".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url,
+            "/mcp/list-tools-500",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.model_permissions.rules.insert(
+        "allow-secondary".to_string(),
+        erato::config::ModelPermissionRule::AllowAll {
+            chat_provider_ids: vec!["secondary".to_string()],
+        },
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-mcp-servers".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["healthy-file".to_string(), "failing-500".to_string()],
+        },
+    );
+
+    let test_token = JwtTokenBuilder::new()
+        .subject("many-models-user")
+        .email("many-models@example.com")
+        .name("many-models-user")
+        .build();
+
+    let app_state = test_app_state(app_config, pool).await;
+    let _user = get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        "many-models-user",
+        Some("many-models@example.com"),
+    )
+    .await
+    .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(&test_token)
+        .json(&json!({
+            "user_message": "Hello resilient MCP world",
+            "chat_provider_id": "secondary"
+        }))
+        .await;
+    response.assert_status_ok();
+
+    let events = parse_sse_events(&response);
+    let assistant_completed = events
+        .iter()
+        .find_map(|event| {
+            let json: Value = serde_json::from_str(&event.data).ok()?;
+            (json["message_type"] == "assistant_message_completed").then_some(json)
+        })
+        .expect("Expected assistant_message_completed event");
+
+    assert_eq!(
+        assistant_completed["message"]["mcp_servers_unavailable"],
+        json!(["failing-500"])
+    );
+
+    let assistant_message_id = Uuid::parse_str(
+        assistant_completed["message_id"]
+            .as_str()
+            .expect("assistant_message_completed should contain message_id"),
+    )
+    .expect("assistant message id should be a uuid");
+
+    let saved_message = erato::db::entity::messages::Entity::find_by_id(assistant_message_id)
+        .one(&app_state.db)
+        .await
+        .expect("Failed to load saved message")
+        .expect("Expected saved assistant message");
+
+    let generation_metadata = saved_message
+        .generation_metadata
+        .expect("Expected generation metadata on assistant message");
+    assert_eq!(
+        generation_metadata["mcp_servers_unavailable"],
+        json!(["failing-500"])
+    );
+
+    let chat_messages_response = server
+        .get(&format!(
+            "/api/v1beta/chats/{}/messages",
+            saved_message.chat_id
+        ))
+        .with_bearer_token(&test_token)
+        .await;
+    chat_messages_response.assert_status_ok();
+
+    let body: Value = chat_messages_response.json();
+    let fetched_assistant_message = body["messages"]
+        .as_array()
+        .and_then(|messages| {
+            messages
+                .iter()
+                .find(|message| message["id"] == assistant_message_id.to_string())
+        })
+        .expect("Expected assistant message in chat messages response");
+    assert_eq!(
+        fetched_assistant_message["mcp_servers_unavailable"],
+        json!(["failing-500"])
+    );
 }
 
 // --- Action-Facet tests ---

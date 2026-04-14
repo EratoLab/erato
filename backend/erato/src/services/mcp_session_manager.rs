@@ -2,7 +2,7 @@ use crate::config::{
     AppConfig, McpServerAuthenticationConfig, McpServerConfig, McpServerForwardedCredential,
 };
 use crate::metrics::report_mcp_active_sessions_for_server;
-use crate::services::mcp_manager::McpRequestAuthContext;
+use crate::services::mcp_manager::{McpRequestAuthContext, ToolDiscoveryResult};
 use crate::services::mcp_oauth::resolve_oauth_access_token;
 use crate::services::mcp_transports::{EmptyClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
@@ -382,8 +382,28 @@ impl McpSessionManager {
         server_id_filter: Option<&HashSet<String>>,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<Vec<ManagedTool>, Report> {
+        let discovery = self
+            .discover_tools_for_server_ids(chat_id, server_id_filter, auth_context)
+            .await;
+
+        if discovery.unavailable_server_ids.is_empty() {
+            Ok(discovery.tools)
+        } else {
+            Err(eyre!(
+                "Failed to discover MCP tools: {}",
+                discovery.unavailable_server_ids.join(", ")
+            ))
+        }
+    }
+
+    pub async fn discover_tools_for_server_ids(
+        &self,
+        chat_id: Uuid,
+        server_id_filter: Option<&HashSet<String>>,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> ToolDiscoveryResult {
         let mut all_tools = Vec::new();
-        let mut errors = Vec::new();
+        let mut unavailable_server_ids = Vec::new();
         let server_ids: Vec<String> = self
             .server_configs
             .keys()
@@ -442,7 +462,7 @@ impl McpSessionManager {
                         error = %e,
                         "Failed to create session for listing tools"
                     );
-                    errors.push(format!("{}: {}", server_id, e));
+                    unavailable_server_ids.push(server_id);
                     continue;
                 }
             };
@@ -462,10 +482,11 @@ impl McpSessionManager {
             "Listed tools for chat"
         );
 
-        if errors.is_empty() {
-            Ok(all_tools)
-        } else {
-            Err(eyre!("Failed to discover MCP tools: {}", errors.join("; ")))
+        unavailable_server_ids.sort();
+
+        ToolDiscoveryResult {
+            tools: all_tools,
+            unavailable_server_ids,
         }
     }
 
