@@ -12,7 +12,7 @@ export function createMockMessageCompose(
     cc: { getAsync: ReturnType<typeof vi.fn> };
     body: {
       getAsync: ReturnType<typeof vi.fn>;
-      getTypeAsync: ReturnType<typeof vi.fn>;
+      getTypeAsync?: ReturnType<typeof vi.fn>;
       setSelectedDataAsync: ReturnType<typeof vi.fn>;
       prependAsync: ReturnType<typeof vi.fn>;
     };

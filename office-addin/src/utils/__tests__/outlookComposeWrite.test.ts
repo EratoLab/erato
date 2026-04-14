@@ -58,6 +58,63 @@ describe("outlookComposeWrite", () => {
       expect(result).toBe("text");
     });
 
+    it("infers 'html' when getTypeAsync is unavailable", async () => {
+      const getAsync = vi.fn((coercionType, callback) => {
+        if (coercionType === Office.CoercionType.Html) {
+          callback(createMockAsyncResult("<div>Hello</div>"));
+          return;
+        }
+
+        callback(createMockAsyncResult("Hello"));
+      });
+      const item = createMockMessageCompose({
+        body: {
+          getAsync,
+          setSelectedDataAsync: vi.fn(),
+          prependAsync: vi.fn(),
+        },
+      });
+      mailbox.item = item;
+
+      const result = await getComposeBodyType();
+      expect(result).toBe("html");
+      expect(getAsync).toHaveBeenCalledWith(
+        Office.CoercionType.Html,
+        expect.any(Function),
+      );
+      expect(getAsync).toHaveBeenCalledWith(
+        Office.CoercionType.Text,
+        expect.any(Function),
+      );
+    });
+
+    it("falls back to 'text' when html body reads are unavailable", async () => {
+      const getAsync = vi.fn((coercionType, callback) => {
+        if (coercionType === Office.CoercionType.Html) {
+          callback(
+            createMockAsyncResult("", "failed", {
+              message: "HTML body unsupported",
+              code: "UnsupportedDataObject",
+            }),
+          );
+          return;
+        }
+
+        callback(createMockAsyncResult("Hello"));
+      });
+      const item = createMockMessageCompose({
+        body: {
+          getAsync,
+          setSelectedDataAsync: vi.fn(),
+          prependAsync: vi.fn(),
+        },
+      });
+      mailbox.item = item;
+
+      const result = await getComposeBodyType();
+      expect(result).toBe("text");
+    });
+
     it("throws when no compose item is available", async () => {
       mailbox.item = null;
       await expect(getComposeBodyType()).rejects.toThrow(
@@ -158,6 +215,51 @@ describe("outlookComposeWrite", () => {
       await replaceComposeSelection("<b>bold</b> text", true);
       expect(setSelectedDataAsync).toHaveBeenCalledWith(
         "bold text",
+        { coercionType: Office.CoercionType.Text },
+        expect.any(Function),
+      );
+    });
+
+    it("falls back to text insertion when html insertion is rejected", async () => {
+      const setSelectedDataAsync = vi.fn((data, options, callback) => {
+        if (options.coercionType === Office.CoercionType.Html) {
+          callback(
+            createMockAsyncResult(undefined, "failed", {
+              message: "HTML insertion unsupported",
+              code: "InvalidFormatError",
+            }),
+          );
+          return;
+        }
+
+        callback(createMockAsyncResult(undefined));
+      });
+      const item = createMockMessageCompose({
+        body: {
+          getAsync: vi.fn((coercionType, callback) => {
+            if (coercionType === Office.CoercionType.Html) {
+              callback(createMockAsyncResult("plain text"));
+              return;
+            }
+
+            callback(createMockAsyncResult("plain text"));
+          }),
+          setSelectedDataAsync,
+          prependAsync: vi.fn(),
+        },
+      });
+      mailbox.item = item;
+
+      await replaceComposeSelection("<b>bold</b>", true);
+      expect(setSelectedDataAsync).toHaveBeenNthCalledWith(
+        1,
+        "<b>bold</b>",
+        { coercionType: Office.CoercionType.Html },
+        expect.any(Function),
+      );
+      expect(setSelectedDataAsync).toHaveBeenNthCalledWith(
+        2,
+        "bold",
         { coercionType: Office.CoercionType.Text },
         expect.any(Function),
       );
