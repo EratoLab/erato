@@ -16,6 +16,11 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             secure: false,
           },
+          "/custom-theme/": {
+            target: "http://localhost:3130",
+            changeOrigin: true,
+            secure: false,
+          },
           "/api/": {
             target: new URL(apiRootUrl).origin,
             changeOrigin: true,
@@ -26,6 +31,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: "/office-addin/",
+    publicDir: path.resolve(__dirname, "../frontend/public"),
     plugins: [react()],
     resolve: linkedFrontend
       ? {

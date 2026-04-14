@@ -8,8 +8,8 @@ import App from "./App";
 import { AddinFileSourceSelector } from "./components/AddinFileSourceSelector";
 import { OutlookEratoEmailRenderer } from "./components/OutlookEratoEmailRenderer";
 import { AddinSetupPage } from "./pages/AddinSetupPage";
-componentRegistry.ChatFileSourceSelector = AddinFileSourceSelector;
-componentRegistry.EratoEmailCodeBlock = OutlookEratoEmailRenderer;
+componentRegistry.ChatFileSourceSelector ??= AddinFileSourceSelector;
+componentRegistry.EratoEmailCodeBlock ??= OutlookEratoEmailRenderer;
 
 const rootElement = document.getElementById("root");
 

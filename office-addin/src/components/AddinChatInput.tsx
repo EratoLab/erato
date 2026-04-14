@@ -3,6 +3,7 @@ import {
   FilePreviewButton,
   FilePreviewLoading,
   GroupedFileAttachmentsPreview,
+  componentRegistry,
   fetchUploadFile,
   getIdToken,
   type ChatInputControlsHandle,
@@ -53,13 +54,131 @@ interface AddinChatInputProps {
   showSuggestedEmailSource?: boolean;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
+  controlledAvailableModels?: ChatModel[];
+  controlledSelectedModel?: ChatModel | null;
+  onControlledSelectedModelChange?: (model: ChatModel) => void;
+  controlledIsModelSelectionReady?: boolean;
+}
+
+const EMPTY_PREVIEW_URL =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+
+function inferFileCapability(
+  filename: string,
+  mimeType?: string,
+): FileUploadItem["file_capability"] {
+  const extension = filename.split(".").pop()?.toLowerCase() ?? "";
+
+  switch (extension) {
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "gif":
+    case "webp":
+    case "bmp":
+    case "svg":
+      return {
+        extensions: [extension],
+        id: "image",
+        mime_types: [mimeType ?? "image/*"],
+        operations: ["analyze_image"],
+      };
+    case "pdf":
+      return {
+        extensions: [extension],
+        id: "pdf",
+        mime_types: [mimeType ?? "application/pdf"],
+        operations: ["extract_text"],
+      };
+    case "doc":
+    case "docx":
+      return {
+        extensions: [extension],
+        id: "word",
+        mime_types: [mimeType ?? "application/octet-stream"],
+        operations: ["extract_text"],
+      };
+    case "xls":
+    case "xlsx":
+    case "csv":
+      return {
+        extensions: [extension],
+        id: "spreadsheet",
+        mime_types: [mimeType ?? "application/octet-stream"],
+        operations: ["extract_text"],
+      };
+    case "ppt":
+    case "pptx":
+      return {
+        extensions: [extension],
+        id: "presentation",
+        mime_types: [mimeType ?? "application/octet-stream"],
+        operations: ["extract_text"],
+      };
+    case "mp3":
+    case "wav":
+    case "m4a":
+      return {
+        extensions: [extension],
+        id: "audio",
+        mime_types: [mimeType ?? "audio/*"],
+        operations: [],
+      };
+    case "mp4":
+    case "mov":
+    case "webm":
+      return {
+        extensions: [extension],
+        id: "video",
+        mime_types: [mimeType ?? "video/*"],
+        operations: [],
+      };
+    case "zip":
+    case "tar":
+    case "gz":
+      return {
+        extensions: [extension],
+        id: "archive",
+        mime_types: [mimeType ?? "application/octet-stream"],
+        operations: [],
+      };
+    default:
+      return {
+        extensions: extension ? [extension] : ["*"],
+        id: "other",
+        mime_types: [mimeType ?? "application/octet-stream"],
+        operations: [],
+      };
+  }
+}
+
+function toPreviewUploadItem(options: {
+  id: string;
+  filename: string;
+  mimeType?: string;
+}): FileUploadItem {
+  return {
+    id: options.id,
+    filename: options.filename,
+    download_url: EMPTY_PREVIEW_URL,
+    file_capability: inferFileCapability(options.filename, options.mimeType),
+  };
 }
 
 export const AddinChatInput = forwardRef<
   ChatInputControlsHandle,
   AddinChatInputProps
 >(function AddinChatInput(
-  { chatId, className, showSuggestedEmailSource = false, ...chatInputProps },
+  {
+    chatId,
+    className,
+    showSuggestedEmailSource = false,
+    controlledAvailableModels,
+    controlledSelectedModel,
+    onControlledSelectedModelChange,
+    controlledIsModelSelectionReady,
+    ...chatInputProps
+  },
   ref,
 ) {
   const { host } = useOffice();
@@ -144,6 +263,54 @@ export const AddinChatInput = forwardRef<
     },
     [removeAttachment, removeEmailBody],
   );
+  const handleRemoveAllEmailSourceFiles = useCallback(() => {
+    if (isEmailBodyIncluded) {
+      removeEmailBody();
+    }
+
+    selectedAttachmentItems.forEach((attachmentItem) => {
+      removeAttachment(attachmentItem.id);
+    });
+  }, [
+    isEmailBodyIncluded,
+    removeAttachment,
+    removeEmailBody,
+    selectedAttachmentItems,
+  ]);
+  const customEmailSourcePreviewFiles = useMemo<FileUploadItem[]>(() => {
+    const previewFiles: FileUploadItem[] = [];
+
+    if (isEmailBodyIncluded && emailBodyFile) {
+      previewFiles.push(
+        toPreviewUploadItem({
+          id: "email-body",
+          filename: emailBodyFile.name,
+          mimeType: emailBodyFile.type,
+        }),
+      );
+    }
+
+    selectedAttachmentItems.forEach((attachmentItem) => {
+      previewFiles.push(
+        toPreviewUploadItem({
+          id: attachmentItem.id,
+          filename: attachmentItem.filename,
+        }),
+      );
+    });
+
+    return previewFiles;
+  }, [emailBodyFile, isEmailBodyIncluded, selectedAttachmentItems]);
+  const EmailSourceAttachmentPreview =
+    componentRegistry.ChatInputAttachmentPreview;
+  const shouldUseCustomEmailSourcePreview =
+    EmailSourceAttachmentPreview !== null &&
+    customEmailSourcePreviewFiles.length > 0;
+  const handleEmailSourcePreview = useCallback((_file: FileUploadItem) => {
+    // Outlook source attachments in the add-in are local placeholders here.
+    // Consume the click so custom preview overrides render consistently
+    // without trying to open a non-existent remote preview URL.
+  }, []);
 
   const wrappedOnSendMessage = useCallback(
     async (
@@ -262,7 +429,25 @@ export const AddinChatInput = forwardRef<
         showSuggestedEmailSource &&
         (hasSelectedEmailSource || isLoadingAttachments) && (
           <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
-            {emailSourceItems.length === 1 ? (
+            {shouldUseCustomEmailSourcePreview ? (
+              <>
+                <EmailSourceAttachmentPreview
+                  attachedFiles={customEmailSourcePreviewFiles}
+                  maxFiles={customEmailSourcePreviewFiles.length}
+                  onRemoveFile={handleRemoveEmailSourceFile}
+                  onRemoveAllFiles={handleRemoveAllEmailSourceFiles}
+                  onFilePreview={handleEmailSourcePreview}
+                  disabled={isUploadingEmail}
+                  showFileTypes={true}
+                />
+                {isLoadingAttachments && (
+                  <FilePreviewLoading
+                    className="w-full"
+                    label="Loading attachments..."
+                  />
+                )}
+              </>
+            ) : emailSourceItems.length === 1 ? (
               emailSourceItems[0].isLoading ? (
                 <FilePreviewLoading
                   className="w-full"
@@ -331,6 +516,10 @@ export const AddinChatInput = forwardRef<
         {...chatInputProps}
         uploadFiles={chatInputProps.uploadFiles}
         uploadError={chatInputProps.uploadError}
+        controlledAvailableModels={controlledAvailableModels}
+        controlledSelectedModel={controlledSelectedModel}
+        onControlledSelectedModelChange={onControlledSelectedModelChange}
+        controlledIsModelSelectionReady={controlledIsModelSelectionReady}
         onSendMessage={(message, inputFileIds, modelId, selectedFacetIds) => {
           void wrappedOnSendMessage(
             message,

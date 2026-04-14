@@ -50,7 +50,7 @@ export default function App() {
   return (
     <I18nProvider>
       <ThemeProvider
-        enableCustomTheme={false}
+        enableCustomTheme={true}
         initialThemeMode="light"
         persistThemeMode={false}
       >
