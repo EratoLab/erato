@@ -307,6 +307,10 @@ export type ChatMessage = {
    */
   is_message_in_active_thread: boolean;
   /**
+   * MCP server IDs that were unavailable while preparing this generation
+   */
+  mcp_servers_unavailable?: string[];
+  /**
    * The ID of the previous message in the thread, if any
    */
   previous_message_id?: string;
@@ -561,6 +565,10 @@ export type Drive = {
    */
   id: string;
   /**
+   * Best-effort classification of the drive based on Graph drive, site, and group metadata
+   */
+  kind: string;
+  /**
    * The display name of the drive
    */
   name: string;
@@ -568,6 +576,14 @@ export type Drive = {
    * The owner of the drive, if available
    */
   owner_name?: string;
+  /**
+   * The SharePoint site name for document libraries, if available
+   */
+  site_name?: string;
+  /**
+   * The web URL to access this drive in OneDrive/SharePoint
+   */
+  web_url?: string;
 };
 
 /**

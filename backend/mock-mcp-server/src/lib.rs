@@ -752,6 +752,14 @@ async fn health() -> Json<serde_json::Value> {
     }))
 }
 
+async fn always_500() -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({ "error": "simulated MCP server failure" })),
+    )
+        .into_response()
+}
+
 fn builtin_mechanisms() -> Vec<MechanismSummary> {
     vec![
         MechanismSummary {
@@ -777,6 +785,12 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
             description: "Provides trigger_content_filter and returns is_error payload",
             endpoint: "Streamable HTTP /mcp/content-filter",
             tools: &["trigger_content_filter"],
+        },
+        MechanismSummary {
+            name: "500 simulation endpoint",
+            description: "Always returns HTTP 500 to simulate an unavailable MCP server",
+            endpoint: "HTTP /mcp/list-tools-500",
+            tools: &[],
         },
         MechanismSummary {
             name: "None auth probe server",
@@ -840,6 +854,11 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
     );
     println!(
         "  {} {}",
+        "HTTP".bright_cyan(),
+        "/mcp/list-tools-500".bright_yellow()
+    );
+    println!(
+        "  {} {}",
         "MCP HTTP".bright_cyan(),
         "/mcp/auth-none".bright_yellow()
     );
@@ -899,6 +918,7 @@ pub fn app() -> Router {
 
     Router::new()
         .route("/health", get(health))
+        .route("/mcp/list-tools-500", any(always_500))
         .nest_service("/mcp/file", file_service)
         .nest_service("/mcp/error", error_service)
         .nest_service("/mcp/progress", progress_service)

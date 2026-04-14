@@ -524,9 +524,24 @@ impl PolicyEngine {
     ) -> Result<Vec<String>, Report> {
         let mut allowed = Vec::new();
         let (subject_kind, subject_id) = subject.clone().into_parts();
+        let resource_kind_name = if let Some(first_id) = resource_ids.first() {
+            let (resource_kind, _) = to_resource(first_id.clone()).into_parts();
+            format!("{resource_kind:?}")
+        } else {
+            "Unknown".to_string()
+        };
+
+        tracing::trace!(
+            subject = ?subject,
+            groups = ?groups,
+            resource_kind = resource_kind_name,
+            requested_resource_ids = ?resource_ids,
+            "Filtering authorized config resources"
+        );
+
         for resource_id in resource_ids {
             let (resource_kind, _) = to_resource(resource_id.clone()).into_parts();
-            if self
+            let is_allowed = self
                 .authorize_with_context(
                     subject_kind,
                     &subject_id,
@@ -537,11 +552,30 @@ impl PolicyEngine {
                     groups,
                 )
                 .await
-                .is_ok()
-            {
+                .is_ok();
+
+            tracing::trace!(
+                subject = ?subject,
+                groups = ?groups,
+                resource_kind = ?resource_kind,
+                resource_id = resource_id,
+                allowed = is_allowed,
+                "Config resource authorization result"
+            );
+
+            if is_allowed {
                 allowed.push(resource_id.clone());
             }
         }
+
+        tracing::trace!(
+            subject = ?subject,
+            groups = ?groups,
+            resource_kind = resource_kind_name,
+            allowed_resource_ids = ?allowed,
+            "Finished filtering authorized config resources"
+        );
+
         Ok(allowed)
     }
 

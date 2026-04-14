@@ -928,6 +928,10 @@ pub struct ChatMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     error: Option<GenerationErrorType>,
+    /// MCP server IDs that were unavailable while preparing this generation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    mcp_servers_unavailable: Option<Vec<String>>,
     /// When the message was created
     created_at: DateTime<FixedOffset>,
     /// When the message was last updated
@@ -1535,12 +1539,18 @@ impl ChatMessage {
                 serde_json::from_value::<GenerationMetadata>(metadata.clone()).ok()
             })
             .and_then(|metadata| metadata.error);
+        let mcp_servers_unavailable = msg.generation_metadata.as_ref().and_then(|metadata| {
+            serde_json::from_value::<GenerationMetadata>(metadata.clone())
+                .ok()
+                .and_then(|metadata| metadata.mcp_servers_unavailable)
+        });
         Ok(ChatMessage {
             id: msg.id.to_string(),
             chat_id: msg.chat_id.to_string(),
             role: parsed_message.role.to_string(),
             content: parsed_message.content,
             error,
+            mcp_servers_unavailable,
             created_at: msg.created_at,
             updated_at: msg.updated_at,
             previous_message_id: msg.previous_message_id.map(|id| id.to_string()),

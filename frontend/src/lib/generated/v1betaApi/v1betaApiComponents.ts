@@ -862,10 +862,14 @@ export type AllDrivesError = Fetcher.ErrorWrapper<undefined>;
 export type AllDrivesVariables = V1betaApiContext["fetcherOptions"];
 
 /**
- * This includes:
- * - The user's personal OneDrive
- * - Drives shared with the user
- * - Recent items (as a pseudo-drive)
+ * This exhaustively walks the Microsoft Graph drive discovery surfaces that are
+ * relevant for the current user:
+ * - `GET /me/drive`: https://learn.microsoft.com/graph/api/drive-get
+ * - `GET /me/drives`, `GET /groups/{id}/drives`, `GET /sites/{id}/drives`:
+ *   https://learn.microsoft.com/graph/api/drive-list
+ * - `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme
+ * - `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams
+ * - `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search
  */
 export const fetchAllDrives = (
   variables: AllDrivesVariables,
@@ -886,10 +890,14 @@ export const fetchAllDrives = (
   });
 
 /**
- * This includes:
- * - The user's personal OneDrive
- * - Drives shared with the user
- * - Recent items (as a pseudo-drive)
+ * This exhaustively walks the Microsoft Graph drive discovery surfaces that are
+ * relevant for the current user:
+ * - `GET /me/drive`: https://learn.microsoft.com/graph/api/drive-get
+ * - `GET /me/drives`, `GET /groups/{id}/drives`, `GET /sites/{id}/drives`:
+ *   https://learn.microsoft.com/graph/api/drive-list
+ * - `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme
+ * - `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams
+ * - `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search
  */
 export function allDrivesQuery(variables: AllDrivesVariables): {
   queryKey: reactQuery.QueryKey;
@@ -922,10 +930,14 @@ export function allDrivesQuery(
 }
 
 /**
- * This includes:
- * - The user's personal OneDrive
- * - Drives shared with the user
- * - Recent items (as a pseudo-drive)
+ * This exhaustively walks the Microsoft Graph drive discovery surfaces that are
+ * relevant for the current user:
+ * - `GET /me/drive`: https://learn.microsoft.com/graph/api/drive-get
+ * - `GET /me/drives`, `GET /groups/{id}/drives`, `GET /sites/{id}/drives`:
+ *   https://learn.microsoft.com/graph/api/drive-list
+ * - `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme
+ * - `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams
+ * - `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search
  */
 export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse,>(
   variables: AllDrivesVariables,
@@ -951,10 +963,14 @@ export const useSuspenseAllDrives = <TData = Schemas.AllDrivesResponse,>(
 };
 
 /**
- * This includes:
- * - The user's personal OneDrive
- * - Drives shared with the user
- * - Recent items (as a pseudo-drive)
+ * This exhaustively walks the Microsoft Graph drive discovery surfaces that are
+ * relevant for the current user:
+ * - `GET /me/drive`: https://learn.microsoft.com/graph/api/drive-get
+ * - `GET /me/drives`, `GET /groups/{id}/drives`, `GET /sites/{id}/drives`:
+ *   https://learn.microsoft.com/graph/api/drive-list
+ * - `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme
+ * - `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams
+ * - `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search
  */
 export const useAllDrives = <TData = Schemas.AllDrivesResponse,>(
   variables: AllDrivesVariables | reactQuery.SkipToken,

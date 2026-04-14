@@ -232,6 +232,7 @@ pub fn create_trace_metadata(
     assistant_id: Option<Uuid>,
     tool_names: &[String],
     filenames: &[String],
+    mcp_servers_unavailable: &[String],
     was_aborted: bool,
     platform: Option<&str>,
 ) -> Option<JsonValue> {
@@ -248,6 +249,13 @@ pub fn create_trace_metadata(
 
     if !filenames.is_empty() {
         metadata.insert("filenames".to_string(), json!(filenames));
+    }
+
+    if !mcp_servers_unavailable.is_empty() {
+        metadata.insert(
+            "mcp_servers_unavailable".to_string(),
+            json!(mcp_servers_unavailable),
+        );
     }
 
     if metadata.is_empty() {
@@ -684,6 +692,7 @@ mod tests {
             None,
             &["search".to_string()],
             &["report.pdf".to_string(), "notes.txt".to_string()],
+            &["mock_mcp_unavailable_500".to_string()],
             true,
             Some("web"),
         )
@@ -695,7 +704,8 @@ mod tests {
                 "tool_called_search": true,
                 "erato_platform": "web",
                 "erato_generation_aborted": true,
-                "filenames": ["report.pdf", "notes.txt"]
+                "filenames": ["report.pdf", "notes.txt"],
+                "mcp_servers_unavailable": ["mock_mcp_unavailable_500"]
             })
         );
     }

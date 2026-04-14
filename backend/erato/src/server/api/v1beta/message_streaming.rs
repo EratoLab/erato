@@ -1062,6 +1062,10 @@ pub struct PreparedChatRequest {
     generation_parameters: GenerationParameters,
     // Request-scoped context used for persistence and tracing
     generation_request_context: GenerationRequestContext,
+    // MCP servers that were unavailable while listing tools for this request.
+    mcp_servers_unavailable: Vec<String>,
+    // Filtered MCP tools available to this request, including server routing info.
+    available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
     // Prepared `genai` `ChatRequest` (messages + available tools)
     chat_request: ChatRequest,
     // Prepared `genai` `ChatOptions` (e.g. reasoning effort)
@@ -1097,6 +1101,7 @@ impl LangfuseTraceEnrichment {
         &self,
         assistant_id: Option<Uuid>,
         tool_names: &HashSet<String>,
+        mcp_servers_unavailable: &[String],
         was_aborted: bool,
     ) -> Option<JsonValue> {
         let mut tool_names: Vec<String> = tool_names.iter().cloned().collect();
@@ -1105,6 +1110,7 @@ impl LangfuseTraceEnrichment {
             assistant_id,
             &tool_names,
             &self.filenames,
+            mcp_servers_unavailable,
             was_aborted,
             Some(&self.platform),
         )
@@ -1483,6 +1489,13 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         .await?
         .into_iter()
         .collect();
+    tracing::trace!(
+        subject = ?me_profile_input.subject,
+        user_groups = ?me_profile_input.user_groups,
+        requested_server_filter = ?effective_server_filter,
+        authorized_server_ids = ?authorized_server_ids,
+        "Computed authorized MCP server IDs for chat request"
+    );
     let effective_server_filter = Some(match effective_server_filter {
         Some(server_ids) => server_ids
             .intersection(&authorized_server_ids)
@@ -1490,6 +1503,11 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             .collect(),
         None => authorized_server_ids,
     });
+    tracing::trace!(
+        subject = ?me_profile_input.subject,
+        final_effective_server_filter = ?effective_server_filter,
+        "Final MCP server filter for chat request"
+    );
     let mcp_auth_context = McpRequestAuthContext {
         app_state: Some(app_state),
         user_id: me_profile_input.user_id,
@@ -1498,11 +1516,11 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     };
 
     // Only discover tools for servers potentially needed in this request.
-    let all_mcp_server_tools = app_state
+    let tool_discovery = app_state
         .mcp_servers
-        .list_tools_for_server_ids(chat.id, effective_server_filter.as_ref(), &mcp_auth_context)
-        .await
-        .map_err(|e| eyre!("Failed to discover MCP tools: {}", e))?;
+        .discover_tools_for_server_ids(chat.id, effective_server_filter.as_ref(), &mcp_auth_context)
+        .await;
+    let all_mcp_server_tools = tool_discovery.tools;
     let filtered_mcp_tools =
         filter_mcp_tools_by_assistant(all_mcp_server_tools, assistant_config.as_ref());
     let generation_mcp_tools =
@@ -1544,7 +1562,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     let mut chat_request = resolved_generation_input_messages
         .clone()
         .into_chat_request();
-    let chat_request_tools = convert_mcp_tools_to_genai_tools(generation_mcp_tools);
+    let chat_request_tools = convert_mcp_tools_to_genai_tools(generation_mcp_tools.clone());
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -1575,6 +1593,8 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         generation_input_messages,
         generation_parameters,
         generation_request_context,
+        mcp_servers_unavailable: tool_discovery.unavailable_server_ids,
+        available_mcp_tools: generation_mcp_tools.clone(),
         chat_request,
         chat_options,
     })
@@ -1602,6 +1622,9 @@ async fn stream_generate_chat_completion<
     chat_provider_id: Option<&str>,
     user_groups: &[String],
     mcp_auth_context: McpRequestAuthContext<'_>,
+    mcp_servers_unavailable: Vec<String>,
+    allowed_tool_names: HashSet<String>,
+    available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
@@ -1644,6 +1667,13 @@ async fn stream_generate_chat_completion<
 
     let mut current_message_content: Vec<ContentPart> = vec![];
     let mut current_turn_chat_request = chat_request.clone();
+    let available_mcp_tools_by_name: HashMap<
+        String,
+        crate::services::mcp_session_manager::ManagedTool,
+    > = available_mcp_tools
+        .into_iter()
+        .map(|tool| (tool.tool.name.to_string(), tool))
+        .collect();
 
     // Track cumulative usage statistics across all turns
     let mut total_prompt_tokens = 0u32;
@@ -1666,6 +1696,7 @@ async fn stream_generate_chat_completion<
                 || langfuse_trace_id.is_some()
                 || was_aborted
                 || error.is_some()
+                || !mcp_servers_unavailable.is_empty()
             {
                 Some(GenerationMetadata {
                     used_prompt_tokens: if total_prompt_tokens > 0 {
@@ -1691,6 +1722,8 @@ async fn stream_generate_chat_completion<
                     langfuse_trace_id,
                     was_aborted: was_aborted.then_some(true),
                     error,
+                    mcp_servers_unavailable: (!mcp_servers_unavailable.is_empty())
+                        .then(|| mcp_servers_unavailable.clone()),
                 })
             } else {
                 None
@@ -1769,26 +1802,34 @@ async fn stream_generate_chat_completion<
                 message.send_event(tx.clone()).await?;
             }
 
-            let managed_tool_call = match app_state
-                .mcp_servers
-                .convert_tool_call_to_managed_tool_call(
-                    chat_id,
-                    unfinished_tool_call.clone(),
-                    &mcp_auth_context,
-                )
-                .await
+            if !allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str()) {
+                let _ = tx
+                    .send(Err(eyre!(
+                        "Proposed MCP tool call '{}' is not allowed for this request",
+                        unfinished_tool_call.fn_name
+                    )))
+                    .await;
+                return Err(());
+            }
+
+            let managed_tool = match available_mcp_tools_by_name
+                .get(unfinished_tool_call.fn_name.as_str())
             {
-                Ok(managed_tool_call) => managed_tool_call,
-                Err(err) => {
+                Some(managed_tool) => managed_tool.clone(),
+                None => {
                     let _ = tx
                         .send(Err(eyre!(
-                            "Failed to resolve MCP tool call '{}': {}",
-                            unfinished_tool_call.fn_name,
-                            err
+                            "Failed to resolve MCP tool call '{}': tool was not in the prepared MCP tool set",
+                            unfinished_tool_call.fn_name
                         )))
                         .await;
                     return Err(());
                 }
+            };
+            let managed_tool_call = crate::services::mcp_manager::ManagedToolCall {
+                server_id: managed_tool.server_id.clone(),
+                tool_call: unfinished_tool_call.clone(),
+                tool: managed_tool.tool.clone(),
             };
             let output_schema = managed_tool_call.tool.output_schema.clone();
             match app_state
@@ -2021,6 +2062,8 @@ async fn stream_generate_chat_completion<
                             let trace_enrichment = langfuse_trace_enrichment.clone();
                             let trace_tool_names = all_tool_names.clone();
                             let trace_model_tags = all_model_tags.clone();
+                            let trace_mcp_servers_unavailable =
+                                mcp_servers_unavailable.clone();
                             tokio::spawn(async move {
                                 let result = if current_turn == 1 {
                                     create_trace_with_generation_from_chat(
@@ -2069,8 +2112,11 @@ async fn stream_generate_chat_completion<
                                     if let Some(metadata) = trace_enrichment.trace_metadata(
                                         assistant_id_for_langfuse,
                                         &trace_tool_names,
+                                        &trace_mcp_servers_unavailable,
                                         true,
-                                    ) && let Err(err) = client.update_trace_metadata(metadata).await {
+                                    ) && let Err(err) =
+                                        client.update_trace_metadata(metadata).await
+                                    {
                                         tracing::warn!(
                                             "Failed to update Langfuse aborted metadata for turn {}: {}",
                                             current_turn,
@@ -2381,6 +2427,7 @@ async fn stream_generate_chat_completion<
                         let trace_enrichment = langfuse_trace_enrichment.clone();
                         let trace_tool_names = all_tool_names.clone();
                         let trace_model_tags = all_model_tags.clone();
+                        let trace_mcp_servers_unavailable = mcp_servers_unavailable.clone();
                         tokio::spawn(async move {
                             // Update trace output
                             if let Err(e) = client.update_trace_output(output_json).await {
@@ -2400,6 +2447,7 @@ async fn stream_generate_chat_completion<
                             if let Some(metadata) = trace_enrichment.trace_metadata(
                                 assistant_id_for_trace,
                                 &trace_tool_names,
+                                &trace_mcp_servers_unavailable,
                                 false,
                             ) {
                                 if let Err(e) = client.update_trace_metadata(metadata).await {
@@ -2459,6 +2507,7 @@ async fn stream_generate_chat_completion<
                     let trace_metadata = langfuse_trace_enrichment.trace_metadata(
                         assistant_id,
                         &all_tool_names,
+                        &mcp_servers_unavailable,
                         false,
                     );
                     tokio::spawn(async move {
@@ -3879,6 +3928,8 @@ async fn run_message_submit_task(
         generation_input_messages,
         generation_parameters,
         generation_request_context,
+        mcp_servers_unavailable,
+        available_mcp_tools,
     } = prepare_chat_request(
         app_state,
         policy,
@@ -3912,6 +3963,16 @@ async fn run_message_submit_task(
         .generation_chat_provider_id
         .clone()
         .unwrap_or_else(|| "unknown".to_string());
+    let allowed_tool_names: HashSet<String> = chat_request
+        .tools
+        .as_ref()
+        .map(|tools| {
+            tools
+                .iter()
+                .map(|tool| tool.name.to_string())
+                .collect::<HashSet<_>>()
+        })
+        .unwrap_or_default();
     let effective_selected_facet_ids: Vec<String> = generation_parameters
         .selected_facets
         .iter()
@@ -4112,6 +4173,9 @@ async fn run_message_submit_task(
         Some(chat_provider_id.as_str()),
         &me_user.groups,
         mcp_auth_context,
+        mcp_servers_unavailable,
+        allowed_tool_names,
+        available_mcp_tools,
         Some(task),
         chat.assistant_id,
     );
@@ -4298,6 +4362,8 @@ pub async fn regenerate_message_sse(
                 generation_input_messages,
                 generation_parameters,
                 generation_request_context,
+                mcp_servers_unavailable,
+                available_mcp_tools,
             } = prepare_chat_request_res.unwrap();
 
             let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
@@ -4322,6 +4388,16 @@ pub async fn regenerate_message_sse(
                 .generation_chat_provider_id
                 .clone()
                 .unwrap_or_else(|| "unknown".to_string());
+            let allowed_tool_names: HashSet<String> = chat_request
+                .tools
+                .as_ref()
+                .map(|tools| {
+                    tools
+                        .iter()
+                        .map(|tool| tool.name.to_string())
+                        .collect::<HashSet<_>>()
+                })
+                .unwrap_or_default();
 
             let initial_assistant_message =
                 match submit_message(
@@ -4382,6 +4458,9 @@ pub async fn regenerate_message_sse(
                     Some(chat_provider_id.as_str()),
                     &me_user.groups,
                     mcp_auth_context,
+                    mcp_servers_unavailable,
+                    allowed_tool_names,
+                    available_mcp_tools,
                     Some(&task_for_stream),
                     chat.assistant_id,
                 )
@@ -4622,6 +4701,8 @@ pub async fn edit_message_sse(
                 generation_input_messages,
                 generation_parameters,
                 generation_request_context,
+                mcp_servers_unavailable,
+                available_mcp_tools,
             } = prepare_chat_request_res.unwrap();
 
             let langfuse_trace_enrichment = match build_langfuse_trace_enrichment(
@@ -4646,6 +4727,16 @@ pub async fn edit_message_sse(
                 .generation_chat_provider_id
                 .clone()
                 .unwrap_or_else(|| "unknown".to_string());
+            let allowed_tool_names: HashSet<String> = chat_request
+                .tools
+                .as_ref()
+                .map(|tools| {
+                    tools
+                        .iter()
+                        .map(|tool| tool.name.to_string())
+                        .collect::<HashSet<_>>()
+                })
+                .unwrap_or_default();
 
             let initial_assistant_message = match submit_message(
                 &app_state.db,
@@ -4706,6 +4797,9 @@ pub async fn edit_message_sse(
                     Some(chat_provider_id.as_str()),
                     &me_user.groups,
                     mcp_auth_context,
+                    mcp_servers_unavailable,
+                    allowed_tool_names,
+                    available_mcp_tools,
                     Some(&task_for_stream),
                     chat.assistant_id,
                 )
