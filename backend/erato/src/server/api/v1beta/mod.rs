@@ -1044,6 +1044,8 @@ pub struct FileUploadItem {
     download_url: String,
     /// Pre-signed URL for inline preview without forcing download when available
     preview_url: Option<String>,
+    /// Indicates that file contents are unavailable for the current user due to missing permissions.
+    file_contents_unavailable_missing_permissions: bool,
     /// The file capability that was evaluated for this file
     #[serde(rename = "file_capability")]
     file_capability: FileCapability,
@@ -1262,6 +1264,7 @@ pub async fn upload_file(
             filename,
             download_url,
             preview_url: Some(preview_url),
+            file_contents_unavailable_missing_permissions: false,
             file_capability,
         });
     }
@@ -1517,6 +1520,7 @@ async fn link_sharepoint_file_impl(
             filename,
             preview_url: Some(format!("/api/v1beta/files/{}/preview", file_upload.id)),
             download_url,
+            file_contents_unavailable_missing_permissions: false,
             file_capability,
         }],
     }))
@@ -1783,6 +1787,8 @@ pub async fn chat_messages(
                     filename: file_upload.filename,
                     download_url: file_upload.download_url,
                     preview_url: file_upload.preview_url,
+                    file_contents_unavailable_missing_permissions: file_upload
+                        .file_contents_unavailable_missing_permissions,
                     file_capability,
                 },
             );
@@ -2409,6 +2415,8 @@ pub async fn get_file(
         filename: file_upload.filename,
         download_url: file_upload.download_url,
         preview_url: file_upload.preview_url,
+        file_contents_unavailable_missing_permissions: file_upload
+            .file_contents_unavailable_missing_permissions,
         file_capability,
     }))
 }

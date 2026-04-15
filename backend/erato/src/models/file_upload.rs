@@ -188,6 +188,7 @@ pub struct FileUploadWithUrl {
     pub file_storage_path: String,
     pub download_url: String,
     pub preview_url: Option<String>,
+    pub file_contents_unavailable_missing_permissions: bool,
 }
 
 /// Get a specific file upload by ID, including a pre-signed download URL.
@@ -217,62 +218,64 @@ pub async fn get_file_upload_with_url_and_token(
             file_upload.file_storage_provider_id
         ))?;
 
-    let (download_url, preview_url) = if file_storage.is_sharepoint() {
-        match file_storage
-            .get_sharepoint_file_metadata_with_context(
-                &file_upload.file_storage_path,
-                sharepoint_ctx.as_ref(),
-            )
-            .await
-        {
-            Ok(metadata) => (
-                metadata.download_url,
-                Some(format!("/api/v1beta/files/{}/preview", file_upload.id)),
-            ),
-            Err(err) => {
-                tracing::warn!(
-                    file_id = %file_upload.id,
-                    provider = %file_upload.file_storage_provider_id,
-                    error = %err,
-                    "Failed to generate Sharepoint file metadata, returning placeholder"
-                );
-                (format!("/api/v1beta/files/{}", file_upload.id), None)
+    let (download_url, preview_url, file_contents_unavailable_missing_permissions) =
+        if file_storage.is_sharepoint() {
+            match file_storage
+                .get_sharepoint_file_metadata_with_context(
+                    &file_upload.file_storage_path,
+                    sharepoint_ctx.as_ref(),
+                )
+                .await
+            {
+                Ok(metadata) => (
+                    metadata.download_url,
+                    Some(format!("/api/v1beta/files/{}/preview", file_upload.id)),
+                    false,
+                ),
+                Err(err) => {
+                    tracing::warn!(
+                        file_id = %file_upload.id,
+                        provider = %file_upload.file_storage_provider_id,
+                        error = %err,
+                        "Failed to generate Sharepoint file metadata, returning placeholder"
+                    );
+                    (format!("/api/v1beta/files/{}", file_upload.id), None, true)
+                }
             }
-        }
-    } else {
-        let download_url = match file_storage
-            .generate_presigned_download_url_with_context(
-                &file_upload.file_storage_path,
-                None,
-                Some(&file_upload.filename),
-                sharepoint_ctx.as_ref(),
-            )
-            .await
-        {
-            Ok(url) => url,
-            Err(err) => {
-                tracing::warn!(
-                    file_id = %file_upload.id,
-                    provider = %file_upload.file_storage_provider_id,
-                    error = %err,
-                    "Failed to generate download URL, returning placeholder"
-                );
-                format!("/api/v1beta/files/{}", file_upload.id)
-            }
+        } else {
+            let download_url = match file_storage
+                .generate_presigned_download_url_with_context(
+                    &file_upload.file_storage_path,
+                    None,
+                    Some(&file_upload.filename),
+                    sharepoint_ctx.as_ref(),
+                )
+                .await
+            {
+                Ok(url) => url,
+                Err(err) => {
+                    tracing::warn!(
+                        file_id = %file_upload.id,
+                        provider = %file_upload.file_storage_provider_id,
+                        error = %err,
+                        "Failed to generate download URL, returning placeholder"
+                    );
+                    format!("/api/v1beta/files/{}", file_upload.id)
+                }
+            };
+
+            let preview_url = file_storage
+                .generate_presigned_preview_url_with_context(
+                    &file_upload.file_storage_path,
+                    None,
+                    Some(&file_upload.filename),
+                    sharepoint_ctx.as_ref(),
+                )
+                .await
+                .ok();
+
+            (download_url, preview_url, false)
         };
-
-        let preview_url = file_storage
-            .generate_presigned_preview_url_with_context(
-                &file_upload.file_storage_path,
-                None,
-                Some(&file_upload.filename),
-                sharepoint_ctx.as_ref(),
-            )
-            .await
-            .ok();
-
-        (download_url, preview_url)
-    };
 
     Ok(FileUploadWithUrl {
         id: file_upload.id,
@@ -281,6 +284,7 @@ pub async fn get_file_upload_with_url_and_token(
         file_storage_path: file_upload.file_storage_path,
         download_url,
         preview_url,
+        file_contents_unavailable_missing_permissions,
     })
 }
 
@@ -338,62 +342,64 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
                 upload.file_storage_provider_id
             ))?;
 
-        let (download_url, preview_url) = if file_storage.is_sharepoint() {
-            match file_storage
-                .get_sharepoint_file_metadata_with_context(
-                    &upload.file_storage_path,
-                    sharepoint_ctx.as_ref(),
-                )
-                .await
-            {
-                Ok(metadata) => (
-                    metadata.download_url,
-                    Some(format!("/api/v1beta/files/{}/preview", upload.id)),
-                ),
-                Err(err) => {
-                    tracing::warn!(
-                        file_id = %upload.id,
-                        provider = %upload.file_storage_provider_id,
-                        error = %err,
-                        "Failed to generate Sharepoint file metadata, returning placeholder"
-                    );
-                    (format!("/api/v1beta/files/{}", upload.id), None)
+        let (download_url, preview_url, file_contents_unavailable_missing_permissions) =
+            if file_storage.is_sharepoint() {
+                match file_storage
+                    .get_sharepoint_file_metadata_with_context(
+                        &upload.file_storage_path,
+                        sharepoint_ctx.as_ref(),
+                    )
+                    .await
+                {
+                    Ok(metadata) => (
+                        metadata.download_url,
+                        Some(format!("/api/v1beta/files/{}/preview", upload.id)),
+                        false,
+                    ),
+                    Err(err) => {
+                        tracing::warn!(
+                            file_id = %upload.id,
+                            provider = %upload.file_storage_provider_id,
+                            error = %err,
+                            "Failed to generate Sharepoint file metadata, returning placeholder"
+                        );
+                        (format!("/api/v1beta/files/{}", upload.id), None, true)
+                    }
                 }
-            }
-        } else {
-            let download_url = match file_storage
-                .generate_presigned_download_url_with_context(
-                    &upload.file_storage_path,
-                    None,
-                    Some(&upload.filename),
-                    sharepoint_ctx.as_ref(),
-                )
-                .await
-            {
-                Ok(url) => url,
-                Err(err) => {
-                    tracing::warn!(
-                        file_id = %upload.id,
-                        provider = %upload.file_storage_provider_id,
-                        error = %err,
-                        "Failed to generate download URL, returning placeholder"
-                    );
-                    format!("/api/v1beta/files/{}", upload.id)
-                }
+            } else {
+                let download_url = match file_storage
+                    .generate_presigned_download_url_with_context(
+                        &upload.file_storage_path,
+                        None,
+                        Some(&upload.filename),
+                        sharepoint_ctx.as_ref(),
+                    )
+                    .await
+                {
+                    Ok(url) => url,
+                    Err(err) => {
+                        tracing::warn!(
+                            file_id = %upload.id,
+                            provider = %upload.file_storage_provider_id,
+                            error = %err,
+                            "Failed to generate download URL, returning placeholder"
+                        );
+                        format!("/api/v1beta/files/{}", upload.id)
+                    }
+                };
+
+                let preview_url = file_storage
+                    .generate_presigned_preview_url_with_context(
+                        &upload.file_storage_path,
+                        None,
+                        Some(&upload.filename),
+                        sharepoint_ctx.as_ref(),
+                    )
+                    .await
+                    .ok();
+
+                (download_url, preview_url, false)
             };
-
-            let preview_url = file_storage
-                .generate_presigned_preview_url_with_context(
-                    &upload.file_storage_path,
-                    None,
-                    Some(&upload.filename),
-                    sharepoint_ctx.as_ref(),
-                )
-                .await
-                .ok();
-
-            (download_url, preview_url)
-        };
 
         result.push(FileUploadWithUrl {
             id: upload.id,
@@ -402,6 +408,7 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
             file_storage_path: upload.file_storage_path,
             download_url,
             preview_url,
+            file_contents_unavailable_missing_permissions,
         });
     }
 

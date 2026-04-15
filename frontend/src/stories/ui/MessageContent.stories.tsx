@@ -289,6 +289,7 @@ export const ResolvedFileLinksInMarkdown: Story = {
         filename: "quarterly-report.pdf",
         download_url:
           "https://files.example.com/downloads/quarterly-report.pdf",
+        file_contents_unavailable_missing_permissions: false,
         file_capability: FileTypeUtil.createMockFileCapability(
           "quarterly-report.pdf",
         ),
@@ -297,6 +298,7 @@ export const ResolvedFileLinksInMarkdown: Story = {
         id: "file_abc",
         filename: "design-spec.pdf",
         download_url: "https://files.example.com/downloads/design-spec.pdf",
+        file_contents_unavailable_missing_permissions: false,
         file_capability:
           FileTypeUtil.createMockFileCapability("design-spec.pdf"),
       },

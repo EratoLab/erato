@@ -773,6 +773,11 @@ msgid "feedback.view.title"
 msgstr "Your Feedback"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Modal/FilePreviewModal.tsx
+msgid "filePreviewModal.unavailableMissingPermissions"
+msgstr "This file is unavailable because you do not have permission to access it."
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
 msgid "fileSourceSelector.uploadFromComputer"
 msgstr "Upload from Computer"

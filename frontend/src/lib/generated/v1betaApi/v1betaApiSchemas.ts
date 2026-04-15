@@ -778,6 +778,10 @@ export type FileUploadItem = {
    */
   file_capability: FileCapability;
   /**
+   * Indicates that file contents are unavailable for the current user due to missing permissions.
+   */
+  file_contents_unavailable_missing_permissions: boolean;
+  /**
    * The original filename of the uploaded file
    */
   filename: string;
