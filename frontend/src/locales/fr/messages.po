@@ -68,6 +68,11 @@ msgid "assistant.form.model.helpText"
 msgstr "Optionnel : Choisissez quel modèle cet assistant doit utiliser par défaut"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ModelSelector.tsx
+msgid "assistant.form.model.none"
+msgstr "-"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.prompt.placeholder"
 msgstr "Vous êtes un assistant utile qui..."
