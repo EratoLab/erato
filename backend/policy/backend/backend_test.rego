@@ -199,6 +199,15 @@ test_user_can_read_shared_chat_when_feature_enabled if {
 	} with data.resource_attributes as resource_attributes
 		with data.share_links as share_links
 		with data.config as chat_sharing_enabled_config
+	backend.chat_view_permission_query with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "chat",
+		"resource_id": chat_1_id,
+		"action": "read",
+	} with data.resource_attributes as resource_attributes
+		with data.share_links as share_links
+		with data.config as chat_sharing_enabled_config
 }
 
 test_user_cannot_read_shared_chat_when_feature_disabled if {

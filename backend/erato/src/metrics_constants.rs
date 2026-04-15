@@ -2,6 +2,7 @@ pub const POSTGRES_QUERY_VERIFY_LATEST_MIGRATION: &str = "verify_latest_migratio
 pub const POSTGRES_QUERY_LIST_RECENT_CHATS: &str = "list_recent_chats";
 pub const POSTGRES_QUERY_COUNT_RECENT_CHATS: &str = "count_recent_chats";
 pub const POSTGRES_QUERY_FREQUENT_ASSISTANTS: &str = "frequent_assistants";
+pub const POSTGRES_QUERY_POLICY_CHAT_VIEW_PERMISSION: &str = "policy_chat_view_permission";
 pub const POSTGRES_QUERY_USER_SPENDING_BY_PROVIDER: &str = "user_spending_by_provider";
 
 pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
@@ -9,5 +10,6 @@ pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_LIST_RECENT_CHATS,
     POSTGRES_QUERY_COUNT_RECENT_CHATS,
     POSTGRES_QUERY_FREQUENT_ASSISTANTS,
+    POSTGRES_QUERY_POLICY_CHAT_VIEW_PERMISSION,
     POSTGRES_QUERY_USER_SPENDING_BY_PROVIDER,
 ];

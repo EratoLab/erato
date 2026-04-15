@@ -49,6 +49,15 @@ package backend
 #   }
 # ]
 #
+# tables := {
+#   "chat": [
+#     {
+#       "id": "some-chat-id",
+#       "owner_id": "some-user-id"
+#     }
+#   ]
+# }
+#
 # share_links := [
 #   {
 #     "id": "some-link-id",
@@ -102,6 +111,20 @@ action_share := "share"
 
 chat_sharing_enabled if {
 	data.config.chat_sharing.enabled
+}
+
+resource_row(resource_kind, resource_id) := row if {
+	row := object.get(
+		object.get(data.resource_attributes, resource_kind, {}),
+		resource_id,
+		null,
+	)
+	row != null
+}
+
+resource_row(resource_kind, resource_id) := row if {
+	some row in object.get(data.tables, resource_kind, [])
+	row.id == resource_id
 }
 
 has_enabled_share_link(resource_type, resource_id) if {
@@ -164,6 +187,39 @@ can_read_shared_chat(chat_id) if {
 	data.resource_attributes[resource_kind_chat][chat_id].archived_at == null
 }
 
+# Queryable helper rule for `chat` `view`/`read` checks.
+# Keep this rule in the database-friendly subset so it can serve as the basis
+# for query generation.
+can_view_chat(chat_id) if {
+	chat := resource_row(resource_kind_chat, chat_id)
+	chat.owner_id == input.subject_id
+}
+
+can_view_chat(chat_id) if {
+	can_read_shared_chat(chat_id)
+}
+
+# SQL-codegen query source for chat view checks.
+# Values are filled in by the backend at runtime.
+chat_view_permission_query contains result if {
+	some chat in data.chats
+	chat.id == input.resource_id
+	chat.owner_user_id == input.subject_id
+	result := {"allowed": true}
+}
+
+chat_view_permission_query contains result if {
+	some chat in data.chats
+	some share_link in data.share_links
+	chat.id == input.resource_id
+	chat.archived_at == null
+	share_link.resource_type == "chat"
+	share_link.resource_id == chat.id
+	share_link.enabled == true
+	result := {"allowed": true}
+	data.config.chat_sharing.enabled
+}
+
 can_read_assistant(assistant_id) if {
 	some grant in data.share_grants
 	grant.resource_type == "assistant"
@@ -175,17 +231,21 @@ can_read_assistant(assistant_id) if {
 	group_id == grant.subject_id
 }
 
-# A user can view/update chats they own.
+# A user can view chats they are allowed to access.
 allow if {
-	# Ensure subject is a user and is logged in.
 	input.subject_kind == subject_kind_user
 	input.subject_id != not_logged_in
-
-	# Check for chat read action
 	input.resource_kind == resource_kind_chat
-	input.action in [action_read, action_update]
+	input.action == action_read
+	can_view_chat(input.resource_id)
+}
 
-	# Check ownership
+# A user can update chats they own.
+allow if {
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+	input.resource_kind == resource_kind_chat
+	input.action == action_update
 	data.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
 }
 
@@ -196,15 +256,6 @@ allow if {
 	input.resource_kind == resource_kind_chat
 	input.action == action_share
 	data.resource_attributes[resource_kind_chat][input.resource_id].owner_id == input.subject_id
-}
-
-# A logged-in user can read a chat when chat sharing is enabled and the chat has an active share link.
-allow if {
-	input.subject_kind == subject_kind_user
-	input.subject_id != not_logged_in
-	input.resource_kind == resource_kind_chat
-	input.action == action_read
-	can_read_shared_chat(input.resource_id)
 }
 
 # A user can submit messages to chats they own.
@@ -428,3 +479,11 @@ allow if {
 
 	# The authorization logic for checking message/chat ownership is handled in the model layer
 }
+
+#chat_view_permission_query contains result if {
+#    some chat in data.chats
+#    chat.id == input.resource_id
+#    can_view_chat(input.resource_id)
+#
+#	result := {"allowed": true}
+#}

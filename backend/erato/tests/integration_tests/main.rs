@@ -25,6 +25,7 @@ mod api;
 mod config;
 mod db;
 mod llm;
+mod policy;
 mod test_utils;
 
 // Using a (possibly brittle?) life-before-main method to set the DATABASE_URL before any tests run.

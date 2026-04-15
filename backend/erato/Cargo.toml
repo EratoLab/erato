@@ -27,7 +27,7 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = "0.1.41"
 facet = "0.44.3"
 synonym = "0.1.5"
-regorus = "0.5.0"
+regorus = { git = "https://github.com/EratoLab/regorus.git", rev = "042d694b7ebce22e7fe944c0e9ef80f457f29d1b" }
 eyre = "0.6.12"
 color-eyre = "0.6.3"
 async-trait = "0.1.77"
@@ -60,7 +60,7 @@ rmcp = { version = "=1.3.0", features = ["auth", "client", "reqwest", "transport
 rmcp-sse = { path = "../rmcp-sse" }
 ractor = "0.15.9"
 ractor_actors = { version = "0.4.9", features = ["time"] }
-chrono = "0.4"
+chrono = "0.4.41"
 cron = "0.12.1"
 
 # Dependencies: Observability

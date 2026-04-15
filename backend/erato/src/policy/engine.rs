@@ -4,21 +4,50 @@ use crate::db::entity::{
     assistant_file_uploads, assistants, chat_file_uploads, file_uploads, share_grants, share_links,
 };
 use crate::db::entity_ext::chats;
+use crate::metrics_constants::POSTGRES_QUERY_POLICY_CHAT_VIEW_PERMISSION;
 use crate::policy::types::{
     Action, Resource, ResourceId, ResourceKind, Subject, SubjectId, SubjectKind,
 };
+use crate::query_metrics::named_statement_from_string;
 use axum::http::StatusCode;
 use eyre::{Report, WrapErr, eyre};
-use regorus::Engine;
+use regorus::{
+    Source,
+    Engine,
+    unstable::{
+        Expr,
+        Parser,
+        RegoToSqlIrTranslator,
+        Rule,
+        RuleHead,
+        SqlCodeGenerator,
+        SqlDialect,
+        SqlOperation,
+        SqlOptimizer,
+    },
+};
 use sea_orm::prelude::Uuid;
-use sea_orm::{DatabaseConnection, EntityTrait, FromQueryResult, QuerySelect};
+use sea_orm::{DatabaseConnection, DbBackend, EntityTrait, FromQueryResult, Iden, QuerySelect};
 use serde_json::{Value as JsonValue, json};
 use std::collections::HashMap;
 use std::sync::Arc;
+use regorus::unstable::{SqlInputValue, SqlLiteral};
 use tokio::sync::RwLock;
 use tracing::instrument;
 
 const BACKEND_POLICY: &str = include_str!("../../../policy/backend/backend.rego");
+const NOT_LOGGED_IN_SUBJECT_ID: &str = "__not_logged_in__";
+const CHAT_VIEW_PERMISSION_QUERY_RULE_NAME: &str = "chat_view_permission_query";
+const CHAT_VIEW_PERMISSION_QUERY_PLACEHOLDER_CHAT_ID: &str = "__ERATO_CHAT_VIEW_QUERY_CHAT_ID__";
+const CHAT_VIEW_PERMISSION_QUERY_PLACEHOLDER_SUBJECT_ID: &str =
+    "__ERATO_CHAT_VIEW_QUERY_SUBJECT_ID__";
+const CHAT_VIEW_PERMISSION_QUERY_PLACEHOLDER_CHAT_SHARING_ENABLED: &str =
+    "__ERATO_CHAT_VIEW_QUERY_CHAT_SHARING_ENABLED__";
+
+#[derive(Debug, FromQueryResult)]
+struct PolicyAuthorizationRow {
+    allowed: bool,
+}
 
 /// Minimal chat attributes required for policy evaluation.
 #[derive(Debug, FromQueryResult)]
@@ -439,6 +468,178 @@ impl PolicyEngine {
             tracing::error!("Failed to rebuild policy data: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })
+    }
+
+    fn chat_view_permission_query_template(
+        subject_id: &str,
+        chat_id: &str,
+        chat_sharing_enabled: bool,
+    ) -> String {
+        BACKEND_POLICY
+            // .replace(
+            //     CHAT_VIEW_PERMISSION_QUERY_PLACEHOLDER_CHAT_ID,
+            //     &format!("\"{chat_id}\""),
+            // )
+            // .replace(
+            //     CHAT_VIEW_PERMISSION_QUERY_PLACEHOLDER_SUBJECT_ID,
+            //     &format!("\"{subject_id}\""),
+            // )
+            .replace(
+                "data.config.chat_sharing.enabled",
+                &chat_sharing_enabled.to_string(),
+            )
+    }
+
+    fn rule_name_for_set_head(rule_head: &RuleHead) -> Option<String> {
+        match rule_head {
+            RuleHead::Set { refr, .. } => match refr.as_ref() {
+                Expr::Var { value, .. } => value.as_string().ok().map(|value| value.to_string()),
+                Expr::RefDot {
+                    refr: inner_refr, ..
+                } => match inner_refr.as_ref() {
+                    Expr::Var { value, .. } => {
+                        value.as_string().ok().map(|value| value.to_string())
+                    }
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn specialize_postgres_chat_view_permission_sql(sql: String, chat_id: &str) -> String {
+        sql.replace(
+            &format!("= '{chat_id}'"),
+            &format!("= CAST('{chat_id}' AS UUID)"),
+        )
+        .replace("c.id = sl.resource_id", "c.id = CAST(sl.resource_id AS UUID)")
+    }
+
+    fn build_chat_view_permission_query(
+        subject_id: &str,
+        chat_id: &str,
+        chat_sharing_enabled: bool,
+        pretty_print: bool,
+    ) -> Result<String, Report> {
+        let source = Source::from_contents(
+            "backend_view_permission_query.rego".to_string(),
+            Self::chat_view_permission_query_template(subject_id, chat_id, chat_sharing_enabled),
+            // BACKEND_POLICY.to_string()
+        )
+        .map_err(|err| eyre!(err))?;
+        let mut parser = Parser::new(&source).map_err(|err| eyre!(err))?;
+        parser.enable_rego_v1().map_err(|err| eyre!(err))?;
+        let module = parser.parse().map_err(|err| eyre!(err))?;
+
+        let mut query_rules = Vec::new();
+        for rule in &module.policy {
+            let rule = rule.as_ref();
+            match rule {
+                Rule::Spec { head, bodies, .. } => {
+                    if Self::rule_name_for_set_head(head).as_deref()
+                        == Some(CHAT_VIEW_PERMISSION_QUERY_RULE_NAME)
+                    {
+                        if bodies.is_empty() {
+                            continue;
+                        }
+                        query_rules.push(rule);
+                    }
+                }
+                Rule::Default { .. } => {}
+            }
+        }
+
+        if query_rules.is_empty() {
+            return Err(eyre!(
+                "No '{}' rules found in chat view permission policy",
+                CHAT_VIEW_PERMISSION_QUERY_RULE_NAME
+            ));
+        }
+
+        let mut translated_queries = Vec::with_capacity(query_rules.len());
+        for rule in query_rules {
+            let mut translator = RegoToSqlIrTranslator::new(None)
+                .with_input_binding("resource_id".to_string(), SqlInputValue::Literal(SqlLiteral::String(chat_id.to_string())))
+                .with_input_binding("subject_id".to_string(), SqlInputValue::Literal(SqlLiteral::String(subject_id.to_string())));
+            let query = translator
+                .translate_rule(rule)
+                .map_err(|err| eyre!(err))
+                .wrap_err("Failed to translate chat view permission rule to SQL")?;
+            translated_queries.push(query);
+        }
+
+        let mut combined_query =
+            translated_queries
+                .into_iter()
+                .reduce(|mut acc, query| {
+                    acc.pipeline.push(SqlOperation::Union(Box::new(query)));
+                    acc
+                })
+                .ok_or_else(|| eyre!("Failed to combine chat view permission SQL rules"))?;
+
+        let optimizer = SqlOptimizer::new();
+        let optimized_query = optimizer.optimize(&combined_query);
+
+        let mut generator = SqlCodeGenerator::new()
+            .with_dialect(SqlDialect::PostgreSQL)
+            .with_pretty_print(pretty_print);
+
+        combined_query = optimized_query;
+        Ok(Self::specialize_postgres_chat_view_permission_sql(
+            generator.generate(&combined_query),
+            chat_id,
+        ))
+    }
+
+    pub fn build_chat_view_permission_sql(
+        &self,
+        subject: &Subject,
+        chat_id: &str,
+        chat_sharing_enabled: bool,
+        pretty_print: bool,
+    ) -> Result<String, Report> {
+        if subject.user_id() == NOT_LOGGED_IN_SUBJECT_ID {
+            return Err(eyre!("Anonymous subjects cannot view chats"));
+        }
+
+        Self::build_chat_view_permission_query(
+            subject.user_id(),
+            chat_id,
+            chat_sharing_enabled,
+            pretty_print,
+        )
+    }
+
+    /// Example query-based authorization path derived from `data.backend.can_view_chat`.
+    pub async fn authorize_chat_view_via_query(
+        &self,
+        db: &DatabaseConnection,
+        config: &AppConfig,
+        subject: &Subject,
+        chat_id: &str,
+    ) -> Result<(), Report> {
+        let sql = self.build_chat_view_permission_sql(
+            subject,
+            chat_id,
+            config.chat_sharing.enabled,
+            false,
+        )?;
+        let statement = named_statement_from_string(
+            DbBackend::Postgres,
+            POSTGRES_QUERY_POLICY_CHAT_VIEW_PERMISSION,
+            sql,
+        );
+
+        let row = PolicyAuthorizationRow::find_by_statement(statement)
+            .one(db)
+            .await?;
+
+        if row.is_some_and(|row| row.allowed) {
+            Ok(())
+        } else {
+            Err(eyre!("User is not authorized to view this chat"))
+        }
     }
 }
 
@@ -1118,5 +1319,27 @@ mod tests {
             .unwrap();
 
         assert_eq!(allowed, requested_ids);
+    }
+
+    #[test]
+    fn test_build_chat_view_permission_sql_pretty_prints_for_specific_user() {
+        let engine = PolicyEngine::new();
+        let subject = Subject::User("user-123".to_string());
+        let chat_id = "00000000-0000-0000-0000-000000000456";
+        let sql = engine
+            .build_chat_view_permission_sql(&subject, chat_id, true, true)
+            .unwrap();
+
+        println!("{sql}");
+
+        assert!(sql.contains("SELECT TRUE AS allowed"));
+        assert!(sql.contains("FROM chats"));
+        assert!(sql.contains("owner_user_id = 'user-123'"));
+        assert!(sql.contains(&format!("CAST('{chat_id}' AS UUID)")));
+        assert!(sql.contains("UNION"));
+        assert!(sql.contains("JOIN share_links"));
+        assert!(sql.contains("CAST(sl.resource_id AS UUID)"));
+        assert!(sql.contains("resource_type = 'chat'"));
+        assert!(sql.contains("enabled = TRUE"));
     }
 }
