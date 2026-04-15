@@ -1428,6 +1428,27 @@ Whether to use the user's forwarded access token for Microsoft Graph API authent
 
 **Type:** `boolean`
 
+##### `integrations.experimental_sharepoint.all_drives_sources`
+
+Which Microsoft Graph discovery surfaces Erato should query for `/integrations/sharepoint/all-drives`.
+
+If omitted or set to an empty list, Erato queries all supported sources.
+
+Supported values:
+
+- `me_drive`
+- `me_drives`
+- `joined_teams`
+- `group_drives`
+- `site_search`
+- `site_drives`
+- `shared_with_me`
+- `shared_drive_details`
+
+**Default value:** `[]` (interpreted as all sources)
+
+**Type:** `array[string]`
+
 **Example:**
 
 ```toml
@@ -1435,6 +1456,7 @@ Whether to use the user's forwarded access token for Microsoft Graph API authent
 enabled = true
 file_upload_enabled = true
 auth_via_access_token = true
+all_drives_sources = ["me_drive", "me_drives", "shared_with_me", "shared_drive_details"]
 ```
 
 **Prerequisites:**

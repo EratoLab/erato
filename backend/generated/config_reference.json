@@ -160,6 +160,7 @@
   "http_port": {},
   "integrations.experimental_entra_id.auth_via_access_token": {},
   "integrations.experimental_entra_id.enabled": {},
+  "integrations.experimental_sharepoint.all_drives_sources.[]": {},
   "integrations.experimental_sharepoint.auth_via_access_token": {},
   "integrations.experimental_sharepoint.enabled": {},
   "integrations.experimental_sharepoint.file_upload_enabled": {},

@@ -115,6 +115,7 @@ chat_provider_ids = ["test-token-limit"]
 # enabled = true
 # file_upload_enabled = true  # Whether file upload from Sharepoint is enabled (default: true)
 # auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)
+# all_drives_sources = ["me_drive", "me_drives", "shared_with_me", "shared_drive_details"]  # Optional; omit to query all sources
 
 # Experimental Entra ID integration configuration
 # Exposes organization users and groups to the frontend for sharing features.
