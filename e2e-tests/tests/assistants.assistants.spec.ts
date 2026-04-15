@@ -35,6 +35,8 @@ test.describe("Assistant Management", () => {
       page.getByRole("heading", { name: /create assistant/i }),
     ).toBeVisible();
 
+    await expect(page.getByRole("button", { name: "-" })).toBeVisible();
+
     // Fill in basic fields
     await page.getByLabel(/name/i).fill(assistantName);
     await page
@@ -86,6 +88,18 @@ test.describe("Assistant Management", () => {
     await expect(
       page.getByRole("heading", { name: assistantName }),
     ).toBeVisible();
+
+    const assistantsResponse = await page.request.get(
+      "/api/v1beta/assistants?sharing_relation=owned_by_user",
+    );
+    expect(assistantsResponse.ok()).toBeTruthy();
+    const assistants = (await assistantsResponse.json()) as Array<{
+      name: string;
+      default_chat_provider?: string | null;
+    }>;
+    const createdAssistant = assistants.find((item) => item.name === assistantName);
+    expect(createdAssistant).toBeDefined();
+    expect(createdAssistant?.default_chat_provider ?? null).toBeNull();
   });
 
   test("should edit an assistant and add files", async ({ page }) => {

@@ -45,9 +45,7 @@ export default function AssistantCreatePage() {
         name: formData.name,
         prompt: formData.prompt,
         ...(formData.description && { description: formData.description }),
-        ...(formData.defaultModel?.chat_provider_id && {
-          default_chat_provider: formData.defaultModel.chat_provider_id,
-        }),
+        default_chat_provider: formData.defaultModel?.chat_provider_id ?? null,
         ...(formData.facetIds.length > 0 && {
           facet_ids: formData.facetIds,
         }),

@@ -20,6 +20,10 @@ interface ModelSelectorProps {
   selectedModel: ChatModel | null;
   /** Callback when user selects a different model */
   onModelChange: (model: ChatModel) => void;
+  /** Whether clearing the selection is allowed */
+  allowNoSelection?: boolean;
+  /** Callback when user clears the selection */
+  onClearSelection?: () => void;
   /** Whether the selector is disabled (e.g., during loading) */
   disabled?: boolean;
   /** Additional CSS classes */
@@ -90,11 +94,17 @@ export const ModelSelector = ({
   availableModels,
   selectedModel,
   onModelChange,
+  allowNoSelection = false,
+  onClearSelection,
   disabled = false,
   className = "",
 }: ModelSelectorProps) => {
   // Keep this marker so Lingui extracts the dynamic model description keys.
   const _modelDescriptionMarker = t`chat_models.<chat-provider-id>.description`;
+  const noneLabel = t({
+    id: "assistant.form.model.none",
+    message: "-",
+  });
   // Track dropdown open state for chevron rotation
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const shouldReserveIconSpace = useMemo(
@@ -104,7 +114,7 @@ export const ModelSelector = ({
 
   // Convert available models to dropdown menu items
   const dropdownItems: DropdownMenuItem[] = useMemo(() => {
-    return availableModels.map((model) => ({
+    const items = availableModels.map((model) => ({
       label: (
         <ModelSelectorOptionContent
           model={model}
@@ -114,7 +124,29 @@ export const ModelSelector = ({
       onClick: () => onModelChange(model),
       checked: selectedModel?.chat_provider_id === model.chat_provider_id,
     }));
-  }, [availableModels, onModelChange, selectedModel, shouldReserveIconSpace]);
+
+    if (allowNoSelection) {
+      items.unshift({
+        label: (
+          <span className="text-sm font-medium text-[var(--theme-fg-primary)]">
+            {noneLabel}
+          </span>
+        ),
+        onClick: () => onClearSelection?.(),
+        checked: selectedModel == null,
+      });
+    }
+
+    return items;
+  }, [
+    allowNoSelection,
+    availableModels,
+    noneLabel,
+    onClearSelection,
+    onModelChange,
+    selectedModel,
+    shouldReserveIconSpace,
+  ]);
 
   // Don't render if no models available
   if (availableModels.length === 0) {
@@ -122,7 +154,7 @@ export const ModelSelector = ({
   }
 
   // If only one model available, show read-only display
-  if (availableModels.length === 1) {
+  if (availableModels.length === 1 && !allowNoSelection) {
     const singleModel = availableModels[0];
     return (
       <div
@@ -135,8 +167,9 @@ export const ModelSelector = ({
     );
   }
 
-  // Show loading state if disabled but models exist
-  const displayName = selectedModel?.model_display_name ?? t`Loading...`;
+  const displayName =
+    selectedModel?.model_display_name ??
+    (allowNoSelection ? noneLabel : t`Loading...`);
 
   return (
     <div className={`flex items-center ${className}`}>
@@ -145,8 +178,10 @@ export const ModelSelector = ({
         align="right"
         onOpenChange={setIsDropdownOpen}
         matchContentWidth
+        triggerButtonVariant="secondary"
+        triggerButtonClassName="min-w-[10rem] justify-between gap-2 rounded-[var(--theme-radius-input)] px-3 py-2 shadow-sm"
         triggerIcon={
-          <div className="flex items-center gap-1 px-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {selectedModel?.model_icon ? (
               <ResolvedIcon
                 iconId={selectedModel.model_icon}
@@ -154,8 +189,8 @@ export const ModelSelector = ({
               />
             ) : null}
             <span
-              className="max-w-32 truncate text-sm font-medium text-[var(--theme-fg-primary)] sm:max-w-40"
-              title={selectedModel?.model_display_name}
+              className="min-w-0 flex-1 truncate text-left text-sm font-medium text-[var(--theme-fg-primary)]"
+              title={selectedModel?.model_display_name ?? noneLabel}
             >
               {displayName}
             </span>

@@ -740,6 +740,8 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
               availableModels={availableModels}
               selectedModel={formData.defaultModel}
               onModelChange={handleModelSelect}
+              allowNoSelection
+              onClearSelection={() => handleModelSelect(null)}
               disabled={isSubmitting}
             />
           </FormField>

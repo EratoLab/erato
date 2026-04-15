@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
@@ -6,7 +6,10 @@ import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { AssistantForm } from "./AssistantForm";
 
 import type { TokenUsageEstimationResult } from "@/hooks/chat/useTokenUsageEstimation";
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ChatModel,
+  FileUploadItem,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 
 const pdfFileCapability = {
@@ -15,6 +18,17 @@ const pdfFileCapability = {
   mime_types: ["application/pdf"],
   operations: ["extract_text"],
 };
+
+const mockModels: ChatModel[] = [
+  {
+    chat_provider_id: "mock-llm",
+    model_display_name: "Mock LLM",
+  },
+  {
+    chat_provider_id: "mock-llm-alt",
+    model_display_name: "Mock LLM Alt",
+  },
+];
 
 const estimateTokenUsageFromPartsMock = vi.fn();
 const clearLastEstimationMock = vi.fn();
@@ -346,5 +360,43 @@ describe("AssistantForm", () => {
       screen.queryByText("Estimating token usage..."),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Used context: 40%")).toBeInTheDocument();
+  });
+
+  it("defaults the assistant model selector to '-' and submits a null model", async () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <StaticFeatureConfigProvider
+        config={{
+          assistants: {
+            enabled: false,
+            showRecentItems: false,
+            contextWarningThreshold: 0.5,
+            contextFileContributorThreshold: 0.05,
+          },
+        }}
+      >
+        <AssistantForm availableModels={mockModels} onSubmit={onSubmit} />
+      </StaticFeatureConfigProvider>,
+    );
+
+    expect(screen.getByTitle("-")).toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/name/i), {
+      target: { value: "Model-less assistant" },
+    });
+    fireEvent.change(screen.getByLabelText(/system prompt/i), {
+      target: {
+        value: "You are a helpful assistant without a pinned model.",
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /create assistant/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultModel: null,
+      }),
+    );
   });
 });

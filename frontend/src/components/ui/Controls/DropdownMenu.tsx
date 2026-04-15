@@ -32,6 +32,8 @@ export interface DropdownMenuProps {
   className?: string;
   align?: "left" | "right";
   triggerIcon?: React.ReactNode;
+  triggerButtonVariant?: ButtonVariant;
+  triggerButtonClassName?: string;
   id?: string;
   preferredOrientation?: {
     vertical: "top" | "bottom";
@@ -104,6 +106,8 @@ export const DropdownMenu = memo(
     className,
     align = "right",
     triggerIcon = <MoreVertical className="size-4" />,
+    triggerButtonVariant = "ghost",
+    triggerButtonClassName,
     id,
     preferredOrientation,
     matchContentWidth = false,
@@ -245,9 +249,12 @@ export const DropdownMenu = memo(
               id={triggerProps.id}
               type={triggerProps.type}
               size="sm"
-              variant="ghost"
+              variant={triggerButtonVariant}
               onClick={triggerProps.onClick}
-              className="flex min-w-fit items-center justify-center"
+              className={clsx(
+                "flex min-w-fit items-center justify-center",
+                triggerButtonClassName,
+              )}
               aria-label={t`Open menu`}
               aria-expanded={triggerProps["aria-expanded"]}
               aria-haspopup={triggerProps["aria-haspopup"]}
