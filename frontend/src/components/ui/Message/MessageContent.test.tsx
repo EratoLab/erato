@@ -32,6 +32,7 @@ const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   download_url: "https://files.example.com/sample-report-compressed.pdf",
   preview_url:
     "https://files.example.com/preview/sample-report-compressed.pdf" as never,
+  file_contents_unavailable_missing_permissions: false,
   file_capability: FileTypeUtil.createMockFileCapability(
     "sample-report-compressed.pdf",
   ),
@@ -207,7 +208,7 @@ describe("MessageContent", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("link", { name: "Link" }));
+    fireEvent.click(screen.getByText("Link"));
 
     expect(onFileLinkPreview).toHaveBeenCalledTimes(1);
     expect(onFileLinkPreview).toHaveBeenCalledWith(
@@ -233,7 +234,7 @@ describe("MessageContent", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("link", { name: "Link" }));
+    fireEvent.click(screen.getByText("Link"));
 
     expect(onFileLinkPreview).toHaveBeenCalledTimes(1);
     expect(onFileLinkPreview).toHaveBeenCalledWith(
@@ -242,6 +243,33 @@ describe("MessageContent", () => {
         download_url: "",
         preview_url:
           "https://files.example.com/preview/sample-report-compressed.pdf#page=4",
+      }),
+    );
+  });
+
+  it("keeps inaccessible erato-file links previewable so the modal can explain the permission issue", () => {
+    const onFileLinkPreview = vi.fn();
+    const file = makeFile({
+      download_url: "",
+      preview_url: undefined,
+      file_contents_unavailable_missing_permissions: true,
+    });
+
+    renderWithTheme(
+      <MessageContent
+        content={textContent("[Link](erato-file://file_123)")}
+        filesById={{ [file.id]: file }}
+        onFileLinkPreview={onFileLinkPreview}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Link"));
+
+    expect(onFileLinkPreview).toHaveBeenCalledTimes(1);
+    expect(onFileLinkPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "file_123",
+        file_contents_unavailable_missing_permissions: true,
       }),
     );
   });

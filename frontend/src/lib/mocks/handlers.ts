@@ -58,6 +58,7 @@ export const handlers = [
       filename: "test-file.txt",
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       download_url: `http://localhost/download/${fileId}`,
+      file_contents_unavailable_missing_permissions: false,
       file_capability: FileTypeUtil.createMockFileCapability("test-file.txt"),
     };
     return HttpResponse.json(response);
@@ -147,6 +148,7 @@ export const handlers = [
           id: `uploaded-file-${chatId}-${index}-${Date.now()}`,
           filename: file.name,
           download_url: `http://localhost/download/uploaded-file-${chatId}-${index}`,
+          file_contents_unavailable_missing_permissions: false,
           file_capability: FileTypeUtil.createMockFileCapability(file.name),
         }),
       );
@@ -206,6 +208,7 @@ export const handlers = [
           id: `linked-file-${Date.now()}`,
           filename,
           download_url: `http://localhost/download/linked-file-${Date.now()}`,
+          file_contents_unavailable_missing_permissions: false,
           file_capability: FileTypeUtil.createMockFileCapability(filename),
         },
       ],

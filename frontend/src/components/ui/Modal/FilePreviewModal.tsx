@@ -42,10 +42,12 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   const isImage = imageExtensions.includes(extension);
   const isPdf = extension === "pdf";
   const previewUrl = getPreviewUrl(file);
+  const isUnavailableMissingPermissions =
+    file.file_contents_unavailable_missing_permissions;
   const canPreview = (isImage || isPdf) && Boolean(previewUrl);
   const actionButtons = (
     <div className="mt-4 flex flex-wrap justify-center gap-3">
-      {file.download_url && (
+      {!isUnavailableMissingPermissions && file.download_url && (
         <Button
           // eslint-disable-next-line lingui/no-unlocalized-strings
           onClick={() => window.open(file.download_url, "_blank")}
@@ -58,6 +60,20 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   );
 
   const renderPreview = () => {
+    if (isUnavailableMissingPermissions) {
+      return (
+        <div className="text-center">
+          <Alert type="warning" className="mb-4">
+            {t({
+              id: "filePreviewModal.unavailableMissingPermissions",
+              message:
+                "This file is unavailable because you do not have permission to access it.",
+            })}
+          </Alert>
+        </div>
+      );
+    }
+
     if (isImage && previewUrl) {
       return (
         <>

@@ -91,12 +91,14 @@ const mockFiles: FileUploadItem[] = [
     id: "file-1",
     filename: "documentation.pdf",
     download_url: "#",
+    file_contents_unavailable_missing_permissions: false,
     file_capability: FileTypeUtil.createMockFileCapability("documentation.pdf"),
   },
   {
     id: "file-2",
     filename: "guidelines.txt",
     download_url: "#",
+    file_contents_unavailable_missing_permissions: false,
     file_capability: FileTypeUtil.createMockFileCapability("guidelines.txt"),
   },
 ];

@@ -22,12 +22,14 @@ const attachedFiles: FileUploadItem[] = [
     id: "file-1",
     filename: longFilename,
     download_url: "https://example.com/file-1",
+    file_contents_unavailable_missing_permissions: false,
     file_capability: documentCapability,
   },
   {
     id: "file-2",
     filename: "quarterly-summary.xlsx",
     download_url: "https://example.com/file-2",
+    file_contents_unavailable_missing_permissions: false,
     file_capability: documentCapability,
   },
 ];

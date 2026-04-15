@@ -242,9 +242,11 @@ export const MessageContent = memo(function MessageContent({
           return null;
         }
         const file = filesById[fileId];
+        const isUnavailableMissingPermissions =
+          file.file_contents_unavailable_missing_permissions;
         const previewUrl = getPreviewUrl(file) ?? file.download_url;
 
-        if (!previewUrl) {
+        if (!previewUrl && !isUnavailableMissingPermissions) {
           return null;
         }
 
@@ -256,9 +258,10 @@ export const MessageContent = memo(function MessageContent({
           }
         }
 
-        const resolvedHref = pageParam
-          ? `${previewUrl}#page=${pageParam}`
-          : previewUrl;
+        const resolvedHref =
+          pageParam && previewUrl
+            ? `${previewUrl}#page=${pageParam}`
+            : previewUrl || "#";
 
         return {
           resolvedHref,

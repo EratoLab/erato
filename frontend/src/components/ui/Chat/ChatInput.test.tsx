@@ -426,6 +426,7 @@ describe("ChatInput", () => {
         filename: "report.pdf",
         download_url: "/files/report.pdf",
         preview_url: undefined,
+        file_contents_unavailable_missing_permissions: false,
         file_capability: {
           extensions: ["pdf"],
           id: "pdf",
@@ -475,6 +476,7 @@ describe("ChatInput", () => {
         filename: "diagram.png",
         download_url: "/files/diagram.png",
         preview_url: undefined,
+        file_contents_unavailable_missing_permissions: false,
         file_capability: {
           extensions: ["png"],
           id: "image",

@@ -773,6 +773,11 @@ msgid "feedback.view.title"
 msgstr "Votre avis"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Modal/FilePreviewModal.tsx
+msgid "filePreviewModal.unavailableMissingPermissions"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
 msgid "fileSourceSelector.uploadFromComputer"
 msgstr "Télécharger depuis l'ordinateur"
