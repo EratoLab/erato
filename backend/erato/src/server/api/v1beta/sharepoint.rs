@@ -3,6 +3,7 @@
 //! These routes allow users to browse their OneDrive and Sharepoint files
 //! and attach them to chats.
 
+use crate::config::SharepointAllDrivesSource;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::state::AppState;
 use axum::extract::{Path, State};
@@ -592,6 +593,13 @@ pub async fn all_drives(
     Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<AllDrivesResponse>, StatusCode> {
     check_sharepoint_enabled(&app_state)?;
+    let enabled_sources: HashSet<_> = app_state
+        .config
+        .integrations
+        .experimental_sharepoint
+        .resolved_all_drives_sources()
+        .into_iter()
+        .collect();
     let access_token = get_access_token(&me_user)?;
     let client = create_graph_client(access_token);
     let http_client = reqwest_012::Client::new();
@@ -602,161 +610,179 @@ pub async fn all_drives(
     let mut discovered_group_ids = HashSet::new();
 
     // Get the user's personal OneDrive
-    match client.me().drive().get_drive().send().await {
-        Ok(response) => {
-            if let Ok(drive_json) = response.json::<serde_json::Value>().await {
-                add_drive(
-                    &mut drive_candidates_by_id,
-                    &mut enrichment,
-                    &mut discovered_site_ids,
-                    "me/drive",
-                    &drive_json,
-                );
-            }
-        }
-        Err(e) => {
-            tracing::warn!("Failed to get personal OneDrive: {:?}", e);
-        }
-    }
-
-    match fetch_graph_collection(&http_client, access_token, "/me/drives").await {
-        Ok(drives) => {
-            for drive in drives {
-                add_drive(
-                    &mut drive_candidates_by_id,
-                    &mut enrichment,
-                    &mut discovered_site_ids,
-                    "me/drives",
-                    &drive,
-                );
-            }
-        }
-        Err(e) => {
-            tracing::warn!("Failed to list /me/drives: {:?}", e);
-        }
-    }
-
-    match fetch_graph_collection(&http_client, access_token, "/me/joinedTeams?$select=id").await {
-        Ok(joined_teams) => {
-            for team in joined_teams {
-                if let Some(group_id) = team.get("id").and_then(|value| value.as_str()) {
-                    discovered_group_ids.insert(group_id.to_string());
-                }
-            }
-        }
-        Err(e) => {
-            tracing::warn!("Failed to list /me/joinedTeams: {:?}", e);
-        }
-    }
-
-    for group_id in discovered_group_ids {
-        let path = format!("/groups/{group_id}/drives");
-        match fetch_graph_collection(&http_client, access_token, &path).await {
-            Ok(group_drives) => {
-                for drive in group_drives {
+    if enabled_sources.contains(&SharepointAllDrivesSource::MeDrive) {
+        match client.me().drive().get_drive().send().await {
+            Ok(response) => {
+                if let Ok(drive_json) = response.json::<serde_json::Value>().await {
                     add_drive(
                         &mut drive_candidates_by_id,
                         &mut enrichment,
                         &mut discovered_site_ids,
-                        "groups/{id}/drives",
+                        "me/drive",
+                        &drive_json,
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to get personal OneDrive: {:?}", e);
+            }
+        }
+    }
+
+    if enabled_sources.contains(&SharepointAllDrivesSource::MeDrives) {
+        match fetch_graph_collection(&http_client, access_token, "/me/drives").await {
+            Ok(drives) => {
+                for drive in drives {
+                    add_drive(
+                        &mut drive_candidates_by_id,
+                        &mut enrichment,
+                        &mut discovered_site_ids,
+                        "me/drives",
                         &drive,
                     );
                 }
             }
             Err(e) => {
-                tracing::warn!("Failed to list group drives for {}: {:?}", group_id, e);
+                tracing::warn!("Failed to list /me/drives: {:?}", e);
             }
         }
     }
 
-    match fetch_graph_collection(&http_client, access_token, "/sites?search=*").await {
-        Ok(sites) => {
-            for site in sites {
-                if let Some(site_id) = site.get("id").and_then(|value| value.as_str()) {
-                    discovered_site_ids.insert(site_id.to_string());
-                    enrichment.site_metadata_by_id.insert(
-                        site_id.to_string(),
-                        SiteMetadata {
-                            display_name: site
-                                .get("displayName")
-                                .and_then(|value| value.as_str())
-                                .map(String::from)
-                                .unwrap_or_else(|| site_id.to_string()),
-                            is_personal_site: site
-                                .get("isPersonalSite")
-                                .and_then(|value| value.as_bool())
-                                .unwrap_or(false),
-                        },
-                    );
+    if enabled_sources.contains(&SharepointAllDrivesSource::JoinedTeams) {
+        match fetch_graph_collection(&http_client, access_token, "/me/joinedTeams?$select=id").await
+        {
+            Ok(joined_teams) => {
+                for team in joined_teams {
+                    if let Some(group_id) = team.get("id").and_then(|value| value.as_str()) {
+                        discovered_group_ids.insert(group_id.to_string());
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to list /me/joinedTeams: {:?}", e);
+            }
+        }
+    }
+
+    if enabled_sources.contains(&SharepointAllDrivesSource::GroupDrives) {
+        for group_id in discovered_group_ids {
+            let path = format!("/groups/{group_id}/drives");
+            match fetch_graph_collection(&http_client, access_token, &path).await {
+                Ok(group_drives) => {
+                    for drive in group_drives {
+                        add_drive(
+                            &mut drive_candidates_by_id,
+                            &mut enrichment,
+                            &mut discovered_site_ids,
+                            "groups/{id}/drives",
+                            &drive,
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to list group drives for {}: {:?}", group_id, e);
                 }
             }
         }
-        Err(e) => {
-            tracing::warn!("Failed to search /sites?search=*: {:?}", e);
-        }
     }
 
-    match fetch_graph_collection(&http_client, access_token, "/me/drive/sharedWithMe()").await {
-        Ok(shared_items) => {
-            for item in &shared_items {
-                collect_shared_item_references(
-                    item,
-                    &mut discovered_drive_ids,
-                    &mut discovered_site_ids,
-                );
+    if enabled_sources.contains(&SharepointAllDrivesSource::SiteSearch) {
+        match fetch_graph_collection(&http_client, access_token, "/sites?search=*").await {
+            Ok(sites) => {
+                for site in sites {
+                    if let Some(site_id) = site.get("id").and_then(|value| value.as_str()) {
+                        discovered_site_ids.insert(site_id.to_string());
+                        enrichment.site_metadata_by_id.insert(
+                            site_id.to_string(),
+                            SiteMetadata {
+                                display_name: site
+                                    .get("displayName")
+                                    .and_then(|value| value.as_str())
+                                    .map(String::from)
+                                    .unwrap_or_else(|| site_id.to_string()),
+                                is_personal_site: site
+                                    .get("isPersonalSite")
+                                    .and_then(|value| value.as_bool())
+                                    .unwrap_or(false),
+                            },
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to search /sites?search=*: {:?}", e);
             }
         }
-        Err(e) => {
-            tracing::warn!("Failed to list /me/drive/sharedWithMe(): {:?}", e);
+    }
+
+    if enabled_sources.contains(&SharepointAllDrivesSource::SharedWithMe) {
+        match fetch_graph_collection(&http_client, access_token, "/me/drive/sharedWithMe()").await {
+            Ok(shared_items) => {
+                for item in &shared_items {
+                    collect_shared_item_references(
+                        item,
+                        &mut discovered_drive_ids,
+                        &mut discovered_site_ids,
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to list /me/drive/sharedWithMe(): {:?}", e);
+            }
         }
     }
 
-    for site_id in discovered_site_ids {
-        if !enrichment.site_metadata_by_id.contains_key(&site_id)
-            && let Some(site_metadata) = fetch_site_name(&http_client, access_token, &site_id).await
-        {
-            enrichment
-                .site_metadata_by_id
-                .insert(site_id.clone(), site_metadata);
-        }
+    if enabled_sources.contains(&SharepointAllDrivesSource::SiteDrives) {
+        for site_id in discovered_site_ids {
+            if !enrichment.site_metadata_by_id.contains_key(&site_id)
+                && let Some(site_metadata) =
+                    fetch_site_name(&http_client, access_token, &site_id).await
+            {
+                enrichment
+                    .site_metadata_by_id
+                    .insert(site_id.clone(), site_metadata);
+            }
 
-        let path = format!("/sites/{site_id}/drives");
-        match fetch_graph_collection(&http_client, access_token, &path).await {
-            Ok(site_drives) => {
-                let mut ignored_site_ids = HashSet::new();
-                for drive in site_drives {
-                    let mut drive = drive;
-                    set_sharepoint_site_id(&mut drive, &site_id);
+            let path = format!("/sites/{site_id}/drives");
+            match fetch_graph_collection(&http_client, access_token, &path).await {
+                Ok(site_drives) => {
+                    let mut ignored_site_ids = HashSet::new();
+                    for drive in site_drives {
+                        let mut drive = drive;
+                        set_sharepoint_site_id(&mut drive, &site_id);
+                        add_drive(
+                            &mut drive_candidates_by_id,
+                            &mut enrichment,
+                            &mut ignored_site_ids,
+                            "sites/{id}/drives",
+                            &drive,
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to list site drives for {}: {:?}", site_id, e);
+                }
+            }
+        }
+    }
+
+    if enabled_sources.contains(&SharepointAllDrivesSource::SharedDriveDetails) {
+        for drive_id in discovered_drive_ids {
+            let path = format!("/drives/{drive_id}");
+            match fetch_graph_drive(&http_client, access_token, &path).await {
+                Ok(drive) => {
+                    let mut ignored_site_ids = HashSet::new();
                     add_drive(
                         &mut drive_candidates_by_id,
                         &mut enrichment,
                         &mut ignored_site_ids,
-                        "sites/{id}/drives",
+                        "sharedWithMe -> drives/{id}",
                         &drive,
                     );
                 }
-            }
-            Err(e) => {
-                tracing::warn!("Failed to list site drives for {}: {:?}", site_id, e);
-            }
-        }
-    }
-
-    for drive_id in discovered_drive_ids {
-        let path = format!("/drives/{drive_id}");
-        match fetch_graph_drive(&http_client, access_token, &path).await {
-            Ok(drive) => {
-                let mut ignored_site_ids = HashSet::new();
-                add_drive(
-                    &mut drive_candidates_by_id,
-                    &mut enrichment,
-                    &mut ignored_site_ids,
-                    "sharedWithMe -> drives/{id}",
-                    &drive,
-                );
-            }
-            Err(e) => {
-                tracing::warn!("Failed to fetch shared drive {}: {:?}", drive_id, e);
+                Err(e) => {
+                    tracing::warn!("Failed to fetch shared drive {}: {:?}", drive_id, e);
+                }
             }
         }
     }

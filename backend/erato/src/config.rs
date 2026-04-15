@@ -353,7 +353,8 @@ impl AppConfig {
                 .with_list_parse_key("chat_providers.priority_order")
                 .with_list_parse_key("experimental_facets.priority_order")
                 .with_list_parse_key("experimental_facets.tool_call_allowlist")
-                .with_list_parse_key("experimental_facets.default_selected_facets"),
+                .with_list_parse_key("experimental_facets.default_selected_facets")
+                .with_list_parse_key("integrations.experimental_sharepoint.all_drives_sources"),
         );
         Ok(builder)
     }
@@ -1863,6 +1864,33 @@ impl Default for FileProcessorConfig {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Hash, ToSchema, Facet)]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum SharepointAllDrivesSource {
+    MeDrive,
+    MeDrives,
+    JoinedTeams,
+    GroupDrives,
+    SiteSearch,
+    SiteDrives,
+    SharedWithMe,
+    SharedDriveDetails,
+}
+
+impl SharepointAllDrivesSource {
+    pub const ALL: [Self; 8] = [
+        Self::MeDrive,
+        Self::MeDrives,
+        Self::JoinedTeams,
+        Self::GroupDrives,
+        Self::SiteSearch,
+        Self::SiteDrives,
+        Self::SharedWithMe,
+        Self::SharedDriveDetails,
+    ];
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct ExperimentalSharepointConfig {
     // Whether the experimental Sharepoint/OneDrive integration is enabled.
@@ -1882,6 +1910,23 @@ pub struct ExperimentalSharepointConfig {
     // Defaults to `true`.
     #[serde(default = "default_true")]
     pub auth_via_access_token: bool,
+
+    // Which Microsoft Graph discovery surfaces should be queried when building the
+    // `/integrations/sharepoint/all-drives` response.
+    //
+    // Supported values:
+    // - `me_drive`
+    // - `me_drives`
+    // - `joined_teams`
+    // - `group_drives`
+    // - `site_search`
+    // - `site_drives`
+    // - `shared_with_me`
+    // - `shared_drive_details`
+    //
+    // If empty or omitted, all sources are queried.
+    #[serde(default)]
+    pub all_drives_sources: Vec<SharepointAllDrivesSource>,
 }
 
 fn default_true() -> bool {
@@ -1889,6 +1934,14 @@ fn default_true() -> bool {
 }
 
 impl ExperimentalSharepointConfig {
+    pub fn resolved_all_drives_sources(&self) -> Vec<SharepointAllDrivesSource> {
+        if self.all_drives_sources.is_empty() {
+            SharepointAllDrivesSource::ALL.to_vec()
+        } else {
+            self.all_drives_sources.clone()
+        }
+    }
+
     /// Validates the Sharepoint configuration.
     pub fn validate(&self) -> Result<(), Report> {
         if self.enabled && !self.auth_via_access_token {

@@ -2,7 +2,10 @@
 
 use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
-use erato::config::{AppConfig, ModelReasoningEffort, ModelVerbosity, PromptSourceSpecification};
+use erato::config::{
+    AppConfig, ModelReasoningEffort, ModelVerbosity, PromptSourceSpecification,
+    SharepointAllDrivesSource,
+};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
 use std::collections::HashMap;
@@ -126,6 +129,68 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         .migrate();
 
     assert_eq!(config.frontend.web_frontend_bundle_path, "./legacy-public");
+}
+
+#[test]
+fn test_sharepoint_all_drives_sources_defaults_to_all_when_omitted() {
+    let config = AppConfig::default();
+
+    assert_eq!(
+        config
+            .integrations
+            .experimental_sharepoint
+            .resolved_all_drives_sources(),
+        SharepointAllDrivesSource::ALL.to_vec()
+    );
+}
+
+#[test]
+fn test_sharepoint_all_drives_sources_can_be_configured() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "o4-mini"
+
+[integrations.experimental_sharepoint]
+all_drives_sources = ["me_drive", "shared_with_me", "shared_drive_details"]
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert_eq!(
+        config
+            .integrations
+            .experimental_sharepoint
+            .all_drives_sources,
+        vec![
+            SharepointAllDrivesSource::MeDrive,
+            SharepointAllDrivesSource::SharedWithMe,
+            SharepointAllDrivesSource::SharedDriveDetails,
+        ]
+    );
 }
 
 /// Tests OpenAI provider configuration with custom base URL.

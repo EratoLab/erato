@@ -37,6 +37,7 @@ enabled = true
 | `enabled`               | boolean | `false` | Whether the SharePoint integration is enabled                               |
 | `file_upload_enabled`   | boolean | `true`  | Whether file linking from SharePoint is enabled                             |
 | `auth_via_access_token` | boolean | `true`  | Use the user's forwarded access token for MS Graph API (currently required) |
+| `all_drives_sources`    | string[] | `[]`   | Optional subset of Graph discovery surfaces for `/all-drives`; empty means all |
 
 ### Full Example
 
@@ -45,7 +46,23 @@ enabled = true
 enabled = true
 file_upload_enabled = true
 auth_via_access_token = true
+all_drives_sources = ["me_drive", "me_drives", "shared_with_me", "shared_drive_details"]
 ```
+
+### Drive Discovery Sources
+
+`all_drives_sources` controls which Microsoft Graph discovery surfaces Erato uses when listing accessible drives. Supported values are:
+
+- `me_drive`
+- `me_drives`
+- `joined_teams`
+- `group_drives`
+- `site_search`
+- `site_drives`
+- `shared_with_me`
+- `shared_drive_details`
+
+If you do not set `all_drives_sources`, Erato queries the full set of sources to preserve the existing behavior. This can be useful for tenants where some discovery paths return very large numbers of drives or where only a subset of drive types should be exposed.
 
 ## Authentication Flow
 
