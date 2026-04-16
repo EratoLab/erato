@@ -40,7 +40,7 @@
           "id": "TaskPaneRuntime",
           "type": "general",
           "code": {
-            "page": "https://localhost:3002/office-addin/"
+            "page": "https://localhost:3002/public/platform-office-addin/"
           },
           "lifetime": "short",
           "actions": [

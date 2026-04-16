@@ -3,8 +3,14 @@ import { detect, fromNavigator } from "@lingui/detect-locale";
 
 import { env } from "@/app/env";
 
+import type { Messages } from "@lingui/core";
+
 export const defaultLocale = "en";
 export const supportedLocales = ["en", "de", "fr", "pl", "es"];
+
+type CompiledCatalog = {
+  messages: Messages;
+};
 
 // Validate detected locale
 export function getValidLocale(locale: string): string {
@@ -40,40 +46,16 @@ function detectLocale(): string {
 // Dynamic catalog loading (session-only, no persistence)
 export async function dynamicActivate(locale: string) {
   const validLocale = getValidLocale(locale);
+  const { commonPublicBasePath, frontendPlatform, frontendPublicBasePath } =
+    env();
 
   try {
-    // Load main locale messages
-    const { messages: mainMessages } = await import(
-      `../locales/${validLocale}/messages.po`
-    );
-
-    // Try to load custom-theme translations and merge them
-    let customThemePath: string | null = null;
-    try {
-      customThemePath = env().themeCustomerName;
-    } catch {
-      // Environment not fully configured, skip custom theme loading
-    }
-    let mergedMessages = mainMessages;
-
-    if (customThemePath) {
-      try {
-        const themeUrl = `/custom-theme/${customThemePath}/locales/${validLocale}/messages.json`;
-        const response = await fetch(themeUrl);
-        if (response.ok) {
-          const { messages: customMessages } = await response.json();
-          // Merge custom theme messages with main messages
-          // Custom theme messages take precedence for overlapping keys
-          mergedMessages = { ...mainMessages, ...customMessages };
-        }
-      } catch (error) {
-        console.warn(
-          `[i18n] Failed to load custom theme locale ${validLocale}, using main translations only.`,
-          error,
-        );
-        // Continue with main messages only
-      }
-    }
+    const mergedMessages = await loadMergedMessages({
+      commonPublicBasePath,
+      frontendPlatform,
+      frontendPublicBasePath,
+      locale: validLocale,
+    });
 
     i18n.loadAndActivate({
       locale: validLocale,
@@ -86,9 +68,14 @@ export async function dynamicActivate(locale: string) {
       error,
     );
     if (validLocale !== defaultLocale) {
-      const { messages } = await import(
-        `../locales/${defaultLocale}/messages.po`
-      );
+      const { commonPublicBasePath, frontendPlatform, frontendPublicBasePath } =
+        env();
+      const messages = await loadMergedMessages({
+        commonPublicBasePath,
+        frontendPlatform,
+        frontendPublicBasePath,
+        locale: defaultLocale,
+      });
       i18n.loadAndActivate({
         locale: defaultLocale,
         messages,
@@ -107,3 +94,71 @@ export function initializeI18n() {
 export { detectLocale };
 
 export { i18n };
+
+async function loadMergedMessages({
+  commonPublicBasePath,
+  frontendPlatform,
+  frontendPublicBasePath,
+  locale,
+}: {
+  commonPublicBasePath: string;
+  frontendPlatform: "common" | "platform-office-addin";
+  frontendPublicBasePath: string;
+  locale: string;
+}): Promise<Messages> {
+  const themeCustomerName = env().themeCustomerName;
+  const messageLayers = [
+    await loadCommonLocaleMessages(commonPublicBasePath, locale),
+    frontendPlatform !== "common"
+      ? await loadOptionalMessages(
+          `${frontendPublicBasePath}/locales/${locale}/messages.json`,
+        )
+      : null,
+    ...(themeCustomerName
+      ? [
+          await loadOptionalMessages(
+            `${commonPublicBasePath}/custom-theme/${themeCustomerName}/locales/${locale}/messages.json`,
+          ),
+          frontendPlatform !== "common"
+            ? await loadOptionalMessages(
+                `${frontendPublicBasePath}/custom-theme/${themeCustomerName}/locales/${locale}/messages.json`,
+              )
+            : null,
+        ]
+      : []),
+  ];
+
+  return messageLayers.reduce<Messages>(
+    (merged, messages) => (messages ? { ...merged, ...messages } : merged),
+    {},
+  );
+}
+
+async function loadCommonLocaleMessages(
+  commonPublicBasePath: string,
+  locale: string,
+): Promise<Messages> {
+  const publicMessages = await loadOptionalMessages(
+    `${commonPublicBasePath}/locales/${locale}/messages.json`,
+  );
+  if (publicMessages) {
+    return publicMessages;
+  }
+
+  const bundledMessages = await import(`../locales/${locale}/messages.po`);
+  return bundledMessages.messages;
+}
+
+async function loadOptionalMessages(url: string): Promise<Messages | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return null;
+    }
+
+    const { messages } = (await response.json()) as CompiledCatalog;
+    return messages;
+  } catch {
+    return null;
+  }
+}

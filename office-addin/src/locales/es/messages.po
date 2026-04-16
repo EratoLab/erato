@@ -1,0 +1,257 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-04-16 11:06+0200\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: es\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Plural-Forms: \n"
+
+# ==============================
+# Explicit IDs
+# ==============================
+#. js-lingui-explicit-id
+#: src/App.tsx
+msgid "officeAddin.auth.authenticating"
+msgstr "Autenticando..."
+
+#. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.msalClientIdMissing"
+msgstr "El ID de cliente de MSAL no está configurado"
+
+#. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.msalInitializationFailed"
+msgstr "No se pudo inicializar MSAL"
+
+#. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.msalNotInitialized"
+msgstr "MSAL no está inicializado"
+
+#. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.msalProviderNotMounted"
+msgstr "MsalNaaProvider no está montado"
+
+#. js-lingui-explicit-id
+#: src/providers/MsalNaaProvider.tsx
+msgid "officeAddin.auth.naaUnsupported"
+msgstr "La autenticación de aplicación anidada no es compatible con este entorno"
+
+#. js-lingui-explicit-id
+#: src/App.tsx
+msgid "officeAddin.auth.signInRequired"
+msgstr "Se requiere iniciar sesión"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
+msgid "officeAddin.chat.newChat"
+msgstr "Nuevo chat"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
+msgid "officeAddin.chat.title"
+msgstr "Erato"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.dismissSelection"
+msgstr "Descartar selección"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.emailFallback"
+msgstr "Correo electrónico"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.loadingAttachments"
+msgstr "Cargando archivos adjuntos..."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.copied"
+msgstr "Copiado"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.copy"
+msgstr "Copiar"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.done"
+msgstr "Listo"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.insertAtCursor"
+msgstr "Insertar en el cursor"
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.insertFailed"
+msgstr "No se pudo insertar en el cuerpo del mensaje."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.inserting"
+msgstr "Insertando..."
+
+#. js-lingui-explicit-id
+#: src/components/OutlookEratoEmailRenderer.tsx
+msgid "officeAddin.emailRenderer.replaceSelection"
+msgstr "Reemplazar selección"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.addFiles"
+msgstr "Agregar archivos"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.attachmentFallback"
+msgstr "Adjunto"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
+msgstr "Los adjuntos en la nube no se pueden cargar desde Outlook"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.emailContent"
+msgstr "Contenido del correo"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.emailThread"
+msgstr "Hilo de correo"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.fromComputer"
+msgstr "Cargar desde el equipo"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.fromOneDrive"
+msgstr "Cargar desde OneDrive"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.hide"
+msgstr "Ocultar"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.loading"
+msgstr "..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.loadingAttachments"
+msgstr "Cargando archivos adjuntos..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.loadingEmailThread"
+msgstr "Cargando hilo de correo..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.noEmailContent"
+msgstr "No hay contenido de correo disponible para este elemento."
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.show"
+msgstr "Mostrar"
+
+#. js-lingui-explicit-id
+#: src/providers/OfficeProvider.tsx
+msgid "officeAddin.office.loading"
+msgstr "Cargando complemento de Office..."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.copied"
+msgstr "Copiado"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.copy"
+msgstr "Descargue el XML siguiente como <0>manifest.xml</0> y luego súbalo en el centro de administración de Microsoft 365 en Aplicaciones integradas."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.copyButton"
+msgstr "Copiar"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.downloadButton"
+msgstr "Descargar manifest.xml"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.downloadManifest"
+msgstr "Descárguelo como <0>manifest.xml</0>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.eyebrow"
+msgstr "Configuración del complemento de Office"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.integratedAppsLink"
+msgstr "Aplicaciones integradas"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.loadingManifest"
+msgstr "Cargando manifiesto..."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.loadManifestFailed"
+msgstr "No se pudo cargar el manifiesto"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.manifestPreview"
+msgstr "Vista previa del manifiesto"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.openIntegratedApps"
+msgstr "Abrir aplicaciones integradas"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.redirectUriInstruction"
+msgstr "En el registro de la aplicación Entra ID, agregue el URI de redirección SPA:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.reviewManifest"
+msgstr "Revise el XML del manifiesto generado a continuación."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.title"
+msgstr "Cargue el manifiesto generado"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.setup.uploadInstruction"
+msgstr "y cargue allí el archivo descargado."

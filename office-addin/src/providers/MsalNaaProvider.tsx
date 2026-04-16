@@ -5,6 +5,7 @@ import {
   type IPublicClientApplication,
 } from "@azure/msal-browser";
 import { env, setIdToken } from "@erato/frontend/library";
+import { t } from "@lingui/core/macro";
 import {
   createContext,
   useCallback,
@@ -27,7 +28,15 @@ const MsalNaaContext = createContext<MsalNaaContextValue>({
   isInitialized: false,
   isAuthenticated: false,
   account: null,
-  acquireToken: () => Promise.reject(new Error("MsalNaaProvider not mounted")),
+  acquireToken: () =>
+    Promise.reject(
+      new Error(
+        t({
+          id: "officeAddin.auth.msalProviderNotMounted",
+          message: "MsalNaaProvider not mounted",
+        }),
+      ),
+    ),
   error: null,
 });
 
@@ -46,7 +55,12 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const clientId = import.meta.env.VITE_MSAL_CLIENT_ID ?? env().msalClientId;
     if (!clientId) {
-      setError("MSAL client ID is not configured");
+      setError(
+        t({
+          id: "officeAddin.auth.msalClientIdMissing",
+          message: "MSAL client ID is not configured",
+        }),
+      );
       setIsInitialized(true);
       return;
     }
@@ -65,7 +79,11 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
 
     if (!naaSupported) {
       setError(
-        "Nested App Authentication is not supported in this environment",
+        t({
+          id: "officeAddin.auth.naaUnsupported",
+          message:
+            "Nested App Authentication is not supported in this environment",
+        }),
       );
       setIsInitialized(true);
       return;
@@ -129,7 +147,10 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
         setError(
           initializationError instanceof Error
             ? initializationError.message
-            : "Failed to initialize MSAL",
+            : t({
+                id: "officeAddin.auth.msalInitializationFailed",
+                message: "Failed to initialize MSAL",
+              }),
         );
         setIsInitialized(true);
       });
@@ -138,7 +159,12 @@ export function MsalNaaProvider({ children }: { children: React.ReactNode }) {
   const acquireToken = useCallback(
     async (scopes: string[]): Promise<string> => {
       if (!pca) {
-        throw new Error("MSAL not initialized");
+        throw new Error(
+          t({
+            id: "officeAddin.auth.msalNotInitialized",
+            message: "MSAL not initialized",
+          }),
+        );
       }
 
       try {

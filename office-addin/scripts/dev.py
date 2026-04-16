@@ -50,6 +50,7 @@ ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
 ENTRA_CONFIG_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.cfg"
 REQUIRED_COMMANDS = ("docker", "pnpm", "tailscale")
 EXPECTED_OAUTH2_PROXY_UPSTREAMS = """upstreams = [
+    "http://localhost:3130/public/common/#/public/common/",
     "http://localhost:3002/office-addin/#/",
     "http://localhost:3130/office-addin/manifest.xml#/office-addin/manifest.xml",
     "http://localhost:3130/api/#/api/"

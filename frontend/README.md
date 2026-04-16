@@ -204,7 +204,7 @@ The theme system uses a configuration-based approach that can be customized in s
 
 1. **Environment Variables**:
 
-   - `VITE_CUSTOMER_NAME`: Name of the customer folder (e.g., "trilux")
+   - `VITE_CUSTOMER_NAME`: Name of the customer folder (e.g., "acme-test")
    - `VITE_THEME_PATH`: Override the theme pack directory
    - `VITE_THEME_CONFIG_PATH`: Override the `theme.json` file path
    - `VITE_LOGO_PATH`: Path to logo for light mode
@@ -367,6 +367,10 @@ You can customize the assistant's avatar image to match your branding:
 4. **Fallback Behavior**:
 
    If no custom avatar is provided, the assistant will display with a colored circle containing the letter "A" (styled using the theme's `avatar.assistant` colors from theme.json).
+
+### Platforms
+
+The frontend platform layout, including shared `/public/common` assets, per-platform bundles, i18n catalogs, and theme resolution, is documented in [PLATFORMS.md](./PLATFORMS.md).
 
 ### Extending the Theme System
 

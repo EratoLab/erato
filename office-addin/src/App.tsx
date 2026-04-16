@@ -4,6 +4,7 @@ import {
   I18nProvider,
   ThemeProvider,
 } from "@erato/frontend/library";
+import { t } from "@lingui/core/macro";
 
 import { AddinChatPage } from "./pages/AddinChatPage";
 import { MsalNaaProvider, useMsalNaa } from "./providers/MsalNaaProvider";
@@ -18,7 +19,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   if (!isInitialized) {
     return (
       <div className="office-shell office-shell--centered">
-        <p className="office-status">Authenticating...</p>
+        <p className="office-status">
+          {t({
+            id: "officeAddin.auth.authenticating",
+            message: "Authenticating...",
+          })}
+        </p>
       </div>
     );
   }
@@ -27,7 +33,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="office-shell office-shell--centered">
         <p className="office-status office-status--error">
-          {error ?? "Sign-in required"}
+          {error ??
+            t({
+              id: "officeAddin.auth.signInRequired",
+              message: "Sign-in required",
+            })}
         </p>
       </div>
     );
@@ -50,7 +60,7 @@ export default function App() {
   return (
     <I18nProvider>
       <ThemeProvider
-        enableCustomTheme={false}
+        enableCustomTheme
         initialThemeMode="light"
         persistThemeMode={false}
       >

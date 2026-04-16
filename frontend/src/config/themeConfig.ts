@@ -69,9 +69,11 @@ const buildThemeAssetFilename = (baseFilename: string, isDark: boolean) =>
   `${baseFilename}${isDark ? "-dark" : ""}.svg`;
 
 const buildCustomerThemeFilePath = (
+  basePath: string,
   customerName: string | null | undefined,
   filename: string,
-) => (customerName ? `/custom-theme/${customerName}/${filename}` : null);
+) =>
+  customerName ? `${basePath}/custom-theme/${customerName}/${filename}` : null;
 
 const buildThemePathOverride = (
   themePath: string | null | undefined,
@@ -92,21 +94,36 @@ const resolveSiblingThemeFilePath = (
 };
 
 const resolveThemeBaseDir = (options: {
+  platformPublicBasePath: string;
+  commonPublicBasePath: string;
   themePath?: string | null;
   customerName?: string | null;
   themeCustomerName?: string | null;
-  defaultDir?: string;
+  preferPlatformBaseDir?: boolean;
 }): string => {
-  const { themePath, customerName, themeCustomerName, defaultDir } = options;
+  const {
+    commonPublicBasePath,
+    customerName,
+    platformPublicBasePath,
+    preferPlatformBaseDir = false,
+    themeCustomerName,
+    themePath,
+  } = options;
 
   if (themePath) return themePath;
-  if (customerName) return `/custom-theme/${customerName}`;
-  if (themeCustomerName) return `/custom-theme/${themeCustomerName}`;
+  if (customerName) {
+    return `${preferPlatformBaseDir ? platformPublicBasePath : commonPublicBasePath}/custom-theme/${customerName}`;
+  }
+  if (themeCustomerName) {
+    return `${preferPlatformBaseDir ? platformPublicBasePath : commonPublicBasePath}/custom-theme/${themeCustomerName}`;
+  }
 
-  return defaultDir ?? "/custom-theme";
+  return `${preferPlatformBaseDir ? platformPublicBasePath : commonPublicBasePath}/custom-theme`;
 };
 
 const resolveThemeFilePath = (options: {
+  platformPublicBasePath: string;
+  commonPublicBasePath: string;
   filename: string;
   themePath?: string | null;
   customerName?: string | null;
@@ -114,22 +131,44 @@ const resolveThemeFilePath = (options: {
   defaultPath?: string | null;
 }): string | null => {
   const {
+    commonPublicBasePath,
     filename,
+    platformPublicBasePath,
     themePath,
     customerName,
     themeCustomerName,
-    defaultPath = `/custom-theme/${filename}`,
+    defaultPath = `${commonPublicBasePath}/custom-theme/${filename}`,
   } = options;
 
   return (
     buildThemePathOverride(themePath ?? undefined, filename) ??
-    buildCustomerThemeFilePath(customerName ?? undefined, filename) ??
-    buildCustomerThemeFilePath(themeCustomerName ?? undefined, filename) ??
+    buildCustomerThemeFilePath(
+      platformPublicBasePath,
+      customerName ?? undefined,
+      filename,
+    ) ??
+    buildCustomerThemeFilePath(
+      commonPublicBasePath,
+      customerName ?? undefined,
+      filename,
+    ) ??
+    buildCustomerThemeFilePath(
+      platformPublicBasePath,
+      themeCustomerName ?? undefined,
+      filename,
+    ) ??
+    buildCustomerThemeFilePath(
+      commonPublicBasePath,
+      themeCustomerName ?? undefined,
+      filename,
+    ) ??
     defaultPath
   );
 };
 
 const resolveThemePackAssetPath = (options: {
+  platformPublicBasePath: string;
+  commonPublicBasePath: string;
   filename: string;
   resolvedThemeConfigPath?: string | null;
   themeConfigPath?: string | null;
@@ -139,13 +178,15 @@ const resolveThemePackAssetPath = (options: {
   defaultPath?: string | null;
 }): string | null => {
   const {
+    commonPublicBasePath,
     filename,
+    platformPublicBasePath,
     resolvedThemeConfigPath,
     themeConfigPath,
     themePath,
     customerName,
     themeCustomerName,
-    defaultPath = `/custom-theme/${filename}`,
+    defaultPath = `${commonPublicBasePath}/custom-theme/${filename}`,
   } = options;
 
   if (resolvedThemeConfigPath) {
@@ -157,7 +198,9 @@ const resolveThemePackAssetPath = (options: {
   }
 
   return resolveThemeFilePath({
+    commonPublicBasePath,
     filename,
+    platformPublicBasePath,
     themePath,
     customerName,
     themeCustomerName,
@@ -179,7 +222,12 @@ const resolveAssetPath = (options: {
   hasDefault?: boolean;
 }): string | null => {
   const { envPaths, baseFilename, isDark = false, hasDefault = true } = options;
-  const { themePath, themeCustomerName } = env();
+  const {
+    commonPublicBasePath,
+    frontendPublicBasePath,
+    themePath,
+    themeCustomerName,
+  } = env();
 
   // 1. Environment variable override
   const envPath = isDark ? envPaths.dark : envPaths.light;
@@ -187,10 +235,14 @@ const resolveAssetPath = (options: {
 
   const filename = buildThemeAssetFilename(baseFilename, isDark);
   return resolveThemeFilePath({
+    commonPublicBasePath,
     filename,
+    platformPublicBasePath: frontendPublicBasePath,
     themePath,
     themeCustomerName,
-    defaultPath: hasDefault ? `/custom-theme/${filename}` : null,
+    defaultPath: hasDefault
+      ? `${commonPublicBasePath}/custom-theme/${filename}`
+      : null,
   });
 };
 
@@ -199,21 +251,47 @@ const resolveAssetPath = (options: {
  */
 export const defaultThemeConfig: ThemeLocationConfig = {
   getThemePaths: () => {
-    const { themeConfigPath, themeCustomerName, themePath } = env();
+    const {
+      commonPublicBasePath,
+      frontendPublicBasePath,
+      themeConfigPath,
+      themeCustomerName,
+      themePath,
+    } = env();
 
-    return [
+    const paths: Array<string | null | undefined> = [
       // 1. Environment variable override for entire path
       themeConfigPath,
+    ];
 
-      // 2. Customer-specific theme based on environment variable
-      buildCustomerThemeFilePath(themeCustomerName, "theme.json"),
+    if (frontendPublicBasePath !== commonPublicBasePath) {
+      paths.push(
+        buildCustomerThemeFilePath(
+          frontendPublicBasePath,
+          themeCustomerName,
+          "theme.json",
+        ),
+      );
+    }
 
+    paths.push(
+      // 2. Shared common theme
+      buildCustomerThemeFilePath(
+        commonPublicBasePath,
+        themeCustomerName,
+        "theme.json",
+      ),
       // 3. Custom theme override path
       buildThemePathOverride(themePath, "theme.json"),
+    );
 
-      // 4. Fallback to default location (no customer subfolder)
-      "/custom-theme/theme.json",
-    ];
+    if (frontendPublicBasePath !== commonPublicBasePath) {
+      paths.push(`${frontendPublicBasePath}/custom-theme/theme.json`);
+    }
+
+    paths.push(`${commonPublicBasePath}/custom-theme/theme.json`);
+
+    return paths;
   },
 
   getLogoPath: (themeName, isDark) => {
@@ -224,7 +302,7 @@ export const defaultThemeConfig: ThemeLocationConfig = {
       hasDefault: true,
     });
     // Logo always has a default, so path will never be null
-    return path ?? "/custom-theme/logo.svg";
+    return path ?? `${env().commonPublicBasePath}/custom-theme/logo.svg`;
   },
 
   getAssistantAvatarPath: (themeName) =>
@@ -246,30 +324,46 @@ export const defaultThemeConfig: ThemeLocationConfig = {
     }),
 
   getFontsCssPath: (themeName, resolvedThemeConfigPath) => {
-    const { themeConfigPath, themePath, themeCustomerName } = env();
+    const {
+      commonPublicBasePath,
+      frontendPublicBasePath,
+      themeConfigPath,
+      themePath,
+      themeCustomerName,
+    } = env();
     return (
       resolveThemePackAssetPath({
+        commonPublicBasePath,
         filename: "fonts.css",
+        platformPublicBasePath: frontendPublicBasePath,
         resolvedThemeConfigPath,
         themeConfigPath,
         themePath,
         themeCustomerName,
-        defaultPath: "/custom-theme/fonts.css",
-      }) ?? "/custom-theme/fonts.css"
+        defaultPath: `${commonPublicBasePath}/custom-theme/fonts.css`,
+      }) ?? `${commonPublicBasePath}/custom-theme/fonts.css`
     );
   },
 
   getThemeCssPath: (themeName, resolvedThemeConfigPath) => {
-    const { themeConfigPath, themePath, themeCustomerName } = env();
+    const {
+      commonPublicBasePath,
+      frontendPublicBasePath,
+      themeConfigPath,
+      themePath,
+      themeCustomerName,
+    } = env();
     return (
       resolveThemePackAssetPath({
+        commonPublicBasePath,
         filename: "theme.css",
+        platformPublicBasePath: frontendPublicBasePath,
         resolvedThemeConfigPath,
         themeConfigPath,
         themePath,
         themeCustomerName,
-        defaultPath: "/custom-theme/theme.css",
-      }) ?? "/custom-theme/theme.css"
+        defaultPath: `${commonPublicBasePath}/custom-theme/theme.css`,
+      }) ?? `${commonPublicBasePath}/custom-theme/theme.css`
     );
   },
 };
@@ -346,11 +440,20 @@ export function resolveIconPaths(
 } {
   if (!iconMappings) return {};
 
-  const { themePath, themeCustomerName } = env();
+  const {
+    commonPublicBasePath,
+    frontendPlatform,
+    frontendPublicBasePath,
+    themePath,
+    themeCustomerName,
+  } = env();
 
   // Determine base path for custom icons
   // Priority: themePath > customerName > themeCustomerName > default
   const basePath = resolveThemeBaseDir({
+    commonPublicBasePath,
+    platformPublicBasePath: frontendPublicBasePath,
+    preferPlatformBaseDir: frontendPlatform !== "common",
     themePath,
     customerName,
     themeCustomerName,

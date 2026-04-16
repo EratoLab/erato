@@ -1,4 +1,5 @@
 import { AnchoredPopover } from "@erato/frontend/library";
+import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
 
 import { useOffice } from "../providers/OfficeProvider";
@@ -136,7 +137,12 @@ export function AddinFileSourceSelector({
     !!emailBodyFile || selectableAttachments.length > 0 || isLoadingAttachments;
   const canUploadEmailContent = !!onSelectFiles;
 
-  const triggerLabel = isBusy ? "..." : "+";
+  const triggerLabel = isBusy
+    ? t({
+        id: "officeAddin.fileSource.loading",
+        message: "...",
+      })
+    : "+";
   const triggerButtonClassName = [
     "inline-flex size-8 items-center justify-center rounded-md text-lg font-medium text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50",
     className,
@@ -164,7 +170,10 @@ export function AddinFileSourceSelector({
           type={triggerProps.type}
           onClick={triggerProps.onClick}
           disabled={isBusy}
-          aria-label="Add files"
+          aria-label={t({
+            id: "officeAddin.fileSource.addFiles",
+            message: "Add files",
+          })}
           aria-expanded={triggerProps["aria-expanded"]}
           aria-haspopup={triggerProps["aria-haspopup"]}
           aria-controls={triggerProps["aria-controls"]}
@@ -181,7 +190,12 @@ export function AddinFileSourceSelector({
           disabled={isBusy}
           className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <span>Upload from Computer</span>
+          <span>
+            {t({
+              id: "officeAddin.fileSource.fromComputer",
+              message: "Upload from Computer",
+            })}
+          </span>
         </button>
 
         {availableProviders.includes("sharepoint") && (
@@ -191,7 +205,12 @@ export function AddinFileSourceSelector({
             disabled={isBusy}
             className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span>Upload from OneDrive</span>
+            <span>
+              {t({
+                id: "officeAddin.fileSource.fromOneDrive",
+                message: "Upload from OneDrive",
+              })}
+            </span>
           </button>
         )}
 
@@ -203,9 +222,22 @@ export function AddinFileSourceSelector({
               disabled={isBusy || !canUploadEmailContent || !hasAnyEmailContent}
               className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-theme-fg-primary transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <span>Email content</span>
+              <span>
+                {t({
+                  id: "officeAddin.fileSource.emailContent",
+                  message: "Email content",
+                })}
+              </span>
               <span className="text-xs text-theme-fg-muted">
-                {isEmailContentOpen ? "Hide" : "Show"}
+                {isEmailContentOpen
+                  ? t({
+                      id: "officeAddin.fileSource.hide",
+                      message: "Hide",
+                    })
+                  : t({
+                      id: "officeAddin.fileSource.show",
+                      message: "Show",
+                    })}
               </span>
             </button>
 
@@ -213,7 +245,10 @@ export function AddinFileSourceSelector({
               <div className="max-h-72 overflow-y-auto rounded-lg border border-theme-border bg-theme-bg-secondary p-1">
                 {mailItem?.isLoadingBody && (
                   <div className="px-3 py-2 text-xs text-theme-fg-muted">
-                    Loading email thread...
+                    {t({
+                      id: "officeAddin.fileSource.loadingEmailThread",
+                      message: "Loading email thread...",
+                    })}
                   </div>
                 )}
 
@@ -227,7 +262,10 @@ export function AddinFileSourceSelector({
                   >
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium text-theme-fg-primary">
-                        Email thread
+                        {t({
+                          id: "officeAddin.fileSource.emailThread",
+                          message: "Email thread",
+                        })}
                       </div>
                       <div className="truncate text-xs text-theme-fg-muted">
                         {emailBodyFile.name}
@@ -241,7 +279,10 @@ export function AddinFileSourceSelector({
 
                 {isLoadingAttachments && (
                   <div className="px-3 py-2 text-xs text-theme-fg-muted">
-                    Loading attachments...
+                    {t({
+                      id: "officeAddin.fileSource.loadingAttachments",
+                      message: "Loading attachments...",
+                    })}
                   </div>
                 )}
 
@@ -264,8 +305,16 @@ export function AddinFileSourceSelector({
                         </div>
                         <div className="truncate text-xs text-theme-fg-muted">
                           {isCloudAttachment
-                            ? "Cloud attachment cannot be uploaded from Outlook"
-                            : attachment.contentType || "Attachment"}
+                            ? t({
+                                id: "officeAddin.fileSource.cloudAttachmentUnsupported",
+                                message:
+                                  "Cloud attachment cannot be uploaded from Outlook",
+                              })
+                            : attachment.contentType ||
+                              t({
+                                id: "officeAddin.fileSource.attachmentFallback",
+                                message: "Attachment",
+                              })}
                         </div>
                       </div>
                       <span className="shrink-0 text-xs text-theme-fg-muted">
@@ -280,7 +329,10 @@ export function AddinFileSourceSelector({
                   !emailBodyFile &&
                   selectableAttachments.length === 0 && (
                     <div className="px-3 py-2 text-xs text-theme-fg-muted">
-                      No email content is available for this item.
+                      {t({
+                        id: "officeAddin.fileSource.noEmailContent",
+                        message: "No email content is available for this item.",
+                      })}
                     </div>
                   )}
               </div>

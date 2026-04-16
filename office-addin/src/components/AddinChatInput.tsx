@@ -13,6 +13,7 @@ import {
   type FileType,
   type FileUploadItem,
 } from "@erato/frontend/library";
+import { t } from "@lingui/core/macro";
 import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
@@ -266,7 +267,10 @@ export const AddinChatInput = forwardRef<
               emailSourceItems[0].isLoading ? (
                 <FilePreviewLoading
                   className="w-full"
-                  label="Loading attachments..."
+                  label={t({
+                    id: "officeAddin.chatInput.loadingAttachments",
+                    message: "Loading attachments...",
+                  })}
                 />
               ) : (
                 <FilePreviewButton
@@ -286,7 +290,12 @@ export const AddinChatInput = forwardRef<
                 groups={[
                   {
                     id: "current-email",
-                    label: emailSubject || "Email",
+                    label:
+                      emailSubject ||
+                      t({
+                        id: "officeAddin.chatInput.emailFallback",
+                        message: "Email",
+                      }),
                     metaLabel: "",
                     items: emailSourceItems,
                   },
@@ -313,7 +322,10 @@ export const AddinChatInput = forwardRef<
               type="button"
               onClick={() => setIsSelectionDismissed(true)}
               className="ml-auto shrink-0 rounded p-0.5 hover:bg-theme-bg-tertiary"
-              aria-label="Dismiss selection"
+              aria-label={t({
+                id: "officeAddin.chatInput.dismissSelection",
+                message: "Dismiss selection",
+              })}
             >
               &#x2715;
             </button>

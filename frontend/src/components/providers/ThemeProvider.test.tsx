@@ -16,6 +16,9 @@ const mockEnv = env as ReturnType<typeof vi.fn>;
 
 const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   apiRootUrl: "http://localhost:3000",
+  frontendPlatform: "common",
+  frontendPublicBasePath: "/public/common",
+  commonPublicBasePath: "/public/common",
   themeCustomerName: null,
   themePath: null,
   themeConfigPath: null,

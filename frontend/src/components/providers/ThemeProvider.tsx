@@ -372,8 +372,8 @@ export function ThemeProvider({
         setResolvedThemeConfigPath(themeConfigPath);
         setIsCustomTheme(true);
         // Resolve icon paths from theme config
-        // Use undefined to let it fall back to env().themeCustomerName (e.g., "trilux-test")
-        // instead of themeConfig.name (e.g., "Trilux Theme") which is the display name
+        // Use undefined to let it fall back to env().themeCustomerName (e.g., "acme-test")
+        // instead of themeConfig.name (e.g., "ACME Theme") which is the display name
         const resolvedIcons = resolveIconPaths(themeConfig.icons, undefined);
         setIconMappings(resolvedIcons);
         return;

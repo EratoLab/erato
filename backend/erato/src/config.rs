@@ -1436,7 +1436,8 @@ pub struct FrontendConfig {
     pub web_frontend_bundle_path: String,
 
     // The name of a theme to use for the frontend.
-    // Themes can be placed in `frontend/public/custom-theme/<THEME_NAME>` directories.
+    // Themes can be placed in `frontend/public/custom-theme/<THEME_NAME>` directories
+    // and are served from `/public/common/custom-theme/<THEME_NAME>`.
     pub theme: Option<String>,
 
     // Additional values to inject into the frontend environment as global variables.
@@ -2022,6 +2023,8 @@ pub struct MsOfficeAddinConfig {
     pub msal_client_id: Option<String>,
     #[serde(default = "default_ms_office_addin_msal_authority")]
     pub msal_authority: String,
+    #[serde(default = "default_ms_office_addin_serve_bundle_legacy_path")]
+    pub serve_bundle_legacy_path: bool,
     #[serde(default = "default_ms_office_addin_frontend_bundle_path")]
     pub frontend_bundle_path: String,
 }
@@ -2032,6 +2035,7 @@ impl Default for MsOfficeAddinConfig {
             enabled: false,
             msal_client_id: None,
             msal_authority: default_ms_office_addin_msal_authority(),
+            serve_bundle_legacy_path: default_ms_office_addin_serve_bundle_legacy_path(),
             frontend_bundle_path: default_ms_office_addin_frontend_bundle_path(),
         }
     }
@@ -2041,8 +2045,12 @@ fn default_ms_office_addin_msal_authority() -> String {
     "https://login.microsoftonline.com/common".to_string()
 }
 
+fn default_ms_office_addin_serve_bundle_legacy_path() -> bool {
+    true
+}
+
 fn default_ms_office_addin_frontend_bundle_path() -> String {
-    "./public-office-addin".to_string()
+    "./public/platform-office-addin".to_string()
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]

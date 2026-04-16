@@ -42,6 +42,9 @@ dev_nginx_jwt:
 start:
     pnpm run start
 
+build:
+    pnpm run build
+
 build-lib:
     pnpm run build:lib
 

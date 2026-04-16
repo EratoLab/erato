@@ -17,6 +17,9 @@ const DEFAULT_MAX_BODY_LIMIT_BYTES: u64 = 20 * 1024 * 1024;
 // The following keys are aligned with the `env.ts` of the frontend.
 // If you change the keys, you must also update them in the frontend.
 const FRONTEND_ENV_KEY_API_ROOT_URL: &str = "API_ROOT_URL";
+const FRONTEND_ENV_KEY_FRONTEND_PLATFORM: &str = "FRONTEND_PLATFORM";
+const FRONTEND_ENV_KEY_FRONTEND_PUBLIC_BASE_PATH: &str = "FRONTEND_PUBLIC_BASE_PATH";
+const FRONTEND_ENV_KEY_COMMON_PUBLIC_BASE_PATH: &str = "COMMON_PUBLIC_BASE_PATH";
 const FRONTEND_ENV_KEY_THEME_CUSTOMER_NAME: &str = "THEME_CUSTOMER_NAME";
 const FRONTEND_ENV_KEY_DISABLE_UPLOAD: &str = "DISABLE_UPLOAD";
 const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_AUTOFOCUS";
@@ -95,27 +98,40 @@ impl FrontendRegistry {
 }
 
 pub fn build_frontend_registry(config: &AppConfig) -> FrontendRegistry {
-    FrontendRegistry {
-        frontends: vec![
-            ServedFrontend {
-                bundle_path: config
-                    .integrations
-                    .ms_office
-                    .addin
-                    .frontend_bundle_path
-                    .clone(),
-                environment: build_frontend_environment(config, FrontendKind::OfficeAddin),
-                mount_path: "/office-addin".to_string(),
-                enabled: config.integrations.ms_office.addin.enabled,
-            },
-            ServedFrontend {
-                bundle_path: config.frontend.web_frontend_bundle_path.clone(),
-                environment: build_frontend_environment(config, FrontendKind::Web),
-                mount_path: "/".to_string(),
-                enabled: true,
-            },
-        ],
+    let mut frontends = vec![ServedFrontend {
+        bundle_path: config
+            .integrations
+            .ms_office
+            .addin
+            .frontend_bundle_path
+            .clone(),
+        environment: build_frontend_environment(config, FrontendKind::OfficeAddin),
+        mount_path: "/public/platform-office-addin".to_string(),
+        enabled: config.integrations.ms_office.addin.enabled,
+    }];
+
+    if config.integrations.ms_office.addin.serve_bundle_legacy_path {
+        frontends.push(ServedFrontend {
+            bundle_path: config
+                .integrations
+                .ms_office
+                .addin
+                .frontend_bundle_path
+                .clone(),
+            environment: build_frontend_environment(config, FrontendKind::OfficeAddin),
+            mount_path: "/office-addin".to_string(),
+            enabled: config.integrations.ms_office.addin.enabled,
+        });
     }
+
+    frontends.push(ServedFrontend {
+        bundle_path: config.frontend.web_frontend_bundle_path.clone(),
+        environment: build_frontend_environment(config, FrontendKind::Web),
+        mount_path: "/".to_string(),
+        enabled: true,
+    });
+
+    FrontendRegistry { frontends }
 }
 
 fn build_frontend_environment(
@@ -129,6 +145,22 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_API_ROOT_URL.to_string(),
         Value::String(api_root_url.clone()),
+    );
+    let (frontend_platform, frontend_public_base_path) = match frontend_kind {
+        FrontendKind::Web => ("common", "/public/common"),
+        FrontendKind::OfficeAddin => ("platform-office-addin", "/public/platform-office-addin"),
+    };
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_FRONTEND_PLATFORM.to_string(),
+        Value::String(frontend_platform.to_string()),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_FRONTEND_PUBLIC_BASE_PATH.to_string(),
+        Value::String(frontend_public_base_path.to_string()),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_COMMON_PUBLIC_BASE_PATH.to_string(),
+        Value::String("/public/common".to_string()),
     );
     if let Some(theme) = &config.frontend.theme {
         env.additional_environment.insert(
@@ -584,7 +616,13 @@ mod tests {
         let registry = FrontendRegistry {
             frontends: vec![
                 ServedFrontend {
-                    bundle_path: "./public-office-addin".to_string(),
+                    bundle_path: "./public/platform-office-addin".to_string(),
+                    environment: FrontedEnvironment::default(),
+                    mount_path: "/public/platform-office-addin".to_string(),
+                    enabled: true,
+                },
+                ServedFrontend {
+                    bundle_path: "./public/platform-office-addin".to_string(),
                     environment: FrontedEnvironment::default(),
                     mount_path: "/office-addin".to_string(),
                     enabled: true,
@@ -609,7 +647,7 @@ mod tests {
         let registry = FrontendRegistry {
             frontends: vec![
                 ServedFrontend {
-                    bundle_path: "./public-office-addin".to_string(),
+                    bundle_path: "./public/platform-office-addin".to_string(),
                     environment: FrontedEnvironment::default(),
                     mount_path: "/office-addin".to_string(),
                     enabled: false,
