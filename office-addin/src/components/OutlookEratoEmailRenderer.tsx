@@ -1,4 +1,5 @@
 import { sanitizeHtmlPreview } from "@erato/frontend/library";
+import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
 
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
@@ -58,9 +59,25 @@ export function OutlookEratoEmailRenderer({
   }, [content]);
 
   const insertLabel = (() => {
-    if (status === "done") return "Done!";
-    if (status === "inserting") return "Inserting...";
-    return hasSelection ? "Replace Selection" : "Insert at Cursor";
+    if (status === "done")
+      return t({
+        id: "officeAddin.emailRenderer.done",
+        message: "Done!",
+      });
+    if (status === "inserting")
+      return t({
+        id: "officeAddin.emailRenderer.inserting",
+        message: "Inserting...",
+      });
+    return hasSelection
+      ? t({
+          id: "officeAddin.emailRenderer.replaceSelection",
+          message: "Replace Selection",
+        })
+      : t({
+          id: "officeAddin.emailRenderer.insertAtCursor",
+          message: "Insert at Cursor",
+        });
   })();
 
   return (
@@ -90,12 +107,23 @@ export function OutlookEratoEmailRenderer({
           disabled={isBusy}
           className="rounded-md border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary disabled:opacity-50"
         >
-          {status === "copied" ? "Copied!" : "Copy"}
+          {status === "copied"
+            ? t({
+                id: "officeAddin.emailRenderer.copied",
+                message: "Copied!",
+              })
+            : t({
+                id: "officeAddin.emailRenderer.copy",
+                message: "Copy",
+              })}
         </button>
       </div>
       {status === "error" && (
         <p className="mt-1 text-xs text-red-500">
-          Failed to insert into compose body.
+          {t({
+            id: "officeAddin.emailRenderer.insertFailed",
+            message: "Failed to insert into compose body.",
+          })}
         </p>
       )}
     </div>

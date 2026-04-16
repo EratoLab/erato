@@ -10,7 +10,6 @@ FROM ${REGISTRY}/${BACKEND_IMAGE}
 
 # Copy frontend files to their runtime locations
 COPY --from=frontend /public /app/public/
-COPY --from=frontend /public-office-addin /app/public-office-addin/
 
 # The backend will serve these files directly
 CMD ["./erato"]

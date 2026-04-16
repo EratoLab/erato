@@ -10,8 +10,8 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Erato Office Extension" />
   <Description DefaultValue="Erato AI assistant for Outlook" />
-  <IconUrl DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
-  <HighResolutionIconUrl DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
+  <IconUrl DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
   <SupportUrl DefaultValue="https://erato.chat" />
   <Hosts>
     <Host Name="Mailbox" />
@@ -24,7 +24,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://localhost:3002/office-addin/" />
+        <SourceLocation DefaultValue="https://localhost:3002/public/platform-office-addin/" />
         <RequestedHeight>450</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -93,12 +93,12 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="icon16" DefaultValue="https://localhost:3002/office-addin/assets/outline-icon-32x32.png" />
-        <bt:Image id="icon32" DefaultValue="https://localhost:3002/office-addin/assets/outline-icon-32x32.png" />
-        <bt:Image id="icon80" DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
+        <bt:Image id="icon16" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/outline-icon-32x32.png" />
+        <bt:Image id="icon32" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/outline-icon-32x32.png" />
+        <bt:Image id="icon80" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/office-addin/" />
+        <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/public/platform-office-addin/" />
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="groupLabel" DefaultValue="Erato" />
@@ -169,12 +169,12 @@
       </Hosts>
       <Resources>
         <bt:Images>
-          <bt:Image id="icon16" DefaultValue="https://localhost:3002/office-addin/assets/outline-icon-32x32.png" />
-          <bt:Image id="icon32" DefaultValue="https://localhost:3002/office-addin/assets/outline-icon-32x32.png" />
-          <bt:Image id="icon80" DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
+          <bt:Image id="icon16" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/outline-icon-32x32.png" />
+          <bt:Image id="icon32" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/outline-icon-32x32.png" />
+          <bt:Image id="icon80" DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/office-addin/" />
+          <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/public/platform-office-addin/" />
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="groupLabel" DefaultValue="Erato" />

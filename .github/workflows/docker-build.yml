@@ -138,6 +138,11 @@ jobs:
         if: success() || failure()
         run: pnpm run format:check
 
+      - name: "Office add-in i18n catalogs are up-to-date"
+        working-directory: ./office-addin
+        if: success() || failure()
+        run: ./scripts/check-i18n-extract.sh
+
       - name: "Office add-in lint"
         working-directory: ./office-addin
         if: success() || failure()

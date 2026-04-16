@@ -32,6 +32,9 @@ beforeEach(() => {
   // Set up default env mock
   mockEnv.mockReturnValue({
     apiRootUrl: "/api/",
+    frontendPlatform: "common",
+    frontendPublicBasePath: "/public/common",
+    commonPublicBasePath: "/public/common",
     themeCustomerName: null,
     themePath: null,
     themeConfigPath: null,
@@ -40,9 +43,16 @@ beforeEach(() => {
     themeAssistantAvatarPath: null,
     disableUpload: false,
     disableChatInputAutofocus: false,
+    chatInputEmptyStateLayout: "bottom",
     disableLogout: false,
     assistantsEnabled: false,
     assistantsShowRecentItems: false,
+    assistantContextWarningThreshold: 0.5,
+    assistantContextFileContributorThreshold: 0.05,
+    starterPromptsEnabled: false,
+    promptOptimizerEnabled: false,
+    mcpServersTabEnabled: false,
+    chatSharingEnabled: false,
     sharepointEnabled: false,
     messageFeedbackEnabled: false,
     messageFeedbackCommentsEnabled: false,
@@ -52,6 +62,9 @@ beforeEach(() => {
     sidebarCollapsedMode: "hidden",
     sidebarLogoPath: null,
     sidebarLogoDarkPath: null,
+    sidebarChatHistoryShowMetadata: true,
+    msalClientId: null,
+    msalAuthority: null,
   });
 
   act(() => {

@@ -1,3 +1,6 @@
 /dist
 /node_modules
 /manifests/manifest-funnel.xml
+src/locales/**/*.json
+src/locales/**/*.ts
+public/locales/**/*.json

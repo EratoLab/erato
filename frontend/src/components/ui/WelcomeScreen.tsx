@@ -45,7 +45,7 @@ export function WelcomeScreen({ className = "" }: WelcomeScreenProps) {
       try {
         // Construct path with the folder name
         // eslint-disable-next-line lingui/no-unlocalized-strings
-        const themePath = `/custom-theme/${customerName}/theme.json`;
+        const themePath = `${env().commonPublicBasePath}/custom-theme/${customerName}/theme.json`;
 
         // Load the theme data
         const themeData = await loadThemeFromPath(themePath);

@@ -42,6 +42,9 @@ describe("FeatureConfigProvider", () => {
     // Default mock: all features enabled (nothing disabled)
     mockEnv.mockReturnValue({
       apiRootUrl: "/api/",
+      frontendPlatform: "common",
+      frontendPublicBasePath: "/public/common",
+      commonPublicBasePath: "/public/common",
       themeCustomerName: null,
       themePath: null,
       themeConfigPath: null,
@@ -57,6 +60,8 @@ describe("FeatureConfigProvider", () => {
       assistantContextWarningThreshold: 0.5,
       assistantContextFileContributorThreshold: 0.05,
       starterPromptsEnabled: false,
+      promptOptimizerEnabled: false,
+      mcpServersTabEnabled: false,
       sharepointEnabled: false,
       messageFeedbackEnabled: false,
       messageFeedbackCommentsEnabled: false,
@@ -68,6 +73,8 @@ describe("FeatureConfigProvider", () => {
       sidebarLogoDarkPath: null,
       sidebarChatHistoryShowMetadata: true,
       chatSharingEnabled: false,
+      msalClientId: null,
+      msalAuthority: null,
     });
   });
 
@@ -124,6 +131,7 @@ describe("FeatureConfigProvider", () => {
         },
         userPreferences: {
           enabled: true,
+          mcpServersTabEnabled: false,
         },
         cloudProviders: {
           availableProviders: [],

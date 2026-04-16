@@ -9,7 +9,8 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 // use utoipa::openapi::OpenApiBuilder;
 use url::Url;
 use utoipa::{IntoParams, OpenApi};
@@ -111,7 +112,10 @@ fn render_office_addin_manifest(
     base_url: &str,
     deployment_version: Option<&str>,
 ) -> String {
-    let office_addin_base_url = format!("{}/office-addin", base_url.trim_end_matches('/'));
+    let office_addin_base_url = format!(
+        "{}/public/platform-office-addin",
+        base_url.trim_end_matches('/')
+    );
     let office_addin_asset_base_url = format!("{office_addin_base_url}/assets");
     let manifest_version = office_addin_manifest_version(deployment_version);
 
@@ -204,11 +208,87 @@ async fn office_addin_manifest(
         .into_response()
 }
 
+fn favicon_candidate_paths(bundle_root: &Path, theme: Option<&str>, path: &str) -> Vec<PathBuf> {
+    let theme_favicon_names = match path {
+        "favicon.ico" => ["favicon.ico", "favicon.svg"],
+        "favicon.svg" => ["favicon.svg", "favicon.ico"],
+        _ => [path, path],
+    };
+    let mut candidate_paths = Vec::new();
+
+    if let Some(theme) = theme {
+        for favicon_name in theme_favicon_names {
+            candidate_paths.push(
+                bundle_root
+                    .join("custom-theme")
+                    .join(theme)
+                    .join(favicon_name),
+            );
+            candidate_paths.push(
+                bundle_root
+                    .join("public")
+                    .join("common")
+                    .join("custom-theme")
+                    .join(theme)
+                    .join(favicon_name),
+            );
+        }
+    }
+
+    candidate_paths.push(bundle_root.join(path));
+    candidate_paths.push(bundle_root.join("public").join(path));
+
+    candidate_paths
+}
+
+async fn favicon(State(app_state): State<AppState>, path: &'static str) -> Response {
+    let bundle_root = PathBuf::from(&app_state.config.frontend.web_frontend_bundle_path);
+    for candidate in favicon_candidate_paths(
+        &bundle_root,
+        app_state.config.frontend.theme.as_deref(),
+        path,
+    ) {
+        match std::fs::read(&candidate) {
+            Ok(contents) => {
+                let content_type = match candidate.extension().and_then(OsStr::to_str) {
+                    Some("svg") => "image/svg+xml",
+                    _ => "image/x-icon",
+                };
+                return (
+                    [(header::CONTENT_TYPE, HeaderValue::from_static(content_type))],
+                    contents,
+                )
+                    .into_response();
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to read favicon: {err}"),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    (StatusCode::NOT_FOUND, "Favicon not found").into_response()
+}
+
+async fn favicon_ico(State(app_state): State<AppState>) -> Response {
+    favicon(State(app_state), "favicon.ico").await
+}
+
+async fn favicon_svg(State(app_state): State<AppState>) -> Response {
+    favicon(State(app_state), "favicon.svg").await
+}
+
 pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
     // build our application with a route
 
     let router = OpenApiRouter::new()
         .route("/health", get(health).head(health))
+        .route("/favicon.ico", get(favicon_ico))
+        .route("/favicon.svg", get(favicon_svg))
         .route("/office-addin/manifest.xml", get(office_addin_manifest))
         .nest("/api/v1beta", crate::server::api::v1beta::router(app_state));
 
@@ -243,14 +323,15 @@ E.g. the chats route scoped under there will only list the chats created by the 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn render_office_addin_manifest_rewrites_taskpane_and_asset_urls() {
         let template = r#"
         <OfficeApp>
           <Version>{{OFFICE_ADDIN_MANIFEST_VERSION}}</Version>
-          <IconUrl DefaultValue="https://localhost:3002/office-addin/assets/color-icon-192x192.png" />
-          <SourceLocation DefaultValue="https://localhost:3002/office-addin/" />
+          <IconUrl DefaultValue="https://localhost:3002/public/platform-office-addin/assets/color-icon-192x192.png" />
+          <SourceLocation DefaultValue="https://localhost:3002/public/platform-office-addin/" />
         </OfficeApp>
         "#;
 
@@ -259,10 +340,10 @@ mod tests {
 
         assert!(
             rendered.contains(
-                "https://app.example.com/base/office-addin/assets/color-icon-192x192.png"
+                "https://app.example.com/base/public/platform-office-addin/assets/color-icon-192x192.png"
             )
         );
-        assert!(rendered.contains("https://app.example.com/base/office-addin/"));
+        assert!(rendered.contains("https://app.example.com/base/public/platform-office-addin/"));
         assert!(rendered.contains("<Version>0.5.2.42</Version>"));
         assert!(!rendered.contains(OFFICE_ADDIN_MANIFEST_DEFAULT_BASE_URL));
     }
@@ -287,5 +368,62 @@ mod tests {
                 .expect("base URL should parse");
 
         assert_eq!(normalized, "https://app.example.com/base");
+    }
+
+    #[test]
+    fn favicon_candidate_paths_prefer_runtime_theme_mounts() {
+        let bundle_root = PathBuf::from("/app/public");
+
+        let paths = favicon_candidate_paths(&bundle_root, Some("acme-test"), "favicon.ico");
+
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/app/public/custom-theme/acme-test/favicon.ico"),
+                PathBuf::from("/app/public/public/common/custom-theme/acme-test/favicon.ico"),
+                PathBuf::from("/app/public/custom-theme/acme-test/favicon.svg"),
+                PathBuf::from("/app/public/public/common/custom-theme/acme-test/favicon.svg"),
+                PathBuf::from("/app/public/favicon.ico"),
+                PathBuf::from("/app/public/public/favicon.ico"),
+            ]
+        );
+    }
+
+    #[test]
+    fn favicon_candidate_paths_support_runtime_theme_files() {
+        let temp_dir = tempdir().expect("temp dir should be created");
+        let runtime_theme_path = temp_dir
+            .path()
+            .join("custom-theme")
+            .join("acme-test")
+            .join("favicon.ico");
+        std::fs::create_dir_all(runtime_theme_path.parent().expect("parent should exist"))
+            .expect("theme directory should be created");
+        std::fs::write(&runtime_theme_path, b"runtime-favicon").expect("favicon should be written");
+
+        let candidates = favicon_candidate_paths(temp_dir.path(), Some("acme-test"), "favicon.ico");
+
+        let resolved = candidates
+            .into_iter()
+            .find_map(|candidate| std::fs::read(&candidate).ok());
+
+        assert_eq!(resolved, Some(b"runtime-favicon".to_vec()));
+    }
+
+    #[test]
+    fn favicon_candidate_paths_allow_svg_theme_override_for_ico_request() {
+        let bundle_root = PathBuf::from("/app/public");
+
+        let paths = favicon_candidate_paths(&bundle_root, Some("acme-test"), "favicon.ico");
+
+        assert_eq!(
+            paths[0..4],
+            [
+                PathBuf::from("/app/public/custom-theme/acme-test/favicon.ico"),
+                PathBuf::from("/app/public/public/common/custom-theme/acme-test/favicon.ico"),
+                PathBuf::from("/app/public/custom-theme/acme-test/favicon.svg"),
+                PathBuf::from("/app/public/public/common/custom-theme/acme-test/favicon.svg"),
+            ]
+        );
     }
 }

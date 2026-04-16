@@ -23,6 +23,9 @@ describe("themeConfig", () => {
   // Default env mock
   const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
     apiRootUrl: "http://localhost:3000",
+    frontendPlatform: "common",
+    frontendPublicBasePath: "/public/common",
+    commonPublicBasePath: "/public/common",
     themeCustomerName: null,
     themePath: null,
     themeConfigPath: null,
@@ -104,16 +107,16 @@ describe("themeConfig", () => {
       );
 
       expect(defaultThemeConfig.getLogoPath(undefined, true)).toBe(
-        "/custom-theme/acme/logo-dark.svg",
+        "/public/common/custom-theme/acme/logo-dark.svg",
       );
       expect(defaultThemeConfig.getLogoPath(undefined, false)).toBe(
-        "/custom-theme/acme/logo.svg",
+        "/public/common/custom-theme/acme/logo.svg",
       );
     });
 
     it("should return default dark path when no overrides and dark mode requested", () => {
       expect(defaultThemeConfig.getLogoPath(undefined, true)).toBe(
-        "/custom-theme/logo-dark.svg",
+        "/public/common/custom-theme/logo-dark.svg",
       );
     });
 
@@ -149,13 +152,13 @@ describe("themeConfig", () => {
       );
 
       expect(defaultThemeConfig.getLogoPath(undefined, false)).toBe(
-        "/custom-theme/acme/logo.svg",
+        "/public/common/custom-theme/acme/logo.svg",
       );
     });
 
     it("should return default path when no overrides are set", () => {
       expect(defaultThemeConfig.getLogoPath(undefined, false)).toBe(
-        "/custom-theme/logo.svg",
+        "/public/common/custom-theme/logo.svg",
       );
     });
 
@@ -234,7 +237,7 @@ describe("themeConfig", () => {
       );
 
       expect(defaultThemeConfig.getAssistantAvatarPath(undefined)).toBe(
-        "/custom-theme/acme/assistant-avatar.svg",
+        "/public/common/custom-theme/acme/assistant-avatar.svg",
       );
     });
 
@@ -310,10 +313,10 @@ describe("themeConfig", () => {
       );
 
       expect(defaultThemeConfig.getSidebarLogoPath(undefined, true)).toBe(
-        "/custom-theme/acme/sidebar-logo-dark.svg",
+        "/public/common/custom-theme/acme/sidebar-logo-dark.svg",
       );
       expect(defaultThemeConfig.getSidebarLogoPath(undefined, false)).toBe(
-        "/custom-theme/acme/sidebar-logo.svg",
+        "/public/common/custom-theme/acme/sidebar-logo.svg",
       );
     });
 
@@ -349,7 +352,7 @@ describe("themeConfig", () => {
       );
 
       expect(defaultThemeConfig.getSidebarLogoPath(undefined, false)).toBe(
-        "/custom-theme/acme/sidebar-logo.svg",
+        "/public/common/custom-theme/acme/sidebar-logo.svg",
       );
     });
 
@@ -407,7 +410,7 @@ describe("themeConfig", () => {
         null, // themeConfigPath
         null, // themeCustomerName
         null, // themePath
-        "/custom-theme/theme.json",
+        "/public/common/custom-theme/theme.json",
       ]);
     });
 
@@ -423,9 +426,9 @@ describe("themeConfig", () => {
       const result = defaultThemeConfig.getThemePaths();
       expect(result).toEqual([
         "/custom/theme.json",
-        "/custom-theme/acme/theme.json",
+        "/public/common/custom-theme/acme/theme.json",
         "/themes/company/theme.json",
-        "/custom-theme/theme.json",
+        "/public/common/custom-theme/theme.json",
       ]);
     });
   });
@@ -692,10 +695,10 @@ describe("themeConfig", () => {
         },
       };
 
-      const result = resolveIconPaths(iconMappings, "trilux-test");
+      const result = resolveIconPaths(iconMappings, "acme-test");
 
       expect(result.fileTypes?.pdf).toBe(
-        "/custom-theme/trilux-test/icons/custom-pdf.svg",
+        "/public/common/custom-theme/acme-test/icons/custom-pdf.svg",
       );
       expect(result.fileTypes?.image).toBe("MediaImage");
     });
@@ -732,7 +735,7 @@ describe("themeConfig", () => {
       const result = resolveIconPaths(iconMappings, undefined);
 
       expect(result.actions?.copy).toBe(
-        "/custom-theme/env-customer/icons/copy.svg",
+        "/public/common/custom-theme/env-customer/icons/copy.svg",
       );
     });
 
@@ -758,11 +761,17 @@ describe("themeConfig", () => {
 
       const result = resolveIconPaths(iconMappings, "test");
 
-      expect(result.fileTypes?.pdf).toBe("/custom-theme/test/pdf.svg");
-      expect(result.status?.error).toBe("/custom-theme/test/error.svg");
-      expect(result.actions?.copy).toBe("/custom-theme/test/copy.svg");
+      expect(result.fileTypes?.pdf).toBe(
+        "/public/common/custom-theme/test/pdf.svg",
+      );
+      expect(result.status?.error).toBe(
+        "/public/common/custom-theme/test/error.svg",
+      );
+      expect(result.actions?.copy).toBe(
+        "/public/common/custom-theme/test/copy.svg",
+      );
       expect(result.navigation?.assistants).toBe(
-        "/custom-theme/test/assistants.svg",
+        "/public/common/custom-theme/test/assistants.svg",
       );
     });
 
@@ -775,7 +784,9 @@ describe("themeConfig", () => {
 
       const result = resolveIconPaths(iconMappings, undefined);
 
-      expect(result.fileTypes?.video).toBe("/custom-theme/icons/video.svg");
+      expect(result.fileTypes?.video).toBe(
+        "/public/common/custom-theme/icons/video.svg",
+      );
     });
   });
 });

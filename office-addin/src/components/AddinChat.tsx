@@ -21,6 +21,7 @@ import {
   type MessageAction,
   type MessageControlsContext,
 } from "@erato/frontend/library";
+import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 
@@ -192,14 +193,20 @@ export function AddinChat() {
       <div className="flex size-full min-w-0 flex-col">
         <div className="flex items-center justify-between border-b border-theme-border px-4 py-2">
           <span className="text-sm font-semibold text-theme-fg-primary">
-            Erato
+            {t({
+              id: "officeAddin.chat.title",
+              message: "Erato",
+            })}
           </span>
           <button
             type="button"
             onClick={() => void createNewChat()}
             className="rounded-md bg-theme-bg-tertiary px-3 py-1 text-xs font-medium text-theme-fg-secondary transition-colors hover:bg-theme-bg-hover"
           >
-            New Chat
+            {t({
+              id: "officeAddin.chat.newChat",
+              message: "New Chat",
+            })}
           </button>
         </div>
 

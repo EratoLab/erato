@@ -80,7 +80,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(config.frontend.web_frontend_bundle_path, "./public");
     assert_eq!(
         config.integrations.ms_office.addin.frontend_bundle_path,
-        "./public-office-addin"
+        "./public/platform-office-addin"
     );
     assert_eq!(
         config.integrations.ms_office.addin.msal_authority,

@@ -1,5 +1,8 @@
 export type Env = {
   apiRootUrl: string;
+  frontendPlatform: "common" | "platform-office-addin";
+  frontendPublicBasePath: string;
+  commonPublicBasePath: string;
   themeCustomerName: string | null;
   themePath: string | null;
   themeConfigPath: string | null;
@@ -36,6 +39,9 @@ declare global {
   // These are injected from the backend (see frontend_environment.rs and related)
   interface Window {
     API_ROOT_URL?: string;
+    FRONTEND_PLATFORM?: string;
+    FRONTEND_PUBLIC_BASE_PATH?: string;
+    COMMON_PUBLIC_BASE_PATH?: string;
     THEME_CUSTOMER_NAME?: string;
     THEME_PATH?: string;
     THEME_CONFIG_PATH?: string;
@@ -73,6 +79,11 @@ declare global {
 
 // Default maximum body limit in bytes (20MB) - must match backend default
 const DEFAULT_MAX_BODY_LIMIT_BYTES = 20 * 1024 * 1024;
+// These are static runtime mount paths, not user-facing strings.
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const COMMON_PUBLIC_BASE_PATH = "/public/common";
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const OFFICE_ADDIN_PUBLIC_BASE_PATH = "/public/platform-office-addin";
 
 function normalizeChatInputEmptyStateLayout(
   value: string | null | undefined,
@@ -87,6 +98,23 @@ export const env = (): Env => {
       "API_ROOT_URL not set (checked VITE_API_ROOT_URL and window.API_ROOT_URL)",
     );
   }
+  const frontendPlatform =
+    (import.meta.env.VITE_FRONTEND_PLATFORM ??
+      window.FRONTEND_PLATFORM ??
+      "common") === "platform-office-addin"
+      ? "platform-office-addin"
+      : "common";
+  const frontendPublicBasePath =
+    import.meta.env.VITE_FRONTEND_PUBLIC_BASE_PATH ??
+    window.FRONTEND_PUBLIC_BASE_PATH ??
+    (frontendPlatform === "platform-office-addin"
+      ? OFFICE_ADDIN_PUBLIC_BASE_PATH
+      : COMMON_PUBLIC_BASE_PATH);
+  const commonPublicBasePath =
+    import.meta.env.VITE_COMMON_PUBLIC_BASE_PATH ??
+    window.COMMON_PUBLIC_BASE_PATH ??
+    COMMON_PUBLIC_BASE_PATH;
+
   let customerName =
     import.meta.env.VITE_CUSTOMER_NAME ?? window.THEME_CUSTOMER_NAME ?? null;
   if (customerName === "") {
@@ -222,6 +250,9 @@ export const env = (): Env => {
 
   return {
     apiRootUrl,
+    frontendPlatform,
+    frontendPublicBasePath,
+    commonPublicBasePath,
     themeCustomerName: customerName,
     themePath,
     themeConfigPath,

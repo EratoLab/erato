@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { createContext, useContext, useEffect, useState } from "react";
 
 interface MailboxUser {
@@ -96,7 +97,12 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
   if (!context.isReady) {
     return (
       <div className="office-shell office-shell--centered">
-        <p className="office-status">Loading Office Add-in...</p>
+        <p className="office-status">
+          {t({
+            id: "officeAddin.office.loading",
+            message: "Loading Office Add-in...",
+          })}
+        </p>
       </div>
     );
   }

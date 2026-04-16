@@ -1,12 +1,79 @@
+import fs from "node:fs";
 import path from "node:path";
 
+import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
+const loadOfficeAddinEnv = (mode: string) => {
+  const developmentEnv =
+    mode === "development" ? {} : loadEnv("development", __dirname, "");
+  const modeEnv = loadEnv(mode, __dirname, "");
+
+  return {
+    ...developmentEnv,
+    ...modeEnv,
+  };
+};
+
+const copy404Plugin = () => {
+  return {
+    name: "copy-404",
+    writeBundle(options: { dir?: string }) {
+      const outDir = options.dir ?? "dist";
+      const indexPath = path.join(outDir, "index.html");
+      const notFoundPath = path.join(outDir, "404.html");
+
+      if (fs.existsSync(indexPath)) {
+        fs.copyFileSync(indexPath, notFoundPath);
+        console.log("✓ Copied index.html to 404.html");
+      }
+    },
+  };
+};
+
+const stagePlatformLocalesPlugin = () => {
+  const rootDir = __dirname;
+  const sourceRoot = path.join(rootDir, "src", "locales");
+  const targetRoot = path.join(rootDir, "public", "locales");
+  const supportedLocales = ["en", "de", "fr", "pl", "es"];
+
+  const stage = () => {
+    for (const locale of supportedLocales) {
+      const targetDir = path.join(targetRoot, locale);
+      fs.mkdirSync(targetDir, { recursive: true });
+
+      const sourcePath = path.join(sourceRoot, locale, "messages.json");
+      const targetPath = path.join(targetDir, "messages.json");
+      if (fs.existsSync(sourcePath)) {
+        fs.copyFileSync(sourcePath, targetPath);
+      } else if (!fs.existsSync(targetPath)) {
+        fs.writeFileSync(targetPath, JSON.stringify({ messages: {} }, null, 2));
+      }
+    }
+  };
+
+  return {
+    name: "stage-platform-locales",
+    buildStart() {
+      stage();
+    },
+    configureServer() {
+      stage();
+    },
+  };
+};
+
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd());
+  const env = loadOfficeAddinEnv(mode);
   const apiRootUrl = env.VITE_API_ROOT_URL;
   const linkedFrontend = mode === "linked";
+  const isDevServer = mode !== "production";
+  const define = Object.fromEntries(
+    Object.entries(env)
+      .filter(([key]) => key.startsWith("VITE_"))
+      .map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)]),
+  );
 
   const apiProxy =
     apiRootUrl && !apiRootUrl.startsWith("http://localhost:3002")
@@ -25,8 +92,18 @@ export default defineConfig(({ mode }) => {
       : undefined;
 
   return {
-    base: "/office-addin/",
-    plugins: [react()],
+    base: isDevServer ? "/office-addin/" : "/public/platform-office-addin/",
+    define,
+    plugins: [
+      react({
+        babel: {
+          plugins: ["@lingui/babel-plugin-lingui-macro"],
+        },
+      }),
+      lingui(),
+      stagePlatformLocalesPlugin(),
+      copy404Plugin(),
+    ],
     resolve: linkedFrontend
       ? {
           alias: {

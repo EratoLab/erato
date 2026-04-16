@@ -1,3 +1,5 @@
+import { t } from "@lingui/core/macro";
+import { Trans } from "@lingui/react/macro";
 import { useCallback, useEffect, useState } from "react";
 
 const INTEGRATED_APPS_URL =
@@ -42,7 +44,10 @@ export function AddinSetupPage() {
         setError(
           loadError instanceof Error
             ? loadError.message
-            : "Failed to load manifest",
+            : t({
+                id: "officeAddin.setup.loadManifestFailed",
+                message: "Failed to load manifest",
+              }),
         );
       } finally {
         if (!abortController.signal.aborted) {
@@ -74,22 +79,38 @@ export function AddinSetupPage() {
     <div className="office-setup-page">
       <div className="office-setup-card">
         <div className="office-setup-header">
-          <p className="office-setup-eyebrow">Office Add-in Setup</p>
-          <h1 className="office-setup-title">Upload the generated manifest</h1>
+          <p className="office-setup-eyebrow">
+            <Trans id="officeAddin.setup.eyebrow">Office Add-in Setup</Trans>
+          </p>
+          <h1 className="office-setup-title">
+            <Trans id="officeAddin.setup.title">
+              Upload the generated manifest
+            </Trans>
+          </h1>
           <p className="office-setup-copy">
-            Download the XML below as <code>manifest.xml</code>, then upload it
-            in Microsoft 365 admin center under Integrated Apps.
+            <Trans id="officeAddin.setup.copy">
+              Download the XML below as <code>manifest.xml</code>, then upload
+              it in Microsoft 365 admin center under Integrated Apps.
+            </Trans>
           </p>
         </div>
 
         <ol className="office-setup-steps">
           <li>
-            In the Entra ID app registration, add the SPA redirect URI:
+            <Trans id="officeAddin.setup.redirectUriInstruction">
+              In the Entra ID app registration, add the SPA redirect URI:
+            </Trans>
             <CopyableCodeField content={spaRedirectUri} />
           </li>
-          <li>Review the generated manifest XML below.</li>
           <li>
-            Download it as <code>manifest.xml</code>.
+            <Trans id="officeAddin.setup.reviewManifest">
+              Review the generated manifest XML below.
+            </Trans>
+          </li>
+          <li>
+            <Trans id="officeAddin.setup.downloadManifest">
+              Download it as <code>manifest.xml</code>.
+            </Trans>
           </li>
           <li>
             Open{" "}
@@ -99,9 +120,13 @@ export function AddinSetupPage() {
               rel="noreferrer"
               className="office-setup-link"
             >
-              Integrated Apps
+              <Trans id="officeAddin.setup.integratedAppsLink">
+                Integrated Apps
+              </Trans>
             </a>{" "}
-            and upload the downloaded file there.
+            <Trans id="officeAddin.setup.uploadInstruction">
+              and upload the downloaded file there.
+            </Trans>
           </li>
         </ol>
 
@@ -112,7 +137,9 @@ export function AddinSetupPage() {
             disabled={isLoading || !manifestXml}
             className="office-setup-button"
           >
-            Download manifest.xml
+            <Trans id="officeAddin.setup.downloadButton">
+              Download manifest.xml
+            </Trans>
           </button>
           <a
             href={INTEGRATED_APPS_URL}
@@ -120,7 +147,9 @@ export function AddinSetupPage() {
             rel="noreferrer"
             className="office-setup-button office-setup-button--secondary"
           >
-            Open Integrated Apps
+            <Trans id="officeAddin.setup.openIntegratedApps">
+              Open Integrated Apps
+            </Trans>
           </a>
         </div>
 
@@ -132,13 +161,20 @@ export function AddinSetupPage() {
           className="office-setup-preview-label"
           htmlFor="manifest-preview"
         >
-          Manifest preview
+          <Trans id="officeAddin.setup.manifestPreview">Manifest preview</Trans>
         </label>
         <textarea
           id="manifest-preview"
           className="office-setup-preview"
           readOnly
-          value={isLoading ? "Loading manifest..." : manifestXml}
+          value={
+            isLoading
+              ? t({
+                  id: "officeAddin.setup.loadingManifest",
+                  message: "Loading manifest...",
+                })
+              : manifestXml
+          }
           spellCheck={false}
         />
       </div>
@@ -170,7 +206,15 @@ function CopyableCodeField({ content }: { content: string }) {
           onClick={handleCopy}
           className="office-setup-code-button"
         >
-          {copied ? "Copied!" : "Copy"}
+          {copied
+            ? t({
+                id: "officeAddin.setup.copied",
+                message: "Copied!",
+              })
+            : t({
+                id: "officeAddin.setup.copyButton",
+                message: "Copy",
+              })}
         </button>
       </div>
     </div>
