@@ -19,6 +19,7 @@ const officeMock = {
   },
   EventType: {
     ItemChanged: "itemChanged",
+    OfficeThemeChanged: "officeThemeChanged",
   },
   context: {} as Record<string, unknown>,
 };
