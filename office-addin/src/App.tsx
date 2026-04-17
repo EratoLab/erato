@@ -9,6 +9,7 @@ import { t } from "@lingui/core/macro";
 import { AddinChatPage } from "./pages/AddinChatPage";
 import { MsalNaaProvider, useMsalNaa } from "./providers/MsalNaaProvider";
 import { OfficeProvider, useOffice } from "./providers/OfficeProvider";
+import { OfficeThemeProvider } from "./providers/OfficeThemeProvider";
 import { OutlookMailItemProvider } from "./providers/OutlookMailItemProvider";
 
 import "./styles.css";
@@ -59,25 +60,23 @@ function OutlookWrapper({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <I18nProvider>
-      <ThemeProvider
-        enableCustomTheme
-        initialThemeMode="light"
-        persistThemeMode={false}
-      >
+      <ThemeProvider enableCustomTheme persistThemeMode={false}>
         <FeatureConfigProvider
           config={{ chatInput: { showUsageAdvisory: false } }}
         >
           <ApiProvider enableDevtools={false}>
             <OfficeProvider>
-              <MsalNaaProvider>
-                <AuthGate>
-                  <OutlookWrapper>
-                    <div className="office-shell">
-                      <AddinChatPage />
-                    </div>
-                  </OutlookWrapper>
-                </AuthGate>
-              </MsalNaaProvider>
+              <OfficeThemeProvider>
+                <MsalNaaProvider>
+                  <AuthGate>
+                    <OutlookWrapper>
+                      <div className="office-shell">
+                        <AddinChatPage />
+                      </div>
+                    </OutlookWrapper>
+                  </AuthGate>
+                </MsalNaaProvider>
+              </OfficeThemeProvider>
             </OfficeProvider>
           </ApiProvider>
         </FeatureConfigProvider>
