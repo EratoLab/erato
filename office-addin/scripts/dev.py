@@ -56,7 +56,7 @@ MANIFEST_LOCAL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-local.xml"
 MANIFEST_FUNNEL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.xml"
 ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
 ENTRA_CONFIG_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.cfg"
-REQUIRED_COMMANDS = ("docker", "pnpm", "tailscale")
+REQUIRED_COMMANDS = ("docker", "node", "pnpm", "tailscale")
 EXPECTED_OAUTH2_PROXY_UPSTREAMS = """upstreams = [
     "http://localhost:3130/public/common/#/public/common/",
     "http://localhost:3002/office-addin/#/",
@@ -473,7 +473,7 @@ def build_frontend_app() -> None:
     run_quiet_command(
         ["pnpm", "exec", "vite", "build", "--mode", "dev-linked", "--logLevel", "warn"],
         cwd=FRONTEND_DIR,
-        print_stdout_on_success=True,
+        print_stdout_on_success=False,
         print_stderr_on_success=True,
         success_message="Frontend app output ready",
     )
@@ -574,7 +574,7 @@ class FrontendAppBuildWatcher:
 
 def spawn_frontend_watch() -> subprocess.Popen[str]:
     return subprocess.Popen(
-        ["pnpm", "run", "build:lib:watch"],
+        ["node", "scripts/watch-library.mjs"],
         cwd=FRONTEND_DIR,
         text=True,
         start_new_session=True,
