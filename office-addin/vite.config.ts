@@ -145,6 +145,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: isDevServer ? "/office-addin/" : "/public/platform-office-addin/",
+    clearScreen: false,
     define,
     plugins: [
       react({
@@ -175,6 +176,7 @@ export default defineConfig(({ mode }) => {
       host: true,
       allowedHosts: [".ts.net"],
       port: 3002,
+      strictPort: true,
       proxy: apiProxy,
       fs: {
         allow: [path.resolve(__dirname, "..")],

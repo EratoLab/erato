@@ -15,6 +15,7 @@ function shouldSuppressLine(line) {
       line.includes("downloaded") &&
       line.includes("added")) ||
     line.includes("transforming (") ||
+    line.endsWith("modules transformed.") ||
     line === "transforming..." ||
     line === "rendering chunks..." ||
     line === "computing gzip size..." ||
@@ -59,6 +60,14 @@ function emitLine(name, line) {
 
   if (name === "bundle" && trimmed.includes("watching for file changes")) {
     logLine("[watch-library] library bundle watching");
+    return;
+  }
+
+  if (
+    name === "pack" &&
+    trimmed.includes("wrote dist-package/erato-frontend.tgz")
+  ) {
+    logLine("[watch-library] package archive ready");
     return;
   }
 

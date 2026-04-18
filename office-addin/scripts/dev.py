@@ -14,6 +14,7 @@ import re
 import secrets
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -369,6 +370,21 @@ def clear_vite_cache() -> None:
     shutil.rmtree(VITE_CACHE_DIR, ignore_errors=True)
 
 
+def can_connect_to_port(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+        connection.settimeout(0.2)
+        return connection.connect_ex(("127.0.0.1", port)) == 0
+
+
+def ensure_port_is_free(port: int, *, label: str) -> None:
+    if can_connect_to_port(port):
+        print(
+            f"{label} port {port} is already in use; stop the existing process and retry",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def wait_for_generated_path(
     path: Path,
     producer: subprocess.Popen[str],
@@ -392,6 +408,34 @@ def wait_for_generated_path(
 
     print(
         f"Timed out waiting for {path.relative_to(FRONTEND_DIR.parent)}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def wait_for_listening_port(
+    port: int,
+    producer: subprocess.Popen[str],
+    *,
+    timeout_seconds: int = 60,
+) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if can_connect_to_port(port):
+            return
+
+        return_code = producer.poll()
+        if return_code is not None:
+            print(
+                f"Process exited with code {return_code}: {producer.args}",
+                file=sys.stderr,
+            )
+            sys.exit(return_code or 1)
+
+        time.sleep(0.25)
+
+    print(
+        f"Timed out waiting for localhost:{port} to accept connections",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -596,6 +640,65 @@ def spawn_app_dev(mode: str, *, force_optimize: bool = False) -> subprocess.Pope
     )
 
 
+def print_status_block(title: str, lines: list[tuple[str, str]]) -> None:
+    print(title)
+    label_width = max(len(label) for label, _ in lines)
+    for label, value in lines:
+        print(f"- {label.ljust(label_width)}  {value}")
+
+
+def print_linked_long_running_processes() -> None:
+    print_status_block(
+        "Linked long-running processes",
+        [
+            (
+                "frontend library build watch",
+                "running via node scripts/watch-library.mjs",
+            ),
+            (
+                "frontend public/locales watcher",
+                "running inside scripts/dev.py",
+            ),
+            (
+                "add-in dev server",
+                "starting via vite --host --mode linked",
+            ),
+        ],
+    )
+
+
+def print_linked_watch_mode_ready() -> None:
+    print_status_block(
+        "Linked watch mode ready",
+        [
+            (
+                "add-in dev server",
+                f"http://localhost:{OFFICE_ADDIN_PORT}/office-addin/",
+            ),
+            (
+                "frontend app assets",
+                "ready for backend serving",
+            ),
+            (
+                "frontend library outputs",
+                "ready for linked imports",
+            ),
+            (
+                "frontend public/locales changes",
+                "rebuild backend-served assets",
+            ),
+            (
+                "frontend library changes",
+                "rebuild linked library outputs",
+            ),
+            (
+                "office-addin changes",
+                "Vite HMR or full reload",
+            ),
+        ],
+    )
+
+
 def terminate_process(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         return
@@ -736,6 +839,10 @@ def main() -> int:
             wait_for_packaged_frontend(frontend_watch)
             install_packaged_frontend()
             clear_vite_cache()
+            ensure_port_is_free(
+                OFFICE_ADDIN_PORT,
+                label="Office add-in dev server",
+            )
             app_dev = spawn_app_dev(args.mode, force_optimize=True)
         else:
             build_frontend_app()
@@ -743,7 +850,14 @@ def main() -> int:
             wait_for_linked_frontend(frontend_watch)
             frontend_app_build_watcher = FrontendAppBuildWatcher()
             frontend_app_build_watcher.start()
+            print_linked_long_running_processes()
+            ensure_port_is_free(
+                OFFICE_ADDIN_PORT,
+                label="Office add-in dev server",
+            )
             app_dev = spawn_app_dev(args.mode)
+            wait_for_listening_port(OFFICE_ADDIN_PORT, app_dev)
+            print_linked_watch_mode_ready()
 
         assert frontend_watch is not None
         assert app_dev is not None
