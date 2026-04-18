@@ -5,10 +5,16 @@ import { Readable } from "node:stream";
 
 import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin, type ViteDevServer } from "vite";
+import {
+  createLogger,
+  defineConfig,
+  type Logger,
+  type Plugin,
+  type ViteDevServer,
+} from "vite";
 
 // Custom plugin to copy index.html as 404.html for SPA routing
-const copy404Plugin = () => {
+const copy404Plugin = ({ silent = false }: { silent?: boolean } = {}) => {
   return {
     name: "copy-404",
     writeBundle(options: any) {
@@ -18,10 +24,34 @@ const copy404Plugin = () => {
 
       if (fs.existsSync(indexPath)) {
         fs.copyFileSync(indexPath, notFoundPath);
-        console.log("✓ Copied index.html to 404.html");
+        if (!silent) {
+          console.log("✓ Copied index.html to 404.html");
+        }
       }
     },
   };
+};
+
+const createDevLinkedBuildLogger = (enabled: boolean): Logger | undefined => {
+  if (!enabled) {
+    return undefined;
+  }
+
+  const logger = createLogger();
+  const originalWarn = logger.warn;
+
+  logger.warn = (msg, options) => {
+    if (
+      msg.includes("date-fns/locale/en-US.js is dynamically imported") ||
+      msg.includes("Some chunks are larger than 500 kB after minification.")
+    ) {
+      return;
+    }
+
+    originalWarn(msg, options);
+  };
+
+  return logger;
 };
 
 const contentTypeForPath = (filePath: string): string => {
@@ -205,28 +235,34 @@ const stagePublicLayoutPlugin = (): Plugin => {
 };
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [
-    react({
-      babel: {
-        plugins: ["@lingui/babel-plugin-lingui-macro"],
-      },
-    }),
-    lingui(),
-    stagePublicLayoutPlugin(),
-    copy404Plugin(),
-  ],
-  publicDir: false,
-  server: {
-    port: 3000, // You can change this if needed
-  },
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+export default defineConfig(({ mode }) => {
+  const silentLinkedBuildOutput = mode === "dev-linked";
+
+  return {
+    customLogger: createDevLinkedBuildLogger(silentLinkedBuildOutput),
+    plugins: [
+      react({
+        babel: {
+          plugins: ["@lingui/babel-plugin-lingui-macro"],
+        },
+      }),
+      lingui(),
+      stagePublicLayoutPlugin(),
+      copy404Plugin({ silent: silentLinkedBuildOutput }),
+    ],
+    publicDir: false,
+    server: {
+      port: 3000, // You can change this if needed
     },
-  },
-  build: {
-    outDir: "out",
-    assetsDir: "public/common/assets",
-  },
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
+    },
+    build: {
+      outDir: "out",
+      assetsDir: "public/common/assets",
+      reportCompressedSize: !silentLinkedBuildOutput,
+    },
+  };
 });

@@ -81,6 +81,50 @@ def run_command(
     )
 
 
+def print_process_output(output: str | None) -> None:
+    if not output:
+        return
+
+    for line in output.splitlines():
+        if line.strip():
+            print(line)
+
+
+def run_quiet_command(
+    command: list[str],
+    *,
+    cwd: Path | None = None,
+    success_message: str | None = None,
+    print_stdout_on_success: bool = False,
+    print_stderr_on_success: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    result = run_command(
+        command,
+        cwd=cwd,
+        capture_output=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        print_process_output(result.stdout)
+        print_process_output(result.stderr)
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            command,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+
+    if print_stdout_on_success:
+        print_process_output(result.stdout)
+    if print_stderr_on_success:
+        print_process_output(result.stderr)
+    if success_message:
+        print(success_message)
+
+    return result
+
+
 def require_command(name: str) -> None:
     if shutil.which(name) is None:
         print(f"Missing required command: {name}", file=sys.stderr)
@@ -158,9 +202,17 @@ def sync_entra_proxy_upstreams() -> None:
 
 
 def start_auth_proxy() -> None:
-    run_command(
-        ["docker", "compose", "up", "--force-recreate", "--detach"],
+    run_quiet_command(
+        [
+            "docker",
+            "compose",
+            "up",
+            "--force-recreate",
+            "--detach",
+            "--remove-orphans",
+        ],
         cwd=LOCAL_AUTH_DIR,
+        print_stderr_on_success=False,
     )
     print(f"Auth proxy available at http://localhost:{AUTH_PROXY_PORT}")
 
@@ -408,7 +460,23 @@ def compute_file_sha256(path: Path) -> str | None:
 
 def build_frontend_app() -> None:
     print("Building frontend app output for backend-served assets")
-    run_command(["pnpm", "run", "build:app"], cwd=FRONTEND_DIR)
+    run_quiet_command(
+        ["pnpm", "exec", "lingui", "compile"],
+        cwd=FRONTEND_DIR,
+        print_stderr_on_success=False,
+    )
+    run_quiet_command(
+        ["pnpm", "exec", "tsc"],
+        cwd=FRONTEND_DIR,
+        print_stderr_on_success=False,
+    )
+    run_quiet_command(
+        ["pnpm", "exec", "vite", "build", "--mode", "dev-linked", "--logLevel", "warn"],
+        cwd=FRONTEND_DIR,
+        print_stdout_on_success=True,
+        print_stderr_on_success=True,
+        success_message="Frontend app output ready",
+    )
 
 
 def path_has_hidden_segment(path: Path) -> bool:
@@ -656,7 +724,7 @@ def main() -> int:
 
     def handle_signal(signum: int, _frame: object) -> None:
         cleanup()
-        raise SystemExit(128 + signum)
+        raise SystemExit(0)
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
