@@ -1,13 +1,65 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { useOutlookMailItem } from "./OutlookMailItemProvider";
 import { emailToHtmlFile } from "../utils/emailToFile";
 
+
 import type { LocalFilePreviewItem } from "@erato/frontend/library";
+import type { ReactNode } from "react";
 
 const OUTLOOK_CLOUD_ATTACHMENT_TYPE = "cloud";
 
-export function useOutlookEmailSource() {
+interface OutlookEmailSourceContextValue {
+  emailSubject: string;
+  isEmailBodyIncluded: boolean;
+  emailBodyFile: File | null;
+  selectedAttachmentItems: LocalFilePreviewItem[];
+  isLoadingAttachments: boolean;
+  removeEmailBody: () => void;
+  removeAttachment: (attachmentId: string) => void;
+  restoreEmailBody: () => void;
+  restoreAttachment: (attachmentId: string) => void;
+  isEmailBodyDismissed: boolean;
+  dismissedAttachmentIds: string[];
+  resolveSelectedFilesForSend: () => Promise<File[]>;
+  hasSelectedEmailSource: boolean;
+}
+
+const defaultValue: OutlookEmailSourceContextValue = {
+  emailSubject: "",
+  isEmailBodyIncluded: false,
+  emailBodyFile: null,
+  selectedAttachmentItems: [],
+  isLoadingAttachments: false,
+  removeEmailBody: () => {},
+  removeAttachment: () => {},
+  restoreEmailBody: () => {},
+  restoreAttachment: () => {},
+  isEmailBodyDismissed: false,
+  dismissedAttachmentIds: [],
+  resolveSelectedFilesForSend: async () => [],
+  hasSelectedEmailSource: false,
+};
+
+const OutlookEmailSourceContext =
+  createContext<OutlookEmailSourceContextValue>(defaultValue);
+
+export function useOutlookEmailSource(): OutlookEmailSourceContextValue {
+  return useContext(OutlookEmailSourceContext);
+}
+
+export function OutlookEmailSourceProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const {
     itemIdentity,
     mailItem,
@@ -43,10 +95,10 @@ export function useOutlookEmailSource() {
     }
   }, [dismissedBodyMailIdentity, itemIdentity]);
 
-  const isEmailBodyIncluded =
-    !!emailBodyFile &&
-    !!itemIdentity &&
-    dismissedBodyMailIdentity !== itemIdentity;
+  const isEmailBodyDismissed =
+    !!itemIdentity && dismissedBodyMailIdentity === itemIdentity;
+
+  const isEmailBodyIncluded = !!emailBodyFile && !isEmailBodyDismissed;
 
   const selectableAttachments = useMemo(() => {
     return attachments.filter((attachment) => !attachment.isInline);
@@ -73,6 +125,16 @@ export function useOutlookEmailSource() {
   const removeAttachment = useCallback((attachmentId: string) => {
     setDismissedAttachmentIds((previous) =>
       previous.includes(attachmentId) ? previous : [...previous, attachmentId],
+    );
+  }, []);
+
+  const restoreEmailBody = useCallback(() => {
+    setDismissedBodyMailIdentity(null);
+  }, []);
+
+  const restoreAttachment = useCallback((attachmentId: string) => {
+    setDismissedAttachmentIds((previous) =>
+      previous.filter((id) => id !== attachmentId),
     );
   }, []);
 
@@ -119,16 +181,42 @@ export function useOutlookEmailSource() {
     selectableAttachments,
   ]);
 
-  return {
-    emailSubject: mailItem?.subject ?? "",
-    isEmailBodyIncluded,
-    emailBodyFile,
-    selectedAttachmentItems,
-    isLoadingAttachments,
-    removeEmailBody,
-    removeAttachment,
-    resolveSelectedFilesForSend,
-    hasSelectedEmailSource:
-      isEmailBodyIncluded || selectedAttachmentItems.length > 0,
-  };
+  const value = useMemo<OutlookEmailSourceContextValue>(
+    () => ({
+      emailSubject: mailItem?.subject ?? "",
+      isEmailBodyIncluded,
+      emailBodyFile,
+      selectedAttachmentItems,
+      isLoadingAttachments,
+      removeEmailBody,
+      removeAttachment,
+      restoreEmailBody,
+      restoreAttachment,
+      isEmailBodyDismissed,
+      dismissedAttachmentIds,
+      resolveSelectedFilesForSend,
+      hasSelectedEmailSource:
+        isEmailBodyIncluded || selectedAttachmentItems.length > 0,
+    }),
+    [
+      dismissedAttachmentIds,
+      emailBodyFile,
+      isEmailBodyDismissed,
+      isEmailBodyIncluded,
+      isLoadingAttachments,
+      mailItem?.subject,
+      removeAttachment,
+      removeEmailBody,
+      resolveSelectedFilesForSend,
+      restoreAttachment,
+      restoreEmailBody,
+      selectedAttachmentItems,
+    ],
+  );
+
+  return (
+    <OutlookEmailSourceContext.Provider value={value}>
+      {children}
+    </OutlookEmailSourceContext.Provider>
+  );
 }

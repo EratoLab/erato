@@ -23,13 +23,6 @@
  * ```
  */
 
-import { OpenWebUIChatHistoryList } from "@/customer/components/OpenWebUIChatHistoryList";
-import { OpenWebUIChatInputAttachmentPreview } from "@/customer/components/OpenWebUIChatInputAttachmentPreview";
-import { OpenWebUIChatMessageRenderer } from "@/customer/components/OpenWebUIChatMessageRenderer";
-import { OpenWebUITopLeftAccessory } from "@/customer/components/OpenWebUITopLeftAccessory";
-import { OpenWebUIAssistantWelcomeScreen } from "@/customer/components/OpenWebUIWelcomeScreens"; // eslint-disable-next-line import/order
-import { OpenWebUIStarterPrompts } from "@/customer/components/OpenWebUIStarterPrompts";
-
 import type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 import type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList";
 import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
@@ -162,13 +155,13 @@ export const resolveComponentOverride = <TProps>(
 export const componentRegistry: ComponentRegistry = {
   AssistantFileSourceSelector: null,
   ChatFileSourceSelector: null,
-  ChatInputAttachmentPreview: OpenWebUIChatInputAttachmentPreview,
-  ChatHistoryList: OpenWebUIChatHistoryList,
+  ChatInputAttachmentPreview: null,
+  ChatHistoryList: null,
   ChatWelcomeScreen: null,
-  StarterPrompts: OpenWebUIStarterPrompts,
-  AssistantWelcomeScreen: OpenWebUIAssistantWelcomeScreen,
+  StarterPrompts: null,
+  AssistantWelcomeScreen: null,
   MessageControls: null,
-  ChatMessageRenderer: OpenWebUIChatMessageRenderer,
-  ChatTopLeftAccessory: OpenWebUITopLeftAccessory,
+  ChatMessageRenderer: null,
+  ChatTopLeftAccessory: null,
   EratoEmailCodeBlock: null,
 };

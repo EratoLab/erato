@@ -10,6 +10,7 @@ import { AddinChatPage } from "./pages/AddinChatPage";
 import { MsalNaaProvider, useMsalNaa } from "./providers/MsalNaaProvider";
 import { OfficeProvider, useOffice } from "./providers/OfficeProvider";
 import { OfficeThemeProvider } from "./providers/OfficeThemeProvider";
+import { OutlookEmailSourceProvider } from "./providers/OutlookEmailSourceProvider";
 import { OutlookMailItemProvider } from "./providers/OutlookMailItemProvider";
 
 import "./styles.css";
@@ -51,7 +52,11 @@ function OutlookWrapper({ children }: { children: React.ReactNode }) {
   const { host } = useOffice();
 
   if (host === "Outlook") {
-    return <OutlookMailItemProvider>{children}</OutlookMailItemProvider>;
+    return (
+      <OutlookMailItemProvider>
+        <OutlookEmailSourceProvider>{children}</OutlookEmailSourceProvider>
+      </OutlookMailItemProvider>
+    );
   }
 
   return <>{children}</>;

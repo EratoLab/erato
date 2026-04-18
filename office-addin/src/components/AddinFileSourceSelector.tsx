@@ -1,8 +1,9 @@
-import { AnchoredPopover } from "@erato/frontend/library";
+import { AnchoredPopover, useChatContext } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useMemo, useState } from "react";
 
 import { useOffice } from "../providers/OfficeProvider";
+import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { emailToHtmlFile } from "../utils/emailToFile";
 
@@ -46,9 +47,19 @@ export function AddinFileSourceSelector({
   const { host } = useOffice();
   const { mailItem, attachments, isLoadingAttachments, getAttachmentFile } =
     useOutlookMailItem();
+  const {
+    isEmailBodyDismissed,
+    dismissedAttachmentIds,
+    restoreEmailBody,
+    restoreAttachment,
+  } = useOutlookEmailSource();
+  const { currentChatId, messageOrder } = useChatContext();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEmailContentOpen, setIsEmailContentOpen] = useState(false);
   const [isUploadingEmailContent, setIsUploadingEmailContent] = useState(false);
+
+  const isSuggestionEligible =
+    host === "Outlook" && currentChatId === null && messageOrder.length === 0;
 
   const isBusy = disabled || isProcessing || isUploadingEmailContent;
   const canShowEmailContent = host === "Outlook";
@@ -113,11 +124,29 @@ export function AddinFileSourceSelector({
       return;
     }
 
+    if (isSuggestionEligible) {
+      restoreEmailBody();
+      closeMenus();
+      return;
+    }
+
     void handleUploadResolvedFiles([emailBodyFile]);
-  }, [emailBodyFile, handleUploadResolvedFiles]);
+  }, [
+    closeMenus,
+    emailBodyFile,
+    handleUploadResolvedFiles,
+    isSuggestionEligible,
+    restoreEmailBody,
+  ]);
 
   const handleSelectAttachment = useCallback(
     (attachmentId: string) => {
+      if (isSuggestionEligible) {
+        restoreAttachment(attachmentId);
+        closeMenus();
+        return;
+      }
+
       void (async () => {
         try {
           const file = await getAttachmentFile(attachmentId);
@@ -130,7 +159,13 @@ export function AddinFileSourceSelector({
         }
       })();
     },
-    [getAttachmentFile, handleUploadResolvedFiles],
+    [
+      closeMenus,
+      getAttachmentFile,
+      handleUploadResolvedFiles,
+      isSuggestionEligible,
+      restoreAttachment,
+    ],
   );
 
   const hasAnyEmailContent =
@@ -252,30 +287,40 @@ export function AddinFileSourceSelector({
                   </div>
                 )}
 
-                {emailBodyFile && (
-                  <button
-                    type="button"
-                    onClick={handleSelectEmailBody}
-                    disabled={isBusy}
-                    title={emailBodyFile.name}
-                    className="flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-theme-fg-primary">
-                        {t({
-                          id: "officeAddin.fileSource.emailThread",
-                          message: "Email thread",
-                        })}
-                      </div>
-                      <div className="truncate text-xs text-theme-fg-muted">
-                        {emailBodyFile.name}
-                      </div>
-                    </div>
-                    <span className="shrink-0 text-xs text-theme-fg-muted">
-                      {formatFileSize(emailBodyFile.size)}
-                    </span>
-                  </button>
-                )}
+                {emailBodyFile &&
+                  (() => {
+                    const isAlreadyAdded =
+                      isSuggestionEligible && !isEmailBodyDismissed;
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleSelectEmailBody}
+                        disabled={isBusy || isAlreadyAdded}
+                        title={emailBodyFile.name}
+                        className="flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-theme-fg-primary">
+                            {t({
+                              id: "officeAddin.fileSource.emailThread",
+                              message: "Email thread",
+                            })}
+                          </div>
+                          <div className="truncate text-xs text-theme-fg-muted">
+                            {isAlreadyAdded
+                              ? t({
+                                  id: "officeAddin.fileSource.alreadyAdded",
+                                  message: "Already added",
+                                })
+                              : emailBodyFile.name}
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-xs text-theme-fg-muted">
+                          {formatFileSize(emailBodyFile.size)}
+                        </span>
+                      </button>
+                    );
+                  })()}
 
                 {isLoadingAttachments && (
                   <div className="px-3 py-2 text-xs text-theme-fg-muted">
@@ -289,13 +334,16 @@ export function AddinFileSourceSelector({
                 {selectableAttachments.map((attachment) => {
                   const isCloudAttachment =
                     String(attachment.attachmentType).toLowerCase() === "cloud";
+                  const isAlreadyAdded =
+                    isSuggestionEligible &&
+                    !dismissedAttachmentIds.includes(attachment.id);
 
                   return (
                     <button
                       key={attachment.id}
                       type="button"
                       onClick={() => handleSelectAttachment(attachment.id)}
-                      disabled={isBusy || isCloudAttachment}
+                      disabled={isBusy || isCloudAttachment || isAlreadyAdded}
                       title={attachment.name}
                       className="flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-theme-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -310,11 +358,16 @@ export function AddinFileSourceSelector({
                                 message:
                                   "Cloud attachment cannot be uploaded from Outlook",
                               })
-                            : attachment.contentType ||
-                              t({
-                                id: "officeAddin.fileSource.attachmentFallback",
-                                message: "Attachment",
-                              })}
+                            : isAlreadyAdded
+                              ? t({
+                                  id: "officeAddin.fileSource.alreadyAdded",
+                                  message: "Already added",
+                                })
+                              : attachment.contentType ||
+                                t({
+                                  id: "officeAddin.fileSource.attachmentFallback",
+                                  message: "Attachment",
+                                })}
                         </div>
                       </div>
                       <span className="shrink-0 text-xs text-theme-fg-muted">
