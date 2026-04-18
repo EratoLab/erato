@@ -14,8 +14,10 @@ import re
 import secrets
 import shutil
 import signal
+import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -27,12 +29,19 @@ FUNNEL_TARGET_PORT = AUTH_PROXY_PORT
 SCRIPT_PATH = Path(__file__).resolve()
 OFFICE_ADDIN_DIR = SCRIPT_PATH.parent.parent
 FRONTEND_DIR = OFFICE_ADDIN_DIR.parent / "frontend"
+FRONTEND_PUBLIC_DIR = FRONTEND_DIR / "public"
+FRONTEND_SOURCE_LOCALES_DIR = FRONTEND_DIR / "src" / "locales"
 FRONTEND_TARBALL_PATH = FRONTEND_DIR / "dist-package" / "erato-frontend.tgz"
 FRONTEND_PACKAGE_STATE_PATH = (
     FRONTEND_DIR / "dist-package" / "erato-frontend.state.json"
 )
 FRONTEND_LIBRARY_ENTRY_PATH = FRONTEND_DIR / "dist-library" / "library.js"
 FRONTEND_LIBRARY_CSS_PATH = FRONTEND_DIR / "dist-library" / "style.css"
+FRONTEND_APP_BUILD_WATCH_POLL_SECONDS = 1.0
+FRONTEND_APP_BUILD_WATCH_FILES = (
+    FRONTEND_DIR / "lingui.config.ts",
+    FRONTEND_DIR / "vite.config.ts",
+)
 INSTALLED_FRONTEND_LIBRARY_ENTRY_PATH = (
     OFFICE_ADDIN_DIR
     / "node_modules"
@@ -48,7 +57,7 @@ MANIFEST_LOCAL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-local.xml"
 MANIFEST_FUNNEL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel.xml"
 ENTRA_TEMPLATE_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.template.cfg"
 ENTRA_CONFIG_PATH = LOCAL_AUTH_DIR / "oauth2-proxy-entra-id.cfg"
-REQUIRED_COMMANDS = ("docker", "pnpm", "tailscale")
+REQUIRED_COMMANDS = ("docker", "node", "pnpm", "tailscale")
 EXPECTED_OAUTH2_PROXY_UPSTREAMS = """upstreams = [
     "http://localhost:3130/public/common/#/public/common/",
     "http://localhost:3002/office-addin/#/",
@@ -71,6 +80,50 @@ def run_command(
         capture_output=capture_output,
         text=True,
     )
+
+
+def print_process_output(output: str | None) -> None:
+    if not output:
+        return
+
+    for line in output.splitlines():
+        if line.strip():
+            print(line)
+
+
+def run_quiet_command(
+    command: list[str],
+    *,
+    cwd: Path | None = None,
+    success_message: str | None = None,
+    print_stdout_on_success: bool = False,
+    print_stderr_on_success: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    result = run_command(
+        command,
+        cwd=cwd,
+        capture_output=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        print_process_output(result.stdout)
+        print_process_output(result.stderr)
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            command,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+
+    if print_stdout_on_success:
+        print_process_output(result.stdout)
+    if print_stderr_on_success:
+        print_process_output(result.stderr)
+    if success_message:
+        print(success_message)
+
+    return result
 
 
 def require_command(name: str) -> None:
@@ -150,9 +203,17 @@ def sync_entra_proxy_upstreams() -> None:
 
 
 def start_auth_proxy() -> None:
-    run_command(
-        ["docker", "compose", "up", "--force-recreate", "--detach"],
+    run_quiet_command(
+        [
+            "docker",
+            "compose",
+            "up",
+            "--force-recreate",
+            "--detach",
+            "--remove-orphans",
+        ],
         cwd=LOCAL_AUTH_DIR,
+        print_stderr_on_success=False,
     )
     print(f"Auth proxy available at http://localhost:{AUTH_PROXY_PORT}")
 
@@ -278,10 +339,7 @@ def print_funnel_url() -> None:
         "",
         redirect_status,
         "",
-        (
-            "Upload manifests/manifest-funnel.xml via "
-            "https://aka.ms/olksideload"
-        ),
+        ("Upload manifests/manifest-funnel.xml via https://aka.ms/olksideload"),
     ]
     width = max(len(line) for line in lines) + 4
     border = "#" * width
@@ -312,11 +370,40 @@ def clear_vite_cache() -> None:
     shutil.rmtree(VITE_CACHE_DIR, ignore_errors=True)
 
 
-def wait_for_path(path: Path, timeout_seconds: int = 60) -> None:
+def can_connect_to_port(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
+        connection.settimeout(0.2)
+        return connection.connect_ex(("127.0.0.1", port)) == 0
+
+
+def ensure_port_is_free(port: int, *, label: str) -> None:
+    if can_connect_to_port(port):
+        print(
+            f"{label} port {port} is already in use; stop the existing process and retry",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+def wait_for_generated_path(
+    path: Path,
+    producer: subprocess.Popen[str],
+    *,
+    timeout_seconds: int = 60,
+) -> None:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         if path.exists():
             return
+
+        return_code = producer.poll()
+        if return_code is not None:
+            print(
+                f"Process exited with code {return_code}: {producer.args}",
+                file=sys.stderr,
+            )
+            sys.exit(return_code or 1)
+
         time.sleep(0.5)
 
     print(
@@ -326,13 +413,71 @@ def wait_for_path(path: Path, timeout_seconds: int = 60) -> None:
     sys.exit(1)
 
 
-def wait_for_packaged_frontend(timeout_seconds: int = 60) -> None:
-    wait_for_path(FRONTEND_PACKAGE_STATE_PATH, timeout_seconds=timeout_seconds)
+def wait_for_listening_port(
+    port: int,
+    producer: subprocess.Popen[str],
+    *,
+    timeout_seconds: int = 60,
+) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if can_connect_to_port(port):
+            return
+
+        return_code = producer.poll()
+        if return_code is not None:
+            print(
+                f"Process exited with code {return_code}: {producer.args}",
+                file=sys.stderr,
+            )
+            sys.exit(return_code or 1)
+
+        time.sleep(0.25)
+
+    print(
+        f"Timed out waiting for localhost:{port} to accept connections",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
-def wait_for_linked_frontend(timeout_seconds: int = 60) -> None:
-    wait_for_path(FRONTEND_LIBRARY_ENTRY_PATH, timeout_seconds=timeout_seconds)
-    wait_for_path(FRONTEND_LIBRARY_CSS_PATH, timeout_seconds=timeout_seconds)
+def wait_for_packaged_frontend(
+    frontend_watch: subprocess.Popen[str],
+    timeout_seconds: int = 60,
+) -> None:
+    wait_for_generated_path(
+        FRONTEND_PACKAGE_STATE_PATH,
+        frontend_watch,
+        timeout_seconds=timeout_seconds,
+    )
+    wait_for_generated_path(
+        FRONTEND_TARBALL_PATH,
+        frontend_watch,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def wait_for_linked_frontend(
+    frontend_watch: subprocess.Popen[str],
+    timeout_seconds: int = 60,
+) -> None:
+    wait_for_generated_path(
+        FRONTEND_LIBRARY_ENTRY_PATH,
+        frontend_watch,
+        timeout_seconds=timeout_seconds,
+    )
+    wait_for_generated_path(
+        FRONTEND_LIBRARY_CSS_PATH,
+        frontend_watch,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def clear_frontend_watch_outputs() -> None:
+    FRONTEND_LIBRARY_ENTRY_PATH.unlink(missing_ok=True)
+    FRONTEND_LIBRARY_CSS_PATH.unlink(missing_ok=True)
+    FRONTEND_PACKAGE_STATE_PATH.unlink(missing_ok=True)
+    FRONTEND_TARBALL_PATH.unlink(missing_ok=True)
 
 
 def read_package_state() -> dict[str, str] | None:
@@ -357,9 +502,123 @@ def compute_file_sha256(path: Path) -> str | None:
     return digest.hexdigest()
 
 
+def build_frontend_app() -> None:
+    print("Building frontend app output for backend-served assets")
+    run_quiet_command(
+        ["pnpm", "exec", "lingui", "compile"],
+        cwd=FRONTEND_DIR,
+        print_stderr_on_success=False,
+    )
+    run_quiet_command(
+        ["pnpm", "exec", "tsc"],
+        cwd=FRONTEND_DIR,
+        print_stderr_on_success=False,
+    )
+    run_quiet_command(
+        ["pnpm", "exec", "vite", "build", "--mode", "dev-linked", "--logLevel", "warn"],
+        cwd=FRONTEND_DIR,
+        print_stdout_on_success=False,
+        print_stderr_on_success=True,
+        success_message="Frontend app output ready",
+    )
+
+
+def path_has_hidden_segment(path: Path) -> bool:
+    return any(part.startswith(".") for part in path.parts)
+
+
+def should_watch_frontend_app_file(path: Path) -> bool:
+    if path_has_hidden_segment(path.relative_to(FRONTEND_DIR)):
+        return False
+
+    if (
+        path.name == "messages.json"
+        and "locales" in path.parts
+    ):
+        return False
+
+    return path.is_file()
+
+
+def iter_frontend_app_watch_files() -> list[Path]:
+    files: list[Path] = []
+
+    for watch_file in FRONTEND_APP_BUILD_WATCH_FILES:
+        if watch_file.exists():
+            files.append(watch_file)
+
+    for root in (FRONTEND_PUBLIC_DIR, FRONTEND_SOURCE_LOCALES_DIR):
+        if not root.exists():
+            continue
+
+        for path in root.rglob("*"):
+            if should_watch_frontend_app_file(path):
+                files.append(path)
+
+    return sorted(files)
+
+
+def capture_frontend_app_watch_snapshot() -> dict[str, tuple[int, int]]:
+    snapshot: dict[str, tuple[int, int]] = {}
+    for file_path in iter_frontend_app_watch_files():
+        stat_result = file_path.stat()
+        snapshot[str(file_path.relative_to(FRONTEND_DIR))] = (
+            stat_result.st_mtime_ns,
+            stat_result.st_size,
+        )
+
+    return snapshot
+
+
+class FrontendAppBuildWatcher:
+    def __init__(self) -> None:
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        self._thread.join(timeout=5)
+
+    def _run(self) -> None:
+        baseline_snapshot = capture_frontend_app_watch_snapshot()
+
+        while not self._stop_event.wait(FRONTEND_APP_BUILD_WATCH_POLL_SECONDS):
+            current_snapshot = capture_frontend_app_watch_snapshot()
+            if current_snapshot == baseline_snapshot:
+                continue
+
+            print(
+                "Detected frontend public or locale source change, rebuilding frontend app",
+            )
+            snapshot_before_build = current_snapshot
+
+            try:
+                build_frontend_app()
+            except subprocess.CalledProcessError as error:
+                print(
+                    f"Frontend app build failed with code {error.returncode}; waiting for more changes",
+                    file=sys.stderr,
+                )
+                baseline_snapshot = snapshot_before_build
+                continue
+
+            snapshot_after_build = capture_frontend_app_watch_snapshot()
+            if snapshot_after_build != snapshot_before_build:
+                print(
+                    "Frontend public or locale source changed during rebuild, scheduling another frontend app build",
+                )
+                baseline_snapshot = snapshot_before_build
+                continue
+
+            baseline_snapshot = snapshot_after_build
+
+
 def spawn_frontend_watch() -> subprocess.Popen[str]:
     return subprocess.Popen(
-        ["pnpm", "run", "build:lib:watch"],
+        ["node", "scripts/watch-library.mjs"],
         cwd=FRONTEND_DIR,
         text=True,
         start_new_session=True,
@@ -378,6 +637,65 @@ def spawn_app_dev(mode: str, *, force_optimize: bool = False) -> subprocess.Pope
         cwd=OFFICE_ADDIN_DIR,
         text=True,
         start_new_session=True,
+    )
+
+
+def print_status_block(title: str, lines: list[tuple[str, str]]) -> None:
+    print(title)
+    label_width = max(len(label) for label, _ in lines)
+    for label, value in lines:
+        print(f"- {label.ljust(label_width)}  {value}")
+
+
+def print_linked_long_running_processes() -> None:
+    print_status_block(
+        "Linked long-running processes",
+        [
+            (
+                "frontend library build watch",
+                "running via node scripts/watch-library.mjs",
+            ),
+            (
+                "frontend public/locales watcher",
+                "running inside scripts/dev.py",
+            ),
+            (
+                "add-in dev server",
+                "starting via vite --host --mode linked",
+            ),
+        ],
+    )
+
+
+def print_linked_watch_mode_ready() -> None:
+    print_status_block(
+        "Linked watch mode ready",
+        [
+            (
+                "add-in dev server",
+                f"http://localhost:{OFFICE_ADDIN_PORT}/office-addin/",
+            ),
+            (
+                "frontend app assets",
+                "ready for backend serving",
+            ),
+            (
+                "frontend library outputs",
+                "ready for linked imports",
+            ),
+            (
+                "frontend public/locales changes",
+                "rebuild backend-served assets",
+            ),
+            (
+                "frontend library changes",
+                "rebuild linked library outputs",
+            ),
+            (
+                "office-addin changes",
+                "Vite HMR or full reload",
+            ),
+        ],
     )
 
 
@@ -427,9 +745,13 @@ def wait_for_processes(
 
             if mode == "packaged":
                 package_state = read_package_state()
-                next_package_sha = package_state.get("sha256") if package_state else None
+                next_package_sha = (
+                    package_state.get("sha256") if package_state else None
+                )
                 if next_package_sha and next_package_sha != current_package_sha:
-                    print("Detected packaged frontend update, reinstalling office-addin")
+                    print(
+                        "Detected packaged frontend update, reinstalling office-addin"
+                    )
                     install_packaged_frontend()
                     clear_vite_cache()
                     terminate_process(app_dev)
@@ -491,25 +813,62 @@ def main() -> int:
     ensure_funnel()
     print_funnel_url()
 
-    frontend_watch = spawn_frontend_watch()
-    if args.mode == "packaged":
-        wait_for_packaged_frontend()
-        install_packaged_frontend()
-        clear_vite_cache()
-        app_dev = spawn_app_dev(args.mode, force_optimize=True)
-    else:
-        wait_for_linked_frontend()
-        app_dev = spawn_app_dev(args.mode)
+    frontend_watch: subprocess.Popen[str] | None = None
+    frontend_app_build_watcher: FrontendAppBuildWatcher | None = None
+    app_dev: subprocess.Popen[str] | None = None
+
+    def cleanup() -> None:
+        if frontend_watch is not None:
+            terminate_process(frontend_watch)
+        if frontend_app_build_watcher is not None:
+            frontend_app_build_watcher.stop()
+        if app_dev is not None:
+            terminate_process(app_dev)
 
     def handle_signal(signum: int, _frame: object) -> None:
-        terminate_process(frontend_watch)
-        terminate_process(app_dev)
-        raise SystemExit(128 + signum)
+        cleanup()
+        raise SystemExit(0)
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    return wait_for_processes(frontend_watch, app_dev, mode=args.mode)
+    try:
+        clear_frontend_watch_outputs()
+        if args.mode == "packaged":
+            frontend_watch = spawn_frontend_watch()
+            wait_for_packaged_frontend(frontend_watch)
+            install_packaged_frontend()
+            clear_vite_cache()
+            ensure_port_is_free(
+                OFFICE_ADDIN_PORT,
+                label="Office add-in dev server",
+            )
+            app_dev = spawn_app_dev(args.mode, force_optimize=True)
+        else:
+            build_frontend_app()
+            frontend_watch = spawn_frontend_watch()
+            wait_for_linked_frontend(frontend_watch)
+            frontend_app_build_watcher = FrontendAppBuildWatcher()
+            frontend_app_build_watcher.start()
+            print_linked_long_running_processes()
+            ensure_port_is_free(
+                OFFICE_ADDIN_PORT,
+                label="Office add-in dev server",
+            )
+            app_dev = spawn_app_dev(args.mode)
+            wait_for_listening_port(OFFICE_ADDIN_PORT, app_dev)
+            print_linked_watch_mode_ready()
+
+        assert frontend_watch is not None
+        assert app_dev is not None
+        return wait_for_processes(
+            frontend_watch,
+            app_dev,
+            mode=args.mode,
+        )
+    except BaseException:
+        cleanup()
+        raise
 
 
 if __name__ == "__main__":

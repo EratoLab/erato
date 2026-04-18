@@ -14,7 +14,12 @@ function shouldSuppressLine(line) {
     (line.includes("reused") &&
       line.includes("downloaded") &&
       line.includes("added")) ||
-    line.includes("transforming (")
+    line.includes("transforming (") ||
+    line.endsWith("modules transformed.") ||
+    line === "transforming..." ||
+    line === "rendering chunks..." ||
+    line === "computing gzip size..." ||
+    line === "build started..."
   );
 }
 
@@ -55,6 +60,26 @@ function emitLine(name, line) {
 
   if (name === "bundle" && trimmed.includes("watching for file changes")) {
     logLine("[watch-library] library bundle watching");
+    return;
+  }
+
+  if (
+    name === "pack" &&
+    trimmed.includes("wrote dist-package/erato-frontend.tgz")
+  ) {
+    logLine("[watch-library] package archive ready");
+    return;
+  }
+
+  if (
+    name === "bundle" &&
+    (trimmed.startsWith("vite v") ||
+      trimmed.startsWith("dist-library/") ||
+      trimmed.startsWith("built in "))
+  ) {
+    if (trimmed.startsWith("built in ")) {
+      logLine("[watch-library] library bundle ready");
+    }
     return;
   }
 

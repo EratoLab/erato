@@ -7,10 +7,19 @@
 # It also receives through stdin a series of lines in the format:
 # <local_ref> <local_sha> <remote_ref> <remote_sha>
 
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+run_from_repo_dir() {
+    local relative_dir=$1
+    shift
+    (
+        cd "$REPO_ROOT/$relative_dir" && "$@"
+    )
+}
+
 check_backend_changes() {
     local changed_files=("$@")
     local backend_files=()
-    local initial_dir=$(pwd)
 
     # Check if any files in backend directory were modified
     for file in "${changed_files[@]}"; do
@@ -47,18 +56,15 @@ check_backend_changes() {
     if [ -n "$selected" ]; then
         if echo "$selected" | grep -q "Run tests"; then
             echo "Running tests..."
-            cd backend && just test
-            cd "$initial_dir"
+            run_from_repo_dir backend just test
         fi
         if echo "$selected" | grep -q "Run lint"; then
             echo "Running lint..."
-            cd backend && just lint
-            cd "$initial_dir"
+            run_from_repo_dir backend just lint
         fi
         if echo "$selected" | grep -q "Check OpenAPI"; then
             echo "Checking if OpenAPI spec is up to date..."
-            cd backend && just generate_open_api_check
-            cd "$initial_dir"
+            run_from_repo_dir backend just generate_open_api_check
         fi
     fi
 
@@ -68,7 +74,6 @@ check_backend_changes() {
 check_frontend_changes() {
     local changed_files=("$@")
     local frontend_files=()
-    local initial_dir=$(pwd)
 
     # Check if any files in frontend directory were modified
     for file in "${changed_files[@]}"; do
@@ -105,7 +110,7 @@ check_frontend_changes() {
     if [ -n "$selected" ]; then
         if echo "$selected" | grep -q "Run standard lint + check"; then
             echo "Running lint and type check..."
-            cd frontend && pnpm run check
+            run_from_repo_dir frontend pnpm run check
             if [ $? -ne 0 ]; then
                 echo "Lint or type check failed. Fix the issues before pushing."
                 return 1
@@ -114,7 +119,7 @@ check_frontend_changes() {
 
         if echo "$selected" | grep -q "Run strict type check"; then
             echo "Running strict type check..."
-            cd frontend && pnpm run lint:strict
+            run_from_repo_dir frontend pnpm run lint:strict
             if [ $? -ne 0 ]; then
                 echo "Strict type check failed. You can try 'cd frontend && pnpm run lint:fix' to automatically fix some issues."
                 echo "For Type errors, you'll need to fix them manually."
@@ -124,7 +129,7 @@ check_frontend_changes() {
 
         if echo "$selected" | grep -q "Check format"; then
             echo "Checking formatting..."
-            cd frontend && just check-format
+            run_from_repo_dir frontend just check-format
             if [ $? -ne 0 ]; then
                 echo "Formatting check failed. Run 'cd frontend && just format' to fix."
                 return 1
@@ -138,7 +143,6 @@ check_frontend_changes() {
 check_office_addin_changes() {
     local changed_files=("$@")
     local addin_files=()
-    local initial_dir=$(pwd)
 
     # Check if any files in office-addin directory were modified
     for file in "${changed_files[@]}"; do
@@ -175,22 +179,20 @@ check_office_addin_changes() {
     if [ -n "$selected" ]; then
         if echo "$selected" | grep -q "Run check"; then
             echo "Running format, lint, and type check..."
-            cd office-addin && pnpm run check
+            run_from_repo_dir office-addin pnpm run check
             if [ $? -ne 0 ]; then
                 echo "Check failed. Fix the issues before pushing."
                 return 1
             fi
-            cd "$initial_dir"
         fi
 
         if echo "$selected" | grep -q "Run tests"; then
             echo "Running tests..."
-            cd office-addin && pnpm run test
+            run_from_repo_dir office-addin pnpm run test
             if [ $? -ne 0 ]; then
                 echo "Tests failed. Fix the issues before pushing."
                 return 1
             fi
-            cd "$initial_dir"
         fi
     fi
 
