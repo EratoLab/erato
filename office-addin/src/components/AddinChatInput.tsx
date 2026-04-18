@@ -54,6 +54,10 @@ interface AddinChatInputProps {
   showSuggestedEmailSource?: boolean;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
+  controlledAvailableModels?: ChatModel[];
+  controlledSelectedModel?: ChatModel | null;
+  onControlledSelectedModelChange?: (model: ChatModel) => void;
+  controlledIsModelSelectionReady?: boolean;
 }
 
 export const AddinChatInput = forwardRef<

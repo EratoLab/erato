@@ -46,6 +46,10 @@ body {
   min-width: 0;
 }
 
+.office-shell [data-ui="chat-header"] {
+  display: none;
+}
+
 .office-shell [data-ui="chat-input-controls"] {
   flex-wrap: wrap;
   gap: calc(var(--theme-spacing-control-gap) / 2);

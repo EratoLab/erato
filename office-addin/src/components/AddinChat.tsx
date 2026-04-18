@@ -8,7 +8,10 @@ import {
   FilePreviewModal,
   MessageList,
   chatMessagesQuery,
+  componentRegistry,
   extractTextFromContent,
+  resolveComponentOverride,
+  useActiveModelSelection,
   useChatActions,
   useChatContext,
   useFilePreviewModal,
@@ -19,6 +22,7 @@ import {
   type ContentPart,
   type FileUploadItem,
   type MessageAction,
+  type MessageControlsComponent,
   type MessageControlsContext,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
@@ -70,6 +74,11 @@ export function AddinChat() {
     uploadError,
   } = useChatContext();
   const { profile } = useProfile();
+
+  const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
+    useActiveModelSelection({ initialModel: currentChatLastModel });
+
+  const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
 
   const canEditForCurrentChat = Array.isArray(chats)
     ? !!chats.find((chat) => chat.id === (currentChatId ?? ""))?.can_edit
@@ -188,6 +197,24 @@ export function AddinChat() {
     [canEditForCurrentChat, profile?.id],
   );
 
+  const resolvedMessageControls = useMemo(
+    () =>
+      resolveComponentOverride(
+        componentRegistry.MessageControls,
+        DefaultMessageControls,
+      ) as MessageControlsComponent,
+    [],
+  );
+
+  const resolvedMessageRenderer = useMemo(
+    () =>
+      resolveComponentOverride(
+        componentRegistry.ChatMessageRenderer,
+        ChatMessage,
+      ),
+    [],
+  );
+
   return (
     <ChatInputControlsProvider value={chatInputControls}>
       <div className="flex size-full min-w-0 flex-col">
@@ -211,7 +238,15 @@ export function AddinChat() {
         </div>
 
         <ChatErrorBoundary onReset={() => void refetchHistory()}>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-theme-bg-secondary">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-theme-bg-secondary">
+            {TopLeftAccessory ? (
+              <TopLeftAccessory
+                availableModels={availableModels}
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
+                isModelSelectionReady={isSelectionReady}
+              />
+            ) : null}
             <MessageList
               messages={messages}
               messageOrder={messageOrder}
@@ -224,8 +259,8 @@ export function AddinChat() {
               showTimestamps={true}
               showAvatars={false}
               userProfile={profile ?? undefined}
-              controls={DefaultMessageControls}
-              messageRenderer={ChatMessage}
+              controls={resolvedMessageControls}
+              messageRenderer={resolvedMessageRenderer}
               controlsContext={controlsContext}
               onMessageAction={async (action: MessageAction) => {
                 if (action.type === "edit") {
@@ -319,7 +354,10 @@ export function AddinChat() {
               editInitialContent={
                 editState.mode === "edit" ? editState.initialContent : undefined
               }
-              initialModel={currentChatLastModel}
+              controlledAvailableModels={availableModels}
+              controlledSelectedModel={selectedModel}
+              onControlledSelectedModelChange={setSelectedModel}
+              controlledIsModelSelectionReady={isSelectionReady}
               initialSelectedFacetIds={currentChatLastSelectedFacets}
               onFacetSelectionChange={setActiveSelectedFacetIds}
               showSuggestedEmailSource={shouldSuggestCurrentEmail}
