@@ -2,6 +2,8 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useState } from "react";
 
+import { componentRegistry } from "@/config/componentRegistry";
+
 import { getFileName, type FileResource } from "./FilePreviewBase";
 import { FilePreviewButton } from "./FilePreviewButton";
 import { FilePreviewLoading } from "./FilePreviewLoading";
@@ -52,7 +54,7 @@ function getFileId(item: FileAttachmentGroupItem): string {
   return item.id;
 }
 
-export const GroupedFileAttachmentsPreview: React.FC<
+const DefaultGroupedFileAttachmentsPreview: React.FC<
   GroupedFileAttachmentsPreviewProps
 > = ({
   groups,
@@ -187,4 +189,14 @@ export const GroupedFileAttachmentsPreview: React.FC<
       })}
     </div>
   );
+};
+
+export const GroupedFileAttachmentsPreview: React.FC<
+  GroupedFileAttachmentsPreviewProps
+> = (props) => {
+  const Override = componentRegistry.ChatGroupedAttachmentsPreview;
+  if (Override) {
+    return <Override {...props} />;
+  }
+  return <DefaultGroupedFileAttachmentsPreview {...props} />;
 };

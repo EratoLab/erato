@@ -1,7 +1,5 @@
 import {
   ChatInput,
-  FilePreviewButton,
-  FilePreviewLoading,
   GroupedFileAttachmentsPreview,
   fetchUploadFile,
   getIdToken,
@@ -267,50 +265,26 @@ export const AddinChatInput = forwardRef<
         showSuggestedEmailSource &&
         (hasSelectedEmailSource || isLoadingAttachments) && (
           <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
-            {emailSourceItems.length === 1 ? (
-              emailSourceItems[0].isLoading ? (
-                <FilePreviewLoading
-                  className="w-full"
-                  label={t({
-                    id: "officeAddin.chatInput.loadingAttachments",
-                    message: "Loading attachments...",
-                  })}
-                />
-              ) : (
-                <FilePreviewButton
-                  file={emailSourceItems[0].file}
-                  onRemove={() =>
-                    handleRemoveEmailSourceFile(emailSourceItems[0].id)
-                  }
-                  disabled={isUploadingEmail}
-                  className="w-full"
-                  showFileType={true}
-                  showSize={true}
-                  filenameClassName="max-w-full"
-                />
-              )
-            ) : (
-              <GroupedFileAttachmentsPreview
-                groups={[
-                  {
-                    id: "current-email",
-                    label:
-                      emailSubject ||
-                      t({
-                        id: "officeAddin.chatInput.emailFallback",
-                        message: "Email",
-                      }),
-                    metaLabel: "",
-                    items: emailSourceItems,
-                  },
-                ]}
-                onRemoveFile={handleRemoveEmailSourceFile}
-                disabled={isUploadingEmail}
-                showFileTypes={true}
-                showFileSizes={true}
-                defaultVisibleItems={3}
-              />
-            )}
+            <GroupedFileAttachmentsPreview
+              groups={[
+                {
+                  id: "current-email",
+                  label:
+                    emailSubject ||
+                    t({
+                      id: "officeAddin.chatInput.emailFallback",
+                      message: "Email",
+                    }),
+                  metaLabel: "",
+                  items: emailSourceItems,
+                },
+              ]}
+              onRemoveFile={handleRemoveEmailSourceFile}
+              disabled={isUploadingEmail}
+              showFileTypes={true}
+              showFileSizes={true}
+              defaultVisibleItems={3}
+            />
           </div>
         )}
 

@@ -29,6 +29,7 @@ import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
 import type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
 import type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPromptsSection";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
+import type { GroupedFileAttachmentsPreviewProps } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
 import type { ChatInputAttachmentPreviewProps } from "@/types/chat-input-attachment-preview";
 import type { MessageControlsProps } from "@/types/message-controls";
@@ -68,6 +69,17 @@ export interface ComponentRegistry {
    * Used to render custom attachment chips/thumbnails inside the chat input shell.
    */
   ChatInputAttachmentPreview: ComponentType<ChatInputAttachmentPreviewProps> | null;
+
+  /**
+   * Override for the grouped attachments preview.
+   * Used by the Office addin's Outlook email-source suggestion and by any
+   * callsite that renders grouped attachment cards.
+   *
+   * When set, replaces the default rounded-md card layout with a theme-specific
+   * presentation (e.g. the OpenWebUI chip look) so grouped previews stay visually
+   * consistent with composer attachments.
+   */
+  ChatGroupedAttachmentsPreview: ComponentType<GroupedFileAttachmentsPreviewProps> | null;
 
   /**
    * Override for the chat history list shown in the sidebar.
@@ -156,6 +168,7 @@ export const componentRegistry: ComponentRegistry = {
   AssistantFileSourceSelector: null,
   ChatFileSourceSelector: null,
   ChatInputAttachmentPreview: null,
+  ChatGroupedAttachmentsPreview: null,
   ChatHistoryList: null,
   ChatWelcomeScreen: null,
   StarterPrompts: null,
