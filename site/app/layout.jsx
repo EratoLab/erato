@@ -1,19 +1,12 @@
 import { Footer, Layout } from "nextra-theme-docs";
 import { Banner, Head } from "nextra/components";
 import { getPageMap } from "nextra/page-map";
-import { Dongle } from "next/font/google";
 import LanguageDetection from "../components/LanguageDetection.jsx";
 import CustomFooter from "../components/CustomFooter.jsx";
 import CustomNavbar from "../components/CustomNavbar.jsx";
 import SearchConfig from "../components/SearchConfig.jsx";
 
 import "./globals.css";
-
-const dongle = Dongle({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-dongle",
-});
 
 export const metadata = {
   // Define your metadata here
@@ -45,7 +38,6 @@ export default async function RootLayout({ children }) {
       dir="ltr"
       // Suggested by `next-themes` package https://github.com/pacocoursey/next-themes#with-app
       suppressHydrationWarning
-      className={`${dongle.variable}`}
     >
       <Head
       // ... Your additional head options
