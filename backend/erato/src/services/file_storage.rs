@@ -557,6 +557,7 @@ fn preview_content_type_for_filename(filename: &str) -> Option<&'static str> {
         .map(|ext| ext.to_ascii_lowercase())
         .as_deref()
     {
+        Some("eml") => Some("message/rfc822"),
         Some("pdf") => Some("application/pdf"),
         Some("jpg") | Some("jpeg") => Some("image/jpeg"),
         Some("png") => Some("image/png"),
@@ -776,6 +777,7 @@ mod tests {
     use super::SharepointStorage;
     use super::build_content_disposition;
     use super::build_presign_content_disposition;
+    use super::preview_content_type_for_filename;
     use serde_json::json;
 
     #[test]
@@ -858,5 +860,13 @@ mod tests {
 
         assert_eq!(metadata.download_url, "https://example.test/download");
         assert_eq!(metadata.etag.as_deref(), Some("\"abc123\""));
+    }
+
+    #[test]
+    fn preview_content_type_for_filename_supports_eml() {
+        assert_eq!(
+            preview_content_type_for_filename("message.eml"),
+            Some("message/rfc822")
+        );
     }
 }

@@ -121,6 +121,7 @@ pub async fn get_file_contents_cached<'a>(
     cache_key: &FileCacheKey,
     file_storage: &FileStorage,
     file_storage_path: &str,
+    filename: &str,
     sharepoint_ctx: Option<&SharepointContext<'a>>,
 ) -> Result<String, Report> {
     let file_id_str = cache_key.file_id.to_string();
@@ -156,7 +157,12 @@ pub async fn get_file_contents_cached<'a>(
                 .acquire()
                 .await
                 .wrap_err("File processing semaphore closed")?;
-            let parsed_content = parse_file(app_state.file_processor.as_ref(), file_bytes).await?;
+            let parsed_content = parse_file(
+                app_state.file_processor.as_ref(),
+                file_bytes,
+                Some(filename),
+            )
+            .await?;
             let content = remove_null_characters(&parsed_content);
 
             tracing::debug!(
@@ -259,6 +265,7 @@ pub fn get_file_cached<'a>(
                 &cache_key,
                 file_storage,
                 file_storage_path,
+                filename,
                 sharepoint_ctx,
             )
             .await?;

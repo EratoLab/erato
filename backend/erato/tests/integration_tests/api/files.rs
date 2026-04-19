@@ -12,7 +12,9 @@ use sqlx::Pool;
 use sqlx::postgres::Postgres;
 
 use crate::test_app_state;
-use crate::test_utils::{TEST_JWT_TOKEN, TestRequestAuthExt, setup_mock_llm_server};
+use crate::test_utils::{
+    TEST_JWT_TOKEN, TestRequestAuthExt, read_integration_test_file_bytes, setup_mock_llm_server,
+};
 
 fn assert_download_url_contains_filename(download_url: &str, filename: &str) {
     assert!(
@@ -23,6 +25,47 @@ fn assert_download_url_contains_filename(download_url: &str, filename: &str) {
         download_url.contains(&format!("filename%3D%22{filename}%22")),
         "Download URL should contain the original filename in content disposition: {download_url}"
     );
+}
+
+async fn create_chat(server: &TestServer) -> String {
+    let create_chat_response = server
+        .post("/api/v1beta/me/chats")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&json!({}))
+        .await;
+
+    create_chat_response.assert_status_ok();
+
+    let create_chat_json: Value = create_chat_response.json();
+    create_chat_json["chat_id"]
+        .as_str()
+        .expect("Expected chat_id in response")
+        .to_string()
+}
+
+async fn upload_file_to_chat(
+    server: &TestServer,
+    chat_id: &str,
+    file_bytes: Vec<u8>,
+    filename: &str,
+    mime_type: &str,
+) -> Value {
+    let multipart_form = MultipartForm::new().add_part(
+        "file",
+        Part::bytes(file_bytes)
+            .file_name(filename)
+            .mime_type(mime_type),
+    );
+
+    let upload_response = server
+        .post(&format!("/api/v1beta/me/files?chat_id={}", chat_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(multipart_form)
+        .await;
+
+    upload_response.assert_status_ok();
+    upload_response.json()
 }
 
 /// Test file upload to a chat.
@@ -165,6 +208,137 @@ async fn test_file_upload_endpoint(pool: Pool<Postgres>) {
     }
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_file_capabilities_endpoint_includes_email_support(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .get("/api/v1beta/me/file-capabilities")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+
+    response.assert_status_ok();
+    let capabilities: Value = response.json();
+    let capabilities = capabilities
+        .as_array()
+        .expect("Expected capabilities array");
+
+    let email_capability = capabilities
+        .iter()
+        .find(|cap| cap["id"].as_str() == Some("email"))
+        .expect("Expected email capability");
+
+    assert_eq!(email_capability["extensions"], json!(["eml"]));
+    assert_eq!(email_capability["mime_types"], json!(["message/rfc822"]));
+    assert_eq!(email_capability["operations"], json!(["extract_text"]));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_storage_helpers_support_eml_content_type(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let provider = app_state.default_file_storage_provider();
+    let file_path = format!("eml-storage-test-{}", Uuid::new_v4());
+    let filename = "storage_roundtrip.eml";
+
+    let mut writer = provider
+        .upload_file_writer(&file_path, Some("message/rfc822"))
+        .await
+        .expect("Failed to create upload writer for EML content type");
+    writer
+        .write(read_integration_test_file_bytes(
+            "please_review_attached_draft.eml",
+        ))
+        .await
+        .expect("Failed to write EML fixture to storage");
+    writer
+        .close()
+        .await
+        .expect("Failed to finalize EML upload to storage");
+
+    provider
+        .generate_presigned_download_url(&file_path, None, Some(filename))
+        .await
+        .expect("Failed to generate presigned download URL for EML file");
+    provider
+        .generate_presigned_preview_url(&file_path, None, Some(filename))
+        .await
+        .expect("Failed to generate presigned preview URL for EML file");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_eml_upload_supports_rfc822_and_octet_stream_content_types(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let chat_id = create_chat(&server).await;
+    let test_cases = [
+        ("message/rfc822", "email_rfc822.eml"),
+        ("application/octet-stream", "email_octet_stream.eml"),
+    ];
+
+    for (mime_type, filename) in test_cases {
+        let upload_json = upload_file_to_chat(
+            &server,
+            &chat_id,
+            read_integration_test_file_bytes("please_review_attached_draft.eml"),
+            filename,
+            mime_type,
+        )
+        .await;
+
+        let file = &upload_json["files"][0];
+        let file_id = file["id"].as_str().expect("Expected uploaded file id");
+        let download_url = file["download_url"]
+            .as_str()
+            .expect("Expected download URL");
+
+        assert_eq!(file["filename"], json!(filename));
+        assert_eq!(file["file_capability"]["id"], json!("email"));
+        assert_eq!(
+            file["file_capability"]["operations"],
+            json!(["extract_text"])
+        );
+        assert!(
+            file["preview_url"].as_str().is_some(),
+            "Expected preview URL"
+        );
+        assert_download_url_contains_filename(download_url, filename);
+
+        let get_file_response = server
+            .get(&format!("/api/v1beta/files/{}", file_id))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await;
+
+        get_file_response.assert_status_ok();
+        let file_json: Value = get_file_response.json();
+        assert_eq!(file_json["filename"], json!(filename));
+        assert_eq!(file_json["file_capability"]["id"], json!("email"));
+        assert_eq!(
+            file_json["file_capability"]["operations"],
+            json!(["extract_text"])
+        );
+        assert!(
+            file_json["preview_url"].as_str().is_some(),
+            "Expected preview URL"
+        );
+    }
+}
+
 /// Test retrieving file information by ID.
 ///
 /// # Test Categories
@@ -191,19 +365,7 @@ async fn test_get_file_by_id(pool: Pool<Postgres>) {
     let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
 
     // First, create a chat to attach the file to
-    let create_chat_response = server
-        .post("/api/v1beta/me/chats")
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .add_header(http::header::CONTENT_TYPE, "application/json")
-        .json(&json!({}))
-        .await;
-
-    create_chat_response.assert_status_ok();
-
-    let create_chat_json: Value = create_chat_response.json();
-    let chat_id = create_chat_json["chat_id"]
-        .as_str()
-        .expect("Expected chat_id in response");
+    let chat_id = create_chat(&server).await;
 
     // Create a file to upload
     let file_content = json!({"test": "content"}).to_string();

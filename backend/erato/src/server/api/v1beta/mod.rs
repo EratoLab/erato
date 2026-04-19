@@ -2428,6 +2428,7 @@ fn preview_content_type(filename: &str) -> &'static str {
         .map(|ext| ext.to_ascii_lowercase())
     {
         Some(ext) => match ext.as_str() {
+            "eml" => "message/rfc822",
             "pdf" => "application/pdf",
             "jpg" | "jpeg" => "image/jpeg",
             "png" => "image/png",
@@ -2857,4 +2858,30 @@ pub async fn file_capabilities(
 pub struct FileCapabilitiesQuery {
     /// Optional model ID to get capabilities specific to that model
     model_id: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{effective_upload_content_type, preview_content_type};
+
+    #[test]
+    fn preview_content_type_supports_eml() {
+        assert_eq!(preview_content_type("message.eml"), "message/rfc822");
+    }
+
+    #[test]
+    fn effective_upload_content_type_uses_eml_fallback_for_octet_stream() {
+        assert_eq!(
+            effective_upload_content_type("message.eml", Some("application/octet-stream")),
+            Some("message/rfc822".to_string())
+        );
+    }
+
+    #[test]
+    fn effective_upload_content_type_preserves_specific_multipart_type() {
+        assert_eq!(
+            effective_upload_content_type("message.eml", Some("message/rfc822")),
+            Some("message/rfc822".to_string())
+        );
+    }
 }

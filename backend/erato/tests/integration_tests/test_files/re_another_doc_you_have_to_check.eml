@@ -1,0 +1,41 @@
+From: Daniel Person <daniel@eratolabs.com>
+To: Max Token <testuser@maxgoisser.onmicrosoft.com>
+Subject: Re: Another doc you have to check
+Date: Sun, 19 Apr 2026 15:40:17 +0200
+Message-ID: <sample-reply@eratolabs.com>
+In-Reply-To: <original-message@eratolabs.com>
+References: <original-message@eratolabs.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt-boundary"
+
+--alt-boundary
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hi Max,
+
+I am referring to the PDF draft I attached to my previous email. I was hoping you could review the content and confirm if you are comfortable with it.
+
+Please let me know if you have any specific questions or if you cannot see the attachment.
+
+Best regards,
+Daniel
+
+On Fri, 20 Mar 2026 at 13:28, Daniel Person <daniel@eratolabs.com> wrote:
+> could you please take a quick look at the attached draft document and let me know whether it looks fine from your side.
+> Thanks
+> Daniel
+
+--alt-boundary
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+<html>
+  <body>
+    <p>Hi Max,</p>
+    <p>I am referring to the PDF draft I attached to my previous email. I was hoping you could review the content and confirm if you are comfortable with it.</p>
+    <p>Please let me know if you have any specific questions or if you cannot see the attachment.</p>
+    <p>Best regards,<br>Daniel</p>
+  </body>
+</html>
+--alt-boundary--

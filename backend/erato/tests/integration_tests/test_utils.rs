@@ -12,8 +12,10 @@ use erato::state::AppState;
 use mocktail::prelude::*;
 use mocktail::server::MockServerConfig;
 use serde_json::{Value, json};
+use std::fs;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
+use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::{Builder, NamedTempFile};
 
@@ -54,6 +56,16 @@ pub fn create_temp_config_file(content: &str) -> NamedTempFile {
     temp_file.flush().expect("Failed to flush temporary file");
 
     temp_file
+}
+
+/// Read a fixture from `tests/integration_tests/test_files`.
+pub fn read_integration_test_file_bytes(filename: &str) -> Vec<u8> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/integration_tests/test_files")
+        .join(filename);
+
+    fs::read(&path)
+        .unwrap_or_else(|_| panic!("Failed to read integration test fixture {}", filename))
 }
 
 /// Builds an `AppConfig` from a configuration file path with optional overrides.

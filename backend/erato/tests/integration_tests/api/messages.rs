@@ -21,7 +21,7 @@ use std::env;
 use crate::test_app_state;
 use crate::test_utils::{
     JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
-    extract_chat_id, parse_sse_events, setup_mock_llm_server,
+    extract_chat_id, parse_sse_events, read_integration_test_file_bytes, setup_mock_llm_server,
 };
 
 fn mock_mcp_base_url() -> String {
@@ -964,6 +964,126 @@ async fn test_token_usage_estimate_with_file(pool: Pool<Postgres>) {
         remaining_tokens,
         max_tokens - total_tokens,
         "Remaining tokens should be max_tokens - total_tokens"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_token_usage_estimate_with_eml_file(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let message_request = json!({
+        "previous_message_id": null,
+        "user_message": "Test message to create a chat for EML token usage test"
+    });
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&message_request)
+        .await;
+
+    response.assert_status_ok();
+
+    let body = response.as_bytes();
+    let body_str = String::from_utf8_lossy(body);
+    let lines: Vec<&str> = body_str.lines().collect();
+
+    let mut user_message_id = String::new();
+    let mut chat_id = String::new();
+
+    for i in 0..lines.len() - 1 {
+        if lines[i] == "event: user_message_saved" {
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse user_message_saved data");
+                user_message_id = data_json["message_id"]
+                    .as_str()
+                    .expect("Expected message_id to be a string")
+                    .to_string();
+            }
+        } else if lines[i] == "event: chat_created" {
+            let data_line = lines[i + 1];
+            if data_line.starts_with("data: ") {
+                let data_json: Value = serde_json::from_str(&data_line[6..])
+                    .expect("Failed to parse chat_created data");
+                chat_id = data_json["chat_id"]
+                    .as_str()
+                    .expect("Expected chat_id to be a string")
+                    .to_string();
+            }
+        }
+    }
+
+    let multipart_form = axum_test::multipart::MultipartForm::new().add_part(
+        "file",
+        axum_test::multipart::Part::bytes(read_integration_test_file_bytes(
+            "please_review_attached_draft.eml",
+        ))
+        .file_name("please_review_attached_draft.eml")
+        .mime_type("application/octet-stream"),
+    );
+
+    let upload_response = server
+        .post(&format!("/api/v1beta/me/files?chat_id={}", chat_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(multipart_form)
+        .await;
+
+    upload_response.assert_status_ok();
+    let upload_json: Value = upload_response.json();
+    assert_eq!(
+        upload_json["files"][0]["file_capability"]["id"],
+        json!("email")
+    );
+
+    let file_id = upload_json["files"][0]["id"]
+        .as_str()
+        .expect("Expected file ID")
+        .to_string();
+
+    let token_usage_request = json!({
+        "previous_message_id": user_message_id,
+        "user_message": "Can you analyze this email file for me?",
+        "input_files_ids": [file_id]
+    });
+
+    let response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&token_usage_request)
+        .await;
+
+    response.assert_status_ok();
+    let token_usage: Value = response.json();
+
+    let file_detail = &token_usage["file_details"][0];
+    assert_eq!(
+        file_detail["filename"],
+        json!("please_review_attached_draft.eml")
+    );
+    assert!(
+        file_detail["token_count"]
+            .as_u64()
+            .expect("Expected token_count")
+            > 0,
+        "Expected extracted email content to produce tokens"
+    );
+    assert!(
+        token_usage["stats"]["file_tokens"]
+            .as_u64()
+            .expect("Expected file_tokens")
+            > 0,
+        "Expected file_tokens to be greater than zero"
     );
 }
 

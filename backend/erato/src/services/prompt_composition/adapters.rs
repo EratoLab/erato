@@ -99,7 +99,7 @@ impl<'a> FileResolver for AppStateFileResolver<'a> {
         let text = self
             .app_state
             .file_processor
-            .parse_file(file_bytes)
+            .parse_file(file_bytes, Some(&file.filename))
             .await
             .wrap_err("Failed to parse file")?;
 

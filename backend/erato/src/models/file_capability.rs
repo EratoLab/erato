@@ -169,6 +169,13 @@ pub fn get_file_capabilities(supports_image_understanding: bool) -> Vec<FileCapa
             ],
             vec![FileOperation::ExtractText],
         ),
+        // Email files - supported by Kreuzberg when parsed as RFC822
+        FileCapability::new(
+            "email",
+            vec!["eml".to_string()],
+            vec!["message/rfc822".to_string()],
+            vec![FileOperation::ExtractText],
+        ),
         // Plain text files - supported by Kreuzberg
         FileCapability::new(
             "text",
@@ -324,6 +331,11 @@ mod tests {
         // Test image
         let cap = find_file_capability_by_filename(&caps, "photo.jpg");
         assert_eq!(cap.id, "image");
+
+        // Test email
+        let cap = find_file_capability_by_filename(&caps, "message.eml");
+        assert_eq!(cap.id, "email");
+        assert_eq!(cap.operations, vec![FileOperation::ExtractText]);
 
         // Test unsupported file
         let cap = find_file_capability_by_filename(&caps, "archive.zip");

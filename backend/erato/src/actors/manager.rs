@@ -10,13 +10,9 @@ impl ActorManager {
     pub async fn new(db: DatabaseConnection, config: AppConfig) -> Self {
         let args = (db, config);
         // Spawn the top-level supervisor
-        let (_supervisor, supervisor_handle) = Actor::spawn(
-            Some("worker_supervisor".to_string()),
-            WorkerSupervisor,
-            args,
-        )
-        .await
-        .expect("Failed to spawn WorkerSupervisor");
+        let (_supervisor, supervisor_handle) = Actor::spawn(None, WorkerSupervisor, args)
+            .await
+            .expect("Failed to spawn WorkerSupervisor");
 
         // We'll spawn the supervisor handle in a background task to ensure it's not dropped
         // and the actor system keeps running.
