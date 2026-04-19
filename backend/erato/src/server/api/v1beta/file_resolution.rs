@@ -73,43 +73,42 @@ pub(crate) async fn resolve_file_pointers_in_generation_input(
     let mut resolved_messages = Vec::new();
 
     for input_message in generation_input_messages.messages {
-        let resolved_content = match input_message.content {
+        let resolved_contents = match input_message.content {
             ContentPart::TextFilePointer(ref file_pointer) => {
                 let file_upload_id = file_pointer.file_upload_id;
-                let is_image_pointer = false;
-
-                resolve_file_pointer(
-                    app_state,
-                    file_upload_id,
-                    is_image_pointer,
-                    sharepoint_ctx.as_ref(),
-                )
-                .await
+                vec![
+                    resolve_file_pointer(app_state, file_upload_id, false, sharepoint_ctx.as_ref())
+                        .await,
+                ]
             }
             ContentPart::ImageFilePointer(ref file_pointer) => {
                 let file_upload_id = file_pointer.file_upload_id;
-                let is_image_pointer = true;
-
-                resolve_file_pointer(
-                    app_state,
-                    file_upload_id,
-                    is_image_pointer,
-                    sharepoint_ctx.as_ref(),
-                )
-                .await
+                vec![
+                    format_image_file_pointer_message(file_upload_id),
+                    resolve_file_pointer(app_state, file_upload_id, true, sharepoint_ctx.as_ref())
+                        .await,
+                ]
             }
             // Pass through other content parts unchanged
-            other => other,
+            other => vec![other],
         };
 
-        resolved_messages.push(crate::models::message::InputMessage {
-            role: input_message.role,
-            content: resolved_content,
-        });
+        for content in resolved_contents {
+            resolved_messages.push(crate::models::message::InputMessage {
+                role: input_message.role.clone(),
+                content,
+            });
+        }
     }
 
     Ok(GenerationInputMessages {
         messages: resolved_messages,
+    })
+}
+
+fn format_image_file_pointer_message(file_upload_id: Uuid) -> ContentPart {
+    ContentPart::Text(ContentPartText {
+        text: format!("image_file_pointer: erato-file://{}", file_upload_id),
     })
 }
 
