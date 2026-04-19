@@ -59,11 +59,13 @@ export {
 } from "@/hooks/chat";
 export { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 export {
+  useConversationDropzone,
   useFileDropzone,
   useFileUploadStore,
   useFileUploadWithTokenCheck,
   useStandaloneFileUpload,
 } from "@/hooks/files";
+export { DocumentIcon } from "@/components/ui/icons";
 export {
   useChatInputHandlers,
   useSidebar,

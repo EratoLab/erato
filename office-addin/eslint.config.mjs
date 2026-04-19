@@ -36,6 +36,8 @@ const eslintConfig = [
         React: "readonly",
         JSX: "readonly",
         URL: "readonly",
+        atob: "readonly",
+        btoa: "readonly",
         console: "readonly",
         document: "readonly",
         fetch: "readonly",

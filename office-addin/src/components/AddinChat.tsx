@@ -3,6 +3,7 @@ import {
   ChatInputControlsProvider,
   ChatMessage,
   DefaultMessageControls,
+  DocumentIcon,
   FeedbackCommentDialog,
   FeedbackViewDialog,
   FilePreviewModal,
@@ -14,6 +15,7 @@ import {
   resolveComponentOverride,
   useActiveModelSelection,
   useChatContext,
+  useConversationDropzone,
   useFileCapabilitiesContext,
   useFilePreviewModal,
   useFileUploadWithTokenCheck,
@@ -33,6 +35,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
+import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
+import { expandDroppedEmailFiles } from "../utils/expandDroppedEmailFiles";
+import { fetchOutlookMessageFiles } from "../utils/fetchOutlookMessage";
+
+import type { OutlookMailListDragItem } from "../utils/outlookMailListDragParse";
+
+// Accept real `.eml` / `.msg` files dropped by Outlook clients that expose
+// emails as native file drags (Outlook Mac, Classic Outlook on Windows). OWA
+// and New Outlook use the custom `maillistrow` path handled separately via
+// `useOutlookMailListDrag`.
+const EMAIL_MIME_TYPES: Record<string, string[]> = {
+  "message/rfc822": [".eml"],
+  "application/vnd.ms-outlook": [".msg"],
+};
 
 interface AddinChatProps {
   assistantId?: string;
@@ -89,14 +105,74 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     [capabilities],
   );
 
-  const { uploadFiles, uploadError } = useFileUploadWithTokenCheck({
-    message: "",
-    chatId: currentChatId,
-    assistantId,
-    chatProviderId: selectedModel?.chat_provider_id ?? undefined,
+  const { uploadFiles, uploadError, isUploading } = useFileUploadWithTokenCheck(
+    {
+      message: "",
+      chatId: currentChatId,
+      assistantId,
+      chatProviderId: selectedModel?.chat_provider_id ?? undefined,
+      acceptedFileTypes,
+      multiple: true,
+    },
+  );
+
+  const handleDropUploaded = useCallback((uploaded: FileUploadItem[]) => {
+    chatInputControlsRef.current?.addUploadedFiles(uploaded);
+  }, []);
+
+  const uploadFilesWithEmailExpansion = useCallback(
+    async (files: File[]) => {
+      const expanded = await expandDroppedEmailFiles(files);
+      return uploadFiles(expanded);
+    },
+    [uploadFiles],
+  );
+
+  const {
+    getRootProps: getConversationDropzoneRootProps,
+    getInputProps: getConversationDropzoneInputProps,
+    isDragActive,
+    isDragAccept,
+  } = useConversationDropzone({
+    uploadFiles: uploadFilesWithEmailExpansion,
+    onUploaded: handleDropUploaded,
     acceptedFileTypes,
-    multiple: true,
+    extraAcceptMimeTypes: EMAIL_MIME_TYPES,
+    isUploading,
   });
+
+  const handleOutlookMailListDrop = useCallback(
+    async (items: OutlookMailListDragItem[]) => {
+      const collected: File[] = [];
+      for (const item of items) {
+        try {
+          const { files } = await fetchOutlookMessageFiles(item.itemId);
+          collected.push(...files);
+        } catch (error) {
+          console.warn(
+            "Failed to fetch dropped Outlook email, skipping:",
+            item.subject || item.itemId,
+            error,
+          );
+        }
+      }
+      if (collected.length === 0) {
+        return;
+      }
+      const uploaded = await uploadFiles(collected);
+      if (uploaded && uploaded.length > 0) {
+        chatInputControlsRef.current?.addUploadedFiles(uploaded);
+      }
+    },
+    [uploadFiles],
+  );
+
+  const { isDragActive: isOutlookMailDragActive } = useOutlookMailListDrag({
+    onDrop: handleOutlookMailListDrop,
+  });
+
+  const showDropOverlay =
+    (isDragActive && isDragAccept) || isOutlookMailDragActive;
 
   const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
 
@@ -307,7 +383,39 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
         </div>
 
         <ChatErrorBoundary onReset={() => void refetchHistory()}>
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-theme-bg-secondary">
+          <div
+            {...getConversationDropzoneRootProps()}
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-theme-bg-secondary"
+            role="region"
+            aria-label={t({
+              id: "officeAddin.chat.conversation.aria",
+              message: "Chat conversation",
+            })}
+            data-ui="addin-chat-conversation-dropzone"
+          >
+            <input
+              {...getConversationDropzoneInputProps()}
+              aria-label={t({
+                id: "officeAddin.chat.conversation.dropzone.ariaLabel",
+                message: "Drop files anywhere in the conversation to upload",
+              })}
+            />
+            {showDropOverlay && (
+              <div
+                className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden bg-[color:color-mix(in_srgb,var(--theme-shell-chat-body)_75%,transparent)]"
+                data-testid="addin-chat-drop-overlay"
+              >
+                <div className="relative flex flex-col items-center gap-2 px-6 py-5 text-center">
+                  <DocumentIcon className="size-10 text-[var(--theme-fg-primary)] drop-shadow-[0_8px_24px_rgba(0,0,0,0.18)]" />
+                  <p className="text-sm font-medium text-[var(--theme-fg-primary)]">
+                    {t({
+                      id: "officeAddin.chat.fileDrop.overlay.label",
+                      message: "Drop to upload",
+                    })}
+                  </p>
+                </div>
+              </div>
+            )}
             {TopLeftAccessory ? (
               <TopLeftAccessory
                 availableModels={availableModels}

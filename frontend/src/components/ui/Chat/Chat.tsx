@@ -10,7 +10,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useDropzone } from "react-dropzone";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import {
@@ -23,6 +22,7 @@ import {
   useStandardMessageActions,
 } from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
+import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
@@ -35,7 +35,6 @@ import {
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
-import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
@@ -585,36 +584,20 @@ export const Chat = ({
     // For now, its presence enables the button in ChatInput.
   }, []);
 
-  const handleConversationDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      if (acceptedFiles.length === 0) {
-        return;
-      }
-
-      void uploadFiles(acceptedFiles).then((uploadedFiles) => {
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          chatInputControlsRef.current?.addUploadedFiles(uploadedFiles);
-        }
-      });
-    },
-    [uploadFiles],
-  );
+  const handleDropUploaded = useCallback((uploaded: FileUploadItem[]) => {
+    chatInputControlsRef.current?.addUploadedFiles(uploaded);
+  }, []);
 
   const {
     getRootProps: getConversationDropzoneRootProps,
     getInputProps: getConversationDropzoneInputProps,
     isDragActive,
     isDragAccept,
-  } = useDropzone({
-    onDrop: handleConversationDrop,
-    accept:
-      acceptedFileTypes && acceptedFileTypes.length > 0
-        ? FileTypeUtil.getAcceptObject(acceptedFileTypes)
-        : undefined,
-    multiple: true,
-    disabled: isUploading,
-    noClick: true,
-    noKeyboard: true,
+  } = useConversationDropzone({
+    uploadFiles,
+    onUploaded: handleDropUploaded,
+    acceptedFileTypes,
+    isUploading,
   });
 
   if (process.env.NODE_ENV === "development") {
