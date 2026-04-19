@@ -10,13 +10,16 @@ import {
   chatMessagesQuery,
   componentRegistry,
   extractTextFromContent,
+  getSupportedFileTypes,
   resolveComponentOverride,
   useActiveModelSelection,
-  useChatActions,
   useChatContext,
+  useFileCapabilitiesContext,
   useFilePreviewModal,
+  useFileUploadWithTokenCheck,
   useMessageFeedback,
   useProfile,
+  useStandardMessageActions,
   type ActionFacetRequest,
   type ChatInputControlsHandle,
   type ContentPart,
@@ -31,7 +34,11 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
 
-export function AddinChat() {
+interface AddinChatProps {
+  assistantId?: string;
+}
+
+export function AddinChat({ assistantId }: AddinChatProps = {}) {
   const chatInputControlsRef = useRef<ChatInputControlsHandle | null>(null);
   const chatInputControls = useMemo(
     () => ({
@@ -64,19 +71,32 @@ export function AddinChat() {
     editMessage,
     regenerateMessage,
     isMessagingLoading,
+    isPendingResponse,
     chats,
     currentChatId,
-    navigateToChat,
     createNewChat,
     refetchHistory,
     currentChatLastModel,
-    uploadFiles,
-    uploadError,
   } = useChatContext();
   const { profile } = useProfile();
+  const { capabilities } = useFileCapabilitiesContext();
 
   const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
     useActiveModelSelection({ initialModel: currentChatLastModel });
+
+  const acceptedFileTypes = useMemo(
+    () => getSupportedFileTypes(capabilities),
+    [capabilities],
+  );
+
+  const { uploadFiles, uploadError } = useFileUploadWithTokenCheck({
+    message: "",
+    chatId: currentChatId,
+    assistantId,
+    chatProviderId: selectedModel?.chat_provider_id ?? undefined,
+    acceptedFileTypes,
+    multiple: true,
+  });
 
   const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
 
@@ -98,17 +118,18 @@ export function AddinChat() {
   >(currentChatLastSelectedFacets ?? []);
   const [editState, setEditState] = useState<
     | { mode: "compose" }
-    | { mode: "edit"; messageId: string; initialContent: ContentPart[] }
+    | {
+        mode: "edit";
+        messageId: string;
+        initialContent: ContentPart[];
+        initialFiles: FileUploadItem[];
+      }
   >({ mode: "compose" });
   const shouldSuggestCurrentEmail =
     currentChatId === null &&
     messageOrder.length === 0 &&
+    !isPendingResponse &&
     editState.mode === "compose";
-
-  const { handleMessageAction } = useChatActions({
-    switchSession: navigateToChat,
-    sendMessage,
-  });
 
   const handleSendMessage = useCallback(
     (
@@ -122,12 +143,12 @@ export function AddinChat() {
         message,
         inputFileIds,
         modelId,
-        undefined,
+        assistantId,
         selectedFacetIds,
         actionFacet,
       ).then(() => refetchHistory());
     },
-    [refetchHistory, sendMessage],
+    [assistantId, refetchHistory, sendMessage],
   );
 
   const cancelEdit = useCallback(() => setEditState({ mode: "compose" }), []);
@@ -188,6 +209,54 @@ export function AddinChat() {
     switchToEditMode,
     canEditFeedback,
   } = useMessageFeedback({ onFeedbackSuccess: handleFeedbackSuccess });
+
+  const handleCopyAction = useCallback(
+    async (action: MessageAction): Promise<boolean> => {
+      if (action.type !== "copy") {
+        return false;
+      }
+      const messageToCopy = messages[action.messageId];
+      const textContent = extractTextFromContent(messageToCopy?.content);
+      if (!textContent) {
+        return false;
+      }
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(textContent);
+        } else {
+          throw new Error("clipboard API unavailable");
+        }
+        return true;
+      } catch {
+        try {
+          const textarea = document.createElement("textarea");
+          textarea.value = textContent;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textarea);
+          return true;
+        } catch (fallbackError) {
+          console.warn("Failed to copy message content:", fallbackError);
+          return false;
+        }
+      }
+    },
+    [messages],
+  );
+
+  const standardMessageActionHandler = useStandardMessageActions({
+    messages,
+    setEditState,
+    handleRegenerate,
+    handleFeedbackSubmit,
+    feedbackConfig,
+    openFeedbackDialog,
+    onUnhandledAction: handleCopyAction,
+  });
 
   const controlsContext: MessageControlsContext = useMemo(
     () => ({
@@ -262,76 +331,7 @@ export function AddinChat() {
               controls={resolvedMessageControls}
               messageRenderer={resolvedMessageRenderer}
               controlsContext={controlsContext}
-              onMessageAction={async (action: MessageAction) => {
-                if (action.type === "edit") {
-                  const messageToEdit = messages[action.messageId];
-                  if (messageToEdit?.role === "user") {
-                    setEditState({
-                      mode: "edit",
-                      messageId: action.messageId,
-                      initialContent: messageToEdit.content,
-                    });
-                  }
-                  return true;
-                }
-
-                if (action.type === "regenerate") {
-                  handleRegenerate(action.messageId);
-                  return true;
-                }
-
-                if (action.type === "copy") {
-                  const messageToCopy = messages[action.messageId];
-                  const textContent = extractTextFromContent(
-                    messageToCopy?.content,
-                  );
-                  if (!textContent) {
-                    return false;
-                  }
-
-                  try {
-                    if (navigator.clipboard?.writeText) {
-                      await navigator.clipboard.writeText(textContent);
-                    } else {
-                      throw new Error("clipboard API unavailable");
-                    }
-                    return true;
-                  } catch {
-                    try {
-                      const textarea = document.createElement("textarea");
-                      textarea.value = textContent;
-                      textarea.style.position = "fixed";
-                      textarea.style.opacity = "0";
-                      document.body.appendChild(textarea);
-                      textarea.select();
-                      document.execCommand("copy");
-                      document.body.removeChild(textarea);
-                      return true;
-                    } catch (fallbackError) {
-                      console.warn(
-                        "Failed to copy message content:",
-                        fallbackError,
-                      );
-                      return false;
-                    }
-                  }
-                }
-
-                if (action.type === "like" || action.type === "dislike") {
-                  const sentiment =
-                    action.type === "like" ? "positive" : "negative";
-                  const result = await handleFeedbackSubmit(
-                    action.messageId,
-                    sentiment,
-                  );
-                  if (result.success && feedbackConfig.commentsEnabled) {
-                    openFeedbackDialog(action.messageId, sentiment);
-                  }
-                  return result.success;
-                }
-
-                return handleMessageAction(action);
-              }}
+              onMessageAction={standardMessageActionHandler}
               useVirtualization={messageOrder.length > 30}
               virtualizationThreshold={30}
               onFilePreview={openPreviewModal}
@@ -346,6 +346,7 @@ export function AddinChat() {
               onFilePreview={openPreviewModal}
               handleFileAttachments={(_files: FileUploadItem[]) => {}}
               chatId={currentChatId}
+              assistantId={assistantId}
               isLoading={isMessagingLoading}
               mode={editState.mode}
               editMessageId={
@@ -353,6 +354,9 @@ export function AddinChat() {
               }
               editInitialContent={
                 editState.mode === "edit" ? editState.initialContent : undefined
+              }
+              editInitialFiles={
+                editState.mode === "edit" ? editState.initialFiles : undefined
               }
               controlledAvailableModels={availableModels}
               controlledSelectedModel={selectedModel}

@@ -125,6 +125,7 @@ vi.mock("@/hooks/chat", () => ({
     modelsError: null,
     isSelectionReady: false,
   }),
+  useStandardMessageActions: () => vi.fn().mockResolvedValue(false),
 }));
 
 // Mock the actual components that are used

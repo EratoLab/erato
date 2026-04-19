@@ -46,6 +46,7 @@ interface AddinChatInputProps {
   mode?: "compose" | "edit";
   editMessageId?: string;
   editInitialContent?: ContentPart[];
+  editInitialFiles?: FileUploadItem[];
   initialModel?: ChatModel | null;
   initialSelectedFacetIds?: string[];
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
@@ -62,7 +63,13 @@ export const AddinChatInput = forwardRef<
   ChatInputControlsHandle,
   AddinChatInputProps
 >(function AddinChatInput(
-  { chatId, className, showSuggestedEmailSource = false, ...chatInputProps },
+  {
+    chatId,
+    className,
+    showSuggestedEmailSource = false,
+    editInitialFiles,
+    ...chatInputProps
+  },
   ref,
 ) {
   const { host } = useOffice();
@@ -320,7 +327,7 @@ export const AddinChatInput = forwardRef<
         className="p-2 sm:p-4"
         showControls={true}
         showFileTypes={true}
-        initialFiles={[]}
+        initialFiles={editInitialFiles ?? []}
         chatId={chatId}
         {...chatInputProps}
         uploadFiles={chatInputProps.uploadFiles}

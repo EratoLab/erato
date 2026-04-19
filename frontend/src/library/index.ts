@@ -52,13 +52,16 @@ export {
   useChatHistory,
   useChatMessaging,
   useModelHistory,
+  useStandardMessageActions,
   useTokenManagement,
   useActiveModelSelection,
+  type EditMessageState,
 } from "@/hooks/chat";
 export { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 export {
   useFileDropzone,
   useFileUploadStore,
+  useFileUploadWithTokenCheck,
   useStandaloneFileUpload,
 } from "@/hooks/files";
 export {
