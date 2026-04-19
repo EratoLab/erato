@@ -108,6 +108,10 @@ export const AddinChatInput = forwardRef<
                 size: emailBodyFile.size,
               },
               isLoading: false,
+              labelOverride: t({
+                id: "officeAddin.chatInput.emailLabel",
+                message: "Email",
+              }),
             },
           ]
         : []),

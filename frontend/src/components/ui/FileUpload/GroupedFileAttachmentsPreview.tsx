@@ -17,6 +17,14 @@ export interface FileAttachmentGroupItem {
   id: string;
   file: FileResource;
   isLoading?: boolean;
+  /**
+   * Optional display label for the item's metadata row. When set, renderers
+   * should show this verbatim instead of deriving a label from the file's
+   * capability / extension. Useful for items synthesised client-side whose
+   * backend capability id would not read well (e.g. email body rendered as
+   * `.html` but meant to be labelled "Email").
+   */
+  labelOverride?: string;
 }
 
 export interface FileAttachmentGroup {
