@@ -10,7 +10,7 @@ pub trait FileProcessor: Send + Sync {
     async fn parse_file(
         &self,
         file_bytes: Vec<u8>,
-        filename: Option<&str>,
+        mime_type: Option<&str>,
     ) -> Result<String, Report>;
 }
 
@@ -29,16 +29,26 @@ fn looks_like_docx(file_bytes: &[u8]) -> bool {
         .any(|window| window == needle)
 }
 
-fn mime_type_override_for_filename(filename: &str) -> Option<&'static str> {
-    match filename
-        .rsplit('.')
+fn normalize_mime_type(mime_type: &str) -> String {
+    mime_type
+        .split(';')
         .next()
-        .map(|ext| ext.to_ascii_lowercase())
-        .as_deref()
+        .unwrap_or(mime_type)
+        .trim()
+        .to_ascii_lowercase()
+}
+
+fn detect_mime_type(file_bytes: &[u8]) -> Result<String, Report> {
+    let mut mime_type = detect_mime_type_from_bytes(file_bytes)?;
+    tracing::debug!("Detected MIME type from bytes: {:?}", &mime_type);
+    if matches!(
+        mime_type.as_str(),
+        "application/zip" | "application/x-zip-compressed"
+    ) && looks_like_docx(file_bytes)
     {
-        Some("eml") => Some("message/rfc822"),
-        _ => None,
+        mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
     }
+    Ok(mime_type)
 }
 
 #[async_trait]
@@ -46,9 +56,9 @@ impl FileProcessor for KreuzbergProcessor {
     async fn parse_file(
         &self,
         file_bytes: Vec<u8>,
-        filename: Option<&str>,
+        mime_type: Option<&str>,
     ) -> Result<String, Report> {
-        let filename = filename.map(str::to_owned);
+        let mime_type = mime_type.map(str::to_owned);
         Ok(
             tokio::task::spawn_blocking(move || -> Result<String, Report> {
                 // Check if the file is an image using magic number detection
@@ -57,37 +67,11 @@ impl FileProcessor for KreuzbergProcessor {
                     return Ok(String::new());
                 }
 
-                let mut mime_type = if let Some(filename) = filename.as_deref() {
-                    if let Some(mime_type) = mime_type_override_for_filename(filename) {
-                        tracing::debug!(
-                            filename = %filename,
-                            mime_type = %mime_type,
-                            "Overriding MIME type from filename"
-                        );
-                        mime_type.to_string()
-                    } else {
-                        let mut mime_type = detect_mime_type_from_bytes(&file_bytes)?;
-                        tracing::debug!("Detected MIME type from bytes: {:?}", &mime_type);
-                        if matches!(
-                            mime_type.as_str(),
-                            "application/zip" | "application/x-zip-compressed"
-                        ) && looks_like_docx(&file_bytes)
-                        {
-                            mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
-                        }
-                        mime_type
-                    }
+                let mut mime_type = if let Some(mime_type) = mime_type.as_deref() {
+                    tracing::debug!(mime_type = %mime_type, "Using provided MIME type");
+                    normalize_mime_type(mime_type)
                 } else {
-                    let mut mime_type = detect_mime_type_from_bytes(&file_bytes)?;
-                    tracing::debug!("Detected MIME type from bytes: {:?}", &mime_type);
-                    if matches!(
-                        mime_type.as_str(),
-                        "application/zip" | "application/x-zip-compressed"
-                    ) && looks_like_docx(&file_bytes)
-                    {
-                        mime_type = kreuzberg::DOCX_MIME_TYPE.to_string();
-                    }
-                    mime_type
+                    detect_mime_type(&file_bytes)?
                 };
 
                 if matches!(
@@ -158,7 +142,7 @@ mod tests {
 
         let processor = KreuzbergProcessor;
         let extracted = processor
-            .parse_file(pdf_bytes, Some("sample-report-compressed.pdf"))
+            .parse_file(pdf_bytes, None)
             .await
             .expect("Failed to extract text from PDF");
 
@@ -174,7 +158,7 @@ mod tests {
 
         let processor = KreuzbergProcessor;
         let extracted = processor
-            .parse_file(eml_bytes, Some("please_review_attached_draft.eml"))
+            .parse_file(eml_bytes, Some("message/rfc822"))
             .await
             .expect("Failed to extract text from EML fixture");
 
@@ -193,7 +177,7 @@ mod tests {
 
         let processor = KreuzbergProcessor;
         let extracted = processor
-            .parse_file(eml_bytes, Some("re_another_doc_you_have_to_check.eml"))
+            .parse_file(eml_bytes, Some("message/rfc822"))
             .await
             .expect("Failed to extract text from EML reply fixture");
 

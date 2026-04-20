@@ -268,6 +268,11 @@ async fn test_storage_helpers_support_eml_content_type(pool: Pool<Postgres>) {
         .generate_presigned_download_url(&file_path, None, Some(filename))
         .await
         .expect("Failed to generate presigned download URL for EML file");
+    let content_type = provider
+        .get_file_content_type_with_context(&file_path, None)
+        .await
+        .expect("Failed to fetch stored EML content type");
+    assert_eq!(content_type.as_deref(), Some("message/rfc822"));
     provider
         .generate_presigned_preview_url(&file_path, None, Some(filename))
         .await
@@ -289,6 +294,7 @@ async fn test_eml_upload_supports_rfc822_and_octet_stream_content_types(pool: Po
     let test_cases = [
         ("message/rfc822", "email_rfc822.eml"),
         ("application/octet-stream", "email_octet_stream.eml"),
+        ("text/plain", "email_text_plain.eml"),
     ];
 
     for (mime_type, filename) in test_cases {

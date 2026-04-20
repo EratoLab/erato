@@ -121,7 +121,6 @@ pub async fn get_file_contents_cached<'a>(
     cache_key: &FileCacheKey,
     file_storage: &FileStorage,
     file_storage_path: &str,
-    filename: &str,
     sharepoint_ctx: Option<&SharepointContext<'a>>,
 ) -> Result<String, Report> {
     let file_id_str = cache_key.file_id.to_string();
@@ -150,6 +149,9 @@ pub async fn get_file_contents_cached<'a>(
             .await?;
 
             span.record("file_bytes_length", file_bytes.len());
+            let mime_type = file_storage
+                .get_file_content_type_with_context(file_storage_path, sharepoint_ctx)
+                .await?;
 
             // Parse the file using the configured file processor
             let _permit = app_state
@@ -160,7 +162,7 @@ pub async fn get_file_contents_cached<'a>(
             let parsed_content = parse_file(
                 app_state.file_processor.as_ref(),
                 file_bytes,
-                Some(filename),
+                mime_type.as_deref(),
             )
             .await?;
             let content = remove_null_characters(&parsed_content);
@@ -265,7 +267,6 @@ pub fn get_file_cached<'a>(
                 &cache_key,
                 file_storage,
                 file_storage_path,
-                filename,
                 sharepoint_ctx,
             )
             .await?;

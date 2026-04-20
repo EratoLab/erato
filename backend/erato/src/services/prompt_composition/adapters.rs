@@ -88,6 +88,10 @@ impl<'a> FileResolver for AppStateFileResolver<'a> {
             .file_storage_providers
             .get(&file.file_storage_provider_id)
             .wrap_err("File storage provider not found")?;
+        let content_type = file_storage
+            .get_file_content_type_with_context(&file.file_storage_path, sharepoint_ctx.as_ref())
+            .await
+            .wrap_err("Failed to read file content type from storage")?;
 
         // Read the file content
         let file_bytes = file_storage
@@ -99,7 +103,7 @@ impl<'a> FileResolver for AppStateFileResolver<'a> {
         let text = self
             .app_state
             .file_processor
-            .parse_file(file_bytes, Some(&file.filename))
+            .parse_file(file_bytes, content_type.as_deref())
             .await
             .wrap_err("Failed to parse file")?;
 

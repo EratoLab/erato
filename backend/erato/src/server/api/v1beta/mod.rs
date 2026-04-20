@@ -2442,13 +2442,43 @@ fn preview_content_type(filename: &str) -> &'static str {
     }
 }
 
+fn is_eml_filename(filename: &str) -> bool {
+    filename
+        .rsplit('.')
+        .next()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("eml"))
+}
+
+fn content_type_essence(content_type: &str) -> &str {
+    content_type
+        .split(';')
+        .next()
+        .unwrap_or(content_type)
+        .trim()
+}
+
 fn effective_upload_content_type(
     filename: &str,
     provided_content_type: Option<&str>,
 ) -> Option<String> {
+    let provided_content_type = provided_content_type.map(content_type_essence);
+
+    let needs_eml_override = is_eml_filename(filename)
+        && match provided_content_type {
+            None => true,
+            Some(content_type) => {
+                content_type.eq_ignore_ascii_case("application/octet-stream")
+                    || content_type.eq_ignore_ascii_case("text/plain")
+            }
+        };
+
+    if needs_eml_override {
+        return Some("message/rfc822".to_string());
+    }
+
     match provided_content_type {
-        Some(content_type) if content_type != "application/octet-stream" => {
-            Some(content_type.to_string())
+        Some(content_type) if !content_type.eq_ignore_ascii_case("application/octet-stream") => {
+            Some(content_type.to_ascii_lowercase())
         }
         _ => Some(preview_content_type(filename).to_string()),
     }
@@ -2881,6 +2911,14 @@ mod tests {
     fn effective_upload_content_type_preserves_specific_multipart_type() {
         assert_eq!(
             effective_upload_content_type("message.eml", Some("message/rfc822")),
+            Some("message/rfc822".to_string())
+        );
+    }
+
+    #[test]
+    fn effective_upload_content_type_normalizes_eml_text_plain() {
+        assert_eq!(
+            effective_upload_content_type("message.eml", Some("text/plain; charset=utf-8")),
             Some("message/rfc822".to_string())
         );
     }

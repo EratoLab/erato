@@ -6,7 +6,7 @@ use tracing::instrument;
 pub async fn parse_file(
     file_processor: &dyn FileProcessor,
     file_bytes: Vec<u8>,
-    filename: Option<&str>,
+    mime_type: Option<&str>,
 ) -> Result<String, Report> {
-    file_processor.parse_file(file_bytes, filename).await
+    file_processor.parse_file(file_bytes, mime_type).await
 }
