@@ -119,6 +119,65 @@ describe("expandDroppedEmailFiles", () => {
     expect(result).toEqual([body]);
   });
 
+  it("invokes onAttachedEmail with the Message-ID of each successfully expanded .eml", async () => {
+    const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
+    const body = new File(["<html>"], "msg.html", { type: "text/html" });
+    mockedParse.mockResolvedValueOnce({
+      files: [body],
+      messageId: "<m1@x>",
+    });
+    const onAttachedEmail = vi.fn();
+
+    await expandDroppedEmailFiles([eml], { onAttachedEmail });
+
+    expect(onAttachedEmail).toHaveBeenCalledTimes(1);
+    expect(onAttachedEmail).toHaveBeenCalledWith("<m1@x>");
+  });
+
+  it("does not call onAttachedEmail when the email was skipped", async () => {
+    const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
+    mockedParse.mockResolvedValueOnce({
+      files: [new File(["<html>"], "msg.html", { type: "text/html" })],
+      messageId: "<preview@host>",
+    });
+    const onAttachedEmail = vi.fn();
+    const shouldSkipEmail = () => true;
+
+    await expandDroppedEmailFiles([eml], { shouldSkipEmail, onAttachedEmail });
+
+    expect(onAttachedEmail).not.toHaveBeenCalled();
+  });
+
+  it("does not call onAttachedEmail when parsing produced no files", async () => {
+    const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
+    mockedParse.mockResolvedValueOnce({ files: [], messageId: "<m@x>" });
+    const onAttachedEmail = vi.fn();
+
+    await expandDroppedEmailFiles([eml], { onAttachedEmail });
+
+    expect(onAttachedEmail).not.toHaveBeenCalled();
+  });
+
+  it("invokes onAttachedEmail for a successfully expanded .msg", async () => {
+    const msg = new File([new Uint8Array([0])], "item.msg", {
+      type: "application/vnd.ms-outlook",
+    });
+    const body = new File(["<html>"], "body.html", { type: "text/html" });
+    const acquireGraphToken = vi.fn();
+    const onAttachedEmail = vi.fn();
+    mockedParseMsg.mockResolvedValueOnce({
+      files: [body],
+      messageId: "<msg@x>",
+    });
+
+    await expandDroppedEmailFiles([msg], {
+      acquireGraphToken,
+      onAttachedEmail,
+    });
+
+    expect(onAttachedEmail).toHaveBeenCalledWith("<msg@x>");
+  });
+
   it("skips a dropped .msg whose Message-ID matches the shouldSkipEmail predicate", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const msg = new File([new Uint8Array([0])], "item.msg", {

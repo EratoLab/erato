@@ -17,6 +17,13 @@ interface ExpandDroppedEmailFilesOptions {
    * preview path.
    */
   shouldSkipEmail?: (messageId: string) => boolean;
+  /**
+   * Called once per successfully expanded email (after the skip check).
+   * Receives the RFC 5322 `Message-ID`. The caller typically records this
+   * so the current-email preview can be suppressed for emails that are
+   * already represented in the attachment list.
+   */
+  onAttachedEmail?: (messageId: string) => void;
 }
 
 /**
@@ -40,6 +47,9 @@ export async function expandDroppedEmailFiles(
       if (shouldSkip(messageId, options.shouldSkipEmail)) {
         logSkip(file.name, messageId);
         continue;
+      }
+      if (messageId && parsed.length > 0) {
+        options.onAttachedEmail?.(messageId);
       }
       expanded.push(...parsed);
       continue;
@@ -82,6 +92,9 @@ async function parseMsgFileIfPossible(
   if (shouldSkip(messageId, options.shouldSkipEmail)) {
     logSkip(file.name, messageId);
     return [];
+  }
+  if (messageId && files.length > 0) {
+    options.onAttachedEmail?.(messageId);
   }
   return files;
 }

@@ -137,12 +137,33 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     useOutlookEmailSource();
   const previewEmailMessageIdRef = useRef<string | null>(null);
 
+  // Tracks the RFC 5322 Message-IDs of emails already attached via any drop
+  // path in this session. Used to (a) suppress the current-email preview
+  // when the open email is already represented in the attachments and
+  // (b) short-circuit subsequent drops of the same email.
+  const [attachedEmailMessageIds, setAttachedEmailMessageIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const noteAttachedEmail = useCallback((messageId: string) => {
+    setAttachedEmailMessageIds((previous) => {
+      if (previous.has(messageId)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.add(messageId);
+      return next;
+    });
+  }, []);
+
   const shouldSkipEmailDuplicateOfPreview = useCallback(
     (messageId: string) => {
       const previewMessageId = previewEmailMessageIdRef.current;
-      return previewMessageId !== null && messageId === previewMessageId;
+      if (previewMessageId !== null && messageId === previewMessageId) {
+        return true;
+      }
+      return attachedEmailMessageIds.has(messageId);
     },
-    [],
+    [attachedEmailMessageIds],
   );
 
   const uploadFilesWithEmailExpansion = useCallback(
@@ -150,10 +171,16 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       const expanded = await expandDroppedEmailFiles(files, {
         acquireGraphToken,
         shouldSkipEmail: shouldSkipEmailDuplicateOfPreview,
+        onAttachedEmail: noteAttachedEmail,
       });
       return uploadFiles(expanded);
     },
-    [acquireGraphToken, shouldSkipEmailDuplicateOfPreview, uploadFiles],
+    [
+      acquireGraphToken,
+      noteAttachedEmail,
+      shouldSkipEmailDuplicateOfPreview,
+      uploadFiles,
+    ],
   );
 
   const {
@@ -189,6 +216,9 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
             );
             continue;
           }
+          if (internetMessageId && files.length > 0) {
+            noteAttachedEmail(internetMessageId);
+          }
           collected.push(...files);
         } catch (error) {
           console.warn(
@@ -206,7 +236,12 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
         chatInputControlsRef.current?.addUploadedFiles(uploaded);
       }
     },
-    [acquireGraphToken, shouldSkipEmailDuplicateOfPreview, uploadFiles],
+    [
+      acquireGraphToken,
+      noteAttachedEmail,
+      shouldSkipEmailDuplicateOfPreview,
+      uploadFiles,
+    ],
   );
 
   const { isDragActive: isOutlookMailDragActive } = useOutlookMailListDrag({
@@ -221,6 +256,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       const expanded = await expandDroppedEmailFiles(files, {
         acquireGraphToken,
         shouldSkipEmail: shouldSkipEmailDuplicateOfPreview,
+        onAttachedEmail: noteAttachedEmail,
       });
       if (expanded.length === 0) {
         return;
@@ -230,7 +266,12 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
         chatInputControlsRef.current?.addUploadedFiles(uploaded);
       }
     },
-    [acquireGraphToken, shouldSkipEmailDuplicateOfPreview, uploadFiles],
+    [
+      acquireGraphToken,
+      noteAttachedEmail,
+      shouldSkipEmailDuplicateOfPreview,
+      uploadFiles,
+    ],
   );
 
   const { isDragActive: isOfficeDragActive } = useOfficeDragAndDrop({
@@ -269,18 +310,23 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
         initialFiles: FileUploadItem[];
       }
   >({ mode: "compose" });
+  const currentEmailMessageId = mailItem?.internetMessageId ?? null;
+  const currentEmailAlreadyAttached =
+    currentEmailMessageId !== null &&
+    attachedEmailMessageIds.has(currentEmailMessageId);
   const shouldSuggestCurrentEmail =
     currentChatId === null &&
     messageOrder.length === 0 &&
     !isPendingResponse &&
-    editState.mode === "compose";
+    editState.mode === "compose" &&
+    !currentEmailAlreadyAttached;
 
   // Keep the preview's Message-ID fresh for the drop-dedup predicate. The
   // ref is read by `shouldSkipEmailDuplicateOfPreview` at drop time, so we
   // write here on every render once `shouldSuggestCurrentEmail` is known.
   previewEmailMessageIdRef.current =
     shouldSuggestCurrentEmail && hasSelectedEmailSource && isEmailBodyIncluded
-      ? (mailItem?.internetMessageId ?? null)
+      ? currentEmailMessageId
       : null;
 
   const handleSendMessage = useCallback(
