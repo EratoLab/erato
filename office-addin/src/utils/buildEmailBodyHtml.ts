@@ -1,4 +1,5 @@
 import { escapeHtml } from "./htmlConvert";
+import { EMAIL_BODY_CSP, sanitizeEmailHtml } from "./sanitizeEmailHtml";
 
 export interface EmailAddressInput {
   name?: string;
@@ -40,13 +41,13 @@ export function buildEmailBodyFile(input: EmailBodyInput): File {
   headerRows.push(`<strong>Subject:</strong> ${escapeHtml(subject)}`);
 
   const body = input.bodyHtml
-    ? input.bodyHtml
+    ? sanitizeEmailHtml(input.bodyHtml)
     : input.bodyText
       ? `<pre>${escapeHtml(input.bodyText)}</pre>`
       : "";
 
   const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title></head>
+<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${EMAIL_BODY_CSP}"><base target="_blank"><title>${escapeHtml(subject)}</title></head>
 <body>
 <div style="font-family:sans-serif;font-size:13px;color:#333;border-bottom:1px solid #ccc;padding-bottom:8px;margin-bottom:16px">
   ${headerRows.join("<br>")}

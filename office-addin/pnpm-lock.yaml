@@ -44,6 +44,9 @@ importers:
       cfb:
         specifier: ^1.2.2
         version: 1.2.2
+      dompurify:
+        specifier: ^3.3.3
+        version: 3.4.0
       postal-mime:
         specifier: 2.7.4
         version: 2.7.4
@@ -314,7 +317,7 @@ packages:
     resolution: {integrity: sha512-N10dEJNSsUx41Z6pZsXU8FjPjpBEplgH24sfkmITrBED1/U2Esum9F3lfLrMjKHHjmi557zQn7kR9R+XWXu5Rg==}
 
   '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz':
-    resolution: {integrity: sha512-LdGuZLEQvGpGHFAADnKe+Sv7C3R8r3hLPjio3akYZnqvZuX85wafUrMRakK4ZWBiEoemt/yzNvfUQVwII3E9jQ==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
+    resolution: {integrity: sha512-44YjLHHjvxe7NLgfaOIMouS7/CIuBX3iA+sploZ1DIZVUDl5k/Fyi+Xtka03BQ64t9xus0SEhOaBKpPaCF2QxA==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
     version: 0.1.0
     peerDependencies:
       '@lingui/core': ^5.9.4
