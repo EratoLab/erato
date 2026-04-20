@@ -155,9 +155,10 @@ function buildBodyFile(message: OutlookRestMessage): File | null {
   });
 }
 
-function toAddress(
-  recipient: OutlookRestRecipient | undefined,
-): { name?: string; address?: string } {
+function toAddress(recipient: OutlookRestRecipient | undefined): {
+  name?: string;
+  address?: string;
+} {
   const emailAddress = recipient?.EmailAddress;
   return {
     name: emailAddress?.Name,

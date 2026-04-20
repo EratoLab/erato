@@ -26,7 +26,10 @@ function installOutlookMailboxMock(): MailboxMock {
 }
 
 function installFetchMock(
-  responder: (url: string, init?: RequestInit) => {
+  responder: (
+    url: string,
+    init?: RequestInit,
+  ) => {
     ok: boolean;
     status?: number;
     statusText?: string;
@@ -199,11 +202,10 @@ describe("fetchOutlookMessageFilesByInternetMessageIdViaGraph", () => {
       };
     });
 
-    const result =
-      await fetchOutlookMessageFilesByInternetMessageIdViaGraph(
-        "<abc@host>",
-        acquireToken,
-      );
+    const result = await fetchOutlookMessageFilesByInternetMessageIdViaGraph(
+      "<abc@host>",
+      acquireToken,
+    );
 
     expect(result).not.toBeNull();
     expect(result?.subject).toBe("Matched");
@@ -222,11 +224,10 @@ describe("fetchOutlookMessageFilesByInternetMessageIdViaGraph", () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
     installFetchMock(() => ({ ok: true, jsonValue: { value: [] } }));
 
-    const result =
-      await fetchOutlookMessageFilesByInternetMessageIdViaGraph(
-        "<missing@host>",
-        acquireToken,
-      );
+    const result = await fetchOutlookMessageFilesByInternetMessageIdViaGraph(
+      "<missing@host>",
+      acquireToken,
+    );
 
     expect(result).toBeNull();
   });

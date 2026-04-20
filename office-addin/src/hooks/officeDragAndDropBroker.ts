@@ -83,10 +83,7 @@ function installIfNeeded(): void {
     );
   } catch (error) {
     installState = "failed";
-    console.warn(
-      "[officeDragAndDropBroker] addHandlerAsync threw:",
-      error,
-    );
+    console.warn("[officeDragAndDropBroker] addHandlerAsync threw:", error);
   }
 }
 
@@ -126,10 +123,7 @@ function handleOfficeEvent(event: Office.DragAndDropEventArgs): void {
       try {
         subscriber.onDrop(files);
       } catch (error) {
-        console.warn(
-          "[officeDragAndDropBroker] onDrop listener threw:",
-          error,
-        );
+        console.warn("[officeDragAndDropBroker] onDrop listener threw:", error);
       }
     }
   }

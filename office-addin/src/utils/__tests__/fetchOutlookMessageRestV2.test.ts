@@ -98,9 +98,7 @@ describe("fetchOutlookMessageFilesViaRestV2", () => {
     const html = await files[0].text();
     expect(html).toContain("<strong>From:</strong> Alice &lt;alice@x&gt;");
     expect(html).toContain("<strong>To:</strong> bob@x");
-    expect(html).toContain(
-      "<strong>Subject:</strong> Hey how are you?",
-    );
+    expect(html).toContain("<strong>Subject:</strong> Hey how are you?");
     expect(html).toContain("<pre>plain text body</pre>");
   });
 

@@ -10,7 +10,6 @@ import {
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
 import { emailToHtmlFile } from "../utils/emailToFile";
 
-
 import type { LocalFilePreviewItem } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 

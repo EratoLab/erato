@@ -28,9 +28,7 @@ export function isEmlFile(file: File): boolean {
   return /\.eml$/i.test(file.name);
 }
 
-export async function parseEmlFileToFiles(
-  file: File,
-): Promise<EmlParseResult> {
+export async function parseEmlFileToFiles(file: File): Promise<EmlParseResult> {
   let parsed;
   try {
     const buffer = await file.arrayBuffer();

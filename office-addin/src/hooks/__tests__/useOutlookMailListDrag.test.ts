@@ -13,7 +13,10 @@ function buildDragEvent(
   } = {},
 ): DragEvent {
   const { transferTypes = [], payloadByType = {}, relatedTarget = null } = init;
-  const event = new Event(type, { bubbles: true, cancelable: true }) as DragEvent;
+  const event = new Event(type, {
+    bubbles: true,
+    cancelable: true,
+  }) as DragEvent;
   const dataTransfer = {
     types: transferTypes,
     getData: (key: string) => payloadByType[key] ?? "",

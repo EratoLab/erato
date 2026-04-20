@@ -20,9 +20,9 @@ describe("isEmlFile", () => {
   });
 
   it("returns false for unrelated files", () => {
-    expect(isEmlFile(new File(["x"], "doc.pdf", { type: "application/pdf" }))).toBe(
-      false,
-    );
+    expect(
+      isEmlFile(new File(["x"], "doc.pdf", { type: "application/pdf" })),
+    ).toBe(false);
   });
 });
 
@@ -46,7 +46,9 @@ describe("parseEmlFileToFiles", () => {
     const body = result[0];
     expect(body.type).toBe("text/html");
     const text = await body.text();
-    expect(text).toContain("<strong>From:</strong> Alice &lt;alice@example.com&gt;");
+    expect(text).toContain(
+      "<strong>From:</strong> Alice &lt;alice@example.com&gt;",
+    );
     expect(text).toContain("<strong>To:</strong> Bob &lt;bob@example.com&gt;");
     expect(text).toContain("<strong>Subject:</strong> Hello there");
     expect(text).toMatch(/<pre>plain body content\s*<\/pre>/);

@@ -16,7 +16,9 @@ let capturedHandler: ((event: Office.DragAndDropEventArgs) => void) | null =
   null;
 let deferredRegistration: (() => void) | null = null;
 
-function setupOffice(options: { deferRegistration?: boolean } = {}): MailboxMock {
+function setupOffice(
+  options: { deferRegistration?: boolean } = {},
+): MailboxMock {
   const mailbox = installMockMailbox();
   (Office.EventType as unknown as Record<string, string>).DragAndDropEvent =
     "olkDragAndDropEvent";
