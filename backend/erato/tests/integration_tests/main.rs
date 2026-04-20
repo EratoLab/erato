@@ -107,7 +107,8 @@ async fn test_app_state_internal(
     }
 
     let actor_manager =
-        erato::actors::manager::ActorManager::new(db.clone(), app_config.clone()).await;
+        erato::actors::manager::ActorManager::new_with_name(db.clone(), app_config.clone(), None)
+            .await;
 
     // Create a disabled Langfuse client for testing
     let langfuse_config = LangfuseConfig {

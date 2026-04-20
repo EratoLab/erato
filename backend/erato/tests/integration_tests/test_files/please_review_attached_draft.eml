@@ -1,0 +1,26 @@
+From: Daniel Person <daniel@eratolabs.com>
+To: testuser@maxgoisser.onmicrosoft.com
+Subject: Please review attached draft
+Date: Fri, 20 Mar 2026 13:28:03 +0100
+Message-ID: <sample-review@eratolabs.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mix-boundary"
+
+--mix-boundary
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hi Max,
+
+could you please take a quick look at the attached draft document and let me know whether it looks fine from your side.
+
+Thanks
+Daniel
+
+--mix-boundary
+Content-Type: application/pdf; name="internal_review_test_attachment.pdf"
+Content-Disposition: attachment; filename="internal_review_test_attachment.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJUVPRgo=
+--mix-boundary--

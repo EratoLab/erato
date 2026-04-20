@@ -92,6 +92,7 @@ pub struct SharepointContext<'a> {
 pub struct SharepointFileMetadata {
     pub download_url: String,
     pub etag: Option<String>,
+    pub content_type: Option<String>,
 }
 
 impl FileStorage {
@@ -286,6 +287,22 @@ impl FileStorage {
             )),
         }
     }
+
+    pub async fn get_file_content_type_with_context(
+        &self,
+        path: &str,
+        context: Option<&SharepointContext<'_>>,
+    ) -> Result<Option<String>, Report> {
+        match self {
+            Self::OpenDal(storage) => storage.get_file_content_type(path).await,
+            Self::Sharepoint(storage) => {
+                let ctx = context.ok_or_else(|| {
+                    eyre::eyre!("Sharepoint storage requires an access token context")
+                })?;
+                Ok(storage.get_file_metadata(path, ctx).await?.content_type)
+            }
+        }
+    }
 }
 
 impl OpenDalStorage {
@@ -374,6 +391,15 @@ impl OpenDalStorage {
         let mut buffer = Vec::new();
         reader.read_into(&mut buffer, ..).await?;
         Ok(buffer)
+    }
+
+    pub async fn get_file_content_type(&self, path: &str) -> Result<Option<String>, Report> {
+        Ok(self
+            .opendal_operator
+            .stat(path)
+            .await?
+            .content_type()
+            .map(ToOwned::to_owned))
     }
 
     /// Generate a pre-signed URL for downloading a file
@@ -557,6 +583,7 @@ fn preview_content_type_for_filename(filename: &str) -> Option<&'static str> {
         .map(|ext| ext.to_ascii_lowercase())
         .as_deref()
     {
+        Some("eml") => Some("message/rfc822"),
         Some("pdf") => Some("application/pdf"),
         Some("jpg") | Some("jpeg") => Some("image/jpeg"),
         Some("png") => Some("image/png"),
@@ -739,10 +766,16 @@ impl SharepointStorage {
             .or_else(|| item.get("etag"))
             .and_then(|v| v.as_str())
             .map(ToOwned::to_owned);
+        let content_type = item
+            .get("file")
+            .and_then(|file| file.get("mimeType"))
+            .and_then(|v| v.as_str())
+            .map(ToOwned::to_owned);
 
         Ok(SharepointFileMetadata {
             download_url: download_url.to_string(),
             etag,
+            content_type,
         })
     }
 }
@@ -776,6 +809,7 @@ mod tests {
     use super::SharepointStorage;
     use super::build_content_disposition;
     use super::build_presign_content_disposition;
+    use super::preview_content_type_for_filename;
     use serde_json::json;
 
     #[test]
@@ -858,5 +892,31 @@ mod tests {
 
         assert_eq!(metadata.download_url, "https://example.test/download");
         assert_eq!(metadata.etag.as_deref(), Some("\"abc123\""));
+        assert_eq!(metadata.content_type, None);
+    }
+
+    #[test]
+    fn parse_sharepoint_metadata_extracts_content_type() {
+        let metadata = SharepointStorage::parse_file_metadata_response(
+            &json!({
+                "@microsoft.graph.downloadUrl": "https://example.test/download",
+                "file": {
+                    "mimeType": "message/rfc822"
+                }
+            }),
+            "drive",
+            "item",
+        )
+        .unwrap();
+
+        assert_eq!(metadata.content_type.as_deref(), Some("message/rfc822"));
+    }
+
+    #[test]
+    fn preview_content_type_for_filename_supports_eml() {
+        assert_eq!(
+            preview_content_type_for_filename("message.eml"),
+            Some("message/rfc822")
+        );
     }
 }

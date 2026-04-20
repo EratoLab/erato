@@ -149,6 +149,9 @@ pub async fn get_file_contents_cached<'a>(
             .await?;
 
             span.record("file_bytes_length", file_bytes.len());
+            let mime_type = file_storage
+                .get_file_content_type_with_context(file_storage_path, sharepoint_ctx)
+                .await?;
 
             // Parse the file using the configured file processor
             let _permit = app_state
@@ -156,7 +159,12 @@ pub async fn get_file_contents_cached<'a>(
                 .acquire()
                 .await
                 .wrap_err("File processing semaphore closed")?;
-            let parsed_content = parse_file(app_state.file_processor.as_ref(), file_bytes).await?;
+            let parsed_content = parse_file(
+                app_state.file_processor.as_ref(),
+                file_bytes,
+                mime_type.as_deref(),
+            )
+            .await?;
             let content = remove_null_characters(&parsed_content);
 
             tracing::debug!(

@@ -2428,6 +2428,7 @@ fn preview_content_type(filename: &str) -> &'static str {
         .map(|ext| ext.to_ascii_lowercase())
     {
         Some(ext) => match ext.as_str() {
+            "eml" => "message/rfc822",
             "pdf" => "application/pdf",
             "jpg" | "jpeg" => "image/jpeg",
             "png" => "image/png",
@@ -2441,13 +2442,43 @@ fn preview_content_type(filename: &str) -> &'static str {
     }
 }
 
+fn is_eml_filename(filename: &str) -> bool {
+    filename
+        .rsplit('.')
+        .next()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("eml"))
+}
+
+fn content_type_essence(content_type: &str) -> &str {
+    content_type
+        .split(';')
+        .next()
+        .unwrap_or(content_type)
+        .trim()
+}
+
 fn effective_upload_content_type(
     filename: &str,
     provided_content_type: Option<&str>,
 ) -> Option<String> {
+    let provided_content_type = provided_content_type.map(content_type_essence);
+
+    let needs_eml_override = is_eml_filename(filename)
+        && match provided_content_type {
+            None => true,
+            Some(content_type) => {
+                content_type.eq_ignore_ascii_case("application/octet-stream")
+                    || content_type.eq_ignore_ascii_case("text/plain")
+            }
+        };
+
+    if needs_eml_override {
+        return Some("message/rfc822".to_string());
+    }
+
     match provided_content_type {
-        Some(content_type) if content_type != "application/octet-stream" => {
-            Some(content_type.to_string())
+        Some(content_type) if !content_type.eq_ignore_ascii_case("application/octet-stream") => {
+            Some(content_type.to_ascii_lowercase())
         }
         _ => Some(preview_content_type(filename).to_string()),
     }
@@ -2857,4 +2888,38 @@ pub async fn file_capabilities(
 pub struct FileCapabilitiesQuery {
     /// Optional model ID to get capabilities specific to that model
     model_id: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{effective_upload_content_type, preview_content_type};
+
+    #[test]
+    fn preview_content_type_supports_eml() {
+        assert_eq!(preview_content_type("message.eml"), "message/rfc822");
+    }
+
+    #[test]
+    fn effective_upload_content_type_uses_eml_fallback_for_octet_stream() {
+        assert_eq!(
+            effective_upload_content_type("message.eml", Some("application/octet-stream")),
+            Some("message/rfc822".to_string())
+        );
+    }
+
+    #[test]
+    fn effective_upload_content_type_preserves_specific_multipart_type() {
+        assert_eq!(
+            effective_upload_content_type("message.eml", Some("message/rfc822")),
+            Some("message/rfc822".to_string())
+        );
+    }
+
+    #[test]
+    fn effective_upload_content_type_normalizes_eml_text_plain() {
+        assert_eq!(
+            effective_upload_content_type("message.eml", Some("text/plain; charset=utf-8")),
+            Some("message/rfc822".to_string())
+        );
+    }
 }
