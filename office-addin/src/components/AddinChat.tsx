@@ -35,6 +35,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
+import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
 import { useMsalNaa } from "../providers/MsalNaaProvider";
 import { expandDroppedEmailFiles } from "../utils/expandDroppedEmailFiles";
@@ -185,8 +186,33 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     onDrop: handleOutlookMailListDrop,
   });
 
+  const handleOfficeDragAndDrop = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) {
+        return;
+      }
+      const expanded = await expandDroppedEmailFiles(files, {
+        acquireGraphToken,
+      });
+      if (expanded.length === 0) {
+        return;
+      }
+      const uploaded = await uploadFiles(expanded);
+      if (uploaded && uploaded.length > 0) {
+        chatInputControlsRef.current?.addUploadedFiles(uploaded);
+      }
+    },
+    [acquireGraphToken, uploadFiles],
+  );
+
+  const { isDragActive: isOfficeDragActive } = useOfficeDragAndDrop({
+    onDrop: handleOfficeDragAndDrop,
+  });
+
   const showDropOverlay =
-    (isDragActive && isDragAccept) || isOutlookMailDragActive;
+    (isDragActive && isDragAccept) ||
+    isOutlookMailDragActive ||
+    isOfficeDragActive;
 
   const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
 
