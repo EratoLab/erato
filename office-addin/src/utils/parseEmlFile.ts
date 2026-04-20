@@ -10,7 +10,16 @@ import type { Address, Mailbox } from "postal-mime";
  * `fetchOutlookMessage.ts` for the OWA `maillistrow` drag path. The backend
  * rejects raw `.eml` uploads because `message/rfc822` is not a declared file
  * capability, so we parse them client-side before forwarding to upload.
+ *
+ * The RFC 5322 `Message-ID` header is returned alongside the files so the
+ * caller can correlate this drop against other representations of the same
+ * email (e.g. the currently-open email preview) and avoid duplicates.
  */
+
+export interface EmlParseResult {
+  files: File[];
+  messageId: string | null;
+}
 
 export function isEmlFile(file: File): boolean {
   if (file.type === "message/rfc822") {
@@ -19,14 +28,16 @@ export function isEmlFile(file: File): boolean {
   return /\.eml$/i.test(file.name);
 }
 
-export async function parseEmlFileToFiles(file: File): Promise<File[]> {
+export async function parseEmlFileToFiles(
+  file: File,
+): Promise<EmlParseResult> {
   let parsed;
   try {
     const buffer = await file.arrayBuffer();
     parsed = await PostalMime.parse(buffer);
   } catch (error) {
     console.warn("[parseEmlFile] failed to parse .eml file, skipping:", error);
-    return [];
+    return { files: [], messageId: null };
   }
 
   const date = parsed.date ? new Date(parsed.date) : null;
@@ -54,7 +65,10 @@ export async function parseEmlFileToFiles(file: File): Promise<File[]> {
     attachmentFiles.push(new File([blobPart], filename, { type: mimeType }));
   }
 
-  return [bodyFile, ...attachmentFiles];
+  return {
+    files: [bodyFile, ...attachmentFiles],
+    messageId: parsed.messageId ?? null,
+  };
 }
 
 function toMailbox(

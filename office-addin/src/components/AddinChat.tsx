@@ -38,6 +38,8 @@ import { AddinChatInput } from "./AddinChatInput";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
 import { useMsalNaa } from "../providers/MsalNaaProvider";
+import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
+import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { expandDroppedEmailFiles } from "../utils/expandDroppedEmailFiles";
 import { fetchOutlookMessageFiles } from "../utils/fetchOutlookMessage";
 
@@ -130,14 +132,28 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     [acquireToken],
   );
 
+  const { mailItem } = useOutlookMailItem();
+  const { hasSelectedEmailSource, isEmailBodyIncluded } =
+    useOutlookEmailSource();
+  const previewEmailMessageIdRef = useRef<string | null>(null);
+
+  const shouldSkipEmailDuplicateOfPreview = useCallback(
+    (messageId: string) => {
+      const previewMessageId = previewEmailMessageIdRef.current;
+      return previewMessageId !== null && messageId === previewMessageId;
+    },
+    [],
+  );
+
   const uploadFilesWithEmailExpansion = useCallback(
     async (files: File[]) => {
       const expanded = await expandDroppedEmailFiles(files, {
         acquireGraphToken,
+        shouldSkipEmail: shouldSkipEmailDuplicateOfPreview,
       });
       return uploadFiles(expanded);
     },
-    [acquireGraphToken, uploadFiles],
+    [acquireGraphToken, shouldSkipEmailDuplicateOfPreview, uploadFiles],
   );
 
   const {
@@ -158,10 +174,21 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       const collected: File[] = [];
       for (const item of items) {
         try {
-          const { files } = await fetchOutlookMessageFiles(
+          const { files, internetMessageId } = await fetchOutlookMessageFiles(
             item.itemId,
             acquireGraphToken,
           );
+          if (
+            internetMessageId &&
+            shouldSkipEmailDuplicateOfPreview(internetMessageId)
+          ) {
+            console.log(
+              "[AddinChat] skipping dropped Outlook email already represented by the current-email preview:",
+              item.subject || item.itemId,
+              internetMessageId,
+            );
+            continue;
+          }
           collected.push(...files);
         } catch (error) {
           console.warn(
@@ -179,7 +206,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
         chatInputControlsRef.current?.addUploadedFiles(uploaded);
       }
     },
-    [acquireGraphToken, uploadFiles],
+    [acquireGraphToken, shouldSkipEmailDuplicateOfPreview, uploadFiles],
   );
 
   const { isDragActive: isOutlookMailDragActive } = useOutlookMailListDrag({
@@ -193,6 +220,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       }
       const expanded = await expandDroppedEmailFiles(files, {
         acquireGraphToken,
+        shouldSkipEmail: shouldSkipEmailDuplicateOfPreview,
       });
       if (expanded.length === 0) {
         return;
@@ -202,7 +230,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
         chatInputControlsRef.current?.addUploadedFiles(uploaded);
       }
     },
-    [acquireGraphToken, uploadFiles],
+    [acquireGraphToken, shouldSkipEmailDuplicateOfPreview, uploadFiles],
   );
 
   const { isDragActive: isOfficeDragActive } = useOfficeDragAndDrop({
@@ -246,6 +274,14 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     messageOrder.length === 0 &&
     !isPendingResponse &&
     editState.mode === "compose";
+
+  // Keep the preview's Message-ID fresh for the drop-dedup predicate. The
+  // ref is read by `shouldSkipEmailDuplicateOfPreview` at drop time, so we
+  // write here on every render once `shouldSuggestCurrentEmail` is known.
+  previewEmailMessageIdRef.current =
+    shouldSuggestCurrentEmail && hasSelectedEmailSource && isEmailBodyIncluded
+      ? (mailItem?.internetMessageId ?? null)
+      : null;
 
   const handleSendMessage = useCallback(
     (

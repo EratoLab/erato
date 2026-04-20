@@ -9,6 +9,14 @@ interface ExpandDroppedEmailFilesOptions {
    * the caller only ever drops `.eml` / regular files.
    */
   acquireGraphToken?: AcquireGraphToken;
+  /**
+   * Optional predicate consulted with the RFC 5322 `Message-ID` of each
+   * parsed email. When the predicate returns `true`, the entire email is
+   * dropped from the output (body + attachments). Used to avoid duplicating
+   * the currently-open Outlook email which is already included via the
+   * preview path.
+   */
+  shouldSkipEmail?: (messageId: string) => boolean;
 }
 
 /**
@@ -28,7 +36,11 @@ export async function expandDroppedEmailFiles(
   const expanded: File[] = [];
   for (const file of files) {
     if (isEmlFile(file)) {
-      const parsed = await parseEmlFileToFiles(file);
+      const { files: parsed, messageId } = await parseEmlFileToFiles(file);
+      if (shouldSkip(messageId, options.shouldSkipEmail)) {
+        logSkip(file.name, messageId);
+        continue;
+      }
       expanded.push(...parsed);
       continue;
     }
@@ -63,5 +75,31 @@ async function parseMsgFileIfPossible(
     return [];
   }
   const { parseMsgFileToFiles } = await import("./parseMsgFile");
-  return parseMsgFileToFiles(file, options.acquireGraphToken);
+  const { files, messageId } = await parseMsgFileToFiles(
+    file,
+    options.acquireGraphToken,
+  );
+  if (shouldSkip(messageId, options.shouldSkipEmail)) {
+    logSkip(file.name, messageId);
+    return [];
+  }
+  return files;
+}
+
+function shouldSkip(
+  messageId: string | null,
+  predicate: ((messageId: string) => boolean) | undefined,
+): boolean {
+  if (!messageId || !predicate) {
+    return false;
+  }
+  return predicate(messageId);
+}
+
+function logSkip(fileName: string, messageId: string | null): void {
+  console.log(
+    "[expandDroppedEmailFiles] skipping dropped email already represented by the current-email preview:",
+    fileName,
+    messageId,
+  );
 }

@@ -41,7 +41,10 @@ describe("expandDroppedEmailFiles", () => {
     const body = new File(["<html></html>"], "msg.html", { type: "text/html" });
     const attach = new File(["a"], "a.txt", { type: "text/plain" });
 
-    mockedParse.mockResolvedValueOnce([body, attach]);
+    mockedParse.mockResolvedValueOnce({
+      files: [body, attach],
+      messageId: "<m1@x>",
+    });
 
     const result = await expandDroppedEmailFiles([eml, pdf]);
     expect(mockedParse).toHaveBeenCalledTimes(1);
@@ -59,10 +62,86 @@ describe("expandDroppedEmailFiles", () => {
 
   it("returns [] when the only .eml input fails to parse", async () => {
     const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
-    mockedParse.mockResolvedValueOnce([]);
+    mockedParse.mockResolvedValueOnce({ files: [], messageId: null });
 
     const result = await expandDroppedEmailFiles([eml]);
     expect(result).toEqual([]);
+  });
+
+  it("skips a dropped .eml whose Message-ID matches the shouldSkipEmail predicate", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
+    const body = new File(["<html>"], "msg.html", { type: "text/html" });
+    mockedParse.mockResolvedValueOnce({
+      files: [body],
+      messageId: "<preview@host>",
+    });
+
+    const shouldSkipEmail = vi.fn(
+      (messageId: string) => messageId === "<preview@host>",
+    );
+
+    const result = await expandDroppedEmailFiles([eml], { shouldSkipEmail });
+
+    expect(shouldSkipEmail).toHaveBeenCalledWith("<preview@host>");
+    expect(result).toEqual([]);
+    expect(logSpy).toHaveBeenCalled();
+  });
+
+  it("keeps a dropped .eml whose Message-ID does not match the skip predicate", async () => {
+    const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
+    const body = new File(["<html>"], "msg.html", { type: "text/html" });
+    mockedParse.mockResolvedValueOnce({
+      files: [body],
+      messageId: "<other@host>",
+    });
+
+    const shouldSkipEmail = vi.fn(
+      (messageId: string) => messageId === "<preview@host>",
+    );
+
+    const result = await expandDroppedEmailFiles([eml], { shouldSkipEmail });
+
+    expect(shouldSkipEmail).toHaveBeenCalledWith("<other@host>");
+    expect(result).toEqual([body]);
+  });
+
+  it("does not consult shouldSkipEmail when the parsed email has no Message-ID", async () => {
+    const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
+    const body = new File(["<html>"], "msg.html", { type: "text/html" });
+    mockedParse.mockResolvedValueOnce({ files: [body], messageId: null });
+
+    const shouldSkipEmail = vi.fn(() => true);
+
+    const result = await expandDroppedEmailFiles([eml], { shouldSkipEmail });
+
+    expect(shouldSkipEmail).not.toHaveBeenCalled();
+    expect(result).toEqual([body]);
+  });
+
+  it("skips a dropped .msg whose Message-ID matches the shouldSkipEmail predicate", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const msg = new File([new Uint8Array([0])], "item.msg", {
+      type: "application/vnd.ms-outlook",
+    });
+    const body = new File(["<html>"], "body.html", { type: "text/html" });
+    mockedParseMsg.mockResolvedValueOnce({
+      files: [body],
+      messageId: "<preview@host>",
+    });
+    const acquireGraphToken = vi.fn();
+    const shouldSkipEmail = vi.fn(
+      (messageId: string) => messageId === "<preview@host>",
+    );
+
+    const result = await expandDroppedEmailFiles([msg], {
+      acquireGraphToken,
+      shouldSkipEmail,
+    });
+
+    expect(shouldSkipEmail).toHaveBeenCalledWith("<preview@host>");
+    expect(result).toEqual([]);
+    expect(logSpy).toHaveBeenCalled();
   });
 
   it("routes .msg files through parseMsgFileToFiles when a Graph token is provided", async () => {
@@ -71,7 +150,10 @@ describe("expandDroppedEmailFiles", () => {
     });
     const body = new File(["<html>"], "body.html", { type: "text/html" });
     const acquireGraphToken = vi.fn();
-    mockedParseMsg.mockResolvedValueOnce([body]);
+    mockedParseMsg.mockResolvedValueOnce({
+      files: [body],
+      messageId: "<m@x>",
+    });
 
     const result = await expandDroppedEmailFiles([msg], { acquireGraphToken });
 
@@ -94,7 +176,7 @@ describe("expandDroppedEmailFiles", () => {
   it("matches .msg by filename extension even when MIME is empty", async () => {
     const msg = new File([new Uint8Array([0])], "NoType.MSG");
     const acquireGraphToken = vi.fn();
-    mockedParseMsg.mockResolvedValueOnce([]);
+    mockedParseMsg.mockResolvedValueOnce({ files: [], messageId: null });
 
     await expandDroppedEmailFiles([msg], { acquireGraphToken });
 

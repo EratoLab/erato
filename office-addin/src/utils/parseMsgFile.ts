@@ -11,16 +11,20 @@ import type { AcquireGraphToken } from "./fetchOutlookMessageGraph";
  * Graph owns the fidelity-sensitive work (RTF-encapsulated HTML, embedded
  * content types, etc.).
  *
- * Returns an empty array on any recoverable failure (unreadable CFB, missing
- * Message-ID, Graph filter yields no match, network/auth failure). Failures
- * are logged via `console.warn` so the caller gets an observable signal.
- * The deliberate choice to swallow rather than throw matches how `.eml`
- * parsing handles its own failures upstream.
+ * Returns an empty file list on any recoverable failure (unreadable CFB,
+ * missing Message-ID, Graph filter yields no match, network/auth failure).
+ * The extracted `messageId` (if any) is still surfaced so callers can apply
+ * de-duplication against other representations of the same email.
  */
+export interface MsgParseResult {
+  files: File[];
+  messageId: string | null;
+}
+
 export async function parseMsgFileToFiles(
   file: File,
   acquireGraphToken: AcquireGraphToken,
-): Promise<File[]> {
+): Promise<MsgParseResult> {
   let internetMessageId: string | null;
   try {
     internetMessageId = await extractMsgInternetMessageId(file);
@@ -30,7 +34,7 @@ export async function parseMsgFileToFiles(
       file.name,
       error,
     );
-    return [];
+    return { files: [], messageId: null };
   }
 
   if (!internetMessageId) {
@@ -38,7 +42,7 @@ export async function parseMsgFileToFiles(
       "[parseMsgFile] Dropped .msg has no Internet Message-ID — cannot resolve via Graph:",
       file.name,
     );
-    return [];
+    return { files: [], messageId: null };
   }
 
   try {
@@ -51,15 +55,15 @@ export async function parseMsgFileToFiles(
         "[parseMsgFile] Graph lookup returned no match for Message-ID:",
         internetMessageId,
       );
-      return [];
+      return { files: [], messageId: internetMessageId };
     }
-    return result.files;
+    return { files: result.files, messageId: internetMessageId };
   } catch (error) {
     console.warn(
       "[parseMsgFile] Graph fetch failed for dropped .msg:",
       file.name,
       error,
     );
-    return [];
+    return { files: [], messageId: internetMessageId };
   }
 }

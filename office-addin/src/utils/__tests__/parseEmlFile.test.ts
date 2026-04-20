@@ -41,7 +41,7 @@ describe("parseEmlFileToFiles", () => {
       `${CRLF}` +
       `plain body content`;
 
-    const result = await parseEmlFileToFiles(makeEmlFile(eml));
+    const { files: result } = await parseEmlFileToFiles(makeEmlFile(eml));
     expect(result).toHaveLength(1);
     const body = result[0];
     expect(body.type).toBe("text/html");
@@ -62,7 +62,7 @@ describe("parseEmlFileToFiles", () => {
       `${CRLF}` +
       `<p>hi there</p>`;
 
-    const result = await parseEmlFileToFiles(makeEmlFile(eml));
+    const { files: result } = await parseEmlFileToFiles(makeEmlFile(eml));
     expect(result).toHaveLength(1);
     const text = await result[0].text();
     expect(text).toContain("<p>hi there</p>");
@@ -89,7 +89,7 @@ describe("parseEmlFileToFiles", () => {
       `attachment body${CRLF}` +
       `--${boundary}--${CRLF}`;
 
-    const result = await parseEmlFileToFiles(makeEmlFile(eml));
+    const { files: result } = await parseEmlFileToFiles(makeEmlFile(eml));
     expect(result).toHaveLength(2);
     const attachment = result[1];
     expect(attachment.name).toBe("notes.txt");
@@ -118,7 +118,7 @@ describe("parseEmlFileToFiles", () => {
       `${btoa("pngbytes")}${CRLF}` +
       `--${boundary}--${CRLF}`;
 
-    const result = await parseEmlFileToFiles(makeEmlFile(eml));
+    const { files: result } = await parseEmlFileToFiles(makeEmlFile(eml));
     expect(result).toHaveLength(1);
   });
 
@@ -143,7 +143,7 @@ describe("parseEmlFileToFiles", () => {
       `${btoa("pngbytes")}${CRLF}` +
       `--${boundary}--${CRLF}`;
 
-    const result = await parseEmlFileToFiles(makeEmlFile(eml));
+    const { files: result } = await parseEmlFileToFiles(makeEmlFile(eml));
     expect(result).toHaveLength(1);
   });
 
@@ -159,9 +159,38 @@ describe("parseEmlFileToFiles", () => {
     vi.spyOn(failing, "arrayBuffer").mockRejectedValue(new Error("boom"));
 
     const result = await parseEmlFileToFiles(failing);
-    expect(result).toEqual([]);
+    expect(result).toEqual({ files: [], messageId: null });
     expect(warnSpy).toHaveBeenCalled();
     // Also confirm behaviour with the bogus bytes path.
     void bogus;
+  });
+
+  it("surfaces the RFC 5322 Message-ID header when present", async () => {
+    const eml =
+      `From: a@x${CRLF}` +
+      `To: b@x${CRLF}` +
+      `Subject: With id${CRLF}` +
+      `Message-ID: <abc-123@example.com>${CRLF}` +
+      `MIME-Version: 1.0${CRLF}` +
+      `Content-Type: text/plain${CRLF}` +
+      `${CRLF}` +
+      `body`;
+
+    const { messageId } = await parseEmlFileToFiles(makeEmlFile(eml));
+    expect(messageId).toBe("<abc-123@example.com>");
+  });
+
+  it("returns messageId null when the header is absent", async () => {
+    const eml =
+      `From: a@x${CRLF}` +
+      `To: b@x${CRLF}` +
+      `Subject: No id${CRLF}` +
+      `MIME-Version: 1.0${CRLF}` +
+      `Content-Type: text/plain${CRLF}` +
+      `${CRLF}` +
+      `body`;
+
+    const { messageId } = await parseEmlFileToFiles(makeEmlFile(eml));
+    expect(messageId).toBeNull();
   });
 });

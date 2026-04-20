@@ -35,6 +35,7 @@ describe("parseMsgFileToFiles", () => {
     mockGraph.mockResolvedValue({
       subject: "Hi",
       files: [bodyFile, attachmentFile],
+      internetMessageId: "<abc@host>",
     });
 
     const acquireToken = vi.fn().mockResolvedValue("tok");
@@ -43,10 +44,13 @@ describe("parseMsgFileToFiles", () => {
 
     expect(mockExtract).toHaveBeenCalledWith(file);
     expect(mockGraph).toHaveBeenCalledWith("<abc@host>", acquireToken);
-    expect(result).toEqual([bodyFile, attachmentFile]);
+    expect(result).toEqual({
+      files: [bodyFile, attachmentFile],
+      messageId: "<abc@host>",
+    });
   });
 
-  it("returns [] when the Internet Message-ID cannot be read from the .msg", async () => {
+  it("returns empty files with null messageId when the Internet Message-ID cannot be read", async () => {
     mockExtract.mockResolvedValue(null);
     const acquireToken = vi.fn();
 
@@ -55,11 +59,11 @@ describe("parseMsgFileToFiles", () => {
       acquireToken,
     );
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({ files: [], messageId: null });
     expect(mockGraph).not.toHaveBeenCalled();
   });
 
-  it("returns [] when the CFB read throws", async () => {
+  it("returns empty files with null messageId when the CFB read throws", async () => {
     mockExtract.mockRejectedValue(new Error("bad bytes"));
     const acquireToken = vi.fn();
 
@@ -68,11 +72,11 @@ describe("parseMsgFileToFiles", () => {
       acquireToken,
     );
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({ files: [], messageId: null });
     expect(mockGraph).not.toHaveBeenCalled();
   });
 
-  it("returns [] when Graph has no match for the Message-ID", async () => {
+  it("returns empty files but preserves messageId when Graph has no match", async () => {
     mockExtract.mockResolvedValue("<missing@host>");
     mockGraph.mockResolvedValue(null);
     const acquireToken = vi.fn().mockResolvedValue("tok");
@@ -82,10 +86,10 @@ describe("parseMsgFileToFiles", () => {
       acquireToken,
     );
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({ files: [], messageId: "<missing@host>" });
   });
 
-  it("returns [] when Graph fetch itself throws", async () => {
+  it("returns empty files but preserves messageId when Graph fetch throws", async () => {
     mockExtract.mockResolvedValue("<abc@host>");
     mockGraph.mockRejectedValue(new Error("graph down"));
     const acquireToken = vi.fn().mockResolvedValue("tok");
@@ -95,6 +99,6 @@ describe("parseMsgFileToFiles", () => {
       acquireToken,
     );
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({ files: [], messageId: "<abc@host>" });
   });
 });

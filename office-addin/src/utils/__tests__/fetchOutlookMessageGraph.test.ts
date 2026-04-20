@@ -72,9 +72,10 @@ describe("fetchOutlookMessageFilesViaGraph", () => {
     expect(acquireToken).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe(
+    expect(url).toContain(
       `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(GRAPH_ID)}?$expand=attachments`,
     );
+    expect(url).toContain("internetMessageId");
     const headers = (init as RequestInit).headers as Record<string, string>;
     expect(headers.Authorization).toBe("Bearer graph-token-xyz");
   });
@@ -134,6 +135,22 @@ describe("fetchOutlookMessageFilesViaGraph", () => {
     expect(files[1].name).toBe("doc.pdf");
     expect(files[1].type).toBe("application/pdf");
     expect(await files[1].text()).toBe("pdf-bytes");
+  });
+
+  it("surfaces internetMessageId from the Graph response in the return value", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        subject: "With id",
+        body: { contentType: "text", content: "x" },
+        internetMessageId: "<abc@host>",
+        attachments: [],
+      },
+    }));
+
+    const result = await fetchOutlookMessageFilesViaGraph(EWS_ID, acquireToken);
+    expect(result.internetMessageId).toBe("<abc@host>");
   });
 
   it("throws when Graph returns a non-OK status", async () => {

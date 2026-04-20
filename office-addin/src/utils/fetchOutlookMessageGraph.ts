@@ -54,6 +54,7 @@ interface GraphMessage {
 export interface FetchOutlookMessageResult {
   subject: string;
   files: File[];
+  internetMessageId: string | null;
 }
 
 export type AcquireGraphToken = () => Promise<string>;
@@ -70,7 +71,11 @@ export async function fetchOutlookMessageFilesViaGraph(
   const restId = convertEwsIdToGraphId(ewsItemId);
   const token = await acquireToken();
   const message = await fetchMessageById(restId, token);
-  return { subject: message.subject ?? "", files: toFiles(message) };
+  return {
+    subject: message.subject ?? "",
+    files: toFiles(message),
+    internetMessageId: message.internetMessageId ?? null,
+  };
 }
 
 /**
@@ -92,7 +97,11 @@ export async function fetchOutlookMessageFilesByInternetMessageIdViaGraph(
     return null;
   }
   const message = await fetchMessageById(match.id, token);
-  return { subject: message.subject ?? "", files: toFiles(message) };
+  return {
+    subject: message.subject ?? "",
+    files: toFiles(message),
+    internetMessageId: message.internetMessageId ?? internetMessageId,
+  };
 }
 
 function convertEwsIdToGraphId(ewsItemId: string): string {
@@ -107,7 +116,7 @@ async function fetchMessageById(
   messageId: string,
   token: string,
 ): Promise<GraphMessage> {
-  const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}?$expand=attachments`;
+  const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}?$expand=attachments&$select=subject,body,from,toRecipients,ccRecipients,receivedDateTime,internetMessageId`;
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
