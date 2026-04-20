@@ -5,7 +5,7 @@ import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../../test/mocks/outlook/mailbox";
-import { fetchOutlookMessageFiles } from "../fetchOutlookMessage";
+import { fetchOutlookMessageFilesViaRestV2 } from "../fetchOutlookMessageRestV2";
 
 type MailboxMock = ReturnType<typeof installMockMailbox> & {
   convertToRestId: ReturnType<typeof vi.fn>;
@@ -45,7 +45,7 @@ function installOutlookMailboxMock(): MailboxMock {
   return mailbox;
 }
 
-describe("fetchOutlookMessageFiles", () => {
+describe("fetchOutlookMessageFilesViaRestV2", () => {
   beforeEach(() => {
     installOutlookMailboxMock();
   });
@@ -65,7 +65,7 @@ describe("fetchOutlookMessageFiles", () => {
       },
     });
 
-    await fetchOutlookMessageFiles(EWS_ID);
+    await fetchOutlookMessageFilesViaRestV2(EWS_ID);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
@@ -89,7 +89,7 @@ describe("fetchOutlookMessageFiles", () => {
       },
     });
 
-    const { subject, files } = await fetchOutlookMessageFiles(EWS_ID);
+    const { subject, files } = await fetchOutlookMessageFilesViaRestV2(EWS_ID);
     expect(subject).toBe("Hey how are you?");
     expect(files).toHaveLength(1);
     expect(files[0].name).toBe("Hey how are you_.html");
@@ -114,7 +114,7 @@ describe("fetchOutlookMessageFiles", () => {
       },
     });
 
-    const { files } = await fetchOutlookMessageFiles(EWS_ID);
+    const { files } = await fetchOutlookMessageFilesViaRestV2(EWS_ID);
     const html = await files[0].text();
     expect(html).toContain("<p>rich</p>");
     expect(html).not.toContain("<pre>");
@@ -140,7 +140,7 @@ describe("fetchOutlookMessageFiles", () => {
       },
     });
 
-    const { files } = await fetchOutlookMessageFiles(EWS_ID);
+    const { files } = await fetchOutlookMessageFilesViaRestV2(EWS_ID);
     expect(files).toHaveLength(2);
     const attachment = files[1];
     expect(attachment.name).toBe("doc.pdf");
@@ -174,7 +174,7 @@ describe("fetchOutlookMessageFiles", () => {
       },
     });
 
-    const { files } = await fetchOutlookMessageFiles(EWS_ID);
+    const { files } = await fetchOutlookMessageFilesViaRestV2(EWS_ID);
     expect(files).toHaveLength(1);
     expect(files[0].name).toBe("Mixed.html");
   });
@@ -186,7 +186,7 @@ describe("fetchOutlookMessageFiles", () => {
       statusText: "Forbidden",
     });
 
-    await expect(fetchOutlookMessageFiles(EWS_ID)).rejects.toThrow(
+    await expect(fetchOutlookMessageFilesViaRestV2(EWS_ID)).rejects.toThrow(
       /Outlook REST fetch failed: 403 Forbidden/,
     );
   });
@@ -198,7 +198,7 @@ describe("fetchOutlookMessageFiles", () => {
     mailbox.restUrl = undefined;
     installFetchMock({ ok: true });
 
-    await expect(fetchOutlookMessageFiles(EWS_ID)).rejects.toThrow(
+    await expect(fetchOutlookMessageFilesViaRestV2(EWS_ID)).rejects.toThrow(
       /restUrl is not available/,
     );
   });

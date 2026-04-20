@@ -36,10 +36,13 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
+import { useMsalNaa } from "../providers/MsalNaaProvider";
 import { expandDroppedEmailFiles } from "../utils/expandDroppedEmailFiles";
 import { fetchOutlookMessageFiles } from "../utils/fetchOutlookMessage";
 
 import type { OutlookMailListDragItem } from "../utils/outlookMailListDragParse";
+
+const GRAPH_MAIL_SCOPES = ["Mail.Read"];
 
 // Accept real `.eml` / `.msg` files dropped by Outlook clients that expose
 // emails as native file drags (Outlook Mac, Classic Outlook on Windows). OWA
@@ -120,12 +123,20 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     chatInputControlsRef.current?.addUploadedFiles(uploaded);
   }, []);
 
+  const { acquireToken } = useMsalNaa();
+  const acquireGraphToken = useCallback(
+    () => acquireToken(GRAPH_MAIL_SCOPES),
+    [acquireToken],
+  );
+
   const uploadFilesWithEmailExpansion = useCallback(
     async (files: File[]) => {
-      const expanded = await expandDroppedEmailFiles(files);
+      const expanded = await expandDroppedEmailFiles(files, {
+        acquireGraphToken,
+      });
       return uploadFiles(expanded);
     },
-    [uploadFiles],
+    [acquireGraphToken, uploadFiles],
   );
 
   const {
@@ -146,7 +157,10 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       const collected: File[] = [];
       for (const item of items) {
         try {
-          const { files } = await fetchOutlookMessageFiles(item.itemId);
+          const { files } = await fetchOutlookMessageFiles(
+            item.itemId,
+            acquireGraphToken,
+          );
           collected.push(...files);
         } catch (error) {
           console.warn(
@@ -164,7 +178,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
         chatInputControlsRef.current?.addUploadedFiles(uploaded);
       }
     },
-    [uploadFiles],
+    [acquireGraphToken, uploadFiles],
   );
 
   const { isDragActive: isOutlookMailDragActive } = useOutlookMailListDrag({

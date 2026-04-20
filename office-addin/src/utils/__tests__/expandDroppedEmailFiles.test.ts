@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { expandDroppedEmailFiles } from "../expandDroppedEmailFiles";
 import * as parseEmlFileModule from "../parseEmlFile";
+import * as parseMsgFileModule from "../parseMsgFile";
 
 import type * as ParseEmlFileModule from "../parseEmlFile";
+import type * as ParseMsgFileModule from "../parseMsgFile";
 
 vi.mock("../parseEmlFile", async () => {
   const actual =
@@ -14,12 +16,23 @@ vi.mock("../parseEmlFile", async () => {
   };
 });
 
+vi.mock("../parseMsgFile", async () => {
+  const actual =
+    await vi.importActual<typeof ParseMsgFileModule>("../parseMsgFile");
+  return {
+    ...actual,
+    parseMsgFileToFiles: vi.fn(),
+  };
+});
+
 const mockedParse = vi.mocked(parseEmlFileModule.parseEmlFileToFiles);
+const mockedParseMsg = vi.mocked(parseMsgFileModule.parseMsgFileToFiles);
 
 describe("expandDroppedEmailFiles", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     mockedParse.mockReset();
+    mockedParseMsg.mockReset();
   });
 
   it("expands .eml files and preserves order of mixed input", async () => {
@@ -50,5 +63,41 @@ describe("expandDroppedEmailFiles", () => {
 
     const result = await expandDroppedEmailFiles([eml]);
     expect(result).toEqual([]);
+  });
+
+  it("routes .msg files through parseMsgFileToFiles when a Graph token is provided", async () => {
+    const msg = new File([new Uint8Array([0])], "item.msg", {
+      type: "application/vnd.ms-outlook",
+    });
+    const body = new File(["<html>"], "body.html", { type: "text/html" });
+    const acquireGraphToken = vi.fn();
+    mockedParseMsg.mockResolvedValueOnce([body]);
+
+    const result = await expandDroppedEmailFiles([msg], { acquireGraphToken });
+
+    expect(mockedParseMsg).toHaveBeenCalledTimes(1);
+    expect(mockedParseMsg).toHaveBeenCalledWith(msg, acquireGraphToken);
+    expect(result).toEqual([body]);
+  });
+
+  it("skips .msg files when no Graph token is available and logs a warning", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const msg = new File([new Uint8Array([0])], "item.msg");
+
+    const result = await expandDroppedEmailFiles([msg]);
+
+    expect(result).toEqual([]);
+    expect(mockedParseMsg).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it("matches .msg by filename extension even when MIME is empty", async () => {
+    const msg = new File([new Uint8Array([0])], "NoType.MSG");
+    const acquireGraphToken = vi.fn();
+    mockedParseMsg.mockResolvedValueOnce([]);
+
+    await expandDroppedEmailFiles([msg], { acquireGraphToken });
+
+    expect(mockedParseMsg).toHaveBeenCalledWith(msg, acquireGraphToken);
   });
 });
