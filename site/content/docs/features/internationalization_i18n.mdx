@@ -2,9 +2,19 @@
 
 ## Language detection
 
-The language used for the frontend is chosen based on the user's browser language.
+The language used for the backend response profile is resolved in this order:
 
-If the user's browser language is not supported, the default language (English) is used.
+1. Configurable language detection sources from `i18n.language.language_detection_priority`
+2. `i18n.language.default_language`
+3. English fallback (`en`)
+
+By default, the order is:
+
+1. `id_token_any` (Entra ID `xms_pl`, then `xms_tpl`)
+2. Browser `Accept-Language` header
+3. `en`
+
+If no source yields a supported value, the configured default (`i18n.language.default_language`) is used, and falls back to `en` if needed.
 
 ## Supported languages
 

@@ -2,6 +2,7 @@
 
 use axum::Router;
 use axum_test::TestServer;
+use erato::config::LanguageDetectionPriority;
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
 use serde_json::Value;
@@ -82,6 +83,61 @@ async fn test_profile_endpoint_uses_preferred_language_claim_when_supported(pool
 
     let profile: Value = response.json();
     assert_eq!(profile["preferred_language"].as_str().unwrap(), "de");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_profile_endpoint_respects_configured_language_priority(pool: Pool<Postgres>) {
+    let mut app_config = hermetic_app_config(None, None);
+    app_config.i18n.language.language_detection_priority =
+        vec![LanguageDetectionPriority::IdTokenXmsTpl];
+    let app_state = test_app_state(app_config, pool).await;
+
+    let jwt = JwtTokenBuilder::new()
+        .preferred_language("de")
+        .tenant_preferred_language("fr")
+        .build();
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .get("/api/v1beta/me/profile")
+        .with_bearer_token(&jwt)
+        .await;
+
+    response.assert_status_ok();
+    let profile: Value = response.json();
+    assert_eq!(profile["preferred_language"].as_str().unwrap(), "fr");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_profile_endpoint_uses_default_language_when_no_match(pool: Pool<Postgres>) {
+    let mut app_config = hermetic_app_config(None, None);
+    app_config.i18n.language.language_detection_priority =
+        vec![LanguageDetectionPriority::BrowserAcceptLanguage];
+    app_config.i18n.language.default_language = "es".to_string();
+    let app_state = test_app_state(app_config, pool).await;
+
+    let jwt = JwtTokenBuilder::new().build();
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let response = server
+        .get("/api/v1beta/me/profile")
+        .add_header(axum::http::header::ACCEPT_LANGUAGE, "it-IT,it;q=0.9")
+        .with_bearer_token(&jwt)
+        .await;
+
+    response.assert_status_ok();
+    let profile: Value = response.json();
+    assert_eq!(profile["preferred_language"].as_str().unwrap(), "es");
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

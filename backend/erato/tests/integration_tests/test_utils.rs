@@ -162,6 +162,7 @@ pub struct JwtTokenBuilder {
     email: Option<String>,
     name: Option<String>,
     preferred_language: Option<String>,
+    tenant_preferred_language: Option<String>,
     organization_user_id: Option<String>,
     groups: Vec<String>,
 }
@@ -174,6 +175,7 @@ impl Default for JwtTokenBuilder {
             email: Some("admin@example.com".to_string()),
             name: Some("admin".to_string()),
             preferred_language: None,
+            tenant_preferred_language: None,
             organization_user_id: None,
             groups: Vec::new(),
         }
@@ -216,6 +218,15 @@ impl JwtTokenBuilder {
         self
     }
 
+    /// Set the tenant-level preferred language claim (Entra ID `xms_tpl`)
+    pub fn tenant_preferred_language(
+        mut self,
+        tenant_preferred_language: impl Into<String>,
+    ) -> Self {
+        self.tenant_preferred_language = Some(tenant_preferred_language.into());
+        self
+    }
+
     /// Set the organization user ID claim (Azure AD's "oid")
     pub fn organization_user_id(mut self, oid: impl Into<String>) -> Self {
         self.organization_user_id = Some(oid.into());
@@ -250,6 +261,10 @@ impl JwtTokenBuilder {
 
         if let Some(preferred_language) = self.preferred_language {
             claims["xms_pl"] = Value::String(preferred_language);
+        }
+
+        if let Some(tenant_preferred_language) = self.tenant_preferred_language {
+            claims["xms_tpl"] = Value::String(tenant_preferred_language);
         }
 
         if let Some(oid) = self.organization_user_id {

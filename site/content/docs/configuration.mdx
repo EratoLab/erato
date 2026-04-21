@@ -264,6 +264,50 @@ This will be inejcted into the frontend as:
 window.FOO = "bar";
 ```
 
+### `i18n`
+
+Internationalization-related settings used by the backend when determining user language preferences.
+
+### `i18n.language`
+
+Configuration for language detection and defaulting.
+
+#### `i18n.language.language_detection_priority`
+
+Ordered list of language sources to evaluate when resolving a user's preferred language.
+
+`id_token_any` expands to checking `id_token_xms_pl` then `id_token_xms_tpl` in that order.
+
+**Supported values:**
+
+- `id_token_any`
+- `id_token_xms_pl`
+- `id_token_xms_tpl`
+- `browser_accept_language`
+
+**Type:** `array<string>`
+
+**Default value:** `["id_token_any", "browser_accept_language"]`
+
+Any value omitted in the order is treated as unsupported for that source and detection continues to the next value.
+
+#### `i18n.language.default_language`
+
+Fallback language used after no configured sources match.
+
+**Type:** `string`
+
+**Default value:** `"en"`
+
+**Example:**
+
+```toml
+[i18n]
+[i18n.language]
+language_detection_priority = ["id_token_xms_tpl", "browser_accept_language"]
+default_language = "de"
+```
+
 ### `chat_provider` (deprecated)
 
 **⚠️ Deprecated:** Please use `chat_providers` instead for multiple provider support and better flexibility.

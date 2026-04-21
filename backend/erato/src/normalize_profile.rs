@@ -21,6 +21,10 @@ pub struct IdTokenProfile {
     pub picture: Option<String>,
     // Preferred language
     pub preferred_language: Option<String>,
+    // User-specific preferred language from the xms_pl claim (if present).
+    pub id_token_xms_pl: Option<String>,
+    // Tenant-level preferred language from the xms_tpl claim (if present).
+    pub id_token_xms_tpl: Option<String>,
     // Groups - list of group names/identifiers the user belongs to
     pub groups: Vec<String>,
     // Organization user ID - from the `oid` claim (Entra ID specific)
@@ -45,14 +49,14 @@ pub fn normalize_profile(claims: Value) -> Result<IdTokenProfile, Report> {
         .get("picture")
         .and_then(|v| v.as_str().map(String::from));
     // xms_pl and xms_tpl; Entra ID specific
-    let user_preferred_language = claims
+    let id_token_xms_pl = claims
         .get("xms_pl")
         .and_then(|v| v.as_str().map(String::from));
-    let tenant_preferred_language = claims
+    let id_token_xms_tpl = claims
         .get("xms_tpl")
         .and_then(|v| v.as_str().map(String::from));
 
-    let preferred_language = user_preferred_language.or(tenant_preferred_language);
+    let preferred_language = id_token_xms_pl.clone().or(id_token_xms_tpl.clone());
 
     // Parse groups claim - can be either an array of strings or a single string
     let groups = match claims.get("groups") {
@@ -89,6 +93,8 @@ pub fn normalize_profile(claims: Value) -> Result<IdTokenProfile, Report> {
         name,
         picture,
         preferred_language,
+        id_token_xms_pl,
+        id_token_xms_tpl,
         groups,
         organization_user_id,
         organization_group_ids,
@@ -124,6 +130,8 @@ mod tests {
         assert_eq!(profile.email, Some("admin@example.com".to_string()));
         assert_eq!(profile.name, Some("admin".to_string()));
         assert_eq!(profile.preferred_language, None);
+        assert_eq!(profile.id_token_xms_pl, None);
+        assert_eq!(profile.id_token_xms_tpl, None);
         assert_eq!(profile.picture, None);
         assert_eq!(profile.groups, Vec::<String>::new());
         assert_eq!(profile.organization_user_id, None);
@@ -175,6 +183,8 @@ mod tests {
         assert_eq!(profile.email, Some("john.doe@example.com".to_string()));
         assert_eq!(profile.name, Some("John Doe".to_string()));
         assert_eq!(profile.preferred_language, Some("en".to_string()));
+        assert_eq!(profile.id_token_xms_pl, Some("en".to_string()));
+        assert_eq!(profile.id_token_xms_tpl, Some("en".to_string()));
         assert_eq!(profile.picture, None);
         assert_eq!(profile.groups, Vec::<String>::new());
         assert_eq!(

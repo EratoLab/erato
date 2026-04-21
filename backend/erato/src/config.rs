@@ -80,6 +80,68 @@ pub enum PromptSourceSpecification {
     },
 }
 
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[facet(untagged)]
+pub struct I18nConfig {
+    #[serde(default)]
+    pub language: I18nLanguageConfig,
+}
+
+impl I18nConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.language.default_language.trim().is_empty() {
+            return Err(eyre!("i18n.language.default_language cannot be empty"));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+pub struct I18nLanguageConfig {
+    // Ordered list of language detection sources to try.
+    // The default language is appended automatically as a final fallback.
+    #[serde(default = "default_i18n_language_detection_priority")]
+    pub language_detection_priority: Vec<LanguageDetectionPriority>,
+
+    // Default language used when no source provides a supported value.
+    // This value is normalized to a supported language code at runtime.
+    #[serde(default = "default_i18n_default_language")]
+    pub default_language: String,
+}
+
+impl Default for I18nLanguageConfig {
+    fn default() -> Self {
+        Self {
+            language_detection_priority: default_i18n_language_detection_priority(),
+            default_language: default_i18n_default_language(),
+        }
+    }
+}
+
+fn default_i18n_language_detection_priority() -> Vec<LanguageDetectionPriority> {
+    vec![
+        LanguageDetectionPriority::IdTokenAny,
+        LanguageDetectionPriority::BrowserAcceptLanguage,
+    ]
+}
+
+fn default_i18n_default_language() -> String {
+    "en".to_string()
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum LanguageDetectionPriority {
+    #[default]
+    IdTokenAny,
+    IdTokenXmsPl,
+    IdTokenXmsTpl,
+    BrowserAcceptLanguage,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum PromptSourceSpecificationInput {
@@ -194,6 +256,9 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub frontend: FrontendConfig,
+
+    #[serde(default)]
+    pub i18n: I18nConfig,
 
     #[serde(default)]
     pub integrations: IntegrationsConfig,
@@ -354,6 +419,7 @@ impl AppConfig {
                 .with_list_parse_key("experimental_facets.priority_order")
                 .with_list_parse_key("experimental_facets.tool_call_allowlist")
                 .with_list_parse_key("experimental_facets.default_selected_facets")
+                .with_list_parse_key("i18n.language.language_detection_priority")
                 .with_list_parse_key("integrations.experimental_sharepoint.all_drives_sources"),
         );
         Ok(builder)
@@ -444,6 +510,10 @@ impl AppConfig {
         // Validate Prometheus configuration
         if let Err(e) = config.integrations.prometheus.validate(config.http_port) {
             panic!("Invalid Prometheus configuration: {}", e);
+        }
+
+        if let Err(e) = config.i18n.validate() {
+            panic!("Invalid i18n configuration: {}", e);
         }
 
         if let Err(e) = config.server.validate() {

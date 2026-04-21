@@ -158,6 +158,8 @@
   },
   "http_host": {},
   "http_port": {},
+  "i18n.language.default_language": {},
+  "i18n.language.language_detection_priority.[]": {},
   "integrations.experimental_entra_id.auth_via_access_token": {},
   "integrations.experimental_entra_id.enabled": {},
   "integrations.experimental_sharepoint.all_drives_sources.[]": {},
