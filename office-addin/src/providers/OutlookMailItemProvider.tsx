@@ -31,6 +31,10 @@ export interface OutlookMailItemData {
   dateTimeCreated: Date | null;
   conversationId: string | null;
   internetMessageId: string | null;
+  // EWS item id for read-mode messages. Null for compose mode (no Graph-
+  // reachable id until the draft is saved) — callers gate Graph fetches on
+  // this being present.
+  itemId: string | null;
   bodyText: string | null;
   bodyHtml: string | null;
   isLoadingBody: boolean;
@@ -201,6 +205,7 @@ function readMailItemSync(item: Office.MessageRead): OutlookMailItemData {
     dateTimeCreated: item.dateTimeCreated ?? null,
     conversationId: item.conversationId ?? null,
     internetMessageId: item.internetMessageId ?? null,
+    itemId: item.itemId ?? null,
     bodyText: null,
     bodyHtml: null,
     isLoadingBody: true,
@@ -220,6 +225,7 @@ function readMailItemCompose(
     dateTimeCreated: null,
     conversationId: item.conversationId ?? null,
     internetMessageId: null,
+    itemId: null,
     bodyText: null,
     bodyHtml: null,
     isLoadingBody: true,
