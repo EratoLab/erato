@@ -26,6 +26,8 @@ interface UseCloudDataOptions {
   driveId: string | null;
   /** Current item ID (folder) */
   itemId: string | null;
+  /** Optional drive search query */
+  searchQuery?: string;
 }
 
 interface UseCloudDataResult {
@@ -47,11 +49,14 @@ export function useCloudData({
   provider,
   driveId,
   itemId,
+  searchQuery,
 }: UseCloudDataOptions): UseCloudDataResult {
   // Only Sharepoint is supported for now
   if (provider !== "sharepoint") {
     throw new Error(`Unsupported cloud provider: ${provider}`);
   }
+
+  const normalizedSearchQuery = searchQuery?.trim();
 
   // Fetch all drives using generated hook
   const {
@@ -59,7 +64,15 @@ export function useCloudData({
     isLoading: isDrivesLoading,
     error: drivesError,
     refetch: refetchDrives,
-  } = useAllDrives({});
+  } = useAllDrives({
+    ...(normalizedSearchQuery
+      ? {
+          queryParams: {
+            query: normalizedSearchQuery,
+          },
+        }
+      : {}),
+  });
 
   // Fetch items from current location
   // Use getDriveRoot if no itemId, otherwise getDriveItemChildren

@@ -857,9 +857,18 @@ export const useGetFilePreview = <TData = undefined,>(
   });
 };
 
+export type AllDrivesQueryParams = {
+  /**
+   * Optional SharePoint site search query. If empty or omitted, wildcard search is used.
+   */
+  query?: string;
+};
+
 export type AllDrivesError = Fetcher.ErrorWrapper<undefined>;
 
-export type AllDrivesVariables = V1betaApiContext["fetcherOptions"];
+export type AllDrivesVariables = {
+  queryParams?: AllDrivesQueryParams;
+} & V1betaApiContext["fetcherOptions"];
 
 /**
  * This exhaustively walks the Microsoft Graph drive discovery surfaces that are
@@ -880,7 +889,7 @@ export const fetchAllDrives = (
     AllDrivesError,
     undefined,
     {},
-    {},
+    AllDrivesQueryParams,
     {}
   >({
     url: "/api/v1beta/integrations/sharepoint/all-drives",

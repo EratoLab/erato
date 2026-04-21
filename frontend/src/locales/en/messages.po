@@ -586,6 +586,11 @@ msgstr "Go back"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.searchDrives"
+msgstr "Search drives..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.selection.filesSelected"
 msgstr "files selected"
 

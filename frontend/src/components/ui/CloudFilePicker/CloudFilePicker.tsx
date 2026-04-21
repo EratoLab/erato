@@ -7,6 +7,7 @@
 
 import { t } from "@lingui/core/macro";
 import { memo, useCallback, useState } from "react";
+import { useDebounce } from "use-debounce";
 
 import { useCloudData } from "@/hooks/cloud/useCloudData";
 import { useCloudNavigation } from "@/hooks/cloud/useCloudNavigation";
@@ -16,12 +17,14 @@ import { CloudDriveList } from "./CloudDriveList";
 import { CloudItemBrowser } from "./CloudItemBrowser";
 import { CloudNavigationBreadcrumb } from "./CloudNavigationBreadcrumb";
 import { Button } from "../Controls/Button";
-import { CloseIcon, ArrowLeftIcon } from "../icons";
+import { Input } from "../Input/Input";
+import { ArrowLeftIcon, CloseIcon } from "../icons";
 
 import type {
   CloudProvider,
   SelectedCloudFile,
 } from "@/lib/api/cloudProviders/types";
+import type { ChangeEvent } from "react";
 
 export interface CloudFilePickerProps {
   /** Provider type (currently only "sharepoint" supported) */
@@ -55,6 +58,8 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
   }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [driveSearchQuery, setDriveSearchQuery] = useState("");
+    const [debouncedDriveSearchQuery] = useDebounce(driveSearchQuery, 200);
 
     // Navigation state
     const {
@@ -84,11 +89,13 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
       provider,
       driveId,
       itemId,
+      searchQuery: debouncedDriveSearchQuery,
     });
 
     // Handle drive selection
     const handleSelectDrive = useCallback(
       (drive: { id: string; name: string }) => {
+        setDriveSearchQuery("");
         goToDrive(drive.id, drive.name);
         clearSelection();
       },
@@ -117,8 +124,16 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
       reset();
       clearSelection();
       setError(null);
+      setDriveSearchQuery("");
       onClose();
     }, [reset, clearSelection, onClose]);
+
+    const handleDriveSearchChange = useCallback(
+      (event: ChangeEvent<HTMLInputElement>) => {
+        setDriveSearchQuery(event.target.value);
+      },
+      [],
+    );
 
     // Handle confirm
     const handleConfirm = useCallback(async () => {
@@ -136,6 +151,7 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
         // Reset and close
         reset();
         clearSelection();
+        setDriveSearchQuery("");
         onClose();
       } catch (err) {
         setError(
@@ -247,11 +263,24 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
             )}
 
             {showDriveList && (
-              <CloudDriveList
-                drives={drives}
-                onSelectDrive={handleSelectDrive}
-                isLoading={isLoading}
-              />
+              <>
+                <div className="mb-3">
+                  <Input
+                    type="search"
+                    value={driveSearchQuery}
+                    onChange={handleDriveSearchChange}
+                    placeholder={t({
+                      id: "cloudFilePicker.searchDrives",
+                      message: "Search drives...",
+                    })}
+                  />
+                </div>
+                <CloudDriveList
+                  drives={drives}
+                  onSelectDrive={handleSelectDrive}
+                  isLoading={isLoading}
+                />
+              </>
             )}
 
             {showItemBrowser && (

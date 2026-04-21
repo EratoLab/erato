@@ -496,6 +496,17 @@
         "summary": "Get all drives accessible to the user.",
         "description": "This exhaustively walks the Microsoft Graph drive discovery surfaces that are\nrelevant for the current user:\n- `GET /me/drive`: https://learn.microsoft.com/graph/api/drive-get\n- `GET /me/drives`, `GET /groups/{id}/drives`, `GET /sites/{id}/drives`:\n  https://learn.microsoft.com/graph/api/drive-list\n- `GET /me/drive/sharedWithMe()`: https://learn.microsoft.com/graph/api/drive-sharedwithme\n- `GET /me/joinedTeams`: https://learn.microsoft.com/graph/api/user-list-joinedteams\n- `GET /sites?search=*`: https://learn.microsoft.com/graph/api/site-search",
         "operationId": "all_drives",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Optional Drive/site search query used to filter the returned drives by drive title or site name. If empty or omitted, wildcard search is used for site discovery and no filtering is applied.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "List of accessible drives",
