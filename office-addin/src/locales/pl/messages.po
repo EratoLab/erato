@@ -53,6 +53,21 @@ msgstr "Wymagane logowanie"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx
+msgid "officeAddin.chat.conversation.aria"
+msgstr "Rozmowa na czacie"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
+msgid "officeAddin.chat.conversation.dropzone.ariaLabel"
+msgstr "Upuść pliki w dowolnym miejscu rozmowy, aby je przesłać"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
+msgid "officeAddin.chat.fileDrop.overlay.label"
+msgstr "Upuść, aby przesłać"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
 msgid "officeAddin.chat.newChat"
 msgstr "Nowy czat"
 
@@ -73,8 +88,18 @@ msgstr "E-mail"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.loadingAttachments"
-msgstr "Ładowanie załączników..."
+msgid "officeAddin.chatInput.emailLabel"
+msgstr "E-mail"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.expandingDroppedEmails"
+msgstr "Przetwarzanie upuszczonych e-maili…"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+#~ msgid "officeAddin.chatInput.loadingAttachments"
+#~ msgstr "Ładowanie załączników..."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -115,6 +140,11 @@ msgstr "Zastąp zaznaczenie"
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.addFiles"
 msgstr "Dodaj pliki"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.alreadyAdded"
+msgstr "Już dodano"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx

@@ -10,15 +10,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { useDropzone } from "react-dropzone";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
-import { useActiveModelSelection, useChatActions } from "@/hooks/chat";
+import {
+  useActiveModelSelection,
+  useChatActions,
+  useStandardMessageActions,
+} from "@/hooks/chat";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
+import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
@@ -30,9 +34,7 @@ import {
   useChatSharingFeature,
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
-import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
-import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
@@ -556,6 +558,16 @@ export const Chat = ({
     onFeedbackSuccess: handleFeedbackSuccess,
   });
 
+  const standardMessageActionHandler = useStandardMessageActions({
+    messages,
+    setEditState,
+    handleRegenerate,
+    handleFeedbackSubmit,
+    feedbackConfig,
+    openFeedbackDialog,
+    onUnhandledAction: handleMessageAction,
+  });
+
   // Restore placeholder definitions for props passed to MessageList
   const hasOlderMessages = false;
   const loadOlderMessages = () => {
@@ -572,36 +584,20 @@ export const Chat = ({
     // For now, its presence enables the button in ChatInput.
   }, []);
 
-  const handleConversationDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      if (acceptedFiles.length === 0) {
-        return;
-      }
-
-      void uploadFiles(acceptedFiles).then((uploadedFiles) => {
-        if (uploadedFiles && uploadedFiles.length > 0) {
-          chatInputControlsRef.current?.addUploadedFiles(uploadedFiles);
-        }
-      });
-    },
-    [uploadFiles],
-  );
+  const handleDropUploaded = useCallback((uploaded: FileUploadItem[]) => {
+    chatInputControlsRef.current?.addUploadedFiles(uploaded);
+  }, []);
 
   const {
     getRootProps: getConversationDropzoneRootProps,
     getInputProps: getConversationDropzoneInputProps,
     isDragActive,
     isDragAccept,
-  } = useDropzone({
-    onDrop: handleConversationDrop,
-    accept:
-      acceptedFileTypes && acceptedFileTypes.length > 0
-        ? FileTypeUtil.getAcceptObject(acceptedFileTypes)
-        : undefined,
-    multiple: true,
-    disabled: isUploading,
-    noClick: true,
-    noKeyboard: true,
+  } = useConversationDropzone({
+    uploadFiles,
+    onUploaded: handleDropUploaded,
+    acceptedFileTypes,
+    isUploading,
   });
 
   if (process.env.NODE_ENV === "development") {
@@ -833,79 +829,7 @@ export const Chat = ({
                     ...controlsContext,
                     canEdit: canEditForCurrentChat,
                   }}
-                  onMessageAction={async (action: MessageAction) => {
-                    // Intercept edit/regenerate here to route to local handlers
-                    if (action.type === "edit") {
-                      logger.log(
-                        `Edit action called with messageId: ${action.messageId}`,
-                      );
-
-                      // Find the message directly from the messages object
-                      const messageToEdit = messages[action.messageId];
-                      logger.log(
-                        `Available message keys:`,
-                        Object.keys(messages),
-                      );
-                      logger.log(`Looking up message:`, messageToEdit);
-
-                      if (messageToEdit.role === "user") {
-                        const messageFiles = (
-                          messageToEdit as ChatMessage & {
-                            files?: FileUploadItem[];
-                          }
-                        ).files;
-                        const initialFiles = Array.isArray(messageFiles)
-                          ? messageFiles
-                          : [];
-                        logger.log(
-                          `Setting editState: messageId=${action.messageId}, content="${extractTextFromContent(messageToEdit.content)}"`,
-                        );
-
-                        // Use React's functional update to ensure we get the latest state
-                        setEditState(() => ({
-                          mode: "edit",
-                          messageId: action.messageId,
-                          initialContent: messageToEdit.content,
-                          initialFiles,
-                        }));
-
-                        logger.log(`editState set successfully`);
-                      } else {
-                        logger.log(
-                          `Cannot edit message ${action.messageId}: not found or not a user message`,
-                          {
-                            messageToEdit,
-                            role: messageToEdit.role,
-                            available: Object.keys(messages),
-                          },
-                        );
-                      }
-                      return true;
-                    }
-                    if (action.type === "regenerate") {
-                      handleRegenerate(action.messageId);
-                      return true;
-                    }
-                    // Handle like/dislike feedback actions
-                    if (action.type === "like" || action.type === "dislike") {
-                      const sentiment =
-                        action.type === "like" ? "positive" : "negative";
-
-                      // Submit feedback immediately (cache invalidation handled by onFeedbackSuccess callback)
-                      const result = await handleFeedbackSubmit(
-                        action.messageId,
-                        sentiment,
-                      );
-
-                      // If comments are enabled, open the dialog for additional comment
-                      if (result.success && feedbackConfig.commentsEnabled) {
-                        openFeedbackDialog(action.messageId, sentiment);
-                      }
-
-                      return result.success;
-                    }
-                    return handleMessageAction(action);
-                  }}
+                  onMessageAction={standardMessageActionHandler}
                   className={clsx(
                     layout,
                     canShareCurrentChat && "pt-12 sm:pt-14",

@@ -3,22 +3,31 @@ import {
   ChatInputControlsProvider,
   ChatMessage,
   DefaultMessageControls,
+  DocumentIcon,
   FeedbackCommentDialog,
   FeedbackViewDialog,
   FilePreviewModal,
   MessageList,
   chatMessagesQuery,
+  componentRegistry,
   extractTextFromContent,
-  useChatActions,
+  getSupportedFileTypes,
+  resolveComponentOverride,
+  useActiveModelSelection,
   useChatContext,
+  useConversationDropzone,
+  useFileCapabilitiesContext,
   useFilePreviewModal,
+  useFileUploadWithTokenCheck,
   useMessageFeedback,
   useProfile,
+  useStandardMessageActions,
   type ActionFacetRequest,
   type ChatInputControlsHandle,
-  type ContentPart,
+  type EditMessageState,
   type FileUploadItem,
   type MessageAction,
+  type MessageControlsComponent,
   type MessageControlsContext,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
@@ -26,8 +35,37 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
+import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
+import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
+import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
+import { useMsalNaa } from "../providers/MsalNaaProvider";
+import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
+import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { expandDroppedEmailFiles } from "../utils/expandDroppedEmailFiles";
+import { fetchOutlookMessageFiles } from "../utils/fetchOutlookMessage";
 
-export function AddinChat() {
+import type { FetchOutlookMessageResult } from "../utils/fetchOutlookMessage";
+import type { OutlookMailListDragItem } from "../utils/outlookMailListDragParse";
+
+const GRAPH_MAIL_SCOPES = ["Mail.Read"];
+// Upper bound for a single Outlook item's Graph fetch. Beyond this we drop
+// the item from the drop batch so the send button isn't held hostage.
+const OUTLOOK_FETCH_TIMEOUT_MS = 10_000;
+
+// Accept real `.eml` / `.msg` files dropped by Outlook clients that expose
+// emails as native file drags (Outlook Mac, Classic Outlook on Windows). OWA
+// and New Outlook use the custom `maillistrow` path handled separately via
+// `useOutlookMailListDrag`.
+const EMAIL_MIME_TYPES: Record<string, string[]> = {
+  "message/rfc822": [".eml"],
+  "application/vnd.ms-outlook": [".msg"],
+};
+
+interface AddinChatProps {
+  assistantId?: string;
+}
+
+export function AddinChat({ assistantId }: AddinChatProps = {}) {
   const chatInputControlsRef = useRef<ChatInputControlsHandle | null>(null);
   const chatInputControls = useMemo(
     () => ({
@@ -60,16 +98,282 @@ export function AddinChat() {
     editMessage,
     regenerateMessage,
     isMessagingLoading,
+    isPendingResponse,
     chats,
     currentChatId,
-    navigateToChat,
     createNewChat,
     refetchHistory,
     currentChatLastModel,
-    uploadFiles,
-    uploadError,
   } = useChatContext();
   const { profile } = useProfile();
+  const { capabilities } = useFileCapabilitiesContext();
+
+  const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
+    useActiveModelSelection({ initialModel: currentChatLastModel });
+
+  const acceptedFileTypes = useMemo(
+    () => getSupportedFileTypes(capabilities),
+    [capabilities],
+  );
+
+  const { uploadFiles, uploadError, isUploading } = useFileUploadWithTokenCheck(
+    {
+      message: "",
+      chatId: currentChatId,
+      assistantId,
+      chatProviderId: selectedModel?.chat_provider_id ?? undefined,
+      acceptedFileTypes,
+      multiple: true,
+    },
+  );
+
+  const handleDropUploaded = useCallback((uploaded: FileUploadItem[]) => {
+    chatInputControlsRef.current?.addUploadedFiles(uploaded);
+  }, []);
+
+  const { acquireToken } = useMsalNaa();
+  const acquireGraphToken = useCallback(
+    () => acquireToken(GRAPH_MAIL_SCOPES),
+    [acquireToken],
+  );
+
+  const { mailItem } = useOutlookMailItem();
+  const { hasSelectedEmailSource, isEmailBodyIncluded } =
+    useOutlookEmailSource();
+  const previewEmailMessageIdRef = useRef<string | null>(null);
+
+  // Tracks the RFC 5322 Message-IDs of emails already attached via any drop
+  // path in this session. The hook keeps a ref as the synchronous source of
+  // truth (safe across awaits in concurrent drop handlers) plus a mirrored
+  // state so render-time predicates — e.g. the current-email preview
+  // suppression below — still see updates.
+  const dedup = useEmailDedupSet();
+
+  // Atomic claim across the preview-dup check + the session dedup. Returns
+  // false when the email is already represented by the preview or was
+  // previously claimed by another drop; callers must treat a `false` result
+  // as "skip this email, do not upload". The combined claim closes a race
+  // where two concurrent drops both saw an empty state.
+  const tryClaimEmailAttachment = useCallback(
+    (messageId: string): boolean => {
+      if (previewEmailMessageIdRef.current === messageId) {
+        return false;
+      }
+      return dedup.tryAdd(messageId);
+    },
+    [dedup],
+  );
+
+  // Coalesce duplicate Outlook Graph fetches for the same item id. Two
+  // rapid drops of the same mail-list row now share a single Graph call
+  // instead of burning quota on both. A 10s timeout keeps a hung fetch
+  // from locking the send button indefinitely — the coalesced promise
+  // rejects and its entry is cleared so a later retry can start fresh.
+  const pendingOutlookFetchesRef = useRef<
+    Map<string, Promise<FetchOutlookMessageResult>>
+  >(new Map());
+  const fetchOutlookMessageFilesCoalesced = useCallback(
+    (itemId: string): Promise<FetchOutlookMessageResult> => {
+      const existing = pendingOutlookFetchesRef.current.get(itemId);
+      if (existing) {
+        return existing;
+      }
+      const fetchPromise = (async () => {
+        try {
+          return await Promise.race([
+            fetchOutlookMessageFiles(itemId, acquireGraphToken),
+            new Promise<FetchOutlookMessageResult>((_, reject) => {
+              setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `Outlook fetch timed out after ${OUTLOOK_FETCH_TIMEOUT_MS}ms`,
+                    ),
+                  ),
+                OUTLOOK_FETCH_TIMEOUT_MS,
+              );
+            }),
+          ]);
+        } finally {
+          pendingOutlookFetchesRef.current.delete(itemId);
+        }
+      })();
+      pendingOutlookFetchesRef.current.set(itemId, fetchPromise);
+      return fetchPromise;
+    },
+    [acquireGraphToken],
+  );
+
+  // Counter for in-flight drop batches. Drives the "processing dropped
+  // emails" indicator and disables send while the user is still seeing
+  // files appear. Incremented on drop entry and decremented in a finally
+  // so timeouts and failures always release the gate.
+  const [pendingExpansionCount, setPendingExpansionCount] = useState(0);
+  const isExpandingDroppedEmails = pendingExpansionCount > 0;
+  const trackExpansion = useCallback(
+    async <T,>(work: () => Promise<T>): Promise<T> => {
+      setPendingExpansionCount((n) => n + 1);
+      try {
+        return await work();
+      } finally {
+        setPendingExpansionCount((n) => n - 1);
+      }
+    },
+    [],
+  );
+
+  const uploadFilesWithEmailExpansion = useCallback(
+    async (files: File[]) => {
+      return trackExpansion(async () => {
+        const claimedIds: string[] = [];
+        const expanded = await expandDroppedEmailFiles(files, {
+          acquireGraphToken,
+          tryAttachEmail: (messageId) => {
+            if (!tryClaimEmailAttachment(messageId)) {
+              return false;
+            }
+            claimedIds.push(messageId);
+            return true;
+          },
+        });
+        if (expanded.length === 0) {
+          return undefined;
+        }
+        const uploaded = await uploadFiles(expanded);
+        if (uploaded === undefined) {
+          claimedIds.forEach((id) => dedup.remove(id));
+        }
+        return uploaded;
+      });
+    },
+    [
+      acquireGraphToken,
+      dedup,
+      trackExpansion,
+      tryClaimEmailAttachment,
+      uploadFiles,
+    ],
+  );
+
+  const {
+    getRootProps: getConversationDropzoneRootProps,
+    getInputProps: getConversationDropzoneInputProps,
+    isDragActive,
+    isDragAccept,
+  } = useConversationDropzone({
+    uploadFiles: uploadFilesWithEmailExpansion,
+    onUploaded: handleDropUploaded,
+    acceptedFileTypes,
+    extraAcceptMimeTypes: EMAIL_MIME_TYPES,
+    isUploading,
+  });
+
+  const handleOutlookMailListDrop = useCallback(
+    async (items: OutlookMailListDragItem[]) => {
+      return trackExpansion(async () => {
+        const collected: File[] = [];
+        const claimedIds: string[] = [];
+        for (const item of items) {
+          try {
+            const { files, internetMessageId } =
+              await fetchOutlookMessageFilesCoalesced(item.itemId);
+            if (!internetMessageId || files.length === 0) {
+              collected.push(...files);
+              continue;
+            }
+            if (!tryClaimEmailAttachment(internetMessageId)) {
+              console.log(
+                "[AddinChat] skipping dropped Outlook email already claimed:",
+                item.subject || item.itemId,
+                internetMessageId,
+              );
+              continue;
+            }
+            claimedIds.push(internetMessageId);
+            collected.push(...files);
+          } catch (error) {
+            console.warn(
+              "Failed to fetch dropped Outlook email, skipping:",
+              item.subject || item.itemId,
+              error,
+            );
+          }
+        }
+        if (collected.length === 0) {
+          return;
+        }
+        const uploaded = await uploadFiles(collected);
+        if (uploaded === undefined) {
+          claimedIds.forEach((id) => dedup.remove(id));
+          return;
+        }
+        if (uploaded.length > 0) {
+          chatInputControlsRef.current?.addUploadedFiles(uploaded);
+        }
+      });
+    },
+    [
+      dedup,
+      fetchOutlookMessageFilesCoalesced,
+      trackExpansion,
+      tryClaimEmailAttachment,
+      uploadFiles,
+    ],
+  );
+
+  const { isDragActive: isOutlookMailDragActive } = useOutlookMailListDrag({
+    onDrop: handleOutlookMailListDrop,
+  });
+
+  const handleOfficeDragAndDrop = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) {
+        return;
+      }
+      return trackExpansion(async () => {
+        const claimedIds: string[] = [];
+        const expanded = await expandDroppedEmailFiles(files, {
+          acquireGraphToken,
+          tryAttachEmail: (messageId) => {
+            if (!tryClaimEmailAttachment(messageId)) {
+              return false;
+            }
+            claimedIds.push(messageId);
+            return true;
+          },
+        });
+        if (expanded.length === 0) {
+          return;
+        }
+        const uploaded = await uploadFiles(expanded);
+        if (uploaded === undefined) {
+          claimedIds.forEach((id) => dedup.remove(id));
+          return;
+        }
+        if (uploaded.length > 0) {
+          chatInputControlsRef.current?.addUploadedFiles(uploaded);
+        }
+      });
+    },
+    [
+      acquireGraphToken,
+      dedup,
+      trackExpansion,
+      tryClaimEmailAttachment,
+      uploadFiles,
+    ],
+  );
+
+  const { isDragActive: isOfficeDragActive } = useOfficeDragAndDrop({
+    onDrop: handleOfficeDragAndDrop,
+  });
+
+  const showDropOverlay =
+    (isDragActive && isDragAccept) ||
+    isOutlookMailDragActive ||
+    isOfficeDragActive;
+
+  const TopLeftAccessory = componentRegistry.ChatTopLeftAccessory;
 
   const canEditForCurrentChat = Array.isArray(chats)
     ? !!chats.find((chat) => chat.id === (currentChatId ?? ""))?.can_edit
@@ -87,19 +391,26 @@ export function AddinChat() {
   const [activeSelectedFacetIds, setActiveSelectedFacetIds] = useState<
     string[]
   >(currentChatLastSelectedFacets ?? []);
-  const [editState, setEditState] = useState<
-    | { mode: "compose" }
-    | { mode: "edit"; messageId: string; initialContent: ContentPart[] }
-  >({ mode: "compose" });
+  const [editState, setEditState] = useState<EditMessageState>({
+    mode: "compose",
+  });
+  const currentEmailMessageId = mailItem?.internetMessageId ?? null;
+  const currentEmailAlreadyAttached =
+    currentEmailMessageId !== null && dedup.ids.has(currentEmailMessageId);
   const shouldSuggestCurrentEmail =
     currentChatId === null &&
     messageOrder.length === 0 &&
-    editState.mode === "compose";
+    !isPendingResponse &&
+    editState.mode === "compose" &&
+    !currentEmailAlreadyAttached;
 
-  const { handleMessageAction } = useChatActions({
-    switchSession: navigateToChat,
-    sendMessage,
-  });
+  // Keep the preview's Message-ID fresh for the drop-dedup predicate. The
+  // ref is read by `tryClaimEmailAttachment` at drop time, so we write here
+  // on every render once `shouldSuggestCurrentEmail` is known.
+  previewEmailMessageIdRef.current =
+    shouldSuggestCurrentEmail && hasSelectedEmailSource && isEmailBodyIncluded
+      ? currentEmailMessageId
+      : null;
 
   const handleSendMessage = useCallback(
     (
@@ -113,12 +424,12 @@ export function AddinChat() {
         message,
         inputFileIds,
         modelId,
-        undefined,
+        assistantId,
         selectedFacetIds,
         actionFacet,
       ).then(() => refetchHistory());
     },
-    [refetchHistory, sendMessage],
+    [assistantId, refetchHistory, sendMessage],
   );
 
   const cancelEdit = useCallback(() => setEditState({ mode: "compose" }), []);
@@ -180,12 +491,78 @@ export function AddinChat() {
     canEditFeedback,
   } = useMessageFeedback({ onFeedbackSuccess: handleFeedbackSuccess });
 
+  const handleCopyAction = useCallback(
+    async (action: MessageAction): Promise<boolean> => {
+      if (action.type !== "copy") {
+        return false;
+      }
+      const messageToCopy = messages[action.messageId];
+      const textContent = extractTextFromContent(messageToCopy?.content);
+      if (!textContent) {
+        return false;
+      }
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(textContent);
+        } else {
+          throw new Error("clipboard API unavailable");
+        }
+        return true;
+      } catch {
+        try {
+          const textarea = document.createElement("textarea");
+          textarea.value = textContent;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textarea);
+          return true;
+        } catch (fallbackError) {
+          console.warn("Failed to copy message content:", fallbackError);
+          return false;
+        }
+      }
+    },
+    [messages],
+  );
+
+  const standardMessageActionHandler = useStandardMessageActions({
+    messages,
+    setEditState,
+    handleRegenerate,
+    handleFeedbackSubmit,
+    feedbackConfig,
+    openFeedbackDialog,
+    onUnhandledAction: handleCopyAction,
+  });
+
   const controlsContext: MessageControlsContext = useMemo(
     () => ({
       currentUserId: profile?.id,
       canEdit: canEditForCurrentChat,
     }),
     [canEditForCurrentChat, profile?.id],
+  );
+
+  const resolvedMessageControls = useMemo(
+    () =>
+      resolveComponentOverride(
+        componentRegistry.MessageControls,
+        DefaultMessageControls,
+      ) as MessageControlsComponent,
+    [],
+  );
+
+  const resolvedMessageRenderer = useMemo(
+    () =>
+      resolveComponentOverride(
+        componentRegistry.ChatMessageRenderer,
+        ChatMessage,
+      ),
+    [],
   );
 
   return (
@@ -211,7 +588,47 @@ export function AddinChat() {
         </div>
 
         <ChatErrorBoundary onReset={() => void refetchHistory()}>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-theme-bg-secondary">
+          <div
+            {...getConversationDropzoneRootProps()}
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-theme-bg-secondary"
+            role="region"
+            aria-label={t({
+              id: "officeAddin.chat.conversation.aria",
+              message: "Chat conversation",
+            })}
+            data-ui="addin-chat-conversation-dropzone"
+          >
+            <input
+              {...getConversationDropzoneInputProps()}
+              aria-label={t({
+                id: "officeAddin.chat.conversation.dropzone.ariaLabel",
+                message: "Drop files anywhere in the conversation to upload",
+              })}
+            />
+            {showDropOverlay && (
+              <div
+                className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden bg-[color:color-mix(in_srgb,var(--theme-shell-chat-body)_75%,transparent)]"
+                data-testid="addin-chat-drop-overlay"
+              >
+                <div className="relative flex flex-col items-center gap-2 px-6 py-5 text-center">
+                  <DocumentIcon className="size-10 text-[var(--theme-fg-primary)] drop-shadow-[0_8px_24px_rgba(0,0,0,0.18)]" />
+                  <p className="text-sm font-medium text-[var(--theme-fg-primary)]">
+                    {t({
+                      id: "officeAddin.chat.fileDrop.overlay.label",
+                      message: "Drop to upload",
+                    })}
+                  </p>
+                </div>
+              </div>
+            )}
+            {TopLeftAccessory ? (
+              <TopLeftAccessory
+                availableModels={availableModels}
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
+                isModelSelectionReady={isSelectionReady}
+              />
+            ) : null}
             <MessageList
               messages={messages}
               messageOrder={messageOrder}
@@ -224,79 +641,10 @@ export function AddinChat() {
               showTimestamps={true}
               showAvatars={false}
               userProfile={profile ?? undefined}
-              controls={DefaultMessageControls}
-              messageRenderer={ChatMessage}
+              controls={resolvedMessageControls}
+              messageRenderer={resolvedMessageRenderer}
               controlsContext={controlsContext}
-              onMessageAction={async (action: MessageAction) => {
-                if (action.type === "edit") {
-                  const messageToEdit = messages[action.messageId];
-                  if (messageToEdit?.role === "user") {
-                    setEditState({
-                      mode: "edit",
-                      messageId: action.messageId,
-                      initialContent: messageToEdit.content,
-                    });
-                  }
-                  return true;
-                }
-
-                if (action.type === "regenerate") {
-                  handleRegenerate(action.messageId);
-                  return true;
-                }
-
-                if (action.type === "copy") {
-                  const messageToCopy = messages[action.messageId];
-                  const textContent = extractTextFromContent(
-                    messageToCopy?.content,
-                  );
-                  if (!textContent) {
-                    return false;
-                  }
-
-                  try {
-                    if (navigator.clipboard?.writeText) {
-                      await navigator.clipboard.writeText(textContent);
-                    } else {
-                      throw new Error("clipboard API unavailable");
-                    }
-                    return true;
-                  } catch {
-                    try {
-                      const textarea = document.createElement("textarea");
-                      textarea.value = textContent;
-                      textarea.style.position = "fixed";
-                      textarea.style.opacity = "0";
-                      document.body.appendChild(textarea);
-                      textarea.select();
-                      document.execCommand("copy");
-                      document.body.removeChild(textarea);
-                      return true;
-                    } catch (fallbackError) {
-                      console.warn(
-                        "Failed to copy message content:",
-                        fallbackError,
-                      );
-                      return false;
-                    }
-                  }
-                }
-
-                if (action.type === "like" || action.type === "dislike") {
-                  const sentiment =
-                    action.type === "like" ? "positive" : "negative";
-                  const result = await handleFeedbackSubmit(
-                    action.messageId,
-                    sentiment,
-                  );
-                  if (result.success && feedbackConfig.commentsEnabled) {
-                    openFeedbackDialog(action.messageId, sentiment);
-                  }
-                  return result.success;
-                }
-
-                return handleMessageAction(action);
-              }}
+              onMessageAction={standardMessageActionHandler}
               useVirtualization={messageOrder.length > 30}
               virtualizationThreshold={30}
               onFilePreview={openPreviewModal}
@@ -311,6 +659,7 @@ export function AddinChat() {
               onFilePreview={openPreviewModal}
               handleFileAttachments={(_files: FileUploadItem[]) => {}}
               chatId={currentChatId}
+              assistantId={assistantId}
               isLoading={isMessagingLoading}
               mode={editState.mode}
               editMessageId={
@@ -319,12 +668,19 @@ export function AddinChat() {
               editInitialContent={
                 editState.mode === "edit" ? editState.initialContent : undefined
               }
-              initialModel={currentChatLastModel}
+              editInitialFiles={
+                editState.mode === "edit" ? editState.initialFiles : undefined
+              }
+              controlledAvailableModels={availableModels}
+              controlledSelectedModel={selectedModel}
+              onControlledSelectedModelChange={setSelectedModel}
+              controlledIsModelSelectionReady={isSelectionReady}
               initialSelectedFacetIds={currentChatLastSelectedFacets}
               onFacetSelectionChange={setActiveSelectedFacetIds}
               showSuggestedEmailSource={shouldSuggestCurrentEmail}
               uploadFiles={uploadFiles}
               uploadError={uploadError}
+              isExpandingDroppedEmails={isExpandingDroppedEmails}
             />
           </div>
         </ChatErrorBoundary>

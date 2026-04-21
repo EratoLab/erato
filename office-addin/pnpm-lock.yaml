@@ -41,6 +41,15 @@ importers:
       '@tanstack/react-query-persist-client':
         specifier: 5.75.7
         version: 5.75.7(@tanstack/react-query@5.75.7(react@19.0.0))(react@19.0.0)
+      cfb:
+        specifier: ^1.2.2
+        version: 1.2.2
+      dompurify:
+        specifier: ^3.3.3
+        version: 3.4.0
+      postal-mime:
+        specifier: 2.7.4
+        version: 2.7.4
       react:
         specifier: 19.0.0
         version: 19.0.0
@@ -308,7 +317,7 @@ packages:
     resolution: {integrity: sha512-N10dEJNSsUx41Z6pZsXU8FjPjpBEplgH24sfkmITrBED1/U2Esum9F3lfLrMjKHHjmi557zQn7kR9R+XWXu5Rg==}
 
   '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz':
-    resolution: {integrity: sha512-hnLkU6/2zAvelKPvkicJFnZEkMoiaHaDm44ABiGWnZf8qr7sKskIOYG7jLDwQKaf1zxvVxm1rnbswNBx5BdE/g==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
+    resolution: {integrity: sha512-44YjLHHjvxe7NLgfaOIMouS7/CIuBX3iA+sploZ1DIZVUDl5k/Fyi+Xtka03BQ64t9xus0SEhOaBKpPaCF2QxA==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
     version: 0.1.0
     peerDependencies:
       '@lingui/core': ^5.9.4
@@ -1203,6 +1212,10 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
+  adler-32@1.3.1:
+    resolution: {integrity: sha512-ynZ4w/nUUv5rrsR8UUGoe1VC9hZj6V5hU9Qw1HlMDJGEJw5S7TfTErWTjMys6M7vr0YWcPqs3qAr4ss0nDfP+A==}
+    engines: {node: '>=0.8'}
+
   adm-zip@0.5.16:
     resolution: {integrity: sha512-TGw5yVi4saajsSEgz25grObGHEUaDrniwvA2qwSC060KfqGPdglhvPMA2lPIoxs3PQIItj2iag35fONcQqgUaQ==}
     engines: {node: '>=12.0'}
@@ -1418,6 +1431,10 @@ packages:
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
 
+  cfb@1.2.2:
+    resolution: {integrity: sha512-KfdUZsSOw19/ObEWasvBP/Ac4reZvAGauZhs6S/gqNhXhI7cKwvlH7ulj+dOEYnca4bm4SGo8C1bTAQvnTjgQA==}
+    engines: {node: '>=0.8'}
+
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
     engines: {node: '>=18'}
@@ -1542,6 +1559,11 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  crc-32@1.2.2:
+    resolution: {integrity: sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==}
+    engines: {node: '>=0.8'}
+    hasBin: true
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -2839,6 +2861,9 @@ packages:
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
     engines: {node: '>= 0.4'}
+
+  postal-mime@2.7.4:
+    resolution: {integrity: sha512-0WdnFQYUrPGGTFu1uOqD2s7omwua8xaeYGdO6rb88oD5yJ/4pPHDA4sdWqfD8wQVfCny563n/HQS7zTFft+f/g==}
 
   postcss-import@15.1.0:
     resolution: {integrity: sha512-hpr+J05B2FVYUAXHeK1YyI267J/dDDhMU6B6civm8hSY1jYJnBXxzKDKDswzJmtLHryrjhnDjqqp/49t8FALew==}
@@ -4763,6 +4788,8 @@ snapshots:
 
   acorn@8.16.0: {}
 
+  adler-32@1.3.1: {}
+
   adm-zip@0.5.16: {}
 
   ajv-draft-04@1.0.0(ajv@8.18.0):
@@ -5000,6 +5027,11 @@ snapshots:
 
   ccount@2.0.1: {}
 
+  cfb@1.2.2:
+    dependencies:
+      adler-32: 1.3.1
+      crc-32: 1.2.2
+
   chai@6.2.2: {}
 
   chalk@2.4.2:
@@ -5120,6 +5152,8 @@ snapshots:
       path-type: 4.0.0
     optionalDependencies:
       typescript: 5.9.3
+
+  crc-32@1.2.2: {}
 
   cross-spawn@7.0.6:
     dependencies:
@@ -6795,6 +6829,8 @@ snapshots:
   pofile@1.1.4: {}
 
   possible-typed-array-names@1.1.0: {}
+
+  postal-mime@2.7.4: {}
 
   postcss-import@15.1.0(postcss@8.5.8):
     dependencies:

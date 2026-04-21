@@ -53,6 +53,21 @@ msgstr "Se requiere iniciar sesión"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx
+msgid "officeAddin.chat.conversation.aria"
+msgstr "Conversación del chat"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
+msgid "officeAddin.chat.conversation.dropzone.ariaLabel"
+msgstr "Suelta archivos en cualquier parte de la conversación para subirlos"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
+msgid "officeAddin.chat.fileDrop.overlay.label"
+msgstr "Suelta para subir"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
 msgid "officeAddin.chat.newChat"
 msgstr "Nuevo chat"
 
@@ -73,8 +88,18 @@ msgstr "Correo electrónico"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.loadingAttachments"
-msgstr "Cargando archivos adjuntos..."
+msgid "officeAddin.chatInput.emailLabel"
+msgstr "Correo electrónico"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.expandingDroppedEmails"
+msgstr "Procesando los correos electrónicos soltados…"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+#~ msgid "officeAddin.chatInput.loadingAttachments"
+#~ msgstr "Cargando archivos adjuntos..."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -115,6 +140,11 @@ msgstr "Reemplazar selección"
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.addFiles"
 msgstr "Agregar archivos"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.alreadyAdded"
+msgstr "Ya agregado"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx

@@ -1,7 +1,5 @@
 import {
   ChatInput,
-  FilePreviewButton,
-  FilePreviewLoading,
   GroupedFileAttachmentsPreview,
   fetchUploadFile,
   getIdToken,
@@ -17,8 +15,8 @@ import { t } from "@lingui/core/macro";
 import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
-import { useOutlookEmailSource } from "../hooks/useOutlookEmailSource";
 import { useOffice } from "../providers/OfficeProvider";
+import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { getComposeBodyType } from "../utils/outlookComposeWrite";
 
@@ -48,19 +46,37 @@ interface AddinChatInputProps {
   mode?: "compose" | "edit";
   editMessageId?: string;
   editInitialContent?: ContentPart[];
+  editInitialFiles?: FileUploadItem[];
   initialModel?: ChatModel | null;
   initialSelectedFacetIds?: string[];
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
   showSuggestedEmailSource?: boolean;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
+  /**
+   * `true` while one or more dropped emails are being expanded or
+   * deduplicated. Gates the send button and renders a non-blocking inline
+   * indicator so the user knows attachments are still materializing.
+   */
+  isExpandingDroppedEmails?: boolean;
+  controlledAvailableModels?: ChatModel[];
+  controlledSelectedModel?: ChatModel | null;
+  onControlledSelectedModelChange?: (model: ChatModel) => void;
+  controlledIsModelSelectionReady?: boolean;
 }
 
 export const AddinChatInput = forwardRef<
   ChatInputControlsHandle,
   AddinChatInputProps
 >(function AddinChatInput(
-  { chatId, className, showSuggestedEmailSource = false, ...chatInputProps },
+  {
+    chatId,
+    className,
+    showSuggestedEmailSource = false,
+    editInitialFiles,
+    isExpandingDroppedEmails = false,
+    ...chatInputProps
+  },
   ref,
 ) {
   const { host } = useOffice();
@@ -106,6 +122,10 @@ export const AddinChatInput = forwardRef<
                 size: emailBodyFile.size,
               },
               isLoading: false,
+              labelOverride: t({
+                id: "officeAddin.chatInput.emailLabel",
+                message: "Email",
+              }),
             },
           ]
         : []),
@@ -263,52 +283,50 @@ export const AddinChatInput = forwardRef<
         showSuggestedEmailSource &&
         (hasSelectedEmailSource || isLoadingAttachments) && (
           <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
-            {emailSourceItems.length === 1 ? (
-              emailSourceItems[0].isLoading ? (
-                <FilePreviewLoading
-                  className="w-full"
-                  label={t({
-                    id: "officeAddin.chatInput.loadingAttachments",
-                    message: "Loading attachments...",
-                  })}
-                />
-              ) : (
-                <FilePreviewButton
-                  file={emailSourceItems[0].file}
-                  onRemove={() =>
-                    handleRemoveEmailSourceFile(emailSourceItems[0].id)
-                  }
-                  disabled={isUploadingEmail}
-                  className="w-full"
-                  showFileType={true}
-                  showSize={true}
-                  filenameClassName="max-w-full"
-                />
-              )
-            ) : (
-              <GroupedFileAttachmentsPreview
-                groups={[
-                  {
-                    id: "current-email",
-                    label:
-                      emailSubject ||
-                      t({
-                        id: "officeAddin.chatInput.emailFallback",
-                        message: "Email",
-                      }),
-                    metaLabel: "",
-                    items: emailSourceItems,
-                  },
-                ]}
-                onRemoveFile={handleRemoveEmailSourceFile}
-                disabled={isUploadingEmail}
-                showFileTypes={true}
-                showFileSizes={true}
-                defaultVisibleItems={3}
-              />
-            )}
+            <GroupedFileAttachmentsPreview
+              groups={[
+                {
+                  id: "current-email",
+                  label:
+                    emailSubject ||
+                    t({
+                      id: "officeAddin.chatInput.emailFallback",
+                      message: "Email",
+                    }),
+                  metaLabel: "",
+                  items: emailSourceItems,
+                },
+              ]}
+              onRemoveFile={handleRemoveEmailSourceFile}
+              disabled={isUploadingEmail}
+              showFileTypes={true}
+              showFileSizes={true}
+              defaultVisibleItems={3}
+            />
           </div>
         )}
+
+      {isExpandingDroppedEmails && (
+        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+          <div
+            className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary"
+            role="status"
+            aria-live="polite"
+            data-testid="addin-chat-email-expansion-indicator"
+          >
+            <span
+              aria-hidden="true"
+              className="inline-block size-3 animate-spin rounded-full border-2 border-theme-border border-t-theme-fg-primary"
+            />
+            <span className="min-w-0 truncate">
+              {t({
+                id: "officeAddin.chatInput.expandingDroppedEmails",
+                message: "Processing dropped emails…",
+              })}
+            </span>
+          </div>
+        </div>
+      )}
 
       {host === "Outlook" && hasActiveSelection && (
         <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
@@ -338,7 +356,7 @@ export const AddinChatInput = forwardRef<
         className="p-2 sm:p-4"
         showControls={true}
         showFileTypes={true}
-        initialFiles={[]}
+        initialFiles={editInitialFiles ?? []}
         chatId={chatId}
         {...chatInputProps}
         uploadFiles={chatInputProps.uploadFiles}
@@ -351,7 +369,11 @@ export const AddinChatInput = forwardRef<
             selectedFacetIds,
           );
         }}
-        disabled={isUploadingEmail || chatInputProps.disabled}
+        disabled={
+          isUploadingEmail ||
+          isExpandingDroppedEmails ||
+          chatInputProps.disabled
+        }
       />
     </div>
   );

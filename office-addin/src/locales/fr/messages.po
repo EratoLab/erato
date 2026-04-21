@@ -53,6 +53,21 @@ msgstr "Connexion requise"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChat.tsx
+msgid "officeAddin.chat.conversation.aria"
+msgstr "Conversation du chat"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
+msgid "officeAddin.chat.conversation.dropzone.ariaLabel"
+msgstr "Déposez des fichiers n’importe où dans la conversation pour les téléverser"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
+msgid "officeAddin.chat.fileDrop.overlay.label"
+msgstr "Déposez pour téléverser"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
 msgid "officeAddin.chat.newChat"
 msgstr "Nouveau chat"
 
@@ -73,8 +88,18 @@ msgstr "E-mail"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.loadingAttachments"
-msgstr "Chargement des pièces jointes..."
+msgid "officeAddin.chatInput.emailLabel"
+msgstr "E-mail"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.expandingDroppedEmails"
+msgstr "Traitement des e-mails déposés…"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+#~ msgid "officeAddin.chatInput.loadingAttachments"
+#~ msgstr "Chargement des pièces jointes..."
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
@@ -115,6 +140,11 @@ msgstr "Remplacer la sélection"
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.addFiles"
 msgstr "Ajouter des fichiers"
+
+#. js-lingui-explicit-id
+#: src/components/AddinFileSourceSelector.tsx
+msgid "officeAddin.fileSource.alreadyAdded"
+msgstr "Déjà ajouté"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
