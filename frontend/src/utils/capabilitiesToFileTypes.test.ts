@@ -107,6 +107,12 @@ describe("capabilitiesToFileTypes", () => {
         mime_types: [],
         operations: ["analyze_image"],
       },
+      {
+        id: "email",
+        extensions: [],
+        mime_types: [],
+        operations: ["extract_text"],
+      },
     ];
 
     const result = capabilitiesToFileTypes(capabilities);
@@ -117,7 +123,8 @@ describe("capabilitiesToFileTypes", () => {
     expect(result).toContain("presentation");
     expect(result).toContain("text");
     expect(result).toContain("image");
-    expect(result).toHaveLength(6);
+    expect(result).toContain("email");
+    expect(result).toHaveLength(7);
   });
 
   it("should not have duplicates", () => {

@@ -11,6 +11,7 @@ const CAPABILITY_ID_TO_FILE_TYPE: Record<string, FileType | null> = {
   powerpoint: "presentation",
   text: "text",
   image: "image",
+  email: "email",
   other: null, // Exclude files with no operations
 };
 
