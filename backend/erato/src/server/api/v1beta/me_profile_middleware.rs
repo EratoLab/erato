@@ -1,3 +1,4 @@
+use crate::config::{I18nLanguageConfig, LanguageDetectionPriority};
 use crate::models::user::get_or_create_user;
 use crate::models::user_preference::get_user_preferences;
 use crate::normalize_profile::{IdTokenProfile, normalize_profile};
@@ -37,9 +38,9 @@ pub struct UserProfile {
     /// Will be a BCP 47 language tag (e.g. "en" or "en-US").
     ///
     /// This is derived in the following order (highest priority first):
-    /// - ID token claims
-    /// - Browser Accept-Language header
-    /// - Default to "en"
+    /// - `i18n.language.language_detection_priority`
+    /// - Default language from `i18n.language.default_language`
+    /// - "en"
     pub preferred_language: String,
     /// List of groups the user belongs to.
     ///
@@ -78,13 +79,13 @@ pub struct UserProfile {
 
 impl UserProfile {
     pub fn from_id_token_profile(profile: IdTokenProfile, user_id: String) -> Self {
-        let preferred_language = profile.preferred_language;
+        let preferred_language = profile.preferred_language.unwrap_or_default();
         Self {
             id: user_id,
             email: profile.email,
             name: profile.name,
             picture: profile.picture,
-            preferred_language: preferred_language.unwrap_or("en".to_string()),
+            preferred_language,
             groups: profile.groups,
             organization_user_id: profile.organization_user_id,
             organization_group_ids: profile.organization_group_ids,
@@ -96,8 +97,41 @@ impl UserProfile {
     }
 
     pub fn determine_final_language(&mut self, accept_language_header: Option<&str>) {
-        let resolved_language = normalize_supported_language(Some(&self.preferred_language))
-            .or_else(|| normalize_supported_language(accept_language_header))
+        let fallback_preferred_language = self.preferred_language.clone();
+        self.determine_final_language_with_config(
+            accept_language_header,
+            &I18nLanguageConfig::default(),
+            None,
+            Some(fallback_preferred_language.as_str()),
+        );
+    }
+
+    pub fn determine_final_language_with_config(
+        &mut self,
+        accept_language_header: Option<&str>,
+        language_config: &I18nLanguageConfig,
+        id_token_xms_pl: Option<&str>,
+        id_token_xms_tpl: Option<&str>,
+    ) {
+        let resolved_language = language_config
+            .language_detection_priority
+            .iter()
+            .find_map(|source| match source {
+                LanguageDetectionPriority::IdTokenAny => {
+                    normalize_supported_language(id_token_xms_pl)
+                        .or_else(|| normalize_supported_language(id_token_xms_tpl))
+                }
+                LanguageDetectionPriority::IdTokenXmsPl => {
+                    normalize_supported_language(id_token_xms_pl)
+                }
+                LanguageDetectionPriority::IdTokenXmsTpl => {
+                    normalize_supported_language(id_token_xms_tpl)
+                }
+                LanguageDetectionPriority::BrowserAcceptLanguage => {
+                    normalize_supported_language(accept_language_header)
+                }
+            })
+            .or_else(|| normalize_supported_language(Some(&language_config.default_language)))
             .unwrap_or("en");
         self.preferred_language = resolved_language.to_string();
     }
@@ -194,8 +228,15 @@ pub async fn user_profile_from_token(
     .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let user_id = user.id.to_string();
+    let id_token_xms_pl = normalized_profile.id_token_xms_pl.clone();
+    let id_token_xms_tpl = normalized_profile.id_token_xms_tpl.clone();
     let mut user_profile = UserProfile::from_id_token_profile(normalized_profile, user_id);
-    user_profile.determine_final_language(accept_language_header);
+    user_profile.determine_final_language_with_config(
+        accept_language_header,
+        &app_state.config.i18n.language,
+        id_token_xms_pl.as_deref(),
+        id_token_xms_tpl.as_deref(),
+    );
     let prefs = get_user_preferences(&app_state.db, &user.id)
         .await
         .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -284,7 +325,10 @@ fn parse_language_candidates(raw_language: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::UserProfile;
     use super::{normalize_supported_language, parse_language_candidates};
+    use crate::config::{I18nLanguageConfig, LanguageDetectionPriority};
+    use crate::normalize_profile::IdTokenProfile;
 
     #[test]
     fn parses_accept_language_candidates_in_priority_order() {
@@ -310,5 +354,107 @@ mod tests {
     #[test]
     fn returns_none_for_unsupported_language() {
         assert_eq!(normalize_supported_language(Some("it-IT,it;q=0.9")), None);
+    }
+
+    #[test]
+    fn resolves_language_from_configured_id_token_priority() {
+        let mut user_profile = UserProfile::from_id_token_profile(
+            IdTokenProfile {
+                iss: "iss".to_string(),
+                sub: "sub".to_string(),
+                email: None,
+                name: None,
+                picture: None,
+                preferred_language: Some("de".to_string()),
+                id_token_xms_pl: Some("de".to_string()),
+                id_token_xms_tpl: Some("fr".to_string()),
+                groups: Vec::new(),
+                organization_user_id: None,
+                organization_group_ids: Vec::new(),
+            },
+            "user-id".to_string(),
+        );
+
+        let language_config = I18nLanguageConfig {
+            language_detection_priority: vec![LanguageDetectionPriority::IdTokenXmsTpl],
+            default_language: "en".to_string(),
+        };
+
+        user_profile.determine_final_language_with_config(
+            None,
+            &language_config,
+            Some("de"),
+            Some("fr"),
+        );
+        assert_eq!(user_profile.preferred_language, "fr");
+    }
+
+    #[test]
+    fn resolves_language_from_id_token_any_then_accept_header_then_default() {
+        let mut user_profile = UserProfile::from_id_token_profile(
+            IdTokenProfile {
+                iss: "iss".to_string(),
+                sub: "sub".to_string(),
+                email: None,
+                name: None,
+                picture: None,
+                preferred_language: None,
+                id_token_xms_pl: Some("zz".to_string()),
+                id_token_xms_tpl: Some("fr".to_string()),
+                groups: Vec::new(),
+                organization_user_id: None,
+                organization_group_ids: Vec::new(),
+            },
+            "user-id".to_string(),
+        );
+
+        let language_config = I18nLanguageConfig {
+            language_detection_priority: vec![
+                LanguageDetectionPriority::IdTokenAny,
+                LanguageDetectionPriority::BrowserAcceptLanguage,
+            ],
+            default_language: "en".to_string(),
+        };
+
+        user_profile.determine_final_language_with_config(
+            Some("de-DE"),
+            &language_config,
+            Some("zz"),
+            Some("fr"),
+        );
+        assert_eq!(user_profile.preferred_language, "fr");
+    }
+
+    #[test]
+    fn resolves_configured_default_language_when_no_sources_match() {
+        let mut user_profile = UserProfile::from_id_token_profile(
+            IdTokenProfile {
+                iss: "iss".to_string(),
+                sub: "sub".to_string(),
+                email: None,
+                name: None,
+                picture: None,
+                preferred_language: None,
+                id_token_xms_pl: None,
+                id_token_xms_tpl: None,
+                groups: Vec::new(),
+                organization_user_id: None,
+                organization_group_ids: Vec::new(),
+            },
+            "user-id".to_string(),
+        );
+
+        let language_config = I18nLanguageConfig {
+            language_detection_priority: vec![LanguageDetectionPriority::BrowserAcceptLanguage],
+            default_language: "es".to_string(),
+        };
+
+        user_profile.determine_final_language_with_config(
+            Some("it-IT"),
+            &language_config,
+            None,
+            None,
+        );
+        assert_eq!(user_profile.preferred_language, "es");
     }
 }

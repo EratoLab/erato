@@ -5740,7 +5740,7 @@
           },
           "preferred_language": {
             "type": "string",
-            "description": "The user's preferred language.\n\nThe final determined language is intersected with our supported languages, to determine the final language.\n\nWill be a BCP 47 language tag (e.g. \"en\" or \"en-US\").\n\nThis is derived in the following order (highest priority first):\n- ID token claims\n- Browser Accept-Language header\n- Default to \"en\""
+            "description": "The user's preferred language.\n\nThe final determined language is intersected with our supported languages, to determine the final language.\n\nWill be a BCP 47 language tag (e.g. \"en\" or \"en-US\").\n\nThis is derived in the following order (highest priority first):\n- `i18n.language.language_detection_priority`\n- Default language from `i18n.language.default_language`\n- \"en\""
           }
         }
       },
