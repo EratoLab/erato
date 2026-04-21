@@ -75,8 +75,7 @@ export function useStandardMessageActions({
       }
 
       if (action.type === "like" || action.type === "dislike") {
-        const sentiment =
-          action.type === "like" ? "positive" : "negative";
+        const sentiment = action.type === "like" ? "positive" : "negative";
         const result = await handleFeedbackSubmit(action.messageId, sentiment);
         if (result.success && feedbackConfig.commentsEnabled) {
           openFeedbackDialog(action.messageId, sentiment);

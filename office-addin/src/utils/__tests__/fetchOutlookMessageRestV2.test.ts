@@ -27,7 +27,7 @@ function installFetchMock(response: {
     status: response.status ?? 200,
     statusText: response.statusText ?? "OK",
     json: () => Promise.resolve(response.jsonValue ?? {}),
-  } as Response);
+  });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }

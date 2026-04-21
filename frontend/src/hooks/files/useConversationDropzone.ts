@@ -62,7 +62,10 @@ export function useConversationDropzone({
       acceptedFileTypes && acceptedFileTypes.length > 0
         ? FileTypeUtil.getAcceptObject(acceptedFileTypes)
         : undefined;
-    if (!extraAcceptMimeTypes || Object.keys(extraAcceptMimeTypes).length === 0) {
+    if (
+      !extraAcceptMimeTypes ||
+      Object.keys(extraAcceptMimeTypes).length === 0
+    ) {
       return base;
     }
     return { ...(base ?? {}), ...extraAcceptMimeTypes };
