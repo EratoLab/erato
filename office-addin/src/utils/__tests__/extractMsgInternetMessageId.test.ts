@@ -1,33 +1,10 @@
-import * as CFB from "cfb";
 import { describe, expect, it } from "vitest";
 
+import { buildCfbWith, utf16le } from "../../test/fixtures/msg";
 import {
   extractMsgInternetMessageId,
   extractMsgInternetMessageIdFromBytes,
 } from "../extractMsgInternetMessageId";
-
-function buildCfbWith(
-  entries: { name: string; content: Uint8Array }[],
-): Uint8Array {
-  const container = CFB.utils.cfb_new();
-  for (const entry of entries) {
-    CFB.utils.cfb_add(container, entry.name, entry.content);
-  }
-  const written = CFB.write(container, {
-    type: "array",
-  }) as unknown as ArrayLike<number>;
-  return new Uint8Array(written);
-}
-
-function utf16le(value: string): Uint8Array {
-  const bytes = new Uint8Array(value.length * 2);
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    bytes[index * 2] = code & 0xff;
-    bytes[index * 2 + 1] = (code >> 8) & 0xff;
-  }
-  return bytes;
-}
 
 describe("extractMsgInternetMessageIdFromBytes", () => {
   it("returns the Message-ID string when the stream is present", () => {
