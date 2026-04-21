@@ -38,17 +38,17 @@ describe("expandDroppedEmailFiles", () => {
   it("expands .eml files and preserves order of mixed input", async () => {
     const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
     const pdf = new File(["pdfbytes"], "doc.pdf", { type: "application/pdf" });
-    const body = new File(["<html></html>"], "msg.html", { type: "text/html" });
+    const raw = new File(["email"], "msg.eml", { type: "message/rfc822" });
     const attach = new File(["a"], "a.txt", { type: "text/plain" });
 
     mockedParse.mockResolvedValueOnce({
-      files: [body, attach],
+      files: [raw, attach],
       messageId: "<m1@x>",
     });
 
     const result = await expandDroppedEmailFiles([eml, pdf]);
     expect(mockedParse).toHaveBeenCalledTimes(1);
-    expect(result.map((f) => f.name)).toEqual(["msg.html", "a.txt", "doc.pdf"]);
+    expect(result.map((f) => f.name)).toEqual(["msg.eml", "a.txt", "doc.pdf"]);
   });
 
   it("passes non-eml files through unchanged", async () => {
@@ -71,9 +71,9 @@ describe("expandDroppedEmailFiles", () => {
   it("drops a parsed .eml when tryAttachEmail returns false", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
-    const body = new File(["<html>"], "msg.html", { type: "text/html" });
+    const raw = new File(["email"], "msg.eml", { type: "message/rfc822" });
     mockedParse.mockResolvedValueOnce({
-      files: [body],
+      files: [raw],
       messageId: "<preview@host>",
     });
 
@@ -90,9 +90,9 @@ describe("expandDroppedEmailFiles", () => {
 
   it("keeps a parsed .eml when tryAttachEmail returns true", async () => {
     const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
-    const body = new File(["<html>"], "msg.html", { type: "text/html" });
+    const raw = new File(["email"], "msg.eml", { type: "message/rfc822" });
     mockedParse.mockResolvedValueOnce({
-      files: [body],
+      files: [raw],
       messageId: "<other@host>",
     });
 
@@ -101,20 +101,20 @@ describe("expandDroppedEmailFiles", () => {
     const result = await expandDroppedEmailFiles([eml], { tryAttachEmail });
 
     expect(tryAttachEmail).toHaveBeenCalledWith("<other@host>");
-    expect(result).toEqual([body]);
+    expect(result).toEqual([raw]);
   });
 
   it("does not consult tryAttachEmail when the parsed email has no Message-ID", async () => {
     const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
-    const body = new File(["<html>"], "msg.html", { type: "text/html" });
-    mockedParse.mockResolvedValueOnce({ files: [body], messageId: null });
+    const raw = new File(["email"], "msg.eml", { type: "message/rfc822" });
+    mockedParse.mockResolvedValueOnce({ files: [raw], messageId: null });
 
     const tryAttachEmail = vi.fn(() => false);
 
     const result = await expandDroppedEmailFiles([eml], { tryAttachEmail });
 
     expect(tryAttachEmail).not.toHaveBeenCalled();
-    expect(result).toEqual([body]);
+    expect(result).toEqual([raw]);
   });
 
   it("does not consult tryAttachEmail when parsing produced no files", async () => {

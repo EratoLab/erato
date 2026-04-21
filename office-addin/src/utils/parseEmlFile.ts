@@ -1,15 +1,11 @@
 import PostalMime from "postal-mime";
 
-import { buildEmailBodyFile } from "./buildEmailBodyHtml";
-
-import type { Address, Mailbox } from "postal-mime";
-
 /**
- * Expands `.eml` files (MIME `message/rfc822`) into an HTML body file and
- * separate attachment files, mirroring the shape produced by
- * `fetchOutlookMessage.ts` for the OWA `maillistrow` drag path. The backend
- * rejects raw `.eml` uploads because `message/rfc822` is not a declared file
- * capability, so we parse them client-side before forwarding to upload.
+ * Expands a dropped `.eml` file into the raw RFC822 message (uploaded as
+ * `message/rfc822` so the backend can extract headers and body server-side)
+ * plus one `File` per non-inline, non-related attachment. Attachments are
+ * extracted client-side because the backend's `.eml` text extraction lists
+ * attachment filenames only, not their contents.
  *
  * The RFC 5322 `Message-ID` header is returned alongside the files so the
  * caller can correlate this drop against other representations of the same
@@ -29,24 +25,18 @@ export function isEmlFile(file: File): boolean {
 }
 
 export async function parseEmlFileToFiles(file: File): Promise<EmlParseResult> {
+  let buffer: ArrayBuffer;
   let parsed;
   try {
-    const buffer = await file.arrayBuffer();
+    buffer = await file.arrayBuffer();
     parsed = await PostalMime.parse(buffer);
   } catch (error) {
     console.warn("[parseEmlFile] failed to parse .eml file, skipping:", error);
     return { files: [], messageId: null };
   }
 
-  const date = parsed.date ? new Date(parsed.date) : null;
-  const bodyFile = buildEmailBodyFile({
-    subject: parsed.subject ?? "(no subject)",
-    from: toMailbox(parsed.from),
-    to: flattenAddresses(parsed.to),
-    cc: flattenAddresses(parsed.cc),
-    date: date && !isNaN(date.getTime()) ? date : null,
-    bodyHtml: parsed.html ?? null,
-    bodyText: parsed.text ?? null,
+  const rawEmlFile = new File([buffer], file.name, {
+    type: "message/rfc822",
   });
 
   const attachmentFiles: File[] = [];
@@ -64,44 +54,9 @@ export async function parseEmlFileToFiles(file: File): Promise<EmlParseResult> {
   }
 
   return {
-    files: [bodyFile, ...attachmentFiles],
+    files: [rawEmlFile, ...attachmentFiles],
     messageId: parsed.messageId ?? null,
   };
-}
-
-function toMailbox(
-  address: Address | undefined,
-): { name?: string; address?: string } | null {
-  if (!address) {
-    return null;
-  }
-  if ("address" in address && address.address) {
-    return { name: address.name, address: address.address };
-  }
-  return null;
-}
-
-function flattenAddresses(
-  addresses: Address[] | undefined,
-): { name?: string; address?: string }[] | null {
-  if (!addresses || addresses.length === 0) {
-    return null;
-  }
-  const result: Mailbox[] = [];
-  for (const entry of addresses) {
-    if ("address" in entry && entry.address) {
-      result.push({ name: entry.name, address: entry.address });
-      continue;
-    }
-    if ("group" in entry && Array.isArray(entry.group)) {
-      for (const member of entry.group) {
-        if (member.address) {
-          result.push({ name: member.name, address: member.address });
-        }
-      }
-    }
-  }
-  return result.length > 0 ? result : null;
 }
 
 function toBlobPart(
