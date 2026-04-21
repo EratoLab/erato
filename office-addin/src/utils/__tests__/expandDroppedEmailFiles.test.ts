@@ -68,7 +68,7 @@ describe("expandDroppedEmailFiles", () => {
     expect(result).toEqual([]);
   });
 
-  it("skips a dropped .eml whose Message-ID matches the shouldSkipEmail predicate", async () => {
+  it("drops a parsed .eml when tryAttachEmail returns false", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
     const body = new File(["<html>"], "msg.html", { type: "text/html" });
@@ -77,18 +77,18 @@ describe("expandDroppedEmailFiles", () => {
       messageId: "<preview@host>",
     });
 
-    const shouldSkipEmail = vi.fn(
-      (messageId: string) => messageId === "<preview@host>",
+    const tryAttachEmail = vi.fn(
+      (messageId: string) => messageId !== "<preview@host>",
     );
 
-    const result = await expandDroppedEmailFiles([eml], { shouldSkipEmail });
+    const result = await expandDroppedEmailFiles([eml], { tryAttachEmail });
 
-    expect(shouldSkipEmail).toHaveBeenCalledWith("<preview@host>");
+    expect(tryAttachEmail).toHaveBeenCalledWith("<preview@host>");
     expect(result).toEqual([]);
     expect(logSpy).toHaveBeenCalled();
   });
 
-  it("keeps a dropped .eml whose Message-ID does not match the skip predicate", async () => {
+  it("keeps a parsed .eml when tryAttachEmail returns true", async () => {
     const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
     const body = new File(["<html>"], "msg.html", { type: "text/html" });
     mockedParse.mockResolvedValueOnce({
@@ -96,75 +96,44 @@ describe("expandDroppedEmailFiles", () => {
       messageId: "<other@host>",
     });
 
-    const shouldSkipEmail = vi.fn(
-      (messageId: string) => messageId === "<preview@host>",
-    );
+    const tryAttachEmail = vi.fn(() => true);
 
-    const result = await expandDroppedEmailFiles([eml], { shouldSkipEmail });
+    const result = await expandDroppedEmailFiles([eml], { tryAttachEmail });
 
-    expect(shouldSkipEmail).toHaveBeenCalledWith("<other@host>");
+    expect(tryAttachEmail).toHaveBeenCalledWith("<other@host>");
     expect(result).toEqual([body]);
   });
 
-  it("does not consult shouldSkipEmail when the parsed email has no Message-ID", async () => {
+  it("does not consult tryAttachEmail when the parsed email has no Message-ID", async () => {
     const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
     const body = new File(["<html>"], "msg.html", { type: "text/html" });
     mockedParse.mockResolvedValueOnce({ files: [body], messageId: null });
 
-    const shouldSkipEmail = vi.fn(() => true);
+    const tryAttachEmail = vi.fn(() => false);
 
-    const result = await expandDroppedEmailFiles([eml], { shouldSkipEmail });
+    const result = await expandDroppedEmailFiles([eml], { tryAttachEmail });
 
-    expect(shouldSkipEmail).not.toHaveBeenCalled();
+    expect(tryAttachEmail).not.toHaveBeenCalled();
     expect(result).toEqual([body]);
   });
 
-  it("invokes onAttachedEmail with the Message-ID of each successfully expanded .eml", async () => {
-    const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
-    const body = new File(["<html>"], "msg.html", { type: "text/html" });
-    mockedParse.mockResolvedValueOnce({
-      files: [body],
-      messageId: "<m1@x>",
-    });
-    const onAttachedEmail = vi.fn();
-
-    await expandDroppedEmailFiles([eml], { onAttachedEmail });
-
-    expect(onAttachedEmail).toHaveBeenCalledTimes(1);
-    expect(onAttachedEmail).toHaveBeenCalledWith("<m1@x>");
-  });
-
-  it("does not call onAttachedEmail when the email was skipped", async () => {
-    const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
-    mockedParse.mockResolvedValueOnce({
-      files: [new File(["<html>"], "msg.html", { type: "text/html" })],
-      messageId: "<preview@host>",
-    });
-    const onAttachedEmail = vi.fn();
-    const shouldSkipEmail = () => true;
-
-    await expandDroppedEmailFiles([eml], { shouldSkipEmail, onAttachedEmail });
-
-    expect(onAttachedEmail).not.toHaveBeenCalled();
-  });
-
-  it("does not call onAttachedEmail when parsing produced no files", async () => {
+  it("does not consult tryAttachEmail when parsing produced no files", async () => {
     const eml = new File(["email"], "msg.eml", { type: "message/rfc822" });
     mockedParse.mockResolvedValueOnce({ files: [], messageId: "<m@x>" });
-    const onAttachedEmail = vi.fn();
+    const tryAttachEmail = vi.fn();
 
-    await expandDroppedEmailFiles([eml], { onAttachedEmail });
+    await expandDroppedEmailFiles([eml], { tryAttachEmail });
 
-    expect(onAttachedEmail).not.toHaveBeenCalled();
+    expect(tryAttachEmail).not.toHaveBeenCalled();
   });
 
-  it("invokes onAttachedEmail for a successfully expanded .msg", async () => {
+  it("invokes tryAttachEmail for a successfully expanded .msg", async () => {
     const msg = new File([new Uint8Array([0])], "item.msg", {
       type: "application/vnd.ms-outlook",
     });
     const body = new File(["<html>"], "body.html", { type: "text/html" });
     const acquireGraphToken = vi.fn();
-    const onAttachedEmail = vi.fn();
+    const tryAttachEmail = vi.fn(() => true);
     mockedParseMsg.mockResolvedValueOnce({
       files: [body],
       messageId: "<msg@x>",
@@ -172,13 +141,13 @@ describe("expandDroppedEmailFiles", () => {
 
     await expandDroppedEmailFiles([msg], {
       acquireGraphToken,
-      onAttachedEmail,
+      tryAttachEmail,
     });
 
-    expect(onAttachedEmail).toHaveBeenCalledWith("<msg@x>");
+    expect(tryAttachEmail).toHaveBeenCalledWith("<msg@x>");
   });
 
-  it("skips a dropped .msg whose Message-ID matches the shouldSkipEmail predicate", async () => {
+  it("drops a .msg when tryAttachEmail returns false", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const msg = new File([new Uint8Array([0])], "item.msg", {
       type: "application/vnd.ms-outlook",
@@ -189,16 +158,16 @@ describe("expandDroppedEmailFiles", () => {
       messageId: "<preview@host>",
     });
     const acquireGraphToken = vi.fn();
-    const shouldSkipEmail = vi.fn(
-      (messageId: string) => messageId === "<preview@host>",
+    const tryAttachEmail = vi.fn(
+      (messageId: string) => messageId !== "<preview@host>",
     );
 
     const result = await expandDroppedEmailFiles([msg], {
       acquireGraphToken,
-      shouldSkipEmail,
+      tryAttachEmail,
     });
 
-    expect(shouldSkipEmail).toHaveBeenCalledWith("<preview@host>");
+    expect(tryAttachEmail).toHaveBeenCalledWith("<preview@host>");
     expect(result).toEqual([]);
     expect(logSpy).toHaveBeenCalled();
   });

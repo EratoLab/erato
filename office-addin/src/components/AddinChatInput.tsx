@@ -53,6 +53,12 @@ interface AddinChatInputProps {
   showSuggestedEmailSource?: boolean;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
+  /**
+   * `true` while one or more dropped emails are being expanded or
+   * deduplicated. Gates the send button and renders a non-blocking inline
+   * indicator so the user knows attachments are still materializing.
+   */
+  isExpandingDroppedEmails?: boolean;
   controlledAvailableModels?: ChatModel[];
   controlledSelectedModel?: ChatModel | null;
   onControlledSelectedModelChange?: (model: ChatModel) => void;
@@ -68,6 +74,7 @@ export const AddinChatInput = forwardRef<
     className,
     showSuggestedEmailSource = false,
     editInitialFiles,
+    isExpandingDroppedEmails = false,
     ...chatInputProps
   },
   ref,
@@ -299,6 +306,28 @@ export const AddinChatInput = forwardRef<
           </div>
         )}
 
+      {isExpandingDroppedEmails && (
+        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+          <div
+            className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary"
+            role="status"
+            aria-live="polite"
+            data-testid="addin-chat-email-expansion-indicator"
+          >
+            <span
+              aria-hidden="true"
+              className="inline-block size-3 animate-spin rounded-full border-2 border-theme-border border-t-theme-fg-primary"
+            />
+            <span className="min-w-0 truncate">
+              {t({
+                id: "officeAddin.chatInput.expandingDroppedEmails",
+                message: "Processing dropped emails…",
+              })}
+            </span>
+          </div>
+        </div>
+      )}
+
       {host === "Outlook" && hasActiveSelection && (
         <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
           <div className="flex items-center gap-2 rounded-lg border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
@@ -340,7 +369,11 @@ export const AddinChatInput = forwardRef<
             selectedFacetIds,
           );
         }}
-        disabled={isUploadingEmail || chatInputProps.disabled}
+        disabled={
+          isUploadingEmail ||
+          isExpandingDroppedEmails ||
+          chatInputProps.disabled
+        }
       />
     </div>
   );

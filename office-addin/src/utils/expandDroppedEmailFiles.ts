@@ -10,20 +10,16 @@ interface ExpandDroppedEmailFilesOptions {
    */
   acquireGraphToken?: AcquireGraphToken;
   /**
-   * Optional predicate consulted with the RFC 5322 `Message-ID` of each
-   * parsed email. When the predicate returns `true`, the entire email is
-   * dropped from the output (body + attachments). Used to avoid duplicating
-   * the currently-open Outlook email which is already included via the
-   * preview path.
+   * Atomic claim consulted with the RFC 5322 `Message-ID` of each
+   * successfully parsed email. Returning `true` claims the email and
+   * includes it in the output; returning `false` drops it (already
+   * attached). Implementations must be atomic — two concurrent calls with
+   * the same id must produce one `true` and one `false` (see
+   * `useEmailDedupSet#tryAdd`). The check-and-claim are unified into a
+   * single callback specifically to close the cross-await race that arose
+   * from a separate `shouldSkip` + `onAttached` pair.
    */
-  shouldSkipEmail?: (messageId: string) => boolean;
-  /**
-   * Called once per successfully expanded email (after the skip check).
-   * Receives the RFC 5322 `Message-ID`. The caller typically records this
-   * so the current-email preview can be suppressed for emails that are
-   * already represented in the attachment list.
-   */
-  onAttachedEmail?: (messageId: string) => void;
+  tryAttachEmail?: (messageId: string) => boolean;
 }
 
 /**
@@ -44,12 +40,14 @@ export async function expandDroppedEmailFiles(
   for (const file of files) {
     if (isEmlFile(file)) {
       const { files: parsed, messageId } = await parseEmlFileToFiles(file);
-      if (shouldSkip(messageId, options.shouldSkipEmail)) {
+      if (
+        messageId &&
+        parsed.length > 0 &&
+        options.tryAttachEmail &&
+        !options.tryAttachEmail(messageId)
+      ) {
         logSkip(file.name, messageId);
         continue;
-      }
-      if (messageId && parsed.length > 0) {
-        options.onAttachedEmail?.(messageId);
       }
       expanded.push(...parsed);
       continue;
@@ -89,24 +87,16 @@ async function parseMsgFileIfPossible(
     file,
     options.acquireGraphToken,
   );
-  if (shouldSkip(messageId, options.shouldSkipEmail)) {
+  if (
+    messageId &&
+    files.length > 0 &&
+    options.tryAttachEmail &&
+    !options.tryAttachEmail(messageId)
+  ) {
     logSkip(file.name, messageId);
     return [];
   }
-  if (messageId && files.length > 0) {
-    options.onAttachedEmail?.(messageId);
-  }
   return files;
-}
-
-function shouldSkip(
-  messageId: string | null,
-  predicate: ((messageId: string) => boolean) | undefined,
-): boolean {
-  if (!messageId || !predicate) {
-    return false;
-  }
-  return predicate(messageId);
 }
 
 function logSkip(fileName: string, messageId: string | null): void {

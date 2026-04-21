@@ -24,7 +24,7 @@ import {
   useStandardMessageActions,
   type ActionFacetRequest,
   type ChatInputControlsHandle,
-  type ContentPart,
+  type EditMessageState,
   type FileUploadItem,
   type MessageAction,
   type MessageControlsComponent,
@@ -35,6 +35,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
+import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
 import { useMsalNaa } from "../providers/MsalNaaProvider";
@@ -43,9 +44,13 @@ import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import { expandDroppedEmailFiles } from "../utils/expandDroppedEmailFiles";
 import { fetchOutlookMessageFiles } from "../utils/fetchOutlookMessage";
 
+import type { FetchOutlookMessageResult } from "../utils/fetchOutlookMessage";
 import type { OutlookMailListDragItem } from "../utils/outlookMailListDragParse";
 
 const GRAPH_MAIL_SCOPES = ["Mail.Read"];
+// Upper bound for a single Outlook item's Graph fetch. Beyond this we drop
+// the item from the drop batch so the send button isn't held hostage.
+const OUTLOOK_FETCH_TIMEOUT_MS = 10_000;
 
 // Accept real `.eml` / `.msg` files dropped by Outlook clients that expose
 // emails as native file drags (Outlook Mac, Classic Outlook on Windows). OWA
@@ -138,47 +143,114 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   const previewEmailMessageIdRef = useRef<string | null>(null);
 
   // Tracks the RFC 5322 Message-IDs of emails already attached via any drop
-  // path in this session. Used to (a) suppress the current-email preview
-  // when the open email is already represented in the attachments and
-  // (b) short-circuit subsequent drops of the same email.
-  const [attachedEmailMessageIds, setAttachedEmailMessageIds] = useState<
-    ReadonlySet<string>
-  >(() => new Set());
-  const noteAttachedEmail = useCallback((messageId: string) => {
-    setAttachedEmailMessageIds((previous) => {
-      if (previous.has(messageId)) {
-        return previous;
-      }
-      const next = new Set(previous);
-      next.add(messageId);
-      return next;
-    });
-  }, []);
+  // path in this session. The hook keeps a ref as the synchronous source of
+  // truth (safe across awaits in concurrent drop handlers) plus a mirrored
+  // state so render-time predicates — e.g. the current-email preview
+  // suppression below — still see updates.
+  const dedup = useEmailDedupSet();
 
-  const shouldSkipEmailDuplicateOfPreview = useCallback(
-    (messageId: string) => {
-      const previewMessageId = previewEmailMessageIdRef.current;
-      if (previewMessageId !== null && messageId === previewMessageId) {
-        return true;
+  // Atomic claim across the preview-dup check + the session dedup. Returns
+  // false when the email is already represented by the preview or was
+  // previously claimed by another drop; callers must treat a `false` result
+  // as "skip this email, do not upload". The combined claim closes a race
+  // where two concurrent drops both saw an empty state.
+  const tryClaimEmailAttachment = useCallback(
+    (messageId: string): boolean => {
+      if (previewEmailMessageIdRef.current === messageId) {
+        return false;
       }
-      return attachedEmailMessageIds.has(messageId);
+      return dedup.tryAdd(messageId);
     },
-    [attachedEmailMessageIds],
+    [dedup],
+  );
+
+  // Coalesce duplicate Outlook Graph fetches for the same item id. Two
+  // rapid drops of the same mail-list row now share a single Graph call
+  // instead of burning quota on both. A 10s timeout keeps a hung fetch
+  // from locking the send button indefinitely — the coalesced promise
+  // rejects and its entry is cleared so a later retry can start fresh.
+  const pendingOutlookFetchesRef = useRef<
+    Map<string, Promise<FetchOutlookMessageResult>>
+  >(new Map());
+  const fetchOutlookMessageFilesCoalesced = useCallback(
+    (itemId: string): Promise<FetchOutlookMessageResult> => {
+      const existing = pendingOutlookFetchesRef.current.get(itemId);
+      if (existing) {
+        return existing;
+      }
+      const fetchPromise = (async () => {
+        try {
+          return await Promise.race([
+            fetchOutlookMessageFiles(itemId, acquireGraphToken),
+            new Promise<FetchOutlookMessageResult>((_, reject) => {
+              setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `Outlook fetch timed out after ${OUTLOOK_FETCH_TIMEOUT_MS}ms`,
+                    ),
+                  ),
+                OUTLOOK_FETCH_TIMEOUT_MS,
+              );
+            }),
+          ]);
+        } finally {
+          pendingOutlookFetchesRef.current.delete(itemId);
+        }
+      })();
+      pendingOutlookFetchesRef.current.set(itemId, fetchPromise);
+      return fetchPromise;
+    },
+    [acquireGraphToken],
+  );
+
+  // Counter for in-flight drop batches. Drives the "processing dropped
+  // emails" indicator and disables send while the user is still seeing
+  // files appear. Incremented on drop entry and decremented in a finally
+  // so timeouts and failures always release the gate.
+  const [pendingExpansionCount, setPendingExpansionCount] = useState(0);
+  const isExpandingDroppedEmails = pendingExpansionCount > 0;
+  const trackExpansion = useCallback(
+    async <T,>(work: () => Promise<T>): Promise<T> => {
+      setPendingExpansionCount((n) => n + 1);
+      try {
+        return await work();
+      } finally {
+        setPendingExpansionCount((n) => n - 1);
+      }
+    },
+    [],
   );
 
   const uploadFilesWithEmailExpansion = useCallback(
     async (files: File[]) => {
-      const expanded = await expandDroppedEmailFiles(files, {
-        acquireGraphToken,
-        shouldSkipEmail: shouldSkipEmailDuplicateOfPreview,
-        onAttachedEmail: noteAttachedEmail,
+      return trackExpansion(async () => {
+        const claimedIds: string[] = [];
+        const expanded = await expandDroppedEmailFiles(files, {
+          acquireGraphToken,
+          tryAttachEmail: (messageId) => {
+            if (!tryClaimEmailAttachment(messageId)) {
+              return false;
+            }
+            claimedIds.push(messageId);
+            return true;
+          },
+        });
+        if (expanded.length === 0) {
+          return undefined;
+        }
+        const uploaded = await uploadFiles(expanded);
+        if (uploaded === undefined) {
+          claimedIds.forEach((id) => dedup.remove(id));
+        }
+        return uploaded;
       });
-      return uploadFiles(expanded);
     },
     [
       acquireGraphToken,
-      noteAttachedEmail,
-      shouldSkipEmailDuplicateOfPreview,
+      dedup,
+      trackExpansion,
+      tryClaimEmailAttachment,
       uploadFiles,
     ],
   );
@@ -198,48 +270,53 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
 
   const handleOutlookMailListDrop = useCallback(
     async (items: OutlookMailListDragItem[]) => {
-      const collected: File[] = [];
-      for (const item of items) {
-        try {
-          const { files, internetMessageId } = await fetchOutlookMessageFiles(
-            item.itemId,
-            acquireGraphToken,
-          );
-          if (
-            internetMessageId &&
-            shouldSkipEmailDuplicateOfPreview(internetMessageId)
-          ) {
-            console.log(
-              "[AddinChat] skipping dropped Outlook email already represented by the current-email preview:",
+      return trackExpansion(async () => {
+        const collected: File[] = [];
+        const claimedIds: string[] = [];
+        for (const item of items) {
+          try {
+            const { files, internetMessageId } =
+              await fetchOutlookMessageFilesCoalesced(item.itemId);
+            if (!internetMessageId || files.length === 0) {
+              collected.push(...files);
+              continue;
+            }
+            if (!tryClaimEmailAttachment(internetMessageId)) {
+              console.log(
+                "[AddinChat] skipping dropped Outlook email already claimed:",
+                item.subject || item.itemId,
+                internetMessageId,
+              );
+              continue;
+            }
+            claimedIds.push(internetMessageId);
+            collected.push(...files);
+          } catch (error) {
+            console.warn(
+              "Failed to fetch dropped Outlook email, skipping:",
               item.subject || item.itemId,
-              internetMessageId,
+              error,
             );
-            continue;
           }
-          if (internetMessageId && files.length > 0) {
-            noteAttachedEmail(internetMessageId);
-          }
-          collected.push(...files);
-        } catch (error) {
-          console.warn(
-            "Failed to fetch dropped Outlook email, skipping:",
-            item.subject || item.itemId,
-            error,
-          );
         }
-      }
-      if (collected.length === 0) {
-        return;
-      }
-      const uploaded = await uploadFiles(collected);
-      if (uploaded && uploaded.length > 0) {
-        chatInputControlsRef.current?.addUploadedFiles(uploaded);
-      }
+        if (collected.length === 0) {
+          return;
+        }
+        const uploaded = await uploadFiles(collected);
+        if (uploaded === undefined) {
+          claimedIds.forEach((id) => dedup.remove(id));
+          return;
+        }
+        if (uploaded.length > 0) {
+          chatInputControlsRef.current?.addUploadedFiles(uploaded);
+        }
+      });
     },
     [
-      acquireGraphToken,
-      noteAttachedEmail,
-      shouldSkipEmailDuplicateOfPreview,
+      dedup,
+      fetchOutlookMessageFilesCoalesced,
+      trackExpansion,
+      tryClaimEmailAttachment,
       uploadFiles,
     ],
   );
@@ -253,23 +330,36 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       if (files.length === 0) {
         return;
       }
-      const expanded = await expandDroppedEmailFiles(files, {
-        acquireGraphToken,
-        shouldSkipEmail: shouldSkipEmailDuplicateOfPreview,
-        onAttachedEmail: noteAttachedEmail,
+      return trackExpansion(async () => {
+        const claimedIds: string[] = [];
+        const expanded = await expandDroppedEmailFiles(files, {
+          acquireGraphToken,
+          tryAttachEmail: (messageId) => {
+            if (!tryClaimEmailAttachment(messageId)) {
+              return false;
+            }
+            claimedIds.push(messageId);
+            return true;
+          },
+        });
+        if (expanded.length === 0) {
+          return;
+        }
+        const uploaded = await uploadFiles(expanded);
+        if (uploaded === undefined) {
+          claimedIds.forEach((id) => dedup.remove(id));
+          return;
+        }
+        if (uploaded.length > 0) {
+          chatInputControlsRef.current?.addUploadedFiles(uploaded);
+        }
       });
-      if (expanded.length === 0) {
-        return;
-      }
-      const uploaded = await uploadFiles(expanded);
-      if (uploaded && uploaded.length > 0) {
-        chatInputControlsRef.current?.addUploadedFiles(uploaded);
-      }
     },
     [
       acquireGraphToken,
-      noteAttachedEmail,
-      shouldSkipEmailDuplicateOfPreview,
+      dedup,
+      trackExpansion,
+      tryClaimEmailAttachment,
       uploadFiles,
     ],
   );
@@ -301,19 +391,12 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   const [activeSelectedFacetIds, setActiveSelectedFacetIds] = useState<
     string[]
   >(currentChatLastSelectedFacets ?? []);
-  const [editState, setEditState] = useState<
-    | { mode: "compose" }
-    | {
-        mode: "edit";
-        messageId: string;
-        initialContent: ContentPart[];
-        initialFiles: FileUploadItem[];
-      }
-  >({ mode: "compose" });
+  const [editState, setEditState] = useState<EditMessageState>({
+    mode: "compose",
+  });
   const currentEmailMessageId = mailItem?.internetMessageId ?? null;
   const currentEmailAlreadyAttached =
-    currentEmailMessageId !== null &&
-    attachedEmailMessageIds.has(currentEmailMessageId);
+    currentEmailMessageId !== null && dedup.ids.has(currentEmailMessageId);
   const shouldSuggestCurrentEmail =
     currentChatId === null &&
     messageOrder.length === 0 &&
@@ -322,8 +405,8 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     !currentEmailAlreadyAttached;
 
   // Keep the preview's Message-ID fresh for the drop-dedup predicate. The
-  // ref is read by `shouldSkipEmailDuplicateOfPreview` at drop time, so we
-  // write here on every render once `shouldSuggestCurrentEmail` is known.
+  // ref is read by `tryClaimEmailAttachment` at drop time, so we write here
+  // on every render once `shouldSuggestCurrentEmail` is known.
   previewEmailMessageIdRef.current =
     shouldSuggestCurrentEmail && hasSelectedEmailSource && isEmailBodyIncluded
       ? currentEmailMessageId
@@ -597,6 +680,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               showSuggestedEmailSource={shouldSuggestCurrentEmail}
               uploadFiles={uploadFiles}
               uploadError={uploadError}
+              isExpandingDroppedEmails={isExpandingDroppedEmails}
             />
           </div>
         </ChatErrorBoundary>
