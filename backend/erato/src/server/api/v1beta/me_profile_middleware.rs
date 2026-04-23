@@ -160,6 +160,8 @@ pub struct MeProfile {
     pub profile: UserProfile,
     /// The raw OIDC token received via the Authorization header.
     pub oidc_token: String,
+    /// The raw ID token claims for consumer-specific rendering.
+    pub id_token_claims: Value,
     /// The raw access token for external APIs like MS Graph.
     /// This is extracted from the X-Forwarded-Access-Token header,
     /// which is typically set by oauth2-proxy when configured to forward
@@ -198,7 +200,7 @@ pub async fn user_profile_from_token(
     app_state: &AppState,
     token: &str,
     accept_language_header: Option<&str>,
-) -> Result<UserProfile, StatusCode> {
+) -> Result<(UserProfile, Value), StatusCode> {
     // Placeholder secret, as we don't validate signature anyway
     let secret = b"placeholder";
 
@@ -214,8 +216,9 @@ pub async fn user_profile_from_token(
         Ok(data) => data,
         Err(_) => return Err(StatusCode::UNAUTHORIZED),
     };
+    let id_token_claims = token_data.claims;
 
-    let normalized_profile = normalize_profile(token_data.claims);
+    let normalized_profile = normalize_profile(id_token_claims.clone());
     let normalized_profile = normalized_profile.map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let user = get_or_create_user(
@@ -242,7 +245,7 @@ pub async fn user_profile_from_token(
         .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
     user_profile.apply_user_preferences(prefs);
 
-    Ok(user_profile)
+    Ok((user_profile, id_token_claims))
 }
 
 /// Middleware that extracts and validates user profile from JWT token
@@ -276,7 +279,7 @@ pub(crate) async fn user_profile_middleware(
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
 
-    if let Ok(current_user) = user_profile_from_token(
+    if let Ok((current_user, id_token_claims)) = user_profile_from_token(
         &app_state,
         auth_header.token(),
         accept_language_header.as_deref(),
@@ -286,6 +289,7 @@ pub(crate) async fn user_profile_middleware(
         req.extensions_mut().insert(MeProfile {
             profile: current_user,
             oidc_token: auth_header.token().to_string(),
+            id_token_claims,
             access_token: forwarded_access_token,
         });
         Ok(next.run(req).await)

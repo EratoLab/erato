@@ -7,8 +7,12 @@ use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
-use crate::services::template_rendering::consumers::system_prompt::SystemPromptRenderer;
-use crate::services::template_rendering::contexts::system_prompt::SystemPromptContext;
+use crate::services::template_rendering::consumers::{
+    chat_provider_headers::ChatProviderHeadersRenderer, system_prompt::SystemPromptRenderer,
+};
+use crate::services::template_rendering::contexts::{
+    chat_provider_headers::ChatProviderHeadersContext, system_prompt::SystemPromptContext,
+};
 use aes_gcm_siv::aead::{Aead, KeyInit, OsRng, rand_core::RngCore};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -403,12 +407,23 @@ impl AppState {
         &self,
         chat_provider_id: Option<&str>,
     ) -> Result<GenaiClient, Report> {
+        self.genai_for_chat_provider_id_with_headers_context(chat_provider_id, None)
+    }
+
+    pub fn genai_for_chat_provider_id_with_headers_context<'a>(
+        &self,
+        chat_provider_id: Option<&str>,
+        chat_provider_headers_context: Option<&ChatProviderHeadersContext<'a>>,
+    ) -> Result<GenaiClient, Report> {
         let chat_provider_id = chat_provider_id.unwrap_or_else(|| {
             self.config
                 .determine_chat_provider(None, None)
                 .expect("Unable to choose default chat provider")
         });
-        Self::build_genai_client(self.config.get_chat_provider(chat_provider_id).clone())
+        Self::build_genai_client_with_headers_context(
+            self.config.get_chat_provider(chat_provider_id).clone(),
+            chat_provider_headers_context,
+        )
     }
 
     pub async fn chat_provider_for_chatcompletion(
@@ -547,9 +562,27 @@ impl AppState {
     }
 
     pub fn build_genai_client(config: ChatProviderConfig) -> Result<GenaiClient, Report> {
+        Self::build_genai_client_with_headers_context(config, None)
+    }
+
+    pub fn build_genai_client_with_headers_context<'a>(
+        config: ChatProviderConfig,
+        chat_provider_headers_context: Option<&ChatProviderHeadersContext<'a>>,
+    ) -> Result<GenaiClient, Report> {
         let base_url = config.base_url.clone();
         let request_params = config.additional_request_parameters_map();
         let request_headers = config.additional_request_headers_map();
+        let header_renderer = ChatProviderHeadersRenderer::new();
+        let request_headers = request_headers
+            .into_iter()
+            .map(|(key, value)| {
+                let rendered_value = chat_provider_headers_context.map_or_else(
+                    || value.to_string(),
+                    |ctx| header_renderer.render(&value, ctx),
+                );
+                (key, rendered_value)
+            })
+            .collect::<HashMap<_, _>>();
 
         // Create a custom reqwest client with the additional headers
         let mut client_builder = reqwest::ClientBuilder::new();

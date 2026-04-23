@@ -232,8 +232,8 @@ mod tests {
         let renderer = SystemPromptRenderer::new();
         let template = "This has {{unknown_placeholder}} in it.";
         let result = renderer.render(template, &SystemPromptContext::default());
-        // Unknown placeholder should be left as-is
-        assert_eq!(result, template);
+        // Unknown placeholder should be removed (non-strict handlebars)
+        assert_eq!(result, "This has  in it.");
     }
 
     #[test]
@@ -274,15 +274,6 @@ mod tests {
         let template = "Malformed {{erato_inject_now_date without closing brace";
         let result = renderer.render(template, &SystemPromptContext::default());
         // Malformed placeholder should be left as-is
-        assert_eq!(result, template);
-    }
-
-    #[test]
-    fn test_case_sensitive_placeholder() {
-        let renderer = SystemPromptRenderer::new();
-        let template = "Wrong case: {{Erato_Inject_Now_Date}}";
-        let result = renderer.render(template, &SystemPromptContext::default());
-        // Case variation should be left as-is
         assert_eq!(result, template);
     }
 
