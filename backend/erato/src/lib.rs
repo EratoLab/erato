@@ -23,7 +23,6 @@ pub mod server;
 pub mod services;
 pub mod startup_log;
 pub mod state;
-pub mod system_prompt_renderer;
 pub mod telemetry;
 
 #[cfg(all(feature = "profiling", not(target_os = "linux")))]

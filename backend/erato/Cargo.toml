@@ -42,6 +42,7 @@ config = "0.15.6"
 http-body-util = "0.1.2"
 lol_html = "2.2.0"
 ordered-multimap = { version = "0.7.3",  features = ["serde"]}
+handlebars = "6"
 futures = "0.3"
 tokio-stream = { version = "0.1.17", features = ["sync"] }
 genai = { version = "0.6.0-beta.2-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "ff563b349b5dbfed9b28f92b9942e7298b333591" }

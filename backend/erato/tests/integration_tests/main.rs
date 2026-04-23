@@ -170,7 +170,9 @@ async fn test_app_state_internal(
         langfuse_client,
         global_policy_engine,
         background_tasks: BackgroundTaskManager::new(),
-        system_prompt_renderer: erato::system_prompt_renderer::SystemPromptRenderer::new(),
+        system_prompt_renderer:
+            erato::services::template_rendering::consumers::system_prompt::SystemPromptRenderer::new(
+            ),
         file_bytes_cache,
         file_contents_cache,
         token_count_cache,

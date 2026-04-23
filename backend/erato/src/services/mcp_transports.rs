@@ -1,6 +1,14 @@
 use crate::config::{McpServerAuthenticationConfig, McpServerConfig, McpServerForwardedCredential};
 use crate::services::mcp_manager::McpRequestAuthContext;
 use crate::services::mcp_oauth::resolve_oauth_access_token;
+use crate::services::template_rendering::consumers::{
+    mcp_access_token::{
+        FORWARDED_ACCESS_TOKEN_AUTH_HEADER_TEMPLATE, McpAccessTokenAuthHeaderRenderer,
+    },
+    mcp_id_token::{FORWARDED_ID_TOKEN_AUTH_HEADER_TEMPLATE, McpIdTokenAuthHeaderRenderer},
+};
+use crate::services::template_rendering::contexts::mcp_access_token::McpForwardedAccessTokenContext;
+use crate::services::template_rendering::contexts::mcp_id_token::McpForwardedIdTokenContext;
 use eyre::{Report, eyre};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use rmcp::ClientHandler;
@@ -34,16 +42,32 @@ async fn apply_auth_headers(
         McpServerAuthenticationConfig::None => Ok(()),
         McpServerAuthenticationConfig::Forwarded { forwarded } => match forwarded.credential {
             McpServerForwardedCredential::AccessToken => {
+                let renderer = McpAccessTokenAuthHeaderRenderer::new();
                 let token = auth_context
                     .access_token
                     .ok_or_else(|| eyre!("Missing forwarded access token for MCP server"))?;
-                apply_auth_header(default_headers, "Authorization", &format!("Bearer {token}"))
+                let header_value = renderer.render(
+                    FORWARDED_ACCESS_TOKEN_AUTH_HEADER_TEMPLATE,
+                    &McpForwardedAccessTokenContext {
+                        access_token: Some(token),
+                        prefix: Some(forwarded.prefix.as_str()),
+                    },
+                );
+                apply_auth_header(default_headers, &forwarded.header_name, &header_value)
             }
             McpServerForwardedCredential::OidcIdToken => {
+                let renderer = McpIdTokenAuthHeaderRenderer::new();
                 let token = auth_context
                     .oidc_token
                     .ok_or_else(|| eyre!("Missing forwarded OIDC token for MCP server"))?;
-                apply_auth_header(default_headers, "Authorization", &format!("Bearer {token}"))
+                let header_value = renderer.render(
+                    FORWARDED_ID_TOKEN_AUTH_HEADER_TEMPLATE,
+                    &McpForwardedIdTokenContext {
+                        id_token: Some(token),
+                        prefix: Some(forwarded.prefix.as_str()),
+                    },
+                );
+                apply_auth_header(default_headers, &forwarded.header_name, &header_value)
             }
         },
         McpServerAuthenticationConfig::Fixed { fixed } => apply_auth_header(

@@ -82,6 +82,7 @@ async fn test_mcp_auth_variants_execute_expected_tools(pool: Pool<Postgres>) {
             McpServerAuthenticationConfig::Forwarded {
                 forwarded: McpServerForwardedAuthenticationConfig {
                     credential: McpServerForwardedCredential::AccessToken,
+                    ..Default::default()
                 },
             },
         ),
@@ -94,6 +95,7 @@ async fn test_mcp_auth_variants_execute_expected_tools(pool: Pool<Postgres>) {
             McpServerAuthenticationConfig::Forwarded {
                 forwarded: McpServerForwardedAuthenticationConfig {
                     credential: McpServerForwardedCredential::OidcIdToken,
+                    ..Default::default()
                 },
             },
         ),
@@ -174,6 +176,7 @@ async fn test_forwarded_mcp_auth_filters_tools_by_identity(pool: Pool<Postgres>)
             McpServerAuthenticationConfig::Forwarded {
                 forwarded: McpServerForwardedAuthenticationConfig {
                     credential: McpServerForwardedCredential::AccessToken,
+                    ..Default::default()
                 },
             },
         ),
@@ -186,6 +189,7 @@ async fn test_forwarded_mcp_auth_filters_tools_by_identity(pool: Pool<Postgres>)
             McpServerAuthenticationConfig::Forwarded {
                 forwarded: McpServerForwardedAuthenticationConfig {
                     credential: McpServerForwardedCredential::OidcIdToken,
+                    ..Default::default()
                 },
             },
         ),

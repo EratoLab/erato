@@ -1447,6 +1447,28 @@ pub enum McpServerAuthenticationConfig {
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct McpServerForwardedAuthenticationConfig {
     pub credential: McpServerForwardedCredential,
+    #[serde(default = "default_mcp_forwarded_auth_header_name")]
+    pub header_name: String,
+    #[serde(default = "default_mcp_forwarded_auth_prefix")]
+    pub prefix: String,
+}
+
+impl Default for McpServerForwardedAuthenticationConfig {
+    fn default() -> Self {
+        Self {
+            credential: McpServerForwardedCredential::AccessToken,
+            header_name: default_mcp_forwarded_auth_header_name(),
+            prefix: default_mcp_forwarded_auth_prefix(),
+        }
+    }
+}
+
+fn default_mcp_forwarded_auth_header_name() -> String {
+    "Authorization".to_string()
+}
+
+fn default_mcp_forwarded_auth_prefix() -> String {
+    "Bearer ".to_string()
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]

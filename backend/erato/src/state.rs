@@ -7,7 +7,8 @@ use crate::services::background_tasks::BackgroundTaskManager;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID};
 use crate::services::langfuse::{LangfuseClient, LangfusePrompt};
 use crate::services::mcp_manager::McpServers;
-use crate::system_prompt_renderer::{RenderContext, SystemPromptRenderer};
+use crate::services::template_rendering::consumers::system_prompt::SystemPromptRenderer;
+use crate::services::template_rendering::contexts::system_prompt::SystemPromptContext;
 use aes_gcm_siv::aead::{Aead, KeyInit, OsRng, rand_core::RngCore};
 use aes_gcm_siv::{Aes256GcmSiv, Nonce};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -656,7 +657,7 @@ impl AppState {
         user_preference_assistant_custom_instructions: Option<&str>,
         user_preference_assistant_additional_information: Option<&str>,
     ) -> Result<Option<String>, Report> {
-        let ctx = RenderContext {
+        let ctx = SystemPromptContext {
             preferred_language,
             user_preference_nickname,
             user_preference_job_title,
