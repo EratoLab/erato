@@ -46,6 +46,7 @@ use crate::services::prompt_composition::{
     build_mcp_tool_allowlist, build_model_settings_for_facets,
 };
 use crate::services::sentry::capture_report;
+use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::State;
 use axum::http::HeaderMap;
@@ -532,10 +533,13 @@ async fn fetch_non_streaming_error(
     chat_options: &ChatOptions,
     message_id: Uuid,
     chat_provider_id: Option<&str>,
-    _user_groups: &[String],
+    chat_provider_headers_context: &ChatProviderHeadersContext<'_>,
 ) -> Option<MessageSubmitStreamingResponseError> {
     let client = app_state
-        .genai_for_chat_provider_id(chat_provider_id)
+        .genai_for_chat_provider_id_with_headers_context(
+            chat_provider_id,
+            Some(chat_provider_headers_context),
+        )
         .ok()?;
     match client
         .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(chat_options))
@@ -1603,6 +1607,7 @@ pub(crate) async fn prepare_chat_request_with_adapters(
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 async fn stream_generate_chat_completion<
+    'a,
     MSG: SendAsSseEvent
         + From<MessageSubmitStreamingResponseMessageTextDelta>
         + From<MessageSubmitStreamingResponseToolCallProposed>
@@ -1620,11 +1625,12 @@ async fn stream_generate_chat_completion<
     user_id: String,
     chat_id: Uuid,
     chat_provider_id: Option<&str>,
-    user_groups: &[String],
+    _user_groups: &[String],
     mcp_auth_context: McpRequestAuthContext<'_>,
     mcp_servers_unavailable: Vec<String>,
     allowed_tool_names: HashSet<String>,
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
+    chat_provider_headers_context: &'a ChatProviderHeadersContext<'a>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), ()> {
@@ -1968,7 +1974,10 @@ async fn stream_generate_chat_completion<
         }
 
         let chat_stream = match app_state
-            .genai_for_chat_provider_id(chat_provider_id)
+            .genai_for_chat_provider_id_with_headers_context(
+                chat_provider_id,
+                Some(chat_provider_headers_context),
+            )
             .expect("Unable to choose chat provider")
             .exec_chat_stream(
                 "PLACEHOLDER_MODEL",
@@ -2562,7 +2571,7 @@ async fn stream_generate_chat_completion<
                 &chat_options,
                 assistant_message_id,
                 chat_provider_id,
-                user_groups,
+                chat_provider_headers_context,
             )
             .await
             {
@@ -3978,6 +3987,8 @@ async fn run_message_submit_task(
         .iter()
         .filter_map(|(facet_id, enabled)| enabled.then_some(facet_id.clone()))
         .collect();
+    let chat_provider_headers_context =
+        ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
 
     // Get the chat provider configuration to check if image generation is enabled
     let ChatProviderConfigWithId {
@@ -4053,7 +4064,10 @@ async fn run_message_submit_task(
             .with_quality("standard");
 
         let genai_client = app_state
-            .genai_for_chat_provider_id(Some(&chat_provider_id))
+            .genai_for_chat_provider_id_with_headers_context(
+                Some(&chat_provider_id),
+                Some(&chat_provider_headers_context),
+            )
             .map_err(|e| format!("Failed to get genai client: {}", e))?;
 
         let image_response = genai_client
@@ -4176,6 +4190,7 @@ async fn run_message_submit_task(
         mcp_servers_unavailable,
         allowed_tool_names,
         available_mcp_tools,
+        &chat_provider_headers_context,
         Some(task),
         chat.assistant_id,
     );
@@ -4437,6 +4452,8 @@ pub async fn regenerate_message_sse(
             }
 
             let subject = me_user.to_subject();
+            let chat_provider_headers_context =
+                ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
             let mcp_auth_context = McpRequestAuthContext {
                 app_state: Some(&app_state),
                 user_id: Uuid::parse_str(&me_user.id).ok(),
@@ -4461,6 +4478,7 @@ pub async fn regenerate_message_sse(
                     mcp_servers_unavailable,
                     allowed_tool_names,
                     available_mcp_tools,
+                    &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
                 )
@@ -4776,6 +4794,8 @@ pub async fn edit_message_sse(
             }
 
             let subject = me_user.to_subject();
+            let chat_provider_headers_context =
+                ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
             let mcp_auth_context = McpRequestAuthContext {
                 app_state: Some(&app_state),
                 user_id: Uuid::parse_str(&me_user.id).ok(),
@@ -4800,6 +4820,7 @@ pub async fn edit_message_sse(
                     mcp_servers_unavailable,
                     allowed_tool_names,
                     available_mcp_tools,
+                    &chat_provider_headers_context,
                     Some(&task_for_stream),
                     chat.assistant_id,
                 )
