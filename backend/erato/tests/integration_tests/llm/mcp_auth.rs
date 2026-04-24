@@ -53,7 +53,7 @@ async fn test_mcp_auth_variants_execute_expected_tools(pool: Pool<Postgres>) {
             "/mcp/auth-fixed",
             McpServerAuthenticationConfig::Fixed {
                 fixed: McpServerFixedAuthenticationConfig {
-                    api_key: "fixed-api-key-secret".to_string(),
+                    api_key: "fixed-api-key-secret".into(),
                     header_name: "Authorization".to_string(),
                     prefix: "Bearer ".to_string(),
                 },
@@ -67,7 +67,7 @@ async fn test_mcp_auth_variants_execute_expected_tools(pool: Pool<Postgres>) {
             "/mcp/auth-fixed-custom",
             McpServerAuthenticationConfig::Fixed {
                 fixed: McpServerFixedAuthenticationConfig {
-                    api_key: "fixed-api-key-secret".to_string(),
+                    api_key: "fixed-api-key-secret".into(),
                     header_name: "X-API-Key".to_string(),
                     prefix: "Token ".to_string(),
                 },

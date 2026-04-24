@@ -1,3 +1,4 @@
+use crate::config::SecretConfigString;
 use crate::state::AppState;
 use axum::Router;
 use axum::body::Body;
@@ -7,13 +8,13 @@ use sentry::{Hub, event_from_error};
 use std::error::Error;
 
 pub fn setup_sentry(
-    sentry_dsn: Option<&String>,
+    sentry_dsn: Option<&SecretConfigString>,
     environment: String,
     _sentry_guard: &mut Option<sentry::ClientInitGuard>,
 ) {
     if let Some(sentry_dsn) = sentry_dsn {
         *_sentry_guard = Some(sentry::init((
-            sentry_dsn.as_str(),
+            sentry_dsn.expose_secret(),
             sentry::ClientOptions {
                 release: sentry::release_name!(),
                 debug: std::env::var("SENTRY_DEBUG").is_ok(),

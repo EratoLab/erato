@@ -384,7 +384,7 @@ async fn load_or_build_client_config(
         let mut config = OAuthClientConfig::new(client_id.clone(), redirect_uri.to_string())
             .with_scopes(oauth2.scopes.clone());
         if let Some(client_secret) = &oauth2.client_secret {
-            config = config.with_client_secret(client_secret.clone());
+            config = config.with_client_secret(client_secret.expose_secret().to_string());
         }
         return Ok(Some(config));
     }
