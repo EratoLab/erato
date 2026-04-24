@@ -69,7 +69,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         .expect("chat_provider should be configured");
     assert_eq!(chat_provider.provider_kind, "openai");
     assert_eq!(chat_provider.model_name, "o4-mini");
-    assert_eq!(chat_provider.api_key, Some("sk-XXX".to_string()));
+    assert_eq!(chat_provider.api_key.as_deref(), Some("sk-XXX"));
     assert_eq!(chat_provider.base_url, None);
     assert_eq!(chat_provider.system_prompt, None);
 
@@ -254,7 +254,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
         .expect("chat_provider should be configured");
     assert_eq!(chat_provider.provider_kind, "openai");
     assert_eq!(chat_provider.model_name, "gpt-4");
-    assert_eq!(chat_provider.api_key, Some("sk-test-key".to_string()));
+    assert_eq!(chat_provider.api_key.as_deref(), Some("sk-test-key"));
     assert_eq!(
         chat_provider.base_url,
         Some("https://api.custom-openai.com/v1/".to_string())
@@ -413,14 +413,14 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(primary.provider_kind, "openai");
     assert_eq!(primary.model_name, "gpt-4");
     assert_eq!(primary.model_display_name(), "GPT-4 (Primary)");
-    assert_eq!(primary.api_key, Some("sk-primary-key".to_string()));
+    assert_eq!(primary.api_key.as_deref(), Some("sk-primary-key"));
 
     // Test secondary provider
     let secondary = chat_providers.providers.get("secondary").unwrap();
     assert_eq!(secondary.provider_kind, "openai");
     assert_eq!(secondary.model_name, "gpt-3.5-turbo");
     assert_eq!(secondary.model_display_name(), "GPT-3.5 Turbo (Backup)");
-    assert_eq!(secondary.api_key, Some("sk-secondary-key".to_string()));
+    assert_eq!(secondary.api_key.as_deref(), Some("sk-secondary-key"));
     assert_eq!(
         secondary.base_url,
         Some("https://api.backup-openai.com/v1/".to_string())
@@ -512,7 +512,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(default_provider.provider_kind, "openai");
     assert_eq!(default_provider.model_name, "gpt-4");
     assert_eq!(default_provider.model_display_name(), "My GPT-4");
-    assert_eq!(default_provider.api_key, Some("sk-test-key".to_string()));
+    assert_eq!(default_provider.api_key.as_deref(), Some("sk-test-key"));
 
     // Test that the methods work correctly with migrated config
     assert_eq!(
@@ -630,7 +630,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
             .additional_request_headers
             .as_ref()
             .unwrap()
-            .contains(&"api-key=primary-azure-key".to_string())
+            .contains(&"api-key=primary-azure-key".into())
     );
 
     let azure_backup = chat_providers.providers.get("azure_backup").unwrap();
@@ -657,7 +657,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
             .additional_request_headers
             .as_ref()
             .unwrap()
-            .contains(&"api-key=backup-azure-key".to_string())
+            .contains(&"api-key=backup-azure-key".into())
     );
 
     // Test that regular OpenAI provider was not affected
@@ -665,7 +665,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(openai_provider.provider_kind, "openai");
     assert_eq!(openai_provider.model_name, "gpt-4o");
     assert_eq!(openai_provider.model_display_name(), "OpenAI GPT-4o");
-    assert_eq!(openai_provider.api_key, Some("openai-key".to_string()));
+    assert_eq!(openai_provider.api_key.as_deref(), Some("openai-key"));
     assert!(openai_provider.additional_request_parameters.is_none());
     assert!(openai_provider.additional_request_headers.is_none());
 
@@ -840,13 +840,13 @@ sentry_dsn = "https://test-key@sentry.io/12345"
 
     // Verify the new sentry configuration is parsed correctly
     assert_eq!(
-        config.integrations.sentry.sentry_dsn,
-        Some("https://test-key@sentry.io/12345".to_string())
+        config.integrations.sentry.sentry_dsn.as_deref(),
+        Some("https://test-key@sentry.io/12345")
     );
     // The get_sentry_dsn() method should return the new config value
     assert_eq!(
-        config.get_sentry_dsn(),
-        Some(&"https://test-key@sentry.io/12345".to_string())
+        config.get_sentry_dsn().map(|dsn| dsn.expose_secret()),
+        Some("https://test-key@sentry.io/12345")
     );
     // The old deprecated field should be None
     assert_eq!(config.sentry_dsn, None);
@@ -987,21 +987,23 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
 
     // Before migration - verify the old field is loaded from TOML
     assert_eq!(
-        config.sentry_dsn,
-        Some("https://old-key@sentry.io/67890".to_string())
+        config.sentry_dsn.as_deref(),
+        Some("https://old-key@sentry.io/67890")
     );
 
     // After migration - the value should be moved to the new location and old cleared
     let migrated_config = config.migrate();
     assert_eq!(migrated_config.sentry_dsn, None);
     assert_eq!(
-        migrated_config.integrations.sentry.sentry_dsn,
-        Some("https://old-key@sentry.io/67890".to_string())
+        migrated_config.integrations.sentry.sentry_dsn.as_deref(),
+        Some("https://old-key@sentry.io/67890")
     );
     // The get_sentry_dsn() method should return the migrated value
     assert_eq!(
-        migrated_config.get_sentry_dsn(),
-        Some(&"https://old-key@sentry.io/67890".to_string())
+        migrated_config
+            .get_sentry_dsn()
+            .map(|dsn| dsn.expose_secret()),
+        Some("https://old-key@sentry.io/67890")
     );
 }
 
@@ -1061,26 +1063,28 @@ sentry_dsn = "https://new-key@sentry.io/12345"
 
     // Before migration - verify both values are loaded from TOML
     assert_eq!(
-        config.sentry_dsn,
-        Some("https://old-key@sentry.io/67890".to_string())
+        config.sentry_dsn.as_deref(),
+        Some("https://old-key@sentry.io/67890")
     );
     assert_eq!(
-        config.integrations.sentry.sentry_dsn,
-        Some("https://new-key@sentry.io/12345".to_string())
+        config.integrations.sentry.sentry_dsn.as_deref(),
+        Some("https://new-key@sentry.io/12345")
     );
 
     // After migration - the new config should be preserved, old should be cleared
     let migrated_config = config.migrate();
     assert_eq!(migrated_config.sentry_dsn, None);
     assert_eq!(
-        migrated_config.integrations.sentry.sentry_dsn,
-        Some("https://new-key@sentry.io/12345".to_string())
+        migrated_config.integrations.sentry.sentry_dsn.as_deref(),
+        Some("https://new-key@sentry.io/12345")
     );
 
     // The get_sentry_dsn() method should return the new value (taking precedence)
     assert_eq!(
-        migrated_config.get_sentry_dsn(),
-        Some(&"https://new-key@sentry.io/12345".to_string())
+        migrated_config
+            .get_sentry_dsn()
+            .map(|dsn| dsn.expose_secret()),
+        Some("https://new-key@sentry.io/12345")
     );
 }
 
@@ -1137,8 +1141,8 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
 
     // Before migration - the old field should have the value, the new should be None
     assert_eq!(
-        config.sentry_dsn,
-        Some("https://old-key@sentry.io/67890".to_string())
+        config.sentry_dsn.as_deref(),
+        Some("https://old-key@sentry.io/67890")
     );
     assert_eq!(config.integrations.sentry.sentry_dsn, None);
 
@@ -1146,14 +1150,16 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     let migrated_config = config.migrate();
     assert_eq!(migrated_config.sentry_dsn, None);
     assert_eq!(
-        migrated_config.integrations.sentry.sentry_dsn,
-        Some("https://old-key@sentry.io/67890".to_string())
+        migrated_config.integrations.sentry.sentry_dsn.as_deref(),
+        Some("https://old-key@sentry.io/67890")
     );
 
     // The get_sentry_dsn() method should return the migrated value
     assert_eq!(
-        migrated_config.get_sentry_dsn(),
-        Some(&"https://old-key@sentry.io/67890".to_string())
+        migrated_config
+            .get_sentry_dsn()
+            .map(|dsn| dsn.expose_secret()),
+        Some("https://old-key@sentry.io/67890")
     );
 }
 
@@ -1215,14 +1221,16 @@ sentry_dsn = "https://new-key@sentry.io/12345"
     let migrated_config = config.migrate();
     assert_eq!(migrated_config.sentry_dsn, None);
     assert_eq!(
-        migrated_config.integrations.sentry.sentry_dsn,
-        Some("https://new-key@sentry.io/12345".to_string())
+        migrated_config.integrations.sentry.sentry_dsn.as_deref(),
+        Some("https://new-key@sentry.io/12345")
     );
 
     // The get_sentry_dsn() method should return the new value (not the old one)
     assert_eq!(
-        migrated_config.get_sentry_dsn(),
-        Some(&"https://new-key@sentry.io/12345".to_string())
+        migrated_config
+            .get_sentry_dsn()
+            .map(|dsn| dsn.expose_secret()),
+        Some("https://new-key@sentry.io/12345")
     );
 }
 
@@ -2534,8 +2542,7 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn test_app_state_encrypt_decrypt_round_trip(pool: Pool<Postgres>) {
     let mut app_config = hermetic_app_config(None, None);
-    app_config.server.encryption_key =
-        Some("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=".to_string());
+    app_config.server.encryption_key = Some("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=".into());
 
     let app_state = test_app_state(app_config, pool).await;
 

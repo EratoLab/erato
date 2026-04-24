@@ -63,7 +63,8 @@ impl LangfuseClient {
             .secret_key
             .as_ref()
             .ok_or_else(|| eyre!("secret_key is required when Langfuse is enabled"))?
-            .clone();
+            .expose_secret()
+            .to_string();
 
         tracing::debug!(
             base_url = %base_url,
@@ -1179,7 +1180,7 @@ mod tests {
             enabled: true,
             base_url: Some("https://cloud.langfuse.com".to_string()),
             public_key: Some("pk-lf-test".to_string()),
-            secret_key: Some("sk-lf-test".to_string()),
+            secret_key: Some("sk-lf-test".into()),
             ..Default::default()
         };
 

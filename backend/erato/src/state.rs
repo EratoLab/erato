@@ -170,7 +170,7 @@ impl std::fmt::Debug for AppState {
 
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
-        let db_connect_options = ConnectOptions::new(&config.database_url);
+        let db_connect_options = ConnectOptions::new(config.database_url.expose_secret());
         // TODO: Change level to Debug, but that also seems to deactivate some other logging (e.g. Errors during request?)
         // db_connect_options.sqlx_logging_level(LevelFilter::Debug);
         let mut db = Database::connect(db_connect_options).await?;
@@ -322,10 +322,10 @@ impl AppState {
             .config
             .server
             .encryption_key
-            .as_deref()
+            .as_ref()
             .ok_or_eyre("server.encryption_key is not configured")?;
         let key_bytes = STANDARD
-            .decode(encryption_key)
+            .decode(encryption_key.expose_secret())
             .map_err(|error| eyre::eyre!("Failed to decode server.encryption_key: {}", error))?;
 
         Aes256GcmSiv::new_from_slice(&key_bytes)
@@ -643,7 +643,7 @@ impl AppState {
                 // TODO: Allow specifying auth in config
                 let mut auth = AuthData::from_single("PLACEHOLDER");
                 if let Some(api_key) = config.api_key.clone() {
-                    auth = AuthData::from_single(api_key);
+                    auth = AuthData::from_single(api_key.expose_secret().to_string());
                 }
 
                 let model = ModelIden::new(adapter_kind, config.model_name.clone());

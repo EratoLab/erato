@@ -1,10 +1,11 @@
+use crate::config::SecretConfigString;
 use crate::state::AppState;
 use axum::Router;
 use axum::http::StatusCode;
 use eyre::Report;
 
 pub fn setup_sentry(
-    _sentry_dsn: Option<&String>,
+    _sentry_dsn: Option<&SecretConfigString>,
     _environment: String,
     _sentry_guard: &mut Option<()>,
 ) {

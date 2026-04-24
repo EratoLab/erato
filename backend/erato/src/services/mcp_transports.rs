@@ -73,7 +73,7 @@ async fn apply_auth_headers(
         McpServerAuthenticationConfig::Fixed { fixed } => apply_auth_header(
             default_headers,
             &fixed.header_name,
-            &format!("{}{}", fixed.prefix, fixed.api_key),
+            &format!("{}{}", fixed.prefix, fixed.api_key.expose_secret()),
         ),
         McpServerAuthenticationConfig::Oauth2 { oauth2 } => {
             let app_state = auth_context

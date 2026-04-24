@@ -5,8 +5,11 @@ use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment};
 use eyre::{OptionExt, Report, eyre};
 use facet::Facet;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize, de};
 use std::collections::HashMap;
+use std::fmt;
+use std::ops::Deref;
 use utoipa::ToSchema;
 
 use crate::config_facet_attrs as erato_config;
@@ -65,6 +68,77 @@ For this reply only:
 
 For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
 "#;
+
+#[derive(Clone, Default, Facet)]
+#[facet(opaque)]
+pub struct SecretConfigString(SecretString);
+
+impl SecretConfigString {
+    pub fn expose_secret(&self) -> &str {
+        self.0.expose_secret()
+    }
+}
+
+impl From<String> for SecretConfigString {
+    fn from(value: String) -> Self {
+        Self(SecretString::from(value))
+    }
+}
+
+impl From<&str> for SecretConfigString {
+    fn from(value: &str) -> Self {
+        Self(SecretString::from(value.to_string()))
+    }
+}
+
+impl fmt::Debug for SecretConfigString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("[REDACTED]")
+    }
+}
+
+impl PartialEq for SecretConfigString {
+    fn eq(&self, other: &Self) -> bool {
+        self.expose_secret() == other.expose_secret()
+    }
+}
+
+impl PartialEq<String> for SecretConfigString {
+    fn eq(&self, other: &String) -> bool {
+        self.expose_secret() == other
+    }
+}
+
+impl PartialEq<SecretConfigString> for String {
+    fn eq(&self, other: &SecretConfigString) -> bool {
+        self == other.expose_secret()
+    }
+}
+
+impl PartialEq<&str> for SecretConfigString {
+    fn eq(&self, other: &&str) -> bool {
+        self.expose_secret() == *other
+    }
+}
+
+impl Eq for SecretConfigString {}
+
+impl Deref for SecretConfigString {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.expose_secret()
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretConfigString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        String::deserialize(deserializer).map(Self::from)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Facet)]
 #[facet(untagged)]
@@ -233,7 +307,8 @@ pub struct AppConfig {
     // The HTTP port to listen on.
     // Defaults to `3130`.
     pub http_port: i32,
-    pub database_url: String,
+    #[facet(sensitive)]
+    pub database_url: SecretConfigString,
     pub chat_providers: Option<ChatProvidersConfig>,
     // A list of file storage providers to use.
     //
@@ -336,7 +411,8 @@ pub struct AppConfig {
         replacement_key = "integrations.sentry.sentry_dsn",
         planned_removal_version = "0.6.0"
     ))]
-    pub sentry_dsn: Option<String>,
+    #[facet(sensitive)]
+    pub sentry_dsn: Option<SecretConfigString>,
     // **Deprecated**: Please use `frontend.additional_environment` instead.
     //
     // This is a dictionary where each value can be a string or a map (string key, string value).
@@ -968,7 +1044,7 @@ impl AppConfig {
     /// Returns the Sentry DSN from either the new location (integrations.sentry.sentry_dsn)
     /// or the old deprecated location (sentry_dsn) for backward compatibility.
     #[allow(deprecated)]
-    pub fn get_sentry_dsn(&self) -> Option<&String> {
+    pub fn get_sentry_dsn(&self) -> Option<&SecretConfigString> {
         self.integrations
             .sentry
             .sentry_dsn
@@ -984,7 +1060,8 @@ pub struct ServerConfig {
     // The value must be base64-encoded and decode to exactly 32 bytes.
     // Example generation command:
     // `openssl rand -base64 32`
-    pub encryption_key: Option<String>,
+    #[facet(sensitive)]
+    pub encryption_key: Option<SecretConfigString>,
 }
 
 impl ServerConfig {
@@ -993,7 +1070,7 @@ impl ServerConfig {
             return Ok(());
         };
 
-        let decoded = STANDARD.decode(encryption_key).map_err(|error| {
+        let decoded = STANDARD.decode(encryption_key.expose_secret()).map_err(|error| {
             eyre!(
                 "server.encryption_key must be valid base64 for a 32-byte AES-256-GCM-SIV key: {}",
                 error
@@ -1101,7 +1178,8 @@ pub struct ChatProviderConfig {
     // If provider_kind is `vertex_ai` and base_url is not provided, this will be used
     // to construct a regional Vertex AI endpoint.
     pub region: Option<String>,
-    pub api_key: Option<String>,
+    #[facet(sensitive)]
+    pub api_key: Option<SecretConfigString>,
     // For Azure OpenAI, the API version to use (e.g. "2024-10-21").
     // This will be automatically converted to additional_request_parameters during config loading.
     pub api_version: Option<String>,
@@ -1110,7 +1188,8 @@ pub struct ChatProviderConfig {
     pub additional_request_parameters: Option<Vec<String>>,
     // Additional request headers to be added to API requests.
     // E.g. 'api-key=XYZ'
-    pub additional_request_headers: Option<Vec<String>>,
+    #[facet(sensitive)]
+    pub additional_request_headers: Option<Vec<SecretConfigString>>,
     // Optional system prompt to use with the chat provider.
     pub system_prompt: Option<PromptSourceSpecification>,
     // Optional Langfuse system prompt configuration.
@@ -1147,7 +1226,7 @@ impl ChatProviderConfig {
         let mut headers = HashMap::new();
         if let Some(header_vec) = &self.additional_request_headers {
             for header in header_vec {
-                if let Some((key, value)) = header.split_once('=') {
+                if let Some((key, value)) = header.expose_secret().split_once('=') {
                     headers.insert(key.trim().to_string(), value.trim().to_string());
                 }
             }
@@ -1193,7 +1272,7 @@ impl ChatProviderConfig {
         // Prepare additional_request_headers
         let mut additional_headers = self.additional_request_headers.unwrap_or_default();
         if let Some(api_key) = &self.api_key {
-            additional_headers.push(format!("api-key={}", api_key));
+            additional_headers.push(format!("api-key={}", api_key.expose_secret()).into());
         }
 
         Ok(ChatProviderConfig {
@@ -1343,7 +1422,8 @@ pub struct StorageProviderAzBlobConfig {
     pub container: String,
     pub endpoint: String,
     pub account_name: Option<String>,
-    pub account_key: Option<String>,
+    #[facet(sensitive)]
+    pub account_key: Option<SecretConfigString>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
@@ -1352,22 +1432,27 @@ pub struct StorageProviderS3Config {
     pub root: Option<String>,
     pub bucket: String,
     pub region: Option<String>,
-    pub access_key_id: Option<String>,
-    pub secret_access_key: Option<String>,
+    #[facet(sensitive)]
+    pub access_key_id: Option<SecretConfigString>,
+    #[facet(sensitive)]
+    pub secret_access_key: Option<SecretConfigString>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 /// Merged config for storage provider specific configs.
 pub struct StorageProviderSpecificConfigMerged {
-    pub access_key_id: Option<String>,
-    pub account_key: Option<String>,
+    #[facet(sensitive)]
+    pub access_key_id: Option<SecretConfigString>,
+    #[facet(sensitive)]
+    pub account_key: Option<SecretConfigString>,
     pub account_name: Option<String>,
     pub bucket: Option<String>,
     pub container: Option<String>,
     pub endpoint: Option<String>,
     pub region: Option<String>,
     pub root: Option<String>,
-    pub secret_access_key: Option<String>,
+    #[facet(sensitive)]
+    pub secret_access_key: Option<SecretConfigString>,
 }
 
 impl StorageProviderSpecificConfigMerged {
@@ -1482,7 +1567,8 @@ pub enum McpServerForwardedCredential {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct McpServerFixedAuthenticationConfig {
-    pub api_key: String,
+    #[facet(sensitive)]
+    pub api_key: SecretConfigString,
     #[serde(default = "default_mcp_fixed_auth_header_name")]
     pub header_name: String,
     #[serde(default = "default_mcp_fixed_auth_prefix")]
@@ -1492,7 +1578,8 @@ pub struct McpServerFixedAuthenticationConfig {
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct McpServerOauth2AuthenticationConfig {
     pub client_id: Option<String>,
-    pub client_secret: Option<String>,
+    #[facet(sensitive)]
+    pub client_secret: Option<SecretConfigString>,
     #[serde(default)]
     pub scopes: Vec<String>,
     pub client_name: Option<String>,
@@ -2249,7 +2336,8 @@ pub struct LangfuseConfig {
     pub public_key: Option<String>,
 
     // The secret key for Langfuse API authentication.
-    pub secret_key: Option<String>,
+    #[facet(sensitive)]
+    pub secret_key: Option<SecretConfigString>,
 
     // Whether tracing is enabled for Langfuse.
     // Defaults to `false`.
@@ -2347,7 +2435,8 @@ pub struct ModelSettings {
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct SentryConfig {
     // If present, will enable Sentry for error reporting.
-    pub sentry_dsn: Option<String>,
+    #[facet(sensitive)]
+    pub sentry_dsn: Option<SecretConfigString>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]

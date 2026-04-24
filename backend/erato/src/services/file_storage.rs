@@ -338,10 +338,10 @@ impl OpenDalStorage {
             builder = builder.region(val);
         }
         if let Some(val) = &config.access_key_id {
-            builder = builder.access_key_id(val);
+            builder = builder.access_key_id(val.expose_secret());
         }
         if let Some(val) = &config.secret_access_key {
-            builder = builder.secret_access_key(val);
+            builder = builder.secret_access_key(val.expose_secret());
         }
 
         let op: Operator = Operator::new(builder)?.finish();
@@ -361,7 +361,7 @@ impl OpenDalStorage {
             builder = builder.account_name(val);
         }
         if let Some(val) = &config.account_key {
-            builder = builder.account_key(val);
+            builder = builder.account_key(val.expose_secret());
         }
 
         let op: Operator = Operator::new(builder)?.finish();
@@ -483,13 +483,13 @@ impl OpenDalStorage {
             .ok_or_eyre("Missing azblob account_name for preview URL generation")?;
         let account_key = config
             .account_key
-            .as_deref()
+            .as_ref()
             .ok_or_eyre("Missing azblob account_key for preview URL generation")?;
 
         build_azblob_service_sas_preview_url(
             config,
             account_name,
-            account_key,
+            account_key.expose_secret(),
             path,
             content_type,
             duration,
