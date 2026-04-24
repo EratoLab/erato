@@ -194,6 +194,8 @@
   "mcp_servers.<server-id>.authentication.fixed.header_name": {},
   "mcp_servers.<server-id>.authentication.fixed.prefix": {},
   "mcp_servers.<server-id>.authentication.forwarded.credential": {},
+  "mcp_servers.<server-id>.authentication.forwarded.header_name": {},
+  "mcp_servers.<server-id>.authentication.forwarded.prefix": {},
   "mcp_servers.<server-id>.authentication.oauth2.client_id": {},
   "mcp_servers.<server-id>.authentication.oauth2.client_name": {},
   "mcp_servers.<server-id>.authentication.oauth2.client_secret": {},

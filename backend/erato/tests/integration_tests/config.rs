@@ -1423,7 +1423,7 @@ cost_output_tokens_per_1m = 0.6
 
 [file_storage_providers.test]
 provider_kind = "s3"
-config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 "#;
 
     temp_file
@@ -1537,7 +1537,7 @@ api_key = "sk-test-key"
 
 [file_storage_providers.test]
 provider_kind = "s3"
-config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 "#;
 
     temp_file
@@ -1624,7 +1624,7 @@ verbosity = "high"
 
 [file_storage_providers.test]
 provider_kind = "s3"
-config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 "#;
 
     temp_file
@@ -1683,7 +1683,7 @@ api_key = "sk-test-key"
 
 [file_storage_providers.test]
 provider_kind = "s3"
-config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 "#;
 
     temp_file
@@ -1729,7 +1729,7 @@ api_key = "sk-test-key"
 
 [file_storage_providers.test]
 provider_kind = "s3"
-config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 
 [experimental_facets]
 only_single_facet = true
@@ -1843,7 +1843,7 @@ priority_order = ["mock-llm"]
 
 [file_storage_providers.test]
 provider_kind = "s3"
-config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 
 [integrations.langfuse]
 enabled = true
@@ -1946,7 +1946,7 @@ model_name = "gpt-4.1"
 
 [file_storage_providers.test]
 provider_kind = "s3"
-config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 "#;
 
     temp_file
@@ -1982,7 +1982,7 @@ model_name = "gpt-4.1"
 
 [file_storage_providers.test]
 provider_kind = "s3"
-config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 
 [user_preferences]
 enabled = false
@@ -2021,7 +2021,7 @@ model_name = "gpt-4.1"
 
 [file_storage_providers.test]
 provider_kind = "s3"
-config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 
 [experimental_assistants]
 enabled = true
@@ -2073,7 +2073,7 @@ model_name = "gpt-4.1"
 
 [file_storage_providers.test]
 provider_kind = "s3"
-config = { bucket = "test-bucket", endpoint = "http://localhost:9000", region = "us-east-1" }
+config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = "us-east-1" }
 
 [experimental_assistants]
 context_file_contributor_threshold = 1.1

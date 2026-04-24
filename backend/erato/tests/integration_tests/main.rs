@@ -92,11 +92,11 @@ async fn test_app_state_internal(
     let provider = FileStorage::from_config(
         app_config
             .file_storage_providers
-            .get("minio")
-            .expect("Unable to get `minio` filestorage from app_config"),
+            .get("seaweedfs")
+            .expect("Unable to get `seaweedfs` filestorage from app_config"),
     )
     .expect("Unable to instantiate FileStorage");
-    file_storage_providers.insert("minio".to_owned(), provider);
+    file_storage_providers.insert("seaweedfs".to_owned(), provider);
 
     // Register Sharepoint file storage if enabled
     if sharepoint_enabled {

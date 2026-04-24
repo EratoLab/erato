@@ -148,29 +148,32 @@ pub async fn setup_mock_image_gen_server(
             vec![config.provider_id.as_str()],
         )
         .unwrap()
-        // File storage provider (minio) - same as other tests
-        .set_override("file_storage_providers.minio.provider_kind", "s3")
+        // File storage provider (SeaweedFS) - same as other tests
+        .set_override("file_storage_providers.seaweedfs.provider_kind", "s3")
         .unwrap()
         .set_override(
-            "file_storage_providers.minio.config.endpoint",
-            "http://127.0.0.1:9000",
+            "file_storage_providers.seaweedfs.config.endpoint",
+            "http://127.0.0.1:8333",
         )
         .unwrap()
         .set_override(
-            "file_storage_providers.minio.config.bucket",
+            "file_storage_providers.seaweedfs.config.bucket",
             "erato-storage",
         )
         .unwrap()
-        .set_override("file_storage_providers.minio.config.region", "us-east-1")
-        .unwrap()
         .set_override(
-            "file_storage_providers.minio.config.access_key_id",
-            "erato-app-user",
+            "file_storage_providers.seaweedfs.config.region",
+            "us-east-1",
         )
         .unwrap()
         .set_override(
-            "file_storage_providers.minio.config.secret_access_key",
-            "erato-app-password",
+            "file_storage_providers.seaweedfs.config.access_key_id",
+            "admin",
+        )
+        .unwrap()
+        .set_override(
+            "file_storage_providers.seaweedfs.config.secret_access_key",
+            "admin",
         )
         .unwrap()
         .set_override("experimental_assistants.enabled", true)
@@ -197,7 +200,7 @@ pub async fn setup_mock_image_gen_server(
 /// Verifies that when a chat provider has `generate_images` enabled, it generates
 /// an image instead of text and stores it as a file_upload.
 ///
-/// Note: This test requires minio to be running on localhost:9000.
+/// Note: This test requires SeaweedFS to be running on localhost:8333.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_image_generation(pool: Pool<Postgres>) {
     // Set up mock image generation server

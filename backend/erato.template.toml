@@ -1,5 +1,5 @@
 # Specify which file storage provider is default
-default_file_storage_provider = "minio"
+default_file_storage_provider = "seaweedfs"
 
 # Server configuration
 # [server]
@@ -7,9 +7,9 @@ default_file_storage_provider = "minio"
 # Generate one with: openssl rand -base64 32
 # encryption_key = "replace-with-openssl-output"
 
-[file_storage_providers.minio]
+[file_storage_providers.seaweedfs]
 provider_kind = "s3"
-config = { endpoint = "http://localhost:9000", bucket = "erato-storage", region = "us-east-1", access_key_id = "erato-app-user", secret_access_key = "erato-app-password" }
+config = { endpoint = "http://localhost:8333", bucket = "erato-storage", region = "us-east-1", access_key_id = "admin", secret_access_key = "admin" }
 # max_upload_size_kb = 102400  # Optional: Maximum file upload size in KB (100 MB example)
 
 # File processor configuration

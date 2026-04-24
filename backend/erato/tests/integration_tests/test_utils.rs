@@ -681,28 +681,31 @@ pub fn hermetic_app_config(
 
     app_config = app_config
         // Set file storage provider override to match the template in erato.template.toml
-        .set_override("file_storage_providers.minio.provider_kind", "s3")
+        .set_override("file_storage_providers.seaweedfs.provider_kind", "s3")
         .unwrap()
         .set_override(
-            "file_storage_providers.minio.config.endpoint",
-            "http://127.0.0.1:9000",
+            "file_storage_providers.seaweedfs.config.endpoint",
+            "http://127.0.0.1:8333",
         )
         .unwrap()
         .set_override(
-            "file_storage_providers.minio.config.bucket",
+            "file_storage_providers.seaweedfs.config.bucket",
             "erato-storage",
         )
         .unwrap()
-        .set_override("file_storage_providers.minio.config.region", "us-east-1")
-        .unwrap()
         .set_override(
-            "file_storage_providers.minio.config.access_key_id",
-            "erato-app-user",
+            "file_storage_providers.seaweedfs.config.region",
+            "us-east-1",
         )
         .unwrap()
         .set_override(
-            "file_storage_providers.minio.config.secret_access_key",
-            "erato-app-password",
+            "file_storage_providers.seaweedfs.config.access_key_id",
+            "admin",
+        )
+        .unwrap()
+        .set_override(
+            "file_storage_providers.seaweedfs.config.secret_access_key",
+            "admin",
         )
         .unwrap()
         .set_override("experimental_assistants.enabled", true)
