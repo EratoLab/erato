@@ -324,8 +324,8 @@ impl OpenDalStorage {
     ) -> Result<(Operator, OpenDalProviderKind), Report> {
         let mut builder = opendal::services::S3::default().bucket(config.bucket.as_str());
 
-        // When using a custom endpoint (e.g., MinIO), we need to:
-        // 1. NOT enable virtual host style (MinIO uses path-style URLs)
+        // When using a custom endpoint (e.g., a local S3-compatible service), we need to:
+        // 1. NOT enable virtual host style (local S3-compatible services use path-style URLs)
         // 2. Disable loading AWS credentials from environment/config files
         if let Some(val) = &config.endpoint {
             builder = builder.endpoint(val).disable_config_load();

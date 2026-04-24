@@ -331,12 +331,8 @@ jobs:
       - name: "Setup test environment"
         working-directory: backend
         run: |
-          curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
-          chmod +x mc
-          sudo mv mc /usr/local/bin/
-          
           ./run_postgres.sh
-          ./run_minio.sh
+          ./run_seaweedfs.sh
           ./run_mock_mcp_server.sh
           cp erato.template.toml erato.toml
       # Should be kept in sync with `justfile` -> `install_clis`
