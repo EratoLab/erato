@@ -1,4 +1,5 @@
 # Generated test files
 *.pdf
+*.eml
 # Manually created test files
 !Acme_Inc_*

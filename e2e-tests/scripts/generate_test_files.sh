@@ -12,3 +12,7 @@ mkdir -p "$TEST_FILES_DIR"
 "$SCRIPT_DIR/generate_corrupted_pdf.py" "$TEST_FILES_DIR/corrupted_truncated.pdf" truncated
 "$SCRIPT_DIR/generate_corrupted_pdf.py" "$TEST_FILES_DIR/corrupted_malformed.pdf" malformed_stream
 "$SCRIPT_DIR/generate_corrupted_pdf.py" "$TEST_FILES_DIR/corrupted_unsupported_encryption.pdf" unsupported_encryption
+"$SCRIPT_DIR/generate_email_with_pdf_attachment.py" \
+  "$TEST_FILES_DIR/email-with-sample-compressed-pdf.eml" \
+  "$TEST_FILES_DIR/sample-report-compressed.pdf" \
+  --attachment-display-name sample_compressed.pdf
