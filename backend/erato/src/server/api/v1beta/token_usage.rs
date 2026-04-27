@@ -11,9 +11,11 @@ use crate::policy::types::{Action, Resource};
 use crate::server::api::v1beta::file_resolution::format_successful_file_content;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming::{
-    ActionFacetRequest, FileContent, MeProfileChatRequestInput, prepare_chat_request_with_adapters,
+    ActionFacetRequest, FileContent, FileContentsForGeneration, MeProfileChatRequestInput,
+    prepare_chat_request_with_adapters, remove_null_characters,
     resolve_effective_selected_facet_ids,
 };
+use crate::services::file_parsing::parse_file;
 use crate::services::file_processing_cached;
 use crate::services::file_storage::SharepointContext;
 use crate::services::prompt_composition::traits::MessageRepository;
@@ -25,8 +27,10 @@ use crate::state::{AppState, ChatProviderConfigWithId};
 use async_trait::async_trait;
 use axum::extract::State;
 use axum::{Extension, Json};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::Utc;
 use eyre::Report;
+use genai::chat::ChatMessage;
 use genai::chat::ChatRequest;
 use sea_orm::prelude::Uuid;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
@@ -50,6 +54,13 @@ pub struct TokenUsageRequest {
     new_chat: Option<TokenUsageNewChatInput>,
     /// File content inputs to include in the estimation.
     file: Option<TokenUsageFileInput>,
+    /// Inline file payloads to include in the estimation without persisting
+    /// them. Used by clients (e.g. the Outlook add-in) that want to count
+    /// transient content — the previewed email body — toward the token budget
+    /// without writing a `file_uploads` row that would later orphan if the
+    /// user dismissed the preview. Each entry is parsed in-place and included
+    /// in the response's `file_details` alongside any `input_files_ids`.
+    virtual_files: Option<Vec<TokenUsageVirtualFile>>,
     #[schema(example = "You are a concise legal assistant.")]
     /// Additional system prompt content to include in the estimation.
     system_prompt: Option<String>,
@@ -95,6 +106,26 @@ pub struct TokenUsageFileInput {
     /// File upload IDs to include in estimation.
     #[serde(default)]
     input_files_ids: Vec<Uuid>,
+}
+
+/// Inline file content (not persisted) included in a token estimate. The
+/// server decodes the base64 payload, runs the same parser the upload route
+/// uses, tokenizes the result, and discards the bytes once the response is
+/// sent. Per-file size cap matches the upload endpoint's
+/// `max_upload_size_bytes` config.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct TokenUsageVirtualFile {
+    #[schema(example = "preview.eml")]
+    /// Original filename (used for content-type fallback and tokenizer header).
+    pub filename: String,
+    #[schema(example = "message/rfc822")]
+    /// Provided MIME type. Normalized via the same fallback rules as
+    /// `/me/files` (e.g. `application/octet-stream` for `.eml` becomes
+    /// `message/rfc822`).
+    pub content_type: Option<String>,
+    /// Standard base64 (RFC 4648) of the raw file bytes.
+    pub base64: String,
 }
 
 /// Token usage statistics for the request
@@ -377,7 +408,7 @@ pub async fn token_usage_estimate(
             })?
     };
 
-    let files_for_generation = file_processing_cached::process_files_parallel_cached(
+    let mut files_for_generation = file_processing_cached::process_files_parallel_cached(
         &app_state,
         &policy,
         &me_user,
@@ -396,6 +427,20 @@ pub async fn token_usage_estimate(
             format!("Failed to process input files: {}", err),
         )
     })?;
+
+    // Inline file payloads (e.g. the Outlook add-in's previewed email body).
+    // Track the index range of virtual entries so the chat-exists branch
+    // below can append them to `chat_request.messages` — the prompt
+    // composition pipeline only knows about persisted file IDs and would
+    // otherwise omit virtuals from the total-token tally.
+    let virtual_files_start = files_for_generation.len();
+    if let Some(virtual_files) = request.virtual_files.as_ref()
+        && !virtual_files.is_empty()
+    {
+        let processed = process_virtual_files(&app_state, virtual_files).await?;
+        files_for_generation.extend(processed);
+    }
+    let virtual_files_range = virtual_files_start..files_for_generation.len();
 
     let (file_details, total_file_tokens) = {
         let span = tracing::info_span!(
@@ -533,7 +578,7 @@ pub async fn token_usage_estimate(
         };
         let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
 
-        prepare_chat_request_with_adapters(
+        let mut chat_request = prepare_chat_request_with_adapters(
             &app_state,
             &policy,
             chat,
@@ -553,7 +598,19 @@ pub async fn token_usage_estimate(
             )
         })?
         .chat_request()
-        .clone()
+        .clone();
+
+        // Append virtual file content as synthetic user messages — the
+        // prompt composition pipeline only ingested persisted file IDs, so
+        // virtuals are absent from `chat_request.messages` until we add
+        // them here. Without this, `total_tokens` would under-count.
+        for file in &files_for_generation[virtual_files_range.clone()] {
+            if let FileContent::Text(ref text) = file.content {
+                let formatted = format_successful_file_content(&file.filename, file.id, text);
+                chat_request.messages.push(ChatMessage::user(formatted));
+            }
+        }
+        chat_request
     } else {
         let mut messages = GenerationInputMessages { messages: vec![] };
         if !new_message_content.is_empty() {
@@ -637,6 +694,86 @@ pub async fn token_usage_estimate(
         },
         file_details,
     }))
+}
+
+/// Decodes and parses each `TokenUsageVirtualFile` into the same
+/// `FileContentsForGeneration` shape that `process_files_parallel_cached`
+/// produces for persisted uploads, so the per-file token loop can treat
+/// them uniformly. Bypasses `file_bytes_cache` / `file_contents_cache`
+/// (which are keyed on `file_id`) — the bytes are transient. The downstream
+/// `token_count_cache` is keyed on the formatted content string, so
+/// content that matches a persisted upload still hits the same cache entry.
+async fn process_virtual_files(
+    app_state: &AppState,
+    virtual_files: &[TokenUsageVirtualFile],
+) -> Result<Vec<FileContentsForGeneration>, (axum::http::StatusCode, String)> {
+    let max_upload_size = app_state
+        .config
+        .max_upload_size_bytes()
+        .map(|v| v as usize)
+        .unwrap_or(20 * 1024 * 1024);
+
+    let mut converted = Vec::with_capacity(virtual_files.len());
+    for vf in virtual_files {
+        let bytes = general_purpose::STANDARD
+            .decode(&vf.base64)
+            .map_err(|err| {
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    format!(
+                        "virtual_files[{}] has invalid base64 payload: {}",
+                        vf.filename, err
+                    ),
+                )
+            })?;
+
+        if bytes.len() > max_upload_size {
+            return Err((
+                axum::http::StatusCode::PAYLOAD_TOO_LARGE,
+                format!(
+                    "virtual_files[{}] exceeds max upload size of {} bytes",
+                    vf.filename, max_upload_size
+                ),
+            ));
+        }
+
+        let content_type = crate::server::api::v1beta::effective_upload_content_type(
+            &vf.filename,
+            vf.content_type.as_deref(),
+        );
+
+        let _permit = app_state
+            .file_processing_semaphore
+            .acquire()
+            .await
+            .map_err(|err| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("File processing semaphore closed: {}", err),
+                )
+            })?;
+
+        let parsed = parse_file(
+            app_state.file_processor.as_ref(),
+            bytes,
+            content_type.as_deref(),
+        )
+        .await
+        .map_err(|err| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                format!("Failed to parse virtual_files[{}]: {}", vf.filename, err),
+            )
+        })?;
+
+        converted.push(FileContentsForGeneration {
+            id: Uuid::new_v4(),
+            filename: vf.filename.clone(),
+            content: FileContent::Text(remove_null_characters(&parsed)),
+        });
+    }
+
+    Ok(converted)
 }
 
 #[instrument(skip_all)]

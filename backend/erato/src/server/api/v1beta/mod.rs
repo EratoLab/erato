@@ -160,7 +160,13 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/files/{file_id}/preview", get(get_file_preview))
         .route(
             "/token_usage/estimate",
-            post(token_usage::token_usage_estimate),
+            // Token estimation accepts inline file payloads (`virtual_files`)
+            // base64-encoded. The default Axum body cap is too small for
+            // even a single max-size preview email; use the same budget as
+            // `/me/files` so a max-size virtual file plus the rest of the
+            // request fits comfortably.
+            post(token_usage::token_usage_estimate)
+                .layer(DefaultBodyLimit::max(max_upload_size * 10)),
         )
         .route("/prompt-optimizer", post(prompt_optimizer))
         // Assistants routes - manually registered for clarity and consistency
@@ -2457,7 +2463,7 @@ fn content_type_essence(content_type: &str) -> &str {
         .trim()
 }
 
-fn effective_upload_content_type(
+pub(super) fn effective_upload_content_type(
     filename: &str,
     provided_content_type: Option<&str>,
 ) -> Option<String> {
