@@ -65,6 +65,12 @@ interface AddinChatInputProps {
    * `attachedFilesState`. Pass a memoized array.
    */
   virtualFiles?: File[];
+  /**
+   * Forwarded to `ChatInput.maxFiles`. The add-in lifts the cap above the
+   * web default (5) because Outlook drops expand one email into body + N
+   * attachments — a single multi-attachment email saturates 5 quickly.
+   */
+  maxFiles?: number;
   controlledAvailableModels?: ChatModel[];
   controlledSelectedModel?: ChatModel | null;
   onControlledSelectedModelChange?: (model: ChatModel) => void;

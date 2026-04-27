@@ -694,6 +694,10 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               uploadError={uploadError}
               isExpandingDroppedEmails={isExpandingDroppedEmails}
               virtualFiles={previewVirtualFiles}
+              // Outlook drag-drop expands one email into body + N attachments,
+              // so the web default of 5 fills up after a single multi-attachment
+              // drop. The add-in lifts the cap; web stays at 5.
+              maxFiles={50}
             />
           </div>
         </ChatErrorBoundary>
