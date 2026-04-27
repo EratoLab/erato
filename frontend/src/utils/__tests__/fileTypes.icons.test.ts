@@ -35,5 +35,6 @@ describe("getFileTypeIcon", () => {
     expect(getFileTypeIcon("code")).toBe("Code");
     expect(getFileTypeIcon("archive")).toBe("Archive");
     expect(getFileTypeIcon("video")).toBe("MediaVideo");
+    expect(getFileTypeIcon("email")).toBe("Mail");
   });
 });

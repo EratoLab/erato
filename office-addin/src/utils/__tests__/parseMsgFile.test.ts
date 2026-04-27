@@ -20,6 +20,7 @@ interface MockResponse {
   status?: number;
   statusText?: string;
   jsonValue?: unknown;
+  bytes?: ArrayBuffer;
 }
 
 function installFetchMock(
@@ -32,10 +33,18 @@ function installFetchMock(
       status: response.status ?? 200,
       statusText: response.statusText ?? "OK",
       json: () => Promise.resolve(response.jsonValue ?? {}),
+      arrayBuffer: () => Promise.resolve(response.bytes ?? new ArrayBuffer(0)),
     } as Response;
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function bytesFrom(text: string): ArrayBuffer {
+  const encoded = new TextEncoder().encode(text);
+  const buffer = new ArrayBuffer(encoded.byteLength);
+  new Uint8Array(buffer).set(encoded);
+  return buffer;
 }
 
 describe("parseMsgFileToFiles", () => {
@@ -48,37 +57,44 @@ describe("parseMsgFileToFiles", () => {
     vi.restoreAllMocks();
   });
 
-  it("decodes real CFB, resolves via Graph filter + fetch, and returns files with the id", async () => {
+  it("decodes real CFB, resolves via Graph filter + $value, and returns a single .eml with the id", async () => {
     const file = msgFileFromBytes(buildMsgWithInternetMessageId("<abc@host>"));
     const acquireToken = vi.fn().mockResolvedValue("tok");
     const fetchMock = installFetchMock((url) => {
       if (url.includes("$filter=")) {
         return {
           ok: true,
-          jsonValue: { value: [{ id: "matched-id", subject: "Hi" }] },
+          jsonValue: {
+            value: [
+              {
+                id: "matched-id",
+                subject: "Hi",
+                internetMessageId: "<abc@host>",
+              },
+            ],
+          },
         };
       }
-      return {
-        ok: true,
-        jsonValue: {
-          id: "matched-id",
-          subject: "Hi",
-          body: { contentType: "text", content: "plain body" },
-          internetMessageId: "<abc@host>",
-          attachments: [],
-        },
-      };
+      return { ok: true, bytes: bytesFrom("raw-mime") };
     });
 
     const result = await parseMsgFileToFiles(file, acquireToken);
 
     expect(result.messageId).toBe("<abc@host>");
-    expect(result.files.length).toBeGreaterThan(0);
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0].type).toBe("message/rfc822");
+    expect(result.files[0].name).toBe("Hi.eml");
+    expect(await result.files[0].text()).toBe("raw-mime");
+
     expect(acquireToken).toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const [filterUrl] = fetchMock.mock.calls[0];
     expect(filterUrl).toContain(
       encodeURIComponent("internetMessageId eq '<abc@host>'"),
+    );
+    const [valueUrl] = fetchMock.mock.calls[1];
+    expect(valueUrl).toContain(
+      `/me/messages/${encodeURIComponent("matched-id")}/$value`,
     );
   });
 

@@ -25,16 +25,16 @@ function installOutlookMailboxMock(): MailboxMock {
   return mailbox;
 }
 
+interface MockResponse {
+  ok: boolean;
+  status?: number;
+  statusText?: string;
+  jsonValue?: unknown;
+  bytes?: ArrayBuffer;
+}
+
 function installFetchMock(
-  responder: (
-    url: string,
-    init?: RequestInit,
-  ) => {
-    ok: boolean;
-    status?: number;
-    statusText?: string;
-    jsonValue?: unknown;
-  },
+  responder: (url: string, init?: RequestInit) => MockResponse,
 ) {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const response = responder(url, init);
@@ -43,10 +43,18 @@ function installFetchMock(
       status: response.status ?? 200,
       statusText: response.statusText ?? "OK",
       json: () => Promise.resolve(response.jsonValue ?? {}),
+      arrayBuffer: () => Promise.resolve(response.bytes ?? new ArrayBuffer(0)),
     } as Response;
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function bytesFrom(text: string): ArrayBuffer {
+  const encoded = new TextEncoder().encode(text);
+  const buffer = new ArrayBuffer(encoded.byteLength);
+  new Uint8Array(buffer).set(encoded);
+  return buffer;
 }
 
 describe("fetchOutlookMessageFilesViaGraph", () => {
@@ -59,104 +67,114 @@ describe("fetchOutlookMessageFilesViaGraph", () => {
     vi.unstubAllGlobals();
   });
 
-  it("hits the Graph v1.0 /me/messages endpoint with the converted id and the MSAL bearer token", async () => {
+  it("requests metadata then the raw MIME $value with the converted id and the MSAL bearer token", async () => {
     const acquireToken = vi.fn().mockResolvedValue("graph-token-xyz");
-    const fetchMock = installFetchMock(() => ({
-      ok: true,
-      jsonValue: {
-        subject: "Test",
-        body: { contentType: "text", content: "plain" },
-        attachments: [],
-      },
-    }));
+    const fetchMock = installFetchMock((url) => {
+      if (url.endsWith("/$value")) {
+        return { ok: true, bytes: bytesFrom("raw-mime") };
+      }
+      return {
+        ok: true,
+        jsonValue: { subject: "Test", internetMessageId: "<abc@host>" },
+      };
+    });
 
     await fetchOutlookMessageFilesViaGraph(EWS_ID, acquireToken);
 
     expect(acquireToken).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toContain(
-      `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(GRAPH_ID)}?$expand=attachments`,
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const [metadataUrl, metadataInit] = fetchMock.mock.calls[0];
+    expect(metadataUrl).toContain(
+      `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(GRAPH_ID)}?$select=`,
     );
-    expect(url).toContain("internetMessageId");
-    const headers = (init as RequestInit).headers as Record<string, string>;
-    expect(headers.Authorization).toBe("Bearer graph-token-xyz");
+    expect(metadataUrl).toContain("internetMessageId");
+    const metadataHeaders = (metadataInit as RequestInit).headers as Record<
+      string,
+      string
+    >;
+    expect(metadataHeaders.Authorization).toBe("Bearer graph-token-xyz");
+
+    const [valueUrl, valueInit] = fetchMock.mock.calls[1];
+    expect(valueUrl).toBe(
+      `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(GRAPH_ID)}/$value`,
+    );
+    const valueHeaders = (valueInit as RequestInit).headers as Record<
+      string,
+      string
+    >;
+    expect(valueHeaders.Accept).toBe("application/octet-stream");
+    expect(valueHeaders.Authorization).toBe("Bearer graph-token-xyz");
   });
 
-  it("builds an HTML body file with rendered headers for a camelCase Graph message", async () => {
+  it("returns a single .eml File wrapping the RFC822 stream, named after the subject", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
-    installFetchMock(() => ({
-      ok: true,
-      jsonValue: {
-        subject: "Hey how are you?",
-        body: { contentType: "text", content: "plain text body" },
-        from: { emailAddress: { name: "Alice", address: "alice@x" } },
-        toRecipients: [{ emailAddress: { address: "bob@x" } }],
-        attachments: [],
-      },
-    }));
+    installFetchMock((url) => {
+      if (url.endsWith("/$value")) {
+        return { ok: true, bytes: bytesFrom("MIME-Version: 1.0\r\n\r\nhi") };
+      }
+      return { ok: true, jsonValue: { subject: "Weekly sync notes" } };
+    });
 
     const { subject, files } = await fetchOutlookMessageFilesViaGraph(
       EWS_ID,
       acquireToken,
     );
-    expect(subject).toBe("Hey how are you?");
+    expect(subject).toBe("Weekly sync notes");
     expect(files).toHaveLength(1);
-    expect(files[0].type).toBe("text/html");
-    const html = await files[0].text();
-    expect(html).toContain("<strong>From:</strong> Alice &lt;alice@x&gt;");
-    expect(html).toContain("<strong>To:</strong> bob@x");
-    expect(html).toContain("<pre>plain text body</pre>");
+    const eml = files[0];
+    expect(eml.type).toBe("message/rfc822");
+    expect(eml.name).toBe("Weekly sync notes.eml");
+    expect(await eml.text()).toBe("MIME-Version: 1.0\r\n\r\nhi");
   });
 
-  it("decodes Graph fileAttachment entries into File objects", async () => {
+  it("sanitises filesystem-hostile characters in the subject-derived filename", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
-    const base64 = btoa("pdf-bytes");
-    installFetchMock(() => ({
-      ok: true,
-      jsonValue: {
-        subject: "With attachment",
-        body: { contentType: "text", content: "see attached" },
-        attachments: [
-          {
-            "@odata.type": "#microsoft.graph.fileAttachment",
-            name: "doc.pdf",
-            contentType: "application/pdf",
-            size: 9,
-            isInline: false,
-            contentBytes: base64,
-          },
-        ],
-      },
-    }));
+    installFetchMock((url) =>
+      url.endsWith("/$value")
+        ? { ok: true, bytes: bytesFrom("x") }
+        : { ok: true, jsonValue: { subject: "Re: a/b\\c<d>|?" } },
+    );
 
     const { files } = await fetchOutlookMessageFilesViaGraph(
       EWS_ID,
       acquireToken,
     );
-    expect(files).toHaveLength(2);
-    expect(files[1].name).toBe("doc.pdf");
-    expect(files[1].type).toBe("application/pdf");
-    expect(await files[1].text()).toBe("pdf-bytes");
+    expect(files[0].name).toBe("Re_ a_b_c_d___.eml");
   });
 
-  it("surfaces internetMessageId from the Graph response in the return value", async () => {
+  it("falls back to message.eml when the subject is missing or blank", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
-    installFetchMock(() => ({
-      ok: true,
-      jsonValue: {
-        subject: "With id",
-        body: { contentType: "text", content: "x" },
-        internetMessageId: "<abc@host>",
-        attachments: [],
-      },
-    }));
+    installFetchMock((url) =>
+      url.endsWith("/$value")
+        ? { ok: true, bytes: bytesFrom("x") }
+        : { ok: true, jsonValue: {} },
+    );
+
+    const { files, subject } = await fetchOutlookMessageFilesViaGraph(
+      EWS_ID,
+      acquireToken,
+    );
+    expect(subject).toBe("");
+    expect(files[0].name).toBe("message.eml");
+  });
+
+  it("surfaces internetMessageId from the metadata response in the return value", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock((url) =>
+      url.endsWith("/$value")
+        ? { ok: true, bytes: bytesFrom("x") }
+        : {
+            ok: true,
+            jsonValue: { subject: "With id", internetMessageId: "<abc@host>" },
+          },
+    );
 
     const result = await fetchOutlookMessageFilesViaGraph(EWS_ID, acquireToken);
     expect(result.internetMessageId).toBe("<abc@host>");
   });
 
-  it("throws when Graph returns a non-OK status", async () => {
+  it("throws when the metadata request returns a non-OK status", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
     installFetchMock(() => ({
       ok: false,
@@ -167,6 +185,19 @@ describe("fetchOutlookMessageFilesViaGraph", () => {
     await expect(
       fetchOutlookMessageFilesViaGraph(EWS_ID, acquireToken),
     ).rejects.toThrow(/Graph fetch failed: 403 Forbidden/);
+  });
+
+  it("throws when the $value request returns a non-OK status", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock((url) =>
+      url.endsWith("/$value")
+        ? { ok: false, status: 404, statusText: "Not Found" }
+        : { ok: true, jsonValue: { subject: "x" } },
+    );
+
+    await expect(
+      fetchOutlookMessageFilesViaGraph(EWS_ID, acquireToken),
+    ).rejects.toThrow(/Graph MIME fetch failed: 404 Not Found/);
   });
 });
 
@@ -180,26 +211,24 @@ describe("fetchOutlookMessageFilesByInternetMessageIdViaGraph", () => {
     vi.unstubAllGlobals();
   });
 
-  it("filters /me/messages by internetMessageId and then fetches the matched message", async () => {
+  it("filters /me/messages by internetMessageId then fetches the matched message's raw MIME", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
     const fetchMock = installFetchMock((url) => {
       if (url.includes("$filter=")) {
         return {
           ok: true,
           jsonValue: {
-            value: [{ id: "matched-graph-id", subject: "Matched" }],
+            value: [
+              {
+                id: "matched-graph-id",
+                subject: "Matched",
+                internetMessageId: "<abc@host>",
+              },
+            ],
           },
         };
       }
-      return {
-        ok: true,
-        jsonValue: {
-          id: "matched-graph-id",
-          subject: "Matched",
-          body: { contentType: "text", content: "body" },
-          attachments: [],
-        },
-      };
+      return { ok: true, bytes: bytesFrom("raw") };
     });
 
     const result = await fetchOutlookMessageFilesByInternetMessageIdViaGraph(
@@ -209,14 +238,19 @@ describe("fetchOutlookMessageFilesByInternetMessageIdViaGraph", () => {
 
     expect(result).not.toBeNull();
     expect(result?.subject).toBe("Matched");
+    expect(result?.internetMessageId).toBe("<abc@host>");
+    expect(result?.files).toHaveLength(1);
+    expect(result?.files[0].type).toBe("message/rfc822");
+    expect(result?.files[0].name).toBe("Matched.eml");
+
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const [filterUrl] = fetchMock.mock.calls[0];
     expect(filterUrl).toContain(
       encodeURIComponent("internetMessageId eq '<abc@host>'"),
     );
-    const [fetchUrl] = fetchMock.mock.calls[1];
-    expect(fetchUrl).toContain(
-      `/me/messages/${encodeURIComponent("matched-graph-id")}`,
+    const [valueUrl] = fetchMock.mock.calls[1];
+    expect(valueUrl).toBe(
+      `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent("matched-graph-id")}/$value`,
     );
   });
 
@@ -238,7 +272,7 @@ describe("fetchOutlookMessageFilesByInternetMessageIdViaGraph", () => {
       if (url.includes("$filter=")) {
         return { ok: true, jsonValue: { value: [] } };
       }
-      return { ok: true, jsonValue: {} };
+      return { ok: true, bytes: bytesFrom("x") };
     });
 
     await fetchOutlookMessageFilesByInternetMessageIdViaGraph(

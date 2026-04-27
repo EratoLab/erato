@@ -1,9 +1,10 @@
-import { buildEmailBodyFile } from "./buildEmailBodyHtml";
-
 /**
- * Fetches a single Outlook message via Microsoft Graph and returns its body
- * and attachments as an array of File objects suitable for the existing
- * upload pipeline.
+ * Fetches a single Outlook message via Microsoft Graph and returns the raw
+ * RFC822 MIME stream wrapped as a `.eml` File (`message/rfc822`). The backend
+ * parses headers, body, and attachment listings server-side; attachment
+ * binaries are intentionally left on the wire — the backend extracts
+ * attachment filenames only, so any consumer needing attachment contents
+ * should upload them separately.
  *
  * This is the Microsoft-365 / Exchange-Online path. It is the blessed
  * replacement for the legacy callback-token + Outlook REST v2.0 route
@@ -13,41 +14,10 @@ import { buildEmailBodyFile } from "./buildEmailBodyHtml";
  */
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
-const FILE_ATTACHMENT_ODATA_TYPE = "#microsoft.graph.fileAttachment";
 
-interface GraphEmailAddress {
-  name?: string;
-  address?: string;
-}
-
-interface GraphRecipient {
-  emailAddress?: GraphEmailAddress;
-}
-
-interface GraphBody {
-  contentType?: "html" | "text";
-  content?: string;
-}
-
-interface GraphAttachment {
-  "@odata.type"?: string;
-  id?: string;
-  name?: string;
-  contentType?: string;
-  size?: number;
-  isInline?: boolean;
-  contentBytes?: string;
-}
-
-interface GraphMessage {
+interface GraphMessageMetadata {
   id?: string;
   subject?: string;
-  body?: GraphBody;
-  from?: GraphRecipient;
-  toRecipients?: GraphRecipient[];
-  ccRecipients?: GraphRecipient[];
-  receivedDateTime?: string;
-  attachments?: GraphAttachment[];
   internetMessageId?: string;
 }
 
@@ -70,17 +40,19 @@ export async function fetchOutlookMessageFilesViaGraph(
 ): Promise<FetchOutlookMessageResult> {
   const restId = convertEwsIdToGraphId(ewsItemId);
   const token = await acquireToken();
-  const message = await fetchMessageById(restId, token);
+  const metadata = await fetchMessageMetadataById(restId, token);
+  const bytes = await fetchMessageRawMimeById(restId, token);
+  const subject = metadata.subject ?? "";
   return {
-    subject: message.subject ?? "",
-    files: toFiles(message),
-    internetMessageId: message.internetMessageId ?? null,
+    subject,
+    files: [buildEmlFile(bytes, subject)],
+    internetMessageId: metadata.internetMessageId ?? null,
   };
 }
 
 /**
- * Looks up a message by its RFC 5322 `Message-ID` header, returning the body
- * and attachments if exactly one match is found. Returns `null` when Graph's
+ * Looks up a message by its RFC 5322 `Message-ID` header, returning a single
+ * `.eml` File if exactly one match is found. Returns `null` when Graph's
  * filter returns an empty result (e.g. for drafts that don't yet have an
  * indexed internet message id).
  */
@@ -90,17 +62,15 @@ export async function fetchOutlookMessageFilesByInternetMessageIdViaGraph(
 ): Promise<FetchOutlookMessageResult | null> {
   const token = await acquireToken();
   const match = await findMessageByInternetMessageId(internetMessageId, token);
-  if (!match) {
+  if (!match?.id) {
     return null;
   }
-  if (!match.id) {
-    return null;
-  }
-  const message = await fetchMessageById(match.id, token);
+  const bytes = await fetchMessageRawMimeById(match.id, token);
+  const subject = match.subject ?? "";
   return {
-    subject: message.subject ?? "",
-    files: toFiles(message),
-    internetMessageId: message.internetMessageId ?? internetMessageId,
+    subject,
+    files: [buildEmlFile(bytes, subject)],
+    internetMessageId: match.internetMessageId ?? internetMessageId,
   };
 }
 
@@ -112,11 +82,11 @@ function convertEwsIdToGraphId(ewsItemId: string): string {
   );
 }
 
-async function fetchMessageById(
+async function fetchMessageMetadataById(
   messageId: string,
   token: string,
-): Promise<GraphMessage> {
-  const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}?$expand=attachments&$select=subject,body,from,toRecipients,ccRecipients,receivedDateTime,internetMessageId`;
+): Promise<GraphMessageMetadata> {
+  const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}?$select=subject,internetMessageId`;
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -128,13 +98,32 @@ async function fetchMessageById(
       `Graph fetch failed: ${response.status} ${response.statusText}`,
     );
   }
-  return (await response.json()) as GraphMessage;
+  return (await response.json()) as GraphMessageMetadata;
+}
+
+async function fetchMessageRawMimeById(
+  messageId: string,
+  token: string,
+): Promise<ArrayBuffer> {
+  const url = `${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/$value`;
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/octet-stream",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Graph MIME fetch failed: ${response.status} ${response.statusText}`,
+    );
+  }
+  return await response.arrayBuffer();
 }
 
 async function findMessageByInternetMessageId(
   internetMessageId: string,
   token: string,
-): Promise<GraphMessage | null> {
+): Promise<GraphMessageMetadata | null> {
   const filter = `internetMessageId eq '${escapeODataString(internetMessageId)}'`;
   const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=1&$select=id,subject,internetMessageId`;
   const response = await fetch(url, {
@@ -148,90 +137,30 @@ async function findMessageByInternetMessageId(
       `Graph lookup failed: ${response.status} ${response.statusText}`,
     );
   }
-  const payload = (await response.json()) as { value?: GraphMessage[] };
+  const payload = (await response.json()) as { value?: GraphMessageMetadata[] };
   const first = payload.value?.[0];
   return first ?? null;
 }
 
-function toFiles(message: GraphMessage): File[] {
-  const files: File[] = [];
-  const body = buildBodyFile(message);
-  if (body) {
-    files.push(body);
-  }
-  for (const attachment of message.attachments ?? []) {
-    const file = buildAttachmentFile(attachment);
-    if (file) {
-      files.push(file);
-    }
-  }
-  return files;
-}
-
-function buildBodyFile(message: GraphMessage): File | null {
-  const body = message.body;
-  if (!body?.content) {
-    return null;
-  }
-  const contentIsHtml = body.contentType === "html";
-  const date = message.receivedDateTime
-    ? new Date(message.receivedDateTime)
-    : null;
-  return buildEmailBodyFile({
-    subject: message.subject ?? "(no subject)",
-    from: toAddress(message.from),
-    to: (message.toRecipients ?? []).map(toAddress),
-    cc: (message.ccRecipients ?? []).map(toAddress),
-    date,
-    bodyHtml: contentIsHtml ? body.content : null,
-    bodyText: contentIsHtml ? null : body.content,
+function buildEmlFile(bytes: ArrayBuffer, subject: string): File {
+  return new File([bytes], buildEmlFilename(subject), {
+    type: "message/rfc822",
   });
 }
 
-function toAddress(recipient: GraphRecipient | undefined): {
-  name?: string;
-  address?: string;
-} {
-  const emailAddress = recipient?.emailAddress;
-  return {
-    name: emailAddress?.name,
-    address: emailAddress?.address,
-  };
-}
-
-function buildAttachmentFile(attachment: GraphAttachment): File | null {
-  if (attachment["@odata.type"] !== FILE_ATTACHMENT_ODATA_TYPE) {
-    // itemAttachment (nested messages) and referenceAttachment (cloud links)
-    // have no contentBytes payload — skip them.
-    return null;
-  }
-  if (!attachment.contentBytes || !attachment.name) {
-    return null;
-  }
-  if (attachment.isInline) {
-    return null;
-  }
-  const buffer = decodeBase64ToBuffer(attachment.contentBytes);
-  if (!buffer) {
-    return null;
-  }
-  return new File([buffer], attachment.name, {
-    type: attachment.contentType ?? "application/octet-stream",
-  });
-}
-
-function decodeBase64ToBuffer(base64: string): ArrayBuffer | null {
-  try {
-    const binary = atob(base64);
-    const buffer = new ArrayBuffer(binary.length);
-    const view = new Uint8Array(buffer);
-    for (let index = 0; index < binary.length; index += 1) {
-      view[index] = binary.charCodeAt(index);
-    }
-    return buffer;
-  } catch {
-    return null;
-  }
+function buildEmlFilename(subject: string): string {
+  const base = subject.trim() || "message";
+  const sanitized = Array.from(base)
+    .map((character) => {
+      if ('<>:"/\\|?*'.includes(character)) {
+        return "_";
+      }
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint < 32 ? "_" : character;
+    })
+    .join("")
+    .slice(0, 100);
+  return `${sanitized}.eml`;
 }
 
 function escapeODataString(value: string): string {

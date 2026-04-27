@@ -42,6 +42,7 @@ import {
   Lock,
   Link,
   LinkSlash,
+  Mail,
   OpenNewWindow,
 } from "iconoir-react";
 
@@ -207,6 +208,10 @@ export const MediaVideoIcon = ({ className, ...props }: IconProps) => (
 
 export const MultiplePagesIcon = ({ className, ...props }: IconProps) => (
   <MultiplePages className={className} {...props} />
+);
+
+export const MailIcon = ({ className, ...props }: IconProps) => (
+  <Mail className={className} {...props} />
 );
 
 export const SearchIcon = ({ className, ...props }: IconProps) => (

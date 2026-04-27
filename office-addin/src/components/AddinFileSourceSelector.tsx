@@ -5,7 +5,6 @@ import { useCallback, useMemo, useState } from "react";
 import { useOffice } from "../providers/OfficeProvider";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
-import { emailToHtmlFile } from "../utils/emailToFile";
 
 type CloudProvider = "sharepoint" | "googledrive";
 
@@ -45,9 +44,11 @@ export function AddinFileSourceSelector({
   className = "",
 }: AddinFileSourceSelectorProps) {
   const { host } = useOffice();
-  const { mailItem, attachments, isLoadingAttachments, getAttachmentFile } =
+  const { attachments, isLoadingAttachments, getAttachmentFile } =
     useOutlookMailItem();
   const {
+    emailBodyFile,
+    isLoadingEmailBody,
     isEmailBodyDismissed,
     dismissedAttachmentIds,
     restoreEmailBody,
@@ -63,13 +64,6 @@ export function AddinFileSourceSelector({
 
   const isBusy = disabled || isProcessing || isUploadingEmailContent;
   const canShowEmailContent = host === "Outlook";
-  const emailBodyFile = useMemo(() => {
-    if (!mailItem || mailItem.isLoadingBody) {
-      return null;
-    }
-
-    return emailToHtmlFile(mailItem);
-  }, [mailItem]);
   const selectableAttachments = useMemo(
     () => attachments.filter((attachment) => !attachment.isInline),
     [attachments],
@@ -169,7 +163,10 @@ export function AddinFileSourceSelector({
   );
 
   const hasAnyEmailContent =
-    !!emailBodyFile || selectableAttachments.length > 0 || isLoadingAttachments;
+    !!emailBodyFile ||
+    selectableAttachments.length > 0 ||
+    isLoadingAttachments ||
+    isLoadingEmailBody;
   const canUploadEmailContent = !!onSelectFiles;
 
   const triggerLabel = isBusy
@@ -278,7 +275,7 @@ export function AddinFileSourceSelector({
 
             {isEmailContentOpen && (
               <div className="max-h-72 overflow-y-auto rounded-lg border border-theme-border bg-theme-bg-secondary p-1">
-                {mailItem?.isLoadingBody && (
+                {isLoadingEmailBody && (
                   <div className="px-3 py-2 text-xs text-theme-fg-muted">
                     {t({
                       id: "officeAddin.fileSource.loadingEmailThread",
@@ -377,7 +374,7 @@ export function AddinFileSourceSelector({
                   );
                 })}
 
-                {!mailItem?.isLoadingBody &&
+                {!isLoadingEmailBody &&
                   !isLoadingAttachments &&
                   !emailBodyFile &&
                   selectableAttachments.length === 0 && (

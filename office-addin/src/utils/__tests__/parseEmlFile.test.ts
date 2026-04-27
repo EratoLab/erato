@@ -31,7 +31,7 @@ describe("parseEmlFileToFiles", () => {
     vi.restoreAllMocks();
   });
 
-  it("parses a plain-text .eml into a single HTML body file with rendered headers", async () => {
+  it("wraps the raw bytes of a plain-text .eml as message/rfc822", async () => {
     const eml =
       `From: Alice <alice@example.com>${CRLF}` +
       `To: Bob <bob@example.com>${CRLF}` +
@@ -41,37 +41,16 @@ describe("parseEmlFileToFiles", () => {
       `${CRLF}` +
       `plain body content`;
 
-    const { files: result } = await parseEmlFileToFiles(makeEmlFile(eml));
+    const source = makeEmlFile(eml, "note.eml");
+    const { files: result } = await parseEmlFileToFiles(source);
     expect(result).toHaveLength(1);
-    const body = result[0];
-    expect(body.type).toBe("text/html");
-    const text = await body.text();
-    expect(text).toContain(
-      "<strong>From:</strong> Alice &lt;alice@example.com&gt;",
-    );
-    expect(text).toContain("<strong>To:</strong> Bob &lt;bob@example.com&gt;");
-    expect(text).toContain("<strong>Subject:</strong> Hello there");
-    expect(text).toMatch(/<pre>plain body content\s*<\/pre>/);
+    const raw = result[0];
+    expect(raw.type).toBe("message/rfc822");
+    expect(raw.name).toBe("note.eml");
+    expect(await raw.text()).toBe(eml);
   });
 
-  it("keeps HTML body content verbatim, without <pre> wrapping", async () => {
-    const eml =
-      `From: a@x${CRLF}` +
-      `To: b@x${CRLF}` +
-      `Subject: Rich${CRLF}` +
-      `MIME-Version: 1.0${CRLF}` +
-      `Content-Type: text/html; charset=utf-8${CRLF}` +
-      `${CRLF}` +
-      `<p>hi there</p>`;
-
-    const { files: result } = await parseEmlFileToFiles(makeEmlFile(eml));
-    expect(result).toHaveLength(1);
-    const text = await result[0].text();
-    expect(text).toContain("<p>hi there</p>");
-    expect(text).not.toContain("<pre>");
-  });
-
-  it("produces a body file plus one File per non-inline attachment", async () => {
+  it("produces the raw .eml file plus one File per non-inline attachment", async () => {
     const boundary = "----BOUNDARY1";
     const eml =
       `From: a@x${CRLF}` +
@@ -93,6 +72,7 @@ describe("parseEmlFileToFiles", () => {
 
     const { files: result } = await parseEmlFileToFiles(makeEmlFile(eml));
     expect(result).toHaveLength(2);
+    expect(result[0].type).toBe("message/rfc822");
     const attachment = result[1];
     expect(attachment.name).toBe("notes.txt");
     expect(attachment.type).toContain("text/plain");

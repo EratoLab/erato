@@ -7,18 +7,21 @@ import {
   useState,
 } from "react";
 
+import { useMsalNaa } from "./MsalNaaProvider";
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
-import { emailToHtmlFile } from "../utils/emailToFile";
+import { fetchCurrentEmailEml } from "../utils/fetchCurrentEmailEml";
 
 import type { LocalFilePreviewItem } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
 const OUTLOOK_CLOUD_ATTACHMENT_TYPE = "cloud";
+const GRAPH_MAIL_SCOPES = ["Mail.Read"];
 
 interface OutlookEmailSourceContextValue {
   emailSubject: string;
   isEmailBodyIncluded: boolean;
   emailBodyFile: File | null;
+  isLoadingEmailBody: boolean;
   selectedAttachmentItems: LocalFilePreviewItem[];
   isLoadingAttachments: boolean;
   removeEmailBody: () => void;
@@ -35,6 +38,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   emailSubject: "",
   isEmailBodyIncluded: false,
   emailBodyFile: null,
+  isLoadingEmailBody: false,
   selectedAttachmentItems: [],
   isLoadingAttachments: false,
   removeEmailBody: () => {},
@@ -66,17 +70,55 @@ export function OutlookEmailSourceProvider({
     isLoadingAttachments,
     getAttachmentFile,
   } = useOutlookMailItem();
+  const { acquireToken } = useMsalNaa();
   const [dismissedBodyMailIdentity, setDismissedBodyMailIdentity] = useState<
     string | null
   >(null);
   const [dismissedAttachmentIds, setDismissedAttachmentIds] = useState<
     string[]
   >([]);
+  const [emailBodyFile, setEmailBodyFile] = useState<File | null>(null);
+  const [isLoadingEmailBody, setIsLoadingEmailBody] = useState(false);
 
-  const emailBodyFile = useMemo(
-    () => (mailItem ? emailToHtmlFile(mailItem) : null),
-    [mailItem],
+  const acquireGraphToken = useCallback(
+    () => acquireToken(GRAPH_MAIL_SCOPES),
+    [acquireToken],
   );
+
+  const itemId = mailItem?.itemId ?? null;
+
+  // Fetch the raw `.eml` via Graph whenever the open email changes. Drafts
+  // and compose items have no itemId, so no accessory is produced — matches
+  // the Graph indexing contract (`/$value` 404s on unsent messages).
+  useEffect(() => {
+    if (!itemId) {
+      setEmailBodyFile(null);
+      setIsLoadingEmailBody(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingEmailBody(true);
+    setEmailBodyFile(null);
+
+    void fetchCurrentEmailEml(itemId, acquireGraphToken)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setEmailBodyFile(result?.file ?? null);
+      })
+      .finally(() => {
+        if (cancelled) {
+          return;
+        }
+        setIsLoadingEmailBody(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [acquireGraphToken, itemId]);
 
   useEffect(() => {
     if (!itemIdentity) {
@@ -185,6 +227,7 @@ export function OutlookEmailSourceProvider({
       emailSubject: mailItem?.subject ?? "",
       isEmailBodyIncluded,
       emailBodyFile,
+      isLoadingEmailBody,
       selectedAttachmentItems,
       isLoadingAttachments,
       removeEmailBody,
@@ -203,6 +246,7 @@ export function OutlookEmailSourceProvider({
       isEmailBodyDismissed,
       isEmailBodyIncluded,
       isLoadingAttachments,
+      isLoadingEmailBody,
       mailItem?.subject,
       removeAttachment,
       removeEmailBody,

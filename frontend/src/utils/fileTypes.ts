@@ -14,6 +14,7 @@ export type FileType =
   | "archive"
   | "audio"
   | "video"
+  | "email"
   | "other";
 
 /**
@@ -173,6 +174,15 @@ export const FILE_TYPES: Record<FileType, FileTypeConfig> = {
     maxSize: 100 * 1024 * 1024, // 100MB
     iconId: "MediaVideo",
     iconColor: "rgb(220, 38, 38)", // red-600
+    enabled: true,
+  },
+  email: {
+    displayName: "Email",
+    extensions: ["eml"],
+    mimeTypes: ["message/rfc822"],
+    maxSize: 25 * 1024 * 1024, // 25MB — emails with inline attachments can run large
+    iconId: "Mail",
+    iconColor: "rgb(37, 99, 235)", // blue-600
     enabled: true,
   },
   other: {
@@ -627,6 +637,13 @@ export class FileTypeUtil {
           "text/csv",
           "text/html",
         ],
+        operations: ["extract_text"],
+      },
+      // Email
+      eml: {
+        id: "email",
+        extensions: ["eml"],
+        mime_types: ["message/rfc822"],
         operations: ["extract_text"],
       },
     };
