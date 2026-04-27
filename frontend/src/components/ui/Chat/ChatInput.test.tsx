@@ -62,8 +62,12 @@ vi.mock("@/components/ui/FileUpload/FileUploadWithTokenCheck", () => ({
   FileUploadWithTokenCheck: () => <div data-testid="file-upload-control" />,
 }));
 
+const mockChatInputTokenUsage = vi.fn();
 vi.mock("./ChatInputTokenUsage", () => ({
-  ChatInputTokenUsage: () => null,
+  ChatInputTokenUsage: (props: unknown) => {
+    mockChatInputTokenUsage(props);
+    return null;
+  },
 }));
 
 vi.mock("./FacetSelector", () => ({
@@ -528,5 +532,52 @@ describe("ChatInput", () => {
 
     expect(shell?.firstElementChild).toBe(inlinePreview);
     expect(inlinePreview?.nextElementSibling).toBe(textarea);
+  });
+
+  // Guard against the prop chain silently breaking. The Outlook add-in
+  // relies on ChatInput forwarding virtualFiles into ChatInputTokenUsage so
+  // the previewed email body counts toward the estimate without going
+  // through the upload pipeline.
+  it("forwards virtualFiles to ChatInputTokenUsage", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles: [],
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+
+    const previewBody = new File(["body"], "preview.eml", {
+      type: "message/rfc822",
+    });
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput
+            onSendMessage={onSendMessage}
+            virtualFiles={[previewBody]}
+          />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(mockChatInputTokenUsage).toHaveBeenCalled();
+    const lastCall =
+      mockChatInputTokenUsage.mock.calls[
+        mockChatInputTokenUsage.mock.calls.length - 1
+      ][0];
+    expect(lastCall.virtualFiles).toEqual([previewBody]);
   });
 });

@@ -59,6 +59,12 @@ interface AddinChatInputProps {
    * indicator so the user knows attachments are still materializing.
    */
   isExpandingDroppedEmails?: boolean;
+  /**
+   * Forwarded to `ChatInput.virtualFiles`. The add-in passes its previewed
+   * email body here so the token estimate covers it without polluting
+   * `attachedFilesState`. Pass a memoized array.
+   */
+  virtualFiles?: File[];
   controlledAvailableModels?: ChatModel[];
   controlledSelectedModel?: ChatModel | null;
   onControlledSelectedModelChange?: (model: ChatModel) => void;

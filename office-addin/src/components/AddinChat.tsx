@@ -138,7 +138,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   );
 
   const { mailItem } = useOutlookMailItem();
-  const { hasSelectedEmailSource, isEmailBodyIncluded } =
+  const { hasSelectedEmailSource, isEmailBodyIncluded, emailBodyFile } =
     useOutlookEmailSource();
   const previewEmailMessageIdRef = useRef<string | null>(null);
 
@@ -412,6 +412,18 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       ? currentEmailMessageId
       : null;
 
+  // Feed the previewed email body into the token estimator without
+  // persisting it as an upload. The estimator hook digests the file's
+  // metadata for cache stability, so we only re-allocate the array when
+  // the underlying File reference changes.
+  const isPreviewBodyIncluded =
+    shouldSuggestCurrentEmail && hasSelectedEmailSource && isEmailBodyIncluded;
+  const previewVirtualFiles = useMemo(
+    () =>
+      isPreviewBodyIncluded && emailBodyFile ? [emailBodyFile] : undefined,
+    [isPreviewBodyIncluded, emailBodyFile],
+  );
+
   const handleSendMessage = useCallback(
     (
       message: string,
@@ -681,6 +693,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               uploadFiles={uploadFiles}
               uploadError={uploadError}
               isExpandingDroppedEmails={isExpandingDroppedEmails}
+              virtualFiles={previewVirtualFiles}
             />
           </div>
         </ChatErrorBoundary>
