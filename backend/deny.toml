@@ -122,6 +122,10 @@ exceptions = [
     { allow = ["AGPL-3.0-or-later"], crate = "mock-mcp-server" },
     # Transitive dependency of jemalloc_pprof used for profiling flamegraph rendering.
     { allow = ["CDDL-1.0"], crate = "inferno" },
+    # Transitive dependency of kreuzberg via comrak for Unicode data tables.
+    { allow = ["Unicode-DFS-2016"], crate = "finl_unicode" },
+    # Document extraction library used for parsing uploaded files.
+    { allow = ["Elastic-2.0"], crate = "kreuzberg" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,

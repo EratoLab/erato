@@ -51,6 +51,79 @@ fn detect_mime_type(file_bytes: &[u8]) -> Result<String, Report> {
     Ok(mime_type)
 }
 
+fn append_extraction_children(
+    content: &mut String,
+    children: Option<Vec<kreuzberg::ArchiveEntry>>,
+) {
+    let Some(children) = children else {
+        return;
+    };
+
+    for child in children {
+        if !content.trim_end().is_empty() {
+            content.push_str("\n\n");
+        }
+
+        content.push_str(&format!(
+            "## Attachment: {}\n\nMIME type: {}\n\n",
+            child.path, child.mime_type
+        ));
+        content.push_str(child.result.content.trim());
+
+        append_extraction_children(content, child.result.children);
+    }
+}
+
+fn content_with_page_markers(
+    content: String,
+    pages: Option<Vec<kreuzberg::PageContent>>,
+    marker_format: &str,
+) -> String {
+    if marker_format.contains("{page_num}") {
+        let marker_probe = marker_format.replace("{page_num}", "1");
+        if content.contains(&marker_probe) {
+            return content;
+        }
+
+        let escaped_marker_probe = marker_probe.replace('<', "\\<").replace('>', "\\>");
+        if content.contains(&escaped_marker_probe) {
+            return content;
+        }
+    }
+
+    let marker_placeholder = marker_format.replace("{page_num}", "");
+    if marker_placeholder.is_empty() || content.contains(&marker_placeholder) {
+        return content;
+    }
+
+    let Some(pages) = pages else {
+        return content;
+    };
+
+    if pages.is_empty() {
+        return content;
+    }
+
+    let page_marked_content = pages
+        .into_iter()
+        .filter(|page| !page.content.trim().is_empty())
+        .map(|page| {
+            format!(
+                "{}\n{}",
+                marker_format.replace("{page_num}", &page.page_number.to_string()),
+                page.content.trim()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    if page_marked_content.is_empty() {
+        content
+    } else {
+        page_marked_content
+    }
+}
+
 #[async_trait]
 impl FileProcessor for KreuzbergProcessor {
     async fn parse_file(
@@ -88,6 +161,7 @@ impl FileProcessor for KreuzbergProcessor {
                     insert_page_markers: true,
                     marker_format: "<page number=\"{page_num}\">".to_string(),
                 };
+                let marker_format = page_config.marker_format.clone();
 
                 let config = kreuzberg::ExtractionConfig {
                     output_format: kreuzberg::OutputFormat::Markdown,
@@ -99,7 +173,11 @@ impl FileProcessor for KreuzbergProcessor {
                 let result = kreuzberg::extract_bytes_sync(&file_bytes, &mime_type, &config)
                     .wrap_err("Kreuzberg extraction failed")?;
 
-                Ok(result.content)
+                let mut content =
+                    content_with_page_markers(result.content, result.pages, &marker_format);
+                append_extraction_children(&mut content, result.children);
+
+                Ok(content)
             })
             .in_current_span()
             .await??,
@@ -162,13 +240,33 @@ mod tests {
             .await
             .expect("Failed to extract text from EML fixture");
 
-        assert!(extracted.contains("Subject: Please review attached draft"));
-        assert!(extracted.contains("From: daniel@eratolabs.com"));
-        assert!(extracted.contains("To: testuser@maxgoisser.onmicrosoft.com"));
+        assert!(extracted.contains("Please review attached draft"));
+        assert!(extracted.contains("daniel@eratolabs.com"));
+        assert!(extracted.contains("testuser@maxgoisser.onmicrosoft.com"));
         assert!(extracted.contains(
             "could you please take a quick look at the attached draft document and let me know whether it looks fine from your side."
         ));
-        assert!(extracted.contains("Attachments: internal_review_test_attachment.pdf"));
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_extracts_content_from_eml_pdf_attachment() {
+        let eml_bytes = read_test_fixture("email-with-sample-compressed-pdf.eml");
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(eml_bytes, Some("message/rfc822"))
+            .await
+            .expect("Failed to extract text from EML fixture with PDF attachment");
+
+        let expected_text = "This sample PDF file is provided by Sample-Files.com";
+        if !extracted.contains(expected_text) {
+            eprintln!(
+                "Expected extracted EML content to contain {:?}, but it did not.\nExtracted content:\n{}",
+                expected_text, extracted
+            );
+        }
+        assert!(extracted.contains("## Attachment: sample_compressed.pdf"));
+        assert!(extracted.contains(expected_text));
     }
 
     #[tokio::test]
@@ -181,14 +279,37 @@ mod tests {
             .await
             .expect("Failed to extract text from EML reply fixture");
 
-        assert!(extracted.contains("Subject: Re: Another doc you have to check"));
-        assert!(extracted.contains("From: daniel@eratolabs.com"));
-        assert!(extracted.contains("To: testuser@maxgoisser.onmicrosoft.com"));
+        assert!(extracted.contains("Re: Another doc you have to check"));
+        assert!(extracted.contains("daniel@eratolabs.com"));
+        assert!(extracted.contains("testuser@maxgoisser.onmicrosoft.com"));
         assert!(
             extracted.contains("I am referring to the PDF draft I attached to my previous email.")
         );
         assert!(extracted.contains(
             "Please let me know if you have any specific questions or if you cannot see the attachment."
         ));
+    }
+
+    #[tokio::test]
+    async fn test_kreuzberg_extracts_structured_content_from_company_overview_pptx() {
+        let pptx_bytes = read_test_fixture("Acme_Inc_Company_Overview.pptx");
+
+        let processor = KreuzbergProcessor;
+        let extracted = processor
+            .parse_file(
+                pptx_bytes,
+                Some("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+            )
+            .await
+            .expect("Failed to extract text from PPTX fixture");
+
+        if !extracted.contains("Alice") || !extracted.contains("Johnson") {
+            eprintln!(
+                "Expected extracted PPTX content to contain both 'Alice' and 'Johnson', but it did not.\nExtracted content:\n{extracted}",
+            );
+        }
+
+        assert!(extracted.contains("Alice"));
+        assert!(extracted.contains("Johnson"));
     }
 }

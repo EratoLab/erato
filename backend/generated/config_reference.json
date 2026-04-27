@@ -7,8 +7,8 @@
   "additional_frontend_environment": {
     "deprecated": {
       "note": "Please use `frontend.additional_environment` instead.",
-      "planned_removal_version": "0.6.0",
-      "replacement_key": "frontend.additional_environment"
+      "replacement_key": "frontend.additional_environment",
+      "planned_removal_version": "0.6.0"
     }
   },
   "budget.budget_currency": {},
@@ -152,8 +152,8 @@
   "frontend_bundle_path": {
     "deprecated": {
       "note": "Please use `frontend.web_frontend_bundle_path` instead.",
-      "planned_removal_version": "0.6.0",
-      "replacement_key": "frontend.web_frontend_bundle_path"
+      "replacement_key": "frontend.web_frontend_bundle_path",
+      "planned_removal_version": "0.6.0"
     }
   },
   "http_host": {},
@@ -220,8 +220,8 @@
   "sentry_dsn": {
     "deprecated": {
       "note": "Please use `integrations.sentry.sentry_dsn` instead.",
-      "planned_removal_version": "0.6.0",
-      "replacement_key": "integrations.sentry.sentry_dsn"
+      "replacement_key": "integrations.sentry.sentry_dsn",
+      "planned_removal_version": "0.6.0"
     }
   },
   "server.encryption_key": {},
