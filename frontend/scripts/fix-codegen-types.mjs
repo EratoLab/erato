@@ -68,6 +68,14 @@ const schemaStringFieldFixes = [
     from: "model_icon?: null | undefined;",
     to: "model_icon?: string | null | undefined;",
   },
+  {
+    from: "virtual_files?: null | undefined;",
+    to: "virtual_files?: TokenUsageVirtualFile[] | null | undefined;",
+  },
+  {
+    from: "content_type?: null | undefined;",
+    to: "content_type?: string | null | undefined;",
+  },
 ];
 
 async function patchVoidTypes(filePath) {

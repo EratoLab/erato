@@ -14,6 +14,7 @@ import type {
   TokenUsageStats,
   FileUploadItem,
   TokenUsageRequest,
+  TokenUsageVirtualFile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 // Token thresholds for warnings
@@ -46,6 +47,7 @@ export interface UseTokenUsageEstimationReturn {
     previousMessageId?: string | null,
     inputFileIds?: string[],
     chatProviderId?: string,
+    virtualFiles?: File[],
   ) => Promise<TokenUsageEstimationResult>;
 
   /** Estimate token usage for when a file is uploaded (with prior message context) */
@@ -86,6 +88,23 @@ const emptyEstimationResult: Omit<TokenUsageEstimationResult, "isLoading"> = {
 };
 
 /**
+ * Cheap, stable digest for a list of virtual `File`s used in the React Query
+ * cache key. We avoid hashing bytes — `name|type|size|lastModified` collides
+ * only across two genuinely-distinct uploads with identical metadata, which
+ * is vanishingly rare in our use case (each opened Outlook email yields a
+ * fresh `File` whose `lastModified` reflects the time of construction).
+ */
+export const digestVirtualFiles = (files: File[] | undefined): string => {
+  if (!files || files.length === 0) {
+    return "";
+  }
+  return [...files]
+    .map((file) => `${file.name}|${file.type}|${file.size}|${file.lastModified}`)
+    .sort()
+    .join(";");
+};
+
+/**
  * Generate a query key for token estimation
  */
 export const getTokenEstimationQueryKey = (
@@ -95,6 +114,7 @@ export const getTokenEstimationQueryKey = (
   assistantId?: string,
   previousMessageId?: string | null,
   chatProviderId?: string,
+  virtualFilesDigest?: string,
 ): string[] => {
   // Normalize inputs for consistent key generation
   const normalizedMessage = message.trim();
@@ -108,8 +128,37 @@ export const getTokenEstimationQueryKey = (
     assistantId ?? "",
     previousMessageId ?? "",
     chatProviderId ?? "",
+    virtualFilesDigest ?? "",
   ];
 };
+
+/**
+ * Encodes `File` bytes as standard base64. Uses `FileReader.readAsDataURL`
+ * so large payloads stream through the browser's native decoder instead of
+ * blowing the JS call stack via `btoa(String.fromCharCode(...))`.
+ */
+async function fileToBase64(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error("FileReader failed"));
+    reader.readAsDataURL(file);
+  });
+  const commaIndex = dataUrl.indexOf(",");
+  return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : "";
+}
+
+async function buildVirtualFilesPayload(
+  files: File[],
+): Promise<TokenUsageVirtualFile[]> {
+  return Promise.all(
+    files.map(async (file) => ({
+      filename: file.name,
+      content_type: file.type || undefined,
+      base64: await fileToBase64(file),
+    })),
+  );
+}
 
 const getTokenEstimationQueryKeyFromParts = (
   requestBody: Record<string, unknown>,
@@ -176,6 +225,7 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
       previousMessageId?: string | null,
       inputFileIds?: string[],
       chatProviderId?: string,
+      virtualFiles?: File[],
     ): Promise<TokenUsageEstimationResult> => {
       try {
         // Generate a proper query key
@@ -186,6 +236,7 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
           assistantId,
           previousMessageId,
           chatProviderId,
+          digestVirtualFiles(virtualFiles),
         );
 
         // Check if we already have cached data
@@ -204,6 +255,10 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
         // Add optional properties if they have values
         if (inputFileIds && inputFileIds.length > 0) {
           requestBody.input_files_ids = inputFileIds;
+        }
+
+        if (virtualFiles && virtualFiles.length > 0) {
+          requestBody.virtual_files = await buildVirtualFilesPayload(virtualFiles);
         }
 
         if (chatId) {
