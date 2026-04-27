@@ -124,6 +124,10 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       chatProviderId: selectedModel?.chat_provider_id ?? undefined,
       acceptedFileTypes,
       multiple: true,
+      // Match the ChatInput cap. Without this, useFileDropzone's default
+      // (5) silently truncates each upload batch before files reach the
+      // input — the chip row shows "5/50" while later drops disappear.
+      maxFiles: 50,
     },
   );
 
