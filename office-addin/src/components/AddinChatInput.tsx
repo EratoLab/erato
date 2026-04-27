@@ -198,7 +198,16 @@ export const AddinChatInput = forwardRef<
             ...(bodyFormat ? { body_format: bodyFormat } : {}),
           },
         };
-      } else if (mailItem?.bodyText || mailItem?.bodyHtml) {
+      } else if (
+        mailItem?.isComposeMode &&
+        (mailItem.bodyText || mailItem.bodyHtml)
+      ) {
+        // Only attach `outlook_review_draft` when the user is composing
+        // their own message — the action is meaningless (and a privacy
+        // footgun) if applied to a read-mode email the user happens to
+        // have open. Backend-side, `full_body` is also capped at 10 KB,
+        // but that's a defense-in-depth check; the gate here prevents the
+        // received-mail body from ever flowing into the request.
         const fullBody =
           bodyFormat === "html"
             ? (mailItem.bodyHtml ?? mailItem.bodyText ?? "")

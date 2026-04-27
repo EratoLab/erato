@@ -38,6 +38,11 @@ export interface OutlookMailItemData {
   bodyText: string | null;
   bodyHtml: string | null;
   isLoadingBody: boolean;
+  // True when the underlying Office item is a `MessageCompose` (the user is
+  // drafting). False for `MessageRead` (the user is reading an email). Used
+  // by the action-facet wrapper to gate `outlook_review_draft`, which only
+  // makes sense for the user's own draft — never for received mail.
+  isComposeMode: boolean;
 }
 
 interface OutlookMailItemContextValue {
@@ -209,6 +214,7 @@ function readMailItemSync(item: Office.MessageRead): OutlookMailItemData {
     bodyText: null,
     bodyHtml: null,
     isLoadingBody: true,
+    isComposeMode: false,
   };
 }
 
@@ -229,6 +235,7 @@ function readMailItemCompose(
     bodyText: null,
     bodyHtml: null,
     isLoadingBody: true,
+    isComposeMode: true,
   });
 
   item.subject.getAsync((result) => {
