@@ -99,7 +99,9 @@ export const digestVirtualFiles = (files: File[] | undefined): string => {
     return "";
   }
   return [...files]
-    .map((file) => `${file.name}|${file.type}|${file.size}|${file.lastModified}`)
+    .map(
+      (file) => `${file.name}|${file.type}|${file.size}|${file.lastModified}`,
+    )
     .sort()
     .join(";");
 };
@@ -141,7 +143,8 @@ async function fileToBase64(file: File): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error ?? new Error("FileReader failed"));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("FileReader failed"));
     reader.readAsDataURL(file);
   });
   const commaIndex = dataUrl.indexOf(",");
@@ -258,7 +261,8 @@ export function useTokenUsageEstimation(): UseTokenUsageEstimationReturn {
         }
 
         if (virtualFiles && virtualFiles.length > 0) {
-          requestBody.virtual_files = await buildVirtualFilesPayload(virtualFiles);
+          requestBody.virtual_files =
+            await buildVirtualFilesPayload(virtualFiles);
         }
 
         if (chatId) {

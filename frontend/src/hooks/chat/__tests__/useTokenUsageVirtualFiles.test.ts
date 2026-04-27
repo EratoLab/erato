@@ -37,9 +37,7 @@ const mockResponse: TokenUsageResponse = {
     remaining_tokens: 900,
     chat_provider_id: "test",
   },
-  file_details: [
-    { id: "synth-1", filename: "preview.eml", token_count: 90 },
-  ],
+  file_details: [{ id: "synth-1", filename: "preview.eml", token_count: 90 }],
 };
 
 describe("digestVirtualFiles", () => {
@@ -75,7 +73,15 @@ describe("digestVirtualFiles", () => {
 
 describe("getTokenEstimationQueryKey + virtualFilesDigest", () => {
   it("changes when the virtual-files digest changes", () => {
-    const a = getTokenEstimationQueryKey("hello", [], null, undefined, null, undefined, "");
+    const a = getTokenEstimationQueryKey(
+      "hello",
+      [],
+      null,
+      undefined,
+      null,
+      undefined,
+      "",
+    );
     const b = getTokenEstimationQueryKey(
       "hello",
       [],
@@ -89,8 +95,24 @@ describe("getTokenEstimationQueryKey + virtualFilesDigest", () => {
   });
 
   it("is stable for the same digest", () => {
-    const a = getTokenEstimationQueryKey("hi", [], null, undefined, null, undefined, "d1");
-    const b = getTokenEstimationQueryKey("hi", [], null, undefined, null, undefined, "d1");
+    const a = getTokenEstimationQueryKey(
+      "hi",
+      [],
+      null,
+      undefined,
+      null,
+      undefined,
+      "d1",
+    );
+    const b = getTokenEstimationQueryKey(
+      "hi",
+      [],
+      null,
+      undefined,
+      null,
+      undefined,
+      "d1",
+    );
     expect(a).toEqual(b);
   });
 });
