@@ -73,6 +73,84 @@ use tracing;
 use tracing::{Instrument, instrument};
 use utoipa::ToSchema;
 
+fn is_openai_responses_provider_kind(provider_kind: &str) -> bool {
+    matches!(provider_kind, "openai_responses" | "azure_openai_responses")
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+fn non_empty_vec<T: Clone>(value: &[T]) -> Option<Vec<T>> {
+    (!value.is_empty()).then(|| value.to_vec())
+}
+
+async fn collect_reasoning_replay_messages(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    just_submitted_user_message_id: &Uuid,
+) -> Result<Vec<GenAiChatMessage>, Report> {
+    let mut current_message = get_message_by_id(
+        &app_state.db,
+        policy,
+        subject,
+        just_submitted_user_message_id,
+    )
+    .await?;
+    let mut replay_messages = Vec::new();
+
+    while let Some(previous_message_id) = current_message.previous_message_id {
+        current_message =
+            get_message_by_id(&app_state.db, policy, subject, &previous_message_id).await?;
+        let parsed_message = MessageSchema::validate(&current_message.raw_message)?;
+        if parsed_message.role != MessageRole::Assistant {
+            continue;
+        }
+
+        let Some(generation_metadata) =
+            current_message
+                .generation_metadata
+                .as_ref()
+                .and_then(|metadata| {
+                    serde_json::from_value::<GenerationMetadata>(metadata.clone()).ok()
+                })
+        else {
+            continue;
+        };
+
+        let mut replay_parts = generation_metadata
+            .reasoning_items
+            .unwrap_or_default()
+            .into_iter()
+            .map(genai::chat::ContentPart::ReasoningItem)
+            .collect::<Vec<_>>();
+        if let Some(encrypted_items) = generation_metadata.reasoning_item_encrypted_content {
+            replay_parts.extend(
+                encrypted_items
+                    .into_iter()
+                    .filter(|item| !item.is_empty())
+                    .map(genai::chat::ContentPart::ThoughtSignature),
+            );
+        }
+        if let Some(reasoning_summary) = generation_metadata.reasoning_summary
+            && !reasoning_summary.is_empty()
+        {
+            replay_parts.push(genai::chat::ContentPart::ReasoningContent(
+                reasoning_summary,
+            ));
+        }
+        if !replay_parts.is_empty() {
+            replay_messages.push(GenAiChatMessage::assistant(MessageContent::from_parts(
+                replay_parts,
+            )));
+        }
+    }
+
+    replay_messages.reverse();
+    Ok(replay_messages)
+}
+
 /// A facet action requested by the user for this generation.
 #[derive(Clone, Debug, serde::Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -1580,6 +1658,24 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     } else {
         tracing::trace!("Not adding empty list of tools, as that may lead to hallucinated tools");
     }
+    if is_openai_responses_provider_kind(&chat_provider_config.provider_kind) {
+        chat_request = chat_request.with_store(false);
+        let reasoning_replay_messages = collect_reasoning_replay_messages(
+            app_state,
+            policy,
+            &me_profile_input.subject,
+            &user_input.just_submitted_user_message_id,
+        )
+        .await?;
+        if !reasoning_replay_messages.is_empty() {
+            let insert_index = chat_request.messages.len().saturating_sub(1);
+            for (offset, replay_message) in reasoning_replay_messages.into_iter().enumerate() {
+                chat_request
+                    .messages
+                    .insert(insert_index + offset, replay_message);
+            }
+        }
+    }
     let effective_model_settings = build_model_settings_for_facets(
         &chat_provider_config.model_settings,
         &app_state.config.experimental_facets,
@@ -1694,6 +1790,9 @@ async fn stream_generate_chat_completion<
     let mut total_completion_tokens = 0u32;
     let mut total_total_tokens = 0u32;
     let mut total_reasoning_tokens = 0u32;
+    let mut captured_reasoning_summary = String::new();
+    let mut captured_reasoning_items: Vec<genai::chat::ReasoningItem> = vec![];
+    let mut captured_reasoning_item_encrypted_content: Vec<String> = vec![];
 
     let build_generation_metadata =
         |total_prompt_tokens: u32,
@@ -1702,11 +1801,17 @@ async fn stream_generate_chat_completion<
          total_reasoning_tokens: u32,
          langfuse_trace_id: Option<String>,
          was_aborted: bool,
-         error: Option<GenerationErrorType>| {
+         error: Option<GenerationErrorType>,
+         reasoning_summary: Option<String>,
+         reasoning_items: Option<Vec<genai::chat::ReasoningItem>>,
+         reasoning_item_encrypted_content: Option<Vec<String>>| {
             if total_prompt_tokens > 0
                 || total_completion_tokens > 0
                 || total_total_tokens > 0
                 || total_reasoning_tokens > 0
+                || reasoning_summary.is_some()
+                || reasoning_items.is_some()
+                || reasoning_item_encrypted_content.is_some()
                 || langfuse_trace_id.is_some()
                 || was_aborted
                 || error.is_some()
@@ -1733,6 +1838,9 @@ async fn stream_generate_chat_completion<
                     } else {
                         None
                     },
+                    reasoning_summary,
+                    reasoning_items,
+                    reasoning_item_encrypted_content,
                     langfuse_trace_id,
                     was_aborted: was_aborted.then_some(true),
                     error,
@@ -1780,6 +1888,9 @@ async fn stream_generate_chat_completion<
                     langfuse_trace_id.clone(),
                     true,
                     None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
                 );
                 break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
@@ -1883,6 +1994,9 @@ async fn stream_generate_chat_completion<
                             langfuse_trace_id.clone(),
                             false,
                             error_payload,
+                            non_empty_string(&captured_reasoning_summary),
+                            non_empty_vec(&captured_reasoning_items),
+                            non_empty_vec(&captured_reasoning_item_encrypted_content),
                         );
                         break 'loop_call_turns Ok((current_message_content, generation_metadata));
                     }
@@ -2025,6 +2139,9 @@ async fn stream_generate_chat_completion<
                     langfuse_trace_id.clone(),
                     false,
                     error_payload,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
                 );
                 break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
@@ -2162,6 +2279,9 @@ async fn stream_generate_chat_completion<
                             langfuse_trace_id.clone(),
                             true,
                             None,
+                        non_empty_string(&captured_reasoning_summary),
+                        non_empty_vec(&captured_reasoning_items),
+                        non_empty_vec(&captured_reasoning_item_encrypted_content),
                         );
                         break 'loop_call_turns Ok((aborted_content, generation_metadata));
                     }
@@ -2198,6 +2318,14 @@ async fn stream_generate_chat_completion<
                         }
                         let message: MSG = delta.into();
                         message.send_event(tx.clone()).await?;
+                    }
+                    ChatStreamEvent::ReasoningChunk(StreamChunk { content }) => {
+                        captured_reasoning_summary.push_str(&content);
+                    }
+                    ChatStreamEvent::ThoughtSignatureChunk(StreamChunk { content }) => {
+                        if !content.is_empty() {
+                            captured_reasoning_item_encrypted_content.push(content);
+                        }
                     }
                     ChatStreamEvent::End(end) => {
                         if first_response_elapsed.is_some() {
@@ -2242,6 +2370,9 @@ async fn stream_generate_chat_completion<
                         langfuse_trace_id.clone(),
                         false,
                         error_payload,
+                        non_empty_string(&captured_reasoning_summary),
+                        non_empty_vec(&captured_reasoning_items),
+                        non_empty_vec(&captured_reasoning_item_encrypted_content),
                     );
                     break 'loop_call_turns Ok((current_message_content, generation_metadata));
                 }
@@ -2253,6 +2384,31 @@ async fn stream_generate_chat_completion<
             }
             if let Some(elapsed) = last_response_elapsed {
                 report_chat_provider_time_to_last_token(chat_provider_metric_label, elapsed);
+            }
+            if let Some(reasoning_content) = stream_end.captured_reasoning_content.as_ref() {
+                captured_reasoning_summary = reasoning_content.clone();
+            }
+            if let Some(reasoning_items) = stream_end.captured_reasoning_items.as_ref() {
+                captured_reasoning_items.extend(reasoning_items.clone());
+                if captured_reasoning_summary.is_empty() {
+                    captured_reasoning_summary = reasoning_items
+                        .iter()
+                        .filter_map(|item| item.summary_text())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                }
+            }
+            if let Some(thought_signatures) = stream_end.captured_thought_signatures() {
+                for thought_signature in thought_signatures {
+                    if !thought_signature.is_empty()
+                        && !captured_reasoning_item_encrypted_content
+                            .iter()
+                            .any(|item| item == thought_signature)
+                    {
+                        captured_reasoning_item_encrypted_content
+                            .push(thought_signature.to_string());
+                    }
+                }
             }
 
             // Track the content generated in this turn for Langfuse tracing
@@ -2407,7 +2563,7 @@ async fn stream_generate_chat_completion<
                         all_tool_names.insert(tool_call.fn_name.clone());
                     }
 
-                    let assistant_turn_content = stream_end
+                    let mut assistant_turn_content = stream_end
                         .captured_content
                         .as_ref()
                         .map(|captured_content| {
@@ -2418,6 +2574,12 @@ async fn stream_generate_chat_completion<
                                 captured_tool_calls.clone().into_iter().cloned().collect(),
                             )
                         });
+                    if let Some(reasoning_content) = stream_end.captured_reasoning_content.as_ref()
+                    {
+                        assistant_turn_content.push(genai::chat::ContentPart::ReasoningContent(
+                            reasoning_content.clone(),
+                        ));
+                    }
 
                     current_turn_chat_request.messages.push(GenAiChatMessage {
                         role: ChatRole::Assistant,
@@ -2506,6 +2668,9 @@ async fn stream_generate_chat_completion<
                         langfuse_trace_id.clone(),
                         false,
                         None,
+                        non_empty_string(&captured_reasoning_summary),
+                        non_empty_vec(&captured_reasoning_items),
+                        non_empty_vec(&captured_reasoning_item_encrypted_content),
                     );
                     break 'loop_call_turns Ok((current_message_content, generation_metadata));
                 }
@@ -2569,6 +2734,9 @@ async fn stream_generate_chat_completion<
                     langfuse_trace_id.clone(),
                     false,
                     None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
                 );
                 break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }
@@ -2611,6 +2779,9 @@ async fn stream_generate_chat_completion<
                     langfuse_trace_id.clone(),
                     false,
                     error_payload,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
                 );
                 break 'loop_call_turns Ok((current_message_content, generation_metadata));
             }

@@ -703,7 +703,7 @@ impl AppConfig {
             }
         }
 
-        // Migrate azure_openai to openai format for all providers in the new structure
+        // Migrate Azure OpenAI endpoint settings for all providers in the new structure
         // and apply default model capabilities
         if let Some(chat_providers) = &mut self.chat_providers {
             for (provider_id, provider_config) in &mut chat_providers.providers {
@@ -713,14 +713,16 @@ impl AppConfig {
                     );
                     *provider_config = provider_config.clone().migrate_legacy_system_prompt();
                 }
-                if provider_config.provider_kind == "azure_openai" {
+                if provider_config.provider_kind == "azure_openai"
+                    || provider_config.provider_kind == "azure_openai_responses"
+                {
                     match provider_config.clone().migrate_azure_openai_to_openai() {
                         Ok(migrated_config) => {
                             *provider_config = migrated_config;
                         }
                         Err(e) => {
                             panic!(
-                                "Failed to migrate azure_openai config for provider '{}': {}",
+                                "Failed to migrate Azure OpenAI config for provider '{}': {}",
                                 provider_id, e
                             );
                         }
@@ -1141,8 +1143,10 @@ pub struct PromptOptimizerConfig {
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet)]
 pub struct ChatProviderConfig {
     // May be one of:
-    // - "openai" (applicable for both OpenAI and AzureGPT)
+    // - "openai" (OpenAI-compatible Chat Completions API)
+    // - "openai_responses" (OpenAI Responses API)
     // - "azure_openai" (will be automatically converted to "openai" format during config loading)
+    // - "azure_openai_responses" (Azure OpenAI Responses API endpoint settings)
     // - "ollama"
     // - "gemini"
     // - "vertex_ai" (will be automatically converted to "gemini" during config loading)
@@ -1234,11 +1238,16 @@ impl ChatProviderConfig {
         headers
     }
 
-    /// Migrates azure_openai configuration to openai format
+    /// Migrates Azure OpenAI configuration into OpenAI-compatible endpoint settings.
     pub fn migrate_azure_openai_to_openai(self) -> Result<Self, Report> {
-        if self.provider_kind != "azure_openai" {
+        if self.provider_kind != "azure_openai" && self.provider_kind != "azure_openai_responses" {
             return Ok(self);
         }
+        let provider_kind = if self.provider_kind == "azure_openai_responses" {
+            "azure_openai_responses"
+        } else {
+            "openai"
+        };
 
         // Validate and process base_url
         let base_url = if let Some(url) = &self.base_url {
@@ -1276,7 +1285,7 @@ impl ChatProviderConfig {
         }
 
         Ok(ChatProviderConfig {
-            provider_kind: "openai".to_string(),
+            provider_kind: provider_kind.to_string(),
             model_name: self.model_name,
             model_display_name: self.model_display_name,
             model_description: self.model_description,

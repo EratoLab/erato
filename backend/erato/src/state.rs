@@ -605,6 +605,8 @@ impl AppState {
                 let adapter_kind = match config.provider_kind.as_str() {
                     "ollama" => Ok(AdapterKind::Ollama),
                     "openai" => Ok(AdapterKind::OpenAI),
+                    "openai_responses" => Ok(AdapterKind::OpenAIResp),
+                    "azure_openai_responses" => Ok(AdapterKind::OpenAIResp),
                     "gemini" => Ok(AdapterKind::Gemini),
                     "vertex_ai" => Ok(AdapterKind::Gemini),
                     _ => Err(genai::resolver::Error::Custom("Unknown provider kind".to_string()))
@@ -845,7 +847,9 @@ pub struct ChatProviderConfigWithId {
 
 pub fn default_endpoint(kind: AdapterKind) -> Endpoint {
     match kind {
-        AdapterKind::OpenAI => Endpoint::from_static("https://api.openai.com/v1/"),
+        AdapterKind::OpenAI | AdapterKind::OpenAIResp => {
+            Endpoint::from_static("https://api.openai.com/v1/")
+        }
         AdapterKind::Ollama => Endpoint::from_static("http://localhost:11434/v1/"),
         AdapterKind::Gemini => {
             Endpoint::from_static("https://generativelanguage.googleapis.com/v1beta/openai/")

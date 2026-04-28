@@ -46,7 +46,7 @@ ordered-multimap = { version = "0.7.3",  features = ["serde"]}
 handlebars = "6"
 futures = "0.3"
 tokio-stream = { version = "0.1.17", features = ["sync"] }
-genai = { version = "0.6.0-beta.17-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "102f18cb1f558fc1975bc413abc1bf206c75944a" }
+genai = { version = "0.6.0-beta.17-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "5fed6f91c17d1e0c151ca149b9d1a9daf3558fb8" }
 reqwest = { version = "0.13.1", features = ["multipart"] }
 reqwest_012 = { package = "reqwest", version = "0.12.28" }
 opendal = { version = "0.52.0", features = ["services-s3", "services-azblob"] }
