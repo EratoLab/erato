@@ -372,6 +372,11 @@ msgid "chat.newChat.title"
 msgstr "Nowy Czat"
 
 #. js-lingui-explicit-id
+#: src/utils/chatSendErrorMessage.ts
+msgid "chat.send.error.actionFacetArgTooLarge"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "chat.share.button"

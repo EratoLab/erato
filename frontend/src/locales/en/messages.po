@@ -372,6 +372,11 @@ msgid "chat.newChat.title"
 msgstr "New Chat"
 
 #. js-lingui-explicit-id
+#: src/utils/chatSendErrorMessage.ts
+msgid "chat.send.error.actionFacetArgTooLarge"
+msgstr "This draft is too long for the AI to process ({actualKb} KB / {maxKb} KB max). Try shortening it, or select only the new portion of your reply and use the rewrite action."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "chat.share.button"

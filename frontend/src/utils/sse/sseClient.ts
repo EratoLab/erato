@@ -256,7 +256,20 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       });
 
       if (!response.ok) {
-        const errorMsg = `SSE request failed: ${response.status} ${response.statusText}`;
+        // Read the body so the caller can surface the validation reason
+        // (e.g. action-facet arg size). Falls back to status text when the
+        // server returns an empty body.
+        let bodyText = "";
+        try {
+          bodyText = await response.text();
+        } catch {
+          // ignore — fall through to status text
+        }
+        const detail =
+          bodyText.trim().length > 0
+            ? bodyText.trim()
+            : `${response.status} ${response.statusText}`;
+        const errorMsg = `SSE request failed: ${detail}`;
         logger.log("Fetch error:", errorMsg);
         throw new Error(errorMsg);
       }
