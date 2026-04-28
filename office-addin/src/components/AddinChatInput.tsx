@@ -205,18 +205,22 @@ export const AddinChatInput = forwardRef<
         // Only attach `outlook_review_draft` when the user is composing
         // their own message — the action is meaningless (and a privacy
         // footgun) if applied to a read-mode email the user happens to
-        // have open. Backend-side, `full_body` is also capped at 10 KB,
-        // but that's a defense-in-depth check; the gate here prevents the
-        // received-mail body from ever flowing into the request.
-        const fullBody =
-          bodyFormat === "html"
-            ? (mailItem.bodyHtml ?? mailItem.bodyText ?? "")
-            : (mailItem.bodyText ?? mailItem.bodyHtml ?? "");
+        // have open. The gate here prevents the received-mail body from
+        // ever flowing into the request.
+        //
+        // Always send the body as plain text. Outlook compose HTML is
+        // bloated with MS-specific tags, inline styles, and base64-encoded
+        // images that have no semantic value for a writing-review prompt
+        // — and they easily push a 5-line reply over a long thread past
+        // the backend's per-arg size cap. The text coercion preserves
+        // quoted history (as `>` lines), bullet lists, and link URLs, so
+        // the LLM still sees the full conversation context.
+        const fullBody = mailItem.bodyText ?? mailItem.bodyHtml ?? "";
         actionFacet = {
           id: "outlook_review_draft",
           args: {
             full_body: fullBody,
-            body_format: bodyFormat ?? "text",
+            body_format: "text",
           },
         };
       }
