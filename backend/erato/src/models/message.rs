@@ -186,6 +186,14 @@ pub enum ContentPart {
     TextFilePointer(ContentPartTextFilePointer),
     ImageFilePointer(ContentPartImageFilePointer),
     Image(ContentPartImage),
+    /// Reference to an action-facet directive that will be rendered fresh
+    /// at request-build time. Persisted in `generation_input_messages` as a
+    /// metadata-only marker (facet id + invocation args) instead of the
+    /// rendered template text — mirrors the `TextFilePointer` pattern.
+    /// Action facets are request-scoped: when this marker is loaded as part
+    /// of *prior-turn* history, the resolver drops it; for the *current
+    /// turn* it renders the template against the current config + args.
+    ActionFacetMarker(ContentPartActionFacetMarker),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -220,6 +228,16 @@ pub struct ContentPartImageFilePointer {
 pub struct ContentPartImage {
     pub content_type: String,
     pub base64_data: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartActionFacetMarker {
+    /// Identifier of the action facet whose template should be rendered.
+    pub facet_id: String,
+    /// Arguments captured at the time of the user's request (e.g. the
+    /// selected text for `outlook_rewrite_selection`, the compose body for
+    /// `outlook_review_draft`).
+    pub args: HashMap<String, String>,
 }
 
 /// Statistics for a list of messages
@@ -281,6 +299,9 @@ impl MessageSchema {
                 ContentPart::TextFilePointer(_) => None,
                 ContentPart::ImageFilePointer(_) => None,
                 ContentPart::Image(_) => None,
+                // Markers are placeholders for the action-facet resolver and
+                // do not contribute to a message's full text representation.
+                ContentPart::ActionFacetMarker(_) => None,
             })
             .collect::<Vec<&str>>()
             .join(" ")
@@ -699,6 +720,8 @@ impl InputMessage {
             ContentPart::TextFilePointer(_) => String::new(),
             ContentPart::ImageFilePointer(_) => String::new(),
             ContentPart::Image(_) => String::new(),
+            // Marker is metadata-only; rendering happens in the resolver.
+            ContentPart::ActionFacetMarker(_) => String::new(),
         }
     }
 }
@@ -713,6 +736,24 @@ impl GenerationInputMessages {
         serde_json::from_value(json.clone())
             .map_err(|e| eyre!("Invalid input message format: {}", e))
     }
+}
+
+/// Action-facet templates (e.g. `outlook_review_draft`,
+/// `outlook_rewrite_selection`) prefix every rendered prompt with the
+/// literal string `"FOR THIS MESSAGE ONLY:"`. They are request-scoped and
+/// must never replay into later turns — when they do, the model sees
+/// multiple competing format directives in the same chat request and
+/// drifts. We filter on the prefix rather than a sentinel marker so this
+/// also cleans up history rows already saved before the filter existed,
+/// without requiring a DB migration.
+fn is_action_facet_system_message(message: &InputMessage) -> bool {
+    if !matches!(message.role, MessageRole::System) {
+        return false;
+    }
+    if let ContentPart::Text(ContentPartText { text }) = &message.content {
+        return text.trim_start().starts_with("FOR THIS MESSAGE ONLY:");
+    }
+    false
 }
 
 /// Helper function to determine if a file is an image based on its extension
@@ -756,7 +797,21 @@ pub async fn get_generation_input_messages_by_previous_message_id(
         current_message_id_opt = message.previous_message_id;
 
         if let Some(gen_input_json) = &message.generation_input_messages {
-            base_history = Some(GenerationInputMessages::validate(gen_input_json)?);
+            let validated = GenerationInputMessages::validate(gen_input_json)?;
+            // Strip per-turn action-facet System messages that pollute prior
+            // turns' snapshots. Each action-facet directive is request-scoped
+            // ("FOR THIS MESSAGE ONLY") and must not leak into later turns —
+            // when it does, the model sees competing format directives from
+            // past turns and the current turn, and drifts toward whichever
+            // pattern its history-bias prefers (typically the older one).
+            let filtered = GenerationInputMessages {
+                messages: validated
+                    .messages
+                    .into_iter()
+                    .filter(|msg| !is_action_facet_system_message(msg))
+                    .collect(),
+            };
+            base_history = Some(filtered);
             messages_to_process.push(message);
             break; // Found anchor
         } else {
@@ -918,4 +973,64 @@ pub async fn regenerate_image_urls_in_content(
     }
 
     Ok(updated_content)
+}
+
+#[cfg(test)]
+mod action_facet_filter_tests {
+    use super::is_action_facet_system_message;
+    use super::{ContentPart, ContentPartText, InputMessage, MessageRole};
+
+    fn system_text(text: &str) -> InputMessage {
+        InputMessage {
+            role: MessageRole::System,
+            content: ContentPart::Text(ContentPartText {
+                text: text.to_string(),
+            }),
+        }
+    }
+
+    fn user_text(text: &str) -> InputMessage {
+        InputMessage {
+            role: MessageRole::User,
+            content: ContentPart::Text(ContentPartText {
+                text: text.to_string(),
+            }),
+        }
+    }
+
+    #[test]
+    fn flags_action_facet_directives_for_both_outlook_templates() {
+        assert!(is_action_facet_system_message(&system_text(
+            "FOR THIS MESSAGE ONLY: The user is composing an email (format: text). The full draft body is:\n\nHi"
+        )));
+        assert!(is_action_facet_system_message(&system_text(
+            "FOR THIS MESSAGE ONLY: The user is composing an email in html format and has selected the following text from the email body:\n\nHi"
+        )));
+    }
+
+    #[test]
+    fn tolerates_leading_whitespace_in_rendered_template() {
+        // The rendered template is wrapped in r#"..."# string literals that
+        // begin with a newline; the trim before prefix-match handles that.
+        assert!(is_action_facet_system_message(&system_text(
+            "\nFOR THIS MESSAGE ONLY: The user is composing an email"
+        )));
+    }
+
+    #[test]
+    fn ignores_user_messages_even_with_matching_text() {
+        assert!(!is_action_facet_system_message(&user_text(
+            "FOR THIS MESSAGE ONLY: not really, just user prose"
+        )));
+    }
+
+    #[test]
+    fn ignores_unrelated_system_messages() {
+        assert!(!is_action_facet_system_message(&system_text(
+            "You are a helpful assistant."
+        )));
+        assert!(!is_action_facet_system_message(&system_text(
+            "Respond in plain text."
+        )));
+    }
 }

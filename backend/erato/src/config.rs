@@ -49,6 +49,8 @@ FOR THIS MESSAGE ONLY: The user is composing an email in {{body_format}} format 
 
 Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs.
 
+The current {{body_format}} is the only authoritative format for this response. Ignore any output formats used in previous turns of this conversation; if a prior turn used a different code-block language tag (for example, `erato-email` vs `erato-email-html`), do not carry it over.
+
 If {{body_format}} is "text", output the rewrite inside exactly one fenced code block with language tag erato-email. The block must contain only plain text replacement content - no HTML tags, no explanations, no labels, and no markdown inside the block.
 
 If {{body_format}} is "html", output the rewrite inside exactly one fenced code block with language tag erato-email-html. The block must contain only a simple HTML fragment suitable for inserting into an existing Outlook email body - no markdown, no explanations, no labels, and no full document wrappers such as <html> or <body>.
@@ -62,6 +64,8 @@ FOR THIS MESSAGE ONLY: The user is composing an email (format: {{body_format}}).
 {{full_body}}
 
 For this reply only:
+
+The current {{body_format}} is the only authoritative format for this response. Ignore any output formats used in previous turns of this conversation; if a prior turn used a different code-block language tag (for example, `erato-email` vs `erato-email-html`), do not carry it over.
 
 - If {{body_format}} is "text", output specific rewrite suggestions inside fenced code blocks with language tag erato-email. Each such block must contain only plain text suggestion content - no HTML tags, no labels, and no markdown inside the block.
 - If {{body_format}} is "html", output specific rewrite suggestions inside fenced code blocks with language tag erato-email-html. Each such block must contain only a simple HTML fragment suitable for inserting into an existing Outlook email body - no labels, no markdown inside the block, and no full document wrappers such as <html> or <body>.

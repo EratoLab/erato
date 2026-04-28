@@ -1,8 +1,9 @@
 use crate::db::entity::prelude::FileUploads;
-use crate::models::message::{ContentPart, ContentPartText, GenerationInputMessages};
+use crate::models::message::{ContentPart, ContentPartText, GenerationInputMessages, InputMessage};
 use crate::server::api::v1beta::message_streaming::FileContent;
 use crate::services::file_processing_cached::get_file_cached;
 use crate::services::file_storage::{SharepointContext, is_missing_permissions_error};
+use crate::services::prompt_composition::transforms::render_action_facet_template;
 use crate::state::AppState;
 use eyre::Report;
 use sea_orm::EntityTrait;
@@ -104,6 +105,70 @@ pub(crate) async fn resolve_file_pointers_in_generation_input(
     Ok(GenerationInputMessages {
         messages: resolved_messages,
     })
+}
+
+/// Sentinel tag wrapping a rendered action-facet directive in the user
+/// turn. Mirrors Claude Code's own `<system-reminder>` convention — the
+/// model has been trained to treat XML-tagged user content as authoritative
+/// guidance rather than ordinary user prose, while keeping the directive
+/// in the user turn (which Anthropic explicitly recommends for per-turn
+/// instructions and which preserves the system prompt cache).
+const ACTION_FACET_SENTINEL_OPEN: &str = "<system-reminder>";
+const ACTION_FACET_SENTINEL_CLOSE: &str = "</system-reminder>";
+
+/// Resolve `ContentPart::ActionFacetMarker` entries by rendering the
+/// referenced facet template against the current `AppConfig` using the
+/// args captured at request time.
+///
+/// Mirrors `resolve_file_pointers_in_generation_input` — the saved
+/// `generation_input_messages` carries metadata-only markers; rendering
+/// happens lazily here, immediately before the chat-request hits the LLM.
+///
+/// Prior-turn markers are stripped earlier in
+/// `compose_prompt_messages`'s historical-replay step, so any marker that
+/// reaches this resolver belongs to the current turn and gets rendered.
+/// If the referenced facet config is missing (renamed/deleted), the
+/// marker is dropped with a warning rather than rendering empty text.
+///
+/// Output is wrapped in a `<system-reminder>` sentinel in the user turn
+/// (the marker carries `MessageRole::User`); see that comment for
+/// reasoning.
+pub(crate) fn resolve_action_facet_markers_in_generation_input(
+    app_state: &AppState,
+    generation_input_messages: GenerationInputMessages,
+) -> GenerationInputMessages {
+    let action_facet_configs = &app_state.config.action_facets.facets;
+    let resolved_messages = generation_input_messages
+        .messages
+        .into_iter()
+        .filter_map(|input_message| match input_message.content {
+            ContentPart::ActionFacetMarker(marker) => {
+                let Some(config) = action_facet_configs.get(&marker.facet_id) else {
+                    tracing::warn!(
+                        facet_id = %marker.facet_id,
+                        "Action-facet config not found while resolving marker — dropping",
+                    );
+                    return None;
+                };
+                let rendered = render_action_facet_template(&config.template, &marker.args);
+                if rendered.is_empty() {
+                    return None;
+                }
+                let wrapped = format!(
+                    "{}\n{}\n{}",
+                    ACTION_FACET_SENTINEL_OPEN, rendered, ACTION_FACET_SENTINEL_CLOSE,
+                );
+                Some(InputMessage {
+                    role: input_message.role,
+                    content: ContentPart::Text(ContentPartText { text: wrapped }),
+                })
+            }
+            _ => Some(input_message),
+        })
+        .collect();
+    GenerationInputMessages {
+        messages: resolved_messages,
+    }
 }
 
 fn format_image_file_pointer_message(file_upload_id: Uuid) -> ContentPart {

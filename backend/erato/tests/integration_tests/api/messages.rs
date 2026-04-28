@@ -2686,27 +2686,37 @@ async fn test_action_facet_rendered_prompt_in_generation_input(pool: Pool<Postgr
         .clone()
         .expect("Missing generation_input_messages");
 
-    let system_texts: Vec<String> = gen_input_value["messages"]
+    // Persisted shape: an `ActionFacetMarker` on a User-role message with
+    // the facet id + args. Rendering is deferred until request-build time
+    // (the resolver wraps it in a `<system-reminder>` sentinel), so the
+    // saved row stores source-of-truth metadata, not derived text. The
+    // `tone` and `content` args round-trip through the JSON unchanged.
+    let marker = gen_input_value["messages"]
         .as_array()
         .expect("Expected messages array")
         .iter()
-        .filter(|msg| msg["role"].as_str() == Some("system"))
-        .filter_map(|msg| {
-            if msg["content"]["content_type"].as_str() == Some("text") {
-                msg["content"]["text"].as_str().map(str::to_string)
-            } else {
-                None
-            }
+        .find(|msg| {
+            msg["role"].as_str() == Some("user")
+                && msg["content"]["content_type"].as_str() == Some("action_facet_marker")
         })
-        .collect();
+        .expect(
+            "Expected ActionFacetMarker as user-role message in saved generation_input_messages",
+        );
 
-    let found = system_texts.iter().any(|text| {
-        text.contains("Rewrite the following in a professional tone")
-            && text.contains("yo whats up")
-    });
-    assert!(
-        found,
-        "Expected rendered action facet prompt as system message. System texts: {system_texts:?}"
+    assert_eq!(
+        marker["content"]["facet_id"].as_str(),
+        Some("rewrite"),
+        "Expected marker.facet_id to round-trip into saved JSON"
+    );
+    assert_eq!(
+        marker["content"]["args"]["tone"].as_str(),
+        Some("professional"),
+        "Expected marker.args.tone to round-trip into saved JSON"
+    );
+    assert_eq!(
+        marker["content"]["args"]["content"].as_str(),
+        Some("yo whats up"),
+        "Expected marker.args.content to round-trip into saved JSON"
     );
 }
 
@@ -2753,27 +2763,28 @@ async fn test_action_facet_template_literal_values_no_rerendering(pool: Pool<Pos
         .clone()
         .expect("Missing generation_input_messages");
 
-    let system_texts: Vec<String> = gen_input_value["messages"]
+    // The marker preserves args verbatim — `{{content}}` in the tone arg
+    // round-trips into the saved JSON unchanged. Re-rendering protection
+    // (one-pass template substitution; arg values are NOT re-expanded) now
+    // lives in the resolver step at request-build time and is covered by
+    // the unit tests for `render_action_facet_template`.
+    let marker = gen_input_value["messages"]
         .as_array()
         .expect("Expected messages array")
         .iter()
-        .filter(|msg| msg["role"].as_str() == Some("system"))
-        .filter_map(|msg| {
-            if msg["content"]["content_type"].as_str() == Some("text") {
-                msg["content"]["text"].as_str().map(str::to_string)
-            } else {
-                None
-            }
+        .find(|msg| {
+            msg["role"].as_str() == Some("user")
+                && msg["content"]["content_type"].as_str() == Some("action_facet_marker")
         })
-        .collect();
+        .expect("Expected ActionFacetMarker in saved generation_input_messages");
 
-    // The rendered template should contain the literal "{{content}}" from the tone arg,
-    // not "actual content" substituted again
-    let found = system_texts
-        .iter()
-        .any(|text| text.contains("{{content}}") && text.contains("actual content"));
-    assert!(
-        found,
-        "Expected literal '{{{{content}}}}' in rendered prompt (no re-rendering). System texts: {system_texts:?}"
+    assert_eq!(
+        marker["content"]["args"]["tone"].as_str(),
+        Some("{{content}}"),
+        "Marker must preserve `{{content}}` literally in args, no re-rendering"
+    );
+    assert_eq!(
+        marker["content"]["args"]["content"].as_str(),
+        Some("actual content")
     );
 }

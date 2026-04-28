@@ -46,6 +46,14 @@ impl From<ContentPart> for GenAiMessageContent {
                 );
                 GenAiMessageContent::from_parts(vec![binary_part])
             }
+            ContentPart::ActionFacetMarker(_) => {
+                // Should never reach here after resolve_action_facet_markers_in_generation_input.
+                // Log error and return empty text rather than panicking.
+                tracing::error!(
+                    "ActionFacetMarker found during LLM conversion - should have been resolved"
+                );
+                GenAiMessageContent::from_text(String::new())
+            }
         }
     }
 }

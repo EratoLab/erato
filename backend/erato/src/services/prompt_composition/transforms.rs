@@ -14,8 +14,9 @@ use crate::config::ExperimentalFacetsConfig;
 use crate::db::entity::chats;
 use crate::db::entity::messages;
 use crate::models::message::{
-    ContentPart, ContentPartImageFilePointer, ContentPartText, ContentPartTextFilePointer,
-    GenerationInputMessages, GenerationParameters, InputMessage, MessageRole, MessageSchema,
+    ContentPart, ContentPartActionFacetMarker, ContentPartImageFilePointer, ContentPartText,
+    ContentPartTextFilePointer, GenerationInputMessages, GenerationParameters, InputMessage,
+    MessageRole, MessageSchema,
 };
 use eyre::Report;
 use sea_orm::prelude::Uuid;
@@ -222,14 +223,16 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         }
     }
 
-    // 9.6 Inject action facet prompt (request-scoped, no toggle detection)
+    // 9.6 Inject action facet directive (request-scoped, no toggle detection).
+    // The marker carries facet_id + args; rendering moves to the resolver
+    // step so the persisted snapshot stores metadata, not derived text.
     if let Some(af) = action_facet
-        && let Some(af_config) = action_facet_configs.get(&af.id)
+        && action_facet_configs.contains_key(&af.id)
     {
-        let rendered = render_action_facet_template(&af_config.template, &af.args);
-        if !rendered.is_empty() {
-            sequence.push(AbstractChatSequencePart::ActionFacetPrompt { content: rendered });
-        }
+        sequence.push(AbstractChatSequencePart::ActionFacetPrompt {
+            facet_id: af.id.clone(),
+            args: af.args.clone(),
+        });
     }
 
     // 10. Add previous messages to the sequence
@@ -445,13 +448,28 @@ pub async fn resolve_sequence(
                 has_system_message = true;
             }
 
-            AbstractChatSequencePart::ActionFacetPrompt { content } => {
+            AbstractChatSequencePart::ActionFacetPrompt { facet_id, args } => {
                 // Do NOT set has_system_message — action facet prompts are
                 // per-request additive instructions that must not suppress
                 // the base system prompt replayed from history.
+                //
+                // Emit a marker (not rendered text). The resolver in
+                // `file_resolution.rs` renders it for the current turn and
+                // drops it for past turns when this snapshot is replayed.
+                //
+                // Role is `User` to match Anthropic's guidance for per-turn
+                // directives ("inject what were previously prefilled-
+                // assistant reminders into the user turn") and OpenAI's
+                // observed instruction-recency bias. The resolver wraps the
+                // rendered template in a `<system-reminder>` sentinel so
+                // the model still recognises it as a directive, not casual
+                // user prose.
                 input_messages.push(InputMessage {
-                    role: MessageRole::System,
-                    content: ContentPart::Text(ContentPartText { text: content }),
+                    role: MessageRole::User,
+                    content: ContentPart::ActionFacetMarker(ContentPartActionFacetMarker {
+                        facet_id,
+                        args,
+                    }),
                 });
             }
 
@@ -466,6 +484,16 @@ pub async fn resolve_sequence(
                         Ok(gen_input) => {
                             let include_system = !has_system_message;
                             for input_msg in gen_input.messages {
+                                // Strip prior-turn action-facet directives so
+                                // they don't replay alongside the current
+                                // turn's directive. Two filters:
+                                //   • new format → ContentPart::ActionFacetMarker
+                                //   • legacy rendered text (pre-marker rows
+                                //     in the DB) → System message whose text
+                                //     starts with "FOR THIS MESSAGE ONLY:"
+                                if is_prior_turn_action_facet_message(&input_msg) {
+                                    continue;
+                                }
                                 let input_msg = normalize_historical_input_message(input_msg);
                                 if include_system || !matches!(input_msg.role, MessageRole::System)
                                 {
@@ -561,6 +589,29 @@ pub async fn resolve_sequence(
 
 fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {
     input_msg
+}
+
+/// True when an `InputMessage` represents an action-facet directive emitted
+/// by a prior turn. Action facets are request-scoped ("FOR THIS MESSAGE
+/// ONLY") — replaying them turns conflicting format directives into a noisy
+/// chat history and the model drifts.
+///
+/// Two shapes need stripping:
+///   * New format: `ContentPart::ActionFacetMarker` (any role).
+///   * Legacy format: `System` messages whose text starts with the literal
+///     `"FOR THIS MESSAGE ONLY:"` prefix from the rendered template — for
+///     `generation_input_messages` rows persisted before the marker
+///     migration. The prefix is stable across all current action-facet
+///     templates (`config.rs`).
+fn is_prior_turn_action_facet_message(input_msg: &InputMessage) -> bool {
+    match &input_msg.content {
+        ContentPart::ActionFacetMarker(_) => true,
+        ContentPart::Text(ContentPartText { text }) => {
+            matches!(input_msg.role, MessageRole::System)
+                && text.trim_start().starts_with("FOR THIS MESSAGE ONLY:")
+        }
+        _ => false,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
