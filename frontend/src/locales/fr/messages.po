@@ -372,6 +372,11 @@ msgid "chat.newChat.title"
 msgstr "Nouveau Chat"
 
 #. js-lingui-explicit-id
+#: src/utils/chatSendErrorMessage.ts
+msgid "chat.send.error.actionFacetArgTooLarge"
+msgstr "Ce brouillon est trop long pour être traité par l'IA ({actualKb} Ko / {maxKb} Ko max). Raccourcissez-le ou sélectionnez uniquement la partie nouvelle de votre réponse et utilisez l'action de réécriture."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 #: src/components/ui/Chat/ChatHistoryList.tsx
 msgid "chat.share.button"

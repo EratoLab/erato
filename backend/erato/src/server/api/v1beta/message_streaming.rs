@@ -1170,7 +1170,15 @@ pub(crate) fn warn_unknown_platform(config: &crate::config::AppConfig, platform:
 }
 
 /// Maximum allowed size in bytes for a single action facet argument value.
-const ACTION_FACET_ARG_MAX_SIZE: usize = 10 * 1024; // 10 KB
+///
+/// Sized to fit a typical Outlook compose-mode reply over a multi-message
+/// thread: empirically 30–60 KB raw HTML, ~5–10 KB once the add-in coerces
+/// to plain text. 64 KB leaves comfortable headroom for the worst-case
+/// fully-quoted thread without inviting unbounded prompt growth — at the
+/// O(4 chars/token) ratio this is roughly 16k tokens, well below any
+/// supported model's context window but high enough that a real user
+/// shouldn't see a 413.
+const ACTION_FACET_ARG_MAX_SIZE: usize = 64 * 1024; // 64 KB
 
 /// Validates an action facet request against the application configuration.
 ///

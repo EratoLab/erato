@@ -13,6 +13,7 @@ import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
+import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
@@ -23,6 +24,7 @@ import {
   useChatInputFeature,
 } from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
+import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ArrowUpIcon, StopIcon } from "../icons";
@@ -190,8 +192,18 @@ export const ChatInput = ({
 
   // Get necessary state from context instead of useChat()
   // isPendingResponse is true immediately when send is clicked (before streaming starts)
-  const { isPendingResponse, isMessagingLoading, isUploading, cancelMessage } =
-    useChatContext();
+  const {
+    isPendingResponse,
+    isMessagingLoading,
+    isUploading,
+    cancelMessage,
+    messagingError,
+  } = useChatContext();
+  const setMessagingError = useMessagingStore((state) => state.setError);
+  const sendErrorText = useMemo(
+    () => resolveChatSendErrorMessage(messagingError),
+    [messagingError],
+  );
   const wasPendingResponseRef = useRef(isPendingResponse);
 
   // Combine loading states
@@ -819,6 +831,20 @@ export const ChatInput = ({
             data-testid="file-upload-error"
           >
             {getFileErrorMessage()}
+          </Alert>
+        )}
+
+        {/* Send / streaming error (e.g. action-facet payload too large). */}
+        {sendErrorText && (
+          <Alert
+            type="error"
+            geometryVariant="message"
+            dismissible
+            onDismiss={() => setMessagingError(null)}
+            className="mb-2"
+            data-testid="chat-send-error"
+          >
+            {sendErrorText}
           </Alert>
         )}
 
