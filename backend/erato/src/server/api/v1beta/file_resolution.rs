@@ -107,6 +107,15 @@ pub(crate) async fn resolve_file_pointers_in_generation_input(
     })
 }
 
+/// Sentinel tag wrapping a rendered action-facet directive in the user
+/// turn. Mirrors Claude Code's own `<system-reminder>` convention — the
+/// model has been trained to treat XML-tagged user content as authoritative
+/// guidance rather than ordinary user prose, while keeping the directive
+/// in the user turn (which Anthropic explicitly recommends for per-turn
+/// instructions and which preserves the system prompt cache).
+const ACTION_FACET_SENTINEL_OPEN: &str = "<system-reminder>";
+const ACTION_FACET_SENTINEL_CLOSE: &str = "</system-reminder>";
+
 /// Resolve `ContentPart::ActionFacetMarker` entries by rendering the
 /// referenced facet template against the current `AppConfig` using the
 /// args captured at request time.
@@ -120,6 +129,10 @@ pub(crate) async fn resolve_file_pointers_in_generation_input(
 /// reaches this resolver belongs to the current turn and gets rendered.
 /// If the referenced facet config is missing (renamed/deleted), the
 /// marker is dropped with a warning rather than rendering empty text.
+///
+/// Output is wrapped in a `<system-reminder>` sentinel in the user turn
+/// (the marker carries `MessageRole::User`); see that comment for
+/// reasoning.
 pub(crate) fn resolve_action_facet_markers_in_generation_input(
     app_state: &AppState,
     generation_input_messages: GenerationInputMessages,
@@ -141,9 +154,13 @@ pub(crate) fn resolve_action_facet_markers_in_generation_input(
                 if rendered.is_empty() {
                     return None;
                 }
+                let wrapped = format!(
+                    "{}\n{}\n{}",
+                    ACTION_FACET_SENTINEL_OPEN, rendered, ACTION_FACET_SENTINEL_CLOSE,
+                );
                 Some(InputMessage {
                     role: input_message.role,
-                    content: ContentPart::Text(ContentPartText { text: rendered }),
+                    content: ContentPart::Text(ContentPartText { text: wrapped }),
                 })
             }
             _ => Some(input_message),

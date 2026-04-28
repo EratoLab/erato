@@ -2686,19 +2686,22 @@ async fn test_action_facet_rendered_prompt_in_generation_input(pool: Pool<Postgr
         .clone()
         .expect("Missing generation_input_messages");
 
-    // Persisted shape: an `ActionFacetMarker` with the facet id + args.
-    // Rendering is deferred until request-build time, so the saved row
-    // stores source-of-truth metadata, not derived text. The `tone` and
-    // `content` args round-trip through the JSON unchanged.
+    // Persisted shape: an `ActionFacetMarker` on a User-role message with
+    // the facet id + args. Rendering is deferred until request-build time
+    // (the resolver wraps it in a `<system-reminder>` sentinel), so the
+    // saved row stores source-of-truth metadata, not derived text. The
+    // `tone` and `content` args round-trip through the JSON unchanged.
     let marker = gen_input_value["messages"]
         .as_array()
         .expect("Expected messages array")
         .iter()
         .find(|msg| {
-            msg["role"].as_str() == Some("system")
+            msg["role"].as_str() == Some("user")
                 && msg["content"]["content_type"].as_str() == Some("action_facet_marker")
         })
-        .expect("Expected ActionFacetMarker as system message in saved generation_input_messages");
+        .expect(
+            "Expected ActionFacetMarker as user-role message in saved generation_input_messages",
+        );
 
     assert_eq!(
         marker["content"]["facet_id"].as_str(),
@@ -2770,7 +2773,7 @@ async fn test_action_facet_template_literal_values_no_rerendering(pool: Pool<Pos
         .expect("Expected messages array")
         .iter()
         .find(|msg| {
-            msg["role"].as_str() == Some("system")
+            msg["role"].as_str() == Some("user")
                 && msg["content"]["content_type"].as_str() == Some("action_facet_marker")
         })
         .expect("Expected ActionFacetMarker in saved generation_input_messages");

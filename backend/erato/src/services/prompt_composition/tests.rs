@@ -2148,7 +2148,7 @@ mod test_cases {
             .await
             .expect("Failed to resolve sequence");
 
-        // Should have: base system prompt + action facet system prompt + user message
+        // Should have: base system prompt + action facet user-turn marker + user message
         assert_eq!(
             resolved.messages.len(),
             3,
@@ -2156,7 +2156,9 @@ mod test_cases {
             resolved.messages.len()
         );
         assert!(matches!(resolved.messages[0].role, MessageRole::System));
-        assert!(matches!(resolved.messages[1].role, MessageRole::System));
+        // Action-facet marker now lands in the User turn (per Anthropic
+        // guidance for per-turn directives + sentinel-tagged user prose).
+        assert!(matches!(resolved.messages[1].role, MessageRole::User));
         assert!(matches!(resolved.messages[2].role, MessageRole::User));
 
         // The action facet prompt is now an ActionFacetMarker — rendering
@@ -2263,46 +2265,38 @@ mod test_cases {
             .await
             .expect("Failed to resolve second sequence");
 
-        // Count system messages
-        let system_messages: Vec<_> = resolved2
-            .messages
-            .iter()
-            .filter(|m| matches!(m.role, MessageRole::System))
-            .collect();
-
-        // Both the base system prompt (from history) and the action facet prompt
-        // should be present — action facets are additive, not replacing.
-        assert_eq!(
-            system_messages.len(),
-            2,
-            "Expected 2 system messages (base + action facet), found {}. Messages: {:#?}",
-            system_messages.len(),
-            resolved2
-                .messages
-                .iter()
-                .map(|m| format!("{:?}: {:?}", m.role, m.content))
-                .collect::<Vec<_>>()
-        );
-
-        // Verify base system prompt is replayed from history
-        let has_base_prompt = system_messages.iter().any(|m| match &m.content {
-            ContentPart::Text(text) => text.text.contains("You are helpful"),
-            _ => false,
+        // The base system prompt should still be replayed from history
+        // (action facets are additive — they must not suppress the base
+        // prompt). With Phase 2, the action-facet marker lands on a User-
+        // role message instead of System, so we look for it across all
+        // messages, not just the System ones.
+        let has_base_prompt = resolved2.messages.iter().any(|m| {
+            matches!(m.role, MessageRole::System)
+                && matches!(
+                    &m.content,
+                    ContentPart::Text(text) if text.text.contains("You are helpful")
+                )
         });
         assert!(
             has_base_prompt,
             "Base system prompt should be present from history"
         );
 
-        // Verify action facet marker is present (rendering happens later
-        // in `resolve_action_facet_markers_in_generation_input`).
-        let has_action_facet = system_messages.iter().any(|m| match &m.content {
-            ContentPart::ActionFacetMarker(marker) => {
-                marker.args.get("tone") == Some(&"formal".to_string())
-            }
-            _ => false,
+        // Verify action facet marker is present in a User-role message
+        // (rendering happens later in
+        // `resolve_action_facet_markers_in_generation_input`).
+        let has_action_facet = resolved2.messages.iter().any(|m| {
+            matches!(m.role, MessageRole::User)
+                && matches!(
+                    &m.content,
+                    ContentPart::ActionFacetMarker(marker)
+                        if marker.args.get("tone") == Some(&"formal".to_string())
+                )
         });
-        assert!(has_action_facet, "Action facet marker should be present");
+        assert!(
+            has_action_facet,
+            "Action facet marker should be present in a user message"
+        );
 
         // Full sequence: base_system + action_facet + user1 + assistant + user2
         assert_eq!(

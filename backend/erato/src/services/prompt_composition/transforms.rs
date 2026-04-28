@@ -456,8 +456,16 @@ pub async fn resolve_sequence(
                 // Emit a marker (not rendered text). The resolver in
                 // `file_resolution.rs` renders it for the current turn and
                 // drops it for past turns when this snapshot is replayed.
+                //
+                // Role is `User` to match Anthropic's guidance for per-turn
+                // directives ("inject what were previously prefilled-
+                // assistant reminders into the user turn") and OpenAI's
+                // observed instruction-recency bias. The resolver wraps the
+                // rendered template in a `<system-reminder>` sentinel so
+                // the model still recognises it as a directive, not casual
+                // user prose.
                 input_messages.push(InputMessage {
-                    role: MessageRole::System,
+                    role: MessageRole::User,
                     content: ContentPart::ActionFacetMarker(ContentPartActionFacetMarker {
                         facet_id,
                         args,
