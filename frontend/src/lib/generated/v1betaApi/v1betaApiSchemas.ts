@@ -1618,6 +1618,15 @@ export type TokenUsageRequest = {
    * @example Hello, world!
    */
   user_message?: string;
+  /**
+   * Inline file payloads to include in the estimation without persisting
+   * them. Used by clients (e.g. the Outlook add-in) that want to count
+   * transient content — the previewed email body — toward the token budget
+   * without writing a `file_uploads` row that would later orphan if the
+   * user dismissed the preview. Each entry is parsed in-place and included
+   * in the response's `file_details` alongside any `input_files_ids`.
+   */
+  virtual_files?: TokenUsageVirtualFile[] | null | undefined;
 };
 
 /**
@@ -1700,6 +1709,34 @@ export type TokenUsageStats = {
    * @minimum 0
    */
   user_message_tokens: number;
+};
+
+/**
+ * Inline file content (not persisted) included in a token estimate. The
+ * server decodes the base64 payload, runs the same parser the upload route
+ * uses, tokenizes the result, and discards the bytes once the response is
+ * sent. Per-file size cap matches the upload endpoint's
+ * `max_upload_size_bytes` config.
+ */
+export type TokenUsageVirtualFile = {
+  /**
+   * Standard base64 (RFC 4648) of the raw file bytes.
+   */
+  base64: string;
+  /**
+   * Provided MIME type. Normalized via the same fallback rules as
+   * `/me/files` (e.g. `application/octet-stream` for `.eml` becomes
+   * `message/rfc822`).
+   *
+   * @example message/rfc822
+   */
+  content_type?: string | null | undefined;
+  /**
+   * Original filename (used for content-type fallback and tokenizer header).
+   *
+   * @example preview.eml
+   */
+  filename: string;
 };
 
 export type ToolCallStatus = "in_progress" | "success" | "error";
@@ -1869,9 +1906,9 @@ export type UserProfile = {
    * Will be a BCP 47 language tag (e.g. "en" or "en-US").
    *
    * This is derived in the following order (highest priority first):
-   * - ID token claims
-   * - Browser Accept-Language header
-   * - Default to "en"
+   * - `i18n.language.language_detection_priority`
+   * - Default language from `i18n.language.default_language`
+   * - "en"
    */
   preferred_language: string;
 };

@@ -59,6 +59,18 @@ interface AddinChatInputProps {
    * indicator so the user knows attachments are still materializing.
    */
   isExpandingDroppedEmails?: boolean;
+  /**
+   * Forwarded to `ChatInput.virtualFiles`. The add-in passes its previewed
+   * email body here so the token estimate covers it without polluting
+   * `attachedFilesState`. Pass a memoized array.
+   */
+  virtualFiles?: File[];
+  /**
+   * Forwarded to `ChatInput.maxFiles`. The add-in lifts the cap above the
+   * web default (5) because Outlook drops expand one email into body + N
+   * attachments — a single multi-attachment email saturates 5 quickly.
+   */
+  maxFiles?: number;
   controlledAvailableModels?: ChatModel[];
   controlledSelectedModel?: ChatModel | null;
   onControlledSelectedModelChange?: (model: ChatModel) => void;
@@ -186,7 +198,16 @@ export const AddinChatInput = forwardRef<
             ...(bodyFormat ? { body_format: bodyFormat } : {}),
           },
         };
-      } else if (mailItem?.bodyText || mailItem?.bodyHtml) {
+      } else if (
+        mailItem?.isComposeMode &&
+        (mailItem.bodyText || mailItem.bodyHtml)
+      ) {
+        // Only attach `outlook_review_draft` when the user is composing
+        // their own message — the action is meaningless (and a privacy
+        // footgun) if applied to a read-mode email the user happens to
+        // have open. Backend-side, `full_body` is also capped at 10 KB,
+        // but that's a defense-in-depth check; the gate here prevents the
+        // received-mail body from ever flowing into the request.
         const fullBody =
           bodyFormat === "html"
             ? (mailItem.bodyHtml ?? mailItem.bodyText ?? "")

@@ -12,6 +12,12 @@ interface ChatInputTokenUsageProps {
   message: string;
   /** Attached files */
   attachedFiles: FileUploadItem[];
+  /**
+   * Inline `File`s that should count toward the estimate without being
+   * persisted to the upload pipeline. Used by the Outlook add-in to feed
+   * the previewed email body into the token check.
+   */
+  virtualFiles?: File[];
   /** Current chat ID */
   chatId?: string | null;
   /** Assistant ID to include for new-chat estimation context */
@@ -36,6 +42,7 @@ interface ChatInputTokenUsageProps {
 export const ChatInputTokenUsage: React.FC<ChatInputTokenUsageProps> = ({
   message,
   attachedFiles,
+  virtualFiles,
   chatId,
   assistantId,
   previousMessageId,
@@ -50,6 +57,7 @@ export const ChatInputTokenUsage: React.FC<ChatInputTokenUsageProps> = ({
     useTokenUsageWithFiles({
       message,
       attachedFiles,
+      virtualFiles,
       chatId,
       assistantId,
       previousMessageId,

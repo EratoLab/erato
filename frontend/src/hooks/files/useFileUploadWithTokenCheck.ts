@@ -1,7 +1,7 @@
 /**
  * Hook for handling file uploads with token usage checking
  */
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { createLogger } from "@/utils/debugLogger";
 
@@ -87,24 +87,37 @@ export function useFileUploadWithTokenCheck({
     chatProviderId,
   });
 
-  const uploadFiles = useCallback(
-    async (files: File[]) => {
-      if (disabled || isUploading) {
-        return;
-      }
+  // Stable identity for `uploadFiles`. `baseUploadFiles` and `isUploading`
+  // both flip on every upload, so a naive `useCallback` would hand consumers
+  // a fresh function reference after every upload — which silently breaks
+  // any consumer that lists `uploadFiles` in a `useEffect` / `useCallback`
+  // dep array (it re-fires their effect, which can re-trigger the upload,
+  // which flips the state again — an unbounded loop). Reading the latest
+  // values via a ref keeps the public-API identity stable across renders
+  // while still using up-to-date state when called.
+  const latestRef = useRef({ disabled, isUploading, baseUploadFiles });
+  useEffect(() => {
+    latestRef.current = { disabled, isUploading, baseUploadFiles };
+  });
 
-      try {
-        // First, upload the files
-        const uploadedItems = await baseUploadFiles(files);
+  const uploadFiles = useCallback(async (files: File[]) => {
+    const {
+      disabled: latestDisabled,
+      isUploading: latestIsUploading,
+      baseUploadFiles: latestBaseUploadFiles,
+    } = latestRef.current;
+    if (latestDisabled || latestIsUploading) {
+      return;
+    }
 
-        return uploadedItems;
-      } catch (error) {
-        logger.error("Error in file upload with token check:", error);
-        return undefined;
-      }
-    },
-    [disabled, isUploading, baseUploadFiles],
-  );
+    try {
+      const uploadedItems = await latestBaseUploadFiles(files);
+      return uploadedItems;
+    } catch (error) {
+      logger.error("Error in file upload with token check:", error);
+      return undefined;
+    }
+  }, []);
 
   return {
     uploadFiles,

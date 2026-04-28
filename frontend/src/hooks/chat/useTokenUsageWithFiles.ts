@@ -2,12 +2,13 @@
  * Hook to integrate token usage estimation with file uploads
  */
 import { useQuery } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useDebounce } from "use-debounce";
 
 import {
   useTokenUsageEstimation,
   getTokenEstimationQueryKey,
+  digestVirtualFiles,
 } from "./useTokenUsageEstimation";
 
 import type { TokenUsageEstimationResult } from "./useTokenUsageEstimation";
@@ -18,6 +19,15 @@ interface UseTokenUsageWithFilesOptions {
   message: string;
   /** Attached files */
   attachedFiles: FileUploadItem[];
+  /**
+   * Inline `File`s that should count toward the estimate without being
+   * persisted to the upload pipeline. The Outlook add-in passes its
+   * previewed email body here so the user sees an accurate token total
+   * before clicking Send. Pass a memoized array — the React Query cache
+   * key derives a digest from each file's `(name, type, size,
+   * lastModified)`, so an unstable reference will thrash the cache.
+   */
+  virtualFiles?: File[];
   /** Current chat ID */
   chatId?: string | null;
   /** Assistant ID for new chat estimation context */
@@ -53,6 +63,7 @@ interface UseTokenUsageWithFilesResult {
 export function useTokenUsageWithFiles({
   message,
   attachedFiles,
+  virtualFiles,
   chatId,
   assistantId,
   previousMessageId,
@@ -74,9 +85,18 @@ export function useTokenUsageWithFiles({
 
   // Extract file IDs for query
   const fileIds = attachedFiles.map((file) => file.id);
+  // Stable digest so the React Query cache key only changes when the
+  // virtual file's metadata genuinely changes — passing a fresh array of
+  // identical Files on every render must not refetch.
+  const virtualFilesDigest = useMemo(
+    () => digestVirtualFiles(virtualFiles),
+    [virtualFiles],
+  );
   const shouldEstimate =
     !disabled &&
-    (debouncedMessage.length >= estimateThreshold || fileIds.length > 0);
+    (debouncedMessage.length >= estimateThreshold ||
+      fileIds.length > 0 ||
+      (virtualFiles?.length ?? 0) > 0);
 
   // Use React Query to handle estimation with proper caching
   const { data: queryEstimation, isLoading: queryLoading } = useQuery({
@@ -87,6 +107,7 @@ export function useTokenUsageWithFiles({
       assistantId,
       previousMessageId,
       chatProviderId,
+      virtualFilesDigest,
     ),
     queryFn: async () => {
       if (!shouldEstimate) {
@@ -100,6 +121,7 @@ export function useTokenUsageWithFiles({
         previousMessageId,
         fileIds.length > 0 ? fileIds : undefined,
         chatProviderId,
+        virtualFiles && virtualFiles.length > 0 ? virtualFiles : undefined,
       );
     },
     enabled: shouldEstimate,
@@ -123,6 +145,7 @@ export function useTokenUsageWithFiles({
       previousMessageId,
       fileIds.length > 0 ? fileIds : undefined,
       chatProviderId,
+      virtualFiles && virtualFiles.length > 0 ? virtualFiles : undefined,
     );
   }, [
     disabled,
@@ -133,6 +156,7 @@ export function useTokenUsageWithFiles({
     assistantId,
     previousMessageId,
     chatProviderId,
+    virtualFiles,
   ]);
 
   // Function to clear the current estimation

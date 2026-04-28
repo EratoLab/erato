@@ -1422,6 +1422,209 @@ async fn test_token_usage_estimate_with_composable_payload(pool: Pool<Postgres>)
     );
 }
 
+/// Inline virtual files contribute to the per-file breakdown and token total
+/// without persisting any `file_uploads` row. Add-in flow: previewed Outlook
+/// email body is included in the estimate without orphaning storage.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_token_usage_estimate_with_virtual_file(pool: Pool<Postgres>) {
+    use base64::{Engine as _, engine::general_purpose};
+
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let body = b"This is the previewed email body. It contains some text that should be tokenized.";
+    let request = json!({
+        "new_chat": {},
+        "new_message_content": "Summarize this email.",
+        "virtual_files": [{
+            "filename": "preview.txt",
+            "content_type": "text/plain",
+            "base64": general_purpose::STANDARD.encode(body),
+        }],
+    });
+
+    let response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&request)
+        .await;
+
+    response.assert_status_ok();
+    let token_usage: Value = response.json();
+
+    let file_details = token_usage["file_details"]
+        .as_array()
+        .expect("Expected file_details array");
+    assert_eq!(file_details.len(), 1, "Expected one virtual file detail");
+    let virtual_detail = &file_details[0];
+    assert_eq!(
+        virtual_detail["filename"].as_str().unwrap(),
+        "preview.txt",
+        "Filename should be echoed in file_details"
+    );
+    let virtual_tokens = virtual_detail["token_count"]
+        .as_u64()
+        .expect("Expected token_count");
+    assert!(virtual_tokens > 0, "Virtual file should contribute tokens");
+
+    let file_tokens = token_usage["stats"]["file_tokens"]
+        .as_u64()
+        .expect("Expected file_tokens");
+    assert_eq!(
+        file_tokens, virtual_tokens,
+        "Stats.file_tokens should equal the virtual file's contribution"
+    );
+
+    let total_tokens = token_usage["stats"]["total_tokens"]
+        .as_u64()
+        .expect("Expected total_tokens");
+    assert!(
+        total_tokens >= file_tokens,
+        "Total should include the virtual file contribution"
+    );
+}
+
+/// Malformed base64 in `virtual_files` returns 400 — the request should not
+/// be silently dropped or re-tried.
+///
+/// # Test Categories
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_token_usage_estimate_virtual_file_invalid_base64(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let request = json!({
+        "new_chat": {},
+        "new_message_content": "Summarize this.",
+        "virtual_files": [{
+            "filename": "bad.txt",
+            "content_type": "text/plain",
+            "base64": "!!!not-base64!!!",
+        }],
+    });
+
+    let response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&request)
+        .await;
+
+    response.assert_status(http::StatusCode::BAD_REQUEST);
+}
+
+/// Persisted and virtual files coexist in `file_details` and both contribute
+/// to the token total. Mixed-source breakdown is the add-in scenario where
+/// the user previews one email and drag-drops another.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_token_usage_estimate_mixes_virtual_and_persisted(pool: Pool<Postgres>) {
+    use base64::{Engine as _, engine::general_purpose};
+
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    // Upload one persisted file (no chat — standalone).
+    let persisted_bytes = b"Persisted file content used for token estimation.".to_vec();
+    let multipart_form = axum_test::multipart::MultipartForm::new().add_part(
+        "file",
+        axum_test::multipart::Part::bytes(persisted_bytes)
+            .file_name("persisted.txt")
+            .mime_type("text/plain"),
+    );
+    let upload_response = server
+        .post("/api/v1beta/me/files")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(multipart_form)
+        .await;
+    upload_response.assert_status_ok();
+    let persisted_file_id = upload_response.json::<Value>()["files"][0]["id"]
+        .as_str()
+        .expect("Expected persisted file id")
+        .to_string();
+
+    let virtual_bytes = b"Virtual preview body used in the same request.".to_vec();
+    let request = json!({
+        "new_chat": {},
+        "new_message_content": "Summarize.",
+        "input_files_ids": [persisted_file_id],
+        "virtual_files": [{
+            "filename": "virtual.txt",
+            "content_type": "text/plain",
+            "base64": general_purpose::STANDARD.encode(&virtual_bytes),
+        }],
+    });
+
+    let response = server
+        .post("/api/v1beta/token_usage/estimate")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(http::header::CONTENT_TYPE, "application/json")
+        .json(&request)
+        .await;
+    response.assert_status_ok();
+
+    let token_usage: Value = response.json();
+    let file_details = token_usage["file_details"]
+        .as_array()
+        .expect("Expected file_details");
+    assert_eq!(
+        file_details.len(),
+        2,
+        "Expected both persisted and virtual entries in file_details"
+    );
+    let filenames: Vec<&str> = file_details
+        .iter()
+        .map(|item| item.get("filename").and_then(Value::as_str).unwrap_or(""))
+        .collect();
+    assert!(
+        filenames.contains(&"persisted.txt"),
+        "Expected persisted file in file_details"
+    );
+    assert!(
+        filenames.contains(&"virtual.txt"),
+        "Expected virtual file in file_details"
+    );
+
+    let summed: u64 = file_details
+        .iter()
+        .map(|item| item["token_count"].as_u64().unwrap_or(0))
+        .sum();
+    assert_eq!(
+        token_usage["stats"]["file_tokens"].as_u64().unwrap(),
+        summed,
+        "Stats.file_tokens should equal the sum across both sources"
+    );
+}
+
 /// Test message submission with invalid previous_message_id (non-existent UUID).
 ///
 /// # Test Categories

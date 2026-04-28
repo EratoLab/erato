@@ -5384,6 +5384,16 @@
             "type": "string",
             "description": "The text of the message.",
             "example": "Hello, world!"
+          },
+          "virtual_files": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/TokenUsageVirtualFile"
+            },
+            "description": "Inline file payloads to include in the estimation without persisting\nthem. Used by clients (e.g. the Outlook add-in) that want to count\ntransient content — the previewed email body — toward the token budget\nwithout writing a `file_uploads` row that would later orphan if the\nuser dismissed the preview. Each entry is parsed in-place and included\nin the response's `file_details` alongside any `input_files_ids`."
           }
         }
       },
@@ -5480,6 +5490,33 @@
             "type": "integer",
             "description": "Number of tokens in the user message",
             "minimum": 0
+          }
+        }
+      },
+      "TokenUsageVirtualFile": {
+        "type": "object",
+        "description": "Inline file content (not persisted) included in a token estimate. The\nserver decodes the base64 payload, runs the same parser the upload route\nuses, tokenizes the result, and discards the bytes once the response is\nsent. Per-file size cap matches the upload endpoint's\n`max_upload_size_bytes` config.",
+        "required": [
+          "filename",
+          "base64"
+        ],
+        "properties": {
+          "base64": {
+            "type": "string",
+            "description": "Standard base64 (RFC 4648) of the raw file bytes."
+          },
+          "content_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Provided MIME type. Normalized via the same fallback rules as\n`/me/files` (e.g. `application/octet-stream` for `.eml` becomes\n`message/rfc822`).",
+            "example": "message/rfc822"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Original filename (used for content-type fallback and tokenizer header).",
+            "example": "preview.eml"
           }
         }
       },

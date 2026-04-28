@@ -124,6 +124,10 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       chatProviderId: selectedModel?.chat_provider_id ?? undefined,
       acceptedFileTypes,
       multiple: true,
+      // Match the ChatInput cap. Without this, useFileDropzone's default
+      // (5) silently truncates each upload batch before files reach the
+      // input — the chip row shows "5/50" while later drops disappear.
+      maxFiles: 50,
     },
   );
 
@@ -138,7 +142,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
   );
 
   const { mailItem } = useOutlookMailItem();
-  const { hasSelectedEmailSource, isEmailBodyIncluded } =
+  const { hasSelectedEmailSource, isEmailBodyIncluded, emailBodyFile } =
     useOutlookEmailSource();
   const previewEmailMessageIdRef = useRef<string | null>(null);
 
@@ -412,6 +416,18 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
       ? currentEmailMessageId
       : null;
 
+  // Feed the previewed email body into the token estimator without
+  // persisting it as an upload. The estimator hook digests the file's
+  // metadata for cache stability, so we only re-allocate the array when
+  // the underlying File reference changes.
+  const isPreviewBodyIncluded =
+    shouldSuggestCurrentEmail && hasSelectedEmailSource && isEmailBodyIncluded;
+  const previewVirtualFiles = useMemo(
+    () =>
+      isPreviewBodyIncluded && emailBodyFile ? [emailBodyFile] : undefined,
+    [isPreviewBodyIncluded, emailBodyFile],
+  );
+
   const handleSendMessage = useCallback(
     (
       message: string,
@@ -681,6 +697,11 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
               uploadFiles={uploadFiles}
               uploadError={uploadError}
               isExpandingDroppedEmails={isExpandingDroppedEmails}
+              virtualFiles={previewVirtualFiles}
+              // Outlook drag-drop expands one email into body + N attachments,
+              // so the web default of 5 fills up after a single multi-attachment
+              // drop. The add-in lifts the cap; web stays at 5.
+              maxFiles={50}
             />
           </div>
         </ChatErrorBoundary>

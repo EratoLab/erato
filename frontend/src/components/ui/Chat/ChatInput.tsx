@@ -81,6 +81,14 @@ interface ChatInputProps {
   acceptedFileTypes?: FileType[];
   /** Initial files to display (optional) */
   initialFiles?: FileUploadItem[];
+  /**
+   * Inline `File`s that should count toward the token estimate without
+   * being persisted as uploads. The Outlook add-in passes its previewed
+   * email body here. Pass a memoized array — the underlying React Query
+   * cache derives a digest from each file's metadata, so an unstable
+   * reference will thrash the cache.
+   */
+  virtualFiles?: File[];
   /** Show file type in previews */
   showFileTypes?: boolean;
   // Add prop for preview callback
@@ -143,6 +151,7 @@ export const ChatInput = ({
   maxFiles = 5,
   acceptedFileTypes = [],
   initialFiles = [],
+  virtualFiles,
   showFileTypes = false,
   // Destructure the new props
   onFilePreview,
@@ -774,6 +783,7 @@ export const ChatInput = ({
         <ChatInputTokenUsage
           message={message}
           attachedFiles={attachedFiles}
+          virtualFiles={virtualFiles}
           chatId={chatId}
           assistantId={assistantId}
           previousMessageId={previousMessageId}

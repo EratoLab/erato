@@ -115,7 +115,11 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
 
       <div
         className={clsx(
-          "flex flex-col",
+          // Cap height at ~3 list rows so a large drop (the add-in lifts the
+          // cap to 50) cannot push the textarea below the viewport. At low
+          // counts the content is shorter than max-height and no scrollbar
+          // appears.
+          "flex max-h-40 flex-col overflow-y-auto",
           surfaceVariant === "message" ? "" : "gap-2",
         )}
         style={attachmentsListStyle}

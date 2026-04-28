@@ -859,7 +859,7 @@ export const useGetFilePreview = <TData = undefined,>(
 
 export type AllDrivesQueryParams = {
   /**
-   * Optional SharePoint site search query. If empty or omitted, wildcard search is used.
+   * Optional Drive/site search query used to filter the returned drives by drive title or site name. If empty or omitted, wildcard search is used for site discovery and no filtering is applied.
    */
   query?: string;
 };
