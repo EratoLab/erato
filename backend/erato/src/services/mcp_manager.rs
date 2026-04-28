@@ -183,6 +183,7 @@ pub fn convert_mcp_tools_to_genai_tools(managed_mcp_tools: Vec<ManagedTool>) -> 
                 name: GenaiToolName::Custom(tool.name.to_string()),
                 description: tool.description.map(|d| d.to_string()),
                 schema: Some(input_schema_value),
+                strict: None,
                 config: None,
             }
         })
