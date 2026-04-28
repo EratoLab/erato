@@ -715,6 +715,24 @@ impl GenerationInputMessages {
     }
 }
 
+/// Action-facet templates (e.g. `outlook_review_draft`,
+/// `outlook_rewrite_selection`) prefix every rendered prompt with the
+/// literal string `"FOR THIS MESSAGE ONLY:"`. They are request-scoped and
+/// must never replay into later turns — when they do, the model sees
+/// multiple competing format directives in the same chat request and
+/// drifts. We filter on the prefix rather than a sentinel marker so this
+/// also cleans up history rows already saved before the filter existed,
+/// without requiring a DB migration.
+fn is_action_facet_system_message(message: &InputMessage) -> bool {
+    if !matches!(message.role, MessageRole::System) {
+        return false;
+    }
+    if let ContentPart::Text(ContentPartText { text }) = &message.content {
+        return text.trim_start().starts_with("FOR THIS MESSAGE ONLY:");
+    }
+    false
+}
+
 /// Helper function to determine if a file is an image based on its extension
 fn is_image_file(filename: &str) -> bool {
     if let Some(extension) = filename.rsplit('.').next() {
@@ -756,7 +774,21 @@ pub async fn get_generation_input_messages_by_previous_message_id(
         current_message_id_opt = message.previous_message_id;
 
         if let Some(gen_input_json) = &message.generation_input_messages {
-            base_history = Some(GenerationInputMessages::validate(gen_input_json)?);
+            let validated = GenerationInputMessages::validate(gen_input_json)?;
+            // Strip per-turn action-facet System messages that pollute prior
+            // turns' snapshots. Each action-facet directive is request-scoped
+            // ("FOR THIS MESSAGE ONLY") and must not leak into later turns —
+            // when it does, the model sees competing format directives from
+            // past turns and the current turn, and drifts toward whichever
+            // pattern its history-bias prefers (typically the older one).
+            let filtered = GenerationInputMessages {
+                messages: validated
+                    .messages
+                    .into_iter()
+                    .filter(|msg| !is_action_facet_system_message(msg))
+                    .collect(),
+            };
+            base_history = Some(filtered);
             messages_to_process.push(message);
             break; // Found anchor
         } else {
@@ -918,4 +950,64 @@ pub async fn regenerate_image_urls_in_content(
     }
 
     Ok(updated_content)
+}
+
+#[cfg(test)]
+mod action_facet_filter_tests {
+    use super::is_action_facet_system_message;
+    use super::{ContentPart, ContentPartText, InputMessage, MessageRole};
+
+    fn system_text(text: &str) -> InputMessage {
+        InputMessage {
+            role: MessageRole::System,
+            content: ContentPart::Text(ContentPartText {
+                text: text.to_string(),
+            }),
+        }
+    }
+
+    fn user_text(text: &str) -> InputMessage {
+        InputMessage {
+            role: MessageRole::User,
+            content: ContentPart::Text(ContentPartText {
+                text: text.to_string(),
+            }),
+        }
+    }
+
+    #[test]
+    fn flags_action_facet_directives_for_both_outlook_templates() {
+        assert!(is_action_facet_system_message(&system_text(
+            "FOR THIS MESSAGE ONLY: The user is composing an email (format: text). The full draft body is:\n\nHi"
+        )));
+        assert!(is_action_facet_system_message(&system_text(
+            "FOR THIS MESSAGE ONLY: The user is composing an email in html format and has selected the following text from the email body:\n\nHi"
+        )));
+    }
+
+    #[test]
+    fn tolerates_leading_whitespace_in_rendered_template() {
+        // The rendered template is wrapped in r#"..."# string literals that
+        // begin with a newline; the trim before prefix-match handles that.
+        assert!(is_action_facet_system_message(&system_text(
+            "\nFOR THIS MESSAGE ONLY: The user is composing an email"
+        )));
+    }
+
+    #[test]
+    fn ignores_user_messages_even_with_matching_text() {
+        assert!(!is_action_facet_system_message(&user_text(
+            "FOR THIS MESSAGE ONLY: not really, just user prose"
+        )));
+    }
+
+    #[test]
+    fn ignores_unrelated_system_messages() {
+        assert!(!is_action_facet_system_message(&system_text(
+            "You are a helpful assistant."
+        )));
+        assert!(!is_action_facet_system_message(&system_text(
+            "Respond in plain text."
+        )));
+    }
 }
