@@ -244,6 +244,9 @@ fn apply_model_settings(mut options: ChatOptions, model_settings: &ModelSettings
     }
     if let Some(reasoning_effort) = model_settings.reasoning_effort {
         options = options.with_reasoning_effort(map_reasoning_effort(reasoning_effort));
+        if reasoning_effort != ModelReasoningEffort::None {
+            options = options.with_capture_reasoning_content(true);
+        }
     }
     if let Some(verbosity) = model_settings.verbosity {
         options = options.with_verbosity(map_verbosity(verbosity));

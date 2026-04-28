@@ -54,6 +54,12 @@ test.describe("Can chat with different models", () => {
       tags: [TAG_CI],
     },
     {
+      modelName: "GPT-5",
+      prompt: "Please provide a brief greeting in exactly five words.",
+      loadingTimeoutMs: 30000,
+      tags: [TAG_CI],
+    },
+    {
       modelName: "Mock-LLM",
       prompt: "Test",
       tags: [TAG_CI],

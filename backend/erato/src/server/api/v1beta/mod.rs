@@ -1542,18 +1542,15 @@ impl ChatMessage {
         feedback: Option<crate::db::entity::message_feedbacks::Model>,
     ) -> Result<Self, Report> {
         let parsed_message = MessageSchema::validate(&msg.raw_message)?;
-        let error = msg
-            .generation_metadata
-            .as_ref()
-            .and_then(|metadata| {
-                serde_json::from_value::<GenerationMetadata>(metadata.clone()).ok()
-            })
-            .and_then(|metadata| metadata.error);
-        let mcp_servers_unavailable = msg.generation_metadata.as_ref().and_then(|metadata| {
-            serde_json::from_value::<GenerationMetadata>(metadata.clone())
-                .ok()
-                .and_then(|metadata| metadata.mcp_servers_unavailable)
+        let generation_metadata = msg.generation_metadata.as_ref().and_then(|metadata| {
+            serde_json::from_value::<GenerationMetadata>(metadata.clone()).ok()
         });
+        let error = generation_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.error.clone());
+        let mcp_servers_unavailable = generation_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.mcp_servers_unavailable.clone());
         Ok(ChatMessage {
             id: msg.id.to_string(),
             chat_id: msg.chat_id.to_string(),

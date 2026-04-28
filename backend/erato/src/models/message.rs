@@ -4,6 +4,7 @@ use crate::models::pagination;
 use crate::policy::prelude::*;
 use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
 use eyre::{Report, eyre};
+use genai::chat::ReasoningItem;
 use sea_orm::prelude::*;
 use sea_orm::{
     ActiveValue, DatabaseConnection, EntityTrait, QueryOrder, QuerySelect, TransactionTrait,
@@ -124,6 +125,15 @@ pub struct GenerationMetadata {
     /// Number of reasoning tokens used during generation (e.g., for o1 models)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub used_reasoning_tokens: Option<u32>,
+    /// Reasoning summary emitted by the model, persisted separately from assistant text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_summary: Option<String>,
+    /// Provider-native reasoning items required for stateless replay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_items: Option<Vec<ReasoningItem>>,
+    /// Encrypted reasoning items required for stateless Responses API replay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_item_encrypted_content: Option<Vec<String>>,
     /// Langfuse trace ID for this generation (if Langfuse tracing was enabled)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub langfuse_trace_id: Option<String>,

@@ -678,6 +678,75 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
     assert_eq!(primary_config.model_name, "gpt-4");
 }
 
+#[test]
+fn test_config_azure_openai_responses_migration_preserves_provider_kind() {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    let config_content = r#"
+[chat_providers]
+priority_order = ["azure_responses"]
+
+[chat_providers.providers.azure_responses]
+provider_kind = "azure_openai_responses"
+model_name = "gpt-5"
+model_display_name = "Azure GPT-5 Responses"
+base_url = "https://responses.openai.azure.com"
+api_key = "responses-azure-key"
+api_version = "2025-04-01-preview"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let mut builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+
+    let config_schema = builder.build().expect("Failed to build config schema");
+    let mut config: AppConfig = config_schema
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+    config = config.migrate();
+
+    let chat_providers = config.chat_providers.as_ref().unwrap();
+    let azure_responses = chat_providers.providers.get("azure_responses").unwrap();
+
+    assert_eq!(azure_responses.provider_kind, "azure_openai_responses");
+    assert_eq!(azure_responses.api_key, None);
+    assert!(
+        azure_responses
+            .base_url
+            .as_ref()
+            .unwrap()
+            .contains("/openai/deployments/gpt-5/")
+    );
+    assert!(
+        azure_responses
+            .additional_request_parameters
+            .as_ref()
+            .unwrap()
+            .contains(&"api-version=2025-04-01-preview".to_string())
+    );
+    assert!(
+        azure_responses
+            .additional_request_headers
+            .as_ref()
+            .unwrap()
+            .contains(&"api-key=responses-azure-key".into())
+    );
+}
+
 /// Tests Vertex AI provider migration to Gemini format.
 ///
 /// # Test Categories

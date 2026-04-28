@@ -37,8 +37,8 @@ generate_open_api_check:
 generate_config_reference_check:
     cargo run --bin gen-config-reference -- --check
 
-test:
-    cargo nextest run --retries 2
+test *args:
+    RUST_MIN_STACK=8388608 cargo nextest run --retries 2 {{args}}
 
 test_policy:
     opa test --v1-compatible -v policy
