@@ -374,7 +374,7 @@ msgstr "Nuevo Chat"
 #. js-lingui-explicit-id
 #: src/utils/chatSendErrorMessage.ts
 msgid "chat.send.error.actionFacetArgTooLarge"
-msgstr ""
+msgstr "Este borrador es demasiado largo para que la IA lo procese ({actualKb} KB / {maxKb} KB máx). Acórtalo o selecciona solo la parte nueva de tu respuesta y usa la acción de reescritura."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
