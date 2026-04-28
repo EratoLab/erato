@@ -2950,8 +2950,54 @@
                 }
               }
             ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContentPartActionFacetMarker",
+                "description": "Reference to an action-facet directive that will be rendered fresh\nat request-build time. Persisted in `generation_input_messages` as a\nmetadata-only marker (facet id + invocation args) instead of the\nrendered template text — mirrors the `TextFilePointer` pattern.\nAction facets are request-scoped: when this marker is loaded as part\nof *prior-turn* history, the resolver drops it; for the *current\nturn* it renders the template against the current config + args."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "action_facet_marker"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Reference to an action-facet directive that will be rendered fresh\nat request-build time. Persisted in `generation_input_messages` as a\nmetadata-only marker (facet id + invocation args) instead of the\nrendered template text — mirrors the `TextFilePointer` pattern.\nAction facets are request-scoped: when this marker is loaded as part\nof *prior-turn* history, the resolver drops it; for the *current\nturn* it renders the template against the current config + args."
           }
         ]
+      },
+      "ContentPartActionFacetMarker": {
+        "type": "object",
+        "required": [
+          "facet_id",
+          "args"
+        ],
+        "properties": {
+          "args": {
+            "type": "object",
+            "description": "Arguments captured at the time of the user's request (e.g. the\nselected text for `outlook_rewrite_selection`, the compose body for\n`outlook_review_draft`).",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "facet_id": {
+            "type": "string",
+            "description": "Identifier of the action facet whose template should be rendered."
+          }
+        }
       },
       "ContentPartImage": {
         "type": "object",

@@ -71,8 +71,14 @@ pub enum AbstractChatSequencePart {
     /// Facet-specific additional system prompt
     FacetAdditionalSystemPrompt { spec: PromptSpec, facet_id: String },
 
-    /// Action-facet rendered prompt (request-scoped, parameterized)
-    ActionFacetPrompt { content: String },
+    /// Action-facet directive (request-scoped, parameterized). Carries the
+    /// facet identity + invocation args; rendering happens later in the
+    /// resolver step so persisted history stores a metadata-only marker
+    /// instead of the rendered template text.
+    ActionFacetPrompt {
+        facet_id: String,
+        args: HashMap<String, String>,
+    },
 
     /// File attached to the current user input
     UserFile { file_id: Uuid },

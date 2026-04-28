@@ -156,6 +156,16 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
                     "base64_data_length": image.base64_data.len()
                 }));
             }
+            ContentPart::ActionFacetMarker(marker) => {
+                // Langfuse trace shows the marker metadata (canonical form)
+                // — the rendered text is reconstructable from facet_id + args
+                // and the current template if needed.
+                output_parts.push(json!({
+                    "type": "action_facet_marker",
+                    "facet_id": marker.facet_id,
+                    "args": marker.args,
+                }));
+            }
         }
     }
 

@@ -186,6 +186,14 @@ pub enum ContentPart {
     TextFilePointer(ContentPartTextFilePointer),
     ImageFilePointer(ContentPartImageFilePointer),
     Image(ContentPartImage),
+    /// Reference to an action-facet directive that will be rendered fresh
+    /// at request-build time. Persisted in `generation_input_messages` as a
+    /// metadata-only marker (facet id + invocation args) instead of the
+    /// rendered template text — mirrors the `TextFilePointer` pattern.
+    /// Action facets are request-scoped: when this marker is loaded as part
+    /// of *prior-turn* history, the resolver drops it; for the *current
+    /// turn* it renders the template against the current config + args.
+    ActionFacetMarker(ContentPartActionFacetMarker),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -220,6 +228,16 @@ pub struct ContentPartImageFilePointer {
 pub struct ContentPartImage {
     pub content_type: String,
     pub base64_data: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartActionFacetMarker {
+    /// Identifier of the action facet whose template should be rendered.
+    pub facet_id: String,
+    /// Arguments captured at the time of the user's request (e.g. the
+    /// selected text for `outlook_rewrite_selection`, the compose body for
+    /// `outlook_review_draft`).
+    pub args: HashMap<String, String>,
 }
 
 /// Statistics for a list of messages
@@ -281,6 +299,9 @@ impl MessageSchema {
                 ContentPart::TextFilePointer(_) => None,
                 ContentPart::ImageFilePointer(_) => None,
                 ContentPart::Image(_) => None,
+                // Markers are placeholders for the action-facet resolver and
+                // do not contribute to a message's full text representation.
+                ContentPart::ActionFacetMarker(_) => None,
             })
             .collect::<Vec<&str>>()
             .join(" ")
@@ -699,6 +720,8 @@ impl InputMessage {
             ContentPart::TextFilePointer(_) => String::new(),
             ContentPart::ImageFilePointer(_) => String::new(),
             ContentPart::Image(_) => String::new(),
+            // Marker is metadata-only; rendering happens in the resolver.
+            ContentPart::ActionFacetMarker(_) => String::new(),
         }
     }
 }

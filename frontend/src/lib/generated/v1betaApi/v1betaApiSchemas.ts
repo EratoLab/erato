@@ -415,7 +415,25 @@ export type ContentPart =
   | {
       base64_data: string;
       content_type: "image";
-    };
+    }
+  | (ContentPartActionFacetMarker & {
+      content_type: "action_facet_marker";
+    });
+
+export type ContentPartActionFacetMarker = {
+  /**
+   * Arguments captured at the time of the user's request (e.g. the
+   * selected text for `outlook_rewrite_selection`, the compose body for
+   * `outlook_review_draft`).
+   */
+  args: {
+    [key: string]: string;
+  };
+  /**
+   * Identifier of the action facet whose template should be rendered.
+   */
+  facet_id: string;
+};
 
 export type ContentPartImage = {
   base64_data: string;

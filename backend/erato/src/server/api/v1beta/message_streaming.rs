@@ -19,7 +19,9 @@ use crate::models::message::{
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::server::api::v1beta::ChatMessage;
-use crate::server::api::v1beta::file_resolution::resolve_file_pointers_in_generation_input;
+use crate::server::api::v1beta::file_resolution::{
+    resolve_action_facet_markers_in_generation_input, resolve_file_pointers_in_generation_input,
+};
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming_file_extraction::{
     parse_content_filter_error_from_mcp_tool_result, post_process_mcp_tool_result,
@@ -1569,6 +1571,16 @@ pub(crate) async fn prepare_chat_request_with_adapters(
         me_profile_input.access_token,
     )
     .await?;
+
+    // Render any ActionFacetMarker entries against the current config.
+    // Saved snapshot keeps the markers; only the about-to-be-sent
+    // chat_request gets rendered text. Past-turn markers were already
+    // stripped during historical replay in `compose_prompt_messages`, so
+    // anything that reaches here is the current turn's directive.
+    let resolved_generation_input_messages = resolve_action_facet_markers_in_generation_input(
+        app_state,
+        resolved_generation_input_messages,
+    );
 
     // Build genai ChatRequest (messages + tools) + ChatOptions
     let mut chat_request = resolved_generation_input_messages
