@@ -60,7 +60,8 @@ use eyre::{Report, eyre};
 use futures::Stream;
 use genai::chat::{
     ChatMessage as GenAiChatMessage, ChatOptions, ChatRequest, ChatRole, ChatStreamEvent,
-    MessageContent, StreamChunk, StreamEnd,
+    ContentPart as GenAiContentPart, MessageContent, ReasoningItem, ReasoningSummaryText,
+    StreamChunk, StreamEnd,
 };
 use sea_orm::JsonValue;
 use sea_orm::prelude::Uuid;
@@ -85,6 +86,56 @@ fn non_empty_string(value: &str) -> Option<String> {
 
 fn non_empty_vec<T: Clone>(value: &[T]) -> Option<Vec<T>> {
     (!value.is_empty()).then(|| value.to_vec())
+}
+
+fn reasoning_summary_part(summary: Option<&str>) -> ReasoningSummaryText {
+    ReasoningSummaryText::new(summary.unwrap_or_default())
+}
+
+fn build_openai_responses_reasoning_replay_parts(
+    generation_metadata: GenerationMetadata,
+) -> Vec<GenAiContentPart> {
+    let reasoning_summary = generation_metadata
+        .reasoning_summary
+        .filter(|summary| !summary.is_empty());
+    let mut reasoning_items = generation_metadata.reasoning_items.unwrap_or_default();
+
+    for reasoning_item in &mut reasoning_items {
+        if reasoning_item.summary.is_empty() {
+            reasoning_item
+                .summary
+                .push(reasoning_summary_part(reasoning_summary.as_deref()));
+        }
+    }
+
+    if let Some(encrypted_items) = generation_metadata.reasoning_item_encrypted_content {
+        for encrypted_content in encrypted_items.into_iter().filter(|item| !item.is_empty()) {
+            let already_present = reasoning_items
+                .iter()
+                .any(|item| item.encrypted_content.as_deref() == Some(encrypted_content.as_str()));
+            if already_present {
+                continue;
+            }
+
+            reasoning_items.push(ReasoningItem {
+                summary: vec![reasoning_summary_part(reasoning_summary.as_deref())],
+                encrypted_content: Some(encrypted_content),
+                ..Default::default()
+            });
+        }
+    }
+
+    if !reasoning_items.is_empty() {
+        return reasoning_items
+            .into_iter()
+            .map(GenAiContentPart::ReasoningItem)
+            .collect();
+    }
+
+    reasoning_summary
+        .map(GenAiContentPart::ReasoningContent)
+        .into_iter()
+        .collect()
 }
 
 async fn collect_reasoning_replay_messages(
@@ -121,27 +172,7 @@ async fn collect_reasoning_replay_messages(
             continue;
         };
 
-        let mut replay_parts = generation_metadata
-            .reasoning_items
-            .unwrap_or_default()
-            .into_iter()
-            .map(genai::chat::ContentPart::ReasoningItem)
-            .collect::<Vec<_>>();
-        if let Some(encrypted_items) = generation_metadata.reasoning_item_encrypted_content {
-            replay_parts.extend(
-                encrypted_items
-                    .into_iter()
-                    .filter(|item| !item.is_empty())
-                    .map(genai::chat::ContentPart::ThoughtSignature),
-            );
-        }
-        if let Some(reasoning_summary) = generation_metadata.reasoning_summary
-            && !reasoning_summary.is_empty()
-        {
-            replay_parts.push(genai::chat::ContentPart::ReasoningContent(
-                reasoning_summary,
-            ));
-        }
+        let replay_parts = build_openai_responses_reasoning_replay_parts(generation_metadata);
         if !replay_parts.is_empty() {
             replay_messages.push(GenAiChatMessage::assistant(MessageContent::from_parts(
                 replay_parts,
@@ -3993,6 +4024,76 @@ pub async fn message_submit_sse(
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
     ))
+}
+
+#[cfg(test)]
+mod reasoning_replay_tests {
+    use super::*;
+
+    fn generation_metadata(
+        reasoning_summary: Option<String>,
+        reasoning_items: Option<Vec<ReasoningItem>>,
+        reasoning_item_encrypted_content: Option<Vec<String>>,
+    ) -> GenerationMetadata {
+        GenerationMetadata {
+            used_prompt_tokens: None,
+            used_completion_tokens: None,
+            used_total_tokens: None,
+            used_reasoning_tokens: None,
+            reasoning_summary,
+            reasoning_items,
+            reasoning_item_encrypted_content,
+            langfuse_trace_id: None,
+            was_aborted: None,
+            error: None,
+            mcp_servers_unavailable: None,
+        }
+    }
+
+    #[test]
+    fn openai_responses_reasoning_replay_deduplicates_encrypted_content() {
+        let parts = build_openai_responses_reasoning_replay_parts(generation_metadata(
+            Some("summary".to_string()),
+            Some(vec![ReasoningItem {
+                id: Some("rs_123".to_string()),
+                summary: vec![ReasoningSummaryText::new("summary")],
+                encrypted_content: Some("encrypted".to_string()),
+                ..Default::default()
+            }]),
+            Some(vec!["encrypted".to_string()]),
+        ));
+
+        assert_eq!(parts.len(), 1);
+        let GenAiContentPart::ReasoningItem(reasoning_item) = &parts[0] else {
+            panic!("expected reasoning item");
+        };
+        assert_eq!(
+            reasoning_item.encrypted_content.as_deref(),
+            Some("encrypted")
+        );
+        assert_eq!(reasoning_item.summary.len(), 1);
+        assert_eq!(reasoning_item.summary[0].text, "summary");
+    }
+
+    #[test]
+    fn openai_responses_reasoning_replay_synthesizes_summary_for_legacy_encrypted_content() {
+        let parts = build_openai_responses_reasoning_replay_parts(generation_metadata(
+            Some("summary".to_string()),
+            None,
+            Some(vec!["encrypted".to_string()]),
+        ));
+
+        assert_eq!(parts.len(), 1);
+        let GenAiContentPart::ReasoningItem(reasoning_item) = &parts[0] else {
+            panic!("expected reasoning item");
+        };
+        assert_eq!(
+            reasoning_item.encrypted_content.as_deref(),
+            Some("encrypted")
+        );
+        assert_eq!(reasoning_item.summary.len(), 1);
+        assert_eq!(reasoning_item.summary[0].text, "summary");
+    }
 }
 
 /// Run the message submission task in the background
