@@ -174,7 +174,7 @@ msgstr "Cargar desde el equipo"
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.fromOneDrive"
-msgstr "Cargar desde OneDrive"
+msgstr "Cargar desde Sharepoint"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx

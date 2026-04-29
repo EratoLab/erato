@@ -174,7 +174,7 @@ msgstr "Téléverser depuis l’ordinateur"
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.fromOneDrive"
-msgstr "Téléverser depuis OneDrive"
+msgstr "Téléverser depuis Sharepoint"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx

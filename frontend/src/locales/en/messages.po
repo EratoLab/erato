@@ -60,7 +60,7 @@ msgstr "Some previously configured tools are no longer available and were remove
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.files.helpText"
-msgstr "Optional: Upload files from your computer or OneDrive that will be available to this assistant in every chat"
+msgstr "Optional: Upload files from your computer or Sharepoint that will be available to this assistant in every chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
@@ -800,7 +800,7 @@ msgstr "Upload from Computer"
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
 msgid "fileSourceSelector.uploadFromOneDrive"
-msgstr "Upload from OneDrive"
+msgstr "Upload from Sharepoint"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx

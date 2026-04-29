@@ -60,17 +60,17 @@ export const FileSourceSelectorGrid = memo<FileSourceSelectorProps>(
           <span>Upload from Computer</span>
         </button>
 
-        {/* OneDrive/SharePoint button */}
+        {/* Sharepoint button */}
         {availableProviders.includes("sharepoint") && (
           <button
             type="button"
             onClick={() => onSelectCloud("sharepoint")}
             disabled={disabled}
             className={buttonBaseClasses}
-            aria-label="Upload from OneDrive"
+            aria-label="Upload from Sharepoint"
           >
             <Cloud className="size-5" />
-            <span>Upload from OneDrive</span>
+            <span>Upload from Sharepoint</span>
           </button>
         )}
 

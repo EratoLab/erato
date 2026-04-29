@@ -60,7 +60,7 @@ msgstr "Einige zuvor konfigurierte Tools sind nicht mehr verfuegbar und wurden a
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.files.helpText"
-msgstr "Optional: Laden Sie Dateien von Ihrem Computer oder OneDrive hoch, die diesem Assistenten in jedem Chat zur Verfügung stehen"
+msgstr "Optional: Laden Sie Dateien von Ihrem Computer oder Sharepoint hoch, die diesem Assistenten in jedem Chat zur Verfügung stehen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
@@ -800,7 +800,7 @@ msgstr "Vom Computer hochladen"
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
 msgid "fileSourceSelector.uploadFromOneDrive"
-msgstr "Von OneDrive hochladen"
+msgstr "Von Sharepoint hochladen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx

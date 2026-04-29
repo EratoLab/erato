@@ -102,7 +102,7 @@ async function selectOneDriveFileByPath(page: Page) {
     .getByRole("button", { name: /open menu/i })
     .last()
     .click();
-  await page.getByRole("menuitem", { name: /upload from onedrive/i }).click();
+  await page.getByRole("menuitem", { name: /upload from sharepoint/i }).click();
 
   const picker = page.getByRole("dialog", {
     name: /select files from cloud storage/i,
