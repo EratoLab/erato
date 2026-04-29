@@ -174,7 +174,7 @@ msgstr "Vom Computer hochladen"
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.fromOneDrive"
-msgstr "Von OneDrive hochladen"
+msgstr "Von Sharepoint hochladen"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx

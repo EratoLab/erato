@@ -60,7 +60,7 @@ msgstr "Certains outils precedemment configures ne sont plus disponibles et ont 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.files.helpText"
-msgstr "Optionnel : Téléchargez des fichiers depuis votre ordinateur ou OneDrive qui seront disponibles pour cet assistant dans chaque chat"
+msgstr "Optionnel : Téléchargez des fichiers depuis votre ordinateur ou Sharepoint qui seront disponibles pour cet assistant dans chaque chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
@@ -800,7 +800,7 @@ msgstr "Télécharger depuis l'ordinateur"
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
 msgid "fileSourceSelector.uploadFromOneDrive"
-msgstr "Télécharger depuis OneDrive"
+msgstr "Télécharger depuis Sharepoint"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx

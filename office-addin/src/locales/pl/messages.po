@@ -174,7 +174,7 @@ msgstr "Prześlij z komputera"
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 msgid "officeAddin.fileSource.fromOneDrive"
-msgstr "Prześlij z OneDrive"
+msgstr "Prześlij z Sharepoint"
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx

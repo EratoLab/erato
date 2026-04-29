@@ -240,7 +240,7 @@ export function AddinFileSourceSelector({
             <span>
               {t({
                 id: "officeAddin.fileSource.fromOneDrive",
-                message: "Upload from OneDrive",
+                message: "Upload from Sharepoint",
               })}
             </span>
           </button>

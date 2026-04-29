@@ -818,7 +818,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
           helpText={t({
             id: "assistant.form.files.helpText",
             message:
-              "Optional: Upload files from your computer or OneDrive that will be available to this assistant in every chat",
+              "Optional: Upload files from your computer or Sharepoint that will be available to this assistant in every chat",
           })}
           htmlFor="assistant-files"
           labelInlineAction={

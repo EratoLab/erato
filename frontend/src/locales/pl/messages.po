@@ -60,7 +60,7 @@ msgstr "Niektore wczesniej skonfigurowane narzedzia nie sa juz dostepne i zostal
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.files.helpText"
-msgstr "Opcjonalnie: Prześlij pliki z komputera lub OneDrive, które będą dostępne dla tego asystenta w każdym czacie"
+msgstr "Opcjonalnie: Prześlij pliki z komputera lub Sharepoint, które będą dostępne dla tego asystenta w każdym czacie"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
@@ -800,7 +800,7 @@ msgstr "Prześlij z komputera"
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/FileSourceSelector.tsx
 msgid "fileSourceSelector.uploadFromOneDrive"
-msgstr "Prześlij z OneDrive"
+msgstr "Prześlij z Sharepoint"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/AssistantFileUploadSelector.tsx

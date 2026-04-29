@@ -69,7 +69,7 @@ export const FileSourceSelector = memo<FileSourceSelectorProps>(
       menuItems.push({
         label: t({
           id: "fileSourceSelector.uploadFromOneDrive",
-          message: "Upload from OneDrive",
+          message: "Upload from Sharepoint",
         }),
         icon: <Cloud className="size-4" />,
         onClick: () => onSelectCloud("sharepoint"),
