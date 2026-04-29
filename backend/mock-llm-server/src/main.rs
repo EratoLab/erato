@@ -78,7 +78,8 @@ async fn main() {
                 .route(
                     "/v1/images/generations",
                     post(endpoints::images::generate_images),
-                ),
+                )
+                .route("/v1/responses", post(endpoints::responses::responses)),
         )
         .nest(
             "/base-vertex",
@@ -105,6 +106,12 @@ async fn main() {
     println!("provider_kind = \"openai\"");
     println!("model_name = \"placeholder\"");
     println!("model_display_name = \"Mock-LLM\"");
+    println!("base_url = \"http://localhost:44320/base-openai/v1/placeholder\"");
+    println!();
+    println!("[chat_providers.providers.mock-llm-openai-responses]");
+    println!("provider_kind = \"openai_responses\"");
+    println!("model_name = \"gpt-5.2\"");
+    println!("model_display_name = \"Mock-LLM Responses\"");
     println!("base_url = \"http://localhost:44320/base-openai/v1/placeholder\"");
     println!();
     println!("[chat_providers.providers.mock-llm-vertex]");
