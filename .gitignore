@@ -19,6 +19,7 @@ tmp/
 
 # Debug directories
 .debug/
+backend/erato/reqwest-recordings/
 
 __pycache__
 

@@ -70,6 +70,11 @@ pub fn log_startup(addr: &str) {
     println!(
         "  {} {}",
         "POST".bright_cyan(),
+        "/base-openai/v1/responses".bright_yellow()
+    );
+    println!(
+        "  {} {}",
+        "POST".bright_cyan(),
         "/base-vertex/v1/publishers/google/{*path}".bright_yellow()
     );
     println!();

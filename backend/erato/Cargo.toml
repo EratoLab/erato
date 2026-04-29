@@ -13,6 +13,10 @@ path = "./src/gen_openapi.rs"
 name = "gen-config-reference"
 path = "./src/gen_config_reference.rs"
 
+[[bin]]
+name = "record-chat-provider-reqwest"
+path = "./src/record_chat_provider_reqwest.rs"
+
 [dependencies]
 axum = { version = "0.8.4", features = ["macros"] }
 axum-extra = { version = "0.10.1", features = ["typed-header", "multipart"] }
