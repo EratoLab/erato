@@ -102,6 +102,16 @@ msgstr "Traitement des e-mails déposés…"
 #~ msgstr "Chargement des pièces jointes..."
 
 #. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.untitled"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.copied"
 msgstr "Copié"

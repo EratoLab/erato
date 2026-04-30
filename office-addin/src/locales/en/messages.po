@@ -102,6 +102,16 @@ msgstr "Processing dropped emails…"
 #~ msgstr "Loading attachments..."
 
 #. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.label"
+msgstr "Reply context"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.untitled"
+msgstr "(no subject)"
+
+#. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.copied"
 msgstr "Copied!"
