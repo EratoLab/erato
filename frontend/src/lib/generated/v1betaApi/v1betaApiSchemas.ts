@@ -403,6 +403,9 @@ export type ContentPart =
   | (ContentPartText & {
       content_type: "text";
     })
+  | (ContentPartReasoning & {
+      content_type: "reasoning";
+    })
   | (ToolUse & {
       content_type: "tool_use";
     })
@@ -446,6 +449,10 @@ export type ContentPartImageFilePointer = {
    * @format uuid
    */
   file_upload_id: string;
+};
+
+export type ContentPartReasoning = {
+  text: string;
 };
 
 export type ContentPartText = {
@@ -704,6 +711,9 @@ export type EditMessageStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
+    })
+  | (MessageSubmitStreamingResponseMessageReasoningDelta & {
+      message_type: "reasoning_delta";
     })
   | (MessageSubmitStreamingResponseToolCallProposed & {
       message_type: "tool_call_proposed";
@@ -1099,6 +1109,9 @@ export type MessageSubmitStreamingResponseMessage =
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
     })
+  | (MessageSubmitStreamingResponseMessageReasoningDelta & {
+      message_type: "reasoning_delta";
+    })
   | (MessageSubmitStreamingResponseToolCallProposed & {
       message_type: "tool_call_proposed";
     })
@@ -1116,6 +1129,18 @@ export type MessageSubmitStreamingResponseMessageComplete = {
    * @format uuid
    */
   message_id: string;
+};
+
+export type MessageSubmitStreamingResponseMessageReasoningDelta = {
+  /**
+   * @minimum 0
+   */
+  content_index: number;
+  /**
+   * @format uuid
+   */
+  message_id: string;
+  new_text: string;
 };
 
 export type MessageSubmitStreamingResponseMessageTextDelta = {
@@ -1393,6 +1418,9 @@ export type RegenerateMessageStreamingResponseMessage =
     })
   | (MessageSubmitStreamingResponseMessageTextDelta & {
       message_type: "text_delta";
+    })
+  | (MessageSubmitStreamingResponseMessageReasoningDelta & {
+      message_type: "reasoning_delta";
     })
   | (MessageSubmitStreamingResponseToolCallProposed & {
       message_type: "tool_call_proposed";

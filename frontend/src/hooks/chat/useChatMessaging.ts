@@ -927,6 +927,11 @@ export function useChatMessaging(
             handleTextDelta(responseData, activeStreamKey);
             break;
 
+          case "reasoning_delta":
+            // Reasoning rendering is handled separately; tolerate reasoning
+            // stream events without mutating the current text-focused UI state.
+            break;
+
           case "assistant_message_completed":
             logger.log(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_completed event. Full payload:",

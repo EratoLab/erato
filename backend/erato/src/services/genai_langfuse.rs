@@ -125,6 +125,12 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
                     "text": text_part.text
                 }));
             }
+            ContentPart::Reasoning(reasoning_part) => {
+                output_parts.push(json!({
+                    "type": "reasoning",
+                    "text": reasoning_part.text
+                }));
+            }
             ContentPart::ToolUse(tool_use) => {
                 output_parts.push(json!({
                     "type": "tool_use",
