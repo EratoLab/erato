@@ -102,6 +102,16 @@ msgstr "Przetwarzanie upuszczonych e-maili…"
 #~ msgstr "Ładowanie załączników..."
 
 #. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.label"
+msgstr "Kontekst odpowiedzi"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.untitled"
+msgstr "(brak tematu)"
+
+#. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.copied"
 msgstr "Skopiowano"

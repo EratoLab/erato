@@ -51,6 +51,90 @@ export async function fetchOutlookMessageFilesViaGraph(
 }
 
 /**
+ * Looks up the most recent non-draft message in a conversation thread —
+ * i.e. the message a user is replying to / forwarding when their compose
+ * window has a `conversationId` but no `itemId` (drafts aren't indexed by
+ * Graph). Used by the add-in's "reply context" preview chip.
+ *
+ * Returns just the metadata needed to render the chip (subject + sender);
+ * deliberately does *not* fetch the body. The body is already present in
+ * the user's draft via Outlook's auto-quote and reaches the LLM via
+ * `outlook_review_draft.full_body` — fetching it again here would double
+ * the token cost.
+ *
+ * Returns `null` when the conversation has no indexed messages (a brand-
+ * new outbound thread, for example) or when Graph errors out.
+ */
+export interface ParentMessageMetadata {
+  subject: string;
+  fromName: string | null;
+  fromAddress: string | null;
+}
+
+export async function fetchParentMessageInConversationViaGraph(
+  conversationId: string,
+  acquireToken: AcquireGraphToken,
+): Promise<ParentMessageMetadata | null> {
+  try {
+    const token = await acquireToken();
+    // Single-clause filter on an indexed property + no `$orderby`. Adding
+    // `and isDraft eq false` plus `$orderby=receivedDateTime desc` trips
+    // Graph's `InefficientFilter` constraint: properties in `$orderby` must
+    // also appear in `$filter`, in the same order, before non-orderby
+    // properties — see the rule at
+    // https://learn.microsoft.com/en-us/graph/api/user-list-messages.
+    // We instead pull the most recent ~thread-worth of messages and pick
+    // the latest non-draft client-side.
+    const filter = `conversationId eq '${escapeODataString(conversationId)}'`;
+    const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=20&$select=id,subject,from,receivedDateTime,isDraft`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!response.ok) {
+      console.warn(
+        "[fetchParentMessageInConversationViaGraph] non-OK status:",
+        response.status,
+        response.statusText,
+      );
+      return null;
+    }
+    const payload = (await response.json()) as {
+      value?: Array<{
+        subject?: string;
+        receivedDateTime?: string;
+        isDraft?: boolean;
+        from?: {
+          emailAddress?: { name?: string; address?: string };
+        };
+      }>;
+    };
+    const candidates = payload.value ?? [];
+    // Drop drafts; sort by receivedDateTime desc; take the latest. We
+    // don't need to be defensive about missing receivedDateTime — Exchange
+    // populates it for any indexed message.
+    const latest = candidates
+      .filter((message) => message.isDraft !== true)
+      .sort((a, b) =>
+        (b.receivedDateTime ?? "").localeCompare(a.receivedDateTime ?? ""),
+      )[0];
+    if (!latest) {
+      return null;
+    }
+    return {
+      subject: latest.subject ?? "",
+      fromName: latest.from?.emailAddress?.name ?? null,
+      fromAddress: latest.from?.emailAddress?.address ?? null,
+    };
+  } catch (error) {
+    console.warn("[fetchParentMessageInConversationViaGraph] failed:", error);
+    return null;
+  }
+}
+
+/**
  * Looks up a message by its RFC 5322 `Message-ID` header, returning a single
  * `.eml` File if exactly one match is found. Returns `null` when Graph's
  * filter returns an empty result (e.g. for drafts that don't yet have an

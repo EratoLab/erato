@@ -102,6 +102,16 @@ msgstr "Abgelegte E-Mails werden verarbeitet…"
 #~ msgstr "Anhänge werden geladen..."
 
 #. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.label"
+msgstr "Antwortkontext"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.untitled"
+msgstr "(kein Betreff)"
+
+#. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.copied"
 msgstr "Kopiert!"

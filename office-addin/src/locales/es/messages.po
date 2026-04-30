@@ -102,6 +102,16 @@ msgstr "Procesando los correos electrónicos soltados…"
 #~ msgstr "Cargando archivos adjuntos..."
 
 #. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.label"
+msgstr "Contexto de respuesta"
+
+#. js-lingui-explicit-id
+#: src/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.replyContext.untitled"
+msgstr "(sin asunto)"
+
+#. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.copied"
 msgstr "Copiado"

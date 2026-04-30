@@ -118,53 +118,100 @@ export const AddinChatInput = forwardRef<
     removeEmailBody,
     removeAttachment,
     resolveSelectedFilesForSend,
+    parentReplyContext,
+    isLoadingParentReplyContext,
   } = useOutlookEmailSource();
   const shouldUseSuggestedEmailSource =
     showSuggestedEmailSource && hasSelectedEmailSource;
-  const emailSourceItems = useMemo(() => {
-    return [
-      ...(isEmailBodyIncluded && emailBodyFile
-        ? [
-            {
-              id: "email-body",
-              file: {
-                id: "email-body",
-                filename: emailBodyFile.name,
-                displayName: "Email thread",
-                size: emailBodyFile.size,
-              },
-              isLoading: false,
-              labelOverride: t({
-                id: "officeAddin.chatInput.emailLabel",
-                message: "Email",
-              }),
-            },
-          ]
-        : []),
-      ...selectedAttachmentItems.map((attachmentItem) => ({
+  // Render the email-source preview whenever there is *something* to show:
+  // a real attachment, an in-flight attachment fetch, or the reply-context
+  // chip (resolved or still loading). Without this gate the preview region
+  // would render an empty card whenever the host is Outlook in compose
+  // mode but Graph hasn't yet returned a parent message.
+  const shouldShowEmailSourcePreview =
+    host === "Outlook" &&
+    showSuggestedEmailSource &&
+    (hasSelectedEmailSource ||
+      isLoadingAttachments ||
+      parentReplyContext !== null ||
+      isLoadingParentReplyContext);
+  const emailSourceItems = useMemo<FileAttachmentGroupItem[]>(() => {
+    const items: FileAttachmentGroupItem[] = [];
+
+    // "Reply context" chip: shown only in compose-reply mode where Graph
+    // resolved a parent message. Marked `kind: "context"` so renderers
+    // suppress the remove affordance, and the chip is *not* threaded into
+    // `resolveSelectedFilesForSend`. The parent's body content already
+    // reaches the LLM via the auto-quote inside the draft body (carried by
+    // the `outlook_review_draft.full_body` action facet).
+    if (parentReplyContext) {
+      const senderLabel =
+        parentReplyContext.fromName?.trim() ||
+        parentReplyContext.fromAddress?.trim() ||
+        "";
+      const subjectLabel =
+        parentReplyContext.subject.trim() ||
+        t({
+          id: "officeAddin.chatInput.replyContext.untitled",
+          message: "(no subject)",
+        });
+      items.push({
+        kind: "context",
+        id: "reply-context",
+        file: {
+          id: "reply-context",
+          filename: subjectLabel,
+          displayName: senderLabel
+            ? `${subjectLabel} — ${senderLabel}`
+            : subjectLabel,
+        },
+        labelOverride: t({
+          id: "officeAddin.chatInput.replyContext.label",
+          message: "Reply context",
+        }),
+      });
+    } else if (isLoadingParentReplyContext) {
+      items.push({ kind: "loading", id: "reply-context-loading" });
+    }
+
+    if (isEmailBodyIncluded && emailBodyFile) {
+      items.push({
+        kind: "attachment",
+        id: "email-body",
+        file: {
+          id: "email-body",
+          filename: emailBodyFile.name,
+          displayName: "Email thread",
+          size: emailBodyFile.size,
+        },
+        labelOverride: t({
+          id: "officeAddin.chatInput.emailLabel",
+          message: "Email",
+        }),
+      });
+    }
+
+    for (const attachmentItem of selectedAttachmentItems) {
+      items.push({
+        kind: "attachment",
         id: attachmentItem.id,
         file: attachmentItem,
-        isLoading: false,
-      })),
-      ...(isLoadingAttachments
-        ? [
-            {
-              id: "attachments-loading",
-              file: {
-                id: "attachments-loading",
-                filename: "attachments-loading",
-              },
-              isLoading: true,
-            },
-          ]
-        : []),
-    ];
+      });
+    }
+
+    if (isLoadingAttachments) {
+      items.push({ kind: "loading", id: "attachments-loading" });
+    }
+
+    return items;
   }, [
     emailBodyFile,
     isEmailBodyIncluded,
     isLoadingAttachments,
+    isLoadingParentReplyContext,
+    parentReplyContext,
     selectedAttachmentItems,
-  ]) as FileAttachmentGroupItem[];
+  ]);
 
   const handleRemoveEmailSourceFile = useCallback(
     (fileId: string) => {
@@ -304,32 +351,30 @@ export const AddinChatInput = forwardRef<
           : "flex min-w-0 flex-col"
       }
     >
-      {host === "Outlook" &&
-        showSuggestedEmailSource &&
-        (hasSelectedEmailSource || isLoadingAttachments) && (
-          <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
-            <GroupedFileAttachmentsPreview
-              groups={[
-                {
-                  id: "current-email",
-                  label:
-                    emailSubject ||
-                    t({
-                      id: "officeAddin.chatInput.emailFallback",
-                      message: "Email",
-                    }),
-                  metaLabel: "",
-                  items: emailSourceItems,
-                },
-              ]}
-              onRemoveFile={handleRemoveEmailSourceFile}
-              disabled={isUploadingEmail}
-              showFileTypes={true}
-              showFileSizes={true}
-              defaultVisibleItems={3}
-            />
-          </div>
-        )}
+      {shouldShowEmailSourcePreview && (
+        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+          <GroupedFileAttachmentsPreview
+            groups={[
+              {
+                id: "current-email",
+                label:
+                  emailSubject ||
+                  t({
+                    id: "officeAddin.chatInput.emailFallback",
+                    message: "Email",
+                  }),
+                metaLabel: "",
+                items: emailSourceItems,
+              },
+            ]}
+            onRemoveFile={handleRemoveEmailSourceFile}
+            disabled={isUploadingEmail}
+            showFileTypes={true}
+            showFileSizes={true}
+            defaultVisibleItems={3}
+          />
+        </div>
+      )}
 
       {isExpandingDroppedEmails && (
         <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">

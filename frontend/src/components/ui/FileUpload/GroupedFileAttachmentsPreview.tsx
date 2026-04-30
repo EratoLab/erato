@@ -13,19 +13,35 @@ import { Button } from "../Controls/Button";
 
 import type React from "react";
 
-export interface FileAttachmentGroupItem {
-  id: string;
-  file: FileResource;
-  isLoading?: boolean;
-  /**
-   * Optional display label for the item's metadata row. When set, renderers
-   * should show this verbatim instead of deriving a label from the file's
-   * capability / extension. Useful for items synthesised client-side whose
-   * backend capability id would not read well (e.g. email body rendered as
-   * `.html` but meant to be labelled "Email").
-   */
-  labelOverride?: string;
-}
+/**
+ * Discriminated union by `kind`:
+ * - `attachment`: a normal managed attachment; renders as a removable chip.
+ * - `context`: a read-only context chip (e.g. the Outlook add-in's "Reply
+ *   context"); renderers must suppress the remove affordance.
+ * - `loading`: an in-flight placeholder; rendered as a spinner. Has no
+ *   `file` because no file has materialised yet.
+ *
+ * `labelOverride` lets callers force the metadata row text (e.g. label an
+ * `.html` synthetic file as "Email") instead of deriving it from the file's
+ * capability / extension.
+ */
+export type FileAttachmentGroupItem =
+  | {
+      kind: "attachment";
+      id: string;
+      file: FileResource;
+      labelOverride?: string;
+    }
+  | {
+      kind: "context";
+      id: string;
+      file: FileResource;
+      labelOverride?: string;
+    }
+  | {
+      kind: "loading";
+      id: string;
+    };
 
 export interface FileAttachmentGroup {
   id: string;
@@ -46,7 +62,9 @@ export interface GroupedFileAttachmentsPreviewProps {
   defaultVisibleItems?: number;
 }
 
-function getFileKey(item: FileAttachmentGroupItem): string {
+function getFileKey(
+  item: Extract<FileAttachmentGroupItem, { kind: "attachment" | "context" }>,
+): string {
   if ("id" in item.file) {
     return item.file.id;
   }
@@ -54,7 +72,9 @@ function getFileKey(item: FileAttachmentGroupItem): string {
   return `${item.id}:${item.file.name}`;
 }
 
-function getFileId(item: FileAttachmentGroupItem): string {
+function getFileId(
+  item: Extract<FileAttachmentGroupItem, { kind: "attachment" | "context" }>,
+): string {
   if ("id" in item.file) {
     return item.file.id;
   }
@@ -138,7 +158,7 @@ const DefaultGroupedFileAttachmentsPreview: React.FC<
 
             <div className="flex flex-col gap-2">
               {visibleItems.map((item) => {
-                if (item.isLoading) {
+                if (item.kind === "loading") {
                   return (
                     <FilePreviewLoading
                       key={item.id}

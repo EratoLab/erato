@@ -7,6 +7,7 @@ import {
 import {
   fetchOutlookMessageFilesByInternetMessageIdViaGraph,
   fetchOutlookMessageFilesViaGraph,
+  fetchParentMessageInConversationViaGraph,
 } from "../fetchOutlookMessageGraph";
 
 const EWS_ID = "AAkALgAAA-ews-id";
@@ -284,5 +285,231 @@ describe("fetchOutlookMessageFilesByInternetMessageIdViaGraph", () => {
     expect(url).toContain(
       encodeURIComponent("internetMessageId eq '<a''b@host>'"),
     );
+  });
+});
+
+describe("fetchParentMessageInConversationViaGraph", () => {
+  beforeEach(() => {
+    installOutlookMailboxMock();
+  });
+
+  afterEach(() => {
+    uninstallMockMailbox();
+    vi.unstubAllGlobals();
+  });
+
+  it("filters /me/messages by conversationId only ($top 20, no $orderby) and returns the latest non-draft", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    const fetchMock = installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        value: [
+          {
+            subject: "Re: Quarterly review",
+            receivedDateTime: "2026-04-29T10:00:00Z",
+            isDraft: false,
+            from: {
+              emailAddress: {
+                name: "Alice Sender",
+                address: "alice@example.com",
+              },
+            },
+          },
+        ],
+      },
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "AAQkAGE5...convId",
+      acquireToken,
+    );
+
+    expect(result).toEqual({
+      subject: "Re: Quarterly review",
+      fromName: "Alice Sender",
+      fromAddress: "alice@example.com",
+    });
+    expect(acquireToken).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain(
+      encodeURIComponent("conversationId eq 'AAQkAGE5...convId'"),
+    );
+    expect(url).toContain("$top=20");
+    expect(url).toContain("$select=id,subject,from,receivedDateTime,isDraft");
+    // The Graph "InefficientFilter" rule forbids combining `$orderby` with
+    // a `$filter` that doesn't reference the orderby property. We sort
+    // client-side instead, so the URL must NOT include `$orderby`.
+    expect(url).not.toContain("$orderby");
+    expect(url).not.toContain(encodeURIComponent("isDraft eq false"));
+    const headers = (init as RequestInit).headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer tok");
+  });
+
+  it("picks the most recent non-draft when Graph returns multiple thread messages", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        value: [
+          {
+            subject: "Earlier reply",
+            receivedDateTime: "2026-04-27T08:00:00Z",
+            isDraft: false,
+            from: { emailAddress: { name: "Bob", address: "bob@x" } },
+          },
+          {
+            subject: "My in-progress draft",
+            receivedDateTime: "2026-04-29T11:00:00Z",
+            isDraft: true,
+            from: { emailAddress: { name: "Me", address: "me@x" } },
+          },
+          {
+            subject: "Latest non-draft",
+            receivedDateTime: "2026-04-29T09:00:00Z",
+            isDraft: false,
+            from: { emailAddress: { name: "Carol", address: "carol@x" } },
+          },
+        ],
+      },
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "thread",
+      acquireToken,
+    );
+
+    expect(result).toEqual({
+      subject: "Latest non-draft",
+      fromName: "Carol",
+      fromAddress: "carol@x",
+    });
+  });
+
+  it("returns null when the conversation contains only drafts", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        value: [
+          {
+            subject: "Drafted reply",
+            receivedDateTime: "2026-04-29T11:00:00Z",
+            isDraft: true,
+            from: { emailAddress: { name: "Me", address: "me@x" } },
+          },
+        ],
+      },
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "draft-only",
+      acquireToken,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the conversation has no indexed messages", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({ ok: true, jsonValue: { value: [] } }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "fresh-conv",
+      acquireToken,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null on Graph error rather than throwing", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "any-conv",
+      acquireToken,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("escapes single quotes in conversationId for the OData filter", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    const fetchMock = installFetchMock(() => ({
+      ok: true,
+      jsonValue: { value: [] },
+    }));
+
+    await fetchParentMessageInConversationViaGraph(
+      "conv'with'quotes",
+      acquireToken,
+    );
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toContain(
+      encodeURIComponent("conversationId eq 'conv''with''quotes'"),
+    );
+  });
+
+  it("tolerates non-draft rows with a missing receivedDateTime and still picks the latest dated one", async () => {
+    // Defends the `receivedDateTime ?? ""` coalesce in the client-side sort:
+    // if Graph ever omits the field on a non-draft row, the sort must still
+    // produce a deterministic ordering rather than throwing.
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        value: [
+          {
+            subject: "Undated row",
+            isDraft: false,
+            from: { emailAddress: { name: "Mallory", address: "m@x" } },
+          },
+          {
+            subject: "Dated row",
+            receivedDateTime: "2026-04-29T10:00:00Z",
+            isDraft: false,
+            from: { emailAddress: { name: "Alice", address: "a@x" } },
+          },
+        ],
+      },
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "mixed",
+      acquireToken,
+    );
+
+    expect(result).toEqual({
+      subject: "Dated row",
+      fromName: "Alice",
+      fromAddress: "a@x",
+    });
+  });
+
+  it("falls back to null name/address when Graph response is missing fields", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        value: [{ subject: "Subject only" }],
+      },
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "conv",
+      acquireToken,
+    );
+
+    expect(result).toEqual({
+      subject: "Subject only",
+      fromName: null,
+      fromAddress: null,
+    });
   });
 });
