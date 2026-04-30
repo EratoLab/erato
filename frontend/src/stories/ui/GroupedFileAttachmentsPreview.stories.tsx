@@ -31,6 +31,7 @@ export const Collapsed: Story = {
         label: "Current email",
         items: [
           {
+            kind: "attachment",
             id: "body",
             file: {
               id: "body",
@@ -39,6 +40,7 @@ export const Collapsed: Story = {
             },
           },
           {
+            kind: "attachment",
             id: "pdf",
             file: {
               id: "pdf",
@@ -47,6 +49,7 @@ export const Collapsed: Story = {
             },
           },
           {
+            kind: "attachment",
             id: "xlsx",
             file: {
               id: "xlsx",
@@ -55,6 +58,7 @@ export const Collapsed: Story = {
             },
           },
           {
+            kind: "attachment",
             id: "docx",
             file: {
               id: "docx",
@@ -79,6 +83,7 @@ export const WithLoading: Story = {
         label: "Current email",
         items: [
           {
+            kind: "attachment",
             id: "body",
             file: {
               id: "body",
@@ -87,12 +92,8 @@ export const WithLoading: Story = {
             },
           },
           {
+            kind: "loading",
             id: "loading-attachment",
-            file: {
-              id: "loading-attachment",
-              filename: "placeholder",
-            },
-            isLoading: true,
           },
         ],
       },

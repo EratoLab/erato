@@ -123,14 +123,15 @@ export const AddinChatInput = forwardRef<
   } = useOutlookEmailSource();
   const shouldUseSuggestedEmailSource =
     showSuggestedEmailSource && hasSelectedEmailSource;
-  const emailSourceItems = useMemo(() => {
+  const emailSourceItems = useMemo<FileAttachmentGroupItem[]>(() => {
+    const items: FileAttachmentGroupItem[] = [];
+
     // "Reply context" chip: shown only in compose-reply mode where Graph
-    // resolved a parent message. Display-only — `isContextOnly: true`
-    // suppresses the remove affordance, and the chip is *not* threaded
-    // into `resolveSelectedFilesForSend`. The parent's body content
-    // already reaches the LLM via the auto-quote inside the draft body
-    // (carried by the `outlook_review_draft.full_body` action facet).
-    const replyContextItems: FileAttachmentGroupItem[] = [];
+    // resolved a parent message. Marked `kind: "context"` so renderers
+    // suppress the remove affordance, and the chip is *not* threaded into
+    // `resolveSelectedFilesForSend`. The parent's body content already
+    // reaches the LLM via the auto-quote inside the draft body (carried by
+    // the `outlook_review_draft.full_body` action facet).
     if (parentReplyContext) {
       const senderLabel =
         parentReplyContext.fromName?.trim() ||
@@ -142,7 +143,8 @@ export const AddinChatInput = forwardRef<
           id: "officeAddin.chatInput.replyContext.untitled",
           message: "(no subject)",
         });
-      replyContextItems.push({
+      items.push({
+        kind: "context",
         id: "reply-context",
         file: {
           id: "reply-context",
@@ -150,64 +152,46 @@ export const AddinChatInput = forwardRef<
           displayName: senderLabel
             ? `${subjectLabel} — ${senderLabel}`
             : subjectLabel,
-        } as unknown as FileAttachmentGroupItem["file"],
-        isLoading: false,
+        },
         labelOverride: t({
           id: "officeAddin.chatInput.replyContext.label",
           message: "Reply context",
         }),
-        isContextOnly: true,
       });
     } else if (isLoadingParentReplyContext) {
-      replyContextItems.push({
-        id: "reply-context-loading",
+      items.push({ kind: "loading", id: "reply-context-loading" });
+    }
+
+    if (isEmailBodyIncluded && emailBodyFile) {
+      items.push({
+        kind: "attachment",
+        id: "email-body",
         file: {
-          id: "reply-context-loading",
-          filename: "reply-context-loading",
-        } as unknown as FileAttachmentGroupItem["file"],
-        isLoading: true,
-        isContextOnly: true,
+          id: "email-body",
+          filename: emailBodyFile.name,
+          displayName: "Email thread",
+          size: emailBodyFile.size,
+        },
+        labelOverride: t({
+          id: "officeAddin.chatInput.emailLabel",
+          message: "Email",
+        }),
       });
     }
 
-    return [
-      ...replyContextItems,
-      ...(isEmailBodyIncluded && emailBodyFile
-        ? [
-            {
-              id: "email-body",
-              file: {
-                id: "email-body",
-                filename: emailBodyFile.name,
-                displayName: "Email thread",
-                size: emailBodyFile.size,
-              },
-              isLoading: false,
-              labelOverride: t({
-                id: "officeAddin.chatInput.emailLabel",
-                message: "Email",
-              }),
-            },
-          ]
-        : []),
-      ...selectedAttachmentItems.map((attachmentItem) => ({
+    for (const attachmentItem of selectedAttachmentItems) {
+      items.push({
+        kind: "attachment",
         id: attachmentItem.id,
         file: attachmentItem,
-        isLoading: false,
-      })),
-      ...(isLoadingAttachments
-        ? [
-            {
-              id: "attachments-loading",
-              file: {
-                id: "attachments-loading",
-                filename: "attachments-loading",
-              },
-              isLoading: true,
-            },
-          ]
-        : []),
-    ];
+      });
+    }
+
+    if (isLoadingAttachments) {
+      items.push({ kind: "loading", id: "attachments-loading" });
+    }
+
+    return items;
   }, [
     emailBodyFile,
     isEmailBodyIncluded,
@@ -215,18 +199,10 @@ export const AddinChatInput = forwardRef<
     isLoadingParentReplyContext,
     parentReplyContext,
     selectedAttachmentItems,
-  ]) as FileAttachmentGroupItem[];
+  ]);
 
   const handleRemoveEmailSourceFile = useCallback(
     (fileId: string) => {
-      // Reply-context chip is display-only (`isContextOnly: true` suppresses
-      // the remove button). Belt-and-suspenders: if the chip ever does fire
-      // a remove, drop it on the floor rather than poisoning
-      // `dismissedAttachmentIds` with a synthetic id.
-      if (fileId === "reply-context" || fileId === "reply-context-loading") {
-        return;
-      }
-
       if (fileId === "email-body") {
         removeEmailBody();
         return;

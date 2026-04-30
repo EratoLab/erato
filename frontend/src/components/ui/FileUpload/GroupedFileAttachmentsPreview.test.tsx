@@ -37,6 +37,7 @@ describe("GroupedFileAttachmentsPreview", () => {
             label: "Current email",
             items: [
               {
+                kind: "attachment",
                 id: "body",
                 file: {
                   id: "body",
@@ -45,6 +46,7 @@ describe("GroupedFileAttachmentsPreview", () => {
                 },
               },
               {
+                kind: "attachment",
                 id: "file-1",
                 file: {
                   id: "file-1",
@@ -53,6 +55,7 @@ describe("GroupedFileAttachmentsPreview", () => {
                 },
               },
               {
+                kind: "attachment",
                 id: "file-2",
                 file: {
                   id: "file-2",
@@ -93,12 +96,8 @@ describe("GroupedFileAttachmentsPreview", () => {
             label: "Current email",
             items: [
               {
+                kind: "loading",
                 id: "loading-1",
-                file: {
-                  id: "loading-1",
-                  filename: "loading-placeholder",
-                },
-                isLoading: true,
               },
             ],
           },
@@ -122,6 +121,7 @@ describe("GroupedFileAttachmentsPreview", () => {
             label: "Current email",
             items: [
               {
+                kind: "attachment",
                 id: "file-1",
                 file: {
                   id: "file-1",
