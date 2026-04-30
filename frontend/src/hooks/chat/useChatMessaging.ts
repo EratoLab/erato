@@ -38,6 +38,7 @@ import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 import { handleAssistantMessageStarted } from "./handlers/handleAssistantMessageStarted";
 import { handleChatCreated } from "./handlers/handleChatCreated";
 import { handleMessageComplete as externalHandleMessageComplete } from "./handlers/handleMessageComplete";
+import { handleReasoningDelta } from "./handlers/handleReasoningDelta";
 import { handleTextDelta } from "./handlers/handleTextDelta";
 import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
@@ -925,6 +926,10 @@ export function useChatMessaging(
           case "text_delta":
             // logger.log("processStreamEvent: text_delta event. Delta:", responseData.delta); // Can be too noisy
             handleTextDelta(responseData, activeStreamKey);
+            break;
+
+          case "reasoning_delta":
+            handleReasoningDelta(responseData, activeStreamKey);
             break;
 
           case "assistant_message_completed":

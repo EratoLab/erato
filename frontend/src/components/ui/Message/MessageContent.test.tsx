@@ -26,6 +26,11 @@ const textContent = (text: string): ContentPart[] => [
 const multipleTextContent = (...texts: string[]): ContentPart[] =>
   texts.map((text) => ({ content_type: "text", text }));
 
+const reasoningContent = (text: string): ContentPart => ({
+  content_type: "reasoning",
+  text,
+});
+
 const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
   id: "file_123",
   filename: "sample-report-compressed.pdf",
@@ -194,6 +199,85 @@ describe("MessageContent", () => {
     expect(paragraphs).toHaveLength(2);
     expect(paragraphs[0].tagName).toBe("P");
     expect(paragraphs[1].tagName).toBe("P");
+  });
+
+  it("renders persisted reasoning in a collapsed section", () => {
+    renderWithTheme(
+      <MessageContent
+        content={[
+          reasoningContent("I checked the input and compared options."),
+          { content_type: "text", text: "Final answer." },
+        ]}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Reasoning" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByText("I checked the input and compared options."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Final answer.")).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByText("I checked the input and compared options."),
+    ).toBeInTheDocument();
+  });
+
+  it("streams reasoning expanded and collapses it once answer text arrives", () => {
+    const { rerender } = renderWithTheme(
+      <MessageContent
+        isStreaming
+        content={[reasoningContent("Inspecting context")]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Reasoning" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByText(/Inspecting context/)).toBeInTheDocument();
+
+    rerender(
+      <ThemeProvider>
+        <MessageContent
+          isStreaming
+          content={[
+            reasoningContent("Inspecting context"),
+            { content_type: "text", text: "Final answer" },
+          ]}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Reasoning" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByText("Inspecting context")).not.toBeInTheDocument();
+    expect(screen.getByText(/Final answer/)).toBeInTheDocument();
+  });
+
+  it("preserves reasoning and text ordering from content parts", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={[
+          { content_type: "text", text: "First answer part." },
+          reasoningContent("Second reasoning part."),
+          { content_type: "text", text: "Third answer part." },
+        ]}
+      />,
+    );
+
+    const articleText = container.querySelector("article")?.textContent ?? "";
+    expect(articleText.indexOf("First answer part.")).toBeLessThan(
+      articleText.indexOf("Reasoning"),
+    );
+    expect(articleText.indexOf("Reasoning")).toBeLessThan(
+      articleText.indexOf("Third answer part."),
+    );
   });
 
   it("passes PDF page anchors through to the preview callback for erato-file links", () => {

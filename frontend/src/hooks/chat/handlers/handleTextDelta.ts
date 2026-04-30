@@ -1,6 +1,41 @@
 import { useMessagingStore } from "../store/messagingStore";
 
-import type { MessageSubmitStreamingResponseMessageTextDelta } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ContentPart,
+  MessageSubmitStreamingResponseMessageTextDelta,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+export function appendTextLikeDelta(
+  currentContent: ContentPart[],
+  contentIndex: number,
+  contentType: "text" | "reasoning",
+  newText: string,
+): ContentPart[] {
+  const updatedContent = [...currentContent];
+  const existingPart =
+    contentIndex < updatedContent.length ? updatedContent[contentIndex] : null;
+
+  if (existingPart?.content_type === contentType) {
+    updatedContent[contentIndex] = {
+      ...existingPart,
+      text: existingPart.text + newText,
+    };
+    return updatedContent;
+  }
+
+  const nextPart =
+    contentType === "text"
+      ? ({ content_type: "text", text: newText } as const)
+      : ({ content_type: "reasoning", text: newText } as const);
+
+  if (contentIndex >= updatedContent.length) {
+    updatedContent.push(nextPart);
+  } else {
+    updatedContent.splice(contentIndex, 0, nextPart);
+  }
+
+  return updatedContent;
+}
 
 /**
  * Handles text delta events from the streaming API response.
@@ -48,29 +83,12 @@ export const handleTextDelta = (
         }
       }
 
-      // Get the current content array
-      const currentContent = currentStreaming.content;
-      const lastPart =
-        currentContent.length > 0
-          ? currentContent[currentContent.length - 1]
-          : null;
-
-      // If the last part is a text part, append to it; otherwise create a new text part
-      let updatedContent;
-      if (lastPart && lastPart.content_type === "text") {
-        updatedContent = [
-          ...currentContent.slice(0, -1),
-          {
-            content_type: "text" as const,
-            text: lastPart.text + responseData.new_text,
-          },
-        ];
-      } else {
-        updatedContent = [
-          ...currentContent,
-          { content_type: "text" as const, text: responseData.new_text },
-        ];
-      }
+      const updatedContent = appendTextLikeDelta(
+        currentStreaming.content,
+        responseData.content_index,
+        "text",
+        responseData.new_text,
+      );
 
       return {
         ...state,

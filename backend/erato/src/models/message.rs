@@ -192,6 +192,7 @@ pub struct ToolUse {
 #[serde(tag = "content_type")]
 pub enum ContentPart {
     Text(ContentPartText),
+    Reasoning(ContentPartReasoning),
     ToolUse(ToolUse),
     TextFilePointer(ContentPartTextFilePointer),
     ImageFilePointer(ContentPartImageFilePointer),
@@ -208,6 +209,11 @@ pub enum ContentPart {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ContentPartText {
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ContentPartReasoning {
     pub text: String,
 }
 
@@ -305,6 +311,7 @@ impl MessageSchema {
             .iter()
             .filter_map(|part| match part {
                 ContentPart::Text(text) => Some(text.text.as_str()),
+                ContentPart::Reasoning(_) => None,
                 ContentPart::ToolUse(_) => None,
                 ContentPart::TextFilePointer(_) => None,
                 ContentPart::ImageFilePointer(_) => None,
@@ -726,6 +733,7 @@ impl InputMessage {
     pub fn full_text(&self) -> String {
         match &self.content {
             ContentPart::Text(content) => content.text.to_string(),
+            ContentPart::Reasoning(_) => String::new(),
             ContentPart::ToolUse(_) => String::new(),
             ContentPart::TextFilePointer(_) => String::new(),
             ContentPart::ImageFilePointer(_) => String::new(),

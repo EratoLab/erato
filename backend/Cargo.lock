@@ -2575,8 +2575,8 @@ dependencies = [
 
 [[package]]
 name = "genai"
-version = "0.6.0-beta.17-WIP"
-source = "git+https://github.com/EratoLab/rust-genai.git?rev=5fed6f91c17d1e0c151ca149b9d1a9daf3558fb8#5fed6f91c17d1e0c151ca149b9d1a9daf3558fb8"
+version = "0.6.0-beta.19-WIP"
+source = "git+https://github.com/EratoLab/rust-genai.git?rev=490d2e209e41428d9953989541da54057df1cab7#490d2e209e41428d9953989541da54057df1cab7"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2584,6 +2584,8 @@ dependencies = [
  "eventsource-stream",
  "futures",
  "mime_guess",
+ "paste",
+ "regex",
  "reqwest 0.13.2",
  "serde",
  "serde_json",

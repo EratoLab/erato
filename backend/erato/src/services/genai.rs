@@ -12,6 +12,11 @@ impl From<ContentPart> for GenAiMessageContent {
     fn from(content: ContentPart) -> Self {
         match content {
             ContentPart::Text(text) => GenAiMessageContent::from_text(text),
+            ContentPart::Reasoning(reasoning) => {
+                GenAiMessageContent::from_parts(vec![genai::chat::ContentPart::ReasoningContent(
+                    reasoning.text,
+                )])
+            }
             ContentPart::ToolUse(tool_use) => {
                 GenAiMessageContent::from_parts(vec![genai::chat::ContentPart::ToolResponse(
                     ToolResponse {

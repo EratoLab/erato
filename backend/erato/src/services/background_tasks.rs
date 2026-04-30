@@ -217,6 +217,13 @@ pub enum StreamingEvent {
         content_index: usize,
         new_text: String,
     },
+    /// A reasoning delta was generated
+    #[serde(rename = "reasoning_delta")]
+    ReasoningDelta {
+        message_id: Uuid,
+        content_index: usize,
+        new_text: String,
+    },
     /// A tool call was proposed by the LLM
     #[serde(rename = "tool_call_proposed")]
     ToolCallProposed {
