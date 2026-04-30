@@ -456,6 +456,42 @@ describe("fetchParentMessageInConversationViaGraph", () => {
     );
   });
 
+  it("tolerates non-draft rows with a missing receivedDateTime and still picks the latest dated one", async () => {
+    // Defends the `receivedDateTime ?? ""` coalesce in the client-side sort:
+    // if Graph ever omits the field on a non-draft row, the sort must still
+    // produce a deterministic ordering rather than throwing.
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        value: [
+          {
+            subject: "Undated row",
+            isDraft: false,
+            from: { emailAddress: { name: "Mallory", address: "m@x" } },
+          },
+          {
+            subject: "Dated row",
+            receivedDateTime: "2026-04-29T10:00:00Z",
+            isDraft: false,
+            from: { emailAddress: { name: "Alice", address: "a@x" } },
+          },
+        ],
+      },
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "mixed",
+      acquireToken,
+    );
+
+    expect(result).toEqual({
+      subject: "Dated row",
+      fromName: "Alice",
+      fromAddress: "a@x",
+    });
+  });
+
   it("falls back to null name/address when Graph response is missing fields", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
     installFetchMock(() => ({
