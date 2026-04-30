@@ -104,12 +104,12 @@ msgstr "Przetwarzanie upuszczonych e-maili…"
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.label"
-msgstr ""
+msgstr "Kontekst odpowiedzi"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.untitled"
-msgstr ""
+msgstr "(brak tematu)"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx

@@ -104,12 +104,12 @@ msgstr "Procesando los correos electrónicos soltados…"
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.label"
-msgstr ""
+msgstr "Contexto de respuesta"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.untitled"
-msgstr ""
+msgstr "(sin asunto)"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx

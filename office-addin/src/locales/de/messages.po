@@ -104,12 +104,12 @@ msgstr "Abgelegte E-Mails werden verarbeitet…"
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.label"
-msgstr ""
+msgstr "Antwortkontext"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.untitled"
-msgstr ""
+msgstr "(kein Betreff)"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx

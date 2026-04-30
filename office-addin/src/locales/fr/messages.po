@@ -104,12 +104,12 @@ msgstr "Traitement des e-mails déposés…"
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.label"
-msgstr ""
+msgstr "Contexte de réponse"
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.untitled"
-msgstr ""
+msgstr "(sans objet)"
 
 #. js-lingui-explicit-id
 #: src/components/OutlookEratoEmailRenderer.tsx
