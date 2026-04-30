@@ -123,6 +123,18 @@ export const AddinChatInput = forwardRef<
   } = useOutlookEmailSource();
   const shouldUseSuggestedEmailSource =
     showSuggestedEmailSource && hasSelectedEmailSource;
+  // Render the email-source preview whenever there is *something* to show:
+  // a real attachment, an in-flight attachment fetch, or the reply-context
+  // chip (resolved or still loading). Without this gate the preview region
+  // would render an empty card whenever the host is Outlook in compose
+  // mode but Graph hasn't yet returned a parent message.
+  const shouldShowEmailSourcePreview =
+    host === "Outlook" &&
+    showSuggestedEmailSource &&
+    (hasSelectedEmailSource ||
+      isLoadingAttachments ||
+      parentReplyContext !== null ||
+      isLoadingParentReplyContext);
   const emailSourceItems = useMemo<FileAttachmentGroupItem[]>(() => {
     const items: FileAttachmentGroupItem[] = [];
 
@@ -339,13 +351,8 @@ export const AddinChatInput = forwardRef<
           : "flex min-w-0 flex-col"
       }
     >
-      {host === "Outlook" &&
-        showSuggestedEmailSource &&
-        (hasSelectedEmailSource ||
-          isLoadingAttachments ||
-          parentReplyContext !== null ||
-          isLoadingParentReplyContext) && (
-          <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
+      {shouldShowEmailSourcePreview && (
+        <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
             <GroupedFileAttachmentsPreview
               groups={[
                 {
