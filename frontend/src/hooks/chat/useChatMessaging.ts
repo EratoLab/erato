@@ -38,6 +38,7 @@ import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 import { handleAssistantMessageStarted } from "./handlers/handleAssistantMessageStarted";
 import { handleChatCreated } from "./handlers/handleChatCreated";
 import { handleMessageComplete as externalHandleMessageComplete } from "./handlers/handleMessageComplete";
+import { handleReasoningDelta } from "./handlers/handleReasoningDelta";
 import { handleTextDelta } from "./handlers/handleTextDelta";
 import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
@@ -928,8 +929,7 @@ export function useChatMessaging(
             break;
 
           case "reasoning_delta":
-            // Reasoning rendering is handled separately; tolerate reasoning
-            // stream events without mutating the current text-focused UI state.
+            handleReasoningDelta(responseData, activeStreamKey);
             break;
 
           case "assistant_message_completed":

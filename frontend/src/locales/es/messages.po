@@ -1978,6 +1978,10 @@ msgstr "Vista previa de"
 msgid "Preview:"
 msgstr "Vista previa:"
 
+#: src/components/ui/Message/MessageContent.tsx
+msgid "Reasoning"
+msgstr "Razonamiento"
+
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #~ msgid "Recent"
 #~ msgstr ""

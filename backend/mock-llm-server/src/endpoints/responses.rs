@@ -6,6 +6,8 @@ use axum::{
 };
 use futures::StreamExt;
 use serde_json::{json, Value};
+use std::time::Duration;
+use tokio::time::sleep;
 
 use crate::{log, request_id::RequestId};
 
@@ -14,6 +16,7 @@ const MESSAGE_ITEM_ID: &str = "msg_mock_reasoning_123";
 const RESPONSE_ID: &str = "resp_mock_reasoning_123";
 const ENCRYPTED_REASONING_CONTENT: &str =
     "gAAAAABmockEncryptedReasoningContentForThoughtSignatureReplay0123456789";
+const RESPONSE_STREAM_EVENT_DELAY_MS: u64 = 450;
 
 /// Handler for OpenAI Responses API endpoint.
 pub async fn responses(
@@ -94,6 +97,9 @@ pub async fn responses(
         futures::stream::iter(events.into_iter().enumerate()).filter_map(move |(idx, event)| {
             let request_id = request_id_for_stream.clone();
             async move {
+                if idx > 0 {
+                    sleep(Duration::from_millis(RESPONSE_STREAM_EVENT_DELAY_MS)).await;
+                }
                 if idx >= total_events - 1 {
                     log::log_response_complete(request_id.as_str());
                 }
@@ -105,10 +111,7 @@ pub async fn responses(
 }
 
 fn is_reasoning_scenario(input_text: &str) -> bool {
-    input_text.contains("five-digit")
-        && input_text.contains("lock code")
-        && input_text.contains("first digit")
-        && input_text.contains("fifth digit")
+    input_text.contains("five-digit riddle")
 }
 
 fn is_riddle_follow_up_scenario(input_text: &str) -> bool {
@@ -140,9 +143,16 @@ fn collect_strings(value: &Value) -> Vec<String> {
 
 fn reasoning_response_events() -> Vec<Event> {
     let summary_text = "**Evaluating the constraints**\n\nThe first digit cannot be 1 or 5, the fifth digit is smaller than the first, and the third digit must equal the sum of the first and fifth. Checking the valid digit pairs leaves 3 and 2 as the first and fifth digits, which makes 5 the third digit. The fourth digit must be odd and unused, so it is 1, leaving 4 for the second digit.";
+    let summary_chunks = [
+        "**Evaluating the constraints**\n\n",
+        "The first digit cannot be 1 or 5, and the fifth digit is smaller than the first. ",
+        "The third digit must equal the sum of the first and fifth. ",
+        "Checking valid digit pairs leaves 3 and 2 as the first and fifth digits, making 5 the third digit. ",
+        "The fourth digit must be odd and unused, so it is 1, leaving 4 for the second digit.",
+    ];
     let output_text = "**Code: 34512.**\n**Justification:** The only consistent placement is first=3, third=5, fifth=2, fourth=1, and second=4; this satisfies 4 > 1 and uses each digit exactly once.";
 
-    vec![
+    let mut events = vec![
         sse_json(
             "response.created",
             json!({
@@ -176,15 +186,22 @@ fn reasoning_response_events() -> Vec<Event> {
                 "sequence_number": 2
             }),
         ),
-        sse_json(
-            "response.reasoning_text.delta",
+    ];
+
+    for (chunk_index, summary_chunk) in summary_chunks.iter().enumerate() {
+        events.push(sse_json(
+            "response.reasoning_summary_text.delta",
             json!({
-                "type": "response.reasoning_text.delta",
+                "type": "response.reasoning_summary_text.delta",
                 "output_index": 0,
-                "content_index": 0,
-                "delta": summary_text
+                "summary_index": 0,
+                "delta": summary_chunk,
+                "sequence_number": 3 + chunk_index
             }),
-        ),
+        ));
+    }
+
+    events.extend([
         sse_json(
             "response.output_item.added",
             json!({
@@ -197,7 +214,7 @@ fn reasoning_response_events() -> Vec<Event> {
                     "status": "in_progress",
                     "content": []
                 },
-                "sequence_number": 4
+                "sequence_number": 8
             }),
         ),
         sse_json(
@@ -208,7 +225,7 @@ fn reasoning_response_events() -> Vec<Event> {
                 "output_index": 1,
                 "content_index": 0,
                 "part": {"type": "output_text", "text": "", "annotations": []},
-                "sequence_number": 5
+                "sequence_number": 9
             }),
         ),
         sse_json(
@@ -219,7 +236,7 @@ fn reasoning_response_events() -> Vec<Event> {
                 "output_index": 1,
                 "content_index": 0,
                 "delta": output_text,
-                "sequence_number": 6
+                "sequence_number": 10
             }),
         ),
         sse_json(
@@ -255,10 +272,12 @@ fn reasoning_response_events() -> Vec<Event> {
                         "total_tokens": 283
                     }))
                 ),
-                "sequence_number": 7
+                "sequence_number": 11
             }),
         ),
-    ]
+    ]);
+
+    events
 }
 
 fn riddle_follow_up_response_events() -> Vec<Event> {

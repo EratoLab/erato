@@ -1835,6 +1835,19 @@ fn append_reasoning_delta_part(content: &mut Vec<ContentPart>, new_text: String)
     }
 }
 
+fn insert_reasoning_part_before_text(content: &mut Vec<ContentPart>, text: String) -> usize {
+    let insertion_index = content
+        .iter()
+        .position(|part| matches!(part, ContentPart::Text(_)))
+        .unwrap_or(content.len());
+
+    content.insert(
+        insertion_index,
+        ContentPart::Reasoning(ContentPartReasoning { text }),
+    );
+    insertion_index
+}
+
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
 async fn stream_generate_chat_completion<
@@ -2533,17 +2546,23 @@ async fn stream_generate_chat_completion<
             if let Some(elapsed) = last_response_elapsed {
                 report_chat_provider_time_to_last_token(chat_provider_metric_label, elapsed);
             }
+            let mut current_turn_captured_reasoning_summary = String::new();
             if let Some(reasoning_content) = stream_end.captured_reasoning_content.as_ref() {
                 captured_reasoning_summary = reasoning_content.clone();
+                current_turn_captured_reasoning_summary = reasoning_content.clone();
             }
             if let Some(reasoning_items) = stream_end.captured_reasoning_items.as_ref() {
                 captured_reasoning_items.extend(reasoning_items.clone());
+                let reasoning_items_summary = reasoning_items
+                    .iter()
+                    .filter_map(|item| item.summary_text())
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 if captured_reasoning_summary.is_empty() {
-                    captured_reasoning_summary = reasoning_items
-                        .iter()
-                        .filter_map(|item| item.summary_text())
-                        .collect::<Vec<_>>()
-                        .join("\n");
+                    captured_reasoning_summary = reasoning_items_summary.clone();
+                }
+                if current_turn_captured_reasoning_summary.is_empty() {
+                    current_turn_captured_reasoning_summary = reasoning_items_summary;
                 }
             }
             if let Some(thought_signatures) = stream_end.captured_thought_signatures() {
@@ -2559,6 +2578,31 @@ async fn stream_generate_chat_completion<
                 }
             }
 
+            if current_turn_streamed_reasoning.is_empty()
+                && !current_turn_captured_reasoning_summary.is_empty()
+            {
+                let content_index = insert_reasoning_part_before_text(
+                    &mut current_message_content,
+                    current_turn_captured_reasoning_summary.clone(),
+                );
+                let delta = MessageSubmitStreamingResponseMessageReasoningDelta {
+                    message_id: assistant_message_id,
+                    content_index,
+                    new_text: current_turn_captured_reasoning_summary.clone(),
+                };
+                if let Some(task) = streaming_task {
+                    let _ = task
+                        .send_event(StreamingEvent::ReasoningDelta {
+                            message_id: assistant_message_id,
+                            content_index,
+                            new_text: current_turn_captured_reasoning_summary.clone(),
+                        })
+                        .await;
+                }
+                let message: MSG = delta.into();
+                message.send_event(tx.clone()).await?;
+            }
+
             #[allow(clippy::collapsible_match)]
             #[allow(clippy::single_match)]
             if let Some(captured_texts) = stream_end.captured_texts() {
@@ -2571,15 +2615,6 @@ async fn stream_generate_chat_completion<
                 }
             } else if !current_turn_streamed_text.is_empty() {
                 // Text chunks have already been appended to current_message_content.
-            }
-
-            if current_turn_streamed_reasoning.is_empty()
-                && let Some(reasoning_content) = stream_end.captured_reasoning_content.as_ref()
-                && !reasoning_content.is_empty()
-            {
-                current_message_content.push(ContentPart::Reasoning(ContentPartReasoning {
-                    text: reasoning_content.clone(),
-                }));
             }
 
             // Accumulate usage statistics from this turn
@@ -4246,6 +4281,30 @@ mod reasoning_replay_tests {
                 }),
                 ContentPart::Text(ContentPartText {
                     text: " again".to_string()
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn completed_response_reasoning_is_inserted_before_streamed_text() {
+        let mut content = vec![ContentPart::Text(ContentPartText {
+            text: "answer".to_string(),
+        })];
+
+        assert_eq!(
+            insert_reasoning_part_before_text(&mut content, "summary".into()),
+            0
+        );
+
+        assert_eq!(
+            content,
+            vec![
+                ContentPart::Reasoning(ContentPartReasoning {
+                    text: "summary".to_string()
+                }),
+                ContentPart::Text(ContentPartText {
+                    text: "answer".to_string()
                 }),
             ]
         );

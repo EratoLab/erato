@@ -131,6 +131,36 @@ async fn main() {
         mock.print_summary();
     }
 
+    println!(
+        "{}",
+        "2 configured OpenAI Responses mocks available:".bright_white()
+    );
+    println!("  [responses-reasoning-lock-code]");
+    println!(
+        "    {}: emits reasoning summary chunks followed by assistant output",
+        "Description".bold()
+    );
+    println!(
+        "    {}: request text contains \"five-digit riddle\"",
+        "Match rule".bold()
+    );
+    println!(
+        "    {}: response.reasoning_summary_text.delta + response.output_text.delta",
+        "Response".bold()
+    );
+    println!();
+    println!("  [responses-riddle-follow-up]");
+    println!(
+        "    {}: validates replayed encrypted reasoning content from the prior reasoning response",
+        "Description".bold()
+    );
+    println!(
+        "    {}: request text contains \"riddle follow-up\" and replayed encrypted_content",
+        "Match rule".bold()
+    );
+    println!("    {}: response.output_text.delta", "Response".bold());
+    println!();
+
     // Print image mock summary
     let image_mocks = mocks::get_default_image_mocks();
     println!(

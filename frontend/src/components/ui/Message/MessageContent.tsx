@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
-import React, { memo } from "react";
+import clsx from "clsx";
+import React, { memo, useEffect, useState } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import remarkGfm from "remark-gfm";
@@ -11,8 +12,8 @@ import {
   resolvePrismCodeTheme,
 } from "@/config/codeHighlightThemes";
 import { useOptionalTranslation } from "@/hooks/i18n";
-import { parseContent } from "@/utils/adapters/contentPartAdapter";
 
+import { ChevronRightIcon } from "../icons";
 import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
 import { ImageContentDisplay } from "./ImageContentDisplay";
 
@@ -205,6 +206,87 @@ const rewriteFootnoteValue = (
   return value;
 };
 
+const isRenderableContentPart = (part: ContentPart): boolean =>
+  part.content_type === "text" ||
+  part.content_type === "reasoning" ||
+  part.content_type === "image" ||
+  part.content_type === "image_file_pointer";
+
+const isNonReasoningRenderableContentPart = (part: ContentPart): boolean =>
+  isRenderableContentPart(part) && part.content_type !== "reasoning";
+
+const contentPartToImage = (
+  part: ContentPart,
+  index: number,
+): UiImagePart | null => {
+  if (part.content_type === "image") {
+    return {
+      type: "image",
+      src: `data:image/png;base64,${part.base64_data}`,
+      id: `image-base64-${index}`,
+    };
+  }
+
+  if (part.content_type === "image_file_pointer") {
+    return {
+      type: "image",
+      src: part.download_url,
+      id: part.file_upload_id,
+      fileUploadId: part.file_upload_id,
+    };
+  }
+
+  return null;
+};
+
+interface ReasoningSectionProps {
+  text: string;
+  isStreamingReasoning: boolean;
+  hasLaterNonReasoningContent: boolean;
+  renderMarkdown: (text: string) => React.ReactNode;
+}
+
+const ReasoningSection = memo(function ReasoningSection({
+  text,
+  isStreamingReasoning,
+  hasLaterNonReasoningContent,
+  renderMarkdown,
+}: ReasoningSectionProps) {
+  const [isExpanded, setIsExpanded] = useState(isStreamingReasoning);
+
+  useEffect(() => {
+    if (isStreamingReasoning) {
+      setIsExpanded(true);
+    } else if (hasLaterNonReasoningContent) {
+      setIsExpanded(false);
+    }
+  }, [hasLaterNonReasoningContent, isStreamingReasoning]);
+
+  return (
+    <section className="my-3 border-l-2 border-theme-border pl-3">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 py-1 text-left text-sm font-medium text-theme-fg-secondary hover:text-theme-fg-primary"
+        aria-expanded={isExpanded}
+        onClick={() => setIsExpanded((prev) => !prev)}
+      >
+        <ChevronRightIcon
+          className={clsx(
+            "size-3 shrink-0 text-theme-fg-muted transition-transform",
+            isExpanded ? "rotate-90" : "rotate-0",
+          )}
+        />
+        <span>{t`Reasoning`}</span>
+      </button>
+      {isExpanded && (
+        <div className="mt-1 text-sm text-theme-fg-secondary">
+          {renderMarkdown(text)}
+        </div>
+      )}
+    </section>
+  );
+});
+
 export const MessageContent = memo(function MessageContent({
   content,
   messageId,
@@ -215,16 +297,6 @@ export const MessageContent = memo(function MessageContent({
   onFileLinkPreview,
 }: MessageContentProps) {
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
-
-  // Parse content efficiently in a single pass
-  const { text: textContent, images } = parseContent(content);
-  const linkedTextContent = autolinkEratoFiles(textContent);
-
-  // For streaming, still show cursor on text
-  const displayText =
-    isStreaming && !linkedTextContent.endsWith("\n")
-      ? linkedTextContent + "▊"
-      : linkedTextContent;
 
   const resolveEratoFileLink = React.useCallback(
     (
@@ -280,17 +352,6 @@ export const MessageContent = memo(function MessageContent({
     },
     [filesById],
   );
-
-  // If showing raw, just show text
-  if (showRaw) {
-    return (
-      <article className="max-w-none font-sans text-base">
-        <pre className="message-content-raw-block whitespace-pre-wrap">
-          <code>{displayText}</code>
-        </pre>
-      </article>
-    );
-  }
 
   // Define custom components for react-markdown
   const markdownComponents: Partial<Components> = {
@@ -539,34 +600,112 @@ export const MessageContent = memo(function MessageContent({
       : markdownComponents.p,
   };
 
+  const renderMarkdown = (text: string) => {
+    const linkedTextContent = autolinkEratoFiles(text);
+
+    return (
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        components={components}
+        urlTransform={(url) =>
+          // eslint-disable-next-line lingui/no-unlocalized-strings
+          url.startsWith("erato-file://") ? url : defaultUrlTransform(url)
+        }
+        // Handle incomplete markdown patterns gracefully
+        skipHtml={false}
+        unwrapDisallowed={false}
+      >
+        {linkedTextContent}
+      </Markdown>
+    );
+  };
+
+  const lastRenderableIndex = React.useMemo(() => {
+    for (let index = content.length - 1; index >= 0; index--) {
+      if (isRenderableContentPart(content[index])) {
+        return index;
+      }
+    }
+
+    return -1;
+  }, [content]);
+
+  // If showing raw, just show text-like content without rendering markdown.
+  if (showRaw) {
+    const rawText = content
+      .filter(
+        (part) =>
+          part.content_type === "text" || part.content_type === "reasoning",
+      )
+      .map((part) => part.text)
+      .join("\n\n");
+
+    return (
+      <article className="max-w-none font-sans text-base">
+        <pre className="message-content-raw-block whitespace-pre-wrap">
+          <code>{rawText}</code>
+        </pre>
+      </article>
+    );
+  }
+
   return (
     <article className="max-w-none font-sans text-base">
-      {/* Render markdown text */}
-      {textContent && (
-        <Markdown
-          remarkPlugins={[remarkGfm]}
-          components={components}
-          urlTransform={(url) =>
-            // eslint-disable-next-line lingui/no-unlocalized-strings
-            url.startsWith("erato-file://") ? url : defaultUrlTransform(url)
-          }
-          // Handle incomplete markdown patterns gracefully
-          skipHtml={false}
-          unwrapDisallowed={false}
-        >
-          {displayText}
-        </Markdown>
-      )}
+      {content.map((part, index) => {
+        const isLastRenderablePart = index === lastRenderableIndex;
 
-      {/* Render images */}
-      {images.length > 0 && (
-        <>
-          <ImageContentDisplay images={images} onImageClick={onImageClick} />
-          {imageAdvisory && (
-            <p className="mt-2 text-xs text-theme-fg-muted">{imageAdvisory}</p>
-          )}
-        </>
-      )}
+        if (part.content_type === "text") {
+          const displayText =
+            isStreaming && isLastRenderablePart && !part.text.endsWith("\n")
+              ? part.text + "▊"
+              : part.text;
+
+          return (
+            <React.Fragment key={`text-${index}`}>
+              {renderMarkdown(displayText)}
+            </React.Fragment>
+          );
+        }
+
+        if (part.content_type === "reasoning") {
+          const displayText =
+            isStreaming && isLastRenderablePart && !part.text.endsWith("\n")
+              ? part.text + "▊"
+              : part.text;
+          const hasLaterNonReasoningContent = content
+            .slice(index + 1)
+            .some(isNonReasoningRenderableContentPart);
+
+          return (
+            <ReasoningSection
+              key={`reasoning-${index}`}
+              text={displayText}
+              isStreamingReasoning={isStreaming && isLastRenderablePart}
+              hasLaterNonReasoningContent={hasLaterNonReasoningContent}
+              renderMarkdown={renderMarkdown}
+            />
+          );
+        }
+
+        const image = contentPartToImage(part, index);
+        if (image) {
+          return (
+            <React.Fragment key={`image-${index}`}>
+              <ImageContentDisplay
+                images={[image]}
+                onImageClick={onImageClick}
+              />
+              {imageAdvisory && (
+                <p className="mt-2 text-xs text-theme-fg-muted">
+                  {imageAdvisory}
+                </p>
+              )}
+            </React.Fragment>
+          );
+        }
+
+        return null;
+      })}
     </article>
   );
 });
