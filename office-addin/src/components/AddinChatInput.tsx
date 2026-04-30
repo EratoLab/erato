@@ -353,28 +353,28 @@ export const AddinChatInput = forwardRef<
     >
       {shouldShowEmailSourcePreview && (
         <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
-            <GroupedFileAttachmentsPreview
-              groups={[
-                {
-                  id: "current-email",
-                  label:
-                    emailSubject ||
-                    t({
-                      id: "officeAddin.chatInput.emailFallback",
-                      message: "Email",
-                    }),
-                  metaLabel: "",
-                  items: emailSourceItems,
-                },
-              ]}
-              onRemoveFile={handleRemoveEmailSourceFile}
-              disabled={isUploadingEmail}
-              showFileTypes={true}
-              showFileSizes={true}
-              defaultVisibleItems={3}
-            />
-          </div>
-        )}
+          <GroupedFileAttachmentsPreview
+            groups={[
+              {
+                id: "current-email",
+                label:
+                  emailSubject ||
+                  t({
+                    id: "officeAddin.chatInput.emailFallback",
+                    message: "Email",
+                  }),
+                metaLabel: "",
+                items: emailSourceItems,
+              },
+            ]}
+            onRemoveFile={handleRemoveEmailSourceFile}
+            disabled={isUploadingEmail}
+            showFileTypes={true}
+            showFileSizes={true}
+            defaultVisibleItems={3}
+          />
+        </div>
+      )}
 
       {isExpandingDroppedEmails && (
         <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
