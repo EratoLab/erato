@@ -118,11 +118,60 @@ export const AddinChatInput = forwardRef<
     removeEmailBody,
     removeAttachment,
     resolveSelectedFilesForSend,
+    parentReplyContext,
+    isLoadingParentReplyContext,
   } = useOutlookEmailSource();
   const shouldUseSuggestedEmailSource =
     showSuggestedEmailSource && hasSelectedEmailSource;
   const emailSourceItems = useMemo(() => {
+    // "Reply context" chip: shown only in compose-reply mode where Graph
+    // resolved a parent message. Display-only — `isContextOnly: true`
+    // suppresses the remove affordance, and the chip is *not* threaded
+    // into `resolveSelectedFilesForSend`. The parent's body content
+    // already reaches the LLM via the auto-quote inside the draft body
+    // (carried by the `outlook_review_draft.full_body` action facet).
+    const replyContextItems: FileAttachmentGroupItem[] = [];
+    if (parentReplyContext) {
+      const senderLabel =
+        parentReplyContext.fromName?.trim() ||
+        parentReplyContext.fromAddress?.trim() ||
+        "";
+      const subjectLabel =
+        parentReplyContext.subject.trim() ||
+        t({
+          id: "officeAddin.chatInput.replyContext.untitled",
+          message: "(no subject)",
+        });
+      replyContextItems.push({
+        id: "reply-context",
+        file: {
+          id: "reply-context",
+          filename: subjectLabel,
+          displayName: senderLabel
+            ? `${subjectLabel} — ${senderLabel}`
+            : subjectLabel,
+        } as unknown as FileAttachmentGroupItem["file"],
+        isLoading: false,
+        labelOverride: t({
+          id: "officeAddin.chatInput.replyContext.label",
+          message: "Reply context",
+        }),
+        isContextOnly: true,
+      });
+    } else if (isLoadingParentReplyContext) {
+      replyContextItems.push({
+        id: "reply-context-loading",
+        file: {
+          id: "reply-context-loading",
+          filename: "reply-context-loading",
+        } as unknown as FileAttachmentGroupItem["file"],
+        isLoading: true,
+        isContextOnly: true,
+      });
+    }
+
     return [
+      ...replyContextItems,
       ...(isEmailBodyIncluded && emailBodyFile
         ? [
             {
@@ -163,11 +212,21 @@ export const AddinChatInput = forwardRef<
     emailBodyFile,
     isEmailBodyIncluded,
     isLoadingAttachments,
+    isLoadingParentReplyContext,
+    parentReplyContext,
     selectedAttachmentItems,
   ]) as FileAttachmentGroupItem[];
 
   const handleRemoveEmailSourceFile = useCallback(
     (fileId: string) => {
+      // Reply-context chip is display-only (`isContextOnly: true` suppresses
+      // the remove button). Belt-and-suspenders: if the chip ever does fire
+      // a remove, drop it on the floor rather than poisoning
+      // `dismissedAttachmentIds` with a synthetic id.
+      if (fileId === "reply-context" || fileId === "reply-context-loading") {
+        return;
+      }
+
       if (fileId === "email-body") {
         removeEmailBody();
         return;
@@ -306,7 +365,10 @@ export const AddinChatInput = forwardRef<
     >
       {host === "Outlook" &&
         showSuggestedEmailSource &&
-        (hasSelectedEmailSource || isLoadingAttachments) && (
+        (hasSelectedEmailSource ||
+          isLoadingAttachments ||
+          parentReplyContext !== null ||
+          isLoadingParentReplyContext) && (
           <div className="mx-auto w-full max-w-4xl px-2 pb-1 sm:px-4">
             <GroupedFileAttachmentsPreview
               groups={[

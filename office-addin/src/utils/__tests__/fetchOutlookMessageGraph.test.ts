@@ -7,6 +7,7 @@ import {
 import {
   fetchOutlookMessageFilesByInternetMessageIdViaGraph,
   fetchOutlookMessageFilesViaGraph,
+  fetchParentMessageInConversationViaGraph,
 } from "../fetchOutlookMessageGraph";
 
 const EWS_ID = "AAkALgAAA-ews-id";
@@ -284,5 +285,129 @@ describe("fetchOutlookMessageFilesByInternetMessageIdViaGraph", () => {
     expect(url).toContain(
       encodeURIComponent("internetMessageId eq '<a''b@host>'"),
     );
+  });
+});
+
+describe("fetchParentMessageInConversationViaGraph", () => {
+  beforeEach(() => {
+    installOutlookMailboxMock();
+  });
+
+  afterEach(() => {
+    uninstallMockMailbox();
+    vi.unstubAllGlobals();
+  });
+
+  it("filters /me/messages by conversationId and isDraft, ordered by receivedDateTime desc, top 1", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    const fetchMock = installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        value: [
+          {
+            subject: "Re: Quarterly review",
+            from: {
+              emailAddress: {
+                name: "Alice Sender",
+                address: "alice@example.com",
+              },
+            },
+          },
+        ],
+      },
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "AAQkAGE5...convId",
+      acquireToken,
+    );
+
+    expect(result).toEqual({
+      subject: "Re: Quarterly review",
+      fromName: "Alice Sender",
+      fromAddress: "alice@example.com",
+    });
+    expect(acquireToken).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain(
+      encodeURIComponent(
+        "conversationId eq 'AAQkAGE5...convId' and isDraft eq false",
+      ),
+    );
+    expect(url).toContain(encodeURIComponent("receivedDateTime desc"));
+    expect(url).toContain("$top=1");
+    expect(url).toContain("$select=subject,from");
+    const headers = (init as RequestInit).headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer tok");
+  });
+
+  it("returns null when the conversation has no indexed messages", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({ ok: true, jsonValue: { value: [] } }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "fresh-conv",
+      acquireToken,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null on Graph error rather than throwing", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "any-conv",
+      acquireToken,
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("escapes single quotes in conversationId for the OData filter", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    const fetchMock = installFetchMock(() => ({
+      ok: true,
+      jsonValue: { value: [] },
+    }));
+
+    await fetchParentMessageInConversationViaGraph(
+      "conv'with'quotes",
+      acquireToken,
+    );
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toContain(
+      encodeURIComponent(
+        "conversationId eq 'conv''with''quotes' and isDraft eq false",
+      ),
+    );
+  });
+
+  it("falls back to null name/address when Graph response is missing fields", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        value: [{ subject: "Subject only" }],
+      },
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "conv",
+      acquireToken,
+    );
+
+    expect(result).toEqual({
+      subject: "Subject only",
+      fromName: null,
+      fromAddress: null,
+    });
   });
 });

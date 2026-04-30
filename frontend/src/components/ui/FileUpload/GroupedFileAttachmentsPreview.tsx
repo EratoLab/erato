@@ -25,6 +25,14 @@ export interface FileAttachmentGroupItem {
    * `.html` but meant to be labelled "Email").
    */
   labelOverride?: string;
+  /**
+   * Marks the item as informational / non-interactive. When true the
+   * renderer should suppress the remove affordance entirely (no greyed-out
+   * button the user might try to click). Used by clients that surface
+   * derived context — e.g. the Outlook add-in's "Reply context" chip —
+   * which is read-only and not a managed attachment.
+   */
+  isContextOnly?: boolean;
 }
 
 export interface FileAttachmentGroup {

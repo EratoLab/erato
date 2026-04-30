@@ -10,7 +10,9 @@ import {
 import { useMsalNaa } from "./MsalNaaProvider";
 import { useOutlookMailItem } from "./OutlookMailItemProvider";
 import { fetchCurrentEmailEml } from "../utils/fetchCurrentEmailEml";
+import { fetchParentMessageInConversationViaGraph } from "../utils/fetchOutlookMessageGraph";
 
+import type { ParentMessageMetadata } from "../utils/fetchOutlookMessageGraph";
 import type { LocalFilePreviewItem } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
@@ -32,6 +34,17 @@ interface OutlookEmailSourceContextValue {
   dismissedAttachmentIds: string[];
   resolveSelectedFilesForSend: () => Promise<File[]>;
   hasSelectedEmailSource: boolean;
+  /**
+   * Metadata of the most recent non-draft message in the same conversation
+   * thread, when the user is in Outlook compose mode replying / forwarding.
+   * Display-only — surfaces a "Reply context" chip in the chat input UI.
+   * Not part of `resolveSelectedFilesForSend`: the body is already in the
+   * draft via Outlook's auto-quote and reaches the LLM through the
+   * `outlook_review_draft.full_body` action facet, so re-sending it here
+   * would double the token cost.
+   */
+  parentReplyContext: ParentMessageMetadata | null;
+  isLoadingParentReplyContext: boolean;
 }
 
 const defaultValue: OutlookEmailSourceContextValue = {
@@ -49,6 +62,8 @@ const defaultValue: OutlookEmailSourceContextValue = {
   dismissedAttachmentIds: [],
   resolveSelectedFilesForSend: async () => [],
   hasSelectedEmailSource: false,
+  parentReplyContext: null,
+  isLoadingParentReplyContext: false,
 };
 
 const OutlookEmailSourceContext =
@@ -79,6 +94,10 @@ export function OutlookEmailSourceProvider({
   >([]);
   const [emailBodyFile, setEmailBodyFile] = useState<File | null>(null);
   const [isLoadingEmailBody, setIsLoadingEmailBody] = useState(false);
+  const [parentReplyContext, setParentReplyContext] =
+    useState<ParentMessageMetadata | null>(null);
+  const [isLoadingParentReplyContext, setIsLoadingParentReplyContext] =
+    useState(false);
 
   const acquireGraphToken = useCallback(
     () => acquireToken(GRAPH_MAIL_SCOPES),
@@ -86,6 +105,8 @@ export function OutlookEmailSourceProvider({
   );
 
   const itemId = mailItem?.itemId ?? null;
+  const conversationId = mailItem?.conversationId ?? null;
+  const isComposeMode = mailItem?.isComposeMode ?? false;
 
   // Fetch the raw `.eml` via Graph whenever the open email changes. Drafts
   // and compose items have no itemId, so no accessory is produced — matches
@@ -119,6 +140,45 @@ export function OutlookEmailSourceProvider({
       cancelled = true;
     };
   }, [acquireGraphToken, itemId]);
+
+  // Fetch the parent-thread metadata when the user is composing a reply or
+  // forward. Graph's `/me/messages/{itemId}` 404s on drafts (the very issue
+  // that gates the read-mode preview above), but the *parent* message is
+  // indexed and addressable by `conversationId`. We surface a display-only
+  // "Reply context" chip; the body itself reaches the LLM via the auto-quote
+  // already embedded in the draft, so re-fetching it here is unnecessary.
+  useEffect(() => {
+    if (!isComposeMode || !conversationId || itemId) {
+      setParentReplyContext(null);
+      setIsLoadingParentReplyContext(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingParentReplyContext(true);
+    setParentReplyContext(null);
+
+    void fetchParentMessageInConversationViaGraph(
+      conversationId,
+      acquireGraphToken,
+    )
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setParentReplyContext(result);
+      })
+      .finally(() => {
+        if (cancelled) {
+          return;
+        }
+        setIsLoadingParentReplyContext(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [acquireGraphToken, conversationId, isComposeMode, itemId]);
 
   useEffect(() => {
     if (!itemIdentity) {
@@ -239,6 +299,8 @@ export function OutlookEmailSourceProvider({
       resolveSelectedFilesForSend,
       hasSelectedEmailSource:
         isEmailBodyIncluded || selectedAttachmentItems.length > 0,
+      parentReplyContext,
+      isLoadingParentReplyContext,
     }),
     [
       dismissedAttachmentIds,
@@ -247,7 +309,9 @@ export function OutlookEmailSourceProvider({
       isEmailBodyIncluded,
       isLoadingAttachments,
       isLoadingEmailBody,
+      isLoadingParentReplyContext,
       mailItem?.subject,
+      parentReplyContext,
       removeAttachment,
       removeEmailBody,
       resolveSelectedFilesForSend,

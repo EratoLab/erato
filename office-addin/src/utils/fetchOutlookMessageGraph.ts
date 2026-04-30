@@ -51,6 +51,72 @@ export async function fetchOutlookMessageFilesViaGraph(
 }
 
 /**
+ * Looks up the most recent non-draft message in a conversation thread —
+ * i.e. the message a user is replying to / forwarding when their compose
+ * window has a `conversationId` but no `itemId` (drafts aren't indexed by
+ * Graph). Used by the add-in's "reply context" preview chip.
+ *
+ * Returns just the metadata needed to render the chip (subject + sender);
+ * deliberately does *not* fetch the body. The body is already present in
+ * the user's draft via Outlook's auto-quote and reaches the LLM via
+ * `outlook_review_draft.full_body` — fetching it again here would double
+ * the token cost.
+ *
+ * Returns `null` when the conversation has no indexed messages (a brand-
+ * new outbound thread, for example) or when Graph errors out.
+ */
+export interface ParentMessageMetadata {
+  subject: string;
+  fromName: string | null;
+  fromAddress: string | null;
+}
+
+export async function fetchParentMessageInConversationViaGraph(
+  conversationId: string,
+  acquireToken: AcquireGraphToken,
+): Promise<ParentMessageMetadata | null> {
+  try {
+    const token = await acquireToken();
+    const filter = `conversationId eq '${escapeODataString(conversationId)}' and isDraft eq false`;
+    const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$orderby=${encodeURIComponent("receivedDateTime desc")}&$top=1&$select=subject,from`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!response.ok) {
+      console.warn(
+        "[fetchParentMessageInConversationViaGraph] non-OK status:",
+        response.status,
+        response.statusText,
+      );
+      return null;
+    }
+    const payload = (await response.json()) as {
+      value?: Array<{
+        subject?: string;
+        from?: {
+          emailAddress?: { name?: string; address?: string };
+        };
+      }>;
+    };
+    const first = payload.value?.[0];
+    if (!first) {
+      return null;
+    }
+    return {
+      subject: first.subject ?? "",
+      fromName: first.from?.emailAddress?.name ?? null,
+      fromAddress: first.from?.emailAddress?.address ?? null,
+    };
+  } catch (error) {
+    console.warn("[fetchParentMessageInConversationViaGraph] failed:", error);
+    return null;
+  }
+}
+
+/**
  * Looks up a message by its RFC 5322 `Message-ID` header, returning a single
  * `.eml` File if exactly one match is found. Returns `null` when Graph's
  * filter returns an empty result (e.g. for drafts that don't yet have an
