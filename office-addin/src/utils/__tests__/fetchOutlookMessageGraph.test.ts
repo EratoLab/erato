@@ -298,7 +298,7 @@ describe("fetchParentMessageInConversationViaGraph", () => {
     vi.unstubAllGlobals();
   });
 
-  it("filters /me/messages by conversationId and isDraft, ordered by receivedDateTime desc, top 1", async () => {
+  it("filters /me/messages by conversationId only ($top 20, no $orderby) and returns the latest non-draft", async () => {
     const acquireToken = vi.fn().mockResolvedValue("tok");
     const fetchMock = installFetchMock(() => ({
       ok: true,
@@ -306,6 +306,8 @@ describe("fetchParentMessageInConversationViaGraph", () => {
         value: [
           {
             subject: "Re: Quarterly review",
+            receivedDateTime: "2026-04-29T10:00:00Z",
+            isDraft: false,
             from: {
               emailAddress: {
                 name: "Alice Sender",
@@ -331,15 +333,81 @@ describe("fetchParentMessageInConversationViaGraph", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toContain(
-      encodeURIComponent(
-        "conversationId eq 'AAQkAGE5...convId' and isDraft eq false",
-      ),
+      encodeURIComponent("conversationId eq 'AAQkAGE5...convId'"),
     );
-    expect(url).toContain(encodeURIComponent("receivedDateTime desc"));
-    expect(url).toContain("$top=1");
-    expect(url).toContain("$select=subject,from");
+    expect(url).toContain("$top=20");
+    expect(url).toContain("$select=id,subject,from,receivedDateTime,isDraft");
+    // The Graph "InefficientFilter" rule forbids combining `$orderby` with
+    // a `$filter` that doesn't reference the orderby property. We sort
+    // client-side instead, so the URL must NOT include `$orderby`.
+    expect(url).not.toContain("$orderby");
+    expect(url).not.toContain(encodeURIComponent("isDraft eq false"));
     const headers = (init as RequestInit).headers as Record<string, string>;
     expect(headers.Authorization).toBe("Bearer tok");
+  });
+
+  it("picks the most recent non-draft when Graph returns multiple thread messages", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        value: [
+          {
+            subject: "Earlier reply",
+            receivedDateTime: "2026-04-27T08:00:00Z",
+            isDraft: false,
+            from: { emailAddress: { name: "Bob", address: "bob@x" } },
+          },
+          {
+            subject: "My in-progress draft",
+            receivedDateTime: "2026-04-29T11:00:00Z",
+            isDraft: true,
+            from: { emailAddress: { name: "Me", address: "me@x" } },
+          },
+          {
+            subject: "Latest non-draft",
+            receivedDateTime: "2026-04-29T09:00:00Z",
+            isDraft: false,
+            from: { emailAddress: { name: "Carol", address: "carol@x" } },
+          },
+        ],
+      },
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "thread",
+      acquireToken,
+    );
+
+    expect(result).toEqual({
+      subject: "Latest non-draft",
+      fromName: "Carol",
+      fromAddress: "carol@x",
+    });
+  });
+
+  it("returns null when the conversation contains only drafts", async () => {
+    const acquireToken = vi.fn().mockResolvedValue("tok");
+    installFetchMock(() => ({
+      ok: true,
+      jsonValue: {
+        value: [
+          {
+            subject: "Drafted reply",
+            receivedDateTime: "2026-04-29T11:00:00Z",
+            isDraft: true,
+            from: { emailAddress: { name: "Me", address: "me@x" } },
+          },
+        ],
+      },
+    }));
+
+    const result = await fetchParentMessageInConversationViaGraph(
+      "draft-only",
+      acquireToken,
+    );
+
+    expect(result).toBeNull();
   });
 
   it("returns null when the conversation has no indexed messages", async () => {
@@ -384,9 +452,7 @@ describe("fetchParentMessageInConversationViaGraph", () => {
 
     const [url] = fetchMock.mock.calls[0];
     expect(url).toContain(
-      encodeURIComponent(
-        "conversationId eq 'conv''with''quotes' and isDraft eq false",
-      ),
+      encodeURIComponent("conversationId eq 'conv''with''quotes'"),
     );
   });
 

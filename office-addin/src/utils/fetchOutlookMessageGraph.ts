@@ -77,8 +77,16 @@ export async function fetchParentMessageInConversationViaGraph(
 ): Promise<ParentMessageMetadata | null> {
   try {
     const token = await acquireToken();
-    const filter = `conversationId eq '${escapeODataString(conversationId)}' and isDraft eq false`;
-    const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$orderby=${encodeURIComponent("receivedDateTime desc")}&$top=1&$select=subject,from`;
+    // Single-clause filter on an indexed property + no `$orderby`. Adding
+    // `and isDraft eq false` plus `$orderby=receivedDateTime desc` trips
+    // Graph's `InefficientFilter` constraint: properties in `$orderby` must
+    // also appear in `$filter`, in the same order, before non-orderby
+    // properties — see the rule at
+    // https://learn.microsoft.com/en-us/graph/api/user-list-messages.
+    // We instead pull the most recent ~thread-worth of messages and pick
+    // the latest non-draft client-side.
+    const filter = `conversationId eq '${escapeODataString(conversationId)}'`;
+    const url = `${GRAPH_BASE}/me/messages?$filter=${encodeURIComponent(filter)}&$top=20&$select=id,subject,from,receivedDateTime,isDraft`;
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -96,19 +104,29 @@ export async function fetchParentMessageInConversationViaGraph(
     const payload = (await response.json()) as {
       value?: Array<{
         subject?: string;
+        receivedDateTime?: string;
+        isDraft?: boolean;
         from?: {
           emailAddress?: { name?: string; address?: string };
         };
       }>;
     };
-    const first = payload.value?.[0];
-    if (!first) {
+    const candidates = payload.value ?? [];
+    // Drop drafts; sort by receivedDateTime desc; take the latest. We
+    // don't need to be defensive about missing receivedDateTime — Exchange
+    // populates it for any indexed message.
+    const latest = candidates
+      .filter((message) => message.isDraft !== true)
+      .sort((a, b) =>
+        (b.receivedDateTime ?? "").localeCompare(a.receivedDateTime ?? ""),
+      )[0];
+    if (!latest) {
       return null;
     }
     return {
-      subject: first.subject ?? "",
-      fromName: first.from?.emailAddress?.name ?? null,
-      fromAddress: first.from?.emailAddress?.address ?? null,
+      subject: latest.subject ?? "",
+      fromName: latest.from?.emailAddress?.name ?? null,
+      fromAddress: latest.from?.emailAddress?.address ?? null,
     };
   } catch (error) {
     console.warn("[fetchParentMessageInConversationViaGraph] failed:", error);
