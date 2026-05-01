@@ -4,6 +4,7 @@ import {
   ChatMessage,
   DefaultMessageControls,
   DocumentIcon,
+  DropdownMenu,
   FeedbackCommentDialog,
   FeedbackViewDialog,
   FilePreviewModal,
@@ -24,6 +25,7 @@ import {
   useStandardMessageActions,
   type ActionFacetRequest,
   type ChatInputControlsHandle,
+  type DropdownMenuItem,
   type EditMessageState,
   type FileUploadItem,
   type MessageAction,
@@ -581,16 +583,31 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     [],
   );
 
+  const headerMenuItems = useMemo<DropdownMenuItem[]>(
+    () => [
+      {
+        id: "settings",
+        label: t({
+          id: "officeAddin.headerMenu.settings",
+          message: "Settings",
+        }),
+        onClick: () => {
+          // TODO: open settings dialog (scope pending)
+        },
+      },
+    ],
+    [],
+  );
+
   return (
     <ChatInputControlsProvider value={chatInputControls}>
       <div className="flex size-full min-w-0 flex-col">
         <div className="flex items-center justify-between border-b border-theme-border px-4 py-2">
-          <span className="text-sm font-semibold text-theme-fg-primary">
-            {t({
-              id: "officeAddin.chat.title",
-              message: "Erato",
-            })}
-          </span>
+          <DropdownMenu
+            id="addin-header-menu"
+            align="left"
+            items={headerMenuItems}
+          />
           <button
             type="button"
             onClick={() => void createNewChat()}

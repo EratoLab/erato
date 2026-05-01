@@ -317,7 +317,7 @@ packages:
     resolution: {integrity: sha512-N10dEJNSsUx41Z6pZsXU8FjPjpBEplgH24sfkmITrBED1/U2Esum9F3lfLrMjKHHjmi557zQn7kR9R+XWXu5Rg==}
 
   '@erato/frontend@file:../frontend/dist-package/erato-frontend.tgz':
-    resolution: {integrity: sha512-bxr68hcK4LCGdrihevjED5cpvDye76UXHYm0aqRQH2LzdjAKi1lIwB7VZlZsW+MrC1pBzoVy3Et0zO+os4N22w==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
+    resolution: {integrity: sha512-b7AXGKM5x8jEdmH0+u600h7AIM+K2rs+va+9ETE9WHfEF2pDDxcE+GWEQQig8IRdci5LIZsq6eQ4KCaqzyY3SQ==, tarball: file:../frontend/dist-package/erato-frontend.tgz}
     version: 0.1.0
     peerDependencies:
       '@lingui/core': ^5.9.4
