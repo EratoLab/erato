@@ -352,7 +352,9 @@ export function UserPreferencesDialog({
   const mcpServers = mcpServersResponse?.servers ?? [];
 
   const focusTab = (tab: PreferencesTab) => {
-    document.getElementById(tabIds[tab])?.focus();
+    const element = document.getElementById(tabIds[tab]);
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView({ block: "nearest", inline: "nearest" });
   };
 
   const handleTabKeyDown = (
@@ -507,8 +509,8 @@ export function UserPreferencesDialog({
       title={t({ id: "preferences.dialog.title", message: "Preferences" })}
       contentClassName="h-[80vh] max-h-[700px] max-w-4xl"
     >
-      <div className="flex h-full gap-5">
-        <aside className="w-48 shrink-0 border-r border-theme-border pr-4">
+      <div className="flex h-full flex-col gap-4 md:flex-row md:gap-5">
+        <aside className="shrink-0 border-b border-theme-border pb-3 md:w-48 md:border-b-0 md:border-r md:pb-0 md:pr-4">
           <div
             role="tablist"
             aria-label={t({
@@ -516,7 +518,7 @@ export function UserPreferencesDialog({
               message: "Preferences",
             })}
             aria-orientation="vertical"
-            className="space-y-1"
+            className="flex gap-1 overflow-x-auto md:flex-col md:overflow-x-visible"
           >
             {visibleTabs.map((tab) => {
               const isActive = activeTab === tab;
@@ -531,7 +533,7 @@ export function UserPreferencesDialog({
                   aria-controls={panelIds[tab]}
                   tabIndex={isActive ? 0 : -1}
                   className={clsx(
-                    "flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm",
+                    "flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-left text-sm md:w-full",
                     "theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
                     isActive
                       ? "bg-theme-bg-hover font-medium text-theme-fg-primary"

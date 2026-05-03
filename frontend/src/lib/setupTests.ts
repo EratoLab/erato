@@ -61,6 +61,9 @@ Object.defineProperty(window, "scrollTo", {
   value: () => {},
 });
 
+// jsdom does not implement Element.prototype.scrollIntoView
+Element.prototype.scrollIntoView = () => {};
+
 // Provide a default API root for tests that load theme config.
 window.API_ROOT_URL = "http://localhost";
 
