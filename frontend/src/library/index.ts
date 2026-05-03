@@ -20,6 +20,7 @@ export { MessageContent } from "@/components/ui/Message/MessageContent";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
+export { ModalBase } from "@/components/ui/Modal/ModalBase";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
@@ -70,7 +71,12 @@ export {
   useFileUploadWithTokenCheck,
   useStandaloneFileUpload,
 } from "@/hooks/files";
-export { DocumentIcon } from "@/components/ui/icons";
+export {
+  ComputerIcon,
+  DocumentIcon,
+  MoonIcon,
+  SunIcon,
+} from "@/components/ui/icons";
 export {
   useChatInputHandlers,
   useSidebar,
