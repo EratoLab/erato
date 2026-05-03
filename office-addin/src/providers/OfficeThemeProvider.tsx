@@ -1,9 +1,11 @@
 /**
  * Side-effect-only provider — deliberately does not expose its own React
  * context, unlike the other providers in this directory. It reads the
- * Office.js theme via `useOfficeTheme` and pushes the resulting mode into
- * the frontend `ThemeProvider` through `setThemeMode`. The redundant-mode
- * guard prevents unnecessary re-renders.
+ * Office.js theme via `useOfficeTheme` and feeds the resulting light/dark
+ * value to `ThemeProvider` as the "system" theme override. While the user
+ * keeps `themeMode === "system"`, the surrounding Office host defines the
+ * effective theme; explicit Light/Dark selections in the settings dialog
+ * remain user choices and are not overwritten here.
  */
 import { useTheme } from "@erato/frontend/library";
 import { useEffect, type ReactNode } from "react";
@@ -12,13 +14,11 @@ import { useOfficeTheme } from "../hooks/useOfficeTheme";
 
 export function OfficeThemeProvider({ children }: { children: ReactNode }) {
   const { mode } = useOfficeTheme();
-  const { themeMode, setThemeMode } = useTheme();
+  const { setSystemThemeOverride } = useTheme();
 
   useEffect(() => {
-    if (mode && mode !== themeMode) {
-      setThemeMode(mode);
-    }
-  }, [mode, themeMode, setThemeMode]);
+    setSystemThemeOverride(mode ?? null);
+  }, [mode, setSystemThemeOverride]);
 
   return <>{children}</>;
 }

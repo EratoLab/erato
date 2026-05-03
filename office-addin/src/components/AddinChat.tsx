@@ -37,6 +37,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInput } from "./AddinChatInput";
+import { AddinSettingsDialog } from "./AddinSettingsDialog";
 import { useEmailDedupSet } from "../hooks/useEmailDedupSet";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookMailListDrag } from "../hooks/useOutlookMailListDrag";
@@ -583,6 +584,8 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
     [],
   );
 
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   const headerMenuItems = useMemo<DropdownMenuItem[]>(
     () => [
       {
@@ -591,9 +594,7 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
           id: "officeAddin.headerMenu.settings",
           message: "Settings",
         }),
-        onClick: () => {
-          // TODO: open settings dialog (scope pending)
-        },
+        onClick: () => setIsSettingsOpen(true),
       },
     ],
     [],
@@ -747,6 +748,10 @@ export function AddinChat({ assistantId }: AddinChatProps = {}) {
           mode={feedbackDialogState.mode}
           initialComment={feedbackDialogState.initialComment}
           error={feedbackDialogState.error}
+        />
+        <AddinSettingsDialog
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
         />
       </div>
     </ChatInputControlsProvider>

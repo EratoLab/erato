@@ -65,7 +65,7 @@ function OutlookWrapper({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <I18nProvider>
-      <ThemeProvider enableCustomTheme persistThemeMode={false}>
+      <ThemeProvider enableCustomTheme persistThemeMode={true}>
         <FeatureConfigProvider
           config={{ chatInput: { showUsageAdvisory: false } }}
         >
