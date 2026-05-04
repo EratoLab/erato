@@ -188,6 +188,7 @@
   "integrations.langfuse.enabled": {},
   "integrations.langfuse.public_key": {},
   "integrations.langfuse.secret_key": {},
+  "integrations.langfuse.summary_tracing_enabled": {},
   "integrations.langfuse.tracing_enabled": {},
   "integrations.ms_office.addin.enabled": {},
   "integrations.ms_office.addin.frontend_bundle_path": {},
