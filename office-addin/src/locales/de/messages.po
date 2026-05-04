@@ -72,11 +72,6 @@ msgid "officeAddin.chat.newChat"
 msgstr "Neuer Chat"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChat.tsx
-msgid "officeAddin.chat.title"
-msgstr "Erato"
-
-#. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Auswahl verwerfen"
@@ -95,11 +90,6 @@ msgstr "E-Mail"
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Abgelegte E-Mails werden verarbeitet…"
-
-#. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
-#~ msgid "officeAddin.chatInput.loadingAttachments"
-#~ msgstr "Anhänge werden geladen..."
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
@@ -217,9 +207,214 @@ msgid "officeAddin.fileSource.show"
 msgstr "Anzeigen"
 
 #. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
+msgid "officeAddin.headerMenu.settings"
+msgstr "Einstellungen"
+
+#. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx
 msgid "officeAddin.office.loading"
 msgstr "Office-Add-in wird geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.ts
+msgid "officeAddin.sessionAsk.actions.continue"
+msgstr "Weiterführen"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.ts
+msgid "officeAddin.sessionAsk.actions.pickFromRecent"
+msgstr "Aus letzten auswählen"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.ts
+msgid "officeAddin.sessionAsk.actions.startNew"
+msgstr "Neu starten"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.ts
+msgid "officeAddin.sessionAsk.descriptionNoSuggestion"
+msgstr "Neuen Chat für diese E-Mail starten?"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.ts
+msgid "officeAddin.sessionAsk.descriptionWithSuggestion"
+msgstr "Vorherigen Chat für diese E-Mail weiterführen oder einen neuen starten?"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.ts
+msgid "officeAddin.sessionAsk.title"
+msgstr "E-Mail gewechselt"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.ts
+msgid "officeAddin.sessionAsk.untitledChat"
+msgstr "Unbenannter Chat"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.ts
+msgid "officeAddin.sessionPick.actions.startNew"
+msgstr "Neu starten"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.ts
+msgid "officeAddin.sessionPick.title"
+msgstr "Letzten Chat auswählen"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.composeInherits.helper"
+msgstr "Beim Antworten oder Weiterleiten einer E-Mail den aktuellen Chat beibehalten, anstatt einen neuen zu starten."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.composeInherits.label"
+msgstr "Chat beim Weiterleiten oder Antworten beibehalten"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.description"
+msgstr "Lege fest, wie sich das Add-in in Office verhält – z. B. wie der Wechsel zwischen E-Mails den Chats zugeordnet wird."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.heading"
+msgstr "Add-in-Verhalten"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.mode.ask.helper"
+msgstr "Beim Öffnen einer anderen E-Mail fragen, ob der vorherige Chat weitergeführt oder ein neuer gestartet werden soll."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.mode.ask.label"
+msgstr "Bei E-Mail-Wechsel nachfragen"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.mode.legend"
+msgstr "Wenn du zu einer anderen E-Mail wechselst"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.mode.new.helper"
+msgstr "Beim Öffnen oder Wechseln zu einer anderen E-Mail jedes Mal einen neuen Chat starten."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.mode.new.label"
+msgstr "Neuen Chat starten"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.mode.resume.helper"
+msgstr "Beim Öffnen oder Wechseln von E-Mails den vorherigen Chat automatisch wiederherstellen."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.mode.resume.label"
+msgstr "Letzten Chat fortsetzen"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.appearance.description"
+msgstr "Wähle aus, wie Erato in diesem Add-in aussehen soll."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.appearance.heading"
+msgstr "Farbmodus"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.appearance.system.description"
+msgstr "Design von Office übernehmen."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.placeholder.empty"
+msgstr "Noch keine Einstellungen verfügbar."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.addin"
+msgstr "Add-in"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.appearance"
+msgstr "Darstellung"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.user"
+msgstr "Benutzereinstellungen"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.title"
+msgstr "Einstellungen"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.actions.cancel"
+msgstr "Abbrechen"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.actions.save"
+msgstr "Speichern"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.actions.saving"
+msgstr "Wird gespeichert..."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.additionalInformation.label"
+msgstr "Zusätzliche Informationen"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.additionalInformation.placeholder"
+msgstr "Weitere Angaben für den Assistenten, z. B. Ich arbeite mit Unternehmenskunden"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.customInstructions.label"
+msgstr "Benutzerdefinierte Anweisungen für den Assistenten"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.customInstructions.placeholder"
+msgstr "Wie soll sich der Assistent verhalten? z. B. Bevorzuge kurze Stichpunkte"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.jobTitle.label"
+msgstr "Berufsbezeichnung"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.jobTitle.placeholder"
+msgstr "Was ist deine Rolle? z. B. Produktmanager"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.nickname.label"
+msgstr "Spitzname"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.nickname.placeholder"
+msgstr "Wie soll der Assistent dich nennen? z. B. Max Mustermann"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.user.save.error"
+msgstr "Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
