@@ -1341,6 +1341,14 @@ Whether to enable detailed tracing of LLM interactions. When enabled, all chat c
 
 **Type:** `boolean`
 
+##### `integrations.langfuse.summary_tracing_enabled`
+
+Whether to enable tracing of generated chat summaries. Set to `false` to skip Langfuse traces for summaries while keeping normal chat completion tracing unchanged.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
 ##### `integrations.langfuse.enable_feedback`
 
 Whether to forward user feedback (thumbs up/down with optional comments) to Langfuse as scores. When enabled, feedback submitted by users will be sent to Langfuse and associated with the corresponding message trace for observability and quality tracking.

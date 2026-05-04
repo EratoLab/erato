@@ -3114,6 +3114,7 @@ pub async fn generate_chat_summary(
     // HACK: Hacky way to recognize reasoning models right now. Shouldbe replaced with capabilities mechanism in the future.
     let ChatProviderConfigWithId {
         chat_provider_config,
+        chat_provider_id,
         ..
     } = app_state.chat_provider_for_summary().wrap_err_with(|| {
         format!(
@@ -3124,16 +3125,70 @@ pub async fn generate_chat_summary(
     let chat_options =
         build_chat_options_for_summary(&chat_provider_config.model_settings, max_tokens);
 
+    let langfuse_trace = if app_state.config.integrations.langfuse.enabled
+        && app_state.config.integrations.langfuse.tracing_enabled
+        && app_state
+            .config
+            .integrations
+            .langfuse
+            .summary_tracing_enabled
+    {
+        let (observation_id, trace_id) = generate_langfuse_ids();
+        let model_name = app_state
+            .config
+            .get_chat_provider(&chat_provider_id)
+            .model_name_langfuse()
+            .to_string();
+        let generation_name = generate_name_from_chat_request(&chat_request)
+            .unwrap_or_else(|| "chat_summary".to_string());
+
+        let mut base_tags = vec![format!("frontend-platform-{}", DEFAULT_ERATO_PLATFORM)];
+        if chat.assistant_id.is_some() {
+            base_tags.push("assistant".to_string());
+        }
+
+        let trace_enrichment = LangfuseTraceEnrichment {
+            base_tags,
+            filenames: vec![],
+            platform: DEFAULT_ERATO_PLATFORM.to_string(),
+        };
+
+        Some((
+            TracingLangfuseClient::new(
+                app_state.langfuse_client.clone(),
+                trace_id,
+                Some(me_user.id.clone()),
+                Some(chat.id.to_string()),
+            ),
+            observation_id,
+            model_name,
+            generation_name,
+            trace_enrichment,
+        ))
+    } else {
+        None
+    };
+
     tracing::debug!(
         "[SUMMARY] Using provider '{}' for summary generation (chat_id={})",
         chat_provider_config.model_name,
         chat.id
     );
 
+    let langfuse_start_time = if langfuse_trace.is_some() {
+        Some(SystemTime::now())
+    } else {
+        None
+    };
+
     tracing::debug!("[SUMMARY] Calling genai API (chat_id={})", chat.id);
     let summary_completion = app_state
         .genai_for_summary()?
-        .exec_chat("PLACEHOLDER_MODEL", chat_request, Some(&chat_options))
+        .exec_chat(
+            "PLACEHOLDER_MODEL",
+            chat_request.clone(),
+            Some(&chat_options),
+        )
         .await
         .wrap_err_with(|| {
             format!(
@@ -3142,6 +3197,7 @@ pub async fn generate_chat_summary(
             )
         })?;
 
+    let summary_completion_end_time = SystemTime::now();
     let summary = summary_completion
         .first_text()
         .ok_or_else(|| {
@@ -3151,6 +3207,89 @@ pub async fn generate_chat_summary(
             )
         })?
         .to_string();
+
+    if let Some((tracing_client, observation_id, model_name, generation_name, enrichment)) =
+        langfuse_trace
+    {
+        let summary_chat_id = chat.id;
+        let summary_output = vec![ContentPart::Text(ContentPartText {
+            text: summary.clone(),
+        })];
+        let output_json =
+            crate::services::genai_langfuse::convert_content_parts_to_json(&summary_output)
+                .wrap_err_with(|| {
+                    format!(
+                        "[SUMMARY] Failed to convert Langfuse summary output to JSON (chat_id={})",
+                        chat.id
+                    )
+                })?;
+
+        if let Some(start_time) = langfuse_start_time {
+            let tool_names: HashSet<String> = HashSet::new();
+            let mut model_tags: HashSet<String> = HashSet::new();
+            model_tags.insert(langfuse_model_tag(&model_name));
+
+            let trace_metadata =
+                enrichment.trace_metadata(chat.assistant_id, &tool_names, &[], false);
+            let trace_tags = enrichment.all_tags(&model_tags, &tool_names);
+            let assistant_id_for_langfuse = chat.assistant_id;
+            let platform = enrichment.platform.clone();
+            let request = chat_request.clone();
+
+            tokio::spawn(async move {
+                let create_trace_result = create_trace_with_generation_from_chat(
+                    &tracing_client,
+                    observation_id,
+                    &request,
+                    &summary_output,
+                    None,
+                    Some(model_name),
+                    Some(generation_name),
+                    Some(start_time),
+                    Some(summary_completion_end_time),
+                    None,
+                    assistant_id_for_langfuse,
+                    &Vec::new(),
+                    Some(&platform),
+                )
+                .await;
+
+                if let Err(err) = create_trace_result {
+                    tracing::warn!(
+                        "[SUMMARY] Failed to send Langfuse trace for chat summary (chat_id={}, error={})",
+                        summary_chat_id,
+                        err
+                    );
+                } else {
+                    if let Some(metadata) = trace_metadata
+                        && let Err(err) = tracing_client.update_trace_metadata(metadata).await
+                    {
+                        tracing::warn!(
+                            "[SUMMARY] Failed to update Langfuse summary trace metadata (chat_id={}, error={})",
+                            summary_chat_id,
+                            err
+                        );
+                    }
+
+                    if let Err(err) = tracing_client.update_trace_tags(trace_tags).await {
+                        tracing::warn!(
+                            "[SUMMARY] Failed to update Langfuse summary trace tags (chat_id={}, error={})",
+                            summary_chat_id,
+                            err
+                        );
+                    }
+
+                    if let Err(err) = tracing_client.update_trace_output(output_json).await {
+                        tracing::warn!(
+                            "[SUMMARY] Failed to update Langfuse summary trace output (chat_id={}, error={})",
+                            summary_chat_id,
+                            err
+                        );
+                    }
+                }
+            });
+        }
+    }
 
     tracing::info!(
         "[SUMMARY] Generated summary for chat_id={}: '{}'",

@@ -2559,6 +2559,11 @@ pub struct LangfuseConfig {
     #[serde(default)]
     pub tracing_enabled: bool,
 
+    // Whether Langfuse tracing for chat summaries is enabled.
+    // Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub summary_tracing_enabled: bool,
+
     // Whether user feedback should be forwarded to Langfuse as scores.
     // Defaults to `false`.
     #[serde(default)]
