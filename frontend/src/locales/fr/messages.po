@@ -860,6 +860,16 @@ msgid "infotooltip.aria.label"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Toast/ToastItem.tsx
+msgid "library.toast.dismiss"
+msgstr "Ignorer la notification"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Toast/Toaster.tsx
+msgid "library.toast.region"
+msgstr "Notifications"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.copy.aria"
 msgstr "Copier le message"
@@ -910,22 +920,22 @@ msgid "preferences.dialog.actions.saving"
 msgstr "Enregistrement..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.current.dark"
 msgstr "Actuellement sombre"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.current.light"
 msgstr "Actuellement clair"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.dark.description"
 msgstr "Toujours utiliser le thème sombre."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.dark.label"
 msgstr "Mode sombre"
 
@@ -935,27 +945,28 @@ msgid "preferences.dialog.appearance.theme.description"
 msgstr "Choisissez l’apparence d’Erato pour votre compte."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.appearance.theme.heading"
 msgstr "Mode de couleur"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.light.description"
 msgstr "Toujours utiliser le thème clair."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.light.label"
 msgstr "Mode clair"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.system.description"
 msgstr "Suivre les réglages d’apparence de votre appareil."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.system.label"
 msgstr "Thème du système"
 

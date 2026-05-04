@@ -860,6 +860,16 @@ msgid "infotooltip.aria.label"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Toast/ToastItem.tsx
+msgid "library.toast.dismiss"
+msgstr "Zamknij powiadomienie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Toast/Toaster.tsx
+msgid "library.toast.region"
+msgstr "Powiadomienia"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.copy.aria"
 msgstr "Kopiuj wiadomość"
@@ -910,22 +920,22 @@ msgid "preferences.dialog.actions.saving"
 msgstr "Zapisywanie..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.current.dark"
 msgstr "Obecnie ciemny"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.current.light"
 msgstr "Obecnie jasny"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.dark.description"
 msgstr "Zawsze używaj ciemnego motywu."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.dark.label"
 msgstr "Tryb ciemny"
 
@@ -935,27 +945,28 @@ msgid "preferences.dialog.appearance.theme.description"
 msgstr "Wybierz, jak Erato ma wyglądać dla Twojego konta."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.appearance.theme.heading"
 msgstr "Tryb kolorów"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.light.description"
 msgstr "Zawsze używaj jasnego motywu."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.light.label"
 msgstr "Tryb jasny"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.system.description"
 msgstr "Dopasuj do ustawień wyglądu Twojego urządzenia."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.system.label"
 msgstr "Motyw systemowy"
 
