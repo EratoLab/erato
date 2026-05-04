@@ -16,7 +16,8 @@ export interface ShowSessionAskToastParams {
 
 const DEDUPE_KEY = "outlook-session-ask";
 const PICK_DEDUPE_KEY = "outlook-session-pick";
-const MAX_RECENT_OPTIONS = 4;
+const PICK_TOAST_ID = `${PICK_DEDUPE_KEY}-toast`;
+const MAX_RECENT_OPTIONS = 6;
 
 const defaultChatTitle = () =>
   t({
@@ -24,13 +25,19 @@ const defaultChatTitle = () =>
     message: "Untitled chat",
   });
 
+const sidebarRowStyle = {
+  minHeight: "var(--theme-spacing-sidebar-row-height)",
+  borderRadius: "var(--theme-radius-shell)",
+} as const;
+
 /**
  * Show the "switched conversation, what now?" toast. Three actions:
  *
  * - **Continue** — resume the suggested chat (the one that was active before
  *   the switch). Hidden when there is no suggested chat.
  * - **Pick from recent** — opens a follow-up toast listing the most recent
- *   chats as buttons. Hidden when there's only the suggested chat to choose.
+ *   chats as sidebar-styled rows. Hidden when there's only the suggested chat
+ *   to choose.
  * - **New** — start a fresh chat for the new context.
  *
  * Deduped by key, so re-emitting (e.g. after another context change) replaces
@@ -112,33 +119,63 @@ interface ShowSessionPickToastParams {
   onNew: () => void;
 }
 
+interface RecentChatPickerProps {
+  chats: readonly RecentChatSummary[];
+  onPick: (chatId: string) => void;
+}
+
+function RecentChatPicker({ chats, onPick }: RecentChatPickerProps) {
+  const dismissPicker = () => toast.dismiss(PICK_TOAST_ID);
+
+  return (
+    <div className="-mx-1 mt-1 flex max-h-[40vh] flex-col gap-1 overflow-y-auto pr-1">
+      {chats.map((chat) => {
+        const title = chat.title?.trim() || defaultChatTitle();
+        return (
+          <button
+            key={chat.id}
+            type="button"
+            onClick={() => {
+              onPick(chat.id);
+              dismissPicker();
+            }}
+            title={title}
+            style={sidebarRowStyle}
+            className="theme-transition flex w-full items-center px-3 py-1.5 text-left hover:bg-[var(--theme-shell-sidebar-hover)] focus-visible:bg-[var(--theme-shell-sidebar-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
+          >
+            <span className="truncate text-sm font-medium text-theme-fg-primary">
+              {title}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function showSessionPickToast(params: ShowSessionPickToastParams) {
   const { recentChats, onPick, onNew } = params;
-
   const options = recentChats.slice(0, MAX_RECENT_OPTIONS);
-  const actions: ToastAction[] = options.map((chat) => ({
-    id: `pick-${chat.id}`,
-    label: chat.title?.trim() || defaultChatTitle(),
-    onClick: () => onPick(chat.id),
-  }));
-
-  actions.push({
-    id: "new",
-    label: t({
-      id: "officeAddin.sessionPick.actions.startNew",
-      message: "Start new",
-    }),
-    variant: "primary",
-    onClick: onNew,
-  });
 
   toast.custom({
+    id: PICK_TOAST_ID,
     variant: "info",
     dedupeKey: PICK_DEDUPE_KEY,
     title: t({
       id: "officeAddin.sessionPick.title",
       message: "Pick a recent chat",
     }),
-    actions,
+    description: <RecentChatPicker chats={options} onPick={onPick} />,
+    actions: [
+      {
+        id: "new",
+        label: t({
+          id: "officeAddin.sessionPick.actions.startNew",
+          message: "Start new",
+        }),
+        variant: "primary",
+        onClick: onNew,
+      },
+    ],
   });
 }
