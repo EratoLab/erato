@@ -155,6 +155,15 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   const sessionRef = useRef(session);
   sessionRef.current = session;
 
+  // The toast outlives the render that spawned it, so its callbacks must
+  // always reach the freshest action functions (whose closures capture the
+  // current anchor). Without these refs, "Start new" would call a stale
+  // closure that silently no-ops.
+  const createNewChatRef = useRef(createNewChat);
+  createNewChatRef.current = createNewChat;
+  const navigateToChatRef = useRef(navigateToChat);
+  navigateToChatRef.current = navigateToChat;
+
   useEffect(() => {
     if (!isOutlook) return;
     if (currentAnchor === null) return; // anchor still settling
@@ -219,14 +228,10 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
             id: chat.id,
             title: chat.title_resolved,
           })),
-          onResume: (chatId) => setCurrentChatId(chatId, currentAnchor),
-          onPickRecent: (chatId) => setCurrentChatId(chatId, currentAnchor),
+          onResume: (chatId) => navigateToChatRef.current(chatId),
+          onPickRecent: (chatId) => navigateToChatRef.current(chatId),
           onNew: () => {
-            setNewChatCounter((previous) => previous + 1);
-            setCurrentChatId(null, currentAnchor);
-            useMessagingStore.getState().abortActiveSSE();
-            useMessagingStore.getState().clearUserMessages();
-            useMessagingStore.getState().resetStreaming();
+            void createNewChatRef.current();
           },
         });
         break;
