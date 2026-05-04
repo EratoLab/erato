@@ -9,16 +9,20 @@ import {
   fetchUpdateProfilePreferences,
   profileQuery,
   useProfile,
+  usePersistedState,
   type UpdateProfilePreferencesRequest,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
+
+import { useOffice } from "../providers/OfficeProvider";
 import {
-  useEffect,
-  useMemo,
-  useState,
-  type KeyboardEvent,
-} from "react";
+  DEFAULT_OUTLOOK_SESSION_PREFERENCES,
+  OUTLOOK_SESSION_PREFERENCES_KEY,
+  outlookSessionPreferencesPersistedOptions,
+  type OutlookSessionPreferences,
+} from "../sessionPolicy";
 
 type SettingsTab = "appearance" | "user" | "addin";
 
@@ -69,13 +73,7 @@ export function AddinSettingsDialog({
         (profile?.preference_assistant_custom_instructions ?? "") ||
       additionalInformation !==
         (profile?.preference_assistant_additional_information ?? ""),
-    [
-      additionalInformation,
-      customInstructions,
-      jobTitle,
-      nickname,
-      profile,
-    ],
+    [additionalInformation, customInstructions, jobTitle, nickname, profile],
   );
 
   const toNullableValue = (value: string) => {
@@ -130,7 +128,6 @@ export function AddinSettingsDialog({
     }),
   };
 
-  /* eslint-disable lingui/no-unlocalized-strings -- Internal DOM ids, not user-facing copy */
   const tabIds: Record<SettingsTab, string> = {
     appearance: "addin-settings-tab-appearance",
     user: "addin-settings-tab-user",
@@ -142,7 +139,6 @@ export function AddinSettingsDialog({
     user: "addin-settings-panel-user",
     addin: "addin-settings-panel-addin",
   };
-  /* eslint-enable lingui/no-unlocalized-strings */
 
   const focusTab = (tab: SettingsTab) => {
     const element = document.getElementById(tabIds[tab]);
@@ -165,9 +161,7 @@ export function AddinSettingsDialog({
       case "ArrowUp":
       case "ArrowLeft":
         nextTab =
-          TAB_ORDER[
-            (currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length
-          ];
+          TAB_ORDER[(currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length];
         break;
       case "Home":
         nextTab = TAB_ORDER[0];
@@ -380,9 +374,7 @@ export function AddinSettingsDialog({
                 })}
               </p>
             </div>
-            <p className="text-sm italic text-theme-fg-muted">
-              {emptyStateText}
-            </p>
+            <AddinBehaviorPanel emptyStateText={emptyStateText} />
           </section>
         </div>
 
@@ -421,5 +413,163 @@ export function AddinSettingsDialog({
         ) : null}
       </div>
     </ModalBase>
+  );
+}
+
+interface AddinBehaviorPanelProps {
+  emptyStateText: string;
+}
+
+function AddinBehaviorPanel({ emptyStateText }: AddinBehaviorPanelProps) {
+  const { host } = useOffice();
+  const isOutlook = host === "Outlook";
+  const radioGroupId = useId();
+
+  const [preferences, setPreferences] =
+    usePersistedState<OutlookSessionPreferences>(
+      OUTLOOK_SESSION_PREFERENCES_KEY,
+      DEFAULT_OUTLOOK_SESSION_PREFERENCES,
+      outlookSessionPreferencesPersistedOptions,
+    );
+
+  if (!isOutlook) {
+    return (
+      <p className="text-sm italic text-theme-fg-muted">{emptyStateText}</p>
+    );
+  }
+
+  const modeOptions: ReadonlyArray<{
+    value: OutlookSessionPreferences["mode"];
+    label: string;
+    helper: string;
+  }> = [
+    {
+      value: "resume",
+      label: t({
+        id: "officeAddin.settings.addin.mode.resume.label",
+        message: "Resume last chat",
+      }),
+      helper: t({
+        id: "officeAddin.settings.addin.mode.resume.helper",
+        message:
+          "Reopens the previous conversation when opening or switching emails.",
+      }),
+    },
+    {
+      value: "ask",
+      label: t({
+        id: "officeAddin.settings.addin.mode.ask.label",
+        message: "Ask on conversation change",
+      }),
+      helper: t({
+        id: "officeAddin.settings.addin.mode.ask.helper",
+        message:
+          "When opening a different email, ask to continue previous chat or start a new one.",
+      }),
+    },
+    {
+      value: "new",
+      label: t({
+        id: "officeAddin.settings.addin.mode.new.label",
+        message: "Start new chat",
+      }),
+      helper: t({
+        id: "officeAddin.settings.addin.mode.new.helper",
+        message:
+          "Start a new chat each time when opening or switching to a different conversation.",
+      }),
+    },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-medium text-theme-fg-primary">
+          {t({
+            id: "officeAddin.settings.addin.mode.legend",
+            message: "When you switch to a different email",
+          })}
+        </legend>
+        <div className="space-y-2">
+          {modeOptions.map((option) => {
+            const inputId = `${radioGroupId}-${option.value}`;
+            const composeInputId = `${inputId}-compose-inherits`;
+            const isChecked = preferences.mode === option.value;
+            const showComposeToggle =
+              isChecked && (option.value === "ask" || option.value === "new");
+            return (
+              <div
+                key={option.value}
+                className="rounded-md border border-theme-border"
+              >
+                <label
+                  htmlFor={inputId}
+                  aria-label={option.label}
+                  className="flex cursor-pointer items-start gap-3 p-3 hover:bg-theme-bg-hover"
+                >
+                  <input
+                    id={inputId}
+                    type="radio"
+                    name={radioGroupId}
+                    value={option.value}
+                    checked={isChecked}
+                    onChange={() =>
+                      setPreferences({ ...preferences, mode: option.value })
+                    }
+                    className="mt-1 size-4 cursor-pointer accent-theme-bg-accent"
+                  />
+                  <span className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-theme-fg-primary">
+                      {option.label}
+                    </span>
+                    <span className="text-xs text-theme-fg-secondary">
+                      {option.helper}
+                    </span>
+                  </span>
+                </label>
+                {showComposeToggle ? (
+                  <label
+                    htmlFor={composeInputId}
+                    aria-label={t({
+                      id: "officeAddin.settings.addin.composeInherits.label",
+                      message: "Stay same chat on Forward or Reply",
+                    })}
+                    className="flex cursor-pointer items-start gap-3 border-t border-theme-border p-3 pl-10 hover:bg-theme-bg-hover"
+                  >
+                    <input
+                      id={composeInputId}
+                      type="checkbox"
+                      checked={preferences.composeInheritsFromRead}
+                      onChange={(event) =>
+                        setPreferences({
+                          ...preferences,
+                          composeInheritsFromRead: event.target.checked,
+                        })
+                      }
+                      className="mt-1 size-4 cursor-pointer accent-theme-bg-accent"
+                    />
+                    <span className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-theme-fg-primary">
+                        {t({
+                          id: "officeAddin.settings.addin.composeInherits.label",
+                          message: "Stay same chat on Forward or Reply",
+                        })}
+                      </span>
+                      <span className="text-xs text-theme-fg-secondary">
+                        {t({
+                          id: "officeAddin.settings.addin.composeInherits.helper",
+                          message:
+                            "When replying or forwarding an email, keep the current chat instead of starting a new one.",
+                        })}
+                      </span>
+                    </span>
+                  </label>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </fieldset>
+    </div>
   );
 }
