@@ -106,6 +106,15 @@ export {
   type PersistedStateOptions,
 } from "@/hooks/usePersistedState";
 export {
+  evaluateAddinSession,
+  type AddinSessionMode,
+  type AddinSessionTrigger,
+  type AddinSessionDecision,
+  type AddinSessionState,
+  type AddinSessionPolicy,
+  type EvaluateInput as AddinSessionEvaluateInput,
+} from "@/lib/addinSession";
+export {
   chatMessagesQuery,
   fetchUpdateProfilePreferences,
   fetchUploadFile,
