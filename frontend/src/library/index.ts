@@ -25,11 +25,21 @@ export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton"
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export { AnchoredPopover } from "@/components/ui/Controls/AnchoredPopover";
+export { Button } from "@/components/ui/Controls/Button";
 export {
   DropdownMenu,
   type DropdownMenuItem,
   type DropdownMenuProps,
 } from "@/components/ui/Controls/DropdownMenu";
+export { Alert } from "@/components/ui/Feedback/Alert";
+export {
+  FormField,
+  Input,
+  Textarea,
+  type FormFieldProps,
+  type InputProps,
+  type TextareaProps,
+} from "@/components/ui/Input";
 export { ChatErrorBoundary } from "@/components/ui/Feedback/ChatErrorBoundary";
 export { FeedbackCommentDialog } from "@/components/ui/Feedback/FeedbackCommentDialog";
 export { FeedbackViewDialog } from "@/components/ui/Feedback/FeedbackViewDialog";
@@ -92,7 +102,9 @@ export { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 export { useProfile } from "@/hooks/useProfile";
 export {
   chatMessagesQuery,
+  fetchUpdateProfilePreferences,
   fetchUploadFile,
+  profileQuery,
   recentChatsQuery,
   useArchiveChatEndpoint,
   useRecentChats,
@@ -138,6 +150,8 @@ export type {
   ChatModel,
   ContentPart,
   FileUploadItem,
+  UpdateProfilePreferencesRequest,
+  UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export type { FileType } from "@/utils/fileTypes";
 export type { LocalFilePreviewItem } from "@/components/ui/FileUpload/FilePreviewBase";
