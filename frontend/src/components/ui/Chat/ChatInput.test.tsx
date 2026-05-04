@@ -1,6 +1,6 @@
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,16 +11,24 @@ import { ChatInput } from "./ChatInput";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
-import type { ButtonHTMLAttributes, FormEvent, ReactNode } from "react";
+import type {
+  ButtonHTMLAttributes,
+  FormEvent,
+  HTMLAttributes,
+  ReactNode,
+} from "react";
 
 const mockUseChatContext = vi.fn();
 const mockUseUploadFeature = vi.fn();
 const mockUseChatInputFeature = vi.fn();
+const mockUseAudioTranscriptionFeature = vi.fn();
 const mockUseOptionalTranslation = vi.fn();
 const mockUseActiveModelSelection = vi.fn();
 const mockUseTokenManagement = vi.fn();
 const mockUseChatInputHandlers = vi.fn();
 const mockUseFacets = vi.fn();
+const mockUseCreateChat = vi.fn();
+const mockFetchGetFile = vi.fn();
 const mockModelSelector = vi.fn();
 
 vi.mock("@/providers/ChatProvider", () => ({
@@ -30,6 +38,7 @@ vi.mock("@/providers/ChatProvider", () => ({
 vi.mock("@/providers/FeatureConfigProvider", () => ({
   useUploadFeature: () => mockUseUploadFeature(),
   useChatInputFeature: () => mockUseChatInputFeature(),
+  useAudioTranscriptionFeature: () => mockUseAudioTranscriptionFeature(),
 }));
 
 vi.mock("@/hooks/i18n", () => ({
@@ -47,15 +56,42 @@ vi.mock("@/hooks/ui", () => ({
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
+  fetchGetFile: (...args: unknown[]) => mockFetchGetFile(...args),
+  useCreateChat: (...args: unknown[]) => mockUseCreateChat(...args),
   useFacets: (...args: unknown[]) => mockUseFacets(...args),
 }));
 
 vi.mock("@/components/ui/FileUpload", () => ({
   FileAttachmentsPreview: ({
     attachedFiles,
+    onRemoveFile,
+    onRemoveAllFiles,
   }: {
     attachedFiles: FileUploadItem[];
-  }) => <div data-testid="attachments-preview">{attachedFiles.length}</div>,
+    onRemoveFile: (id: string) => void;
+    onRemoveAllFiles: () => void;
+  }) => (
+    <div>
+      <div data-testid="attachments-preview">{attachedFiles.length}</div>
+      {attachedFiles.map((file) => (
+        <button
+          type="button"
+          key={file.id}
+          onClick={() => onRemoveFile(file.id)}
+          data-testid={`remove-file-${file.id}`}
+        >
+          remove-file
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={onRemoveAllFiles}
+        data-testid="remove-all-files"
+      >
+        remove-all
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/ui/FileUpload/FileUploadWithTokenCheck", () => ({
@@ -97,7 +133,12 @@ vi.mock("../Controls/Button", () => ({
 }));
 
 vi.mock("../Feedback/Alert", () => ({
-  Alert: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Alert: ({
+    children,
+    ...props
+  }: { children: ReactNode } & HTMLAttributes<HTMLDivElement>) => (
+    <div {...props}>{children}</div>
+  ),
 }));
 
 vi.mock("../Feedback/ChatWarnings/BudgetWarning", () => ({
@@ -107,6 +148,7 @@ vi.mock("../Feedback/ChatWarnings/BudgetWarning", () => ({
 vi.mock("../icons", () => ({
   ArrowUpIcon: () => <span>send</span>,
   StopIcon: () => <span>stop</span>,
+  VoiceIcon: () => <span>record</span>,
 }));
 
 describe("ChatInput", () => {
@@ -133,6 +175,7 @@ describe("ChatInput", () => {
     });
 
     mockUseUploadFeature.mockReturnValue({ enabled: false });
+    mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: false });
     mockUseChatInputFeature.mockReturnValue({
       autofocus: false,
       showUsageAdvisory: true,
@@ -165,6 +208,10 @@ describe("ChatInput", () => {
       data: { facets: [], global_facet_settings: undefined },
       error: null,
     });
+    mockUseCreateChat.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({ chat_id: "silent-chat-id" }),
+    });
+    mockFetchGetFile.mockRejectedValue(new Error("fetchGetFile not mocked"));
   });
 
   it("re-focuses the chat textarea when a response finishes streaming", async () => {
@@ -579,5 +626,457 @@ describe("ChatInput", () => {
         mockChatInputTokenUsage.mock.calls.length - 1
       ][0];
     expect(lastCall.virtualFiles).toEqual([previewBody]);
+  });
+
+  it("blocks compose send when attached audio transcription is incomplete", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles: [
+        {
+          id: "audio-file-1",
+          filename: "voicemail.mp3",
+          download_url: "/files/voicemail.mp3",
+          preview_url: undefined,
+          file_contents_unavailable_missing_permissions: false,
+          file_capability: {
+            extensions: ["mp3"],
+            id: "audio",
+            mime_types: ["audio/mpeg"],
+            operations: ["extract_text"],
+          },
+          audio_transcription: {
+            status: "processing",
+          },
+        },
+      ] satisfies FileUploadItem[],
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.queryByTestId("chat-audio-transcription-blocker"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-input-send-message")).toBeDisabled();
+  });
+
+  it("shows the live transcript section for attached audio files", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles: [
+        {
+          id: "audio-file-1",
+          filename: "voicemail.mp3",
+          download_url: "/files/voicemail.mp3",
+          preview_url: undefined,
+          file_contents_unavailable_missing_permissions: false,
+          file_capability: {
+            extensions: ["mp3"],
+            id: "audio",
+            mime_types: ["audio/mpeg"],
+            operations: ["extract_text"],
+          },
+          audio_transcription: {
+            status: "completed",
+            transcript: "Hello team, this is the transcribed text for testing.",
+          },
+        },
+      ] satisfies FileUploadItem[],
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const transcriptSection = screen.getByTestId(
+      "chat-audio-transcription-audio-file-1",
+    );
+    expect(transcriptSection).toBeInTheDocument();
+    expect(transcriptSection).toHaveTextContent(
+      "Hello team, this is the transcribed text for testing.",
+    );
+  });
+
+  it("refreshes incomplete audio transcription attachment metadata", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const setAttachedFiles = vi.fn();
+    const processingFile = {
+      id: "audio-file-refresh",
+      filename: "refresh.mp3",
+      download_url: "/files/refresh.mp3",
+      preview_url: undefined,
+      file_contents_unavailable_missing_permissions: false,
+      file_capability: {
+        extensions: ["mp3"],
+        id: "audio",
+        mime_types: ["audio/mpeg"],
+        operations: ["extract_text"],
+      },
+      audio_transcription: {
+        status: "processing",
+        progress: 0.2,
+      },
+    } satisfies FileUploadItem;
+    const completedFile = {
+      ...processingFile,
+      audio_transcription: {
+        status: "completed",
+        progress: 1,
+        transcript: "Refreshed transcript.",
+      },
+    } satisfies FileUploadItem;
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles: [processingFile],
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles,
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+    mockFetchGetFile.mockResolvedValue(completedFile);
+
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(mockFetchGetFile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pathParams: { fileId: "audio-file-refresh" },
+        }),
+      );
+      expect(setAttachedFiles).toHaveBeenCalledWith([completedFile]);
+    });
+  });
+
+  it("shows transcript section error details when transcription fails", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles: [
+        {
+          id: "audio-file-2",
+          filename: "voicemail.wav",
+          download_url: "/files/voicemail.wav",
+          preview_url: undefined,
+          file_contents_unavailable_missing_permissions: false,
+          file_capability: {
+            extensions: ["wav"],
+            id: "audio",
+            mime_types: ["audio/wav"],
+            operations: ["extract_text"],
+          },
+          audio_transcription: {
+            status: "failed",
+            error: "Chunk transcription failed after all retries.",
+          },
+        },
+      ] satisfies FileUploadItem[],
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const transcriptSection = screen.getByTestId(
+      "chat-audio-transcription-audio-file-2",
+    );
+    expect(transcriptSection).toBeInTheDocument();
+    expect(transcriptSection).toHaveTextContent("Chunk transcription failed");
+    expect(
+      screen.queryByTestId("chat-audio-transcription-blocker"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("blocks edit send when attached audio transcription is incomplete", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles: [
+        {
+          id: "audio-file-2",
+          filename: "voicemail.wav",
+          download_url: "/files/voicemail.wav",
+          preview_url: undefined,
+          file_contents_unavailable_missing_permissions: false,
+          file_capability: {
+            extensions: ["wav"],
+            id: "audio",
+            mime_types: ["audio/wav"],
+            operations: ["extract_text"],
+          },
+          audio_transcription: {
+            status: "processing",
+          },
+        },
+      ] satisfies FileUploadItem[],
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+
+    const onEditMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput
+            onSendMessage={vi.fn()}
+            mode="edit"
+            onEditMessage={onEditMessage}
+            editMessageId="msg-1"
+          />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("chat-input-save-edit")).toBeDisabled();
+  });
+
+  it("shows the record button when audio transcription and uploads are enabled", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseUploadFeature.mockReturnValue({ enabled: true });
+    mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: true });
+
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("chat-input-record-audio")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-input-record-audio")).toHaveAccessibleName(
+      "Record audio",
+    );
+    expect(screen.getByTestId("chat-input-record-audio")).not.toHaveTextContent(
+      "Record",
+    );
+  });
+
+  it("does not show the record button when audio transcription is disabled", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseUploadFeature.mockReturnValue({ enabled: true });
+    mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: false });
+
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.queryByTestId("chat-input-record-audio"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("warns before removing an audio attachment", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const removeFile = vi.fn();
+    const attachedFiles = [
+      {
+        id: "audio-file-3",
+        filename: "conference-call.mp3",
+        download_url: "/files/conference-call.mp3",
+        preview_url: undefined,
+        file_contents_unavailable_missing_permissions: false,
+        file_capability: {
+          extensions: ["mp3"],
+          id: "audio",
+          mime_types: ["audio/mpeg"],
+          operations: ["extract_text"],
+        },
+        audio_transcription: {
+          status: "completed",
+          transcript: "Transcript ready.",
+        },
+      },
+    ] satisfies FileUploadItem[];
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles,
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: removeFile,
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("remove-file-audio-file-3"));
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(removeFile).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("does remove an audio attachment when confirmation is accepted", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const removeFile = vi.fn();
+    const attachedFiles = [
+      {
+        id: "audio-file-4",
+        filename: "interview.mp3",
+        download_url: "/files/interview.mp3",
+        preview_url: undefined,
+        file_contents_unavailable_missing_permissions: false,
+        file_capability: {
+          extensions: ["mp3"],
+          id: "audio",
+          mime_types: ["audio/mpeg"],
+          operations: ["extract_text"],
+        },
+        audio_transcription: {
+          status: "completed",
+          transcript: "Transcript ready.",
+        },
+      },
+    ] satisfies FileUploadItem[];
+
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles,
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: removeFile,
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+    });
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("remove-file-audio-file-4"));
+    expect(removeFile).toHaveBeenCalledWith("audio-file-4");
+    confirmSpy.mockRestore();
   });
 });

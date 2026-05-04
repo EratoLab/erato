@@ -13,6 +13,7 @@ import {
   FeatureConfigProvider,
   useFeatureConfig,
   useUploadFeature,
+  useAudioTranscriptionFeature,
   useChatInputFeature,
   useAuthFeature,
   useAssistantsFeature,
@@ -68,6 +69,8 @@ describe("FeatureConfigProvider", () => {
       userPreferencesEnabled: true,
       messageFeedbackEditTimeLimitSeconds: null,
       maxUploadSizeBytes: 20971520, // 20 MB - matches backend default
+      audioTranscriptionEnabled: false,
+      audioTranscriptionMaxRecordingDurationSeconds: 1200,
       sidebarCollapsedMode: "hidden",
       sidebarLogoPath: null,
       sidebarLogoDarkPath: null,
@@ -113,6 +116,10 @@ describe("FeatureConfigProvider", () => {
           autofocus: true,
           emptyStateLayout: "bottom",
           showUsageAdvisory: true,
+        },
+        audioTranscription: {
+          enabled: false,
+          maxRecordingDurationSeconds: 1200,
         },
         chatSharing: {
           enabled: false,
@@ -452,6 +459,80 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current.emptyStateLayout).toBe("centered");
+    });
+  });
+
+  describe("useAudioTranscriptionFeature", () => {
+    it("should throw error when used outside provider", () => {
+      const consoleErrorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      expect(() => {
+        renderHook(() => useAudioTranscriptionFeature());
+      }).toThrow(
+        "useFeatureConfig must be used within a FeatureConfigProvider",
+      );
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it("should disable audio transcription when env flag is false or missing", () => {
+      const { result } = renderHook(() => useAudioTranscriptionFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current).toEqual({
+        enabled: false,
+        maxRecordingDurationSeconds: 1200,
+      });
+    });
+
+    it("should enable audio transcription when env flag is true", () => {
+      mockEnv.mockReturnValue({
+        apiRootUrl: "/api/",
+        frontendPlatform: "common",
+        frontendPublicBasePath: "/public/common",
+        commonPublicBasePath: "/public/common",
+        themeCustomerName: null,
+        themePath: null,
+        themeConfigPath: null,
+        themeLogoPath: null,
+        themeLogoDarkPath: null,
+        themeAssistantAvatarPath: null,
+        disableUpload: false,
+        disableChatInputAutofocus: false,
+        chatInputEmptyStateLayout: "bottom",
+        disableLogout: false,
+        assistantsEnabled: false,
+        assistantsShowRecentItems: false,
+        assistantContextWarningThreshold: 0.5,
+        assistantContextFileContributorThreshold: 0.05,
+        starterPromptsEnabled: false,
+        promptOptimizerEnabled: false,
+        mcpServersTabEnabled: false,
+        sharepointEnabled: false,
+        chatSharingEnabled: false,
+        messageFeedbackEnabled: false,
+        messageFeedbackCommentsEnabled: false,
+        userPreferencesEnabled: true,
+        messageFeedbackEditTimeLimitSeconds: null,
+        audioTranscriptionEnabled: true,
+        audioTranscriptionMaxRecordingDurationSeconds: 1200,
+        maxUploadSizeBytes: 20971520,
+        sidebarCollapsedMode: "hidden",
+        sidebarLogoPath: null,
+        sidebarLogoDarkPath: null,
+        sidebarChatHistoryShowMetadata: true,
+        msalClientId: null,
+        msalAuthority: null,
+      });
+
+      const { result } = renderHook(() => useAudioTranscriptionFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.enabled).toBe(true);
     });
   });
 

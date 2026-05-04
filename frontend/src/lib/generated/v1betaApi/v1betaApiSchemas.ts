@@ -784,6 +784,100 @@ export type FileCapability = {
 export type FileOperation = "extract_text" | "analyze_image";
 
 /**
+ * Metadata for audio transcription.
+ */
+export type AudioTranscriptionChunk = {
+  /**
+   * Stable zero-based chunk index.
+   */
+  index: number;
+  /**
+   * Optional start offset in milliseconds for the chunk.
+   */
+  start_ms: null | number;
+  /**
+   * Optional end offset in milliseconds for the chunk.
+   */
+  end_ms: null | number;
+  /**
+   * Optional byte range start in the stored canonical audio object.
+   */
+  byte_start: null | number;
+  /**
+   * Optional byte range end in the stored canonical audio object.
+   */
+  byte_end: null | number;
+  /**
+   * Per-chunk transcription status.
+   */
+  status: string;
+  /**
+   * Per-chunk transcript text.
+   */
+  transcript: null | string;
+  /**
+   * Number of attempts made for this chunk.
+   */
+  attempts: number;
+  /**
+   * Optional sanitized error for this chunk.
+   */
+  error: null | string;
+};
+
+/**
+ * Transcript segment derived from an individual chunk.
+ */
+export type AudioTranscriptSegment = {
+  /**
+   * Zero-based chunk index for this segment.
+   */
+  chunk_index: number;
+  /**
+   * Segment start offset in milliseconds.
+   */
+  start_ms: number;
+  /**
+   * Segment end offset in milliseconds.
+   */
+  end_ms: number;
+  /**
+   * Transcribed text for this segment.
+   */
+  text: string;
+};
+
+/**
+ * Metadata for audio transcription.
+ */
+export type AudioTranscriptionMetadata = {
+  /**
+   * Current status of the transcription job.
+   */
+  status: string;
+  /**
+   * Completed transcript text, when available.
+   */
+  transcript?: null | string;
+  /**
+   * Error details when transcription fails.
+   */
+  error?: null | string;
+  /**
+   * Optional aggregate progress value in [0, 1].
+   */
+  progress?: null | number;
+  /**
+   * Per-chunk progress and state for future timeline alignment.
+   */
+  chunks?: null | AudioTranscriptionChunk[];
+  /**
+   * Transcript segments derived from completed chunks for timeline-aware UI surfaces.
+   */
+  transcript_segments?: null | AudioTranscriptSegment[];
+};
+
+/**
  * Minimal file reference containing only the file ID
  */
 export type FileReference = {
@@ -813,6 +907,10 @@ export type FileUploadItem = {
    * The original filename of the uploaded file
    */
   filename: string;
+  /**
+   * Optional metadata about the audio transcription workflow.
+   */
+  audio_transcription?: null | AudioTranscriptionMetadata;
   /**
    * The unique ID of the uploaded file
    */

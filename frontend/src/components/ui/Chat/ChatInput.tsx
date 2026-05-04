@@ -12,22 +12,29 @@ import {
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
 import { componentRegistry } from "@/config/componentRegistry";
+import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
+import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
-import { useFacets } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  fetchGetFile,
+  useFacets,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
 import { useChatContext } from "@/providers/ChatProvider";
 import {
   useUploadFeature,
   useChatInputFeature,
+  useAudioTranscriptionFeature,
 } from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 
-import { ArrowUpIcon, StopIcon } from "../icons";
+import { ArrowUpIcon, StopIcon, VoiceIcon } from "../icons";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { FacetSelector } from "./FacetSelector";
 import { ModelSelector } from "./ModelSelector";
@@ -45,6 +52,104 @@ import type { FileType } from "@/utils/fileTypes";
 import type { ClipboardEvent as ReactClipboardEvent, Ref } from "react";
 
 const logger = createLogger("UI", "ChatInput");
+const AUDIO_TRANSCRIPTION_STATUS_POLL_INTERVAL_MS = 1000;
+
+type AudioTranscriptionAttachment = {
+  fileId: string;
+  filename: string;
+  status: string;
+  transcript?: string | null;
+  error?: string | null;
+  progress?: number | null;
+  chunks?:
+    | {
+        index: number;
+        start_ms: number | null;
+        end_ms: number | null;
+        byte_start: number | null;
+        byte_end: number | null;
+        status: string;
+        transcript?: string | null;
+        attempts: number;
+        error?: string | null;
+      }[]
+    | null;
+};
+
+function getCompletedChunkTranscript(
+  chunks?: AudioTranscriptionAttachment["chunks"],
+): string | undefined {
+  if (!chunks || chunks.length === 0) {
+    return undefined;
+  }
+
+  const completedChunkText = chunks
+    .filter((chunk) => chunk.status.toLowerCase() === "completed")
+    .map((chunk) => chunk.transcript?.trim())
+    .filter((transcript): transcript is string => Boolean(transcript))
+    .join(" ");
+
+  return completedChunkText.length > 0 ? completedChunkText : undefined;
+}
+
+function isAudioTranscriptionComplete(
+  status?: string,
+  chunks?: AudioTranscriptionAttachment["chunks"],
+): boolean {
+  const normalizedStatus = status?.toLowerCase();
+
+  if (normalizedStatus) {
+    return normalizedStatus === "completed";
+  }
+
+  if (!chunks || chunks.length === 0) {
+    return false;
+  }
+
+  return chunks.every((chunk) => chunk.status.toLowerCase() === "completed");
+}
+
+function getDisplayTranscript(
+  transcript?: string | null,
+  chunks?: AudioTranscriptionAttachment["chunks"],
+): string | undefined {
+  if (transcript?.trim()) {
+    return transcript;
+  }
+
+  return getCompletedChunkTranscript(chunks);
+}
+
+function getDisplayAudioTranscriptionStatus(status: string) {
+  const normalizedStatus = status.toLowerCase();
+
+  switch (normalizedStatus) {
+    case "completed":
+      return t`Completed`;
+    case "failed":
+      return t`Failed`;
+    case "recording":
+      return t`Recording`;
+    case "uploading":
+      return t`Uploading`;
+    case "transcribing":
+      return t`Transcribing`;
+    case "canceled":
+      return t`Canceled`;
+    default:
+      return status;
+  }
+}
+
+function isAudioTranscriptionAttachment(file: FileUploadItem): boolean {
+  return Boolean(file.audio_transcription);
+}
+
+function isAudioTranscriptionInProgress(status: string) {
+  const normalizedStatus = status.toLowerCase();
+
+  return !["completed", "failed", "canceled"].includes(normalizedStatus);
+}
 
 function areFacetIdListsEqual(a: string[], b: string[]) {
   if (a.length !== b.length) {
@@ -189,6 +294,9 @@ export const ChatInput = ({
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
   const pendingSelectedFacetIdsRef = useRef<string[] | null>(null);
   const pendingSelectedChatProviderIdRef = useRef<string | null>(null);
+  const audioTranscriptionStatusLastPollAtRef = useRef(0);
+  const audioTranscriptionStatusPollIndexRef = useRef(0);
+  const audioTranscriptionStatusPollInFlightRef = useRef(false);
 
   // Get necessary state from context instead of useChat()
   // isPendingResponse is true immediately when send is clicked (before streaming starts)
@@ -200,6 +308,8 @@ export const ChatInput = ({
     messagingError,
   } = useChatContext();
   const setMessagingError = useMessagingStore((state) => state.setError);
+  const silentChatId = useFileUploadStore((state) => state.silentChatId);
+  const setSilentChatId = useFileUploadStore((state) => state.setSilentChatId);
   const sendErrorText = useMemo(
     () => resolveChatSendErrorMessage(messagingError),
     [messagingError],
@@ -211,6 +321,8 @@ export const ChatInput = ({
 
   // Get feature configurations
   const { enabled: uploadEnabled } = useUploadFeature();
+  const { enabled: audioTranscriptionEnabled, maxRecordingDurationSeconds } =
+    useAudioTranscriptionFeature();
   const { autofocus: shouldAutofocus, showUsageAdvisory = true } =
     useChatInputFeature();
   // Dummy for i18n:extract
@@ -268,6 +380,31 @@ export const ChatInput = ({
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
 
+  const {
+    isRecording,
+    isRecordingUpload,
+    recordingError,
+    setRecordingError,
+    retryingAudioFileId,
+    recordingBars,
+    toggleAudioRecording,
+    retryAudioTranscription,
+    removeRecordedAudioFile,
+    clearRecordedAudioFiles,
+    hasRecordedAudioFile,
+  } = useAudioTranscriptionRecorder({
+    audioTranscriptionEnabled,
+    uploadEnabled,
+    maxRecordingDurationSeconds,
+    chatId,
+    silentChatId,
+    setSilentChatId,
+    assistantId,
+    selectedModel,
+    attachedFiles,
+    setAttachedFiles,
+  });
+
   const getComposeDraft = useCallback((draftKey: string): ComposeDraftState => {
     const existingDraft = composeDraftsRef.current[draftKey];
     if (existingDraft) {
@@ -283,6 +420,8 @@ export const ChatInput = ({
   }, []);
 
   const { data: facetsData, error: facetsError } = useFacets({});
+  const { fetcherOptions: fileFetchOptions } = useV1betaApiContext();
+  const fileFetchOptionsRef = useRef(fileFetchOptions);
   const availableFacets = useMemo(() => facetsData?.facets ?? [], [facetsData]);
   const globalFacetSettings = facetsData?.global_facet_settings;
 
@@ -574,6 +713,125 @@ export const ChatInput = ({
     setAttachedFiles,
   ]);
 
+  const hasIncompleteAudioTranscription = attachedFiles.some(
+    (file) =>
+      file.audio_transcription &&
+      !isAudioTranscriptionComplete(
+        file.audio_transcription.status,
+        file.audio_transcription.chunks,
+      ),
+  );
+
+  useEffect(() => {
+    fileFetchOptionsRef.current = fileFetchOptions;
+  }, [fileFetchOptions]);
+
+  const incompleteAudioTranscriptionFileIds = useMemo(
+    () =>
+      attachedFiles
+        .filter(
+          (file) =>
+            file.audio_transcription &&
+            !isAudioTranscriptionComplete(
+              file.audio_transcription.status,
+              file.audio_transcription.chunks,
+            ),
+        )
+        .map((file) => file.id),
+    [attachedFiles],
+  );
+
+  useEffect(() => {
+    if (incompleteAudioTranscriptionFileIds.length === 0) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const refreshNextIncompleteAudioTranscription = async () => {
+      if (audioTranscriptionStatusPollInFlightRef.current) {
+        return;
+      }
+
+      const now = Date.now();
+      if (
+        now - audioTranscriptionStatusLastPollAtRef.current <
+        AUDIO_TRANSCRIPTION_STATUS_POLL_INTERVAL_MS
+      ) {
+        return;
+      }
+
+      audioTranscriptionStatusLastPollAtRef.current = now;
+      audioTranscriptionStatusPollInFlightRef.current = true;
+
+      const fileId =
+        incompleteAudioTranscriptionFileIds[
+          audioTranscriptionStatusPollIndexRef.current %
+            incompleteAudioTranscriptionFileIds.length
+        ];
+      audioTranscriptionStatusPollIndexRef.current += 1;
+
+      try {
+        const refreshedFile = await fetchGetFile({
+          ...fileFetchOptionsRef.current,
+          pathParams: { fileId },
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setAttachedFiles(
+          attachedFiles.map((file) =>
+            file.id === refreshedFile.id ? refreshedFile : file,
+          ),
+        );
+      } catch {
+        // Status polling is best-effort; keep the existing attachment state
+        // when a transient refresh request fails.
+      } finally {
+        audioTranscriptionStatusPollInFlightRef.current = false;
+      }
+    };
+
+    void refreshNextIncompleteAudioTranscription();
+    const intervalId = window.setInterval(
+      () => void refreshNextIncompleteAudioTranscription(),
+      AUDIO_TRANSCRIPTION_STATUS_POLL_INTERVAL_MS,
+    );
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [attachedFiles, incompleteAudioTranscriptionFileIds, setAttachedFiles]);
+
+  const audioTranscriptionAttachments = useMemo(
+    (): AudioTranscriptionAttachment[] =>
+      attachedFiles.flatMap((file) => {
+        const audioTranscription = file.audio_transcription;
+        if (!audioTranscription) {
+          return [];
+        }
+
+        return [
+          {
+            fileId: file.id,
+            filename: file.filename,
+            status: audioTranscription.status,
+            transcript: getDisplayTranscript(
+              audioTranscription.transcript,
+              audioTranscription.chunks,
+            ),
+            progress: audioTranscription.progress,
+            chunks: audioTranscription.chunks,
+            error: audioTranscription.error,
+          },
+        ];
+      }),
+    [attachedFiles],
+  );
+
   // Create the submit handler
   // Use isPendingResponse instead of isStreaming to block submission immediately when send is clicked
   const handleSubmit = createSubmitHandler(
@@ -582,6 +840,10 @@ export const ChatInput = ({
     (messageContent, inputFileIds) => {
       // Don't allow sending if token limit is exceeded
       if (isAnyTokenLimitExceeded) {
+        return;
+      }
+      // Don't allow sending until transcription completes for attached audio files
+      if (hasIncompleteAudioTranscription) {
         return;
       }
 
@@ -611,7 +873,7 @@ export const ChatInput = ({
         );
       }
     },
-    isLoading || isPendingResponse,
+    isLoading || isPendingResponse || hasIncompleteAudioTranscription,
     disabled,
     () => setMessage(""),
   );
@@ -699,14 +961,29 @@ export const ChatInput = ({
     isUploading || // From context (drag & drop)
     isLoading ||
     isPendingResponse || // True immediately when send is clicked
-    isFileButtonProcessing; // From button callback
+    isFileButtonProcessing || // From button callback
+    isRecording || // Prevent edits while recording
+    isRecordingUpload; // Prevent edits while uploading recording
 
   // Add token limit exceeded to disabled state for the send button
-  const isSendDisabled = isDisabled || isAnyTokenLimitExceeded;
+  const isSendDisabled =
+    isDisabled || isAnyTokenLimitExceeded || hasIncompleteAudioTranscription;
 
   // Enhanced file removal handler using token management hook
   const handleRemoveFileById = useCallback(
     (fileId: string) => {
+      const fileToRemove = attachedFiles.find((file) => file.id === fileId);
+      if (
+        fileToRemove &&
+        isAudioTranscriptionAttachment(fileToRemove) &&
+        !window.confirm(
+          t`Removing this audio attachment will also clear its transcription. Continue?`,
+        )
+      ) {
+        return;
+      }
+
+      removeRecordedAudioFile(fileId);
       handleRemoveFile(fileId);
 
       // Reset token limits if this was the last file
@@ -717,7 +994,8 @@ export const ChatInput = ({
     },
     [
       handleRemoveFile,
-      attachedFiles.length,
+      removeRecordedAudioFile,
+      attachedFiles,
       message,
       resetTokenLimitsOnFileRemoval,
     ],
@@ -725,11 +1003,17 @@ export const ChatInput = ({
 
   // Enhanced version of handleRemoveAllFiles that also resets token limits
   const handleRemoveAllFilesWithTokenReset = useCallback(() => {
+    clearRecordedAudioFiles();
     handleRemoveAllFiles();
 
     // Reset token limits when all files are removed
     resetTokenLimits(message.trim().length);
-  }, [handleRemoveAllFiles, resetTokenLimits, message]);
+  }, [
+    clearRecordedAudioFiles,
+    handleRemoveAllFiles,
+    resetTokenLimits,
+    message,
+  ]);
 
   // Callback for file button processing state change
   const handleFileButtonProcessingChange = useCallback(
@@ -747,7 +1031,9 @@ export const ChatInput = ({
     !isPendingResponse &&
     !disabled &&
     !isUploading &&
-    !isAnyTokenLimitExceeded;
+    !isAnyTokenLimitExceeded &&
+    !isRecording &&
+    !hasIncompleteAudioTranscription;
 
   // Log just before rendering the component and its preview section
   logger.log(
@@ -807,6 +1093,80 @@ export const ChatInput = ({
         {/* Budget warning - shows when user approaches spending limit */}
         <BudgetWarning />
 
+        {audioTranscriptionAttachments.length > 0 && (
+          <div className="mb-2 space-y-2">
+            {audioTranscriptionAttachments.map((attachment) =>
+              (() => {
+                const displayStatus = getDisplayAudioTranscriptionStatus(
+                  attachment.status,
+                );
+
+                return (
+                  <div
+                    key={attachment.fileId}
+                    className="mb-0 border bg-theme-bg-primary text-theme-fg-primary [border-color:var(--theme-border-attachment)]"
+                    style={{
+                      borderRadius: "var(--theme-radius-message)",
+                      padding:
+                        "var(--theme-spacing-message-padding-y) var(--theme-spacing-message-padding-x)",
+                    }}
+                    role="status"
+                    data-testid={`chat-audio-transcription-${attachment.fileId}`}
+                  >
+                    <p
+                      className={clsx(
+                        "flex items-center gap-2 text-sm font-medium",
+                        isAudioTranscriptionInProgress(attachment.status) &&
+                          "animate-pulse",
+                      )}
+                    >
+                      <VoiceIcon
+                        className="size-4 shrink-0"
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {t`Audio recording - Status: ${displayStatus}`}
+                      </span>
+                    </p>
+                    {attachment.transcript?.trim() && (
+                      <p className="mt-2 whitespace-pre-wrap rounded-md border border-theme-border bg-theme-bg-secondary p-2 text-sm">
+                        {attachment.transcript}
+                      </p>
+                    )}
+                    {attachment.error?.trim() && (
+                      <p className="mt-1 text-sm text-theme-error-fg">
+                        {attachment.error}
+                      </p>
+                    )}
+                    {attachment.status.toLowerCase() === "failed" &&
+                      hasRecordedAudioFile(attachment.fileId) && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            retryAudioTranscription(attachment.fileId)
+                          }
+                          disabled={
+                            retryingAudioFileId === attachment.fileId ||
+                            isDisabled ||
+                            isRecordingUpload
+                          }
+                          className="mt-2"
+                          data-testid={`chat-input-retry-audio-${attachment.fileId}`}
+                        >
+                          {retryingAudioFileId === attachment.fileId
+                            ? t`Retrying...`
+                            : t`Retry transcription`}
+                        </Button>
+                      )}
+                  </div>
+                );
+              })(),
+            )}
+          </div>
+        )}
+
         {!hasAttachmentPreviewOverride && (
           <FileAttachmentsPreview
             attachedFiles={attachedFiles}
@@ -845,6 +1205,18 @@ export const ChatInput = ({
             data-testid="chat-send-error"
           >
             {sendErrorText}
+          </Alert>
+        )}
+        {recordingError && (
+          <Alert
+            type="error"
+            geometryVariant="message"
+            dismissible
+            onDismiss={() => setRecordingError(null)}
+            className="mb-2"
+            data-testid="chat-audio-recording-error"
+          >
+            {recordingError}
           </Alert>
         )}
 
@@ -988,6 +1360,47 @@ export const ChatInput = ({
                   onModelChange={setSelectedModel}
                   disabled={!isSelectionReady}
                 />
+              )}
+              {audioTranscriptionEnabled && uploadEnabled && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={
+                    isRecording ? undefined : (
+                      <VoiceIcon className="text-[var(--theme-fg-primary)]" />
+                    )
+                  }
+                  onClick={toggleAudioRecording}
+                  disabled={
+                    disabled ||
+                    isLoading ||
+                    isPendingResponse ||
+                    isUploading ||
+                    isFileButtonProcessing ||
+                    isRecordingUpload ||
+                    isAnyTokenLimitExceeded
+                  }
+                  data-testid="chat-input-record-audio"
+                  aria-label={isRecording ? t`Stop recording` : t`Record audio`}
+                >
+                  {isRecording ? (
+                    <span
+                      aria-label={t`Recording audio`}
+                      className="flex items-center gap-0.5"
+                    >
+                      {recordingBars.map((height, barIndex) => (
+                        <span
+                          key={barIndex}
+                          className="w-1 rounded-full bg-current transition-all"
+                          style={{
+                            height: `${Math.max(height, 2) * 2}px`,
+                          }}
+                        />
+                      ))}
+                    </span>
+                  ) : null}
+                </Button>
               )}
               {isPendingResponse ? (
                 <Button

@@ -39,6 +39,7 @@ base_url = "http://localhost:12434/v1/"
 context_size_tokens = 1000      # Very low limit for easy testing
 cost_input_tokens_per_1m = 0.0
 cost_output_tokens_per_1m = 0.0
+# supports_audio_input = false    # Optional: allow models to accept audio inputs and audio transcription flow
 
 # Example model settings configuration
 # [chat_providers.providers.test-token-limit.model_settings]
@@ -150,6 +151,23 @@ chat_provider_ids = ["test-token-limit"]
 # When enabled, chat owners can generate organization-internal share links for chats.
 # [chat_sharing]
 # enabled = true
+
+# Audio transcription feature configuration
+# [audio_transcription]
+# enabled = false
+# chat_provider_id = "mock-llm-openai" # Optional: defaults to first audio-capable provider by priority
+# max_recording_duration_seconds = 1200
+# chunk_duration_seconds = 30
+# max_attempts = 3
+# initial_backoff_ms = 250
+# max_backoff_ms = 4000
+# min_words_for_loop_check = 80
+# min_unique_word_ratio = 0.25
+# max_words_per_minute = 200
+# tokens_per_word = 1.5
+# output_token_buffer_factor = 2.0
+# min_output_tokens = 32
+# max_output_tokens = 2048
 
 # Experimental assistants feature configuration
 # [experimental_assistants]

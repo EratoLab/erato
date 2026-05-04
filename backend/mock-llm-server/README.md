@@ -104,6 +104,7 @@ The server comes with pre-configured mocks:
 | Fast | Demonstrates fast streaming | "fast" | Quick response | 10ms |
 | Delay | Demonstrates delayed response | "delay" | Medium-sized text | 5000ms (5s) |
 | RandomOneLiner | Returns one of 100 short variants and avoids repeating a previous assistant variant on regenerate when possible | "random" | Single one-line response | 20ms |
+| AudioSummary | Returns a deterministic summary for audio transcription prompts | "summarize this audio" | One-line audio summary response | 80ms |
 | LongRunning | Demonstrates very long streaming | "long running" or "long running 30" | Countdown for requested seconds (default 90s) | 1000ms (1s) |
 | SmoothLong | Streams one lorem word every 50ms for 10s | "smooth_long" | 200-word lorem ipsum stream | 50ms |
 | ReadMockFileToolCall | Triggers normal MCP file-read flow | "read mock file" | Tool call to `read_file` with `docs/readme.txt` | 100ms |

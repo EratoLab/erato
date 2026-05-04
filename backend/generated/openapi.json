@@ -2590,6 +2590,152 @@
         ],
         "description": "An assistant with its associated files"
       },
+      "AudioTranscriptSegment": {
+        "type": "object",
+        "properties": {
+          "chunk_index": {
+            "type": "integer",
+            "description": "Zero-based chunk index for this segment.",
+            "minimum": 0
+          },
+          "end_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Segment end offset in milliseconds.",
+            "minimum": 0
+          },
+          "start_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Segment start offset in milliseconds.",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string",
+            "description": "Transcribed text for this segment."
+          }
+        }
+      },
+      "AudioTranscriptionChunk": {
+        "type": "object",
+        "properties": {
+          "attempts": {
+            "type": "integer",
+            "description": "Number of attempts made for this chunk.",
+            "minimum": 0
+          },
+          "byte_end": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Optional byte range end in the stored canonical audio object.",
+            "minimum": 0
+          },
+          "byte_start": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Optional byte range start in the stored canonical audio object.",
+            "minimum": 0
+          },
+          "end_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Optional end offset in milliseconds for the chunk.",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional sanitized error for this chunk."
+          },
+          "index": {
+            "type": "integer",
+            "description": "Stable zero-based chunk index.",
+            "minimum": 0
+          },
+          "start_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Optional start offset in milliseconds for the chunk.",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "description": "Per-chunk transcription status."
+          },
+          "transcript": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Per-chunk transcript text."
+          }
+        }
+      },
+      "AudioTranscriptionMetadata": {
+        "type": "object",
+        "properties": {
+          "chunks": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AudioTranscriptionChunk"
+            },
+            "description": "Per-chunk progress and state for future timeline alignment."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional error message if status indicates failure."
+          },
+          "progress": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Optional aggregate progress value in `[0, 1]`."
+          },
+          "status": {
+            "type": "string",
+            "description": "Current transcription state."
+          },
+          "transcript": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional transcript text once transcription completes."
+          },
+          "transcript_segments": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AudioTranscriptSegment"
+            },
+            "description": "Transcript segments derived from completed chunks for timeline-aware UI surfaces."
+          }
+        }
+      },
       "BudgetCurrency": {
         "type": "string",
         "enum": [
@@ -3748,6 +3894,10 @@
           "file_capability"
         ],
         "properties": {
+          "audio_transcription": {
+            "$ref": "#/components/schemas/AudioTranscriptionMetadata",
+            "description": "Optional audio transcription metadata for supported audio uploads."
+          },
           "download_url": {
             "type": "string",
             "description": "Pre-signed URL for downloading the file directly from storage"

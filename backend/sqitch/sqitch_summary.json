@@ -22,7 +22,8 @@
     "deploy/0020_add_share_links_table.sql",
     "deploy/0021_add_input_parameters_to_messages.sql",
     "deploy/0022_add_mcp_server_oauth_tables.sql",
-    "deploy/0023_optimize_active_thread_siblings_constraint.sql"
+    "deploy/0023_optimize_active_thread_siblings_constraint.sql",
+    "deploy/0024_add_audio_transcription_to_file_uploads.sql"
   ],
-  "latest_change": "e7ed706b50146830b82477cbf9cddb70d1092a78"
+  "latest_change": "19aff712f45ce25a3753613df90abd6c015bfd2d"
 }

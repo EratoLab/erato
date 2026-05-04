@@ -13,8 +13,14 @@ use sqlx::postgres::Postgres;
 
 use crate::test_app_state;
 use crate::test_utils::{
-    TEST_JWT_TOKEN, TestRequestAuthExt, read_integration_test_file_bytes, setup_mock_llm_server,
+    MockLlmConfig, TEST_JWT_TOKEN, TestRequestAuthExt, hermetic_app_config,
+    read_integration_test_file_bytes, setup_mock_llm_server,
 };
+
+const CANONICAL_AUDIO_SAMPLE_RATE_HZ: usize = 16_000;
+const CANONICAL_AUDIO_CHANNELS: usize = 1;
+const CANONICAL_AUDIO_BYTES_PER_SAMPLE: usize = 2;
+const CANONICAL_WAV_HEADER_BYTES: usize = 44;
 
 fn assert_download_url_contains_filename(download_url: &str, filename: &str) {
     assert!(
@@ -280,6 +286,99 @@ async fn test_storage_helpers_support_eml_content_type(pool: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_seaweedfs_resumable_audio_write_stream_roundtrip_with_resume_copy(
+    pool: Pool<Postgres>,
+) {
+    let mut app_config = hermetic_app_config(None, None);
+    app_config.audio_transcription.chunk_duration_seconds = 5;
+    let app_state = test_app_state(app_config.clone(), pool).await;
+    let provider = app_state.default_file_storage_provider();
+
+    let wav_bytes = read_integration_test_file_bytes("audio_recordings/sales-summary-1-1.wav");
+    let data_range = canonical_pcm_data_range(&wav_bytes);
+
+    let chunk_data_bytes = app_config.audio_transcription.chunk_duration_seconds as usize
+        * CANONICAL_AUDIO_SAMPLE_RATE_HZ
+        * CANONICAL_AUDIO_CHANNELS
+        * CANONICAL_AUDIO_BYTES_PER_SAMPLE;
+    let data = &wav_bytes[data_range];
+    let pcm_chunks = data.chunks(chunk_data_bytes).collect::<Vec<_>>();
+    assert!(
+        pcm_chunks.len() > 1,
+        "Expected configured chunk duration to split fixture into multiple chunks"
+    );
+
+    let file_path = format!("audio-resumable-write-test-{}.wav", Uuid::new_v4());
+    let interruption_after_chunks = 2usize;
+    let mut writer = provider
+        .upload_file_writer(&file_path, Some("audio/wav"))
+        .await
+        .expect("Failed to open initial SeaweedFS audio writer");
+    for (chunk_index, pcm_chunk) in pcm_chunks
+        .iter()
+        .take(interruption_after_chunks)
+        .enumerate()
+    {
+        let write_bytes = if chunk_index == 0 {
+            build_canonical_wav_from_pcm(pcm_chunk)
+        } else {
+            pcm_chunk.to_vec()
+        };
+        writer
+            .write(write_bytes)
+            .await
+            .expect("Failed to write initial audio chunk to SeaweedFS storage");
+    }
+    writer
+        .close()
+        .await
+        .expect("Failed to close interrupted SeaweedFS audio writer");
+
+    let committed_bytes = provider
+        .read_file_to_bytes(&file_path)
+        .await
+        .expect("Failed to read committed interrupted audio object");
+    assert_eq!(
+        committed_bytes.len(),
+        CANONICAL_WAV_HEADER_BYTES + chunk_data_bytes * interruption_after_chunks,
+        "Committed interrupted object should contain one WAV header plus uploaded PCM chunks"
+    );
+
+    let mut resumed_writer = provider
+        .upload_file_writer(&file_path, Some("audio/wav"))
+        .await
+        .expect("Failed to open resumed SeaweedFS audio writer");
+    resumed_writer
+        .write(committed_bytes)
+        .await
+        .expect("Failed to seed resumed SeaweedFS audio writer");
+    for pcm_chunk in pcm_chunks.iter().skip(interruption_after_chunks) {
+        resumed_writer
+            .write(pcm_chunk.to_vec())
+            .await
+            .expect("Failed to write resumed audio chunk to SeaweedFS storage");
+    }
+    resumed_writer
+        .close()
+        .await
+        .expect("Failed to close resumed SeaweedFS audio writer");
+
+    provider
+        .finalize_resumable_upload(&file_path)
+        .await
+        .expect("Failed to finalize resumable WAV upload");
+    let stored_bytes = provider
+        .read_file_to_bytes(&file_path)
+        .await
+        .expect("Failed to read finalized WAV from SeaweedFS storage");
+    let expected_bytes = build_canonical_wav_from_pcm(data);
+    assert_eq!(
+        stored_bytes, expected_bytes,
+        "Finalized multi-chunk SeaweedFS object should contain the fixture PCM data as canonical WAV"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_eml_upload_supports_rfc822_and_octet_stream_content_types(pool: Pool<Postgres>) {
     let (app_config, _server) = setup_mock_llm_server(None).await;
     let app_state = test_app_state(app_config, pool).await;
@@ -343,6 +442,167 @@ async fn test_eml_upload_supports_rfc822_and_octet_stream_content_types(pool: Po
             "Expected preview URL"
         );
     }
+}
+
+fn canonical_pcm_data_range(bytes: &[u8]) -> std::ops::Range<usize> {
+    assert!(bytes.len() >= CANONICAL_WAV_HEADER_BYTES);
+    assert_eq!(&bytes[0..4], b"RIFF");
+    assert_eq!(&bytes[8..12], b"WAVE");
+
+    let mut offset = 12usize;
+    let mut data_range = None;
+    let mut found_fmt = false;
+    while offset + 8 <= bytes.len() {
+        let chunk_id = &bytes[offset..offset + 4];
+        let chunk_len =
+            u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().unwrap()) as usize;
+        let chunk_start = offset + 8;
+        let chunk_end = chunk_start + chunk_len;
+        assert!(chunk_end <= bytes.len(), "Malformed WAV chunk length");
+
+        if chunk_id == b"fmt " {
+            assert_eq!(chunk_len, 16);
+            assert_eq!(
+                u16::from_le_bytes(bytes[chunk_start..chunk_start + 2].try_into().unwrap()),
+                1
+            );
+            assert_eq!(
+                u16::from_le_bytes(bytes[chunk_start + 2..chunk_start + 4].try_into().unwrap()),
+                1
+            );
+            assert_eq!(
+                u32::from_le_bytes(bytes[chunk_start + 4..chunk_start + 8].try_into().unwrap()),
+                CANONICAL_AUDIO_SAMPLE_RATE_HZ as u32
+            );
+            assert_eq!(
+                u16::from_le_bytes(
+                    bytes[chunk_start + 14..chunk_start + 16]
+                        .try_into()
+                        .unwrap()
+                ),
+                (CANONICAL_AUDIO_BYTES_PER_SAMPLE * 8) as u16
+            );
+            found_fmt = true;
+        } else if chunk_id == b"data" {
+            data_range = Some(chunk_start..chunk_end);
+        }
+
+        offset = chunk_end + (chunk_len % 2);
+    }
+
+    assert!(found_fmt, "Expected WAV fmt chunk");
+    let data_range = data_range.expect("Expected WAV data chunk");
+    assert!(
+        !data_range.is_empty(),
+        "Expected WAV data chunk to contain PCM data"
+    );
+    data_range
+}
+
+fn build_canonical_wav_from_pcm(pcm: &[u8]) -> Vec<u8> {
+    let data_len = pcm.len() as u32;
+    let byte_rate = CANONICAL_AUDIO_SAMPLE_RATE_HZ as u32
+        * CANONICAL_AUDIO_CHANNELS as u32
+        * CANONICAL_AUDIO_BYTES_PER_SAMPLE as u32;
+    let block_align = (CANONICAL_AUDIO_CHANNELS * CANONICAL_AUDIO_BYTES_PER_SAMPLE) as u16;
+    let mut wav = Vec::with_capacity(CANONICAL_WAV_HEADER_BYTES + pcm.len());
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data_len).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&(CANONICAL_AUDIO_CHANNELS as u16).to_le_bytes());
+    wav.extend_from_slice(&(CANONICAL_AUDIO_SAMPLE_RATE_HZ as u32).to_le_bytes());
+    wav.extend_from_slice(&byte_rate.to_le_bytes());
+    wav.extend_from_slice(&block_align.to_le_bytes());
+    wav.extend_from_slice(&((CANONICAL_AUDIO_BYTES_PER_SAMPLE * 8) as u16).to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data_len.to_le_bytes());
+    wav.extend_from_slice(pcm);
+    wav
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_audio_upload_initializes_transcription_metadata_with_mock_llm(pool: Pool<Postgres>) {
+    let transcript = String::from_utf8(read_integration_test_file_bytes(
+        "audio_recordings/sales-summary-1-1.script.md",
+    ))
+    .expect("Expected valid UTF-8 transcript fixture");
+    let mock_config = MockLlmConfig {
+        supports_audio_input: true,
+        audio_transcription_enabled: true,
+        audio_transcription_text: transcript.clone(),
+        ..Default::default()
+    };
+    let (app_config, mock_server) = setup_mock_llm_server(Some(mock_config)).await;
+
+    let transcription_response = reqwest::Client::new()
+        .post(mock_server.url("/v1/audio/transcriptions").to_string())
+        .multipart(
+            reqwest::multipart::Form::new()
+                .text("model", "gpt-3.5-turbo")
+                .part(
+                    "file",
+                    reqwest::multipart::Part::bytes(read_integration_test_file_bytes(
+                        "audio_recordings/sales-summary-1-1.mp3",
+                    ))
+                    .file_name("sales-summary-1-1.mp3")
+                    .mime_str("audio/mpeg")
+                    .expect("Expected valid audio MIME type"),
+                ),
+        )
+        .send()
+        .await
+        .expect("Mock audio transcription request should succeed");
+    assert!(
+        transcription_response.status().is_success(),
+        "Mock audio transcription endpoint should return success"
+    );
+    let transcription_json: Value = transcription_response
+        .json()
+        .await
+        .expect("Expected JSON transcription response");
+    assert_eq!(transcription_json["text"], json!(transcript));
+
+    let app_state = test_app_state(app_config, pool).await;
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+    let chat_id = create_chat(&server).await;
+
+    let upload_json = upload_file_to_chat(
+        &server,
+        &chat_id,
+        read_integration_test_file_bytes("audio_recordings/sales-summary-1-1.mp3"),
+        "sales-summary-1-1.mp3",
+        "audio/mpeg",
+    )
+    .await;
+
+    let file = &upload_json["files"][0];
+    let file_id = file["id"].as_str().expect("Expected uploaded file id");
+    assert_eq!(file["filename"], json!("sales-summary-1-1.mp3"));
+    assert_eq!(file["file_capability"]["id"], json!("audio"));
+    assert_eq!(
+        file["file_capability"]["operations"],
+        json!(["extract_text"])
+    );
+    assert_eq!(file["audio_transcription"]["status"], json!("processing"));
+    assert_eq!(file["audio_transcription"]["progress"], json!(0.0));
+
+    let get_file_response = server
+        .get(&format!("/api/v1beta/files/{}", file_id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    get_file_response.assert_status_ok();
+    let file_json: Value = get_file_response.json();
+    assert_eq!(
+        file_json["audio_transcription"]["status"],
+        json!("processing")
+    );
+    assert_eq!(file_json["audio_transcription"]["progress"], json!(0.0));
 }
 
 /// Test retrieving file information by ID.

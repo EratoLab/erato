@@ -24,3 +24,4 @@
 0021_add_input_parameters_to_messages 2026-03-31T00:00:00Z System Administrator <root@localhost> # Add input_parameters to messages for user-provided context
 0022_add_mcp_server_oauth_tables 2026-04-02T00:00:00Z System Administrator <root@localhost> # Add MCP server oauth persistence tables
 0023_optimize_active_thread_siblings_constraint 2026-04-13T00:00:00Z System Administrator <root@localhost> # Optimize active thread sibling constraint
+0024_add_audio_transcription_to_file_uploads 2026-05-04T00:00:00Z System Administrator <root@localhost> # Add audio transcription state to file uploads

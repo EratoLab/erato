@@ -1,0 +1,1 @@
+Overall, they seemed engaged and confirmed that improving data accessibility and reducing manual reporting work are key priorities for them this quarter. I suspect that we'll be able to close them as a customer in the next 2 weeks.

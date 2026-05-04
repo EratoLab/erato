@@ -74,6 +74,10 @@ async fn main() {
                     "/v1/chat/completions",
                     post(endpoints::chat::chat_completions),
                 )
+                .route(
+                    "/v1/audio/transcriptions",
+                    post(endpoints::audio::transcriptions),
+                )
                 .route("/v1/embeddings", post(endpoints::embeddings::embeddings))
                 .route(
                     "/v1/images/generations",

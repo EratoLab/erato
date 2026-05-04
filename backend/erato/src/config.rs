@@ -396,6 +396,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub file_processor: FileProcessorConfig,
 
+    // Audio transcription feature configuration.
+    #[serde(default)]
+    pub audio_transcription: AudioTranscriptionConfig,
+
     // If true, enables the cleanup worker that periodically deletes old data.
     // Defaults to `false`.
     pub cleanup_enabled: bool,
@@ -460,6 +464,18 @@ impl AppConfig {
             .set_default("cleanup_enabled", false)?
             .set_default("cleanup_archived_max_age_days", 30)?
             .set_default("logging.format", "plain")?
+            .set_default("audio_transcription.enabled", false)?
+            .set_default("audio_transcription.max_recording_duration_seconds", 1200)?
+            .set_default("audio_transcription.chunk_duration_seconds", 30)?
+            .set_default("audio_transcription.max_attempts", 3)?
+            .set_default("audio_transcription.initial_backoff_ms", 250)?
+            .set_default("audio_transcription.max_backoff_ms", 4000)?
+            .set_default("audio_transcription.min_words_for_loop_check", 80)?
+            .set_default("audio_transcription.min_unique_word_ratio", 0.25)?
+            .set_default("audio_transcription.max_words_per_minute", 200)?
+            .set_default("audio_transcription.tokens_per_word", 1.5)?
+            .set_default("audio_transcription.output_token_buffer_factor", 2.0)?
+            .set_default("audio_transcription.fixed_output_token_budget", 500)?
             .set_default("prompt_optimizer.enabled", false)?
             .set_default("prompt_optimizer.prompt", DEFAULT_PROMPT_OPTIMIZER_PROMPT)?;
 
@@ -661,6 +677,82 @@ impl AppConfig {
                 panic!(
                     "Action facet '{}' has no allowed_args. Please provide at least one allowed argument.",
                     id
+                );
+            }
+        }
+
+        // Validate audio transcription requires at least one model with audio-input support.
+        if config.audio_transcription.enabled {
+            if config.audio_transcription.max_recording_duration_seconds == 0 {
+                panic!(
+                    "Invalid `audio_transcription.max_recording_duration_seconds`: value must be greater than 0."
+                );
+            }
+            if config.audio_transcription.chunk_duration_seconds == 0 {
+                panic!(
+                    "Invalid `audio_transcription.chunk_duration_seconds`: value must be greater than 0."
+                );
+            }
+            if config.audio_transcription.chunk_duration_seconds
+                > config.audio_transcription.max_recording_duration_seconds
+            {
+                panic!(
+                    "Invalid `audio_transcription.chunk_duration_seconds`: value must be less than or equal to `audio_transcription.max_recording_duration_seconds`."
+                );
+            }
+            if config.audio_transcription.max_attempts == 0 {
+                panic!("Invalid `audio_transcription.max_attempts`: value must be greater than 0.");
+            }
+            if !(0.0..=1.0).contains(&config.audio_transcription.min_unique_word_ratio) {
+                panic!(
+                    "Invalid `audio_transcription.min_unique_word_ratio`: value must be between 0.0 and 1.0."
+                );
+            }
+            if config.audio_transcription.tokens_per_word <= 0.0
+                || config.audio_transcription.output_token_buffer_factor <= 0.0
+            {
+                panic!(
+                    "Invalid audio transcription token sizing config: `tokens_per_word` and `output_token_buffer_factor` must be greater than 0."
+                );
+            }
+            if let (Some(min_output_tokens), Some(max_output_tokens)) = (
+                config.audio_transcription.min_output_tokens,
+                config.audio_transcription.max_output_tokens,
+            ) && min_output_tokens > max_output_tokens
+            {
+                panic!(
+                    "Invalid audio transcription token sizing config: `min_output_tokens` must be less than or equal to `max_output_tokens`."
+                );
+            }
+
+            let configured_audio_provider = if let Some(provider_id) =
+                config.audio_transcription.chat_provider_id.as_deref()
+            {
+                let provider = config.get_chat_provider(provider_id);
+                if !provider.model_capabilities.supports_audio_input {
+                    panic!(
+                        "audio_transcription.chat_provider_id '{}' does not have `model_capabilities.supports_audio_input = true`.",
+                        provider_id
+                    );
+                }
+                Some(provider)
+            } else if let Some(chat_providers) = &config.chat_providers {
+                chat_providers
+                    .priority_order
+                    .iter()
+                    .filter_map(|provider_id| chat_providers.providers.get(provider_id))
+                    .find(|provider| provider.model_capabilities.supports_audio_input)
+            } else {
+                config
+                    .chat_provider
+                    .as_ref()
+                    .filter(|provider| provider.model_capabilities.supports_audio_input)
+            };
+
+            if configured_audio_provider.is_none() {
+                panic!(
+                    "audio_transcription is enabled, but no chat provider has `model_capabilities.supports_audio_input = true`.\n\n\
+Enable audio transcription with at least one provider setting `supports_audio_input = true` in `chat_providers.providers.<provider_id>.model_capabilities`."
                 );
             }
         }
@@ -2057,6 +2149,116 @@ impl Default for FileProcessorConfig {
     }
 }
 
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet)]
+pub struct AudioTranscriptionConfig {
+    // Whether to enable audio transcription workflow metadata for uploaded audio files.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    // Optional chat provider ID used for transcription. If omitted, the first audio-capable provider in priority order is used.
+    #[serde(default)]
+    pub chat_provider_id: Option<String>,
+
+    // Maximum recording duration in seconds for audio transcription captures.
+    // Defaults to `1200` (20 minutes).
+    #[serde(default = "default_audio_transcription_max_recording_duration_seconds")]
+    pub max_recording_duration_seconds: u64,
+
+    // Chunk duration in seconds for audio transcription captures.
+    // Defaults to `30`.
+    #[serde(default = "default_audio_transcription_chunk_duration_seconds")]
+    pub chunk_duration_seconds: u64,
+
+    // Maximum provider attempts per chunk, including hallucination-loop retries.
+    #[serde(default = "default_audio_transcription_max_attempts")]
+    pub max_attempts: usize,
+
+    // Initial retry backoff in milliseconds.
+    #[serde(default = "default_audio_transcription_initial_backoff_ms")]
+    pub initial_backoff_ms: u64,
+
+    // Maximum retry backoff in milliseconds.
+    #[serde(default = "default_audio_transcription_max_backoff_ms")]
+    pub max_backoff_ms: u64,
+
+    // Minimum transcript word count before loop detection runs.
+    #[serde(default = "default_audio_transcription_min_words_for_loop_check")]
+    pub min_words_for_loop_check: usize,
+
+    // Minimum unique-word ratio accepted for non-loop transcripts.
+    #[serde(default = "default_audio_transcription_min_unique_word_ratio")]
+    pub min_unique_word_ratio: f64,
+
+    // Assumed maximum human speech rate used to derive per-chunk output tokens.
+    #[serde(default = "default_audio_transcription_max_words_per_minute")]
+    pub max_words_per_minute: u32,
+
+    // Token-per-word multiplier used to derive per-chunk output tokens.
+    #[serde(default = "default_audio_transcription_tokens_per_word")]
+    pub tokens_per_word: f64,
+
+    // Safety multiplier used to derive per-chunk output tokens.
+    #[serde(default = "default_audio_transcription_output_token_buffer_factor")]
+    pub output_token_buffer_factor: f64,
+
+    // Fixed output token budget added to the per-chunk heuristic.
+    #[serde(default = "default_audio_transcription_fixed_output_token_budget")]
+    pub fixed_output_token_budget: u32,
+
+    // Optional minimum output tokens for transcription chunks.
+    #[serde(default)]
+    pub min_output_tokens: Option<u32>,
+
+    // Optional maximum output token cap for transcription chunks.
+    #[serde(default)]
+    pub max_output_tokens: Option<u32>,
+}
+
+fn default_audio_transcription_max_recording_duration_seconds() -> u64 {
+    20 * 60
+}
+
+fn default_audio_transcription_chunk_duration_seconds() -> u64 {
+    30
+}
+
+fn default_audio_transcription_max_attempts() -> usize {
+    3
+}
+
+fn default_audio_transcription_initial_backoff_ms() -> u64 {
+    250
+}
+
+fn default_audio_transcription_max_backoff_ms() -> u64 {
+    4000
+}
+
+fn default_audio_transcription_min_words_for_loop_check() -> usize {
+    80
+}
+
+fn default_audio_transcription_min_unique_word_ratio() -> f64 {
+    0.25
+}
+
+fn default_audio_transcription_max_words_per_minute() -> u32 {
+    200
+}
+
+fn default_audio_transcription_tokens_per_word() -> f64 {
+    1.5
+}
+
+fn default_audio_transcription_output_token_buffer_factor() -> f64 {
+    2.0
+}
+
+fn default_audio_transcription_fixed_output_token_budget() -> u32 {
+    500
+}
+
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Hash, ToSchema, Facet)]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -2377,6 +2579,9 @@ pub struct ModelCapabilities {
     // Whether the model supports being provided with images for understanding
     #[serde(default)]
     pub supports_image_understanding: bool,
+    // Whether the model supports audio input (e.g., audio transcription input)
+    #[serde(default)]
+    pub supports_audio_input: bool,
     // Whether the model supports reasoning mode
     #[serde(default)]
     pub supports_reasoning: bool,
@@ -2400,6 +2605,7 @@ impl Default for ModelCapabilities {
         Self {
             context_size_tokens: default_context_size_tokens(),
             supports_image_understanding: false,
+            supports_audio_input: false,
             supports_reasoning: false,
             supports_verbosity: false,
             cost_input_tokens_per_1m: 0.0,

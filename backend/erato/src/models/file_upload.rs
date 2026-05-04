@@ -5,12 +5,214 @@ use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID, Sharepo
 use eyre::{ContextCompat, OptionExt, Report, WrapErr};
 use sea_orm::prelude::*;
 use sea_orm::{ActiveValue, DatabaseConnection, JoinType, QuerySelect};
+use serde::{Deserialize, Serialize};
+use serde_json::to_string;
 use sqlx::types::Uuid;
 use std::collections::HashMap;
 use tracing::instrument;
+use utoipa::ToSchema;
 
 fn subject_user_id(subject: &Subject) -> String {
     subject.user_id().to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct AudioTranscriptionChunk {
+    /// Stable zero-based chunk index.
+    #[serde(default)]
+    pub index: usize,
+    /// Optional start offset in milliseconds for the chunk.
+    #[serde(default)]
+    pub start_ms: Option<u64>,
+    /// Optional end offset in milliseconds for the chunk.
+    #[serde(default)]
+    pub end_ms: Option<u64>,
+    /// Optional byte range start in the stored canonical audio object.
+    #[serde(default)]
+    pub byte_start: Option<u64>,
+    /// Optional byte range end in the stored canonical audio object.
+    #[serde(default)]
+    pub byte_end: Option<u64>,
+    /// Per-chunk transcription status.
+    #[serde(default)]
+    pub status: String,
+    /// Per-chunk transcript text.
+    #[serde(default)]
+    pub transcript: Option<String>,
+    /// Number of attempts made for this chunk.
+    #[serde(default)]
+    pub attempts: usize,
+    /// Optional sanitized error for this chunk.
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct AudioTranscriptSegment {
+    /// Zero-based chunk index for this segment.
+    #[serde(default)]
+    pub chunk_index: usize,
+    /// Segment start offset in milliseconds.
+    #[serde(default)]
+    pub start_ms: u64,
+    /// Segment end offset in milliseconds.
+    #[serde(default)]
+    pub end_ms: u64,
+    /// Transcribed text for this segment.
+    #[serde(default)]
+    pub text: String,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, ToSchema)]
+pub struct AudioTranscriptionMetadata {
+    /// Current transcription state.
+    #[serde(default)]
+    pub status: String,
+    /// Optional transcript text once transcription completes.
+    #[serde(default)]
+    pub transcript: Option<String>,
+    /// Optional error message if status indicates failure.
+    #[serde(default)]
+    pub error: Option<String>,
+    /// Optional aggregate progress value in `[0, 1]`.
+    #[serde(default)]
+    pub progress: Option<f64>,
+    /// Per-chunk progress and state for future timeline alignment.
+    #[serde(default)]
+    pub chunks: Option<Vec<AudioTranscriptionChunk>>,
+    /// Transcript segments derived from completed chunks for timeline-aware UI surfaces.
+    #[serde(default)]
+    pub transcript_segments: Option<Vec<AudioTranscriptSegment>>,
+}
+
+impl AudioTranscriptionMetadata {
+    pub fn is_completed(&self) -> bool {
+        self.status.eq_ignore_ascii_case("completed")
+    }
+
+    pub fn aggregate_transcript(&self) -> Option<String> {
+        if let Some(transcript) = self.transcript.as_ref() {
+            let trimmed = transcript.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+
+        let segments = self.transcript_segments.as_ref()?;
+        let text = segments
+            .iter()
+            .filter_map(|segment| {
+                let chunk_text = segment.text.trim();
+                if chunk_text.is_empty() {
+                    None
+                } else {
+                    Some(chunk_text.to_string())
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        if text.is_empty() { None } else { Some(text) }
+    }
+}
+
+fn parse_audio_transcription_metadata(
+    audio_transcription: &Option<String>,
+) -> Option<AudioTranscriptionMetadata> {
+    let raw = audio_transcription.as_deref()?;
+    serde_json::from_str::<AudioTranscriptionMetadata>(raw).ok()
+}
+
+pub fn initial_audio_transcription_metadata() -> AudioTranscriptionMetadata {
+    AudioTranscriptionMetadata {
+        status: "processing".to_string(),
+        transcript: None,
+        error: None,
+        progress: Some(0.0),
+        chunks: None,
+        transcript_segments: None,
+    }
+}
+
+pub async fn set_audio_transcription_metadata(
+    conn: &DatabaseConnection,
+    file_upload_id: &Uuid,
+    audio_transcription: Option<AudioTranscriptionMetadata>,
+) -> Result<(), Report> {
+    let audio_transcription = audio_transcription
+        .as_ref()
+        .map(to_string)
+        .transpose()
+        .wrap_err("Failed to serialize audio transcription metadata")?;
+
+    file_uploads::ActiveModel {
+        id: ActiveValue::Set(*file_upload_id),
+        audio_transcription: ActiveValue::Set(audio_transcription),
+        ..Default::default()
+    }
+    .update(conn)
+    .await
+    .wrap_err("Failed to update audio transcription metadata")?;
+
+    Ok(())
+}
+
+pub async fn get_audio_transcription_upload_for_mutation(
+    conn: &DatabaseConnection,
+    subject: &Subject,
+    file_upload_id: &Uuid,
+) -> Result<file_uploads::Model, Report> {
+    let file_upload = FileUploads::find_by_id(*file_upload_id)
+        .one(conn)
+        .await?
+        .wrap_err("File upload not found")?;
+
+    if file_upload.owner_user_id != subject.user_id() {
+        return Err(eyre::eyre!(
+            "File upload mutation access denied: subject does not own file upload"
+        ));
+    }
+
+    Ok(file_upload)
+}
+
+pub fn get_audio_transcription_metadata(
+    file_upload: &file_uploads::Model,
+) -> Option<AudioTranscriptionMetadata> {
+    parse_audio_transcription_metadata(&file_upload.audio_transcription)
+}
+
+pub fn get_audio_transcription_blocking_reason(
+    file_upload: &file_uploads::Model,
+) -> Option<String> {
+    let metadata = get_audio_transcription_metadata(file_upload)?;
+    if metadata.is_completed() {
+        return None;
+    }
+
+    if let Some(error) = metadata.error {
+        Some(format!(
+            "Audio transcription for file {} is incomplete: {}",
+            metadata_error_label(file_upload),
+            error
+        ))
+    } else {
+        Some(format!(
+            "Audio transcription for file {} is incomplete (status = {})",
+            metadata_error_label(file_upload),
+            metadata.status
+        ))
+    }
+}
+
+fn metadata_error_label(file_upload: &file_uploads::Model) -> String {
+    format!("{} ({})", file_upload.filename, file_upload.id)
+}
+
+pub fn get_audio_transcript_if_ready(file_upload: &file_uploads::Model) -> Option<String> {
+    parse_audio_transcription_metadata(&file_upload.audio_transcription)
+        .filter(AudioTranscriptionMetadata::is_completed)
+        .and_then(|metadata| metadata.aggregate_transcript())
 }
 
 /// Create a new file upload record in the database and associate it with a chat
@@ -189,6 +391,7 @@ pub struct FileUploadWithUrl {
     pub download_url: String,
     pub preview_url: Option<String>,
     pub file_contents_unavailable_missing_permissions: bool,
+    pub audio_transcription: Option<AudioTranscriptionMetadata>,
 }
 
 /// Get a specific file upload by ID, including a pre-signed download URL.
@@ -218,73 +421,77 @@ pub async fn get_file_upload_with_url_and_token(
             file_upload.file_storage_provider_id
         ))?;
 
-    let (download_url, preview_url, file_contents_unavailable_missing_permissions) =
-        if file_storage.is_sharepoint() {
-            match file_storage
-                .get_sharepoint_file_metadata_with_context(
-                    &file_upload.file_storage_path,
-                    sharepoint_ctx.as_ref(),
-                )
-                .await
-            {
-                Ok(metadata) => (
-                    metadata.download_url,
-                    Some(format!("/api/v1beta/files/{}/preview", file_upload.id)),
-                    false,
-                ),
-                Err(err) => {
-                    tracing::warn!(
-                        file_id = %file_upload.id,
-                        provider = %file_upload.file_storage_provider_id,
-                        error = %err,
-                        "Failed to generate Sharepoint file metadata, returning placeholder"
-                    );
-                    (format!("/api/v1beta/files/{}", file_upload.id), None, true)
-                }
+    let file_storage_path = file_upload.file_storage_path.clone();
+    let file_storage_provider_id = file_upload.file_storage_provider_id.clone();
+    let filename = file_upload.filename.clone();
+    let audio_transcription = get_audio_transcription_metadata(&file_upload);
+
+    let (download_url, preview_url, file_contents_unavailable_missing_permissions) = if file_storage
+        .is_sharepoint()
+    {
+        match file_storage
+            .get_sharepoint_file_metadata_with_context(&file_storage_path, sharepoint_ctx.as_ref())
+            .await
+        {
+            Ok(metadata) => (
+                metadata.download_url,
+                Some(format!("/api/v1beta/files/{}/preview", file_upload.id)),
+                false,
+            ),
+            Err(err) => {
+                tracing::warn!(
+                    file_id = %file_upload.id,
+                    provider = %file_storage_provider_id,
+                    error = %err,
+                    "Failed to generate Sharepoint file metadata, returning placeholder"
+                );
+                (format!("/api/v1beta/files/{}", file_upload.id), None, true)
             }
-        } else {
-            let download_url = match file_storage
-                .generate_presigned_download_url_with_context(
-                    &file_upload.file_storage_path,
-                    None,
-                    Some(&file_upload.filename),
-                    sharepoint_ctx.as_ref(),
-                )
-                .await
-            {
-                Ok(url) => url,
-                Err(err) => {
-                    tracing::warn!(
-                        file_id = %file_upload.id,
-                        provider = %file_upload.file_storage_provider_id,
-                        error = %err,
-                        "Failed to generate download URL, returning placeholder"
-                    );
-                    format!("/api/v1beta/files/{}", file_upload.id)
-                }
-            };
-
-            let preview_url = file_storage
-                .generate_presigned_preview_url_with_context(
-                    &file_upload.file_storage_path,
-                    None,
-                    Some(&file_upload.filename),
-                    sharepoint_ctx.as_ref(),
-                )
-                .await
-                .ok();
-
-            (download_url, preview_url, false)
+        }
+    } else {
+        let download_url = match file_storage
+            .generate_presigned_download_url_with_context(
+                &file_storage_path,
+                None,
+                Some(&filename),
+                sharepoint_ctx.as_ref(),
+            )
+            .await
+        {
+            Ok(url) => url,
+            Err(err) => {
+                tracing::warn!(
+                    file_id = %file_upload.id,
+                    provider = %file_storage_provider_id,
+                    error = %err,
+                    "Failed to generate download URL, returning placeholder"
+                );
+                format!("/api/v1beta/files/{}", file_upload.id)
+            }
         };
+
+        let preview_url = file_storage
+            .generate_presigned_preview_url_with_context(
+                &file_storage_path,
+                None,
+                Some(&filename),
+                sharepoint_ctx.as_ref(),
+            )
+            .await
+            .ok();
+
+        (download_url, preview_url, false)
+    };
 
     Ok(FileUploadWithUrl {
         id: file_upload.id,
-        filename: file_upload.filename,
-        file_storage_provider_id: file_upload.file_storage_provider_id,
-        file_storage_path: file_upload.file_storage_path,
+        filename,
+        file_storage_provider_id,
+        file_storage_path,
         download_url,
         preview_url,
         file_contents_unavailable_missing_permissions,
+        audio_transcription,
     })
 }
 
@@ -334,19 +541,24 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
     let mut result = Vec::with_capacity(file_uploads.len());
 
     for upload in file_uploads {
+        let file_storage_path = upload.file_storage_path.clone();
+        let filename = upload.filename.clone();
+        let file_storage_provider_id = upload.file_storage_provider_id.clone();
+        let audio_transcription = get_audio_transcription_metadata(&upload);
+
         // Get the file storage provider
         let file_storage = file_storage_providers
-            .get(&upload.file_storage_provider_id)
+            .get(&file_storage_provider_id)
             .ok_or_eyre(format!(
                 "File storage provider not found: {}",
-                upload.file_storage_provider_id
+                file_storage_provider_id
             ))?;
 
         let (download_url, preview_url, file_contents_unavailable_missing_permissions) =
             if file_storage.is_sharepoint() {
                 match file_storage
                     .get_sharepoint_file_metadata_with_context(
-                        &upload.file_storage_path,
+                        &file_storage_path,
                         sharepoint_ctx.as_ref(),
                     )
                     .await
@@ -359,7 +571,7 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
                     Err(err) => {
                         tracing::warn!(
                             file_id = %upload.id,
-                            provider = %upload.file_storage_provider_id,
+                            provider = %file_storage_provider_id,
                             error = %err,
                             "Failed to generate Sharepoint file metadata, returning placeholder"
                         );
@@ -369,9 +581,9 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
             } else {
                 let download_url = match file_storage
                     .generate_presigned_download_url_with_context(
-                        &upload.file_storage_path,
+                        &file_storage_path,
                         None,
-                        Some(&upload.filename),
+                        Some(&filename),
                         sharepoint_ctx.as_ref(),
                     )
                     .await
@@ -380,7 +592,7 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
                     Err(err) => {
                         tracing::warn!(
                             file_id = %upload.id,
-                            provider = %upload.file_storage_provider_id,
+                            provider = %file_storage_provider_id,
                             error = %err,
                             "Failed to generate download URL, returning placeholder"
                         );
@@ -390,9 +602,9 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
 
                 let preview_url = file_storage
                     .generate_presigned_preview_url_with_context(
-                        &upload.file_storage_path,
+                        &file_storage_path,
                         None,
-                        Some(&upload.filename),
+                        Some(&filename),
                         sharepoint_ctx.as_ref(),
                     )
                     .await
@@ -403,12 +615,13 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
 
         result.push(FileUploadWithUrl {
             id: upload.id,
-            filename: upload.filename,
-            file_storage_provider_id: upload.file_storage_provider_id,
-            file_storage_path: upload.file_storage_path,
+            filename,
+            file_storage_provider_id,
+            file_storage_path,
             download_url,
             preview_url,
             file_contents_unavailable_missing_permissions,
+            audio_transcription,
         });
     }
 

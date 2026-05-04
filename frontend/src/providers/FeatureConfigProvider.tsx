@@ -30,6 +30,14 @@ interface ChatInputFeatureConfig {
   showUsageAdvisory: boolean;
 }
 
+/** Configuration for audio transcription features */
+interface AudioTranscriptionFeatureConfig {
+  /** Whether audio transcription is enabled */
+  enabled: boolean;
+  /** Maximum recording duration in seconds for audio transcription captures */
+  maxRecordingDurationSeconds: number;
+}
+
 /**
  * Configuration for authentication/account features
  */
@@ -119,6 +127,8 @@ export interface FeatureConfig {
   upload: UploadFeatureConfig;
   /** Chat input feature flags */
   chatInput: ChatInputFeatureConfig;
+  /** Audio transcription feature flags */
+  audioTranscription: AudioTranscriptionFeatureConfig;
   /** Authentication feature flags */
   auth: AuthFeatureConfig;
   /** Assistants feature flags */
@@ -153,6 +163,10 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     autofocus: true,
     emptyStateLayout: "bottom",
     showUsageAdvisory: true,
+  },
+  audioTranscription: {
+    enabled: false,
+    maxRecordingDurationSeconds: 20 * 60,
   },
   auth: {
     showLogout: false,
@@ -223,6 +237,11 @@ function createFeatureConfig(
       emptyStateLayout: environment.chatInputEmptyStateLayout,
       showUsageAdvisory: true,
     },
+    audioTranscription: {
+      enabled: Boolean(environment.audioTranscriptionEnabled),
+      maxRecordingDurationSeconds:
+        environment.audioTranscriptionMaxRecordingDurationSeconds,
+    },
     auth: {
       showLogout: !environment.disableLogout,
     },
@@ -270,6 +289,10 @@ function mergeFeatureConfig(overrides?: FeatureConfigOverrides): FeatureConfig {
     chatInput: {
       ...defaultStaticFeatureConfig.chatInput,
       ...overrides.chatInput,
+    },
+    audioTranscription: {
+      ...defaultStaticFeatureConfig.audioTranscription,
+      ...overrides.audioTranscription,
     },
     auth: { ...defaultStaticFeatureConfig.auth, ...overrides.auth },
     assistants: {
@@ -410,6 +433,17 @@ export function useUploadFeature(): UploadFeatureConfig {
 export function useChatInputFeature(): ChatInputFeatureConfig {
   const config = useFeatureConfig();
   return config.chatInput;
+}
+
+/**
+ * Convenience hook for accessing audio transcription feature configuration.
+ *
+ * @returns Audio transcription feature configuration
+ * @throws {Error} If used outside of FeatureConfigProvider
+ */
+export function useAudioTranscriptionFeature(): AudioTranscriptionFeatureConfig {
+  const config = useFeatureConfig();
+  return config.audioTranscription;
 }
 
 /**

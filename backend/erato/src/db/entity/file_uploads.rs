@@ -15,6 +15,7 @@ pub struct Model {
     pub file_storage_provider_id: String,
     #[sea_orm(column_type = "Text")]
     pub file_storage_path: String,
+    pub audio_transcription: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }
