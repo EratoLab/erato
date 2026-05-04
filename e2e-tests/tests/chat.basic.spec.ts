@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { TAG_CI, TAG_NO_CI } from "./tags";
+import { TAG_CI } from "./tags";
 import { chatIsReadyToChat } from "./shared";
 
 test(

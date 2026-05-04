@@ -1,0 +1,1 @@
+Had a 30-minute discovery call with the Head of Data and one analytics manager from Acme Retail. We discussed their current analytics setup, which is spread across several BI tools and custom SQL dashboards. They’re evaluating our platform, InsightForge, as a way to centralize reporting and make data access easier for non-technical teams.

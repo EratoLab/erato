@@ -52,6 +52,8 @@ describe("themeConfig", () => {
     mcpServersTabEnabled: false,
     messageFeedbackEditTimeLimitSeconds: null,
     maxUploadSizeBytes: 20971520,
+    audioTranscriptionEnabled: false,
+    audioTranscriptionMaxRecordingDurationSeconds: 1200,
     sidebarCollapsedMode: "hidden",
     sidebarChatHistoryShowMetadata: true,
     msalClientId: null,

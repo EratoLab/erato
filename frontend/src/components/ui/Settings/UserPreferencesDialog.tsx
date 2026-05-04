@@ -5,6 +5,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useTheme, type ThemeMode } from "@/components/providers/ThemeProvider";
+import { useAudioInputDevicePreference } from "@/hooks/audio/useAudioInputDevicePreference";
 import {
   fetchCompleteMcpServerOauth,
   fetchUpdateProfilePreferences,
@@ -15,7 +16,10 @@ import {
   useListMcpServers,
   useStartMcpServerOauth,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { useUserPreferencesFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useAudioTranscriptionFeature,
+  useUserPreferencesFeature,
+} from "@/providers/FeatureConfigProvider";
 
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
@@ -33,6 +37,7 @@ import {
   ResolvedIcon,
   SunIcon,
   CheckCircleIcon,
+  VoiceIcon,
   WarningCircleIcon,
 } from "../icons";
 
@@ -44,7 +49,12 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { KeyboardEvent, ReactNode } from "react";
 
-type PreferencesTab = "personalization" | "appearance" | "mcpServers" | "data";
+type PreferencesTab =
+  | "personalization"
+  | "appearance"
+  | "audio"
+  | "mcpServers"
+  | "data";
 
 interface AppearanceOption {
   description: string;
@@ -79,7 +89,16 @@ export function UserPreferencesDialog({
   const queryClient = useQueryClient();
   const { enabled: personalizationEnabled, mcpServersTabEnabled } =
     useUserPreferencesFeature();
+  const { enabled: audioTranscriptionEnabled } = useAudioTranscriptionFeature();
   const { effectiveTheme, setThemeMode, themeMode } = useTheme();
+  const {
+    audioInputDeviceError,
+    audioInputDevices,
+    isLoadingAudioInputDevices,
+    refreshAudioInputDevices,
+    selectedAudioInputDeviceId,
+    setSelectedAudioInputDeviceId,
+  } = useAudioInputDevicePreference();
   const defaultTab: PreferencesTab = personalizationEnabled
     ? "personalization"
     : "appearance";
@@ -122,6 +141,7 @@ export function UserPreferencesDialog({
         ? [
             "personalization",
             "appearance",
+            ...(audioTranscriptionEnabled ? (["audio"] as const) : []),
             ...(mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
                 (["mcpServers"] as const)
@@ -130,13 +150,14 @@ export function UserPreferencesDialog({
           ]
         : [
             "appearance",
+            ...(audioTranscriptionEnabled ? (["audio"] as const) : []),
             ...(mcpServersTabEnabled
               ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
                 (["mcpServers"] as const)
               : []),
             "data",
           ]) satisfies PreferencesTab[],
-    [mcpServersTabEnabled, personalizationEnabled],
+    [audioTranscriptionEnabled, mcpServersTabEnabled, personalizationEnabled],
   );
   const handledOauthCallbackKeyRef = useRef<string | null>(null);
   const requestedDefaultTab =
@@ -275,6 +296,10 @@ export function UserPreferencesDialog({
       id: "preferences.dialog.tabs.appearance",
       message: "Appearance",
     }),
+    audio: t({
+      id: "preferences.dialog.tabs.audio",
+      message: "Audio",
+    }),
     mcpServers: t({
       id: "preferences.dialog.tabs.mcpServers",
       message: "MCP servers",
@@ -285,6 +310,7 @@ export function UserPreferencesDialog({
   const tabIcons = {
     personalization: <MenuScaleIcon className="size-4" />,
     appearance: <MediaImageIcon className="size-4" />,
+    audio: <VoiceIcon className="size-4" />,
     mcpServers: (
       <ResolvedIcon
         iconId="simpleicons-modelcontextprotocol"
@@ -337,6 +363,7 @@ export function UserPreferencesDialog({
   const tabIds = {
     personalization: `${tabGroupId}-tab-personalization`,
     appearance: `${tabGroupId}-tab-appearance`,
+    audio: `${tabGroupId}-tab-audio`,
     mcpServers: `${tabGroupId}-tab-mcp-servers`,
     data: `${tabGroupId}-tab-data`,
   } satisfies Record<PreferencesTab, string>;
@@ -344,6 +371,7 @@ export function UserPreferencesDialog({
   const panelIds = {
     personalization: `${tabGroupId}-panel-personalization`,
     appearance: `${tabGroupId}-panel-appearance`,
+    audio: `${tabGroupId}-panel-audio`,
     mcpServers: `${tabGroupId}-panel-mcp-servers`,
     data: `${tabGroupId}-panel-data`,
   } satisfies Record<PreferencesTab, string>;
@@ -736,6 +764,107 @@ export function UserPreferencesDialog({
                 })}
               </div>
             </section>
+
+            {audioTranscriptionEnabled ? (
+              <section
+                id={panelIds.audio}
+                role="tabpanel"
+                aria-labelledby={tabIds.audio}
+                hidden={activeTab !== "audio"}
+                className="space-y-4"
+              >
+                <div className="space-y-1">
+                  <h2 className="text-sm font-medium text-theme-fg-primary">
+                    {t({
+                      id: "preferences.dialog.audio.input.heading",
+                      message: "Microphone",
+                    })}
+                  </h2>
+                  <p className="text-sm text-theme-fg-secondary">
+                    {t({
+                      id: "preferences.dialog.audio.input.description",
+                      message:
+                        "Choose the audio input device used for chat recordings on this browser.",
+                    })}
+                  </p>
+                </div>
+
+                {audioInputDeviceError ? (
+                  <Alert type="error">{audioInputDeviceError}</Alert>
+                ) : null}
+
+                <FormField
+                  label={t({
+                    id: "preferences.dialog.audio.input.label",
+                    message: "Audio input",
+                  })}
+                  htmlFor="preferences-audio-input-device"
+                >
+                  <select
+                    id="preferences-audio-input-device"
+                    value={selectedAudioInputDeviceId}
+                    onChange={(event) =>
+                      setSelectedAudioInputDeviceId(event.target.value)
+                    }
+                    className={clsx(
+                      "w-full",
+                      "[border-radius:var(--theme-radius-input)]",
+                      "[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
+                      "border border-[var(--theme-border-field)] bg-theme-bg-secondary",
+                      "text-base text-theme-fg-primary",
+                      "theme-transition focus:border-[var(--theme-border-field-focus)] focus:outline-none focus:ring-2 focus:ring-theme-focus",
+                    )}
+                  >
+                    <option value="">
+                      {t({
+                        id: "preferences.dialog.audio.input.default",
+                        message: "System default microphone",
+                      })}
+                    </option>
+                    {audioInputDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-theme-fg-muted">
+                    {audioInputDevices.length === 0
+                      ? t({
+                          id: "preferences.dialog.audio.input.empty",
+                          message:
+                            "No microphones were found. Browser permission may be required before device names are available.",
+                        })
+                      : t({
+                          id: "preferences.dialog.audio.input.persisted",
+                          message:
+                            "This selection is saved locally in this browser.",
+                        })}
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    disabled={isLoadingAudioInputDevices}
+                    onClick={() => {
+                      void refreshAudioInputDevices();
+                    }}
+                  >
+                    {isLoadingAudioInputDevices
+                      ? t({
+                          id: "preferences.dialog.audio.input.refreshing",
+                          message: "Refreshing...",
+                        })
+                      : t({
+                          id: "preferences.dialog.audio.input.refresh",
+                          message: "Refresh devices",
+                        })}
+                  </Button>
+                </div>
+              </section>
+            ) : null}
 
             <section
               id={panelIds.mcpServers}

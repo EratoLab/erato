@@ -1,9 +1,10 @@
 use crate::image_data;
 use crate::matcher::{
     CiteFilesResponseConfig, ErrorResponseConfig, ImageMock, LongRunningResponseConfig, MatchRule,
-    MatchRuleAnyUserMessageInCurrentTurnWithPattern, MatchRuleLastMessageIsUserWithPattern,
-    MatchRuleUserMessagePattern, Mock, RandomOneLinerResponseConfig, ResponseConfig,
-    StaticResponseConfig, ToolCallDef, ToolCallResponseConfig, ToolCallsResponseConfig,
+    MatchRuleAnyMessageContainsAudioContent, MatchRuleAnyUserMessageInCurrentTurnWithPattern,
+    MatchRuleLastMessageIsUserWithPattern, MatchRuleUserMessagePattern, Mock,
+    RandomOneLinerResponseConfig, ResponseConfig, StaticResponseConfig, ToolCallDef,
+    ToolCallResponseConfig, ToolCallsResponseConfig,
 };
 use serde_json::json;
 
@@ -265,6 +266,45 @@ pub fn get_default_mocks() -> Vec<Mock> {
             response: ResponseConfig::Static(StaticResponseConfig {
                 chunks: build_lorem_word_chunks(200),
                 delay_ms: 50,
+                ..Default::default()
+            }),
+        },
+        Mock {
+            name: "AudioSummary".to_string(),
+            description:
+                "Returns a stable summary for audio-transcription scenarios (trigger: 'summarize this audio')"
+                    .to_string(),
+            match_rules: vec![
+                MatchRule::AnyMessageContainsAudioContent(MatchRuleAnyMessageContainsAudioContent {
+                    content_type: Some("audio".to_string()),
+                }),
+                MatchRule::LastMessageIsUserWithPattern(MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "summarize this audio".to_string(),
+                }),
+                MatchRule::LastMessageIsUserWithPattern(MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "summarize audio".to_string(),
+                }),
+                MatchRule::LastMessageIsUserWithPattern(MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "summarize recording".to_string(),
+                }),
+                MatchRule::AnyUserMessageInCurrentTurnWithPattern(
+                    MatchRuleAnyUserMessageInCurrentTurnWithPattern {
+                        pattern: "audio transcription".to_string(),
+                    },
+                ),
+            ],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec![
+                    "I".to_string(),
+                    " can".to_string(),
+                    " summarize".to_string(),
+                    " the".to_string(),
+                    " provided".to_string(),
+                    " audio".to_string(),
+                    " recording".to_string(),
+                    ".".to_string(),
+                ],
+                delay_ms: 80,
                 ..Default::default()
             }),
         },

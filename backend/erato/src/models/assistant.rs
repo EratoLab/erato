@@ -538,6 +538,7 @@ pub async fn create_standalone_file_upload(
         filename: Set(filename),
         file_storage_provider_id: Set(file_storage_provider_id),
         file_storage_path: Set(file_storage_path),
+        audio_transcription: Set(None),
         created_at: Set(Utc::now().into()),
         updated_at: Set(Utc::now().into()),
     };

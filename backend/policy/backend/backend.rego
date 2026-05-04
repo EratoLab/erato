@@ -271,6 +271,20 @@ allow if {
 	data.resource_attributes[resource_kind_file_upload][input.resource_id].owner_id == input.subject_id
 }
 
+# A user can update their own file uploads.
+allow if {
+	# Ensure subject is a user and is logged in.
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+
+	# Check for file upload update action
+	input.resource_kind == resource_kind_file_upload
+	input.action == action_update
+
+	# Check ownership
+	data.resource_attributes[resource_kind_file_upload][input.resource_id].owner_id == input.subject_id
+}
+
 # A user can read file uploads if they can access one of the linked chats.
 allow if {
 	# Ensure subject is a user and is logged in.

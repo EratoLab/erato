@@ -3973,7 +3973,10 @@ async fn validate_submit_request(
     policy: &PolicyEngine,
     me_user: &MeProfile,
     previous_message_id: Option<&Uuid>,
+    input_file_ids: &[Uuid],
 ) -> Result<(), (axum::http::StatusCode, String)> {
+    validate_file_uploads_for_message_submit(app_state, policy, me_user, input_file_ids).await?;
+
     if let Some(prev_msg_id) = previous_message_id {
         validate_message_role(
             app_state,
@@ -4018,6 +4021,50 @@ async fn validate_edit_request(
     Ok(message)
 }
 
+async fn validate_file_uploads_for_message_submit(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    input_file_ids: &[Uuid],
+) -> Result<(), (axum::http::StatusCode, String)> {
+    let mut audio_attachment_count = 0usize;
+
+    for file_upload_id in input_file_ids {
+        let file_upload = crate::models::file_upload::get_file_upload_by_id(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            file_upload_id,
+        )
+        .await
+        .map_err(|e| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                format!("Unable to load input file {}: {}", file_upload_id, e),
+            )
+        })?;
+
+        if file_upload.audio_transcription.is_some() {
+            audio_attachment_count += 1;
+        }
+
+        if let Some(blocking_reason) =
+            crate::models::file_upload::get_audio_transcription_blocking_reason(&file_upload)
+        {
+            return Err((axum::http::StatusCode::BAD_REQUEST, blocking_reason));
+        }
+
+        if audio_attachment_count > 1 {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                "Only one audio transcription attachment is allowed per message.".to_string(),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 #[utoipa::path(
     post,
     path = "/me/messages/submitstream",
@@ -4045,6 +4092,7 @@ pub async fn message_submit_sse(
         &policy,
         &me_user,
         request.previous_message_id.as_ref(),
+        request.input_files_ids.as_slice(),
     )
     .await?;
 
@@ -5076,6 +5124,13 @@ pub async fn edit_message_sse(
     // Validate request parameters
     let message_to_edit =
         validate_edit_request(&app_state, &policy, &me_user, &request.message_id).await?;
+    validate_file_uploads_for_message_submit(
+        &app_state,
+        &policy,
+        &me_user,
+        request.replace_input_files_ids.as_slice(),
+    )
+    .await?;
 
     // Validate action facet before spawning background task (returns HTTP 400 on failure)
     let generation_request_context = generation_request_context_from_headers(&headers);

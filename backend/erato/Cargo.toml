@@ -18,7 +18,7 @@ name = "record-chat-provider-reqwest"
 path = "./src/record_chat_provider_reqwest.rs"
 
 [dependencies]
-axum = { version = "0.8.4", features = ["macros"] }
+axum = { version = "0.8.4", features = ["macros", "ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header", "multipart"] }
 headers = "0.4.0"
 tower-http = { version = "0.6.2",  features = ["fs", "cors", "limit", "trace"] }
@@ -53,7 +53,7 @@ tokio-stream = { version = "0.1.17", features = ["sync"] }
 genai = { version = "0.6.0-beta.19-WIP", git = "https://github.com/EratoLab/rust-genai.git", rev = "490d2e209e41428d9953989541da54057df1cab7" }
 reqwest = { version = "0.13.1", features = ["multipart"] }
 reqwest_012 = { package = "reqwest", version = "0.12.28" }
-opendal = { version = "0.52.0", features = ["services-s3", "services-azblob"] }
+opendal = { version = "0.56.0", features = ["services-s3", "services-azblob"] }
 percent-encoding = "2.3.1"
 
 # MS Graph API client for Sharepoint/OneDrive integration

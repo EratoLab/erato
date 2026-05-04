@@ -26,6 +26,8 @@ export type Env = {
   messageFeedbackEnabled: boolean;
   messageFeedbackCommentsEnabled: boolean;
   messageFeedbackEditTimeLimitSeconds: number | null;
+  audioTranscriptionEnabled: boolean;
+  audioTranscriptionMaxRecordingDurationSeconds: number;
   maxUploadSizeBytes: number;
   sidebarCollapsedMode: "hidden" | "slim";
   sidebarLogoPath: string | null;
@@ -67,6 +69,8 @@ declare global {
     MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS?: number;
     MAX_UPLOAD_SIZE_BYTES?: number;
     SIDEBAR_COLLAPSED_MODE?: string;
+    AUDIO_TRANSCRIPTION_ENABLED?: boolean;
+    AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS?: number;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
@@ -219,6 +223,16 @@ export const env = (): Env => {
   const maxUploadSizeBytes = import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES
     ? Number(import.meta.env.VITE_MAX_UPLOAD_SIZE_BYTES)
     : (window.MAX_UPLOAD_SIZE_BYTES ?? DEFAULT_MAX_BODY_LIMIT_BYTES);
+  const audioTranscriptionEnabled =
+    import.meta.env.VITE_AUDIO_TRANSCRIPTION_ENABLED === "true"
+      ? true
+      : (window.AUDIO_TRANSCRIPTION_ENABLED ?? false);
+  const audioTranscriptionMaxRecordingDurationSeconds = import.meta.env
+    .VITE_AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS
+    ? Number(
+        import.meta.env.VITE_AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS,
+      )
+    : (window.AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS ?? 20 * 60);
 
   const sidebarCollapsedMode =
     import.meta.env.VITE_SIDEBAR_COLLAPSED_MODE ??
@@ -276,6 +290,8 @@ export const env = (): Env => {
     messageFeedbackEnabled,
     messageFeedbackCommentsEnabled,
     messageFeedbackEditTimeLimitSeconds,
+    audioTranscriptionEnabled,
+    audioTranscriptionMaxRecordingDurationSeconds,
     maxUploadSizeBytes,
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",
     sidebarLogoPath,

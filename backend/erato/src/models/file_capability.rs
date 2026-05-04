@@ -92,7 +92,10 @@ impl FileCapability {
 }
 
 /// Builds the list of available file capabilities based on the file processor and model capabilities
-pub fn get_file_capabilities(supports_image_understanding: bool) -> Vec<FileCapability> {
+pub fn get_file_capabilities(
+    supports_image_understanding: bool,
+    supports_audio_input: bool,
+) -> Vec<FileCapability> {
     // Build the image capability based on model support
     let image_capability = if supports_image_understanding {
         FileCapability::new(
@@ -125,6 +128,44 @@ pub fn get_file_capabilities(supports_image_understanding: bool) -> Vec<FileCapa
                 "tif".to_string(),
             ],
             vec!["image/*".to_string()],
+            vec![],
+        )
+    };
+
+    let audio_capability = if supports_audio_input {
+        FileCapability::new(
+            "audio",
+            vec![
+                "mp3".to_string(),
+                "m4a".to_string(),
+                "wav".to_string(),
+                "aac".to_string(),
+                "flac".to_string(),
+                "ogg".to_string(),
+                "oga".to_string(),
+                "opus".to_string(),
+                "webm".to_string(),
+                "mp4".to_string(),
+            ],
+            vec!["audio/*".to_string()],
+            vec![FileOperation::ExtractText],
+        )
+    } else {
+        FileCapability::new(
+            "audio",
+            vec![
+                "mp3".to_string(),
+                "m4a".to_string(),
+                "wav".to_string(),
+                "aac".to_string(),
+                "flac".to_string(),
+                "ogg".to_string(),
+                "oga".to_string(),
+                "opus".to_string(),
+                "webm".to_string(),
+                "mp4".to_string(),
+            ],
+            vec!["audio/*".to_string()],
             vec![],
         )
     };
@@ -202,6 +243,8 @@ pub fn get_file_capabilities(supports_image_understanding: bool) -> Vec<FileCapa
         ),
         // Images - depends on model capability
         image_capability,
+        // Audio files - depends on model capability
+        audio_capability,
         // Fallback for unsupported files - always last with lowest priority
         FileCapability::new(
             "other",
@@ -297,7 +340,7 @@ mod tests {
 
     #[test]
     fn test_get_file_capabilities_with_image_support() {
-        let caps = get_file_capabilities(true);
+        let caps = get_file_capabilities(true, true);
 
         // Should have word, pdf, excel, powerpoint, text, image, and other
         assert!(caps.len() >= 7);
@@ -309,7 +352,7 @@ mod tests {
 
     #[test]
     fn test_get_file_capabilities_without_image_support() {
-        let caps = get_file_capabilities(false);
+        let caps = get_file_capabilities(false, false);
 
         // Image capability should have no operations
         let image_cap = caps.iter().find(|c| c.id == "image").unwrap();
@@ -318,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_find_file_capability_by_filename() {
-        let caps = get_file_capabilities(true);
+        let caps = get_file_capabilities(true, true);
 
         // Test Word document
         let cap = find_file_capability_by_filename(&caps, "document.docx");
@@ -345,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_find_file_capability_priority() {
-        let caps = get_file_capabilities(true);
+        let caps = get_file_capabilities(true, false);
 
         // Ensure that specific capabilities match before the wildcard
         let cap = find_file_capability_by_filename(&caps, "test.pdf");

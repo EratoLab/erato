@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 pub mod assistants;
+pub mod audio_transcription;
 pub mod budget;
 pub mod entra_id;
 mod file_resolution;
@@ -24,6 +25,7 @@ use crate::models::chat::{
 use crate::models::file_capability::{
     FileCapability, FileOperation, find_file_capability_by_filename, get_file_capabilities,
 };
+use crate::models::file_upload::AudioTranscriptionMetadata;
 use crate::models::message::{ContentPart, GenerationErrorType, GenerationMetadata, MessageSchema};
 use crate::models::permissions;
 use crate::policy::engine::PolicyEngine;
@@ -110,6 +112,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/chats/archive_all", post(archive_all_chats_endpoint))
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
+        .route(
+            "/files/audio-transcriptions/socket",
+            get(audio_transcription::audio_transcription_socket),
+        )
         .route("/models", get(available_models))
         .route("/mcp_servers", get(list_mcp_servers))
         .route(
@@ -1055,6 +1061,10 @@ pub struct FileUploadItem {
     /// The file capability that was evaluated for this file
     #[serde(rename = "file_capability")]
     file_capability: FileCapability,
+    /// Optional audio transcription metadata for supported audio uploads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    audio_transcription: Option<crate::models::file_upload::AudioTranscriptionMetadata>,
 }
 
 /// Minimal file reference containing only the file ID
@@ -1069,6 +1079,27 @@ pub struct FileReference {
 pub struct FileUploadResponse {
     /// The list of uploaded files with their IDs and filenames
     files: Vec<FileUploadItem>,
+}
+
+fn initial_audio_transcription_for_file(
+    app_state: &AppState,
+    supports_audio_input: bool,
+    file_capability: &FileCapability,
+) -> Option<AudioTranscriptionMetadata> {
+    if !app_state.config.audio_transcription.enabled || !supports_audio_input {
+        return None;
+    }
+
+    if file_capability.id == "audio"
+        && file_capability
+            .operations
+            .iter()
+            .any(|operation| operation == &FileOperation::ExtractText)
+    {
+        Some(models::file_upload::initial_audio_transcription_metadata())
+    } else {
+        None
+    }
 }
 
 /// SharePoint-specific metadata for linking files
@@ -1149,18 +1180,25 @@ pub async fn upload_file(
         None
     };
 
-    // Determine if any available model supports image understanding
+    // Determine if any available model supports image understanding or audio input
     let available_models = app_state
         .available_models(&policy, &me_user.to_subject(), &me_user.groups)
         .await
         .map_err(log_internal_server_error)?;
-    let supports_image_understanding = available_models.iter().any(|model| {
-        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
-        config.model_capabilities.supports_image_understanding
-    });
+    let (supports_image_understanding, supports_audio_input) =
+        available_models
+            .iter()
+            .fold((false, false), |(image, audio), model| {
+                let config = app_state.config.get_chat_provider(&model.chat_provider_id);
+                (
+                    image || config.model_capabilities.supports_image_understanding,
+                    audio || config.model_capabilities.supports_audio_input,
+                )
+            });
 
     // Get all file capabilities for this user
-    let all_capabilities = get_file_capabilities(supports_image_understanding);
+    let all_capabilities =
+        get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     let mut uploaded_files = Vec::new();
 
@@ -1263,6 +1301,24 @@ pub async fn upload_file(
 
         // Evaluate the file capability for this file
         let file_capability = find_file_capability_by_filename(&all_capabilities, &filename);
+        let audio_transcription = initial_audio_transcription_for_file(
+            &app_state,
+            supports_audio_input,
+            &file_capability,
+        );
+
+        if let Some(audio_transcription) = audio_transcription.clone() {
+            models::file_upload::set_audio_transcription_metadata(
+                &app_state.db,
+                &file_upload.id,
+                Some(audio_transcription),
+            )
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to initialize audio transcription metadata: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        }
 
         // Add this file to our list of uploaded files
         uploaded_files.push(FileUploadItem {
@@ -1272,6 +1328,7 @@ pub async fn upload_file(
             preview_url: Some(preview_url),
             file_contents_unavailable_missing_permissions: false,
             file_capability,
+            audio_transcription,
         });
     }
 
@@ -1401,18 +1458,25 @@ async fn link_sharepoint_file_impl(
 ) -> Result<Json<FileUploadResponse>, StatusCode> {
     use graph_rs_sdk::{GraphClient, GraphClientConfiguration};
 
-    // Determine if any available model supports image understanding
+    // Determine if any available model supports image understanding or audio input
     let available_models = app_state
         .available_models(policy, &me_user.to_subject(), &me_user.groups)
         .await
         .map_err(log_internal_server_error)?;
-    let supports_image_understanding = available_models.iter().any(|model| {
-        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
-        config.model_capabilities.supports_image_understanding
-    });
+    let (supports_image_understanding, supports_audio_input) =
+        available_models
+            .iter()
+            .fold((false, false), |(image, audio), model| {
+                let config = app_state.config.get_chat_provider(&model.chat_provider_id);
+                (
+                    image || config.model_capabilities.supports_image_understanding,
+                    audio || config.model_capabilities.supports_audio_input,
+                )
+            });
 
     // Get all file capabilities for this user
-    let all_capabilities = get_file_capabilities(supports_image_understanding);
+    let all_capabilities =
+        get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     // Check if SharePoint integration is enabled
     if !app_state
@@ -1517,6 +1581,21 @@ async fn link_sharepoint_file_impl(
 
     // Evaluate the file capability for this file
     let file_capability = find_file_capability_by_filename(&all_capabilities, &filename);
+    let audio_transcription =
+        initial_audio_transcription_for_file(app_state, supports_audio_input, &file_capability);
+
+    if let Some(audio_transcription) = audio_transcription.clone() {
+        models::file_upload::set_audio_transcription_metadata(
+            &app_state.db,
+            &file_upload.id,
+            Some(audio_transcription),
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to initialize audio transcription metadata: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    }
 
     app_state.global_policy_engine.invalidate_data().await;
 
@@ -1528,6 +1607,7 @@ async fn link_sharepoint_file_impl(
             download_url,
             file_contents_unavailable_missing_permissions: false,
             file_capability,
+            audio_transcription,
         }],
     }))
 }
@@ -1760,13 +1840,20 @@ pub async fn chat_messages(
         .available_models(&policy, &me_user.to_subject(), &me_user.groups)
         .await
         .map_err(log_internal_server_error)?;
-    let supports_image_understanding = available_models.iter().any(|model| {
-        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
-        config.model_capabilities.supports_image_understanding
-    });
+    let (supports_image_understanding, supports_audio_input) =
+        available_models
+            .iter()
+            .fold((false, false), |(image, audio), model| {
+                let config = app_state.config.get_chat_provider(&model.chat_provider_id);
+                (
+                    image || config.model_capabilities.supports_image_understanding,
+                    audio || config.model_capabilities.supports_audio_input,
+                )
+            });
 
     // Get all file capabilities for this user
-    let all_capabilities = get_file_capabilities(supports_image_understanding);
+    let all_capabilities =
+        get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     // Fetch all file uploads with their download URLs
     let mut file_uploads_map = std::collections::HashMap::new();
@@ -1793,6 +1880,7 @@ pub async fn chat_messages(
                     file_contents_unavailable_missing_permissions: file_upload
                         .file_contents_unavailable_missing_permissions,
                     file_capability,
+                    audio_transcription: file_upload.audio_transcription,
                 },
             );
         }
@@ -2088,13 +2176,20 @@ pub async fn frequent_assistants(
         .available_models(&policy, &me_user.to_subject(), &me_user.groups)
         .await
         .map_err(log_internal_server_error)?;
-    let supports_image_understanding = available_models.iter().any(|model| {
-        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
-        config.model_capabilities.supports_image_understanding
-    });
+    let (supports_image_understanding, supports_audio_input) =
+        available_models
+            .iter()
+            .fold((false, false), |(image, audio), model| {
+                let config = app_state.config.get_chat_provider(&model.chat_provider_id);
+                (
+                    image || config.model_capabilities.supports_image_understanding,
+                    audio || config.model_capabilities.supports_audio_input,
+                )
+            });
 
     // Get all file capabilities for this user
-    let all_capabilities = get_file_capabilities(supports_image_understanding);
+    let all_capabilities =
+        get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     // Convert from model FrequentAssistant to API FrequentAssistantItem
     let current_user_id = &user_id;
@@ -2380,13 +2475,20 @@ pub async fn get_file(
         .available_models(&policy, &me_user.to_subject(), &me_user.groups)
         .await
         .map_err(log_internal_server_error)?;
-    let supports_image_understanding = available_models.iter().any(|model| {
-        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
-        config.model_capabilities.supports_image_understanding
-    });
+    let (supports_image_understanding, supports_audio_input) =
+        available_models
+            .iter()
+            .fold((false, false), |(image, audio), model| {
+                let config = app_state.config.get_chat_provider(&model.chat_provider_id);
+                (
+                    image || config.model_capabilities.supports_image_understanding,
+                    audio || config.model_capabilities.supports_audio_input,
+                )
+            });
 
     // Get all file capabilities for this user
-    let all_capabilities = get_file_capabilities(supports_image_understanding);
+    let all_capabilities =
+        get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     // Get the file upload record with its download URL
     let file_upload = models::file_upload::get_file_upload_with_url_and_token(
@@ -2421,6 +2523,7 @@ pub async fn get_file(
         file_contents_unavailable_missing_permissions: file_upload
             .file_contents_unavailable_missing_permissions,
         file_capability,
+        audio_transcription: file_upload.audio_transcription,
     }))
 }
 
@@ -2848,41 +2951,50 @@ pub async fn file_capabilities(
     axum::extract::Query(params): axum::extract::Query<FileCapabilitiesQuery>,
 ) -> Result<Json<Vec<FileCapability>>, StatusCode> {
     // Determine if image understanding is supported
-    let supports_image_understanding = if let Some(model_id) = params.model_id {
-        if !policy
-            .filter_authorized_chat_provider_ids(
-                &me_user.to_subject(),
-                &me_user.groups,
-                std::slice::from_ref(&model_id),
+    let (supports_image_understanding, supports_audio_input) =
+        if let Some(model_id) = params.model_id {
+            if !policy
+                .filter_authorized_chat_provider_ids(
+                    &me_user.to_subject(),
+                    &me_user.groups,
+                    std::slice::from_ref(&model_id),
+                )
+                .await
+                .map_err(log_internal_server_error)?
+                .contains(&model_id)
+            {
+                return Err(StatusCode::NOT_FOUND);
+            }
+
+            // Get the specific model's capabilities
+            let provider_config = app_state.config.get_chat_provider(&model_id);
+
+            (
+                provider_config
+                    .model_capabilities
+                    .supports_image_understanding,
+                provider_config.model_capabilities.supports_audio_input,
             )
-            .await
-            .map_err(log_internal_server_error)?
-            .contains(&model_id)
-        {
-            return Err(StatusCode::NOT_FOUND);
-        }
+        } else {
+            // Without a specific model, check if ANY available model supports image understanding
+            let available_models = app_state
+                .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+                .await
+                .map_err(log_internal_server_error)?;
 
-        // Get the specific model's capabilities
-        let provider_config = app_state.config.get_chat_provider(&model_id);
-
-        provider_config
-            .model_capabilities
-            .supports_image_understanding
-    } else {
-        // Without a specific model, check if ANY available model supports image understanding
-        let available_models = app_state
-            .available_models(&policy, &me_user.to_subject(), &me_user.groups)
-            .await
-            .map_err(log_internal_server_error)?;
-
-        available_models.iter().any(|model| {
-            let config = app_state.config.get_chat_provider(&model.chat_provider_id);
-            config.model_capabilities.supports_image_understanding
-        })
-    };
+            available_models
+                .iter()
+                .fold((false, false), |(image, audio), model| {
+                    let config = app_state.config.get_chat_provider(&model.chat_provider_id);
+                    (
+                        image || config.model_capabilities.supports_image_understanding,
+                        audio || config.model_capabilities.supports_audio_input,
+                    )
+                })
+        };
 
     // Get file capabilities based on image support
-    let capabilities = get_file_capabilities(supports_image_understanding);
+    let capabilities = get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     Ok(Json(capabilities))
 }

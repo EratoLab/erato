@@ -44,6 +44,7 @@ async fn test_message_submit_with_mocked_llm(pool: Pool<Postgres>) {
         delay_ms: 50,
         provider_id: "mock-llm".to_string(),
         model_name: "gpt-3.5-turbo".to_string(),
+        ..Default::default()
     };
 
     let (app_config, _server) = setup_mock_llm_server(Some(mock_config)).await;
@@ -257,6 +258,7 @@ async fn test_message_submit_content_filter_error_streams_error_event(pool: Pool
         delay_ms: 0,
         provider_id: "mock-llm".to_string(),
         model_name: "gpt-4o-mini".to_string(),
+        ..Default::default()
     };
     let app_config = hermetic_app_config(Some(mock_config), Some(mock_url_str));
 
@@ -424,6 +426,7 @@ async fn test_message_submit_with_content_filter_triggered(pool: Pool<Postgres>)
         delay_ms: 0,
         provider_id: "mock-llm".to_string(),
         model_name: "gpt-4o-mini".to_string(),
+        ..Default::default()
     };
     let app_config = hermetic_app_config(Some(mock_config), Some(mock_url_str));
 

@@ -428,6 +428,28 @@ test_user_cannot_read_other_users_file_upload if {
 	} with data.resource_attributes as resource_attributes
 }
 
+# A user can update their own file upload.
+test_owner_can_update_own_file_upload if {
+	backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_1_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_1_id,
+		"action": "update",
+	} with data.resource_attributes as resource_attributes
+}
+
+# A user cannot update another user's file upload.
+test_user_cannot_update_other_users_file_upload if {
+	not backend.allow with input as {
+		"subject_kind": "user",
+		"subject_id": user_2_id,
+		"resource_kind": "file_upload",
+		"resource_id": file_upload_1_id,
+		"action": "update",
+	} with data.resource_attributes as resource_attributes
+}
+
 # A user can read a file upload if they can read one of its linked chats.
 test_user_can_read_file_upload_via_linked_chat if {
 	backend.allow with input as {

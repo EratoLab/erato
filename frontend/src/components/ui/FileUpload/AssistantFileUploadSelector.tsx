@@ -191,6 +191,9 @@ export const AssistantFileUploadSelector: React.FC<
                   id: f.id,
                   filename: f.filename,
                   download_url: f.download_url,
+                  file_contents_unavailable_missing_permissions:
+                    f.file_contents_unavailable_missing_permissions,
+                  audio_transcription: f.audio_transcription,
                   ...(previewUrl ? { preview_url: previewUrl } : {}),
                   file_capability: f.file_capability,
                 } as FileUploadItem;

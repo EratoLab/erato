@@ -145,6 +145,14 @@ pub struct MatchRuleAnyUserMessageInCurrentTurnWithPattern {
     pub pattern: String,
 }
 
+/// Match rule that checks for audio content in message payloads
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchRuleAnyMessageContainsAudioContent {
+    /// Optional audio content type substring to match (case-insensitive)
+    #[serde(default)]
+    pub content_type: Option<String>,
+}
+
 /// A rule that matches incoming messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MatchRule {
@@ -152,6 +160,8 @@ pub enum MatchRule {
     UserMessagePattern(MatchRuleUserMessagePattern),
     /// Match based on any user message since the last assistant message
     AnyUserMessageInCurrentTurnWithPattern(MatchRuleAnyUserMessageInCurrentTurnWithPattern),
+    /// Match based on any message containing an audio content part
+    AnyMessageContainsAudioContent(MatchRuleAnyMessageContainsAudioContent),
     /// Match when the last message in the conversation is a tool result
     LastMessageIsToolResult,
     /// Match when the last message is a user message with a specific pattern
@@ -191,6 +201,10 @@ impl Mock {
                             pattern_rule.pattern
                         );
                     }
+                    MatchRule::AnyMessageContainsAudioContent(pattern_rule) => {
+                        let content_type = pattern_rule.content_type.as_deref().unwrap_or("audio");
+                        println!("contains audio content matching \"{}\"", content_type);
+                    }
                     MatchRule::LastMessageIsToolResult => {
                         println!("last message is a tool result");
                     }
@@ -213,6 +227,13 @@ impl Mock {
                         println!(
                             "      - any user message since last assistant contains text \"{}\"",
                             pattern_rule.pattern
+                        );
+                    }
+                    MatchRule::AnyMessageContainsAudioContent(pattern_rule) => {
+                        let content_type = pattern_rule.content_type.as_deref().unwrap_or("audio");
+                        println!(
+                            "      - contains audio content matching \"{}\"",
+                            content_type
                         );
                     }
                     MatchRule::LastMessageIsToolResult => {
@@ -512,9 +533,105 @@ impl Matcher {
                         return true;
                     }
                 }
+                MatchRule::AnyMessageContainsAudioContent(pattern_rule) => {
+                    if request.messages.iter().any(|message| {
+                        if let Some(content) = message.content.as_ref() {
+                            self.contains_audio_content(
+                                content,
+                                pattern_rule.content_type.as_deref(),
+                            )
+                        } else {
+                            false
+                        }
+                    }) {
+                        return true;
+                    }
+                }
             }
         }
         false
+    }
+
+    fn contains_audio_content(&self, value: &Value, content_type_filter: Option<&str>) -> bool {
+        match value {
+            Value::String(value) => {
+                if let Some(filter) = content_type_filter {
+                    value
+                        .to_ascii_lowercase()
+                        .contains(&filter.to_ascii_lowercase())
+                } else {
+                    false
+                }
+            }
+            Value::Array(items) => items
+                .iter()
+                .any(|item| self.contains_audio_content(item, content_type_filter)),
+            Value::Object(map) => {
+                if self.is_audio_content_part(map) {
+                    if content_type_filter.is_none() {
+                        return true;
+                    }
+
+                    if let Some(filter) = content_type_filter {
+                        if self.audio_content_type_matches(map, &filter.to_ascii_lowercase()) {
+                            return true;
+                        }
+                    }
+                }
+
+                map.values()
+                    .any(|item| self.contains_audio_content(item, content_type_filter))
+            }
+            _ => false,
+        }
+    }
+
+    fn is_audio_content_part(&self, map: &serde_json::Map<String, Value>) -> bool {
+        map.get("type")
+            .and_then(Value::as_str)
+            .map(|value| value.to_ascii_lowercase().contains("audio"))
+            .unwrap_or(false)
+            || map.contains_key("input_audio")
+    }
+
+    fn audio_content_type_matches(
+        &self,
+        map: &serde_json::Map<String, Value>,
+        filter: &str,
+    ) -> bool {
+        map.get("content_type")
+            .and_then(Value::as_str)
+            .map(|content_type| content_type.to_ascii_lowercase().contains(filter))
+            .unwrap_or(false)
+            || map
+                .get("mime_type")
+                .and_then(Value::as_str)
+                .map(|mime_type| mime_type.to_ascii_lowercase().contains(filter))
+                .unwrap_or(false)
+            || map
+                .get("mime")
+                .and_then(Value::as_str)
+                .map(|mime| mime.to_ascii_lowercase().contains(filter))
+                .unwrap_or(false)
+            || map
+                .get("format")
+                .and_then(Value::as_str)
+                .map(|format| format.to_ascii_lowercase().contains(filter))
+                .unwrap_or(false)
+            || map
+                .values()
+                .any(|item| self.audio_content_type_matches_in_value(item, filter))
+    }
+
+    fn audio_content_type_matches_in_value(&self, value: &Value, filter: &str) -> bool {
+        match value {
+            Value::String(value) => value.to_ascii_lowercase().contains(filter),
+            Value::Array(items) => items
+                .iter()
+                .any(|item| self.audio_content_type_matches_in_value(item, filter)),
+            Value::Object(map) => self.audio_content_type_matches(map, filter),
+            _ => false,
+        }
     }
 
     /// Check if the last message is a user message with a specific pattern
@@ -1010,6 +1127,142 @@ mod tests {
             ResponseConfig::Static(config) => {
                 // Falls back to default response because only the last user message is checked
                 assert_ne!(config.chunks, vec!["Matched"]);
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
+    fn test_matcher_any_message_contains_audio_content_without_filter() {
+        let mocks = vec![Mock {
+            name: "AudioSummary".to_string(),
+            description: "Audio summary test mock".to_string(),
+            match_rules: vec![MatchRule::AnyMessageContainsAudioContent(
+                MatchRuleAnyMessageContainsAudioContent { content_type: None },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec!["Audio input".to_string()],
+                delay_ms: 10,
+                ..Default::default()
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "format": "wav",
+                                "data": "UklGRigAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA="
+                            }
+                        }
+                    ]
+                }
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0014");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_eq!(config.chunks, vec!["Audio input"]);
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
+    fn test_matcher_any_message_contains_audio_content_with_filter() {
+        let mocks = vec![Mock {
+            name: "AudioSummary".to_string(),
+            description: "Audio summary test mock".to_string(),
+            match_rules: vec![MatchRule::AnyMessageContainsAudioContent(
+                MatchRuleAnyMessageContainsAudioContent {
+                    content_type: Some("audio/wav".to_string()),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec!["Matched WAV".to_string()],
+                delay_ms: 10,
+                ..Default::default()
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "format": "audio/wav",
+                                "data": "UklGRigAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA="
+                            }
+                        }
+                    ]
+                }
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0015");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_eq!(config.chunks, vec!["Matched WAV"]);
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
+    fn test_matcher_any_message_contains_audio_content_filter_must_match() {
+        let mocks = vec![Mock {
+            name: "AudioSummary".to_string(),
+            description: "Audio summary test mock".to_string(),
+            match_rules: vec![MatchRule::AnyMessageContainsAudioContent(
+                MatchRuleAnyMessageContainsAudioContent {
+                    content_type: Some("audio/mp3".to_string()),
+                },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: vec!["Wrong media type".to_string()],
+                delay_ms: 10,
+                ..Default::default()
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "format": "audio/wav",
+                                "data": "UklGRigAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA="
+                            }
+                        }
+                    ]
+                }
+            ]
+        }))
+        .unwrap();
+
+        let response = matcher.match_request(&request, "test0016");
+        match response {
+            ResponseConfig::Static(config) => {
+                assert_ne!(config.chunks, vec!["Wrong media type"]);
             }
             _ => panic!("Expected Static response"),
         }

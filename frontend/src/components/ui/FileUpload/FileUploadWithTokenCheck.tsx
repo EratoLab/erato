@@ -116,6 +116,7 @@ export const FileUploadWithTokenCheck: React.FC<
   const [selectedCloudProvider, setSelectedCloudProvider] =
     useState<CloudProvider | null>(null);
   const [isLinkingFiles, setIsLinkingFiles] = useState(false);
+  const [cloudLinkError, setCloudLinkError] = useState<Error | null>(null);
 
   // File upload store for silent chat creation
   const { setSilentChatId } = useFileUploadStore();
@@ -144,7 +145,9 @@ export const FileUploadWithTokenCheck: React.FC<
 
   const performDiskUpload = externalPerformFileUpload ?? uploadFiles;
   const resolvedUploadError =
-    externalUploadError ?? (uploadError instanceof Error ? uploadError : null);
+    externalUploadError ??
+    cloudLinkError ??
+    (uploadError instanceof Error ? uploadError : null);
 
   // Get error setter from upload store for dropzone validation errors
   const { setError } = useFileUploadStore();
@@ -229,6 +232,7 @@ export const FileUploadWithTokenCheck: React.FC<
 
         try {
           setIsLinkingFiles(true);
+          setCloudLinkError(null);
           setCloudPickerOpen(false);
 
           // Determine which chat ID to use for linking (same pattern as disk upload)
@@ -273,6 +277,9 @@ export const FileUploadWithTokenCheck: React.FC<
                   id: f.id,
                   filename: f.filename,
                   download_url: f.download_url,
+                  file_contents_unavailable_missing_permissions:
+                    f.file_contents_unavailable_missing_permissions,
+                  audio_transcription: f.audio_transcription,
                   ...(previewUrl ? { preview_url: previewUrl } : {}),
                   file_capability: f.file_capability,
                 } as FileUploadItem;
@@ -284,12 +291,15 @@ export const FileUploadWithTokenCheck: React.FC<
           if (allLinkedFiles.length > 0 && onFilesUploaded) {
             onFilesUploaded(allLinkedFiles);
           }
-
-          setSelectedCloudProvider(null);
         } catch (error) {
           console.error("Error linking cloud files:", error);
-          // TODO: Show error toast/notification to user
+          setCloudLinkError(
+            error instanceof Error
+              ? error
+              : new Error("Failed to link selected cloud files."),
+          );
         } finally {
+          setSelectedCloudProvider(null);
           setIsLinkingFiles(false);
         }
       })();

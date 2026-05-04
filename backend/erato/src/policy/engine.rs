@@ -679,6 +679,7 @@ pub const fn is_valid_resource_action(resource: ResourceKind, action: Action) ->
         (ResourceKind::Assistant, Action::Update) => true,
         (ResourceKind::Assistant, Action::Share) => true,
         (ResourceKind::FileUpload, Action::Read) => true,
+        (ResourceKind::FileUpload, Action::Update) => true,
         (ResourceKind::AssistantSingleton, Action::Create) => true,
         (ResourceKind::ShareGrant, Action::Create) => true,
         (ResourceKind::ShareGrant, Action::Read) => true,
@@ -1033,6 +1034,71 @@ mod tests {
                     "file_upload": {
                         "file_5": {
                             "id": "file_5",
+                            "owner_id": "user_1",
+                            "linked_chat_ids": [],
+                            "linked_assistant_ids": []
+                        }
+                    }
+                },
+                "share_grants": []
+            }))
+            .await
+            .unwrap();
+
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_file_upload_update_by_owner() {
+        let subject = Subject::User("user_1".to_string());
+        let resource = Resource::FileUpload("file_1".to_string());
+        let action = Action::Update;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "chat": {
+                        "chat_1": {
+                            "id": "chat_1",
+                            "owner_id": "user_1"
+                        }
+                    },
+                    "assistant": {},
+                    "file_upload": {
+                        "file_1": {
+                            "id": "file_1",
+                            "owner_id": "user_1",
+                            "linked_chat_ids": ["chat_1"],
+                            "linked_assistant_ids": []
+                        }
+                    }
+                },
+                "share_grants": []
+            }))
+            .await
+            .unwrap();
+
+        let result = authorize!(engine, &subject, &resource, action);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_authorize_file_upload_update_denied_for_non_owner() {
+        let subject = Subject::User("user_2".to_string());
+        let resource = Resource::FileUpload("file_1".to_string());
+        let action = Action::Update;
+
+        let engine = PolicyEngine::new();
+        engine
+            .set_data(json!({
+                "resource_attributes": {
+                    "chat": {},
+                    "assistant": {},
+                    "file_upload": {
+                        "file_1": {
+                            "id": "file_1",
                             "owner_id": "user_1",
                             "linked_chat_ids": [],
                             "linked_assistant_ids": []

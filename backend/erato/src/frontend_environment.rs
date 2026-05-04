@@ -43,6 +43,9 @@ const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_COMMENTS_ENABLED: &str =
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS: &str =
     "MESSAGE_FEEDBACK_EDIT_TIME_LIMIT_SECONDS";
 const FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES: &str = "MAX_UPLOAD_SIZE_BYTES";
+const FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_ENABLED: &str = "AUDIO_TRANSCRIPTION_ENABLED";
+const FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS: &str =
+    "AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS";
 const FRONTEND_ENV_KEY_SIDEBAR_COLLAPSED_MODE: &str = "SIDEBAR_COLLAPSED_MODE";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_PATH: &str = "SIDEBAR_LOGO_PATH";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_DARK_PATH: &str = "SIDEBAR_LOGO_DARK_PATH";
@@ -250,6 +253,19 @@ fn build_frontend_environment(
             Value::Number(limit.into()),
         );
     }
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_ENABLED.to_string(),
+        Value::Bool(config.audio_transcription.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS.to_string(),
+        Value::Number(
+            config
+                .audio_transcription
+                .max_recording_duration_seconds
+                .into(),
+        ),
+    );
     // Always inject max upload size (use configured value or default)
     let max_upload_size = config
         .max_upload_size_bytes()

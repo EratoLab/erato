@@ -86,6 +86,7 @@ function renderDialog({
   initialEntries = ["/"],
   initialTab,
   mcpServersTabEnabled = true,
+  audioTranscriptionEnabled = false,
   onMcpOauthCallbackHandled,
   pendingMcpOauthCallback = null,
   queryClient = new QueryClient({
@@ -99,8 +100,14 @@ function renderDialog({
   userPreferencesEnabled = true,
 }: {
   initialEntries?: string[];
-  initialTab?: "personalization" | "appearance" | "mcpServers" | "data";
+  initialTab?:
+    | "personalization"
+    | "appearance"
+    | "audio"
+    | "mcpServers"
+    | "data";
   mcpServersTabEnabled?: boolean;
+  audioTranscriptionEnabled?: boolean;
   onMcpOauthCallbackHandled?: () => void;
   pendingMcpOauthCallback?: {
     code: string;
@@ -120,6 +127,10 @@ function renderDialog({
           userPreferences: {
             enabled: userPreferencesEnabled,
             mcpServersTabEnabled,
+          },
+          audioTranscription: {
+            enabled: audioTranscriptionEnabled,
+            maxRecordingDurationSeconds: 1200,
           },
         }}
       >
@@ -148,6 +159,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.useRealTimers();
+  localStorage.clear();
 });
 
 describe("UserPreferencesDialog", () => {
@@ -265,6 +277,44 @@ describe("UserPreferencesDialog", () => {
     expect(
       screen.queryByRole("tab", { name: "MCP servers" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows an Audio tab when audio transcription is enabled and persists the selected microphone", async () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        enumerateDevices: vi.fn(async () => [
+          {
+            deviceId: "mic-built-in",
+            groupId: "group-1",
+            kind: "audioinput",
+            label: "Built-in Microphone",
+            toJSON: () => ({}),
+          },
+          {
+            deviceId: "camera-1",
+            groupId: "group-2",
+            kind: "videoinput",
+            label: "Camera",
+            toJSON: () => ({}),
+          },
+        ]),
+      },
+    });
+
+    renderDialog({ audioTranscriptionEnabled: true });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Audio" }));
+
+    const select = await screen.findByLabelText("Audio input");
+    expect(select).toHaveTextContent("System default microphone");
+    expect(select).toHaveTextContent("Built-in Microphone");
+
+    fireEvent.change(select, { target: { value: "mic-built-in" } });
+
+    expect(
+      localStorage.getItem("erato.audioTranscription.audioInputDeviceId"),
+    ).toBe("mic-built-in");
   });
 
   it("updates the selected theme mode from the appearance pane", () => {

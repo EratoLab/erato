@@ -504,13 +504,20 @@ pub async fn create_assistant(
         .available_models(&policy, &me_user.to_subject(), &me_user.groups)
         .await
         .map_err(log_internal_server_error)?;
-    let supports_image_understanding = available_models.iter().any(|model| {
-        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
-        config.model_capabilities.supports_image_understanding
-    });
+    let (supports_image_understanding, supports_audio_input) =
+        available_models
+            .iter()
+            .fold((false, false), |(image, audio), model| {
+                let config = app_state.config.get_chat_provider(&model.chat_provider_id);
+                (
+                    image || config.model_capabilities.supports_image_understanding,
+                    audio || config.model_capabilities.supports_audio_input,
+                )
+            });
 
     // Get all file capabilities for this user
-    let all_capabilities = get_file_capabilities(supports_image_understanding);
+    let all_capabilities =
+        get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     // Convert files to API format with presigned download URLs
     let mut api_files = Vec::new();
@@ -673,13 +680,20 @@ pub async fn get_assistant(
         .available_models(&policy, &me_user.to_subject(), &me_user.groups)
         .await
         .map_err(log_internal_server_error)?;
-    let supports_image_understanding = available_models.iter().any(|model| {
-        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
-        config.model_capabilities.supports_image_understanding
-    });
+    let (supports_image_understanding, supports_audio_input) =
+        available_models
+            .iter()
+            .fold((false, false), |(image, audio), model| {
+                let config = app_state.config.get_chat_provider(&model.chat_provider_id);
+                (
+                    image || config.model_capabilities.supports_image_understanding,
+                    audio || config.model_capabilities.supports_audio_input,
+                )
+            });
 
     // Get all file capabilities for this user
-    let all_capabilities = get_file_capabilities(supports_image_understanding);
+    let all_capabilities =
+        get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     // Convert files to API format with presigned download URLs
     let mut api_files = Vec::new();
@@ -891,13 +905,20 @@ pub async fn update_assistant(
         .available_models(&policy, &me_user.to_subject(), &me_user.groups)
         .await
         .map_err(log_internal_server_error)?;
-    let supports_image_understanding = available_models.iter().any(|model| {
-        let config = app_state.config.get_chat_provider(&model.chat_provider_id);
-        config.model_capabilities.supports_image_understanding
-    });
+    let (supports_image_understanding, supports_audio_input) =
+        available_models
+            .iter()
+            .fold((false, false), |(image, audio), model| {
+                let config = app_state.config.get_chat_provider(&model.chat_provider_id);
+                (
+                    image || config.model_capabilities.supports_image_understanding,
+                    audio || config.model_capabilities.supports_audio_input,
+                )
+            });
 
     // Get all file capabilities for this user
-    let all_capabilities = get_file_capabilities(supports_image_understanding);
+    let all_capabilities =
+        get_file_capabilities(supports_image_understanding, supports_audio_input);
 
     // Convert files to API format with presigned download URLs
     let mut api_files = Vec::new();

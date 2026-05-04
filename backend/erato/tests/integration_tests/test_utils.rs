@@ -542,6 +542,12 @@ pub struct MockLlmConfig {
     pub provider_id: String,
     /// The model name to use in the config (defaults to "gpt-3.5-turbo")
     pub model_name: String,
+    /// Whether this mock provider should advertise audio input support
+    pub supports_audio_input: bool,
+    /// Whether audio transcription should be enabled in app config
+    pub audio_transcription_enabled: bool,
+    /// Text returned by the mock audio transcription endpoint
+    pub audio_transcription_text: String,
 }
 
 impl Default for MockLlmConfig {
@@ -554,6 +560,9 @@ impl Default for MockLlmConfig {
             delay_ms: 50,
             provider_id: "mock-llm".to_string(),
             model_name: "gpt-3.5-turbo".to_string(),
+            supports_audio_input: false,
+            audio_transcription_enabled: false,
+            audio_transcription_text: "This is a mocked audio transcription.".to_string(),
         }
     }
 }
@@ -599,6 +608,18 @@ pub async fn setup_mock_llm_server(config: Option<MockLlmConfig>) -> (AppConfig,
             ])
             .bytes_stream_with_delays(streaming_actions);
     });
+    if config.audio_transcription_enabled {
+        let transcription_text = config.audio_transcription_text.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/audio/transcriptions");
+
+            then.status(axum::http::StatusCode::OK)
+                .headers([("Content-Type", "application/json")])
+                .json(json!({
+                    "text": transcription_text,
+                }));
+        });
+    }
 
     // Start the mock server
     let mockserver_config = MockServerConfig {
@@ -656,6 +677,14 @@ pub fn hermetic_app_config(
             )
             .unwrap()
             .set_override(
+                format!(
+                    "chat_providers.providers.{}.model_capabilities.supports_audio_input",
+                    mock_llm_config.provider_id
+                ),
+                mock_llm_config.supports_audio_input,
+            )
+            .unwrap()
+            .set_override(
                 "chat_providers.priority_order",
                 vec![mock_llm_config.provider_id.as_str()],
             )
@@ -677,6 +706,14 @@ pub fn hermetic_app_config(
                 vec![mock_llm_config.provider_id.as_str()],
             )
             .unwrap();
+
+        if mock_llm_config.audio_transcription_enabled {
+            app_config = app_config
+                .set_override("audio_transcription.enabled", true)
+                .unwrap()
+                .set_override("audio_transcription.max_recording_duration_seconds", 1200)
+                .unwrap();
+        }
     }
 
     app_config = app_config

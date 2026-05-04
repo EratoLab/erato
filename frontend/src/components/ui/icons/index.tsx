@@ -206,6 +206,44 @@ export const MediaVideoIcon = ({ className, ...props }: IconProps) => (
   <MediaVideo className={className} {...props} />
 );
 
+export const VoiceIcon = ({ className, ...props }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    {...props}
+  >
+    <path
+      d="M12 3.5a3.5 3.5 0 0 0-3.5 3.5v5a3.5 3.5 0 1 0 7 0V7A3.5 3.5 0 0 0 12 3.5Z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      fill="none"
+    />
+    <path
+      d="M8.5 10.5v2a3.5 3.5 0 0 0 7 0v-2"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      fill="none"
+      strokeLinecap="round"
+    />
+    <path
+      d="M12 16v3.5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      fill="none"
+    />
+    <path
+      d="M9.5 19h5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      fill="none"
+    />
+  </svg>
+);
+
 export const MultiplePagesIcon = ({ className, ...props }: IconProps) => (
   <MultiplePages className={className} {...props} />
 );

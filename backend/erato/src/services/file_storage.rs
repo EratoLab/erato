@@ -14,6 +14,12 @@ use std::time::Duration;
 use tracing::instrument;
 use url::Url;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileStorageObjectMetadata {
+    pub size_bytes: u64,
+    pub content_type: Option<String>,
+}
+
 const CONTENT_DISPOSITION_FILENAME_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b' ')
     .add(b'"')
@@ -303,6 +309,33 @@ impl FileStorage {
             }
         }
     }
+
+    pub async fn stat_object(&self, path: &str) -> Result<FileStorageObjectMetadata, Report> {
+        match self {
+            Self::OpenDal(storage) => storage.stat_object(path).await,
+            Self::Sharepoint(_) => Err(eyre::eyre!(
+                "Direct file stat via Sharepoint storage is not supported for audio transcription"
+            )),
+        }
+    }
+
+    pub async fn read_range(&self, path: &str, start: u64, end: u64) -> Result<Vec<u8>, Report> {
+        match self {
+            Self::OpenDal(storage) => storage.read_range(path, start, end).await,
+            Self::Sharepoint(_) => Err(eyre::eyre!(
+                "Direct range reads via Sharepoint storage are not supported for audio transcription"
+            )),
+        }
+    }
+
+    pub async fn finalize_resumable_upload(&self, path: &str) -> Result<(), Report> {
+        match self {
+            Self::OpenDal(storage) => storage.finalize_resumable_upload(path).await,
+            Self::Sharepoint(_) => Err(eyre::eyre!(
+                "Direct finalization via Sharepoint storage is not supported for audio transcription"
+            )),
+        }
+    }
 }
 
 impl OpenDalStorage {
@@ -400,6 +433,82 @@ impl OpenDalStorage {
             .await?
             .content_type()
             .map(ToOwned::to_owned))
+    }
+
+    pub async fn stat_object(&self, path: &str) -> Result<FileStorageObjectMetadata, Report> {
+        let metadata = self.opendal_operator.stat(path).await?;
+        Ok(FileStorageObjectMetadata {
+            size_bytes: metadata.content_length(),
+            content_type: metadata.content_type().map(ToOwned::to_owned),
+        })
+    }
+
+    pub async fn read_range(&self, path: &str, start: u64, end: u64) -> Result<Vec<u8>, Report> {
+        if end < start {
+            return Err(eyre::eyre!("Invalid range {}..{} for {}", start, end, path));
+        }
+
+        let bytes = self.read_file_to_bytes(path).await?;
+        let start = start as usize;
+        let end = end as usize;
+        if end > bytes.len() {
+            return Err(eyre::eyre!(
+                "Range {}..{} exceeds object size {} for {}",
+                start,
+                end,
+                bytes.len(),
+                path
+            ));
+        }
+
+        Ok(bytes[start..end].to_vec())
+    }
+
+    pub async fn finalize_resumable_upload(&self, path: &str) -> Result<(), Report> {
+        let mut bytes = self.read_file_to_bytes(path).await?;
+        if bytes.is_empty() {
+            return Ok(());
+        }
+
+        if bytes.len() < 44
+            || &bytes[0..4] != b"RIFF"
+            || &bytes[8..12] != b"WAVE"
+            || &bytes[12..16] != b"fmt "
+            || &bytes[36..40] != b"data"
+        {
+            return Err(eyre::eyre!(
+                "Cannot finalize resumable upload {}: object is not a canonical WAV",
+                path
+            ));
+        }
+
+        let riff_size = bytes
+            .len()
+            .checked_sub(8)
+            .and_then(|size| u32::try_from(size).ok())
+            .ok_or_else(|| eyre::eyre!("Finalized WAV object is too large for RIFF header"))?;
+        let data_size = bytes
+            .len()
+            .checked_sub(44)
+            .and_then(|size| u32::try_from(size).ok())
+            .ok_or_else(|| eyre::eyre!("Finalized WAV data is too large for data header"))?;
+        bytes[4..8].copy_from_slice(&riff_size.to_le_bytes());
+        bytes[40..44].copy_from_slice(&data_size.to_le_bytes());
+
+        let mut writer = self
+            .upload_file_writer(path, Some("audio/wav"))
+            .await
+            .wrap_err("Failed to open finalized WAV writer")?;
+        writer
+            .write(bytes)
+            .await
+            .wrap_err("Failed to write finalized WAV bytes")?;
+        writer
+            .close()
+            .await
+            .wrap_err("Failed to close finalized WAV writer")?;
+
+        Ok(())
     }
 
     /// Generate a pre-signed URL for downloading a file

@@ -3,15 +3,17 @@
 use axum::Router;
 use axum::http;
 use axum_test::TestServer;
+use chrono::Utc;
 use erato::config::{
     ActionFacetConfig, ExperimentalFacetsConfig, FacetConfig, McpServerAuthenticationConfig,
     McpServerConfig, ModelSettings, PromptSourceSpecification,
 };
+use erato::db::entity::{chat_file_uploads, file_uploads};
 use erato::models::message::{GenerationInputMessages, GenerationParameters};
 use erato::models::user::get_or_create_user;
 use erato::server::router::router;
 use sea_orm::prelude::Uuid;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::{Value, json};
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
@@ -21,7 +23,8 @@ use std::env;
 use crate::test_app_state;
 use crate::test_utils::{
     JwtTokenBuilder, TEST_JWT_TOKEN, TEST_USER_ISSUER, TEST_USER_SUBJECT, TestRequestAuthExt,
-    extract_chat_id, parse_sse_events, read_integration_test_file_bytes, setup_mock_llm_server,
+    extract_chat_id, extract_full_text, parse_sse_events, read_integration_test_file_bytes,
+    setup_mock_llm_server,
 };
 
 fn mock_mcp_base_url() -> String {
@@ -1496,6 +1499,126 @@ async fn test_token_usage_estimate_with_virtual_file(pool: Pool<Postgres>) {
     );
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_message_submit_with_completed_audio_transcription(pool: Pool<Postgres>) {
+    use crate::test_utils::MockLlmConfig;
+    let mock_config = MockLlmConfig {
+        chunks: vec![
+            "I".to_string(),
+            " can".to_string(),
+            " summarize".to_string(),
+            " the".to_string(),
+            " completed".to_string(),
+            " audio".to_string(),
+            " file".to_string(),
+            ".".to_string(),
+        ],
+        ..Default::default()
+    };
+    let (app_config, _server) = setup_mock_llm_server(Some(mock_config)).await;
+    let app_state = test_app_state(app_config, pool).await;
+    let db = app_state.db.clone();
+
+    let _user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let create_chat_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "user_message": "Let's start a new chat to attach a completed audio file.",
+        }))
+        .await;
+    create_chat_response.assert_status_ok();
+    let create_chat_events = parse_sse_events(&create_chat_response);
+    let chat_id = extract_chat_id(&create_chat_events).expect("Expected chat_created event");
+    let chat_uuid = Uuid::parse_str(&chat_id).expect("Invalid chat UUID");
+
+    let first_assistant_message_id = create_chat_events
+        .iter()
+        .find_map(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data)
+                && json["message_type"] == "assistant_message_completed"
+            {
+                return json["message_id"].as_str().map(|s| s.to_string());
+            }
+            None
+        })
+        .expect("Expected assistant_message_completed in chat creation response");
+
+    let audio_file_id = Uuid::new_v4();
+    let transcript = String::from_utf8(read_integration_test_file_bytes(
+        "audio_recordings/sales-summary-1-1.script.md",
+    ))
+    .expect("Failed to read audio transcript fixture");
+    let audio_transcription = serde_json::json!({
+        "status": "completed",
+        "transcript": transcript,
+    })
+    .to_string();
+
+    let audio_file = file_uploads::ActiveModel {
+        id: ActiveValue::Set(audio_file_id),
+        owner_user_id: ActiveValue::Set(TEST_USER_SUBJECT.to_string()),
+        filename: ActiveValue::Set("sales-summary-1-1.mp3".to_string()),
+        file_storage_provider_id: ActiveValue::Set("local".to_string()),
+        file_storage_path: ActiveValue::Set("/fixtures/sales-summary-1-1.mp3".to_string()),
+        audio_transcription: ActiveValue::Set(Some(audio_transcription)),
+        created_at: ActiveValue::Set(Utc::now().into()),
+        updated_at: ActiveValue::Set(Utc::now().into()),
+    };
+    audio_file
+        .insert(&db)
+        .await
+        .expect("Failed to insert audio file upload");
+
+    let chat_file_upload = chat_file_uploads::ActiveModel {
+        chat_id: ActiveValue::Set(chat_uuid),
+        file_upload_id: ActiveValue::Set(audio_file_id),
+        created_at: ActiveValue::Set(Utc::now().into()),
+        updated_at: ActiveValue::Set(Utc::now().into()),
+    };
+    chat_file_upload
+        .insert(&db)
+        .await
+        .expect("Failed to link audio file upload to chat");
+
+    let summarize_response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "previous_message_id": first_assistant_message_id,
+            "user_message": "Can you summarize this audio?",
+            "input_files_ids": [audio_file_id],
+        }))
+        .await;
+    summarize_response.assert_status_ok();
+
+    let summarize_events = parse_sse_events(&summarize_response);
+    assert!(
+        summarize_events.iter().any(|event| {
+            if let Ok(json) = serde_json::from_str::<Value>(&event.data) {
+                return json["message_type"] == "assistant_message_completed";
+            }
+            false
+        }),
+        "Expected assistant_message_completed when using completed audio transcription"
+    );
+
+    let assistant_text = extract_full_text(&summarize_events);
+    assert!(
+        assistant_text.contains("audio"),
+        "Expected audio summary response, got: {assistant_text}"
+    );
+}
+
 /// Malformed base64 in `virtual_files` returns 400 — the request should not
 /// be silently dropped or re-tried.
 ///
@@ -1987,6 +2110,7 @@ async fn test_resume_stream_full_replay(pool: Pool<Postgres>) {
         delay_ms: 200, // 200ms between chunks for ~4 seconds total
         provider_id: "mock-llm".to_string(),
         model_name: "gpt-3.5-turbo".to_string(),
+        ..Default::default()
     };
 
     // Set up mock LLM server with numbered messages
@@ -2253,6 +2377,7 @@ async fn test_abort_stream_persists_partial_message(pool: Pool<Postgres>) {
         delay_ms: 200,
         provider_id: "mock-llm".to_string(),
         model_name: "gpt-3.5-turbo".to_string(),
+        ..Default::default()
     };
 
     let (app_config, _server) = setup_mock_llm_server(Some(mock_config)).await;

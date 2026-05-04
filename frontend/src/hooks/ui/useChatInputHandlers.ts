@@ -30,6 +30,10 @@ function mergeUniqueFilesById(
   return [...existingFiles, ...uniqueNewFiles];
 }
 
+function isAudioTranscriptionAttachment(file: FileUploadItem): boolean {
+  return Boolean(file.audio_transcription);
+}
+
 interface UseChatInputHandlersResult {
   /** Currently attached files */
   attachedFiles: FileUploadItem[];
@@ -73,9 +77,28 @@ export function useChatInputHandlers(
     (files: FileUploadItem[]) => {
       logger.log("handleFilesUploaded called with:", files);
       setAttachedFilesState((prevFiles) => {
-        // Limit to maxFiles
-        const combinedFiles = mergeUniqueFilesById(prevFiles, files);
-        const limitedFiles = combinedFiles.slice(0, maxFiles);
+        const incomingAudioFiles = files.filter(isAudioTranscriptionAttachment);
+        const hasIncomingAudio = incomingAudioFiles.length > 0;
+        const incomingAudioFile =
+          incomingAudioFiles[incomingAudioFiles.length - 1];
+        const incomingNonAudioFiles = files.filter(
+          (file) => !isAudioTranscriptionAttachment(file),
+        );
+        const existingNonAudioFiles = prevFiles.filter(
+          (file) => !isAudioTranscriptionAttachment(file),
+        );
+        // Keep at most one audio file and always prefer the most recently uploaded audio attachment.
+        const nextFiles = hasIncomingAudio
+          ? [
+              ...mergeUniqueFilesById(
+                existingNonAudioFiles,
+                incomingNonAudioFiles,
+              ),
+              incomingAudioFile,
+            ]
+          : mergeUniqueFilesById(prevFiles, files);
+
+        const limitedFiles = nextFiles.slice(0, maxFiles);
 
         // Notify parent component if handler provided
         if (handleFileAttachments) {

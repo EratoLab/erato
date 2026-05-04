@@ -7,6 +7,18 @@ model_name = "placeholder"
 model_display_name = "Mock-LLM"
 base_url = "http://erato-local-mock-llm-server:44320/base-openai/v1/placeholder"
 
+[chat_providers.providers.mock-llm-openai.model_capabilities]
+supports_audio_input = true
+
+[audio_transcription]
+enabled = true
+chat_provider_id = "mock-llm-openai"
+max_recording_duration_seconds = 1200
+chunk_duration_seconds = 30
+max_attempts = 3
+initial_backoff_ms = 10
+max_backoff_ms = 50
+
 [mcp_servers_global]
 max_session_idle_seconds = 3600
 

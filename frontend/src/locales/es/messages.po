@@ -282,6 +282,41 @@ msgid "chat.history.rename.userProvided.placeholder"
 msgstr "Déjelo vacío para usar el título generado"
 
 #. js-lingui-explicit-id
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "chat.input.audioRecording.diagnostics.autoGainControl"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "chat.input.audioRecording.diagnostics.channels"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "chat.input.audioRecording.diagnostics.echoCancellation"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "chat.input.audioRecording.diagnostics.noiseSuppression"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "chat.input.audioRecording.diagnostics.sampleRate"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "chat.input.audioTranscription.progress"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "chat.input.audioTranscription.statusWithFile"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ActionFacetContext.tsx
 msgid "chat.message.action_facet.selection_label"
 msgstr "Selección"
@@ -926,6 +961,46 @@ msgstr "Tema del sistema"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.audio.input.default"
+msgstr "Micrófono predeterminado del sistema"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.audio.input.description"
+msgstr "Elige el dispositivo de entrada de audio usado para las grabaciones del chat en este navegador."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.audio.input.empty"
+msgstr "No se encontraron micrófonos. Es posible que se requiera permiso del navegador antes de que los nombres de los dispositivos estén disponibles."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.audio.input.heading"
+msgstr "Micrófono"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.audio.input.label"
+msgstr "Entrada de audio"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.audio.input.persisted"
+msgstr "Esta selección se guarda localmente en este navegador."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.audio.input.refresh"
+msgstr "Actualizar dispositivos"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.audio.input.refreshing"
+msgstr "Actualizando..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.dataTab.archiveAll.archiving"
 msgstr "Archivando..."
 
@@ -1158,6 +1233,11 @@ msgstr "No se pudieron guardar las preferencias. Inténtalo de nuevo."
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.appearance"
 msgstr "Apariencia"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.audio"
+msgstr "Audio"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -1536,6 +1616,74 @@ msgstr "Adjuntar archivo"
 msgid "Attachments"
 msgstr "Adjuntos"
 
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Audio file: {0} · Status: {1}"
+#~ msgstr ""
+
+#: src/hooks/audio/useAudioInputDevicePreference.ts
+msgid "Audio input device selection is not supported in this browser."
+msgstr "La selección del dispositivo de entrada de audio no es compatible con este navegador."
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Audio recording - Status: {0}"
+#~ msgstr "Grabación de audio - Estado: {0}"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Audio recording - Status: {displayStatus}"
+msgstr "Grabación de audio - Estado: {displayStatus}"
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Audio recording is not supported in this browser."
+msgstr "La grabación de audio no es compatible con este navegador."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Audio recording must be a canonical WAV file."
+msgstr "La grabación de audio debe ser un archivo WAV canónico."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Audio recording must be mono 16-bit PCM WAV at 16 kHz."
+msgstr "La grabación de audio debe ser WAV PCM mono de 16 bits a 16 kHz."
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Audio transcription"
+#~ msgstr "Transcripción de audio"
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Audio transcription chunk failed."
+msgstr "Falló el fragmento de transcripción de audio."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Audio transcription connection closed unexpectedly."
+msgstr "La conexión de transcripción de audio se cerró inesperadamente."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Audio transcription connection failed."
+msgstr "Falló la conexión de transcripción de audio."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Audio transcription did not start."
+msgstr "La transcripción de audio no se inició."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Audio transcription failed."
+msgstr "Falló la transcripción de audio."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Audio transcription is not available in this environment."
+msgstr "La transcripción de audio no está disponible en este entorno."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Audio transcription is not enabled."
+msgstr "La transcripción de audio no está habilitada."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "auto gain: {0}"
+#~ msgstr ""
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "auto gain: {autoGainControl}"
+msgstr "ganancia automática: {autoGainControl}"
+
 #: src/pages/AssistantEditPage.tsx
 msgid "Back to Assistants"
 msgstr ""
@@ -1565,8 +1713,24 @@ msgid "Cancel action"
 msgstr "Cancelar acción"
 
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "Canceled"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Cannot send: Audio transcription in progress"
+#~ msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "Cannot send: Token limit exceeded"
 msgstr "No se puede enviar: Límite de tokens excedido"
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "channels: {0}"
+#~ msgstr ""
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "channels: {channelCount}"
+msgstr "canales: {channelCount}"
 
 #: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Chat Error"
@@ -1607,6 +1771,10 @@ msgstr ""
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "collapse sidebar"
 msgstr "contraer barra lateral"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Completed"
+msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Configuration"
@@ -1651,6 +1819,26 @@ msgstr ""
 
 #: src/components/ui/Message/EratoEmailSuggestion.tsx
 msgid "Copy"
+msgstr ""
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Could not complete audio recording."
+msgstr ""
+
+#: src/hooks/audio/useAudioInputDevicePreference.ts
+msgid "Could not load audio input devices."
+msgstr "No se pudieron cargar los dispositivos de entrada de audio."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "Could not prepare audio recording for transcription."
+#~ msgstr ""
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Could not read audio transcription response."
+msgstr "No se pudo leer la respuesta de transcripción de audio."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Could not start audio recording."
 msgstr ""
 
 #: src/pages/AssistantsListPage.tsx
@@ -1724,6 +1912,14 @@ msgstr "Arrastra archivos aquí o haz clic para subir"
 msgid "Drop files to upload..."
 msgstr "Suelta archivos para subir..."
 
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "echo cancellation: {0}"
+#~ msgstr ""
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "echo cancellation: {echoCancellation}"
+msgstr "cancelación de eco: {echoCancellation}"
+
 #: src/pages/AssistantsListPage.tsx
 msgid "Edit"
 msgstr ""
@@ -1789,6 +1985,10 @@ msgstr "facets.<facet-id>.displayName"
 msgid "failed"
 msgstr "falló"
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Failed"
+msgstr ""
+
 #: src/pages/AssistantCreatePage.tsx
 msgid "Failed to create assistant. Please try again."
 msgstr ""
@@ -1804,6 +2004,10 @@ msgstr ""
 
 #: src/pages/AssistantEditPage.tsx
 msgid "Failed to update assistant. Please try again."
+msgstr ""
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Failed to upload audio recording for transcription."
 msgstr ""
 
 #: src/components/ui/FileUpload/FilePreviewBase.tsx
@@ -1906,6 +2110,18 @@ msgstr "El mensaje excede el límite de tokens. Por favor, reduzca la longitud o
 msgid "messages"
 msgstr "mensajes"
 
+#: src/hooks/audio/useAudioInputDevicePreference.ts
+#~ msgid "Microphone {0}"
+#~ msgstr "Micrófono {0}"
+
+#: src/hooks/audio/useAudioInputDevicePreference.ts
+msgid "Microphone {microphoneIndex}"
+msgstr "Micrófono {microphoneIndex}"
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Microphone settings:"
+#~ msgstr ""
+
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "more conversations..."
 msgstr ""
@@ -1928,6 +2144,10 @@ msgstr "Nuevo chat"
 msgid "No assistants yet"
 msgstr ""
 
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "No audio was captured. Please try recording again."
+msgstr ""
+
 #: src/pages/SearchPage.tsx
 msgid "No chats found"
 msgstr "No se encontraron chats"
@@ -1939,6 +2159,14 @@ msgstr ""
 #: src/components/ui/Message/ConversationIndicator.tsx
 msgid "No messages yet"
 msgstr "Aún no hay mensajes"
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "noise suppression: {0}"
+#~ msgstr ""
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "noise suppression: {noiseSuppression}"
+msgstr "supresión de ruido: {noiseSuppression}"
 
 #: src/components/ui/MessageList/MessageListHeader.tsx
 msgid "of"
@@ -1961,6 +2189,10 @@ msgstr "Salida"
 msgid "Please wait"
 msgstr ""
 
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Please wait for audio transcription to finish before sending this message."
+#~ msgstr ""
+
 #: src/components/ui/FileUpload/FileAttachmentsPreview.tsx
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Preview attachment"
@@ -1978,6 +2210,10 @@ msgstr "Vista previa de"
 msgid "Preview:"
 msgstr "Vista previa:"
 
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Progress: {0}%"
+#~ msgstr ""
+
 #: src/components/ui/Message/MessageContent.tsx
 msgid "Reasoning"
 msgstr "Razonamiento"
@@ -1989,6 +2225,30 @@ msgstr "Razonamiento"
 #: src/pages/SearchPage.tsx
 msgid "Recent Chats"
 msgstr "Chats recientes"
+
+#: src/components/ui/Chat/ChatInput.tsx
+#~ msgid "Record"
+#~ msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Record audio"
+msgstr "Grabar audio"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Recording"
+msgstr "Grabando"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Recording audio"
+msgstr "Grabando audio"
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Recording audio is disabled while uploads are not available."
+msgstr "La grabación de audio está deshabilitada mientras las cargas no estén disponibles."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Recording stopped automatically after the configured maximum duration."
+msgstr "La grabación se detuvo automáticamente después de la duración máxima configurada."
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Remaining context: {remainingContextPercentage}%"
@@ -2012,9 +2272,29 @@ msgstr "Eliminar todos los adjuntos"
 msgid "Remove all files"
 msgstr "Eliminar todos los archivos"
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Removing this audio attachment will also clear its transcription. Continue?"
+msgstr "Eliminar este adjunto de audio también borrará su transcripción. ¿Continuar?"
+
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Reset to Browser Detection"
 msgstr "Restablecer a detección del navegador"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Retry transcription"
+msgstr "Reintentar transcripción"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Retrying..."
+msgstr "Reintentando..."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+#~ msgid "sample rate: {0} Hz"
+#~ msgstr ""
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "sample rate: {sampleRate} Hz"
+msgstr "frecuencia de muestreo: {sampleRate} Hz"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Save edit"
@@ -2124,7 +2404,11 @@ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Stop"
-msgstr ""
+msgstr "Detener"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Stop recording"
+msgstr "Detener grabación"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
@@ -2207,6 +2491,10 @@ msgstr ""
 msgid "total"
 msgstr "total"
 
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Transcribing"
+msgstr "Transcribiendo"
+
 #: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Try Again"
 msgstr "Intentar de nuevo"
@@ -2218,6 +2506,10 @@ msgstr "Pruebe con palabras clave diferentes o verifique la ortografía"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Type a message..."
 msgstr "Escriba un mensaje..."
+
+#: src/hooks/audio/useAudioTranscriptionRecorder.ts
+msgid "Unable to retry this transcription because the source audio is not available."
+msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 msgid "Untitled Chat"
@@ -2242,6 +2534,10 @@ msgstr "Subir archivos"
 #: src/components/ui/FileUpload/FileUpload.tsx
 msgid "Uploaded Files"
 msgstr "Archivos subidos"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Uploading"
+msgstr "Cargando"
 
 #: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Uploading file"

@@ -1,4 +1,5 @@
 use crate::db::entity::prelude::FileUploads;
+use crate::models::file_upload;
 use crate::models::message::{ContentPart, ContentPartText, GenerationInputMessages, InputMessage};
 use crate::server::api::v1beta::message_streaming::FileContent;
 use crate::services::file_processing_cached::get_file_cached;
@@ -193,6 +194,31 @@ async fn resolve_file_pointer(
             let file_storage = app_state
                 .file_storage_providers
                 .get(&file.file_storage_provider_id);
+
+            if !is_image_pointer
+                && let Some(blocking_reason) =
+                    file_upload::get_audio_transcription_blocking_reason(&file)
+            {
+                tracing::warn!(
+                    "Using audio transcription placeholder for {}: {}",
+                    file_upload_id,
+                    blocking_reason
+                );
+                let content = format_file_error_message(&file.filename, file_upload_id, false);
+                return ContentPart::Text(ContentPartText { text: content });
+            }
+
+            if !is_image_pointer
+                && let Some(transcript) = file_upload::get_audio_transcript_if_ready(&file)
+            {
+                tracing::info!(
+                    "Using completed audio transcription for file pointer: {}",
+                    file_upload_id
+                );
+                let content =
+                    format_successful_file_content(&file.filename, file_upload_id, &transcript);
+                return ContentPart::Text(ContentPartText { text: content });
+            }
 
             if let Some(file_storage) = file_storage {
                 match get_file_cached(
