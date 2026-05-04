@@ -21,7 +21,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useOffice } from "./OfficeProvider";
-import { showSessionAskToast } from "../components/sessionAskToast";
+import {
+  dismissSessionToasts,
+  showSessionAskToast,
+} from "../components/sessionAskToast";
 import { useOutlookSessionAnchor } from "../hooks/useOutlookSessionAnchor";
 import {
   DEFAULT_OUTLOOK_SESSION,
@@ -187,6 +190,12 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
       policy: { mode: sessionPreferences.mode },
       anchorsEqual: anchorsEqualForPreferences(sessionPreferences),
     });
+
+    // Any decision other than "ask" supersedes a previously-shown ask toast
+    // (e.g. user navigated back to the original conversation without picking).
+    if (decision.kind !== "ask") {
+      dismissSessionToasts();
+    }
 
     switch (decision.kind) {
       case "resume": {

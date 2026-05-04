@@ -15,9 +15,20 @@ export interface ShowSessionAskToastParams {
 }
 
 const DEDUPE_KEY = "outlook-session-ask";
+const ASK_TOAST_ID = `${DEDUPE_KEY}-toast`;
 const PICK_DEDUPE_KEY = "outlook-session-pick";
 const PICK_TOAST_ID = `${PICK_DEDUPE_KEY}-toast`;
 const MAX_RECENT_OPTIONS = 6;
+
+/**
+ * Dismiss any open ask/pick toast. Call this from the policy when it decides
+ * that the prompt is no longer relevant (e.g. the user navigated back to the
+ * original conversation without clicking anything in the toast).
+ */
+export function dismissSessionToasts() {
+  toast.dismiss(ASK_TOAST_ID);
+  toast.dismiss(PICK_TOAST_ID);
+}
 
 const defaultChatTitle = () =>
   t({
@@ -93,6 +104,7 @@ export function showSessionAskToast(params: ShowSessionAskToastParams) {
   });
 
   toast.custom({
+    id: ASK_TOAST_ID,
     variant: "info",
     dedupeKey: DEDUPE_KEY,
     title: t({
