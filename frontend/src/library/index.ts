@@ -102,6 +102,10 @@ export { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 export { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 export { useProfile } from "@/hooks/useProfile";
 export {
+  usePersistedState,
+  type PersistedStateOptions,
+} from "@/hooks/usePersistedState";
+export {
   chatMessagesQuery,
   fetchUpdateProfilePreferences,
   fetchUploadFile,
