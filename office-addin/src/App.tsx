@@ -3,6 +3,7 @@ import {
   FeatureConfigProvider,
   I18nProvider,
   ThemeProvider,
+  Toaster,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
@@ -80,6 +81,7 @@ export default function App() {
                       </div>
                     </OutlookWrapper>
                   </AuthGate>
+                  <Toaster placement="bottom-center" />
                 </MsalNaaProvider>
               </OfficeThemeProvider>
             </OfficeProvider>

@@ -1,5 +1,6 @@
 import {
   ChatContext,
+  evaluateAddinSession,
   getSupportedFileTypes,
   recentChatsQuery,
   useArchiveChatEndpoint,
@@ -10,15 +11,30 @@ import {
   useFileUploadStore,
   useMessagingStore,
   useModelHistory,
+  usePersistedState,
   useRecentChats,
   mapMessageToUiMessage,
   type Message,
   type ChatContextValue,
 } from "@erato/frontend/library";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useOffice } from "./OfficeProvider";
+import { showSessionAskToast } from "../components/sessionAskToast";
+import { useOutlookSessionAnchor } from "../hooks/useOutlookSessionAnchor";
+import {
+  DEFAULT_OUTLOOK_SESSION,
+  DEFAULT_OUTLOOK_SESSION_PREFERENCES,
+  OUTLOOK_SESSION_KEY,
+  OUTLOOK_SESSION_PREFERENCES_KEY,
+  anchorsEqualForPreferences,
+  migrateLegacyChatIdKey,
+  outlookSessionPersistedOptions,
+  outlookSessionPreferencesPersistedOptions,
+  type OutlookSessionAnchor,
+  type OutlookSessionStorageValue,
+} from "../sessionPolicy";
 
 import type { ReactNode } from "react";
 
@@ -32,31 +48,45 @@ interface AddinChatMessage extends Message {
   };
 }
 
+// Run the legacy → versioned-envelope migration once per page load, before the
+// provider mounts. Idempotent.
+migrateLegacyChatIdKey();
+
 export function AddinChatProvider({ children }: { children: ReactNode }) {
   const { capabilities } = useFileCapabilitiesContext();
   const queryClient = useQueryClient();
   const { host } = useOffice();
+  const isOutlook = host === "Outlook";
 
   const acceptedFileTypes = useMemo(
     () => getSupportedFileTypes(capabilities),
     [capabilities],
   );
 
-  const chatIdStorageKey = "erato-office-addin-current-chat-id";
-  const [currentChatId, setCurrentChatIdState] = useState<string | null>(() =>
-    localStorage.getItem(chatIdStorageKey),
+  const [session, setSession] = usePersistedState<OutlookSessionStorageValue>(
+    OUTLOOK_SESSION_KEY,
+    DEFAULT_OUTLOOK_SESSION,
+    outlookSessionPersistedOptions,
   );
+  const [sessionPreferences] = usePersistedState(
+    OUTLOOK_SESSION_PREFERENCES_KEY,
+    DEFAULT_OUTLOOK_SESSION_PREFERENCES,
+    outlookSessionPreferencesPersistedOptions,
+  );
+
+  const currentChatId = session.chatId;
+  const currentAnchor = useOutlookSessionAnchor();
   const [newChatCounter, setNewChatCounter] = useState(0);
 
-  const setCurrentChatId = useCallback((chatId: string | null) => {
-    setCurrentChatIdState(chatId);
-
-    if (chatId) {
-      localStorage.setItem(chatIdStorageKey, chatId);
-    } else {
-      localStorage.removeItem(chatIdStorageKey);
-    }
-  }, []);
+  const setCurrentChatId = useCallback(
+    (chatId: string | null, anchor?: OutlookSessionAnchor | null) => {
+      setSession((previous) => ({
+        chatId,
+        anchor: anchor === undefined ? previous.anchor : anchor,
+      }));
+    },
+    [setSession],
+  );
 
   const {
     data: chatsData,
@@ -72,20 +102,20 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
 
   const createNewChat = useCallback(async () => {
     setNewChatCounter((previous) => previous + 1);
-    setCurrentChatId(null);
+    setCurrentChatId(null, currentAnchor);
 
     useMessagingStore.getState().abortActiveSSE();
     useMessagingStore.getState().clearUserMessages();
     useMessagingStore.getState().resetStreaming();
 
     return `temp-${Date.now()}`;
-  }, [setCurrentChatId]);
+  }, [currentAnchor, setCurrentChatId]);
 
   const navigateToChat = useCallback(
     (chatId: string) => {
-      setCurrentChatId(chatId);
+      setCurrentChatId(chatId, currentAnchor);
     },
-    [setCurrentChatId],
+    [currentAnchor, setCurrentChatId],
   );
 
   const archiveChat = useCallback(
@@ -96,12 +126,119 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
       });
 
       if (currentChatId === chatId) {
-        setCurrentChatId(null);
+        setCurrentChatId(null, currentAnchor);
         setNewChatCounter((previous) => previous + 1);
       }
     },
-    [archiveChatMutation, currentChatId, queryClient, setCurrentChatId],
+    [
+      archiveChatMutation,
+      currentAnchor,
+      currentChatId,
+      queryClient,
+      setCurrentChatId,
+    ],
   );
+
+  // Policy: react to cold-open and to debounced context changes. Outlook-only
+  // for now — other hosts have no anchor concept and silently keep today's
+  // "always resume" behaviour by virtue of `currentAnchor` being null.
+  const lastEvaluatedAnchorRef = useRef<OutlookSessionAnchor | null | "unset">(
+    "unset",
+  );
+  const lastEvaluatedChatIdRef = useRef<string | null>(null);
+
+  // The decision side effect needs the latest chat list to surface a sensible
+  // "Continue <title>" suggestion. Refs avoid re-running the effect when the
+  // chat list ticks for unrelated reasons (cache invalidation, etc.).
+  const chatsRef = useRef(chats);
+  chatsRef.current = chats;
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+
+  useEffect(() => {
+    if (!isOutlook) return;
+    if (currentAnchor === null) return; // anchor still settling
+
+    const previousAnchor = lastEvaluatedAnchorRef.current;
+    const trigger =
+      previousAnchor === "unset"
+        ? ({ kind: "cold-open" } as const)
+        : ({
+            kind: "context-change",
+            previous: previousAnchor,
+            next: currentAnchor,
+          } as const);
+
+    lastEvaluatedAnchorRef.current = currentAnchor;
+
+    const decision = evaluateAddinSession<OutlookSessionAnchor>({
+      trigger,
+      saved: sessionRef.current,
+      currentAnchor,
+      policy: { mode: sessionPreferences.mode },
+      anchorsEqual: anchorsEqualForPreferences(sessionPreferences),
+    });
+
+    switch (decision.kind) {
+      case "resume": {
+        if (sessionRef.current.chatId !== decision.chatId) {
+          setCurrentChatId(decision.chatId, currentAnchor);
+        } else {
+          // Same chat, but anchor may have moved — record the new anchor so
+          // future comparisons stay accurate.
+          setSession({ chatId: decision.chatId, anchor: currentAnchor });
+        }
+        lastEvaluatedChatIdRef.current = decision.chatId;
+        break;
+      }
+      case "new": {
+        if (sessionRef.current.chatId !== null) {
+          setNewChatCounter((previous) => previous + 1);
+          setCurrentChatId(null, currentAnchor);
+          useMessagingStore.getState().abortActiveSSE();
+          useMessagingStore.getState().clearUserMessages();
+          useMessagingStore.getState().resetStreaming();
+        } else {
+          setSession({ chatId: null, anchor: currentAnchor });
+        }
+        lastEvaluatedChatIdRef.current = null;
+        break;
+      }
+      case "ask": {
+        const suggestedChatId = decision.suggestedChatId;
+        const suggestedChat = suggestedChatId
+          ? chatsRef.current.find((chat) => chat.id === suggestedChatId)
+          : null;
+        showSessionAskToast({
+          suggestedChat: suggestedChat
+            ? { id: suggestedChat.id, title: suggestedChat.title_resolved }
+            : suggestedChatId
+              ? { id: suggestedChatId, title: null }
+              : null,
+          recentChats: chatsRef.current.map((chat) => ({
+            id: chat.id,
+            title: chat.title_resolved,
+          })),
+          onResume: (chatId) => setCurrentChatId(chatId, currentAnchor),
+          onPickRecent: (chatId) => setCurrentChatId(chatId, currentAnchor),
+          onNew: () => {
+            setNewChatCounter((previous) => previous + 1);
+            setCurrentChatId(null, currentAnchor);
+            useMessagingStore.getState().abortActiveSSE();
+            useMessagingStore.getState().clearUserMessages();
+            useMessagingStore.getState().resetStreaming();
+          },
+        });
+        break;
+      }
+    }
+  }, [
+    currentAnchor,
+    isOutlook,
+    sessionPreferences,
+    setCurrentChatId,
+    setSession,
+  ]);
 
   const mountKey = useMemo(
     () => `new-chat-session-${newChatCounter}`,
@@ -133,12 +270,18 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (newlyCreatedChatId && !currentChatId && !isPendingResponse) {
       useMessagingStore.getState().setNavigationTransition(true);
-      setCurrentChatId(newlyCreatedChatId);
+      setCurrentChatId(newlyCreatedChatId, currentAnchor);
       setTimeout(() => {
         useMessagingStore.getState().setNavigationTransition(false);
       }, 100);
     }
-  }, [currentChatId, isPendingResponse, newlyCreatedChatId, setCurrentChatId]);
+  }, [
+    currentAnchor,
+    currentChatId,
+    isPendingResponse,
+    newlyCreatedChatId,
+    setCurrentChatId,
+  ]);
 
   useBudgetStatus();
 
