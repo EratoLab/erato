@@ -81,6 +81,14 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   const currentAnchor = useOutlookSessionAnchor();
   const [newChatCounter, setNewChatCounter] = useState(0);
 
+  // Tier-2 gate: in Outlook, defer the messages fetch until the session
+  // policy has run for the first time. With leading-edge anchor debouncing
+  // the gate window is a few tens of ms, but it eliminates the previous
+  // chat flashing in always-new mode and avoids fetching a chat we're about
+  // to abandon. Non-Outlook hosts have no policy and start ungated.
+  const [policyDecided, setPolicyDecided] = useState(!isOutlook);
+  const effectiveChatId = policyDecided ? currentChatId : null;
+
   const setCurrentChatId = useCallback(
     (chatId: string | null, anchor?: OutlookSessionAnchor | null) => {
       setSession((previous) => ({
@@ -246,6 +254,12 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
         break;
       }
     }
+
+    // First decision unblocks the messages fetch. Batched with the state
+    // updates above, so consumers see the decided chatId and the released
+    // gate in the same render — no transient frame where the gate is open
+    // but the decision hasn't applied.
+    setPolicyDecided(true);
   }, [
     currentAnchor,
     isOutlook,
@@ -276,7 +290,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
     refetch: refetchMessages,
     newlyCreatedChatId,
   } = useChatMessaging({
-    chatId: currentChatId,
+    chatId: effectiveChatId,
     silentChatId,
     platform: host?.toLowerCase() ?? "office-addin",
   });
@@ -308,7 +322,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   } = useFileDropzone({
     acceptedFileTypes,
     multiple: true,
-    chatId: currentChatId,
+    chatId: effectiveChatId,
     onSilentChatCreated: () => {},
   });
 
