@@ -55,6 +55,41 @@ interface AddinChatMessage extends Message {
 // provider mounts. Idempotent.
 migrateLegacyChatIdKey();
 
+/**
+ * The session lifecycle in this provider has two phases. Modelling it as a
+ * discriminated union (rather than a `(boolean, chatId)` pair) makes
+ * `(chatId: "X", policyDecided: false)` an unrepresentable state.
+ *
+ * - `pending`: cold-open before the policy has decided. Consumers see no
+ *   messages and the messages fetch is gated.
+ * - `decided`: the policy has spoken (or never needed to — see
+ *   `computeInitialLifecycle` for the cases where we skip the gate). The
+ *   `chatId` field is the runtime source of truth for the current chat.
+ */
+type SessionLifecycle =
+  | { kind: "pending" }
+  | { kind: "decided"; chatId: string | null };
+
+interface ComputeInitialLifecycleArgs {
+  isOutlook: boolean;
+  session: OutlookSessionStorageValue;
+}
+
+/**
+ * Initial lifecycle on mount. Outlook hosts gate until the policy effect
+ * has run for the first time; non-Outlook hosts have no policy and start
+ * decided.
+ */
+function computeInitialLifecycle({
+  isOutlook,
+  session,
+}: ComputeInitialLifecycleArgs): SessionLifecycle {
+  if (!isOutlook) {
+    return { kind: "decided", chatId: session.chatId };
+  }
+  return { kind: "pending" };
+}
+
 export function AddinChatProvider({ children }: { children: ReactNode }) {
   const { capabilities } = useFileCapabilitiesContext();
   const queryClient = useQueryClient();
@@ -81,13 +116,15 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   const currentAnchor = useOutlookSessionAnchor();
   const [newChatCounter, setNewChatCounter] = useState(0);
 
-  // Tier-2 gate: in Outlook, defer the messages fetch until the session
-  // policy has run for the first time. With leading-edge anchor debouncing
-  // the gate window is a few tens of ms, but it eliminates the previous
-  // chat flashing in always-new mode and avoids fetching a chat we're about
-  // to abandon. Non-Outlook hosts have no policy and start ungated.
-  const [policyDecided, setPolicyDecided] = useState(!isOutlook);
-  const effectiveChatId = policyDecided ? currentChatId : null;
+  // The Tier-2 gate is now expressed as a discriminated union (see
+  // `SessionLifecycle`). The lazy initializer derives the initial phase
+  // from the host; once decided, the variant carries the source-of-truth
+  // chatId.
+  const [lifecycle, setLifecycle] = useState<SessionLifecycle>(() =>
+    computeInitialLifecycle({ isOutlook, session }),
+  );
+  const effectiveChatId =
+    lifecycle.kind === "decided" ? lifecycle.chatId : null;
 
   const setCurrentChatId = useCallback(
     (chatId: string | null, anchor?: OutlookSessionAnchor | null) => {
@@ -95,6 +132,13 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
         chatId,
         anchor: anchor === undefined ? previous.anchor : anchor,
       }));
+      // Any explicit chat change implies the session is decided. Idempotent
+      // when already decided to the same chatId — React skips the re-render.
+      setLifecycle((previous) =>
+        previous.kind === "decided" && previous.chatId === chatId
+          ? previous
+          : { kind: "decided", chatId },
+      );
     },
     [setSession],
   );
@@ -255,11 +299,15 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // First decision unblocks the messages fetch. Batched with the state
-    // updates above, so consumers see the decided chatId and the released
-    // gate in the same render — no transient frame where the gate is open
-    // but the decision hasn't applied.
-    setPolicyDecided(true);
+    // First decision unblocks the messages fetch. The "ask" branch above
+    // doesn't change `chatId`, so it never calls `setCurrentChatId` (which
+    // is what flips lifecycle in the resume / new branches). Cover that
+    // case here with a functional update — no-op once already decided.
+    setLifecycle((previous) =>
+      previous.kind === "pending"
+        ? { kind: "decided", chatId: sessionRef.current.chatId }
+        : previous,
+    );
   }, [
     currentAnchor,
     isOutlook,
