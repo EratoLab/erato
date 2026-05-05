@@ -35,7 +35,6 @@ const isAnchorOrNull = (value: unknown): value is OutlookSessionAnchor | null =>
 
 export const outlookSessionPersistedOptions: PersistedStateOptions<OutlookSessionStorageValue> =
   {
-    version: 1,
     parse: (value) => {
       if (value === null || typeof value !== "object") return null;
       const candidate = value as Record<string, unknown>;
@@ -46,19 +45,6 @@ export const outlookSessionPersistedOptions: PersistedStateOptions<OutlookSessio
         anchor: candidate.anchor,
       };
     },
-    migrate: (priorValue, priorVersion) => {
-      // No envelope in the legacy schema. The legacy key held a bare chat id
-      // string in localStorage (no JSON wrapping); see legacyMigrate below for
-      // that path. The path here only fires for envelope versions we don't
-      // recognise — drop them.
-      if (priorVersion !== null) return null;
-      // Defensive: if some build ever stored a bare string under this key
-      // un-enveloped, treat it as a chat id with no anchor.
-      if (typeof priorValue === "string") {
-        return { chatId: priorValue, anchor: null };
-      }
-      return null;
-    },
   };
 
 const isMode = (value: unknown): value is OutlookSessionPreferences["mode"] =>
@@ -66,7 +52,6 @@ const isMode = (value: unknown): value is OutlookSessionPreferences["mode"] =>
 
 export const outlookSessionPreferencesPersistedOptions: PersistedStateOptions<OutlookSessionPreferences> =
   {
-    version: 1,
     parse: (value) => {
       if (value === null || typeof value !== "object") return null;
       const candidate = value as Record<string, unknown>;
@@ -81,8 +66,8 @@ export const outlookSessionPreferencesPersistedOptions: PersistedStateOptions<Ou
 
 /**
  * One-shot migration of the legacy `erato-office-addin-current-chat-id` key
- * (a bare string) into the new envelope-versioned shape. Idempotent — safe to
- * call on every cold open.
+ * (a bare string) into the new shape. Idempotent — safe to call on every
+ * cold open.
  */
 export function migrateLegacyChatIdKey(): void {
   try {
@@ -91,11 +76,11 @@ export function migrateLegacyChatIdKey(): void {
 
     const alreadyMigrated = localStorage.getItem(OUTLOOK_SESSION_KEY);
     if (alreadyMigrated === null) {
-      const envelope = {
-        v: outlookSessionPersistedOptions.version,
-        d: { chatId: legacyValue, anchor: null },
+      const value: OutlookSessionStorageValue = {
+        chatId: legacyValue,
+        anchor: null,
       };
-      localStorage.setItem(OUTLOOK_SESSION_KEY, JSON.stringify(envelope));
+      localStorage.setItem(OUTLOOK_SESSION_KEY, JSON.stringify(value));
     }
     localStorage.removeItem(LEGACY_CHAT_ID_KEY);
   } catch {

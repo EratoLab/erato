@@ -60,7 +60,6 @@ describe("usePersistedState", () => {
   it("returns the default when nothing is stored", () => {
     const { result } = renderHook(() =>
       usePersistedState<Prefs>("test.k1", { mode: "a", count: 0 }, {
-        version: 1,
         parse: parsePrefs,
       }),
     );
@@ -70,7 +69,6 @@ describe("usePersistedState", () => {
   it("persists writes and rehydrates them", () => {
     const { result } = renderHook(() =>
       usePersistedState<Prefs>("test.k2", { mode: "a", count: 0 }, {
-        version: 1,
         parse: parsePrefs,
       }),
     );
@@ -79,7 +77,6 @@ describe("usePersistedState", () => {
 
     const rehydrated = renderHook(() =>
       usePersistedState<Prefs>("test.k2", { mode: "a", count: 0 }, {
-        version: 1,
         parse: parsePrefs,
       }),
     );
@@ -89,7 +86,6 @@ describe("usePersistedState", () => {
   it("supports updater functions", () => {
     const { result } = renderHook(() =>
       usePersistedState<Prefs>("test.k3", { mode: "a", count: 0 }, {
-        version: 1,
         parse: parsePrefs,
       }),
     );
@@ -101,60 +97,19 @@ describe("usePersistedState", () => {
   it("falls back to default when stored value fails parse", () => {
     localStorage.setItem(
       "test.k4",
-      JSON.stringify({ v: 1, d: { mode: "x", count: "nope" } }),
+      JSON.stringify({ mode: "x", count: "nope" }),
     );
     const { result } = renderHook(() =>
       usePersistedState<Prefs>("test.k4", { mode: "a", count: 0 }, {
-        version: 1,
         parse: parsePrefs,
       }),
     );
     expect(result.current[0]).toEqual({ mode: "a", count: 0 });
-  });
-
-  it("invokes migrate for older versions", () => {
-    localStorage.setItem("test.k5", JSON.stringify({ v: 0, d: { kind: "a" } }));
-    const { result } = renderHook(() =>
-      usePersistedState<Prefs>("test.k5", { mode: "a", count: 0 }, {
-        version: 1,
-        parse: parsePrefs,
-        migrate: (prior) => {
-          if (
-            prior !== null &&
-            typeof prior === "object" &&
-            "kind" in prior &&
-            (prior.kind === "a" || prior.kind === "b")
-          ) {
-            return { mode: prior.kind, count: 0 };
-          }
-          return null;
-        },
-      }),
-    );
-    expect(result.current[0]).toEqual({ mode: "a", count: 0 });
-  });
-
-  it("invokes migrate for legacy un-enveloped values", () => {
-    localStorage.setItem("test.k6", JSON.stringify("legacy-string"));
-    const { result } = renderHook(() =>
-      usePersistedState<Prefs>("test.k6", { mode: "a", count: 0 }, {
-        version: 1,
-        parse: parsePrefs,
-        migrate: (prior, priorVersion) => {
-          if (priorVersion === null && typeof prior === "string") {
-            return { mode: "b", count: prior.length };
-          }
-          return null;
-        },
-      }),
-    );
-    expect(result.current[0]).toEqual({ mode: "b", count: 13 });
   });
 
   it("clears storage when set to null", () => {
     const { result } = renderHook(() =>
       usePersistedState<Prefs>("test.k7", { mode: "a", count: 0 }, {
-        version: 1,
         parse: parsePrefs,
       }),
     );
@@ -168,13 +123,11 @@ describe("usePersistedState", () => {
   it("syncs multiple consumers of the same key", () => {
     const a = renderHook(() =>
       usePersistedState<Prefs>("test.k8", { mode: "a", count: 0 }, {
-        version: 1,
         parse: parsePrefs,
       }),
     );
     const b = renderHook(() =>
       usePersistedState<Prefs>("test.k8", { mode: "a", count: 0 }, {
-        version: 1,
         parse: parsePrefs,
       }),
     );
