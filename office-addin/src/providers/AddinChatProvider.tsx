@@ -33,6 +33,7 @@ import {
   OUTLOOK_SESSION_PREFERENCES_KEY,
   anchorsEqualForPreferences,
   migrateLegacyChatIdKey,
+  outlookAnchorFromItem,
   outlookSessionPersistedOptions,
   outlookSessionPreferencesPersistedOptions,
   type OutlookSessionAnchor,
@@ -71,12 +72,11 @@ type SessionLifecycle =
   | { kind: "decided"; chatId: string | null };
 
 /**
- * Reads `Office.context.mailbox.item` synchronously and derives the anchor
- * the policy uses. Mirrors `OutlookMailItemProvider`'s sync read path
- * (`readMailItemSync` + `typeof item.subject === "string"` for read/compose
- * discrimination) so we don't have to wait for that provider's `useEffect`
- * to populate state. Returns `null` if no item is selected or Office isn't
- * in a mailbox host.
+ * Thin Office-context wrapper around the pure `outlookAnchorFromItem`. Lets
+ * the lazy lifecycle initializer derive an anchor before
+ * `OutlookMailItemProvider`'s `useEffect` has populated its state. Try/catch
+ * guards against Office.js access errors in degraded hosts; returns `null`
+ * if no item is selected.
  */
 function readSyncOutlookAnchor(): OutlookSessionAnchor | null {
   try {
@@ -85,11 +85,7 @@ function readSyncOutlookAnchor(): OutlookSessionAnchor | null {
       | Office.MessageCompose
       | undefined
       | null;
-    if (!item) return null;
-    return {
-      conversationId: item.conversationId ?? null,
-      isCompose: typeof (item as Office.MessageRead).subject !== "string",
-    };
+    return outlookAnchorFromItem(item ?? null);
   } catch {
     return null;
   }

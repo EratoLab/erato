@@ -1,6 +1,8 @@
 export {
   anchorsEqualForPreferences,
   composeInheritsAnchorsEqual,
+  isMessageRead,
+  outlookAnchorFromItem,
   strictAnchorsEqual,
 } from "./outlookAnchor";
 export {

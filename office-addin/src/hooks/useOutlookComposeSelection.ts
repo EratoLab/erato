@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-import {
-  isMessageRead,
-  useOutlookMailItem,
-} from "../providers/OutlookMailItemProvider";
+import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { isMessageRead } from "../sessionPolicy";
 
 export interface OutlookComposeSelection {
   /** The selected text content. Empty string when nothing is selected. */

@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 
+import { isMessageRead } from "../sessionPolicy";
 import { callOfficeAsync } from "../utils/officeAsync";
 
 interface EmailAddress {
@@ -78,12 +79,6 @@ function parseRecipients(
     displayName: recipient.displayName,
     emailAddress: recipient.emailAddress,
   }));
-}
-
-export function isMessageRead(
-  item: Office.MessageRead | Office.MessageCompose,
-): item is Office.MessageRead {
-  return typeof (item as Office.MessageRead).subject === "string";
 }
 
 function buildMailItemIdentity(
