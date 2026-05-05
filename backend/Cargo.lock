@@ -2611,7 +2611,7 @@ dependencies = [
 [[package]]
 name = "genai"
 version = "0.6.0-beta.19-WIP"
-source = "git+https://github.com/EratoLab/rust-genai.git?rev=490d2e209e41428d9953989541da54057df1cab7#490d2e209e41428d9953989541da54057df1cab7"
+source = "git+https://github.com/EratoLab/rust-genai.git?rev=45de01a6b48856a129c009bf9ead2cf0aada034b#45de01a6b48856a129c009bf9ead2cf0aada034b"
 dependencies = [
  "base64 0.22.1",
  "bytes",

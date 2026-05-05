@@ -1750,10 +1750,19 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     );
 
     // Build genai ChatRequest (messages + tools) + ChatOptions
+    let effective_model_settings = build_model_settings_for_facets(
+        &chat_provider_config.model_settings,
+        &app_state.config.experimental_facets,
+        &effective_selected_facet_ids,
+    );
+
     let mut chat_request = resolved_generation_input_messages
         .clone()
         .into_chat_request();
-    let chat_request_tools = convert_mcp_tools_to_genai_tools(generation_mcp_tools.clone());
+    let chat_request_tools = convert_mcp_tools_to_genai_tools(
+        generation_mcp_tools.clone(),
+        effective_model_settings.compat_omit_strict,
+    );
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -1777,11 +1786,6 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             }
         }
     }
-    let effective_model_settings = build_model_settings_for_facets(
-        &chat_provider_config.model_settings,
-        &app_state.config.experimental_facets,
-        &effective_selected_facet_ids,
-    );
     let chat_options = build_chat_options_for_completion(&effective_model_settings);
 
     // Create generation parameters with the determined chat provider ID
