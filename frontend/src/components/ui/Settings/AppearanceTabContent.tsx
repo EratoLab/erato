@@ -1,8 +1,8 @@
 import { t } from "@lingui/core/macro";
-import clsx from "clsx";
 
 import { useTheme, type ThemeMode } from "@/components/providers/ThemeProvider";
 
+import { RadioCard } from "../Controls/RadioCard";
 import { ComputerIcon, MoonIcon, SunIcon } from "../icons";
 
 import type { ReactNode } from "react";
@@ -80,56 +80,34 @@ export function AppearanceTabContent({
     >
       {appearanceOptions.map((option) => {
         const isSelected = themeMode === option.value;
+        const trailing =
+          option.value === "system" && isSelected ? (
+            <span className="text-xs text-theme-fg-muted">
+              {effectiveTheme === "dark"
+                ? t({
+                    id: "preferences.dialog.appearance.theme.current.dark",
+                    message: "Currently dark",
+                  })
+                : t({
+                    id: "preferences.dialog.appearance.theme.current.light",
+                    message: "Currently light",
+                  })}
+            </span>
+          ) : null;
 
         return (
-          <button
+          <RadioCard
             key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={isSelected}
-            className={clsx(
-              "flex items-start gap-3 rounded-lg border p-4 text-left",
-              "theme-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus",
-              isSelected
-                ? "border-theme-border-focus bg-theme-bg-hover text-theme-fg-primary"
-                : "border-theme-border bg-theme-bg-primary text-theme-fg-secondary hover:bg-theme-bg-hover",
-            )}
-            onClick={() => setThemeMode(option.value)}
-          >
-            <span
-              aria-hidden="true"
-              className={clsx(
-                "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border",
-                isSelected
-                  ? "border-theme-border-focus bg-theme-bg-secondary text-theme-fg-primary"
-                  : "border-theme-border bg-theme-bg-secondary text-theme-fg-secondary",
-              )}
-            >
-              {option.icon}
-            </span>
-
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center justify-between gap-3">
-                <span className="font-medium">{option.label}</span>
-                {option.value === "system" && isSelected ? (
-                  <span className="text-xs text-theme-fg-muted">
-                    {effectiveTheme === "dark"
-                      ? t({
-                          id: "preferences.dialog.appearance.theme.current.dark",
-                          message: "Currently dark",
-                        })
-                      : t({
-                          id: "preferences.dialog.appearance.theme.current.light",
-                          message: "Currently light",
-                        })}
-                  </span>
-                ) : null}
-              </span>
-              <span className="mt-1 block text-sm text-theme-fg-muted">
-                {option.description}
-              </span>
-            </span>
-          </button>
+            name="appearance-theme"
+            value={option.value}
+            checked={isSelected}
+            onChange={() => setThemeMode(option.value)}
+            label={option.label}
+            helper={option.description}
+            icon={option.icon}
+            trailing={trailing}
+            size="md"
+          />
         );
       })}
     </div>

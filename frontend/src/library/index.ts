@@ -27,6 +27,7 @@ export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoadin
 export { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export { AnchoredPopover } from "@/components/ui/Controls/AnchoredPopover";
 export { Button } from "@/components/ui/Controls/Button";
+export { RadioCard } from "@/components/ui/Controls/RadioCard";
 export {
   DropdownMenu,
   type DropdownMenuItem,
