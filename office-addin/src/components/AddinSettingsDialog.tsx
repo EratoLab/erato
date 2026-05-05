@@ -7,6 +7,7 @@ import { useState, type KeyboardEvent } from "react";
 
 import { BehaviorTabContent } from "./BehaviorTabContent";
 import { UserSettingsTabContent } from "./UserSettingsTabContent";
+import { useOffice } from "../providers/OfficeProvider";
 
 type SettingsTab = "appearance" | "user" | "addin";
 
@@ -25,6 +26,8 @@ export function AddinSettingsDialog({
   isOpen,
   onClose,
 }: AddinSettingsDialogProps) {
+  const { host } = useOffice();
+  const isOutlookHost = host === "Outlook";
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
 
   const tabLabels: Record<SettingsTab, string> = {
@@ -168,11 +171,27 @@ export function AddinSettingsDialog({
             </div>
 
             <AppearanceTabContent
-              systemDescription={t({
-                id: "officeAddin.settings.appearance.system.description",
-                message: "Match your Office host appearance.",
-              })}
+              systemDescription={
+                isOutlookHost
+                  ? t({
+                      id: "officeAddin.settings.appearance.system.description.outlook",
+                      message: "Follow your Outlook theme.",
+                    })
+                  : t({
+                      id: "officeAddin.settings.appearance.system.description",
+                      message: "Match your Office host appearance.",
+                    })
+              }
             />
+            {isOutlookHost ? (
+              <p className="text-xs text-theme-fg-muted">
+                {t({
+                  id: "officeAddin.settings.appearance.outlook.staleness.note",
+                  message:
+                    "Outlook for Windows requires a full restart to pick up theme changes (known Office bug). Pick Light or Dark above to override the host theme.",
+                })}
+              </p>
+            ) : null}
           </section>
 
           <section
