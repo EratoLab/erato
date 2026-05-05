@@ -1,6 +1,6 @@
 import {
   ChatContext,
-  evaluateAddinSession,
+  selectAddinSessionAction,
   getSupportedFileTypes,
   recentChatsQuery,
   useArchiveChatEndpoint,
@@ -265,7 +265,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
     "unset",
   );
 
-  // The decision side effect needs the latest chat list to surface a sensible
+  // The action side effect needs the latest chat list to surface a sensible
   // "Continue <title>" suggestion. Refs avoid re-running the effect when the
   // chat list ticks for unrelated reasons (cache invalidation, etc.).
   const chatsRef = useRef(chats);
@@ -298,7 +298,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
 
     lastEvaluatedAnchorRef.current = currentAnchor;
 
-    const decision = evaluateAddinSession<OutlookSessionAnchor>({
+    const action = selectAddinSessionAction<OutlookSessionAnchor>({
       trigger,
       saved: sessionRef.current,
       currentAnchor,
@@ -306,20 +306,20 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
       anchorsEqual: anchorsEqualForPreferences(sessionPreferences),
     });
 
-    // Any decision other than "ask" supersedes a previously-shown ask toast
+    // Any action other than "ask" supersedes a previously-shown ask toast
     // (e.g. user navigated back to the original conversation without picking).
-    if (decision.kind !== "ask") {
+    if (action.kind !== "ask") {
       dismissSessionToasts();
     }
 
-    switch (decision.kind) {
+    switch (action.kind) {
       case "resume": {
-        if (sessionRef.current.chatId !== decision.chatId) {
-          setCurrentChatId(decision.chatId, currentAnchor);
+        if (sessionRef.current.chatId !== action.chatId) {
+          setCurrentChatId(action.chatId, currentAnchor);
         } else {
           // Same chat, but anchor may have moved — record the new anchor so
           // future comparisons stay accurate.
-          setSession({ chatId: decision.chatId, anchor: currentAnchor });
+          setSession({ chatId: action.chatId, anchor: currentAnchor });
         }
         break;
       }
@@ -336,7 +336,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
         break;
       }
       case "ask": {
-        const suggestedChatId = decision.suggestedChatId;
+        const suggestedChatId = action.suggestedChatId;
         const suggestedChat = suggestedChatId
           ? chatsRef.current.find((chat) => chat.id === suggestedChatId)
           : null;
@@ -365,11 +365,11 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // First decision unblocks the messages fetch. The "ask" branch above
+    // First action unblocks the messages fetch. The "ask" branch above
     // doesn't change `chatId`, so it never calls `setCurrentChatId` (which
     // is what flips lifecycle in the resume / new branches). Settling to
     // the saved chatId here means the previous chat renders behind the
-    // ask toast, giving the user context for the "Continue" decision.
+    // ask toast, giving the user context for the "Continue" action.
     setLifecycle((previous) =>
       previous.kind === "pending"
         ? { kind: "decided", chatId: sessionRef.current.chatId }

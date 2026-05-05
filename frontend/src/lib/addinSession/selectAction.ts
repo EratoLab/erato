@@ -1,12 +1,13 @@
 import type {
-  AddinSessionDecision,
-  EvaluateInput,
+  AddinSessionAction,
+  AddinSessionActionInput,
 } from "./types";
 
 /**
- * Pure decision function for the add-in chat-session lifecycle. Given a
- * trigger, the saved state, the current host context, and the user's policy
- * preferences, returns the action the provider should take.
+ * Pure policy resolver for the add-in chat-session lifecycle. Given a trigger,
+ * the saved state, the current host context, and the user's policy
+ * preferences, returns one of `{resume, new, ask}` — the action the provider
+ * should take.
  *
  * Host-agnostic: the anchor type and equality function are supplied by the
  * caller so each host (Outlook, Excel, Word, …) can encode its own rules
@@ -14,9 +15,9 @@ import type {
  *
  * No side effects, no React, no DOM. Trivially unit-testable.
  */
-export function evaluateAddinSession<TAnchor>(
-  input: EvaluateInput<TAnchor>,
-): AddinSessionDecision {
+export function selectAddinSessionAction<TAnchor>(
+  input: AddinSessionActionInput<TAnchor>,
+): AddinSessionAction {
   const { saved, currentAnchor, policy, anchorsEqual } = input;
 
   // Anchors match → there is no context change to react to. Always resume the

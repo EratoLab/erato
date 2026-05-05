@@ -1,9 +1,9 @@
-export { evaluateAddinSession } from "./evaluate";
+export { selectAddinSessionAction } from "./selectAction";
 export type {
   AddinSessionMode,
   AddinSessionTrigger,
-  AddinSessionDecision,
+  AddinSessionAction,
   AddinSessionState,
   AddinSessionPolicy,
-  EvaluateInput,
+  AddinSessionActionInput,
 } from "./types";

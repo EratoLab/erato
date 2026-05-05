@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluateAddinSession } from "../evaluate";
+import { selectAddinSessionAction } from "../selectAction";
 
 import type {
   AddinSessionPolicy,
@@ -46,14 +46,14 @@ const policyOf = (mode: AddinSessionPolicy["mode"]): AddinSessionPolicy => ({
   mode,
 });
 
-describe("evaluateAddinSession", () => {
+describe("selectAddinSessionAction", () => {
   describe("mode: resume", () => {
     it("resumes saved chat when context matches", () => {
       const saved: AddinSessionState<DemoAnchor> = {
         chatId: "c1",
         anchor: { thread: "T1", isCompose: false },
       };
-      const result = evaluateAddinSession({
+      const result = selectAddinSessionAction({
         trigger: trigger.cold,
         saved,
         currentAnchor: { thread: "T1", isCompose: false },
@@ -68,7 +68,7 @@ describe("evaluateAddinSession", () => {
         chatId: "c1",
         anchor: { thread: "T1", isCompose: false },
       };
-      const result = evaluateAddinSession({
+      const result = selectAddinSessionAction({
         trigger: trigger.change(saved.anchor, {
           thread: "T2",
           isCompose: false,
@@ -82,7 +82,7 @@ describe("evaluateAddinSession", () => {
     });
 
     it("starts new when nothing is saved", () => {
-      const result = evaluateAddinSession({
+      const result = selectAddinSessionAction({
         trigger: trigger.cold,
         saved: { chatId: null, anchor: null },
         currentAnchor: { thread: "T1", isCompose: false },
@@ -99,7 +99,7 @@ describe("evaluateAddinSession", () => {
         chatId: "c1",
         anchor: { thread: "T1", isCompose: false },
       };
-      const result = evaluateAddinSession({
+      const result = selectAddinSessionAction({
         trigger: trigger.change(saved.anchor, {
           thread: "T2",
           isCompose: false,
@@ -117,7 +117,7 @@ describe("evaluateAddinSession", () => {
         chatId: "c1",
         anchor: { thread: "T1", isCompose: false },
       };
-      const result = evaluateAddinSession({
+      const result = selectAddinSessionAction({
         trigger: trigger.cold,
         saved,
         currentAnchor: { thread: "T1", isCompose: false },
@@ -134,7 +134,7 @@ describe("evaluateAddinSession", () => {
         chatId: "c1",
         anchor: { thread: "T1", isCompose: false },
       };
-      const result = evaluateAddinSession({
+      const result = selectAddinSessionAction({
         trigger: trigger.change(saved.anchor, {
           thread: "T2",
           isCompose: false,
@@ -148,7 +148,7 @@ describe("evaluateAddinSession", () => {
     });
 
     it("starts new on context change with no prior chat", () => {
-      const result = evaluateAddinSession({
+      const result = selectAddinSessionAction({
         trigger: trigger.cold,
         saved: { chatId: null, anchor: null },
         currentAnchor: { thread: "T1", isCompose: false },
@@ -163,7 +163,7 @@ describe("evaluateAddinSession", () => {
         chatId: "c1",
         anchor: { thread: "T1", isCompose: false },
       };
-      const result = evaluateAddinSession({
+      const result = selectAddinSessionAction({
         trigger: trigger.cold,
         saved,
         currentAnchor: { thread: "T1", isCompose: false },
@@ -181,7 +181,7 @@ describe("evaluateAddinSession", () => {
         anchor: { thread: "T1", isCompose: false },
       };
       // With compose-inherits, switching to compose-of-same-thread is "same".
-      const result = evaluateAddinSession({
+      const result = selectAddinSessionAction({
         trigger: trigger.change(saved.anchor, {
           thread: "T1",
           isCompose: true,
@@ -199,7 +199,7 @@ describe("evaluateAddinSession", () => {
         chatId: "c1",
         anchor: { thread: "T1", isCompose: false },
       };
-      const result = evaluateAddinSession({
+      const result = selectAddinSessionAction({
         trigger: trigger.change(saved.anchor, {
           thread: "T2",
           isCompose: true,

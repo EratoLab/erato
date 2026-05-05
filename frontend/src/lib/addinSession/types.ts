@@ -20,10 +20,10 @@ export type AddinSessionTrigger<TAnchor> =
     };
 
 /**
- * What the policy returns. The provider applies the side effect — none of the
- * decision values cause anything on their own.
+ * The action the provider should take next. The provider applies the side
+ * effect — none of the action values cause anything on their own.
  */
-export type AddinSessionDecision =
+export type AddinSessionAction =
   | { kind: "resume"; chatId: string }
   | { kind: "new" }
   | { kind: "ask"; suggestedChatId: string | null };
@@ -37,7 +37,7 @@ export interface AddinSessionPolicy {
   mode: AddinSessionMode;
 }
 
-export interface EvaluateInput<TAnchor> {
+export interface AddinSessionActionInput<TAnchor> {
   trigger: AddinSessionTrigger<TAnchor>;
   saved: AddinSessionState<TAnchor>;
   /**
