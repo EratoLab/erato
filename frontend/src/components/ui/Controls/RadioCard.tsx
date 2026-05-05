@@ -63,7 +63,7 @@ export function RadioCard({
   );
 
   const rowClasses = clsx(
-    "flex cursor-pointer items-start gap-3 hover:bg-theme-bg-hover",
+    "relative flex cursor-pointer items-start gap-3 hover:bg-theme-bg-hover",
     size === "md" ? "p-4" : "p-3",
   );
 
@@ -89,7 +89,11 @@ export function RadioCard({
           onChange={onChange}
           className={
             hideRadio
-              ? "sr-only"
+              ? // Cover the whole label as a transparent overlay so click
+                // targeting (incl. Playwright's getByRole("radio").click())
+                // lands on the input rather than the label that would
+                // otherwise occlude an `sr-only` 1x1 input.
+                "absolute inset-0 cursor-pointer opacity-0"
               : "mt-1 size-4 cursor-pointer accent-theme-bg-accent"
           }
         />
