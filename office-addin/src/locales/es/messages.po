@@ -217,47 +217,47 @@ msgid "officeAddin.office.loading"
 msgstr "Cargando complemento de Office..."
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.continue"
 msgstr "Continuar"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
-msgid "officeAddin.sessionAsk.actions.pickFromRecent"
-msgstr "Elegir de recientes"
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.actions.new"
+msgstr "Nuevo"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
-msgid "officeAddin.sessionAsk.actions.startNew"
-msgstr "Nuevo chat"
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.actions.pick"
+msgstr "Elegir"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.descriptionNoSuggestion"
 msgstr "¿Iniciar un nuevo chat para este correo?"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.descriptionWithSuggestion"
 msgstr "¿Continuar el chat anterior de este correo o empezar uno nuevo?"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.title"
 msgstr "Has cambiado de conversación"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.untitledChat"
 msgstr "Chat sin título"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
-msgid "officeAddin.sessionPick.actions.startNew"
-msgstr "Nuevo chat"
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionPick.actions.back"
+msgstr "Atrás"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionPick.title"
 msgstr "Elige un chat reciente"
 

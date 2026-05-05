@@ -217,47 +217,47 @@ msgid "officeAddin.office.loading"
 msgstr "Ładowanie dodatku Office..."
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.continue"
 msgstr "Kontynuuj"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
-msgid "officeAddin.sessionAsk.actions.pickFromRecent"
-msgstr "Wybierz z ostatnich"
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.actions.new"
+msgstr "Nowy"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
-msgid "officeAddin.sessionAsk.actions.startNew"
-msgstr "Nowy czat"
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.actions.pick"
+msgstr "Wybierz"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.descriptionNoSuggestion"
 msgstr "Rozpocząć nowy czat dla tej wiadomości?"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.descriptionWithSuggestion"
 msgstr "Kontynuować poprzedni czat dla tej wiadomości, czy rozpocząć nowy?"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.title"
 msgstr "Zmieniono wiadomość"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.untitledChat"
 msgstr "Czat bez nazwy"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
-msgid "officeAddin.sessionPick.actions.startNew"
-msgstr "Nowy czat"
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionPick.actions.back"
+msgstr "Wstecz"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionPick.title"
 msgstr "Wybierz ostatni czat"
 

@@ -217,47 +217,47 @@ msgid "officeAddin.office.loading"
 msgstr "Office-Add-in wird geladen..."
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.actions.continue"
 msgstr "Weiterführen"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
-msgid "officeAddin.sessionAsk.actions.pickFromRecent"
-msgstr "Aus letzten auswählen"
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.actions.new"
+msgstr "Neu"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
-msgid "officeAddin.sessionAsk.actions.startNew"
-msgstr "Neu starten"
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.actions.pick"
+msgstr "Wählen"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.descriptionNoSuggestion"
 msgstr "Neuen Chat für diese E-Mail starten?"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.descriptionWithSuggestion"
 msgstr "Vorherigen Chat für diese E-Mail weiterführen oder einen neuen starten?"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.title"
 msgstr "E-Mail gewechselt"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionAsk.untitledChat"
 msgstr "Unbenannter Chat"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
-msgid "officeAddin.sessionPick.actions.startNew"
-msgstr "Neu starten"
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionPick.actions.back"
+msgstr "Zurück"
 
 #. js-lingui-explicit-id
-#: src/components/sessionAskToast.ts
+#: src/components/sessionAskToast.tsx
 msgid "officeAddin.sessionPick.title"
 msgstr "Letzten Chat auswählen"
 
