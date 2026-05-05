@@ -36,7 +36,6 @@ import {
   VoiceIcon,
   WarningCircleIcon,
 } from "../icons";
-
 import { AppearanceTabContent } from "./AppearanceTabContent";
 
 import type {
