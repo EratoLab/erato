@@ -79,7 +79,10 @@ function subscribeSystemColorScheme(
   host: string,
   handler: (snapshot: OfficeThemeSnapshot) => void,
 ): () => void {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
     return () => {};
   }
 

@@ -1,7 +1,4 @@
-import {
-  AppearanceTabContent,
-  ModalBase,
-} from "@erato/frontend/library";
+import { AppearanceTabContent, ModalBase } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useState, type KeyboardEvent } from "react";
 

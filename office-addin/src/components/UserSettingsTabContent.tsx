@@ -22,7 +22,9 @@ const toNullableValue = (value: string) => {
   return normalized.length > 0 ? normalized : null;
 };
 
-export function UserSettingsTabContent({ onClose }: UserSettingsTabContentProps) {
+export function UserSettingsTabContent({
+  onClose,
+}: UserSettingsTabContentProps) {
   const { profile } = useProfile();
   const queryClient = useQueryClient();
 

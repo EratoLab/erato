@@ -220,9 +220,7 @@ describe("subscribeThemeChanges", () => {
       installOfficeTheme(darkTheme);
       uninstallMockMatchMedia();
 
-      expect(() =>
-        subscribeThemeChanges("Outlook", vi.fn()),
-      ).not.toThrow();
+      expect(() => subscribeThemeChanges("Outlook", vi.fn())).not.toThrow();
     });
   });
 

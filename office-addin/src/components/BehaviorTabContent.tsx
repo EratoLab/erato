@@ -1,7 +1,4 @@
-import {
-  RadioCard,
-  usePersistedState,
-} from "@erato/frontend/library";
+import { RadioCard, usePersistedState } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useId } from "react";
 
@@ -17,7 +14,9 @@ interface BehaviorTabContentProps {
   emptyStateText: string;
 }
 
-export function BehaviorTabContent({ emptyStateText }: BehaviorTabContentProps) {
+export function BehaviorTabContent({
+  emptyStateText,
+}: BehaviorTabContentProps) {
   const { host } = useOffice();
   const isOutlook = host === "Outlook";
   const radioGroupName = useId();
