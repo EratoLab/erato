@@ -31,7 +31,9 @@ export const useToastStore = create<ToastStore>((set, get) => ({
       }
       set((state) => ({
         toasts: [
-          ...state.toasts.filter((toast) => toast.dedupeKey !== input.dedupeKey),
+          ...state.toasts.filter(
+            (toast) => toast.dedupeKey !== input.dedupeKey,
+          ),
           next,
         ],
       }));

@@ -20,10 +20,7 @@ const strictEquals = (a: DemoAnchor | null, b: DemoAnchor | null) =>
     a.thread === b.thread &&
     a.isCompose === b.isCompose);
 
-const composeInheritsEquals = (
-  a: DemoAnchor | null,
-  b: DemoAnchor | null,
-) => {
+const composeInheritsEquals = (a: DemoAnchor | null, b: DemoAnchor | null) => {
   if (strictEquals(a, b)) return true;
   if (!a || !b) return false;
   // Compose-of-the-same-thread treated as equal to the read mail.

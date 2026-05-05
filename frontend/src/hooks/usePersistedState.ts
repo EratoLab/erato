@@ -74,10 +74,7 @@ function readValue<T>(
   }
 }
 
-const snapshotCache = new Map<
-  string,
-  { raw: string | null; value: unknown }
->();
+const snapshotCache = new Map<string, { raw: string | null; value: unknown }>();
 
 function getSnapshot<T>(
   key: string,

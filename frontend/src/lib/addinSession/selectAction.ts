@@ -1,7 +1,4 @@
-import type {
-  AddinSessionAction,
-  AddinSessionActionInput,
-} from "./types";
+import type { AddinSessionAction, AddinSessionActionInput } from "./types";
 
 /**
  * Pure policy resolver for the add-in chat-session lifecycle. Given a trigger,

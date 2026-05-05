@@ -19,7 +19,8 @@ const EXIT_DURATION_MS = 150;
 
 const defaultDuration = (toast: ToastDescriptor): number => {
   if (typeof toast.duration === "number") return toast.duration;
-  if (toast.actions && toast.actions.length > 0) return Number.POSITIVE_INFINITY;
+  if (toast.actions && toast.actions.length > 0)
+    return Number.POSITIVE_INFINITY;
   if (toast.variant === "error") return Number.POSITIVE_INFINITY;
   return 5000;
 };
@@ -148,12 +149,7 @@ export function ToastItem({ toast }: ToastItemProps) {
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p
-              className={clsx(
-                "text-sm font-medium",
-                variant.titleColor,
-              )}
-            >
+            <p className={clsx("text-sm font-medium", variant.titleColor)}>
               {toast.title}
             </p>
             {toast.description ? (

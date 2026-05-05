@@ -59,38 +59,64 @@ afterEach(() => {
 describe("usePersistedState", () => {
   it("returns the default when nothing is stored", () => {
     const { result } = renderHook(() =>
-      usePersistedState<Prefs>("test.k1", { mode: "a", count: 0 }, {
-        parse: parsePrefs,
-      }),
+      usePersistedState<Prefs>(
+        "test.k1",
+        { mode: "a", count: 0 },
+        {
+          parse: parsePrefs,
+        },
+      ),
     );
     expect(result.current[0]).toEqual({ mode: "a", count: 0 });
   });
 
   it("persists writes and rehydrates them", () => {
     const { result } = renderHook(() =>
-      usePersistedState<Prefs>("test.k2", { mode: "a", count: 0 }, {
-        parse: parsePrefs,
-      }),
+      usePersistedState<Prefs>(
+        "test.k2",
+        { mode: "a", count: 0 },
+        {
+          parse: parsePrefs,
+        },
+      ),
     );
     act(() => result.current[1]({ mode: "b", count: 3 }));
     expect(result.current[0]).toEqual({ mode: "b", count: 3 });
 
     const rehydrated = renderHook(() =>
-      usePersistedState<Prefs>("test.k2", { mode: "a", count: 0 }, {
-        parse: parsePrefs,
-      }),
+      usePersistedState<Prefs>(
+        "test.k2",
+        { mode: "a", count: 0 },
+        {
+          parse: parsePrefs,
+        },
+      ),
     );
     expect(rehydrated.result.current[0]).toEqual({ mode: "b", count: 3 });
   });
 
   it("supports updater functions", () => {
     const { result } = renderHook(() =>
-      usePersistedState<Prefs>("test.k3", { mode: "a", count: 0 }, {
-        parse: parsePrefs,
-      }),
+      usePersistedState<Prefs>(
+        "test.k3",
+        { mode: "a", count: 0 },
+        {
+          parse: parsePrefs,
+        },
+      ),
     );
-    act(() => result.current[1]((previous) => ({ ...previous, count: previous.count + 1 })));
-    act(() => result.current[1]((previous) => ({ ...previous, count: previous.count + 1 })));
+    act(() =>
+      result.current[1]((previous) => ({
+        ...previous,
+        count: previous.count + 1,
+      })),
+    );
+    act(() =>
+      result.current[1]((previous) => ({
+        ...previous,
+        count: previous.count + 1,
+      })),
+    );
     expect(result.current[0].count).toBe(2);
   });
 
@@ -100,18 +126,26 @@ describe("usePersistedState", () => {
       JSON.stringify({ mode: "x", count: "nope" }),
     );
     const { result } = renderHook(() =>
-      usePersistedState<Prefs>("test.k4", { mode: "a", count: 0 }, {
-        parse: parsePrefs,
-      }),
+      usePersistedState<Prefs>(
+        "test.k4",
+        { mode: "a", count: 0 },
+        {
+          parse: parsePrefs,
+        },
+      ),
     );
     expect(result.current[0]).toEqual({ mode: "a", count: 0 });
   });
 
   it("clears storage when set to null", () => {
     const { result } = renderHook(() =>
-      usePersistedState<Prefs>("test.k7", { mode: "a", count: 0 }, {
-        parse: parsePrefs,
-      }),
+      usePersistedState<Prefs>(
+        "test.k7",
+        { mode: "a", count: 0 },
+        {
+          parse: parsePrefs,
+        },
+      ),
     );
     act(() => result.current[1]({ mode: "b", count: 9 }));
     expect(localStorage.getItem("test.k7")).not.toBeNull();
@@ -122,14 +156,22 @@ describe("usePersistedState", () => {
 
   it("syncs multiple consumers of the same key", () => {
     const a = renderHook(() =>
-      usePersistedState<Prefs>("test.k8", { mode: "a", count: 0 }, {
-        parse: parsePrefs,
-      }),
+      usePersistedState<Prefs>(
+        "test.k8",
+        { mode: "a", count: 0 },
+        {
+          parse: parsePrefs,
+        },
+      ),
     );
     const b = renderHook(() =>
-      usePersistedState<Prefs>("test.k8", { mode: "a", count: 0 }, {
-        parse: parsePrefs,
-      }),
+      usePersistedState<Prefs>(
+        "test.k8",
+        { mode: "a", count: 0 },
+        {
+          parse: parsePrefs,
+        },
+      ),
     );
     act(() => a.result.current[1]({ mode: "b", count: 5 }));
     expect(b.result.current[0]).toEqual({ mode: "b", count: 5 });
