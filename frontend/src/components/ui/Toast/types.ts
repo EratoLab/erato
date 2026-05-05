@@ -29,6 +29,11 @@ export interface ToastDescriptor {
    */
   duration?: number;
   /**
+   * Hide the variant icon (info/success/warning/error). Useful for toasts
+   * that act as lightweight dialogs where the icon adds no information.
+   */
+  hideIcon?: boolean;
+  /**
    * Optional dedupe key — emitting a toast with a key that's already showing
    * replaces the existing one rather than stacking.
    */

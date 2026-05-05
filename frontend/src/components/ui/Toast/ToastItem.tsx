@@ -142,9 +142,11 @@ export function ToastItem({ toast }: ToastItemProps) {
     >
       <div className="p-4">
         <div className="flex items-start gap-3">
-          <div className={clsx("mt-0.5 shrink-0", variant.iconWrap)}>
-            {variantIcon(toast.variant)}
-          </div>
+          {toast.hideIcon ? null : (
+            <div className={clsx("mt-0.5 shrink-0", variant.iconWrap)}>
+              {variantIcon(toast.variant)}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <p
               className={clsx(
