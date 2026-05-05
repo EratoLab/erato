@@ -110,8 +110,11 @@ interface ComputeInitialLifecycleArgs {
  * 1. Resume mode (the default). The policy always returns "resume" on
  *    cold-open regardless of anchor — no need to wait for the live anchor.
  * 2. Ask / new mode where the saved anchor matches the current Office item
- *    read synchronously. The policy short-circuits to "resume" whenever
- *    `anchorsEqual(saved, current)` holds — so again, no need to wait.
+ *    read synchronously. The policy short-circuits whenever
+ *    `anchorsEqual(saved, current)` holds — it returns "resume" if a prior
+ *    chat exists, or "new" otherwise. Either way no async step is needed,
+ *    and `{ kind: "decided", chatId: session.chatId }` matches both
+ *    outcomes (`session.chatId` is null exactly when "new" is the result).
  *
  * Together these cover the common cases (resume mode, or returning to the
  * same email in any mode) and reduce the cold-open gate window to zero
@@ -251,7 +254,6 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   const lastEvaluatedAnchorRef = useRef<OutlookSessionAnchor | null | "unset">(
     "unset",
   );
-  const lastEvaluatedChatIdRef = useRef<string | null>(null);
 
   // The decision side effect needs the latest chat list to surface a sensible
   // "Continue <title>" suggestion. Refs avoid re-running the effect when the
@@ -309,7 +311,6 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
           // future comparisons stay accurate.
           setSession({ chatId: decision.chatId, anchor: currentAnchor });
         }
-        lastEvaluatedChatIdRef.current = decision.chatId;
         break;
       }
       case "new": {
@@ -322,7 +323,6 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
         } else {
           setSession({ chatId: null, anchor: currentAnchor });
         }
-        lastEvaluatedChatIdRef.current = null;
         break;
       }
       case "ask": {
@@ -352,8 +352,9 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
 
     // First decision unblocks the messages fetch. The "ask" branch above
     // doesn't change `chatId`, so it never calls `setCurrentChatId` (which
-    // is what flips lifecycle in the resume / new branches). Cover that
-    // case here with a functional update — no-op once already decided.
+    // is what flips lifecycle in the resume / new branches). Settling to
+    // the saved chatId here means the previous chat renders behind the
+    // ask toast, giving the user context for the "Continue" decision.
     setLifecycle((previous) =>
       previous.kind === "pending"
         ? { kind: "decided", chatId: sessionRef.current.chatId }
