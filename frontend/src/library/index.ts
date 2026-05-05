@@ -20,10 +20,37 @@ export { MessageContent } from "@/components/ui/Message/MessageContent";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
+export { ModalBase } from "@/components/ui/Modal/ModalBase";
+export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabContent";
 export { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton";
 export { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 export { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 export { AnchoredPopover } from "@/components/ui/Controls/AnchoredPopover";
+export { Button } from "@/components/ui/Controls/Button";
+export { RadioCard } from "@/components/ui/Controls/RadioCard";
+export {
+  DropdownMenu,
+  type DropdownMenuItem,
+  type DropdownMenuProps,
+} from "@/components/ui/Controls/DropdownMenu";
+export { Alert } from "@/components/ui/Feedback/Alert";
+export {
+  Toaster,
+  toast,
+  type ToasterPlacement,
+  type ToastDescriptor,
+  type ToastInput,
+  type ToastVariant,
+  type ToastAction,
+} from "@/components/ui/Toast";
+export {
+  FormField,
+  Input,
+  Textarea,
+  type FormFieldProps,
+  type InputProps,
+  type TextareaProps,
+} from "@/components/ui/Input";
 export { ChatErrorBoundary } from "@/components/ui/Feedback/ChatErrorBoundary";
 export { FeedbackCommentDialog } from "@/components/ui/Feedback/FeedbackCommentDialog";
 export { FeedbackViewDialog } from "@/components/ui/Feedback/FeedbackViewDialog";
@@ -65,7 +92,12 @@ export {
   useFileUploadWithTokenCheck,
   useStandaloneFileUpload,
 } from "@/hooks/files";
-export { DocumentIcon } from "@/components/ui/icons";
+export {
+  ComputerIcon,
+  DocumentIcon,
+  MoonIcon,
+  SunIcon,
+} from "@/components/ui/icons";
 export {
   useChatInputHandlers,
   useSidebar,
@@ -80,8 +112,23 @@ export { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 export { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 export { useProfile } from "@/hooks/useProfile";
 export {
+  usePersistedState,
+  type PersistedStateOptions,
+} from "@/hooks/usePersistedState";
+export {
+  selectAddinSessionAction,
+  type AddinSessionMode,
+  type AddinSessionTrigger,
+  type AddinSessionAction,
+  type AddinSessionState,
+  type AddinSessionPolicy,
+  type AddinSessionActionInput,
+} from "@/lib/addinSession";
+export {
   chatMessagesQuery,
+  fetchUpdateProfilePreferences,
   fetchUploadFile,
+  profileQuery,
   recentChatsQuery,
   useArchiveChatEndpoint,
   useRecentChats,
@@ -127,6 +174,8 @@ export type {
   ChatModel,
   ContentPart,
   FileUploadItem,
+  UpdateProfilePreferencesRequest,
+  UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export type { FileType } from "@/utils/fileTypes";
 export type { LocalFilePreviewItem } from "@/components/ui/FileUpload/FilePreviewBase";

@@ -3,6 +3,7 @@ import {
   FeatureConfigProvider,
   I18nProvider,
   ThemeProvider,
+  Toaster,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
@@ -65,7 +66,7 @@ function OutlookWrapper({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <I18nProvider>
-      <ThemeProvider enableCustomTheme persistThemeMode={false}>
+      <ThemeProvider enableCustomTheme persistThemeMode={true}>
         <FeatureConfigProvider
           config={{ chatInput: { showUsageAdvisory: false } }}
         >
@@ -80,6 +81,7 @@ export default function App() {
                       </div>
                     </OutlookWrapper>
                   </AuthGate>
+                  <Toaster placement="bottom-center" />
                 </MsalNaaProvider>
               </OfficeThemeProvider>
             </OfficeProvider>

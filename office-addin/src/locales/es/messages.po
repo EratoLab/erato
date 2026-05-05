@@ -72,11 +72,6 @@ msgid "officeAddin.chat.newChat"
 msgstr "Nuevo chat"
 
 #. js-lingui-explicit-id
-#: src/components/AddinChat.tsx
-msgid "officeAddin.chat.title"
-msgstr "Erato"
-
-#. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Descartar selección"
@@ -95,11 +90,6 @@ msgstr "Correo electrónico"
 #: src/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.expandingDroppedEmails"
 msgstr "Procesando los correos electrónicos soltados…"
-
-#. js-lingui-explicit-id
-#: src/components/AddinChatInput.tsx
-#~ msgid "officeAddin.chatInput.loadingAttachments"
-#~ msgstr "Cargando archivos adjuntos..."
 
 #. js-lingui-explicit-id
 #: src/components/AddinChatInput.tsx
@@ -217,9 +207,224 @@ msgid "officeAddin.fileSource.show"
 msgstr "Mostrar"
 
 #. js-lingui-explicit-id
+#: src/components/AddinChat.tsx
+msgid "officeAddin.headerMenu.settings"
+msgstr "Configuración"
+
+#. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx
 msgid "officeAddin.office.loading"
 msgstr "Cargando complemento de Office..."
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.actions.continue"
+msgstr "Continuar"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.actions.new"
+msgstr "Nuevo"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.actions.pick"
+msgstr "Elegir"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.descriptionNoSuggestion"
+msgstr "¿Iniciar un nuevo chat para este correo?"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.descriptionWithSuggestion"
+msgstr "¿Continuar el chat anterior de este correo o empezar uno nuevo?"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.title"
+msgstr "Has cambiado de conversación"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionAsk.untitledChat"
+msgstr "Chat sin título"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionPick.actions.back"
+msgstr "Atrás"
+
+#. js-lingui-explicit-id
+#: src/components/sessionAskToast.tsx
+msgid "officeAddin.sessionPick.title"
+msgstr "Elige un chat reciente"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.composeInherits.helper"
+msgstr "Al responder o reenviar un correo, mantiene el chat actual en lugar de iniciar uno nuevo."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.composeInherits.label"
+msgstr "Mantener el mismo chat al responder o reenviar"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.description"
+msgstr "Configura el comportamiento del complemento dentro de Office, por ejemplo cómo se asocian los correos con los chats al cambiar entre ellos."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.addin.heading"
+msgstr "Comportamiento del complemento"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.mode.ask.helper"
+msgstr "Al abrir un correo distinto, pregunta si continuar el chat anterior o iniciar uno nuevo."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.mode.ask.label"
+msgstr "Preguntar al cambiar de conversación"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.mode.legend"
+msgstr "Al cambiar a un correo distinto"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.mode.new.helper"
+msgstr "Inicia un nuevo chat cada vez que abres o cambias a un correo diferente."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.mode.new.label"
+msgstr "Iniciar nuevo chat"
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.mode.resume.helper"
+msgstr "Retoma el chat anterior al abrir o cambiar de correo."
+
+#. js-lingui-explicit-id
+#: src/components/BehaviorTabContent.tsx
+msgid "officeAddin.settings.addin.mode.resume.label"
+msgstr "Retomar último chat"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.appearance.description"
+msgstr "Elige cómo debe verse Erato en este complemento."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.appearance.heading"
+msgstr "Modo de color"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.appearance.outlook.staleness.note"
+msgstr "Outlook para Windows requiere un reinicio completo para aplicar los cambios de tema (error conocido de Office). Selecciona Claro u Oscuro arriba para anular el tema del host."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.appearance.system.description"
+msgstr "Sigue la apariencia del host de Office."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.appearance.system.description.outlook"
+msgstr "Sigue tu tema de Outlook."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.placeholder.empty"
+msgstr "Aún no hay configuraciones disponibles."
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.addin"
+msgstr "Complemento"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.appearance"
+msgstr "Apariencia"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.tabs.user"
+msgstr "Mi perfil"
+
+#. js-lingui-explicit-id
+#: src/components/AddinSettingsDialog.tsx
+msgid "officeAddin.settings.title"
+msgstr "Configuración"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.actions.cancel"
+msgstr "Cancelar"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.actions.save"
+msgstr "Guardar"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.actions.saving"
+msgstr "Guardando..."
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.additionalInformation.label"
+msgstr "Información adicional"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.additionalInformation.placeholder"
+msgstr "Cualquier contexto adicional para el asistente, p. ej. Trabajo con clientes empresariales"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.customInstructions.label"
+msgstr "Instrucciones personalizadas para el asistente"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.customInstructions.placeholder"
+msgstr "¿Cómo debe comportarse el asistente? p. ej. Prefiero respuestas breves en viñetas"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.jobTitle.label"
+msgstr "Cargo"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.jobTitle.placeholder"
+msgstr "¿Cuál es tu rol? p. ej. Product Manager"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.nickname.label"
+msgstr "Nombre preferido"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.nickname.placeholder"
+msgstr "¿Cómo debe llamarte el asistente? p. ej. Max Mustermann"
+
+#. js-lingui-explicit-id
+#: src/components/UserSettingsTabContent.tsx
+msgid "officeAddin.settings.user.save.error"
+msgstr "No se pudieron guardar las preferencias. Inténtalo de nuevo."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx

@@ -860,6 +860,16 @@ msgid "infotooltip.aria.label"
 msgstr "More information"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Toast/ToastItem.tsx
+msgid "library.toast.dismiss"
+msgstr "Dismiss notification"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Toast/Toaster.tsx
+msgid "library.toast.region"
+msgstr "Notifications"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.copy.aria"
 msgstr "Copy message"
@@ -910,22 +920,22 @@ msgid "preferences.dialog.actions.saving"
 msgstr "Saving..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.current.dark"
 msgstr "Currently dark"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.current.light"
 msgstr "Currently light"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.dark.description"
 msgstr "Always use the dark theme."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.dark.label"
 msgstr "Dark mode"
 
@@ -935,27 +945,28 @@ msgid "preferences.dialog.appearance.theme.description"
 msgstr "Choose how Erato should look for your account."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.appearance.theme.heading"
 msgstr "Color mode"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.light.description"
 msgstr "Always use the light theme."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.light.label"
 msgstr "Light mode"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.system.description"
 msgstr "Match your device appearance settings."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/components/ui/Settings/AppearanceTabContent.tsx
 msgid "preferences.dialog.appearance.theme.system.label"
 msgstr "System theme"
 

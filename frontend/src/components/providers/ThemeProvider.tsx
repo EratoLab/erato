@@ -35,6 +35,10 @@ type ThemeContextType = {
   customThemeName?: string;
   customThemeConfig?: CustomThemeConfig | null;
   effectiveTheme: "light" | "dark"; // The actual theme being applied (for UI indicators)
+  // When set, "system" mode resolves to this value instead of
+  // prefers-color-scheme. Used by hosts (e.g. Office add-in) where the
+  // surrounding environment, not the OS, defines the "system" theme.
+  setSystemThemeOverride: (theme: "light" | "dark" | null) => void;
   iconMappings?: {
     fileTypes?: Record<string, string>;
     status?: Record<string, string>;
@@ -346,6 +350,9 @@ export function ThemeProvider({
     actions?: Record<string, string>;
     navigation?: Record<string, string>;
   }>();
+  const [systemThemeOverride, setSystemThemeOverride] = useState<
+    "light" | "dark" | null
+  >(null);
 
   // Initialize theme from saved settings and try to load custom theme
   useEffect(() => {
@@ -426,6 +433,13 @@ export function ThemeProvider({
   useEffect(() => {
     if (themeMode !== "system") return;
 
+    // If a host (e.g. Office add-in) has supplied an override, that defines
+    // the "system" theme — skip the prefers-color-scheme listener entirely.
+    if (systemThemeOverride !== null) {
+      setEffectiveTheme(systemThemeOverride);
+      return;
+    }
+
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
     // Update theme when system preference changes
@@ -441,7 +455,7 @@ export function ThemeProvider({
 
     // Cleanup
     return () => mediaQuery.removeEventListener("change", handleChange);
-  }, [themeMode]);
+  }, [themeMode, systemThemeOverride]);
 
   // Update effective theme when theme mode changes
   useEffect(() => {
@@ -509,6 +523,7 @@ export function ThemeProvider({
     customThemeName: customThemeConfig?.name,
     customThemeConfig,
     effectiveTheme,
+    setSystemThemeOverride,
     iconMappings,
   };
 

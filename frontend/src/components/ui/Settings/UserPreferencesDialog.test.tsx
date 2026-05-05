@@ -323,10 +323,7 @@ describe("UserPreferencesDialog", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Appearance" }));
     fireEvent.click(screen.getByRole("radio", { name: /Dark mode/i }));
 
-    expect(screen.getByRole("radio", { name: /Dark mode/i })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    expect(screen.getByRole("radio", { name: /Dark mode/i })).toBeChecked();
   });
 
   it("loads MCP server statuses in the MCP servers tab", async () => {

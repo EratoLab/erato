@@ -3,10 +3,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 vi.mock("../../providers/OutlookMailItemProvider", () => ({
   useOutlookMailItem: vi.fn(() => ({ mailItem: null })),
-  isMessageRead: vi.fn(
-    (item: unknown) =>
-      typeof (item as { subject: unknown }).subject === "string",
-  ),
 }));
 
 import { useOutlookMailItem } from "../../providers/OutlookMailItemProvider";

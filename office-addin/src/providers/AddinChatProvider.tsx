@@ -1,5 +1,6 @@
 import {
   ChatContext,
+  selectAddinSessionAction,
   getSupportedFileTypes,
   recentChatsQuery,
   useArchiveChatEndpoint,
@@ -10,15 +11,34 @@ import {
   useFileUploadStore,
   useMessagingStore,
   useModelHistory,
+  usePersistedState,
   useRecentChats,
   mapMessageToUiMessage,
   type Message,
   type ChatContextValue,
 } from "@erato/frontend/library";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useOffice } from "./OfficeProvider";
+import {
+  dismissSessionToasts,
+  showSessionAskToast,
+} from "../components/sessionAskToast";
+import { useOutlookSessionAnchor } from "../hooks/useOutlookSessionAnchor";
+import {
+  DEFAULT_OUTLOOK_SESSION,
+  DEFAULT_OUTLOOK_SESSION_PREFERENCES,
+  OUTLOOK_SESSION_KEY,
+  OUTLOOK_SESSION_PREFERENCES_KEY,
+  anchorsEqualForPreferences,
+  migrateLegacyChatIdKey,
+  outlookAnchorFromItem,
+  outlookSessionPersistedOptions,
+  outlookSessionPreferencesPersistedOptions,
+  type OutlookSessionAnchor,
+  type OutlookSessionStorageValue,
+} from "../sessionPolicy";
 
 import type { ReactNode } from "react";
 
@@ -32,31 +52,160 @@ interface AddinChatMessage extends Message {
   };
 }
 
+// Run the legacy → versioned-envelope migration once per page load, before the
+// provider mounts. Idempotent.
+migrateLegacyChatIdKey();
+
+/**
+ * The session lifecycle in this provider has two phases. Modelling it as a
+ * discriminated union (rather than a `(boolean, chatId)` pair) makes
+ * `(chatId: "X", policyDecided: false)` an unrepresentable state.
+ *
+ * - `pending`: cold-open before the policy has decided. Consumers see no
+ *   messages and the messages fetch is gated.
+ * - `decided`: the policy has spoken (or never needed to — see
+ *   `computeInitialLifecycle` for the cases where we skip the gate). The
+ *   `chatId` field is the runtime source of truth for the current chat.
+ */
+export type SessionLifecycle =
+  | { kind: "pending" }
+  | { kind: "decided"; chatId: string | null };
+
+/**
+ * Thin Office-context wrapper around the pure `outlookAnchorFromItem`. Lets
+ * the lazy lifecycle initializer derive an anchor before
+ * `OutlookMailItemProvider`'s `useEffect` has populated its state. Try/catch
+ * guards against Office.js access errors in degraded hosts; returns `null`
+ * if no item is selected.
+ */
+function readSyncOutlookAnchor(): OutlookSessionAnchor | null {
+  try {
+    const item = Office.context.mailbox?.item as
+      | Office.MessageRead
+      | Office.MessageCompose
+      | undefined
+      | null;
+    return outlookAnchorFromItem(item ?? null);
+  } catch {
+    return null;
+  }
+}
+
+export interface ComputeInitialLifecycleArgs {
+  isOutlook: boolean;
+  session: OutlookSessionStorageValue;
+  sessionPreferences: typeof DEFAULT_OUTLOOK_SESSION_PREFERENCES;
+  /**
+   * The current anchor read synchronously from Office. Pass `null` when no
+   * item is available or the host isn't a mailbox host. Resolved by the
+   * caller (rather than read internally) to keep this function pure and
+   * trivially unit-testable without Office globals.
+   */
+  liveAnchor: OutlookSessionAnchor | null;
+}
+
+/**
+ * Initial lifecycle on mount. Non-Outlook hosts have no policy and start
+ * decided. Outlook hosts gate until the policy effect runs — except in two
+ * cases where the policy outcome is knowable synchronously and we can skip
+ * the gate entirely:
+ *
+ * 1. Resume mode (the default). The policy always returns "resume" on
+ *    cold-open regardless of anchor — no need to wait for the live anchor.
+ * 2. Ask / new mode where the saved anchor matches the current Office item
+ *    read synchronously. The policy short-circuits whenever
+ *    `anchorsEqual(saved, current)` holds — it returns "resume" if a prior
+ *    chat exists, or "new" otherwise. Either way no async step is needed,
+ *    and `{ kind: "decided", chatId: session.chatId }` matches both
+ *    outcomes (`session.chatId` is null exactly when "new" is the result).
+ *
+ * Together these cover the common cases (resume mode, or returning to the
+ * same email in any mode) and reduce the cold-open gate window to zero
+ * frames. Anything else stays `pending`.
+ *
+ * Pure; safe to call during render or in a `useState` initializer.
+ */
+export function computeInitialLifecycle({
+  isOutlook,
+  session,
+  sessionPreferences,
+  liveAnchor,
+}: ComputeInitialLifecycleArgs): SessionLifecycle {
+  if (!isOutlook) {
+    return { kind: "decided", chatId: session.chatId };
+  }
+
+  if (sessionPreferences.mode === "resume") {
+    return { kind: "decided", chatId: session.chatId };
+  }
+
+  if (liveAnchor && session.anchor) {
+    const equals = anchorsEqualForPreferences(sessionPreferences);
+    if (equals(session.anchor, liveAnchor)) {
+      return { kind: "decided", chatId: session.chatId };
+    }
+  }
+
+  return { kind: "pending" };
+}
+
 export function AddinChatProvider({ children }: { children: ReactNode }) {
   const { capabilities } = useFileCapabilitiesContext();
   const queryClient = useQueryClient();
   const { host } = useOffice();
+  const isOutlook = host === "Outlook";
 
   const acceptedFileTypes = useMemo(
     () => getSupportedFileTypes(capabilities),
     [capabilities],
   );
 
-  const chatIdStorageKey = "erato-office-addin-current-chat-id";
-  const [currentChatId, setCurrentChatIdState] = useState<string | null>(() =>
-    localStorage.getItem(chatIdStorageKey),
+  const [session, setSession] = usePersistedState<OutlookSessionStorageValue>(
+    OUTLOOK_SESSION_KEY,
+    DEFAULT_OUTLOOK_SESSION,
+    outlookSessionPersistedOptions,
   );
+  const [sessionPreferences] = usePersistedState(
+    OUTLOOK_SESSION_PREFERENCES_KEY,
+    DEFAULT_OUTLOOK_SESSION_PREFERENCES,
+    outlookSessionPreferencesPersistedOptions,
+  );
+
+  const currentChatId = session.chatId;
+  const currentAnchor = useOutlookSessionAnchor();
   const [newChatCounter, setNewChatCounter] = useState(0);
 
-  const setCurrentChatId = useCallback((chatId: string | null) => {
-    setCurrentChatIdState(chatId);
+  // The Tier-2 gate is now expressed as a discriminated union (see
+  // `SessionLifecycle`). The lazy initializer skips the gate when the
+  // policy outcome is knowable synchronously — see
+  // `computeInitialLifecycle`.
+  const [lifecycle, setLifecycle] = useState<SessionLifecycle>(() =>
+    computeInitialLifecycle({
+      isOutlook,
+      session,
+      sessionPreferences,
+      liveAnchor: readSyncOutlookAnchor(),
+    }),
+  );
+  const effectiveChatId =
+    lifecycle.kind === "decided" ? lifecycle.chatId : null;
 
-    if (chatId) {
-      localStorage.setItem(chatIdStorageKey, chatId);
-    } else {
-      localStorage.removeItem(chatIdStorageKey);
-    }
-  }, []);
+  const setCurrentChatId = useCallback(
+    (chatId: string | null, anchor?: OutlookSessionAnchor | null) => {
+      setSession((previous) => ({
+        chatId,
+        anchor: anchor === undefined ? previous.anchor : anchor,
+      }));
+      // Any explicit chat change implies the session is decided. Idempotent
+      // when already decided to the same chatId — React skips the re-render.
+      setLifecycle((previous) =>
+        previous.kind === "decided" && previous.chatId === chatId
+          ? previous
+          : { kind: "decided", chatId },
+      );
+    },
+    [setSession],
+  );
 
   const {
     data: chatsData,
@@ -72,20 +221,20 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
 
   const createNewChat = useCallback(async () => {
     setNewChatCounter((previous) => previous + 1);
-    setCurrentChatId(null);
+    setCurrentChatId(null, currentAnchor);
 
     useMessagingStore.getState().abortActiveSSE();
     useMessagingStore.getState().clearUserMessages();
     useMessagingStore.getState().resetStreaming();
 
     return `temp-${Date.now()}`;
-  }, [setCurrentChatId]);
+  }, [currentAnchor, setCurrentChatId]);
 
   const navigateToChat = useCallback(
     (chatId: string) => {
-      setCurrentChatId(chatId);
+      setCurrentChatId(chatId, currentAnchor);
     },
-    [setCurrentChatId],
+    [currentAnchor, setCurrentChatId],
   );
 
   const archiveChat = useCallback(
@@ -96,12 +245,143 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
       });
 
       if (currentChatId === chatId) {
-        setCurrentChatId(null);
+        setCurrentChatId(null, currentAnchor);
         setNewChatCounter((previous) => previous + 1);
       }
     },
-    [archiveChatMutation, currentChatId, queryClient, setCurrentChatId],
+    [
+      archiveChatMutation,
+      currentAnchor,
+      currentChatId,
+      queryClient,
+      setCurrentChatId,
+    ],
   );
+
+  // Policy: react to cold-open and to debounced context changes. Outlook-only
+  // for now — other hosts have no anchor concept and silently keep today's
+  // "always resume" behaviour by virtue of `currentAnchor` being null.
+  const lastEvaluatedAnchorRef = useRef<OutlookSessionAnchor | null | "unset">(
+    "unset",
+  );
+
+  // The action side effect needs the latest chat list to surface a sensible
+  // "Continue <title>" suggestion. Refs avoid re-running the effect when the
+  // chat list ticks for unrelated reasons (cache invalidation, etc.).
+  const chatsRef = useRef(chats);
+  chatsRef.current = chats;
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+
+  // The toast outlives the render that spawned it, so its callbacks must
+  // always reach the freshest action functions (whose closures capture the
+  // current anchor). Without these refs, "Start new" would call a stale
+  // closure that silently no-ops.
+  const createNewChatRef = useRef(createNewChat);
+  createNewChatRef.current = createNewChat;
+  const navigateToChatRef = useRef(navigateToChat);
+  navigateToChatRef.current = navigateToChat;
+
+  useEffect(() => {
+    if (!isOutlook) return;
+    if (currentAnchor === null) return; // anchor still settling
+
+    const previousAnchor = lastEvaluatedAnchorRef.current;
+    const trigger =
+      previousAnchor === "unset"
+        ? ({ kind: "cold-open" } as const)
+        : ({
+            kind: "context-change",
+            previous: previousAnchor,
+            next: currentAnchor,
+          } as const);
+
+    lastEvaluatedAnchorRef.current = currentAnchor;
+
+    const action = selectAddinSessionAction<OutlookSessionAnchor>({
+      trigger,
+      saved: sessionRef.current,
+      currentAnchor,
+      policy: { mode: sessionPreferences.mode },
+      anchorsEqual: anchorsEqualForPreferences(sessionPreferences),
+    });
+
+    // Any action other than "ask" supersedes a previously-shown ask toast
+    // (e.g. user navigated back to the original conversation without picking).
+    if (action.kind !== "ask") {
+      dismissSessionToasts();
+    }
+
+    switch (action.kind) {
+      case "resume": {
+        if (sessionRef.current.chatId !== action.chatId) {
+          setCurrentChatId(action.chatId, currentAnchor);
+        } else {
+          // Same chat, but anchor may have moved — record the new anchor so
+          // future comparisons stay accurate.
+          setSession({ chatId: action.chatId, anchor: currentAnchor });
+        }
+        break;
+      }
+      case "new": {
+        if (sessionRef.current.chatId !== null) {
+          setNewChatCounter((previous) => previous + 1);
+          setCurrentChatId(null, currentAnchor);
+          useMessagingStore.getState().abortActiveSSE();
+          useMessagingStore.getState().clearUserMessages();
+          useMessagingStore.getState().resetStreaming();
+        } else {
+          setSession({ chatId: null, anchor: currentAnchor });
+        }
+        break;
+      }
+      case "ask": {
+        const suggestedChatId = action.suggestedChatId;
+        const suggestedChat = suggestedChatId
+          ? chatsRef.current.find((chat) => chat.id === suggestedChatId)
+          : null;
+        showSessionAskToast({
+          suggestedChat: suggestedChat
+            ? {
+                id: suggestedChat.id,
+                title: suggestedChat.title_resolved,
+                lastMessageAt: suggestedChat.last_message_at ?? null,
+              }
+            : suggestedChatId
+              ? { id: suggestedChatId, title: null, lastMessageAt: null }
+              : null,
+          recentChats: chatsRef.current.map((chat) => ({
+            id: chat.id,
+            title: chat.title_resolved,
+            lastMessageAt: chat.last_message_at ?? null,
+          })),
+          onResume: (chatId) => navigateToChatRef.current(chatId),
+          onPickRecent: (chatId) => navigateToChatRef.current(chatId),
+          onNew: () => {
+            void createNewChatRef.current();
+          },
+        });
+        break;
+      }
+    }
+
+    // First action unblocks the messages fetch. The "ask" branch above
+    // doesn't change `chatId`, so it never calls `setCurrentChatId` (which
+    // is what flips lifecycle in the resume / new branches). Settling to
+    // the saved chatId here means the previous chat renders behind the
+    // ask toast, giving the user context for the "Continue" action.
+    setLifecycle((previous) =>
+      previous.kind === "pending"
+        ? { kind: "decided", chatId: sessionRef.current.chatId }
+        : previous,
+    );
+  }, [
+    currentAnchor,
+    isOutlook,
+    sessionPreferences,
+    setCurrentChatId,
+    setSession,
+  ]);
 
   const mountKey = useMemo(
     () => `new-chat-session-${newChatCounter}`,
@@ -125,7 +405,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
     refetch: refetchMessages,
     newlyCreatedChatId,
   } = useChatMessaging({
-    chatId: currentChatId,
+    chatId: effectiveChatId,
     silentChatId,
     platform: host?.toLowerCase() ?? "office-addin",
   });
@@ -133,12 +413,18 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (newlyCreatedChatId && !currentChatId && !isPendingResponse) {
       useMessagingStore.getState().setNavigationTransition(true);
-      setCurrentChatId(newlyCreatedChatId);
+      setCurrentChatId(newlyCreatedChatId, currentAnchor);
       setTimeout(() => {
         useMessagingStore.getState().setNavigationTransition(false);
       }, 100);
     }
-  }, [currentChatId, isPendingResponse, newlyCreatedChatId, setCurrentChatId]);
+  }, [
+    currentAnchor,
+    currentChatId,
+    isPendingResponse,
+    newlyCreatedChatId,
+    setCurrentChatId,
+  ]);
 
   useBudgetStatus();
 
@@ -151,7 +437,7 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   } = useFileDropzone({
     acceptedFileTypes,
     multiple: true,
-    chatId: currentChatId,
+    chatId: effectiveChatId,
     onSilentChatCreated: () => {},
   });
 

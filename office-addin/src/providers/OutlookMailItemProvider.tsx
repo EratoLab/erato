@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 
+import { isMessageRead } from "../sessionPolicy";
 import { callOfficeAsync } from "../utils/officeAsync";
 
 interface EmailAddress {
@@ -78,12 +79,6 @@ function parseRecipients(
     displayName: recipient.displayName,
     emailAddress: recipient.emailAddress,
   }));
-}
-
-export function isMessageRead(
-  item: Office.MessageRead | Office.MessageCompose,
-): item is Office.MessageRead {
-  return typeof (item as Office.MessageRead).subject === "string";
 }
 
 function buildMailItemIdentity(
@@ -449,32 +444,46 @@ export function OutlookMailItemProvider({
   useEffect(() => {
     const mailbox = Office.context.mailbox;
 
-    function onItemChanged() {
+    function onSelectionChanged() {
       setRefreshKey((previous) => previous + 1);
     }
 
-    try {
-      mailbox.addHandlerAsync(
-        Office.EventType.ItemChanged,
-        onItemChanged,
-        (result) => {
+    // OWA and New Outlook drop `ItemChanged` for in-thread navigation
+    // (selecting between replies in the same conversation), so layer in
+    // `SelectedItemsChanged` (Mailbox 1.13+) as a redundant signal. Both
+    // funnel through the same refresh; the read effect's `selectionVersion`
+    // ref discards stale callbacks if both fire for the same change.
+    function subscribe(eventType: Office.EventType, label: string) {
+      try {
+        mailbox.addHandlerAsync(eventType, onSelectionChanged, (result) => {
           if (result.status !== Office.AsyncResultStatus.Succeeded) {
             console.warn(
-              "Failed to register ItemChanged handler:",
+              `Failed to register ${label} handler:`,
               result.error?.message,
             );
           }
-        },
-      );
-    } catch (error) {
-      console.warn("ItemChanged not supported:", error);
+        });
+      } catch (error) {
+        console.warn(`${label} not supported:`, error);
+      }
+    }
+
+    subscribe(Office.EventType.ItemChanged, "ItemChanged");
+    if (Office.EventType.SelectedItemsChanged !== undefined) {
+      subscribe(Office.EventType.SelectedItemsChanged, "SelectedItemsChanged");
     }
 
     return () => {
-      try {
-        mailbox.removeHandlerAsync(Office.EventType.ItemChanged, () => {});
-      } catch {
-        // Best-effort cleanup.
+      function unsubscribe(eventType: Office.EventType) {
+        try {
+          mailbox.removeHandlerAsync(eventType, () => {});
+        } catch {
+          // Best-effort cleanup.
+        }
+      }
+      unsubscribe(Office.EventType.ItemChanged);
+      if (Office.EventType.SelectedItemsChanged !== undefined) {
+        unsubscribe(Office.EventType.SelectedItemsChanged);
       }
     };
   }, []);

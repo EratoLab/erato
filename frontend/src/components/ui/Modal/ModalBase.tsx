@@ -72,6 +72,10 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   const overlayStyle = {
     backgroundColor: "var(--theme-overlay-modal)",
     backdropFilter: "blur(var(--theme-layout-modal-backdrop-blur))",
+    // Ensure a viewport gutter regardless of any max-w-* utility a consumer
+    // sets on contentClassName — Tailwind utilities outweigh the .modal-shell
+    // max-width calc, so the overlay's flex container holds the safe zone.
+    padding: "var(--theme-layout-modal-viewport-margin)",
   } as const;
 
   const shellStyle = {

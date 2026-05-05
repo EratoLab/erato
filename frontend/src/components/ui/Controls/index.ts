@@ -1,5 +1,6 @@
 export * from "./Button";
 export * from "./AnchoredPopover";
+export * from "./RadioCard";
 export * from "./DropdownMenu";
 export * from "./SegmentedControl";
 export * from "./Tooltip";
