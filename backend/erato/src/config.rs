@@ -2646,6 +2646,10 @@ pub struct ModelSettings {
     // Whether the model should generate images instead of text
     #[serde(default)]
     pub generate_images: bool,
+    // Whether to omit tool `strict` in outgoing request payloads.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub compat_omit_strict: bool,
     // Optional sampling temperature for generation.
     pub temperature: Option<f64>,
     // Optional nucleus sampling parameter.

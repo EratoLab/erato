@@ -1698,6 +1698,7 @@ temperature = 0.2
 top_p = 0.9
 reasoning_effort = "minimal"
 verbosity = "high"
+compat_omit_strict = true
 
 [file_storage_providers.test]
 provider_kind = "s3"
@@ -1730,6 +1731,7 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
         provider.model_settings.reasoning_effort,
         Some(ModelReasoningEffort::Minimal)
     );
+    assert!(provider.model_settings.compat_omit_strict);
     assert_eq!(
         provider.model_settings.verbosity,
         Some(ModelVerbosity::High)
@@ -1786,6 +1788,7 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
     assert_eq!(provider.model_settings.temperature, None);
     assert_eq!(provider.model_settings.top_p, None);
     assert_eq!(provider.model_settings.reasoning_effort, None);
+    assert!(!provider.model_settings.compat_omit_strict);
     assert_eq!(provider.model_settings.verbosity, None);
 }
 

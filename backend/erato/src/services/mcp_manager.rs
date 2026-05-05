@@ -167,7 +167,10 @@ impl McpServers {
 }
 
 /// Convert MCP tools to GenAI tools format
-pub fn convert_mcp_tools_to_genai_tools(managed_mcp_tools: Vec<ManagedTool>) -> Vec<GenaiTool> {
+pub fn convert_mcp_tools_to_genai_tools(
+    managed_mcp_tools: Vec<ManagedTool>,
+    omit_tool_strict: bool,
+) -> Vec<GenaiTool> {
     managed_mcp_tools
         .into_iter()
         .map(|managed_tool| {
@@ -183,7 +186,7 @@ pub fn convert_mcp_tools_to_genai_tools(managed_mcp_tools: Vec<ManagedTool>) -> 
                 name: GenaiToolName::Custom(tool.name.to_string()),
                 description: tool.description.map(|d| d.to_string()),
                 schema: Some(input_schema_value),
-                strict: None,
+                strict: if omit_tool_strict { None } else { Some(false) },
                 config: None,
             }
         })

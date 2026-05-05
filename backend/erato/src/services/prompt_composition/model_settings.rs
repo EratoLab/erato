@@ -46,6 +46,9 @@ fn merge_model_settings(base: &ModelSettings, overrides: &ModelSettings) -> Mode
     if overrides.generate_images {
         merged.generate_images = true;
     }
+    if overrides.compat_omit_strict {
+        merged.compat_omit_strict = true;
+    }
     if let Some(temperature) = overrides.temperature {
         merged.temperature = Some(temperature);
     }
@@ -85,6 +88,7 @@ mod tests {
     fn returns_base_when_no_facets_configured() {
         let base = ModelSettings {
             generate_images: true,
+            compat_omit_strict: false,
             temperature: Some(0.2),
             top_p: None,
             reasoning_effort: None,
