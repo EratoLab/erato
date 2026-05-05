@@ -22,12 +22,58 @@ const darkTheme: OfficeThemeLike = {
   isDarkTheme: true,
 };
 
+const lightTheme: OfficeThemeLike = {
+  bodyBackgroundColor: "#FFFFFF",
+  bodyForegroundColor: "#444444",
+  controlBackgroundColor: "#F5F5F5",
+  controlForegroundColor: "#444444",
+  isDarkTheme: false,
+};
+
 function installOfficeTheme(theme: OfficeThemeLike) {
   (Office.context as unknown as Record<string, unknown>).officeTheme = theme;
 }
 
 function uninstallOfficeTheme() {
   delete (Office.context as unknown as Record<string, unknown>).officeTheme;
+}
+
+interface MockMediaQueryList {
+  matches: boolean;
+  addEventListener: ReturnType<typeof vi.fn>;
+  removeEventListener: ReturnType<typeof vi.fn>;
+  dispatchChange: (matches: boolean) => void;
+}
+
+function installMockMatchMedia(initialDark: boolean): MockMediaQueryList {
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const mq: MockMediaQueryList = {
+    matches: initialDark,
+    addEventListener: vi.fn(
+      (_evt: string, listener: (event: MediaQueryListEvent) => void) => {
+        listeners.add(listener);
+      },
+    ),
+    removeEventListener: vi.fn(
+      (_evt: string, listener: (event: MediaQueryListEvent) => void) => {
+        listeners.delete(listener);
+      },
+    ),
+    dispatchChange: (matches: boolean) => {
+      mq.matches = matches;
+      const event = { matches } as MediaQueryListEvent;
+      listeners.forEach((listener) => listener(event));
+    },
+  };
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn(() => mq),
+  });
+  return mq;
+}
+
+function uninstallMockMatchMedia() {
+  delete (window as unknown as Record<string, unknown>).matchMedia;
 }
 
 describe("subscribeThemeChanges", () => {
@@ -102,6 +148,81 @@ describe("subscribeThemeChanges", () => {
         }
       ).mock.calls[0];
       expect(eventType).toBe(Office.EventType.OfficeThemeChanged);
+    });
+  });
+
+  describe("Outlook host with prefers-color-scheme fallback", () => {
+    beforeEach(() => {
+      installMockMailbox();
+    });
+
+    afterEach(() => {
+      uninstallOfficeTheme();
+      uninstallMockMailbox();
+      uninstallMockMatchMedia();
+    });
+
+    it("subscribes to matchMedia when Office theme + OS preference agree (both dark)", () => {
+      installOfficeTheme(darkTheme);
+      const mq = installMockMatchMedia(true);
+
+      subscribeThemeChanges("Outlook", vi.fn());
+
+      expect(mq.addEventListener).toHaveBeenCalledTimes(1);
+      expect(mq.addEventListener.mock.calls[0][0]).toBe("change");
+    });
+
+    it("does NOT subscribe to matchMedia when signals disagree (explicit Outlook theme)", () => {
+      installOfficeTheme(darkTheme);
+      const mq = installMockMatchMedia(false); // OS says light, Outlook says dark
+
+      subscribeThemeChanges("Outlook", vi.fn());
+
+      expect(mq.addEventListener).not.toHaveBeenCalled();
+    });
+
+    it("invokes handler with new mode when OS preference flips and signals agreed", () => {
+      installOfficeTheme(darkTheme);
+      const mq = installMockMatchMedia(true);
+      const handler = vi.fn();
+
+      subscribeThemeChanges("Outlook", handler);
+
+      mq.dispatchChange(false); // OS flips to light
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler.mock.calls[0][0].mode).toBe("light");
+    });
+
+    it("ignores OS changes when initial signals disagreed", () => {
+      installOfficeTheme(lightTheme);
+      const mq = installMockMatchMedia(true); // OS dark, Outlook light → disagreement
+      const handler = vi.fn();
+
+      subscribeThemeChanges("Outlook", handler);
+
+      mq.dispatchChange(false); // listener was never installed; no-op
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("removeEventListener is called on unsubscribe when matchMedia was installed", () => {
+      installOfficeTheme(darkTheme);
+      const mq = installMockMatchMedia(true);
+
+      const unsubscribe = subscribeThemeChanges("Outlook", vi.fn());
+      unsubscribe();
+
+      expect(mq.removeEventListener).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not break when matchMedia is unavailable", () => {
+      installOfficeTheme(darkTheme);
+      uninstallMockMatchMedia();
+
+      expect(() =>
+        subscribeThemeChanges("Outlook", vi.fn()),
+      ).not.toThrow();
     });
   });
 
