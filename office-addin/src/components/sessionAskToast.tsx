@@ -1,9 +1,15 @@
-import { toast, type ToastAction } from "@erato/frontend/library";
+import {
+  MessageTimestamp,
+  toast,
+  type ToastAction,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
 interface RecentChatSummary {
   id: string;
   title: string | null;
+  /** ISO timestamp of the chat's last message, used for the picker subline. */
+  lastMessageAt: string | null;
 }
 
 export interface ShowSessionAskToastParams {
@@ -46,16 +52,16 @@ const sidebarRowStyle = {
  *
  * - **Continue** — resume the suggested chat (the one that was active before
  *   the switch). Hidden when there is no suggested chat.
- * - **Pick from recent** — opens a follow-up toast listing the most recent
- *   chats as sidebar-styled rows. Hidden when there's only the suggested chat
- *   to choose.
+ * - **Pick** — opens a follow-up toast listing the most recent chats as
+ *   sidebar-styled rows. Hidden when there's only the suggested chat to
+ *   choose.
  * - **New** — start a fresh chat for the new context.
  *
  * Deduped by key, so re-emitting (e.g. after another context change) replaces
  * the existing toast rather than stacking.
  */
 export function showSessionAskToast(params: ShowSessionAskToastParams) {
-  const { suggestedChat, recentChats, onResume, onPickRecent, onNew } = params;
+  const { suggestedChat, recentChats, onResume, onNew } = params;
 
   const recentBeyondSuggested = recentChats.filter(
     (chat) => chat.id !== suggestedChat?.id,
@@ -80,15 +86,11 @@ export function showSessionAskToast(params: ShowSessionAskToastParams) {
     actions.push({
       id: "pick",
       label: t({
-        id: "officeAddin.sessionAsk.actions.pickFromRecent",
-        message: "Pick from recent",
+        id: "officeAddin.sessionAsk.actions.pick",
+        message: "Pick",
       }),
       onClick: () => {
-        showSessionPickToast({
-          recentChats: recentBeyondSuggested,
-          onPick: onPickRecent,
-          onNew,
-        });
+        showSessionPickToast(params);
       },
     });
   }
@@ -96,8 +98,8 @@ export function showSessionAskToast(params: ShowSessionAskToastParams) {
   actions.push({
     id: "new",
     label: t({
-      id: "officeAddin.sessionAsk.actions.startNew",
-      message: "Start new",
+      id: "officeAddin.sessionAsk.actions.new",
+      message: "New",
     }),
     variant: suggestedChat ? "secondary" : "primary",
     onClick: onNew,
@@ -106,6 +108,7 @@ export function showSessionAskToast(params: ShowSessionAskToastParams) {
   toast.custom({
     id: ASK_TOAST_ID,
     variant: "info",
+    hideIcon: true,
     dedupeKey: DEDUPE_KEY,
     title: t({
       id: "officeAddin.sessionAsk.title",
@@ -123,12 +126,6 @@ export function showSessionAskToast(params: ShowSessionAskToastParams) {
         }),
     actions,
   });
-}
-
-interface ShowSessionPickToastParams {
-  recentChats: readonly RecentChatSummary[];
-  onPick: (chatId: string) => void;
-  onNew: () => void;
 }
 
 interface RecentChatPickerProps {
@@ -153,11 +150,16 @@ function RecentChatPicker({ chats, onPick }: RecentChatPickerProps) {
             }}
             title={title}
             style={sidebarRowStyle}
-            className="theme-transition flex w-full items-center px-3 py-1.5 text-left hover:bg-[var(--theme-shell-sidebar-hover)] focus-visible:bg-[var(--theme-shell-sidebar-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
+            className="theme-transition flex w-full flex-col gap-0.5 px-3 py-1.5 text-left hover:bg-[var(--theme-shell-sidebar-hover)] focus-visible:bg-[var(--theme-shell-sidebar-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
           >
             <span className="truncate text-sm font-medium text-theme-fg-primary">
               {title}
             </span>
+            {chat.lastMessageAt ? (
+              <span className="text-xs text-theme-fg-secondary">
+                <MessageTimestamp createdAt={new Date(chat.lastMessageAt)} />
+              </span>
+            ) : null}
           </button>
         );
       })}
@@ -165,28 +167,33 @@ function RecentChatPicker({ chats, onPick }: RecentChatPickerProps) {
   );
 }
 
-function showSessionPickToast(params: ShowSessionPickToastParams) {
-  const { recentChats, onPick, onNew } = params;
-  const options = recentChats.slice(0, MAX_RECENT_OPTIONS);
+function showSessionPickToast(askParams: ShowSessionAskToastParams) {
+  const { suggestedChat, recentChats, onPickRecent } = askParams;
+  const recentBeyondSuggested = recentChats.filter(
+    (chat) => chat.id !== suggestedChat?.id,
+  );
+  const options = recentBeyondSuggested.slice(0, MAX_RECENT_OPTIONS);
 
   toast.custom({
     id: PICK_TOAST_ID,
     variant: "info",
+    hideIcon: true,
     dedupeKey: PICK_DEDUPE_KEY,
     title: t({
       id: "officeAddin.sessionPick.title",
       message: "Pick a recent chat",
     }),
-    description: <RecentChatPicker chats={options} onPick={onPick} />,
+    description: <RecentChatPicker chats={options} onPick={onPickRecent} />,
     actions: [
       {
-        id: "new",
+        id: "back",
         label: t({
-          id: "officeAddin.sessionPick.actions.startNew",
-          message: "Start new",
+          id: "officeAddin.sessionPick.actions.back",
+          message: "Back",
         }),
-        variant: "primary",
-        onClick: onNew,
+        onClick: () => {
+          showSessionAskToast(askParams);
+        },
       },
     ],
   });

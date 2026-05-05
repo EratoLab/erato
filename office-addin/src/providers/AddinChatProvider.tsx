@@ -342,13 +342,18 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
           : null;
         showSessionAskToast({
           suggestedChat: suggestedChat
-            ? { id: suggestedChat.id, title: suggestedChat.title_resolved }
+            ? {
+                id: suggestedChat.id,
+                title: suggestedChat.title_resolved,
+                lastMessageAt: suggestedChat.last_message_at ?? null,
+              }
             : suggestedChatId
-              ? { id: suggestedChatId, title: null }
+              ? { id: suggestedChatId, title: null, lastMessageAt: null }
               : null,
           recentChats: chatsRef.current.map((chat) => ({
             id: chat.id,
             title: chat.title_resolved,
+            lastMessageAt: chat.last_message_at ?? null,
           })),
           onResume: (chatId) => navigateToChatRef.current(chatId),
           onPickRecent: (chatId) => navigateToChatRef.current(chatId),
