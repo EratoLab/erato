@@ -70,23 +70,74 @@ type SessionLifecycle =
   | { kind: "pending" }
   | { kind: "decided"; chatId: string | null };
 
+/**
+ * Reads `Office.context.mailbox.item` synchronously and derives the anchor
+ * the policy uses. Mirrors `OutlookMailItemProvider`'s sync read path
+ * (`readMailItemSync` + `typeof item.subject === "string"` for read/compose
+ * discrimination) so we don't have to wait for that provider's `useEffect`
+ * to populate state. Returns `null` if no item is selected or Office isn't
+ * in a mailbox host.
+ */
+function readSyncOutlookAnchor(): OutlookSessionAnchor | null {
+  try {
+    const item = Office.context.mailbox?.item as
+      | Office.MessageRead
+      | Office.MessageCompose
+      | undefined
+      | null;
+    if (!item) return null;
+    return {
+      conversationId: item.conversationId ?? null,
+      isCompose: typeof (item as Office.MessageRead).subject !== "string",
+    };
+  } catch {
+    return null;
+  }
+}
+
 interface ComputeInitialLifecycleArgs {
   isOutlook: boolean;
   session: OutlookSessionStorageValue;
+  sessionPreferences: typeof DEFAULT_OUTLOOK_SESSION_PREFERENCES;
 }
 
 /**
- * Initial lifecycle on mount. Outlook hosts gate until the policy effect
- * has run for the first time; non-Outlook hosts have no policy and start
- * decided.
+ * Initial lifecycle on mount. Non-Outlook hosts have no policy and start
+ * decided. Outlook hosts gate until the policy effect runs — except in two
+ * cases where the policy outcome is knowable synchronously and we can skip
+ * the gate entirely:
+ *
+ * 1. Resume mode (the default). The policy always returns "resume" on
+ *    cold-open regardless of anchor — no need to wait for the live anchor.
+ * 2. Ask / new mode where the saved anchor matches the current Office item
+ *    read synchronously. The policy short-circuits to "resume" whenever
+ *    `anchorsEqual(saved, current)` holds — so again, no need to wait.
+ *
+ * Together these cover the common cases (resume mode, or returning to the
+ * same email in any mode) and reduce the cold-open gate window to zero
+ * frames. Anything else stays `pending`.
  */
 function computeInitialLifecycle({
   isOutlook,
   session,
+  sessionPreferences,
 }: ComputeInitialLifecycleArgs): SessionLifecycle {
   if (!isOutlook) {
     return { kind: "decided", chatId: session.chatId };
   }
+
+  if (sessionPreferences.mode === "resume") {
+    return { kind: "decided", chatId: session.chatId };
+  }
+
+  const liveAnchor = readSyncOutlookAnchor();
+  if (liveAnchor && session.anchor) {
+    const equals = anchorsEqualForPreferences(sessionPreferences);
+    if (equals(session.anchor, liveAnchor)) {
+      return { kind: "decided", chatId: session.chatId };
+    }
+  }
+
   return { kind: "pending" };
 }
 
@@ -117,11 +168,11 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   const [newChatCounter, setNewChatCounter] = useState(0);
 
   // The Tier-2 gate is now expressed as a discriminated union (see
-  // `SessionLifecycle`). The lazy initializer derives the initial phase
-  // from the host; once decided, the variant carries the source-of-truth
-  // chatId.
+  // `SessionLifecycle`). The lazy initializer skips the gate when the
+  // policy outcome is knowable synchronously — see
+  // `computeInitialLifecycle`.
   const [lifecycle, setLifecycle] = useState<SessionLifecycle>(() =>
-    computeInitialLifecycle({ isOutlook, session }),
+    computeInitialLifecycle({ isOutlook, session, sessionPreferences }),
   );
   const effectiveChatId =
     lifecycle.kind === "decided" ? lifecycle.chatId : null;
