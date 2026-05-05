@@ -30,5 +30,9 @@ export function useOutlookSessionAnchor(): OutlookSessionAnchor | null {
     };
   }, [isLoading, mailItem]);
 
-  return useDebouncedValue(liveAnchor, ANCHOR_DEBOUNCE_MS);
+  // Leading-edge: the first observation passes through without waiting, so
+  // cold-open lands the anchor instantly and the session policy can fire
+  // before the chat UI flashes the previous chat. Subsequent `ItemChanged`
+  // bursts (inbox sweeping) still collapse trailing-edge.
+  return useDebouncedValue(liveAnchor, ANCHOR_DEBOUNCE_MS, { leading: true });
 }
