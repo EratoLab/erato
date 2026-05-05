@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   anchorsEqualForPreferences,
   composeInheritsAnchorsEqual,
+  isMessageRead,
+  outlookAnchorFromItem,
   strictAnchorsEqual,
 } from "../outlookAnchor";
 
@@ -74,5 +76,64 @@ describe("anchorsEqualForPreferences", () => {
       composeInheritsFromRead: true,
     });
     expect(eq(read("T1"), compose("T1"))).toBe(true);
+  });
+});
+
+// Minimal item shapes — Office's full type is huge. The discriminator is
+// `typeof item.subject === "string"`, so providing just `subject` and
+// `conversationId` is enough for these helpers.
+const readItem = (conv: string | null) =>
+  ({
+    subject: "Test Subject",
+    conversationId: conv ?? undefined,
+  }) as unknown as Office.MessageRead;
+
+const composeItem = (conv: string | null) =>
+  ({
+    subject: { getAsync: () => undefined },
+    conversationId: conv ?? undefined,
+  }) as unknown as Office.MessageCompose;
+
+describe("isMessageRead", () => {
+  it("identifies a read item by string subject", () => {
+    expect(isMessageRead(readItem("T1"))).toBe(true);
+  });
+
+  it("identifies a compose item by non-string subject", () => {
+    expect(isMessageRead(composeItem("T1"))).toBe(false);
+  });
+});
+
+describe("outlookAnchorFromItem", () => {
+  it("returns null for a missing item", () => {
+    expect(outlookAnchorFromItem(null)).toBeNull();
+  });
+
+  it("derives a read anchor with conversationId", () => {
+    expect(outlookAnchorFromItem(readItem("T1"))).toEqual({
+      conversationId: "T1",
+      isCompose: false,
+    });
+  });
+
+  it("derives a read anchor with null conversationId", () => {
+    expect(outlookAnchorFromItem(readItem(null))).toEqual({
+      conversationId: null,
+      isCompose: false,
+    });
+  });
+
+  it("derives a compose anchor with conversationId (Reply / Forward)", () => {
+    expect(outlookAnchorFromItem(composeItem("T1"))).toEqual({
+      conversationId: "T1",
+      isCompose: true,
+    });
+  });
+
+  it("derives a compose anchor with null conversationId (brand-new draft)", () => {
+    expect(outlookAnchorFromItem(composeItem(null))).toEqual({
+      conversationId: null,
+      isCompose: true,
+    });
   });
 });

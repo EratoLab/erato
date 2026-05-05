@@ -67,7 +67,7 @@ migrateLegacyChatIdKey();
  *   `computeInitialLifecycle` for the cases where we skip the gate). The
  *   `chatId` field is the runtime source of truth for the current chat.
  */
-type SessionLifecycle =
+export type SessionLifecycle =
   | { kind: "pending" }
   | { kind: "decided"; chatId: string | null };
 
@@ -91,10 +91,17 @@ function readSyncOutlookAnchor(): OutlookSessionAnchor | null {
   }
 }
 
-interface ComputeInitialLifecycleArgs {
+export interface ComputeInitialLifecycleArgs {
   isOutlook: boolean;
   session: OutlookSessionStorageValue;
   sessionPreferences: typeof DEFAULT_OUTLOOK_SESSION_PREFERENCES;
+  /**
+   * The current anchor read synchronously from Office. Pass `null` when no
+   * item is available or the host isn't a mailbox host. Resolved by the
+   * caller (rather than read internally) to keep this function pure and
+   * trivially unit-testable without Office globals.
+   */
+  liveAnchor: OutlookSessionAnchor | null;
 }
 
 /**
@@ -115,11 +122,14 @@ interface ComputeInitialLifecycleArgs {
  * Together these cover the common cases (resume mode, or returning to the
  * same email in any mode) and reduce the cold-open gate window to zero
  * frames. Anything else stays `pending`.
+ *
+ * Pure; safe to call during render or in a `useState` initializer.
  */
-function computeInitialLifecycle({
+export function computeInitialLifecycle({
   isOutlook,
   session,
   sessionPreferences,
+  liveAnchor,
 }: ComputeInitialLifecycleArgs): SessionLifecycle {
   if (!isOutlook) {
     return { kind: "decided", chatId: session.chatId };
@@ -129,7 +139,6 @@ function computeInitialLifecycle({
     return { kind: "decided", chatId: session.chatId };
   }
 
-  const liveAnchor = readSyncOutlookAnchor();
   if (liveAnchor && session.anchor) {
     const equals = anchorsEqualForPreferences(sessionPreferences);
     if (equals(session.anchor, liveAnchor)) {
@@ -171,7 +180,12 @@ export function AddinChatProvider({ children }: { children: ReactNode }) {
   // policy outcome is knowable synchronously — see
   // `computeInitialLifecycle`.
   const [lifecycle, setLifecycle] = useState<SessionLifecycle>(() =>
-    computeInitialLifecycle({ isOutlook, session, sessionPreferences }),
+    computeInitialLifecycle({
+      isOutlook,
+      session,
+      sessionPreferences,
+      liveAnchor: readSyncOutlookAnchor(),
+    }),
   );
   const effectiveChatId =
     lifecycle.kind === "decided" ? lifecycle.chatId : null;
