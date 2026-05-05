@@ -2756,23 +2756,46 @@ async fn stream_generate_chat_completion<
                         all_tool_names.insert(tool_call.fn_name.clone());
                     }
 
-                    let mut assistant_turn_content = stream_end
+                    // OpenAI Responses API rejects reasoning items without a `summary` field.
+                    // Two issues to handle here:
+                    //   1. genai's StreamEnd duplicates each captured reasoning event as both a
+                    //      full ReasoningItem and a bare ThoughtSignature (encrypted_content only).
+                    //      The ThoughtSignature serializes without `summary` — drop it.
+                    //   2. The captured ReasoningItem itself may have `summary: vec![]` when the
+                    //      model emitted no summary chunks. genai's `skip_serializing_if =
+                    //      "Vec::is_empty"` then omits the field. Inject a placeholder summary
+                    //      so it serializes (mirrors build_openai_responses_reasoning_replay_parts).
+                    let assistant_turn_content = stream_end
                         .captured_content
                         .as_ref()
                         .map(|captured_content| {
-                            MessageContent::from_parts(captured_content.parts().clone())
+                            MessageContent::from_parts(
+                                captured_content
+                                    .parts()
+                                    .iter()
+                                    .filter(|p| {
+                                        !matches!(p, genai::chat::ContentPart::ThoughtSignature(_))
+                                    })
+                                    .cloned()
+                                    .map(|part| match part {
+                                        genai::chat::ContentPart::ReasoningItem(mut item)
+                                            if item.summary.is_empty() =>
+                                        {
+                                            item.summary.push(reasoning_summary_part(Some(
+                                                current_turn_captured_reasoning_summary.as_str(),
+                                            )));
+                                            genai::chat::ContentPart::ReasoningItem(item)
+                                        }
+                                        other => other,
+                                    })
+                                    .collect::<Vec<_>>(),
+                            )
                         })
                         .unwrap_or_else(|| {
                             MessageContent::from_tool_calls(
                                 captured_tool_calls.clone().into_iter().cloned().collect(),
                             )
                         });
-                    if let Some(reasoning_content) = stream_end.captured_reasoning_content.as_ref()
-                    {
-                        assistant_turn_content.push(genai::chat::ContentPart::ReasoningContent(
-                            reasoning_content.clone(),
-                        ));
-                    }
 
                     current_turn_chat_request.messages.push(GenAiChatMessage {
                         role: ChatRole::Assistant,
