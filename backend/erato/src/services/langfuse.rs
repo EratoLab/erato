@@ -283,10 +283,17 @@ impl LangfuseClient {
         self.send_ingestion_batch(batch).await
     }
 
-    /// Finish a generation and send it to Langfuse
-    pub async fn finish_generation(&self, request: FinishGenerationRequest) -> Result<()> {
+    /// Send a generic observation event to Langfuse
+    pub async fn finish_observation(
+        &self,
+        request: FinishGenerationRequest,
+        observation_type: &str,
+    ) -> Result<()> {
         if !self.enabled {
-            tracing::debug!("Langfuse client is disabled, skipping generation finish");
+            tracing::debug!(
+                observation_type = observation_type,
+                "Langfuse client is disabled, skipping observation send"
+            );
             return Ok(());
         }
 
@@ -295,20 +302,22 @@ impl LangfuseClient {
             trace_id = %request.trace_id,
             model = ?request.model,
             name = ?request.name,
-            "Starting Langfuse generation finish request"
+            observation_type = observation_type,
+            "Starting Langfuse observation finish request"
         );
 
         // Convert timestamp to ISO 8601 string as expected by Langfuse
         let timestamp_iso = system_time_to_iso_string(SystemTime::now());
+        let event_observation_type = observation_type.to_lowercase();
 
         let ingestion_event = IngestionEvent {
             id: request.observation_id.clone(),
-            r#type: "generation-create".to_string(),
+            r#type: format!("{event_observation_type}-create"),
             timestamp: timestamp_iso,
             body: IngestionEventBody::ObservationCreate(Box::new(CreateObservationEvent {
                 id: request.observation_id,
                 trace_id: request.trace_id,
-                r#type: "GENERATION".to_string(),
+                r#type: observation_type.to_string(),
                 name: request.name,
                 start_time: request.start_time,
                 end_time: request.end_time,
@@ -337,6 +346,11 @@ impl LangfuseClient {
         );
 
         self.send_ingestion_batch(batch).await
+    }
+
+    /// Finish a generation and send it to Langfuse
+    pub async fn finish_generation(&self, request: FinishGenerationRequest) -> Result<()> {
+        self.finish_observation(request, "GENERATION").await
     }
 
     /// Create both trace and generation observation in a single batch
@@ -1050,7 +1064,70 @@ impl TracingLangfuseClient {
             environment: self.environment.clone(),
         };
 
-        self.client.finish_generation(request).await
+        self.create_observation(
+            request.observation_id,
+            "GENERATION".to_string(),
+            request.name,
+            request.start_time,
+            request.end_time,
+            request.completion_start_time,
+            request.model,
+            request.model_parameters,
+            request.input,
+            request.output,
+            request.usage,
+            request.metadata,
+            request.level,
+            request.status_message,
+            request.parent_observation_id,
+            request.version,
+        )
+    }
+
+    /// Create an arbitrary observation (for example, a SPAN) on the current trace.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_observation(
+        &self,
+        observation_id: String,
+        observation_type: String,
+        name: Option<String>,
+        start_time: Option<String>,
+        end_time: Option<String>,
+        completion_start_time: Option<String>,
+        model: Option<String>,
+        model_parameters: Option<serde_json::Value>,
+        input: Option<serde_json::Value>,
+        output: Option<serde_json::Value>,
+        usage: Option<Usage>,
+        metadata: Option<serde_json::Value>,
+        level: Option<String>,
+        status_message: Option<String>,
+        parent_observation_id: Option<String>,
+        version: Option<String>,
+    ) -> Result<()> {
+        let request = FinishGenerationRequest {
+            observation_id,
+            trace_id: self.trace_id.clone(),
+            name,
+            start_time,
+            end_time,
+            completion_start_time,
+            model,
+            model_parameters,
+            input,
+            output,
+            usage,
+            metadata,
+            level,
+            status_message,
+            parent_observation_id,
+            version,
+            environment: self.environment.clone(),
+        };
+
+        self.client
+            .finish_observation(request, &observation_type)
+            .await
     }
 
     /// Create both trace and generation in a single batch

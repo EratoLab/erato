@@ -32,7 +32,8 @@ use crate::services::background_tasks::{
 };
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
 use crate::services::genai_langfuse::{
-    TracedGenerationBuilder, create_trace_metadata, create_trace_with_generation_from_chat,
+    TracedGenerationBuilder, create_tool_call_span_from_chat, create_trace_metadata,
+    create_trace_with_generation_from_chat,
     generate_langfuse_ids, generate_name_from_chat_request, langfuse_model_tag,
     langfuse_tool_called_tag,
 };
@@ -2356,6 +2357,7 @@ async fn stream_generate_chat_completion<
                                         assistant_id_for_langfuse,
                                         &accumulated_tool_names,
                                         Some(&trace_enrichment.platform),
+                                        None, // parent_observation_id
                                     )
                                     .await
                                 } else {
@@ -2678,6 +2680,14 @@ async fn stream_generate_chat_completion<
                 } else {
                     Some(format!("chat_completion_turn_{}", current_turn))
                 };
+                let turn_tool_span_obs_id = stream_end
+                    .captured_tool_calls()
+                    .is_some_and(|calls| !calls.is_empty())
+                    .then(generate_langfuse_ids)
+                    .map(|(span_obs_id, _)| span_obs_id);
+                let turn_span_name = generation_name
+                    .as_ref()
+                    .map(|name| format!("{name} (tool calls)"));
 
                 // Extract tool names from this turn's captured tool calls
                 let turn_tool_names: Vec<String> = stream_end
@@ -2694,7 +2704,32 @@ async fn stream_generate_chat_completion<
 
                 // Send trace/observation asynchronously
                 let assistant_id_for_langfuse = assistant_id;
+                let turn_tool_span_obs_id_for_task = turn_tool_span_obs_id;
+                let turn_span_name_for_task = turn_span_name;
                 tokio::spawn(async move {
+                    if let Some(span_obs_id) = turn_tool_span_obs_id_for_task.as_ref() {
+                        if let Err(err) = create_tool_call_span_from_chat(
+                            &client,
+                            span_obs_id.clone(),
+                            &request,
+                            turn_span_name_for_task.clone(),
+                            Some(turn_start),
+                            Some(turn_end_time),
+                            None, // completion_start_time
+                            assistant_id_for_langfuse,
+                            &turn_tool_names,
+                            Some(&trace_platform),
+                            None, // parent_observation_id
+                        )
+                        .await
+                        {
+                            tracing::warn!(
+                                "Failed to send Langfuse span for turn {}: {}",
+                                current_turn,
+                                err
+                            );
+                        }
+                    }
                     let result = if current_turn == 1 {
                         // For first turn, create both trace and generation in a single batch
                         create_trace_with_generation_from_chat(
@@ -2711,6 +2746,7 @@ async fn stream_generate_chat_completion<
                             assistant_id_for_langfuse,
                             &turn_tool_names,
                             Some(&trace_platform),
+                            turn_tool_span_obs_id_for_task,
                         )
                         .await
                     } else {
@@ -2722,6 +2758,7 @@ async fn stream_generate_chat_completion<
                             .with_name(generation_name.unwrap_or_else(|| {
                                 format!("chat_completion_turn_{}", current_turn)
                             }))
+                            .with_parent_observation_id(turn_tool_span_obs_id_for_task.clone())
                             .build_and_send(
                                 &client,
                                 &request,
@@ -3278,6 +3315,7 @@ pub async fn generate_chat_summary(
                     assistant_id_for_langfuse,
                     &Vec::new(),
                     Some(&platform),
+                    None,
                 )
                 .await;
 
