@@ -30,6 +30,7 @@ const mockUseFacets = vi.fn();
 const mockUseCreateChat = vi.fn();
 const mockFetchGetFile = vi.fn();
 const mockModelSelector = vi.fn();
+const mockUseAudioDictationRecorder = vi.fn();
 
 vi.mock("@/providers/ChatProvider", () => ({
   useChatContext: () => mockUseChatContext(),
@@ -53,6 +54,11 @@ vi.mock("@/hooks/chat", () => ({
 vi.mock("@/hooks/ui", () => ({
   useChatInputHandlers: (...args: unknown[]) =>
     mockUseChatInputHandlers(...args),
+}));
+
+vi.mock("@/hooks/audio/useAudioDictationRecorder", () => ({
+  useAudioDictationRecorder: (...args: unknown[]) =>
+    mockUseAudioDictationRecorder(...args),
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
@@ -212,6 +218,14 @@ describe("ChatInput", () => {
       mutateAsync: vi.fn().mockResolvedValue({ chat_id: "silent-chat-id" }),
     });
     mockFetchGetFile.mockRejectedValue(new Error("fetchGetFile not mocked"));
+    mockUseAudioDictationRecorder.mockReturnValue({
+      isDictating: false,
+      isDictationStarting: false,
+      dictationError: null,
+      setDictationError: vi.fn(),
+      dictationBars: [2, 2, 2, 2, 2],
+      toggleDictation: vi.fn(),
+    });
   });
 
   it("re-focuses the chat textarea when a response finishes streaming", async () => {
@@ -913,7 +927,7 @@ describe("ChatInput", () => {
     expect(screen.getByTestId("chat-input-save-edit")).toBeDisabled();
   });
 
-  it("shows the record button when audio transcription and uploads are enabled", async () => {
+  it("shows the dictation button when audio transcription is enabled", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -921,7 +935,7 @@ describe("ChatInput", () => {
       },
     });
 
-    mockUseUploadFeature.mockReturnValue({ enabled: true });
+    mockUseUploadFeature.mockReturnValue({ enabled: false });
     mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: true });
 
     const onSendMessage = vi.fn();
@@ -936,7 +950,7 @@ describe("ChatInput", () => {
 
     expect(screen.getByTestId("chat-input-record-audio")).toBeInTheDocument();
     expect(screen.getByTestId("chat-input-record-audio")).toHaveAccessibleName(
-      "Record audio",
+      "Start dictation",
     );
     expect(screen.getByTestId("chat-input-record-audio")).not.toHaveTextContent(
       "Record",
@@ -967,6 +981,42 @@ describe("ChatInput", () => {
     expect(
       screen.queryByTestId("chat-input-record-audio"),
     ).not.toBeInTheDocument();
+  });
+
+  it("appends completed dictation chunks to the current textarea text", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: true });
+
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const textarea = screen.getByPlaceholderText("Type a message...");
+    fireEvent.change(textarea, { target: { value: "Existing" } });
+    fireEvent.click(screen.getByTestId("chat-input-record-audio"));
+
+    const dictationOptions =
+      mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0];
+    await act(async () => {
+      dictationOptions.onTranscriptChunk({
+        chunkIndex: 0,
+        transcript: " dictated text ",
+      });
+    });
+
+    expect(textarea).toHaveValue("Existing dictated text");
   });
 
   it("warns before removing an audio attachment", async () => {

@@ -12,6 +12,7 @@ import {
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
 import { componentRegistry } from "@/config/componentRegistry";
+import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
@@ -43,6 +44,7 @@ import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
 
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
+import type { AudioDictationTranscriptChunk } from "@/hooks/audio/useAudioDictationRecorder";
 import type {
   FileUploadItem,
   ChatModel,
@@ -234,6 +236,31 @@ interface ComposeDraftState {
   attachedFiles: FileUploadItem[];
 }
 
+type DictationTarget =
+  | {
+      mode: "compose";
+      draftKey: string;
+      nextChunkIndex: number;
+      chunkTranscripts: Map<number, string>;
+    }
+  | {
+      mode: "edit";
+      editMessageId?: string;
+      nextChunkIndex: number;
+      chunkTranscripts: Map<number, string>;
+    };
+
+function appendDictationText(current: string, transcript: string): string {
+  const text = transcript.trim();
+  if (!text) {
+    return current;
+  }
+  if (!current.trim()) {
+    return text;
+  }
+  return /\s$/.test(current) ? `${current}${text}` : `${current} ${text}`;
+}
+
 // eslint-disable-next-line lingui/no-unlocalized-strings -- internal key used only for local draft state
 const NEW_CHAT_DRAFT_KEY = "__new-chat__";
 
@@ -290,6 +317,7 @@ export const ChatInput = ({
     Record<string, ComposeDraftState | undefined>
   >({});
   const activeComposeDraftKeyRef = useRef(composeDraftKey);
+  const dictationTargetRef = useRef<DictationTarget | null>(null);
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
   const pendingSelectedFacetIdsRef = useRef<string[] | null>(null);
@@ -386,8 +414,6 @@ export const ChatInput = ({
     recordingError,
     setRecordingError,
     retryingAudioFileId,
-    recordingBars,
-    toggleAudioRecording,
     retryAudioTranscription,
     removeRecordedAudioFile,
     clearRecordedAudioFiles,
@@ -418,6 +444,86 @@ export const ChatInput = ({
     composeDraftsRef.current[draftKey] = emptyDraft;
     return emptyDraft;
   }, []);
+
+  const appendDictationTranscript = useCallback(
+    ({ chunkIndex, transcript }: AudioDictationTranscriptChunk) => {
+      const target = dictationTargetRef.current;
+      if (!target) {
+        return;
+      }
+
+      target.chunkTranscripts.set(chunkIndex, transcript);
+
+      while (target.chunkTranscripts.has(target.nextChunkIndex)) {
+        const nextTranscript =
+          target.chunkTranscripts.get(target.nextChunkIndex) ?? "";
+        target.chunkTranscripts.delete(target.nextChunkIndex);
+        target.nextChunkIndex += 1;
+
+        if (target.mode === "compose") {
+          if (
+            mode === "compose" &&
+            target.draftKey === activeComposeDraftKeyRef.current
+          ) {
+            setMessage((current) =>
+              appendDictationText(current, nextTranscript),
+            );
+            continue;
+          }
+
+          const draft = getComposeDraft(target.draftKey);
+          composeDraftsRef.current[target.draftKey] = {
+            ...draft,
+            message: appendDictationText(draft.message, nextTranscript),
+          };
+          continue;
+        }
+
+        if (
+          mode === "edit" &&
+          target.editMessageId !== undefined &&
+          target.editMessageId === editMessageId
+        ) {
+          setMessage((current) => appendDictationText(current, nextTranscript));
+        }
+      }
+    },
+    [editMessageId, getComposeDraft, mode],
+  );
+
+  const {
+    isDictating,
+    isDictationStarting,
+    dictationError,
+    setDictationError,
+    dictationBars,
+    toggleDictation,
+  } = useAudioDictationRecorder({
+    enabled: audioTranscriptionEnabled,
+    maxRecordingDurationSeconds,
+    onTranscriptChunk: appendDictationTranscript,
+  });
+
+  const toggleDictationForCurrentTarget = useCallback(() => {
+    if (!isDictating) {
+      dictationTargetRef.current =
+        mode === "compose"
+          ? {
+              mode: "compose",
+              draftKey: composeDraftKey,
+              nextChunkIndex: 0,
+              chunkTranscripts: new Map(),
+            }
+          : {
+              mode: "edit",
+              editMessageId,
+              nextChunkIndex: 0,
+              chunkTranscripts: new Map(),
+            };
+    }
+
+    toggleDictation();
+  }, [composeDraftKey, editMessageId, isDictating, mode, toggleDictation]);
 
   const { data: facetsData, error: facetsError } = useFacets({});
   const { fetcherOptions: fileFetchOptions } = useV1betaApiContext();
@@ -967,7 +1073,11 @@ export const ChatInput = ({
 
   // Add token limit exceeded to disabled state for the send button
   const isSendDisabled =
-    isDisabled || isAnyTokenLimitExceeded || hasIncompleteAudioTranscription;
+    isDisabled ||
+    isAnyTokenLimitExceeded ||
+    hasIncompleteAudioTranscription ||
+    isDictating ||
+    isDictationStarting;
 
   // Enhanced file removal handler using token management hook
   const handleRemoveFileById = useCallback(
@@ -1207,16 +1317,19 @@ export const ChatInput = ({
             {sendErrorText}
           </Alert>
         )}
-        {recordingError && (
+        {(dictationError ?? recordingError) && (
           <Alert
             type="error"
             geometryVariant="message"
             dismissible
-            onDismiss={() => setRecordingError(null)}
+            onDismiss={() => {
+              setDictationError(null);
+              setRecordingError(null);
+            }}
             className="mb-2"
             data-testid="chat-audio-recording-error"
           >
-            {recordingError}
+            {dictationError ?? recordingError}
           </Alert>
         )}
 
@@ -1361,35 +1474,37 @@ export const ChatInput = ({
                   disabled={!isSelectionReady}
                 />
               )}
-              {audioTranscriptionEnabled && uploadEnabled && (
+              {audioTranscriptionEnabled && (
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   icon={
-                    isRecording ? undefined : (
+                    isDictating ? undefined : (
                       <VoiceIcon className="text-[var(--theme-fg-primary)]" />
                     )
                   }
-                  onClick={toggleAudioRecording}
+                  onClick={toggleDictationForCurrentTarget}
                   disabled={
                     disabled ||
                     isLoading ||
                     isPendingResponse ||
                     isUploading ||
                     isFileButtonProcessing ||
-                    isRecordingUpload ||
+                    isDictationStarting ||
                     isAnyTokenLimitExceeded
                   }
                   data-testid="chat-input-record-audio"
-                  aria-label={isRecording ? t`Stop recording` : t`Record audio`}
+                  aria-label={
+                    isDictating ? t`Stop dictation` : t`Start dictation`
+                  }
                 >
-                  {isRecording ? (
+                  {isDictating ? (
                     <span
-                      aria-label={t`Recording audio`}
+                      aria-label={t`Dictating audio`}
                       className="flex items-center gap-0.5"
                     >
-                      {recordingBars.map((height, barIndex) => (
+                      {dictationBars.map((height, barIndex) => (
                         <span
                           key={barIndex}
                           className="w-1 rounded-full bg-current transition-all"
