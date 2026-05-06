@@ -46,6 +46,9 @@ const FRONTEND_ENV_KEY_MAX_UPLOAD_SIZE_BYTES: &str = "MAX_UPLOAD_SIZE_BYTES";
 const FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_ENABLED: &str = "AUDIO_TRANSCRIPTION_ENABLED";
 const FRONTEND_ENV_KEY_AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS: &str =
     "AUDIO_TRANSCRIPTION_MAX_RECORDING_DURATION_SECONDS";
+const FRONTEND_ENV_KEY_AUDIO_DICTATION_ENABLED: &str = "AUDIO_DICTATION_ENABLED";
+const FRONTEND_ENV_KEY_AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS: &str =
+    "AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS";
 const FRONTEND_ENV_KEY_SIDEBAR_COLLAPSED_MODE: &str = "SIDEBAR_COLLAPSED_MODE";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_PATH: &str = "SIDEBAR_LOGO_PATH";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_DARK_PATH: &str = "SIDEBAR_LOGO_DARK_PATH";
@@ -265,6 +268,14 @@ fn build_frontend_environment(
                 .max_recording_duration_seconds
                 .into(),
         ),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_DICTATION_ENABLED.to_string(),
+        Value::Bool(config.audio_dictation.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS.to_string(),
+        Value::Number(config.audio_dictation.max_recording_duration_seconds.into()),
     );
     // Always inject max upload size (use configured value or default)
     let max_upload_size = config

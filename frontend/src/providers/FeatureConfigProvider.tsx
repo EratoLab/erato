@@ -38,6 +38,14 @@ interface AudioTranscriptionFeatureConfig {
   maxRecordingDurationSeconds: number;
 }
 
+/** Configuration for audio dictation features */
+interface AudioDictationFeatureConfig {
+  /** Whether audio dictation is enabled */
+  enabled: boolean;
+  /** Maximum recording duration in seconds for audio dictation captures */
+  maxRecordingDurationSeconds: number;
+}
+
 /**
  * Configuration for authentication/account features
  */
@@ -129,6 +137,8 @@ export interface FeatureConfig {
   chatInput: ChatInputFeatureConfig;
   /** Audio transcription feature flags */
   audioTranscription: AudioTranscriptionFeatureConfig;
+  /** Audio dictation feature flags */
+  audioDictation: AudioDictationFeatureConfig;
   /** Authentication feature flags */
   auth: AuthFeatureConfig;
   /** Assistants feature flags */
@@ -165,6 +175,10 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     showUsageAdvisory: true,
   },
   audioTranscription: {
+    enabled: false,
+    maxRecordingDurationSeconds: 20 * 60,
+  },
+  audioDictation: {
     enabled: false,
     maxRecordingDurationSeconds: 20 * 60,
   },
@@ -242,6 +256,11 @@ function createFeatureConfig(
       maxRecordingDurationSeconds:
         environment.audioTranscriptionMaxRecordingDurationSeconds,
     },
+    audioDictation: {
+      enabled: Boolean(environment.audioDictationEnabled),
+      maxRecordingDurationSeconds:
+        environment.audioDictationMaxRecordingDurationSeconds,
+    },
     auth: {
       showLogout: !environment.disableLogout,
     },
@@ -293,6 +312,10 @@ function mergeFeatureConfig(overrides?: FeatureConfigOverrides): FeatureConfig {
     audioTranscription: {
       ...defaultStaticFeatureConfig.audioTranscription,
       ...overrides.audioTranscription,
+    },
+    audioDictation: {
+      ...defaultStaticFeatureConfig.audioDictation,
+      ...overrides.audioDictation,
     },
     auth: { ...defaultStaticFeatureConfig.auth, ...overrides.auth },
     assistants: {
@@ -444,6 +467,17 @@ export function useChatInputFeature(): ChatInputFeatureConfig {
 export function useAudioTranscriptionFeature(): AudioTranscriptionFeatureConfig {
   const config = useFeatureConfig();
   return config.audioTranscription;
+}
+
+/**
+ * Convenience hook for accessing audio dictation feature configuration.
+ *
+ * @returns Audio dictation feature configuration
+ * @throws {Error} If used outside of FeatureConfigProvider
+ */
+export function useAudioDictationFeature(): AudioDictationFeatureConfig {
+  const config = useFeatureConfig();
+  return config.audioDictation;
 }
 
 /**

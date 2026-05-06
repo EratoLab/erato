@@ -32,6 +32,28 @@ const CANONICAL_SAMPLE_RATE_HZ: u32 = 16_000;
 const CANONICAL_CHANNELS: u16 = 1;
 const CANONICAL_BITS_PER_SAMPLE: u16 = 16;
 
+#[derive(Debug, Clone, Copy)]
+enum AudioFeature {
+    Transcription,
+    Dictation,
+}
+
+impl AudioFeature {
+    fn config<'a>(&self, app_state: &'a AppState) -> &'a crate::config::AudioTranscriptionConfig {
+        match self {
+            Self::Transcription => &app_state.config.audio_transcription,
+            Self::Dictation => &app_state.config.audio_dictation,
+        }
+    }
+
+    fn config_key(&self) -> &'static str {
+        match self {
+            Self::Transcription => "audio_transcription",
+            Self::Dictation => "audio_dictation",
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum ClientControlFrame {
@@ -329,10 +351,9 @@ async fn handle_dictation_control_frame(
         DictationClientControlFrame::Start {
             chunk_duration_ms: requested_chunk_duration_ms,
         } => {
-            ensure_audio_transcription_enabled(app_state)?;
-            let resolved_chunk_duration_ms = requested_chunk_duration_ms.unwrap_or_else(|| {
-                app_state.config.audio_transcription.chunk_duration_seconds * 1000
-            });
+            ensure_audio_dictation_enabled(app_state)?;
+            let resolved_chunk_duration_ms = requested_chunk_duration_ms
+                .unwrap_or_else(|| app_state.config.audio_dictation.chunk_duration_seconds * 1000);
             *chunk_duration_ms = Some(resolved_chunk_duration_ms);
             *next_chunk_index = 0;
             *pending_chunk = None;
@@ -401,6 +422,7 @@ async fn handle_dictation_audio_bytes(
     };
     let transcribed_chunk = transcribe_audio_chunk_with_retry(
         app_state,
+        AudioFeature::Dictation,
         &pending,
         validated_chunk.provider_audio_bytes,
     )
@@ -724,6 +746,7 @@ async fn handle_audio_bytes(
 
     let transcribed_chunk = match transcribe_audio_chunk_with_retry(
         app_state,
+        AudioFeature::Transcription,
         &pending,
         validated_chunk.provider_audio_bytes,
     )
@@ -817,6 +840,14 @@ fn ensure_audio_transcription_enabled(app_state: &AppState) -> Result<(), Report
         Ok(())
     } else {
         Err(eyre::eyre!("Audio transcription is not enabled"))
+    }
+}
+
+fn ensure_audio_dictation_enabled(app_state: &AppState) -> Result<(), Report> {
+    if app_state.config.audio_dictation.enabled {
+        Ok(())
+    } else {
+        Err(eyre::eyre!("Audio dictation is not enabled"))
     }
 }
 
@@ -1218,10 +1249,11 @@ fn build_wav_from_pcm(pcm: &[u8]) -> Vec<u8> {
 
 async fn transcribe_audio_chunk_with_retry(
     app_state: &AppState,
+    audio_feature: AudioFeature,
     pending: &PendingChunk,
     audio_bytes: Vec<u8>,
 ) -> Result<TranscribedChunk, Report> {
-    let config = &app_state.config.audio_transcription;
+    let config = audio_feature.config(app_state);
     let max_attempts = config.max_attempts.max(1);
     let mut next_backoff_ms = config.initial_backoff_ms;
     let mut last_error: Option<Report> = None;
@@ -1234,9 +1266,9 @@ async fn transcribe_audio_chunk_with_retry(
             audio_bytes = audio_bytes.len(),
             "Starting audio transcription provider attempt"
         );
-        match transcribe_audio_chunk(app_state, pending, audio_bytes.clone()).await {
+        match transcribe_audio_chunk(app_state, audio_feature, pending, audio_bytes.clone()).await {
             Ok(transcript) => {
-                if looks_like_hallucination_loop(app_state, &transcript) {
+                if looks_like_hallucination_loop(config, &transcript) {
                     warn!(
                         chunk_index = pending.chunk_index,
                         attempt,
@@ -1288,10 +1320,11 @@ async fn transcribe_audio_chunk_with_retry(
 
 async fn transcribe_audio_chunk(
     app_state: &AppState,
+    audio_feature: AudioFeature,
     pending: &PendingChunk,
     audio_bytes: Vec<u8>,
 ) -> Result<String, Report> {
-    let provider = audio_transcription_provider(app_state)?;
+    let provider = audio_provider(app_state, audio_feature)?;
     debug!(
         chunk_index = pending.chunk_index,
         provider_id = %provider.chat_provider_id,
@@ -1300,21 +1333,22 @@ async fn transcribe_audio_chunk(
         audio_bytes = audio_bytes.len(),
         "Selected audio transcription provider"
     );
-    transcribe_audio_chunk_genai(app_state, &provider, pending, audio_bytes).await
+    transcribe_audio_chunk_genai(app_state, audio_feature, &provider, pending, audio_bytes).await
 }
 
-fn audio_transcription_provider(app_state: &AppState) -> Result<ChatProviderConfigWithId, Report> {
-    if let Some(provider_id) = app_state
-        .config
-        .audio_transcription
-        .chat_provider_id
-        .as_deref()
-    {
+fn audio_provider(
+    app_state: &AppState,
+    audio_feature: AudioFeature,
+) -> Result<ChatProviderConfigWithId, Report> {
+    let config = audio_feature.config(app_state);
+    let config_key = audio_feature.config_key();
+    if let Some(provider_id) = config.chat_provider_id.as_deref() {
         let provider = app_state.config.get_chat_provider(provider_id);
         if !provider.model_capabilities.supports_audio_input {
             return Err(eyre::eyre!(
-                "Configured audio transcription provider '{}' does not support audio input",
-                provider_id
+                "Configured {} provider '{}' does not support audio input",
+                config_key,
+                provider_id,
             ));
         }
         return Ok(ChatProviderConfigWithId {
@@ -1355,12 +1389,13 @@ fn audio_transcription_provider(app_state: &AppState) -> Result<ChatProviderConf
 
 async fn transcribe_audio_chunk_genai(
     app_state: &AppState,
+    audio_feature: AudioFeature,
     provider: &ChatProviderConfigWithId,
     pending: &PendingChunk,
     audio_bytes: Vec<u8>,
 ) -> Result<String, Report> {
     let client = AppState::build_genai_client(provider.chat_provider_config.clone())?;
-    let max_output_tokens = max_output_tokens_for_chunk(app_state, pending);
+    let max_output_tokens = max_output_tokens_for_chunk(app_state, audio_feature, pending);
     let audio_data_range = validate_canonical_wav(&audio_bytes).ok();
     let audio_pcm_bytes = audio_data_range
         .as_ref()
@@ -1421,8 +1456,12 @@ async fn transcribe_audio_chunk_genai(
     Ok(transcript)
 }
 
-fn max_output_tokens_for_chunk(app_state: &AppState, pending: &PendingChunk) -> u32 {
-    max_output_tokens_for_chunk_config(&app_state.config.audio_transcription, pending)
+fn max_output_tokens_for_chunk(
+    app_state: &AppState,
+    audio_feature: AudioFeature,
+    pending: &PendingChunk,
+) -> u32 {
+    max_output_tokens_for_chunk_config(audio_feature.config(app_state), pending)
 }
 
 fn max_output_tokens_for_chunk_config(
@@ -1449,8 +1488,10 @@ fn max_output_tokens_for_chunk_config(
         })
 }
 
-fn looks_like_hallucination_loop(app_state: &AppState, transcript: &str) -> bool {
-    let config = &app_state.config.audio_transcription;
+fn looks_like_hallucination_loop(
+    config: &crate::config::AudioTranscriptionConfig,
+    transcript: &str,
+) -> bool {
     let words = transcript
         .split_whitespace()
         .map(|word| {
@@ -1517,7 +1558,14 @@ async fn retry_failed_chunks(
             },
         };
 
-        match transcribe_audio_chunk_with_retry(app_state, &pending, provider_audio_bytes).await {
+        match transcribe_audio_chunk_with_retry(
+            app_state,
+            AudioFeature::Transcription,
+            &pending,
+            provider_audio_bytes,
+        )
+        .await
+        {
             Ok(transcribed_chunk) => {
                 update_chunk_status(
                     &mut session.metadata,

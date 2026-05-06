@@ -54,6 +54,8 @@ describe("themeConfig", () => {
     maxUploadSizeBytes: 20971520,
     audioTranscriptionEnabled: false,
     audioTranscriptionMaxRecordingDurationSeconds: 1200,
+    audioDictationEnabled: false,
+    audioDictationMaxRecordingDurationSeconds: 1200,
     sidebarCollapsedMode: "hidden",
     sidebarChatHistoryShowMetadata: true,
     msalClientId: null,

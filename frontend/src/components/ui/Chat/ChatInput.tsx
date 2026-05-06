@@ -30,6 +30,7 @@ import {
   useUploadFeature,
   useChatInputFeature,
   useAudioTranscriptionFeature,
+  useAudioDictationFeature,
 } from "@/providers/FeatureConfigProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
@@ -351,6 +352,10 @@ export const ChatInput = ({
   const { enabled: uploadEnabled } = useUploadFeature();
   const { enabled: audioTranscriptionEnabled, maxRecordingDurationSeconds } =
     useAudioTranscriptionFeature();
+  const {
+    enabled: audioDictationEnabled,
+    maxRecordingDurationSeconds: maxDictationDurationSeconds,
+  } = useAudioDictationFeature();
   const { autofocus: shouldAutofocus, showUsageAdvisory = true } =
     useChatInputFeature();
   // Dummy for i18n:extract
@@ -499,8 +504,8 @@ export const ChatInput = ({
     dictationBars,
     toggleDictation,
   } = useAudioDictationRecorder({
-    enabled: audioTranscriptionEnabled,
-    maxRecordingDurationSeconds,
+    enabled: audioDictationEnabled,
+    maxRecordingDurationSeconds: maxDictationDurationSeconds,
     onTranscriptChunk: appendDictationTranscript,
   });
 
@@ -1474,7 +1479,7 @@ export const ChatInput = ({
                   disabled={!isSelectionReady}
                 />
               )}
-              {audioTranscriptionEnabled && (
+              {audioDictationEnabled && (
                 <Button
                   type="button"
                   variant="secondary"

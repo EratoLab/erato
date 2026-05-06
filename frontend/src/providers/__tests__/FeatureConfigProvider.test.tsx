@@ -71,6 +71,8 @@ describe("FeatureConfigProvider", () => {
       maxUploadSizeBytes: 20971520, // 20 MB - matches backend default
       audioTranscriptionEnabled: false,
       audioTranscriptionMaxRecordingDurationSeconds: 1200,
+      audioDictationEnabled: false,
+      audioDictationMaxRecordingDurationSeconds: 1200,
       sidebarCollapsedMode: "hidden",
       sidebarLogoPath: null,
       sidebarLogoDarkPath: null,
@@ -118,6 +120,10 @@ describe("FeatureConfigProvider", () => {
           showUsageAdvisory: true,
         },
         audioTranscription: {
+          enabled: false,
+          maxRecordingDurationSeconds: 1200,
+        },
+        audioDictation: {
           enabled: false,
           maxRecordingDurationSeconds: 1200,
         },

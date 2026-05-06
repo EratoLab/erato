@@ -22,6 +22,7 @@ const mockUseChatContext = vi.fn();
 const mockUseUploadFeature = vi.fn();
 const mockUseChatInputFeature = vi.fn();
 const mockUseAudioTranscriptionFeature = vi.fn();
+const mockUseAudioDictationFeature = vi.fn();
 const mockUseOptionalTranslation = vi.fn();
 const mockUseActiveModelSelection = vi.fn();
 const mockUseTokenManagement = vi.fn();
@@ -40,6 +41,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
   useUploadFeature: () => mockUseUploadFeature(),
   useChatInputFeature: () => mockUseChatInputFeature(),
   useAudioTranscriptionFeature: () => mockUseAudioTranscriptionFeature(),
+  useAudioDictationFeature: () => mockUseAudioDictationFeature(),
 }));
 
 vi.mock("@/hooks/i18n", () => ({
@@ -182,6 +184,7 @@ describe("ChatInput", () => {
 
     mockUseUploadFeature.mockReturnValue({ enabled: false });
     mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: false });
+    mockUseAudioDictationFeature.mockReturnValue({ enabled: false });
     mockUseChatInputFeature.mockReturnValue({
       autofocus: false,
       showUsageAdvisory: true,
@@ -936,7 +939,7 @@ describe("ChatInput", () => {
     });
 
     mockUseUploadFeature.mockReturnValue({ enabled: false });
-    mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: true });
+    mockUseAudioDictationFeature.mockReturnValue({ enabled: true });
 
     const onSendMessage = vi.fn();
     const { i18n } = await import("@lingui/core");
@@ -966,7 +969,7 @@ describe("ChatInput", () => {
     });
 
     mockUseUploadFeature.mockReturnValue({ enabled: true });
-    mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: false });
+    mockUseAudioDictationFeature.mockReturnValue({ enabled: false });
 
     const onSendMessage = vi.fn();
     const { i18n } = await import("@lingui/core");
@@ -991,7 +994,7 @@ describe("ChatInput", () => {
       },
     });
 
-    mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: true });
+    mockUseAudioDictationFeature.mockReturnValue({ enabled: true });
 
     const onSendMessage = vi.fn();
     const { i18n } = await import("@lingui/core");
