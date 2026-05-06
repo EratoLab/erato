@@ -1,4 +1,4 @@
-use crate::config::{ModelReasoningEffort, ModelSettings, ModelVerbosity};
+use crate::config::{ModelCapabilities, ModelReasoningEffort, ModelSettings, ModelVerbosity};
 use crate::models::message::{ContentPart, GenerationInputMessages, InputMessage, MessageRole};
 use eyre::Result;
 use genai::chat::ChatRole as GenAiChatRole;
@@ -240,7 +240,11 @@ fn map_verbosity(verbosity: ModelVerbosity) -> Verbosity {
     }
 }
 
-fn apply_model_settings(mut options: ChatOptions, model_settings: &ModelSettings) -> ChatOptions {
+fn apply_model_settings(
+    mut options: ChatOptions,
+    model_settings: &ModelSettings,
+    model_capabilities: &ModelCapabilities,
+) -> ChatOptions {
     if let Some(temperature) = model_settings.temperature {
         options = options.with_temperature(temperature);
     }
@@ -250,7 +254,12 @@ fn apply_model_settings(mut options: ChatOptions, model_settings: &ModelSettings
     if let Some(reasoning_effort) = model_settings.reasoning_effort {
         options = options.with_reasoning_effort(map_reasoning_effort(reasoning_effort));
         if reasoning_effort != ModelReasoningEffort::None {
-            options = options.with_capture_reasoning_content(true);
+            if model_capabilities.supports_reasoning_summary {
+                options = options.with_capture_reasoning_content(true);
+            }
+            if model_capabilities.supports_encrypted_reasoning_content {
+                options = options.with_capture_encrypted_reasoning_content(true);
+            }
         }
     }
     if let Some(verbosity) = model_settings.verbosity {
@@ -259,20 +268,75 @@ fn apply_model_settings(mut options: ChatOptions, model_settings: &ModelSettings
     options
 }
 
-pub fn build_chat_options_for_completion(model_settings: &ModelSettings) -> ChatOptions {
+pub fn build_chat_options_for_completion(
+    model_settings: &ModelSettings,
+    model_capabilities: &ModelCapabilities,
+) -> ChatOptions {
     let options = ChatOptions::default()
         .with_capture_content(true)
         .with_capture_tool_calls(true)
         .with_capture_usage(true);
-    apply_model_settings(options, model_settings)
+    apply_model_settings(options, model_settings, model_capabilities)
 }
 
 pub fn build_chat_options_for_summary(
     model_settings: &ModelSettings,
+    model_capabilities: &ModelCapabilities,
     max_tokens: u32,
 ) -> ChatOptions {
     let options = ChatOptions::default()
         .with_capture_content(true)
         .with_max_tokens(max_tokens);
-    apply_model_settings(options, model_settings)
+    apply_model_settings(options, model_settings, model_capabilities)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reasoning_model_settings() -> ModelSettings {
+        ModelSettings {
+            reasoning_effort: Some(ModelReasoningEffort::High),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn completion_options_capture_reasoning_when_encrypted_reasoning_supported() {
+        let options = build_chat_options_for_completion(
+            &reasoning_model_settings(),
+            &ModelCapabilities::default(),
+        );
+
+        assert_eq!(options.capture_reasoning_content, Some(true));
+        assert_eq!(options.capture_encrypted_reasoning_content, Some(true));
+    }
+
+    #[test]
+    fn completion_options_capture_reasoning_without_encrypted_reasoning_when_unsupported() {
+        let model_capabilities = ModelCapabilities {
+            supports_encrypted_reasoning_content: false,
+            ..Default::default()
+        };
+
+        let options =
+            build_chat_options_for_completion(&reasoning_model_settings(), &model_capabilities);
+
+        assert_eq!(options.capture_reasoning_content, Some(true));
+        assert_eq!(options.capture_encrypted_reasoning_content, None);
+    }
+
+    #[test]
+    fn completion_options_capture_encrypted_reasoning_without_summary_when_summary_unsupported() {
+        let model_capabilities = ModelCapabilities {
+            supports_reasoning_summary: false,
+            ..Default::default()
+        };
+
+        let options =
+            build_chat_options_for_completion(&reasoning_model_settings(), &model_capabilities);
+
+        assert_eq!(options.capture_reasoning_content, None);
+        assert_eq!(options.capture_encrypted_reasoning_content, Some(true));
+    }
 }

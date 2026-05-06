@@ -1786,7 +1786,10 @@ pub(crate) async fn prepare_chat_request_with_adapters(
             }
         }
     }
-    let chat_options = build_chat_options_for_completion(&effective_model_settings);
+    let chat_options = build_chat_options_for_completion(
+        &effective_model_settings,
+        &chat_provider_config.model_capabilities,
+    );
 
     // Create generation parameters with the determined chat provider ID
     let generation_parameters = GenerationParameters {
@@ -3149,8 +3152,11 @@ pub async fn generate_chat_summary(
             chat.id
         )
     })?;
-    let chat_options =
-        build_chat_options_for_summary(&chat_provider_config.model_settings, max_tokens);
+    let chat_options = build_chat_options_for_summary(
+        &chat_provider_config.model_settings,
+        &chat_provider_config.model_capabilities,
+        max_tokens,
+    );
 
     let langfuse_trace = if app_state.config.integrations.langfuse.enabled
         && app_state.config.integrations.langfuse.tracing_enabled
