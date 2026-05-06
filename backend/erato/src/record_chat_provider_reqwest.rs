@@ -58,7 +58,10 @@ async fn async_main() -> Result<(), Report> {
     init_recording_tracing(recorder.clone())?;
 
     let chat_request = build_chat_request(&provider_config, scenario);
-    let chat_options = build_chat_options_for_completion(&provider_config.model_settings);
+    let chat_options = build_chat_options_for_completion(
+        &provider_config.model_settings,
+        &provider_config.model_capabilities,
+    );
     let client = AppState::build_genai_client(provider_config)?;
 
     let mut stream = client

@@ -2590,6 +2590,12 @@ pub struct ModelCapabilities {
     // Whether the model supports reasoning mode
     #[serde(default)]
     pub supports_reasoning: bool,
+    // Whether the model supports returning reasoning summaries.
+    #[serde(default = "default_supports_reasoning_summary")]
+    pub supports_reasoning_summary: bool,
+    // Whether the model supports encrypted reasoning content for stateless replay.
+    #[serde(default = "default_supports_encrypted_reasoning_content")]
+    pub supports_encrypted_reasoning_content: bool,
     // Whether the model supports providing a verbosity parameter (for future support of GPT-5-type models)
     #[serde(default)]
     pub supports_verbosity: bool,
@@ -2605,6 +2611,14 @@ fn default_context_size_tokens() -> usize {
     1_000_000
 }
 
+fn default_supports_reasoning_summary() -> bool {
+    true
+}
+
+fn default_supports_encrypted_reasoning_content() -> bool {
+    true
+}
+
 impl Default for ModelCapabilities {
     fn default() -> Self {
         Self {
@@ -2612,6 +2626,8 @@ impl Default for ModelCapabilities {
             supports_image_understanding: false,
             supports_audio_input: false,
             supports_reasoning: false,
+            supports_reasoning_summary: default_supports_reasoning_summary(),
+            supports_encrypted_reasoning_content: default_supports_encrypted_reasoning_content(),
             supports_verbosity: false,
             cost_input_tokens_per_1m: 0.0,
             cost_output_tokens_per_1m: 0.0,

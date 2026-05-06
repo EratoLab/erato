@@ -2860,7 +2860,10 @@ pub async fn prompt_optimizer(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let chat_options = build_chat_options_for_completion(&chat_provider_config.model_settings);
+    let chat_options = build_chat_options_for_completion(
+        &chat_provider_config.model_settings,
+        &chat_provider_config.model_capabilities,
+    );
     let mut chat_request: ChatRequest = Default::default();
     chat_request = chat_request.append_message(GenAiChatMessage::system(system_prompt));
     chat_request = chat_request.append_message(GenAiChatMessage::user(request.prompt));

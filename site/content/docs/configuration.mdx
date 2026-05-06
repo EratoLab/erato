@@ -532,6 +532,8 @@ The `model_capabilities` field allows you to configure the capabilities and limi
 context_size_tokens = 128000
 supports_image_understanding = true
 supports_reasoning = false
+supports_reasoning_summary = true
+supports_encrypted_reasoning_content = true
 supports_verbosity = false
 cost_input_tokens_per_1m = 5.0
 cost_output_tokens_per_1m = 15.0
@@ -542,6 +544,8 @@ cost_output_tokens_per_1m = 15.0
 - **`context_size_tokens`** _(default: 1000000)_ - Maximum number of tokens that may be provided to the model including input messages, system prompt, and files
 - **`supports_image_understanding`** _(default: false)_ - Whether the model supports being provided with images for understanding
 - **`supports_reasoning`** _(default: false)_ - Whether the model supports reasoning mode (e.g., OpenAI o1 family)
+- **`supports_reasoning_summary`** _(default: true)_ - Whether the model supports returning reasoning summaries when reasoning is enabled
+- **`supports_encrypted_reasoning_content`** _(default: true)_ - Whether the model supports requesting encrypted reasoning content for stateless reasoning replay
 - **`supports_verbosity`** _(default: false)_ - Whether the model supports providing a verbosity parameter (for future support of advanced models)
 - **`cost_input_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million input tokens (unit-less, for cost estimation)
 - **`cost_output_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million output tokens (unit-less, for cost estimation)

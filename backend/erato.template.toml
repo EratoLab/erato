@@ -40,6 +40,8 @@ context_size_tokens = 1000      # Very low limit for easy testing
 cost_input_tokens_per_1m = 0.0
 cost_output_tokens_per_1m = 0.0
 # supports_audio_input = false    # Optional: allow models to accept audio inputs and audio transcription flow
+# supports_reasoning_summary = true # Optional: request reasoning summaries when reasoning is enabled
+# supports_encrypted_reasoning_content = true # Optional: request encrypted reasoning content for stateless replay
 
 # Example model settings configuration
 # [chat_providers.providers.test-token-limit.model_settings]

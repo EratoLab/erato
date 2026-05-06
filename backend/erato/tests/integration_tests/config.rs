@@ -1480,6 +1480,8 @@ api_key = "sk-test-key"
 context_size_tokens = 8192
 supports_image_understanding = false
 supports_reasoning = false
+supports_reasoning_summary = false
+supports_encrypted_reasoning_content = false
 supports_verbosity = false
 cost_input_tokens_per_1m = 30.0
 cost_output_tokens_per_1m = 60.0
@@ -1548,6 +1550,12 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
             .supports_image_understanding
     );
     assert!(!gpt4_provider.model_capabilities.supports_reasoning);
+    assert!(!gpt4_provider.model_capabilities.supports_reasoning_summary);
+    assert!(
+        !gpt4_provider
+            .model_capabilities
+            .supports_encrypted_reasoning_content
+    );
     assert!(!gpt4_provider.model_capabilities.supports_verbosity);
     assert_eq!(
         gpt4_provider.model_capabilities.cost_input_tokens_per_1m,
@@ -1570,6 +1578,16 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
             .supports_image_understanding
     );
     assert!(!gpt4o_mini_provider.model_capabilities.supports_reasoning);
+    assert!(
+        gpt4o_mini_provider
+            .model_capabilities
+            .supports_reasoning_summary
+    );
+    assert!(
+        gpt4o_mini_provider
+            .model_capabilities
+            .supports_encrypted_reasoning_content
+    );
     assert!(!gpt4o_mini_provider.model_capabilities.supports_verbosity);
     assert_eq!(
         gpt4o_mini_provider
@@ -1658,6 +1676,12 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
             .supports_image_understanding
     );
     assert!(!basic_provider.model_capabilities.supports_reasoning);
+    assert!(basic_provider.model_capabilities.supports_reasoning_summary);
+    assert!(
+        basic_provider
+            .model_capabilities
+            .supports_encrypted_reasoning_content
+    );
     assert!(!basic_provider.model_capabilities.supports_verbosity);
     assert_eq!(
         basic_provider.model_capabilities.cost_input_tokens_per_1m,
