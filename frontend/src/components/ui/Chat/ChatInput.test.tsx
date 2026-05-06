@@ -960,6 +960,53 @@ describe("ChatInput", () => {
     );
   });
 
+  it("shows a moving dictation waveform that swaps to stop affordance", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseUploadFeature.mockReturnValue({ enabled: false });
+    mockUseAudioDictationFeature.mockReturnValue({ enabled: true });
+    mockUseAudioDictationRecorder.mockReturnValue({
+      isDictating: true,
+      isDictationStarting: false,
+      dictationError: null,
+      setDictationError: vi.fn(),
+      dictationBars: [2, 5, 8, 5, 2],
+      toggleDictation: vi.fn(),
+    });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={vi.fn()} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const button = screen.getByTestId("chat-input-record-audio");
+    const waveform = screen.getByTestId("chat-input-dictation-waveform");
+    const stopIcon = screen.getByTestId("chat-input-dictation-stop-icon");
+
+    expect(button).toHaveAccessibleName("Stop dictation");
+    expect(button).toHaveClass("group", "relative", "overflow-hidden");
+    expect(waveform).toHaveClass(
+      "group-hover:opacity-0",
+      "group-focus-visible:opacity-0",
+    );
+    expect(waveform.children[2]).toHaveClass("dictation-wave-bar");
+    expect(waveform.children[2]).toHaveStyle({ height: "16px" });
+    expect(stopIcon).toHaveClass(
+      "group-hover:opacity-100",
+      "group-focus-visible:opacity-100",
+    );
+    expect(stopIcon).toHaveTextContent("stop");
+  });
+
   it("does not show the record button when audio transcription is disabled", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {

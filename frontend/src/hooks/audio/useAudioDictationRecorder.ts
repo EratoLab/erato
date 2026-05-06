@@ -9,6 +9,8 @@ const CANONICAL_AUDIO_WAV_HEADER_BYTES = 44;
 const CANONICAL_AUDIO_BYTES_PER_SAMPLE = 2;
 const DEFAULT_AUDIO_DICTATION_CHUNK_DURATION_MS = 30_000;
 const AUDIO_BARS_COUNT = 5;
+const AUDIO_BAR_MIN_HEIGHT = 2;
+const AUDIO_BAR_MAX_HEIGHT = 16;
 
 type AudioDictationSocketFrame =
   | {
@@ -219,6 +221,44 @@ function mediaTrackSettingsToDiagnostics(
     noiseSuppression: settings.noiseSuppression,
     autoGainControl: settings.autoGainControl,
   };
+}
+
+export function getAudioLevelBarsFromTimeDomainData(
+  audioLevelData: Uint8Array,
+): number[] {
+  const samplesPerBar = Math.max(
+    1,
+    Math.floor(audioLevelData.length / AUDIO_BARS_COUNT),
+  );
+
+  return Array.from({ length: AUDIO_BARS_COUNT }, (_, barIndex) => {
+    const startSample = barIndex * samplesPerBar;
+    const endSample =
+      barIndex + 1 === AUDIO_BARS_COUNT
+        ? audioLevelData.length
+        : (barIndex + 1) * samplesPerBar;
+    let squaredTotal = 0;
+    let peak = 0;
+
+    for (let index = startSample; index < endSample; index++) {
+      const centeredSample = (audioLevelData[index] - 128) / 128;
+      const absoluteSample = Math.abs(centeredSample);
+      squaredTotal += centeredSample * centeredSample;
+      peak = Math.max(peak, absoluteSample);
+    }
+
+    const sampleCount = Math.max(1, endSample - startSample);
+    const rms = Math.sqrt(squaredTotal / sampleCount);
+    const amplifiedLevel = Math.min(1, Math.max(rms * 8, peak * 3.5));
+
+    return Math.max(
+      AUDIO_BAR_MIN_HEIGHT,
+      Math.round(
+        AUDIO_BAR_MIN_HEIGHT +
+          amplifiedLevel * (AUDIO_BAR_MAX_HEIGHT - AUDIO_BAR_MIN_HEIGHT),
+      ),
+    );
+  });
 }
 
 export function useAudioDictationRecorder({
@@ -489,7 +529,8 @@ export function useAudioDictationRecorder({
         const analyser = audioContext.createAnalyser();
         const processor = audioContext.createScriptProcessor(4096, 1, 1);
         const processorSink = audioContext.createGain();
-        analyser.fftSize = 64;
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.65;
         processorSink.gain.value = 0;
         source.connect(analyser);
         source.connect(processor);
@@ -509,43 +550,20 @@ export function useAudioDictationRecorder({
           flushLiveAudioSamples(false);
         };
 
-        const levelData = new Uint8Array(analyser.frequencyBinCount);
+        const levelData = new Uint8Array(analyser.fftSize);
 
         const analyzeLevel = () => {
           if (!audioAnalyserRef.current || !audioLevelDataRef.current) {
             return;
           }
 
-          audioAnalyserRef.current.getByteFrequencyData(
+          audioAnalyserRef.current.getByteTimeDomainData(
             audioLevelDataRef.current,
           );
 
-          const audioLevelData = audioLevelDataRef.current;
-          const binsPerBar = Math.max(
-            1,
-            Math.floor(audioLevelData.length / AUDIO_BARS_COUNT),
+          setDictationBars(
+            getAudioLevelBarsFromTimeDomainData(audioLevelDataRef.current),
           );
-
-          const nextBars = Array.from(
-            { length: AUDIO_BARS_COUNT },
-            (_, barIndex) => {
-              const startBin = barIndex * binsPerBar;
-              const endBin =
-                barIndex + 1 === AUDIO_BARS_COUNT
-                  ? audioLevelData.length
-                  : (barIndex + 1) * binsPerBar;
-              let total = 0;
-
-              for (let index = startBin; index < endBin; index++) {
-                total += audioLevelData[index];
-              }
-
-              const average = total / (endBin - startBin);
-              return Math.max(2, Math.round((average / 255) * 16));
-            },
-          );
-
-          setDictationBars(nextBars);
           audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
         };
 

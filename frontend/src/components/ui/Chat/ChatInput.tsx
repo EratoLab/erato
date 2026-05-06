@@ -1484,6 +1484,9 @@ export const ChatInput = ({
                   type="button"
                   variant="secondary"
                   size="sm"
+                  className={clsx(
+                    isDictating && "group relative overflow-hidden",
+                  )}
                   icon={
                     isDictating ? undefined : (
                       <VoiceIcon className="text-[var(--theme-fg-primary)]" />
@@ -1505,20 +1508,31 @@ export const ChatInput = ({
                   }
                 >
                   {isDictating ? (
-                    <span
-                      aria-label={t`Dictating audio`}
-                      className="flex items-center gap-0.5"
-                    >
-                      {dictationBars.map((height, barIndex) => (
-                        <span
-                          key={barIndex}
-                          className="w-1 rounded-full bg-current transition-all"
-                          style={{
-                            height: `${Math.max(height, 2) * 2}px`,
-                          }}
-                        />
-                      ))}
-                    </span>
+                    <>
+                      <span
+                        aria-label={t`Dictating audio`}
+                        className="flex items-center gap-0.5 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0"
+                        data-testid="chat-input-dictation-waveform"
+                      >
+                        {dictationBars.map((height, barIndex) => (
+                          <span
+                            key={barIndex}
+                            className="dictation-wave-bar w-1 rounded-full bg-current transition-[height] duration-100"
+                            style={{
+                              height: `${Math.max(height, 2) * 2}px`,
+                              animationDelay: `${barIndex * 90}ms`,
+                            }}
+                          />
+                        ))}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+                        data-testid="chat-input-dictation-stop-icon"
+                      >
+                        <StopIcon className="size-4" />
+                      </span>
+                    </>
                   ) : null}
                 </Button>
               )}

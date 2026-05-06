@@ -614,6 +614,24 @@ body {
   @apply transition-[background-color,border-color,color,fill,stroke,opacity,box-shadow,transform] duration-150 ease-in-out motion-reduce:transition-none;
 }
 
+@keyframes dictation-wave {
+  0%,
+  100% {
+    transform: scaleY(0.75);
+  }
+
+  50% {
+    transform: scaleY(1.2);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dictation-wave-bar {
+    animation: dictation-wave 900ms ease-in-out infinite;
+    transform-origin: center;
+  }
+}
+
 /* Footnote reference styling - add square brackets and remove underline */
 a[data-footnote-ref="true"] {
   text-decoration: none;
