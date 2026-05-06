@@ -584,20 +584,23 @@ impl AppState {
             })
             .collect::<HashMap<_, _>>();
 
-        // Create a custom reqwest client with the additional headers
-        let mut client_builder = reqwest::ClientBuilder::new();
-
         // Add default headers if specified
         let mut header_map = HeaderMap::new();
         for (key, value) in request_headers {
             header_map.insert(HeaderName::from_str(&key)?, HeaderValue::from_str(&value)?);
         }
 
-        client_builder = client_builder
+        let custom_client = reqwest::ClientBuilder::new()
             .default_headers(header_map)
-            .connection_verbose(true);
-
-        let custom_client = client_builder.build()?;
+            .connection_verbose(true)
+            .tcp_nodelay(true)
+            .gzip(true)
+            .pool_max_idle_per_host(4)
+            .http2_keep_alive_interval(Some(Duration::from_secs(20)))
+            .http2_keep_alive_timeout(Duration::from_secs(10))
+            .http2_keep_alive_while_idle(true)
+            .http2_adaptive_window(true)
+            .build()?;
 
         let genai_client = genai::ClientBuilder::default()
             .with_reqwest(custom_client)
