@@ -32,9 +32,9 @@ use crate::services::background_tasks::{
 };
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
 use crate::services::genai_langfuse::{
-    TracedGenerationBuilder, create_trace_metadata, create_trace_with_generation_from_chat,
-    generate_langfuse_ids, generate_name_from_chat_request, langfuse_model_tag,
-    langfuse_tool_called_tag,
+    TracedGenerationBuilder, create_tool_call_span_from_chat, create_trace_metadata,
+    create_trace_with_generation_from_chat, generate_langfuse_ids, generate_name_from_chat_request,
+    langfuse_model_tag, langfuse_tool_called_tag,
 };
 use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::mcp_manager::{McpRequestAuthContext, convert_mcp_tools_to_genai_tools};
@@ -2003,6 +2003,7 @@ async fn stream_generate_chat_completion<
     // Track all tool calls across all turns for Langfuse metadata
     let mut all_tool_names: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut all_model_tags: HashSet<String> = HashSet::new();
+    let mut tool_call_parent_observation_ids: HashMap<String, String> = HashMap::new();
 
     'loop_call_turns: loop {
         current_turn += 1;
@@ -2018,6 +2019,7 @@ async fn stream_generate_chat_completion<
         } else {
             None
         };
+        let (turn_obs_id, _) = generate_langfuse_ids();
 
         if current_turn != 1 && unfinished_tool_calls.is_empty() {
             tracing::warn!(
@@ -2105,11 +2107,56 @@ async fn stream_generate_chat_completion<
                 tool: managed_tool.tool.clone(),
             };
             let output_schema = managed_tool_call.tool.output_schema.clone();
-            match app_state
+            let tool_call_start_time = if langfuse_enabled {
+                Some(SystemTime::now())
+            } else {
+                None
+            };
+            let tool_call_parent_observation_id =
+                tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id);
+            let tool_call_result = app_state
                 .mcp_servers
                 .call_tool(chat_id, managed_tool_call, &mcp_auth_context)
-                .await
-            {
+                .await;
+            let tool_call_end_time = if langfuse_enabled {
+                Some(SystemTime::now())
+            } else {
+                None
+            };
+            if let (Some(client), Some(start_time), Some(end_time), Some(parent_observation_id)) = (
+                tracing_client.as_ref(),
+                tool_call_start_time,
+                tool_call_end_time,
+                tool_call_parent_observation_id,
+            ) {
+                let client = client.clone();
+                let request = current_turn_chat_request.clone();
+                let span_name = Some(format!("tool_call: {}", unfinished_tool_call.fn_name));
+                let tool_names = vec![unfinished_tool_call.fn_name.clone()];
+                let trace_platform = langfuse_trace_enrichment.platform.clone();
+                let assistant_id_for_langfuse = assistant_id;
+                tokio::spawn(async move {
+                    let (span_obs_id, _) = generate_langfuse_ids();
+                    if let Err(err) = create_tool_call_span_from_chat(
+                        &client,
+                        span_obs_id,
+                        &request,
+                        span_name,
+                        Some(start_time),
+                        Some(end_time),
+                        None,
+                        assistant_id_for_langfuse,
+                        &tool_names,
+                        Some(&trace_platform),
+                        Some(parent_observation_id),
+                    )
+                    .await
+                    {
+                        tracing::warn!("Failed to send Langfuse span for tool call: {}", err);
+                    }
+                });
+            }
+            match tool_call_result {
                 Ok(tool_call_result) => {
                     if let Some(content_filter_error) =
                         parse_content_filter_error_from_mcp_tool_result(&tool_call_result)
@@ -2359,6 +2406,7 @@ async fn stream_generate_chat_completion<
                                         assistant_id_for_langfuse,
                                         &accumulated_tool_names,
                                         Some(&trace_enrichment.platform),
+                                        None, // parent_observation_id
                                     )
                                     .await
                                 } else {
@@ -2666,9 +2714,6 @@ async fn stream_generate_chat_completion<
                 };
                 all_model_tags.insert(langfuse_model_tag(&model_name));
 
-                // Generate a unique observation ID for this turn
-                let (turn_obs_id, _) = generate_langfuse_ids();
-
                 // Get the content generated in this turn
                 let turn_content = &current_message_content[turn_content_start_index..];
 
@@ -2681,12 +2726,17 @@ async fn stream_generate_chat_completion<
                 } else {
                     Some(format!("chat_completion_turn_{}", current_turn))
                 };
-
                 // Extract tool names from this turn's captured tool calls
                 let turn_tool_names: Vec<String> = stream_end
                     .captured_tool_calls()
                     .map(|calls| calls.iter().map(|call| call.fn_name.clone()).collect())
                     .unwrap_or_default();
+                if let Some(calls) = stream_end.captured_tool_calls() {
+                    for call in calls {
+                        tool_call_parent_observation_ids
+                            .insert(call.call_id.clone(), turn_obs_id.clone());
+                    }
+                }
 
                 // Clone client and data for async task
                 let client = client.clone();
@@ -2714,6 +2764,7 @@ async fn stream_generate_chat_completion<
                             assistant_id_for_langfuse,
                             &turn_tool_names,
                             Some(&trace_platform),
+                            None,
                         )
                         .await
                     } else {
@@ -3176,6 +3227,7 @@ pub async fn generate_chat_summary(
             .unwrap_or_else(|| "chat_summary".to_string());
 
         let mut base_tags = vec![format!("frontend-platform-{}", DEFAULT_ERATO_PLATFORM)];
+        base_tags.push("summary-generation".to_string());
         if chat.assistant_id.is_some() {
             base_tags.push("assistant".to_string());
         }
@@ -3284,6 +3336,7 @@ pub async fn generate_chat_summary(
                     assistant_id_for_langfuse,
                     &Vec::new(),
                     Some(&platform),
+                    None,
                 )
                 .await;
 
