@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   THEME_MODE_LOCAL_STORAGE_KEY,
@@ -42,6 +42,33 @@ const makeFile = (overrides: Partial<FileUploadItem> = {}): FileUploadItem => ({
     "sample-report-compressed.pdf",
   ),
   ...overrides,
+});
+
+beforeAll(() => {
+  const store = new Map<string, string>();
+  const stub: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key) => (store.has(key) ? store.get(key)! : null),
+    setItem: (key, value) => {
+      store.set(key, String(value));
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+  };
+
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: stub,
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: stub,
+  });
 });
 
 describe("MessageContent", () => {
@@ -199,6 +226,23 @@ describe("MessageContent", () => {
     expect(paragraphs).toHaveLength(2);
     expect(paragraphs[0].tagName).toBe("P");
     expect(paragraphs[1].tagName).toBe("P");
+  });
+
+  it("can preserve soft line breaks while keeping markdown lists", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("First line\nSecond line\n\n- One\n- Two")}
+        preserveSoftLineBreaks
+      />,
+    );
+
+    expect(container.querySelector("article")).toHaveClass(
+      "whitespace-pre-wrap",
+    );
+    expect(screen.getByText(/First line\s+Second line/).tagName).toBe("P");
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("One").tagName).toBe("LI");
+    expect(screen.getByText("Two").tagName).toBe("LI");
   });
 
   it("renders persisted reasoning in a collapsed section", () => {

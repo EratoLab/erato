@@ -1,6 +1,6 @@
 import { I18nProvider } from "@lingui/react";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
 
@@ -8,6 +8,8 @@ import { ChatMessage } from "./ChatMessage";
 
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 import type { Messages } from "@lingui/core";
+
+const messageContentMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/chat/store/messagingStore", () => ({
   useMessagingStore: () => ({
@@ -36,7 +38,10 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
 }));
 
 vi.mock("../Message/MessageContent", () => ({
-  MessageContent: () => <div data-testid="message-content-stub" />,
+  MessageContent: (props: unknown) => {
+    messageContentMock(props);
+    return <div data-testid="message-content-stub" />;
+  },
 }));
 
 vi.mock("../Message/ImageLightbox", () => ({
@@ -44,6 +49,10 @@ vi.mock("../Message/ImageLightbox", () => ({
 }));
 
 describe("ChatMessage", () => {
+  beforeEach(() => {
+    messageContentMock.mockClear();
+  });
+
   it("exposes stable message hooks for theme.css selectors", async () => {
     const message: UiChatMessage = {
       id: "msg_1",
@@ -93,6 +102,46 @@ describe("ChatMessage", () => {
     expect(messageShell.firstElementChild).toHaveStyle({
       gap: "var(--theme-spacing-message-gap)",
     });
+    expect(messageContentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ preserveSoftLineBreaks: false }),
+    );
     expect(screen.getByTestId("message-controls-probe")).toBeInTheDocument();
+  });
+
+  it("preserves soft line breaks for user message rendering", async () => {
+    const message: UiChatMessage = {
+      id: "msg_user_1",
+      content: [{ content_type: "text", text: "First\nSecond" }],
+      role: "user",
+      sender: "user",
+      authorId: "user_1",
+      createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+      status: "complete",
+    };
+
+    const Controls = () => <div data-testid="message-controls-probe" />;
+
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+
+    render(
+      <I18nProvider i18n={i18n}>
+        <ChatMessage
+          message={message}
+          controls={Controls}
+          controlsContext={{
+            currentUserId: "user_1",
+            dialogOwnerId: "user_1",
+            isSharedDialog: false,
+          }}
+          onMessageAction={async () => true}
+        />
+      </I18nProvider>,
+    );
+
+    expect(messageContentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ preserveSoftLineBreaks: true }),
+    );
   });
 });

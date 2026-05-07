@@ -33,6 +33,8 @@ interface MessageContentProps {
   /** Map of file IDs to their metadata for erato-file:// link resolution */
   filesById?: Record<string, FileUploadItem>;
   onFileLinkPreview?: (file: FileUploadItem) => void;
+  /** Preserve soft markdown line breaks as visual line breaks. */
+  preserveSoftLineBreaks?: boolean;
 }
 
 const INLINE_CODE_CLASS_NAME =
@@ -295,6 +297,7 @@ export const MessageContent = memo(function MessageContent({
   onImageClick,
   filesById = {},
   onFileLinkPreview,
+  preserveSoftLineBreaks = false,
 }: MessageContentProps) {
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
 
@@ -650,7 +653,12 @@ export const MessageContent = memo(function MessageContent({
   }
 
   return (
-    <article className="max-w-none font-sans text-base">
+    <article
+      className={clsx(
+        "max-w-none font-sans text-base",
+        preserveSoftLineBreaks && "whitespace-pre-wrap",
+      )}
+    >
       {content.map((part, index) => {
         const isLastRenderablePart = index === lastRenderableIndex;
 
