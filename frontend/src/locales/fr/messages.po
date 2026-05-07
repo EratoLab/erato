@@ -2129,7 +2129,7 @@ msgstr "Principales contributions des fichiers au contexte :"
 
 #: src/components/ui/Trace/hooks/useThinkingDuration.ts
 msgid "less than a second"
-msgstr ""
+msgstr "moins d'une seconde"
 
 #: src/components/ui/Controls/UserProfileDropdown.tsx
 #~ msgid "Light mode"
@@ -2506,11 +2506,11 @@ msgstr "Arrêter la dictée"
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
 msgid "Stopped"
-msgstr ""
+msgstr "Arrêté"
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
 msgid "Stopped after {formatted}"
-msgstr ""
+msgstr "Arrêté après {formatted}"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Success"
@@ -2552,7 +2552,7 @@ msgstr "Réflexion"
 
 #: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
 msgid "Thinking…"
-msgstr ""
+msgstr "Réflexion…"
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
@@ -2564,11 +2564,11 @@ msgstr "Ce message utilise {percentUsed}% de la limite de tokens disponible ({to
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
 msgid "Thought"
-msgstr ""
+msgstr "Réfléchi"
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
 msgid "Thought for {formatted}"
-msgstr ""
+msgstr "Réfléchi pendant {formatted}"
 
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "Token Limit Exceeded"
