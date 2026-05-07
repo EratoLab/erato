@@ -504,12 +504,19 @@ describe("useChatMessaging", () => {
       content: [{ content_type: "text", text: "Hello" }],
       role: "user",
       createdAt: "2023-01-01T12:00:00.000Z",
+      updatedAt: "2023-01-01T12:00:00.000Z",
       status: "complete",
       input_files_ids: undefined,
       previous_message_id: undefined,
       sender: "user",
       authorId: "user_id",
       is_message_in_active_thread: true,
+      files: undefined,
+      feedback: undefined,
+      error: undefined,
+      mcp_servers_unavailable: undefined,
+      action_facet_id: undefined,
+      action_facet_args: undefined,
     });
 
     expect(result.current.messages[secondMessageId]).toEqual({
@@ -517,12 +524,19 @@ describe("useChatMessaging", () => {
       content: [{ content_type: "text", text: "Hi there" }],
       role: "assistant",
       createdAt: "2023-01-01T12:01:00.000Z",
+      updatedAt: "2023-01-01T12:01:00.000Z",
       status: "complete",
       input_files_ids: undefined,
       previous_message_id: undefined,
       sender: "assistant",
       authorId: "assistant_id",
       is_message_in_active_thread: true,
+      files: undefined,
+      feedback: undefined,
+      error: undefined,
+      mcp_servers_unavailable: undefined,
+      action_facet_id: undefined,
+      action_facet_args: undefined,
     });
   });
 
