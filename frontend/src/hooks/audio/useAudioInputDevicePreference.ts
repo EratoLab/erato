@@ -33,7 +33,9 @@ function writeStoredAudioInputDeviceId(deviceId: string) {
   }
 }
 
-export function useAudioInputDevicePreference() {
+export function useAudioInputDevicePreference({
+  enabled = true,
+}: { enabled?: boolean } = {}) {
   const [selectedAudioInputDeviceId, setSelectedAudioInputDeviceIdState] =
     useState(readStoredAudioInputDeviceId);
   const [audioInputDevices, setAudioInputDevices] = useState<
@@ -90,8 +92,12 @@ export function useAudioInputDevicePreference() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     void refreshAudioInputDevices();
-  }, [refreshAudioInputDevices]);
+  }, [enabled, refreshAudioInputDevices]);
 
   const selectedAudioInputDevice = useMemo(
     () =>

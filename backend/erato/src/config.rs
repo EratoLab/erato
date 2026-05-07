@@ -1147,18 +1147,27 @@ fn validate_audio_feature_config(
                 provider_id
             );
         }
+        if !audio_provider_kind_supports_binary_audio(&provider.provider_kind) {
+            panic!(
+                "{config_key}.chat_provider_id '{}' uses provider_kind '{}', which does not support audio input through the current adapter.",
+                provider_id, provider.provider_kind
+            );
+        }
         Some(provider)
     } else if let Some(chat_providers) = &app_config.chat_providers {
         chat_providers
             .priority_order
             .iter()
             .filter_map(|provider_id| chat_providers.providers.get(provider_id))
-            .find(|provider| provider.model_capabilities.supports_audio_input)
+            .find(|provider| {
+                provider.model_capabilities.supports_audio_input
+                    && audio_provider_kind_supports_binary_audio(&provider.provider_kind)
+            })
     } else {
-        app_config
-            .chat_provider
-            .as_ref()
-            .filter(|provider| provider.model_capabilities.supports_audio_input)
+        app_config.chat_provider.as_ref().filter(|provider| {
+            provider.model_capabilities.supports_audio_input
+                && audio_provider_kind_supports_binary_audio(&provider.provider_kind)
+        })
     };
 
     if configured_audio_provider.is_none() {
@@ -1166,6 +1175,27 @@ fn validate_audio_feature_config(
             "{config_key} is enabled, but no chat provider has `model_capabilities.supports_audio_input = true`.\n\n\
 Enable {config_key} with at least one provider setting `supports_audio_input = true` in `chat_providers.providers.<provider_id>.model_capabilities`."
         );
+    }
+}
+
+fn audio_provider_kind_supports_binary_audio(provider_kind: &str) -> bool {
+    !matches!(provider_kind, "openai_responses" | "azure_openai_responses")
+}
+
+#[cfg(test)]
+mod audio_config_tests {
+    use super::*;
+
+    #[test]
+    fn audio_config_rejects_openai_responses_provider_kinds() {
+        assert!(!audio_provider_kind_supports_binary_audio(
+            "openai_responses"
+        ));
+        assert!(!audio_provider_kind_supports_binary_audio(
+            "azure_openai_responses"
+        ));
+        assert!(audio_provider_kind_supports_binary_audio("openai"));
+        assert!(audio_provider_kind_supports_binary_audio("gemini"));
     }
 }
 

@@ -959,6 +959,9 @@ export const ChatInput = ({
       if (hasIncompleteAudioTranscription) {
         return;
       }
+      if (isDictationCompleting) {
+        return;
+      }
 
       logger.log("Submit:", {
         mode,
@@ -986,7 +989,10 @@ export const ChatInput = ({
         );
       }
     },
-    isLoading || isPendingResponse || hasIncompleteAudioTranscription,
+    isLoading ||
+      isPendingResponse ||
+      hasIncompleteAudioTranscription ||
+      isDictationCompleting,
     disabled,
     () => setMessage(""),
   );
@@ -1084,7 +1090,8 @@ export const ChatInput = ({
     isAnyTokenLimitExceeded ||
     hasIncompleteAudioTranscription ||
     isDictating ||
-    isDictationStarting;
+    isDictationStarting ||
+    isDictationCompleting;
 
   // Enhanced file removal handler using token management hook
   const handleRemoveFileById = useCallback(
@@ -1150,7 +1157,8 @@ export const ChatInput = ({
     !isUploading &&
     !isAnyTokenLimitExceeded &&
     !isRecording &&
-    !hasIncompleteAudioTranscription;
+    !hasIncompleteAudioTranscription &&
+    !isDictationCompleting;
 
   // Log just before rendering the component and its preview section
   logger.log(

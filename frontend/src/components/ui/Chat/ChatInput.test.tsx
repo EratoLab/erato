@@ -1045,9 +1045,12 @@ describe("ChatInput", () => {
     );
 
     const button = screen.getByTestId("chat-input-record-audio");
+    const textarea = screen.getByPlaceholderText("Type a message...");
+    fireEvent.change(textarea, { target: { value: "Pending text" } });
 
     expect(button).toHaveAccessibleName("Finishing dictation");
     expect(button).toBeDisabled();
+    expect(screen.getByTestId("chat-input-send-message")).toBeDisabled();
     expect(
       screen.getByTestId("chat-input-dictation-loading-icon"),
     ).toHaveTextContent("loading");

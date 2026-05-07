@@ -8,6 +8,8 @@ const CANONICAL_AUDIO_SAMPLE_RATE_HZ = 16_000;
 const CANONICAL_AUDIO_WAV_HEADER_BYTES = 44;
 const CANONICAL_AUDIO_BYTES_PER_SAMPLE = 2;
 const DEFAULT_AUDIO_DICTATION_CHUNK_DURATION_MS = 30_000;
+const AUDIO_DICTATION_SOCKET_OPEN_TIMEOUT_MS = 15_000;
+const AUDIO_DICTATION_SOCKET_FRAME_TIMEOUT_MS = 5 * 60_000;
 const AUDIO_BARS_COUNT = 5;
 const AUDIO_BAR_MIN_HEIGHT = 2;
 const AUDIO_BAR_MAX_HEIGHT = 16;
@@ -80,22 +82,51 @@ function sendAudioDictationControlFrame(
   socket.send(JSON.stringify(frame));
 }
 
-function waitForSocketOpen(socket: WebSocket): Promise<void> {
+function waitForSocketOpen(
+  socket: WebSocket,
+  timeoutMs = AUDIO_DICTATION_SOCKET_OPEN_TIMEOUT_MS,
+): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    socket.addEventListener("open", () => resolve(), { once: true });
-    socket.addEventListener(
-      "error",
-      () => reject(new Error(t`Audio dictation connection failed.`)),
-      { once: true },
-    );
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error(t`Audio dictation connection timed out.`));
+    }, timeoutMs);
+    const handleOpen = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error(t`Audio dictation connection failed.`));
+    };
+    const handleClose = () => {
+      cleanup();
+      reject(new Error(t`Audio dictation connection closed.`));
+    };
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      socket.removeEventListener("open", handleOpen);
+      socket.removeEventListener("error", handleError);
+      socket.removeEventListener("close", handleClose);
+    };
+
+    socket.addEventListener("open", handleOpen, { once: true });
+    socket.addEventListener("error", handleError, { once: true });
+    socket.addEventListener("close", handleClose, { once: true });
   });
 }
 
 function waitForAudioDictationFrame(
   socket: WebSocket,
   predicate: (frame: AudioDictationSocketFrame) => boolean,
+  timeoutMs = AUDIO_DICTATION_SOCKET_FRAME_TIMEOUT_MS,
 ): Promise<AudioDictationSocketFrame> {
   return new Promise<AudioDictationSocketFrame>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error(t`Audio dictation response timed out.`));
+    }, timeoutMs);
+
     const handleMessage = (event: MessageEvent) => {
       if (typeof event.data !== "string") {
         return;
@@ -128,13 +159,21 @@ function waitForAudioDictationFrame(
       reject(new Error(t`Audio dictation connection failed.`));
     };
 
+    const handleClose = () => {
+      cleanup();
+      reject(new Error(t`Audio dictation connection closed.`));
+    };
+
     const cleanup = () => {
+      window.clearTimeout(timeoutId);
       socket.removeEventListener("message", handleMessage);
       socket.removeEventListener("error", handleError);
+      socket.removeEventListener("close", handleClose);
     };
 
     socket.addEventListener("message", handleMessage);
     socket.addEventListener("error", handleError);
+    socket.addEventListener("close", handleClose);
   });
 }
 
@@ -288,7 +327,11 @@ export function useAudioDictationRecorder({
   const audioFrameRef = useRef<number | null>(null);
   const recordingDurationTimerRef = useRef<number | null>(null);
   const onTranscriptChunkRef = useRef(onTranscriptChunk);
-  const { selectedAudioInputDeviceId } = useAudioInputDevicePreference();
+  const isMountedRef = useRef(true);
+  const startInFlightRef = useRef(false);
+  const { selectedAudioInputDeviceId } = useAudioInputDevicePreference({
+    enabled,
+  });
 
   useEffect(() => {
     onTranscriptChunkRef.current = onTranscriptChunk;
@@ -301,7 +344,7 @@ export function useAudioDictationRecorder({
     }
   }, []);
 
-  const stopRecordingVisualizer = useCallback(() => {
+  const stopRecordingVisualizer = useCallback((resetBars = true) => {
     if (audioFrameRef.current !== null) {
       window.cancelAnimationFrame(audioFrameRef.current);
       audioFrameRef.current = null;
@@ -321,7 +364,9 @@ export function useAudioDictationRecorder({
       void audioContextRef.current.close();
     }
     audioContextRef.current = null;
-    setDictationBars(Array.from({ length: AUDIO_BARS_COUNT }, () => 2));
+    if (resetBars && isMountedRef.current) {
+      setDictationBars(Array.from({ length: AUDIO_BARS_COUNT }, () => 2));
+    }
   }, []);
 
   const stopMediaRecordingStream = useCallback(() => {
@@ -412,7 +457,9 @@ export function useAudioDictationRecorder({
         );
       }
 
-      setIsDictationStarting(true);
+      if (isMountedRef.current) {
+        setIsDictationStarting(true);
+      }
       setDictationError(null);
 
       const socket = new WebSocket(createAudioDictationWebSocketUrl());
@@ -470,7 +517,6 @@ export function useAudioDictationRecorder({
         sourceSampleRate: CANONICAL_AUDIO_SAMPLE_RATE_HZ,
       };
       liveSessionRef.current = session;
-      setIsDictationStarting(false);
       return session;
     }, [enabled]);
 
@@ -485,12 +531,24 @@ export function useAudioDictationRecorder({
   }, [stopMediaRecordingStream]);
 
   const startDictation = useCallback(async () => {
+    if (
+      startInFlightRef.current ||
+      isDictating ||
+      isDictationStarting ||
+      isDictationCompleting
+    ) {
+      return;
+    }
+
     if (!enabled) {
       setDictationError(
         t`Audio dictation is not available in this environment.`,
       );
       return;
     }
+
+    startInFlightRef.current = true;
+    setIsDictationStarting(true);
 
     const mediaDevices =
       typeof navigator === "undefined"
@@ -500,6 +558,8 @@ export function useAudioDictationRecorder({
 
     if (typeof mediaDevices?.getUserMedia !== "function") {
       setDictationError(t`Audio recording is not supported in this browser.`);
+      setIsDictationStarting(false);
+      startInFlightRef.current = false;
       return;
     }
 
@@ -516,6 +576,11 @@ export function useAudioDictationRecorder({
           sampleRate: { ideal: CANONICAL_AUDIO_SAMPLE_RATE_HZ },
         },
       });
+      if (!isMountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
       mediaStreamRef.current = stream;
       const audioTrack = stream.getAudioTracks()[0];
       setDictationDiagnostics(
@@ -588,8 +653,10 @@ export function useAudioDictationRecorder({
 
       mediaRecorder.onstop = () => {
         clearRecordingDurationTimer();
-        setIsDictating(false);
-        setIsDictationCompleting(true);
+        if (isMountedRef.current) {
+          setIsDictating(false);
+          setIsDictationCompleting(true);
+        }
         stopMediaRecordingStream();
 
         void (async () => {
@@ -626,7 +693,9 @@ export function useAudioDictationRecorder({
           } finally {
             liveSessionRef.current = null;
             session?.socket.close();
-            setIsDictationCompleting(false);
+            if (isMountedRef.current) {
+              setIsDictationCompleting(false);
+            }
           }
         })();
       };
@@ -636,9 +705,11 @@ export function useAudioDictationRecorder({
         liveSessionRef.current?.socket.close();
         liveSessionRef.current = null;
         stopMediaRecordingStream();
-        setIsDictating(false);
-        setIsDictationStarting(false);
-        setIsDictationCompleting(false);
+        if (isMountedRef.current) {
+          setIsDictating(false);
+          setIsDictationStarting(false);
+          setIsDictationCompleting(false);
+        }
         setDictationError(
           error instanceof Error
             ? error.message
@@ -659,24 +730,32 @@ export function useAudioDictationRecorder({
         );
       }, recordingLimitMs * 1000);
       setIsDictating(true);
+      setIsDictationStarting(false);
       setDictationError(null);
     } catch (error) {
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
       stopMediaRecordingStream();
-      setIsDictating(false);
-      setIsDictationStarting(false);
-      setIsDictationCompleting(false);
-      setDictationError(
-        error instanceof Error
-          ? error.message
-          : t`Could not start audio dictation.`,
-      );
+      if (isMountedRef.current) {
+        setIsDictating(false);
+        setIsDictationStarting(false);
+        setIsDictationCompleting(false);
+        setDictationError(
+          error instanceof Error
+            ? error.message
+            : t`Could not start audio dictation.`,
+        );
+      }
+    } finally {
+      startInFlightRef.current = false;
     }
   }, [
     clearRecordingDurationTimer,
     enabled,
     flushLiveAudioSamples,
+    isDictating,
+    isDictationCompleting,
+    isDictationStarting,
     maxRecordingDurationSeconds,
     selectedAudioInputDeviceId,
     startLiveDictationSession,
@@ -694,16 +773,31 @@ export function useAudioDictationRecorder({
   }, [isDictating, startDictation, stopDictation]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     return () => {
-      if (mediaRecorderRef.current?.state === "recording") {
-        mediaRecorderRef.current.stop();
+      isMountedRef.current = false;
+      startInFlightRef.current = false;
+      const mediaRecorder = mediaRecorderRef.current;
+      if (mediaRecorder) {
+        mediaRecorder.onstop = null;
+        mediaRecorder.onerror = null;
+        if (mediaRecorder.state === "recording") {
+          mediaRecorder.stop();
+        }
+        mediaRecorderRef.current = null;
       }
 
       liveSessionRef.current?.socket.close();
       liveSessionRef.current = null;
-      stopMediaRecordingStream();
+      stopRecordingVisualizer(false);
+      clearRecordingDurationTimer();
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+      }
     };
-  }, [stopMediaRecordingStream]);
+  }, [clearRecordingDurationTimer, stopRecordingVisualizer]);
 
   return {
     isDictating,

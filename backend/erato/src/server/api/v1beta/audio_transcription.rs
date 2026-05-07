@@ -372,6 +372,7 @@ async fn handle_dictation_control_frame(
                 (*chunk_duration_ms).ok_or_eyre("Start audio dictation before sending chunks")?;
             validate_chunk_metadata(
                 app_state,
+                AudioFeature::Dictation,
                 chunk_index,
                 start_ms,
                 end_ms,
@@ -415,7 +416,11 @@ async fn handle_dictation_audio_bytes(
         provider_audio_bytes = validated_chunk.provider_audio_bytes.len(),
         "Validated audio dictation chunk"
     );
-    enforce_audio_byte_limit(app_state, validated_chunk.append_bytes.len() as u64)?;
+    enforce_audio_byte_limit(
+        app_state,
+        AudioFeature::Dictation,
+        validated_chunk.append_bytes.len() as u64,
+    )?;
 
     let ack = DictationServerControlFrame::ChunkAck {
         chunk_index: pending.chunk_index,
@@ -591,7 +596,7 @@ async fn handle_control_frame(
                     session.chunk_duration_ms
                 ));
             }
-            enforce_audio_duration_limit(app_state, end_ms)?;
+            enforce_audio_duration_limit(app_state, AudioFeature::Transcription, end_ms)?;
             let expected_index = next_chunk_index(&session.metadata);
             if chunk_index != expected_index {
                 return Err(eyre::eyre!(
@@ -700,6 +705,7 @@ async fn handle_audio_bytes(
     let byte_start = session.stored_offset;
     enforce_audio_byte_limit(
         app_state,
+        AudioFeature::Transcription,
         byte_start + validated_chunk.append_bytes.len() as u64,
     )?;
     write_audio_storage_bytes(
@@ -853,6 +859,7 @@ fn ensure_audio_dictation_enabled(app_state: &AppState) -> Result<(), Report> {
 
 fn validate_chunk_metadata(
     app_state: &AppState,
+    audio_feature: AudioFeature,
     chunk_index: usize,
     start_ms: u64,
     end_ms: u64,
@@ -868,7 +875,7 @@ fn validate_chunk_metadata(
             chunk_duration_ms
         ));
     }
-    enforce_audio_duration_limit(app_state, end_ms)?;
+    enforce_audio_duration_limit(app_state, audio_feature, end_ms)?;
     if chunk_index != expected_chunk_index {
         return Err(eyre::eyre!(
             "Unexpected chunk index: got {}, expected {}",
@@ -1107,18 +1114,23 @@ fn chunk_attempts(metadata: &AudioTranscriptionMetadata, chunk_index: usize) -> 
         .unwrap_or(0)
 }
 
-fn canonical_audio_max_bytes(app_state: &AppState) -> u64 {
-    44 + app_state
-        .config
-        .audio_transcription
-        .max_recording_duration_seconds
+fn canonical_audio_max_bytes(app_state: &AppState, audio_feature: AudioFeature) -> u64 {
+    canonical_audio_max_bytes_for_config(audio_feature.config(app_state))
+}
+
+fn canonical_audio_max_bytes_for_config(config: &crate::config::AudioTranscriptionConfig) -> u64 {
+    44 + config.max_recording_duration_seconds
         * CANONICAL_SAMPLE_RATE_HZ as u64
         * CANONICAL_CHANNELS as u64
         * (CANONICAL_BITS_PER_SAMPLE as u64 / 8)
 }
 
-fn enforce_audio_byte_limit(app_state: &AppState, next_offset: u64) -> Result<(), Report> {
-    let max_bytes = canonical_audio_max_bytes(app_state);
+fn enforce_audio_byte_limit(
+    app_state: &AppState,
+    audio_feature: AudioFeature,
+    next_offset: u64,
+) -> Result<(), Report> {
+    let max_bytes = canonical_audio_max_bytes(app_state, audio_feature);
     if next_offset > max_bytes {
         return Err(eyre::eyre!(
             "Audio recording exceeds configured maximum size of {} bytes",
@@ -1129,12 +1141,19 @@ fn enforce_audio_byte_limit(app_state: &AppState, next_offset: u64) -> Result<()
     Ok(())
 }
 
-fn enforce_audio_duration_limit(app_state: &AppState, end_ms: u64) -> Result<(), Report> {
-    let max_ms = app_state
-        .config
-        .audio_transcription
-        .max_recording_duration_seconds
-        * 1000;
+fn enforce_audio_duration_limit(
+    app_state: &AppState,
+    audio_feature: AudioFeature,
+    end_ms: u64,
+) -> Result<(), Report> {
+    enforce_audio_duration_limit_config(audio_feature.config(app_state), end_ms)
+}
+
+fn enforce_audio_duration_limit_config(
+    config: &crate::config::AudioTranscriptionConfig,
+    end_ms: u64,
+) -> Result<(), Report> {
+    let max_ms = config.max_recording_duration_seconds * 1000;
     if end_ms > max_ms {
         return Err(eyre::eyre!(
             "Audio chunk exceeds configured maximum recording duration of {}ms",
@@ -1351,6 +1370,14 @@ fn audio_provider(
                 provider_id,
             ));
         }
+        if !audio_provider_kind_supports_binary_audio(&provider.provider_kind) {
+            return Err(eyre::eyre!(
+                "Configured {} provider '{}' uses provider kind '{}' which does not support audio input through the current adapter",
+                config_key,
+                provider_id,
+                provider.provider_kind,
+            ));
+        }
         return Ok(ChatProviderConfigWithId {
             chat_provider_id: provider_id.to_string(),
             chat_provider_config: provider.clone(),
@@ -1365,9 +1392,12 @@ fn audio_provider(
                 chat_providers
                     .providers
                     .get(*provider_id)
-                    .is_some_and(|provider| provider.model_capabilities.supports_audio_input)
+                    .is_some_and(|provider| {
+                        provider.model_capabilities.supports_audio_input
+                            && audio_provider_kind_supports_binary_audio(&provider.provider_kind)
+                    })
             })
-            .ok_or_eyre("No audio-capable chat provider configured")?;
+            .ok_or_eyre("No supported audio-capable chat provider configured")?;
         return Ok(ChatProviderConfigWithId {
             chat_provider_id: provider_id.clone(),
             chat_provider_config: app_state.config.get_chat_provider(provider_id).clone(),
@@ -1378,13 +1408,20 @@ fn audio_provider(
         .config
         .chat_provider
         .as_ref()
-        .filter(|provider| provider.model_capabilities.supports_audio_input)
-        .ok_or_eyre("No audio-capable chat provider configured")?;
+        .filter(|provider| {
+            provider.model_capabilities.supports_audio_input
+                && audio_provider_kind_supports_binary_audio(&provider.provider_kind)
+        })
+        .ok_or_eyre("No supported audio-capable chat provider configured")?;
 
     Ok(ChatProviderConfigWithId {
         chat_provider_id: "default".to_string(),
         chat_provider_config: provider.clone(),
     })
+}
+
+fn audio_provider_kind_supports_binary_audio(provider_kind: &str) -> bool {
+    !matches!(provider_kind, "openai_responses" | "azure_openai_responses")
 }
 
 async fn transcribe_audio_chunk_genai(
@@ -1720,5 +1757,36 @@ mod tests {
         );
         assert!(resolve_chunk_content_type(0, Some("audio/pcm".to_string())).is_err());
         assert!(resolve_chunk_content_type(1, Some("audio/mpeg".to_string())).is_err());
+    }
+
+    #[test]
+    fn audio_dictation_limits_can_differ_from_audio_transcription_limits() {
+        let transcription_config = crate::config::AudioTranscriptionConfig {
+            max_recording_duration_seconds: 1200,
+            ..Default::default()
+        };
+        let dictation_config = crate::config::AudioTranscriptionConfig {
+            max_recording_duration_seconds: 5,
+            ..Default::default()
+        };
+
+        assert!(enforce_audio_duration_limit_config(&dictation_config, 5_001).is_err());
+        assert!(enforce_audio_duration_limit_config(&transcription_config, 5_001).is_ok());
+        assert!(
+            canonical_audio_max_bytes_for_config(&dictation_config)
+                < canonical_audio_max_bytes_for_config(&transcription_config)
+        );
+    }
+
+    #[test]
+    fn audio_provider_kind_rejects_openai_responses_until_audio_is_supported() {
+        assert!(!audio_provider_kind_supports_binary_audio(
+            "openai_responses"
+        ));
+        assert!(!audio_provider_kind_supports_binary_audio(
+            "azure_openai_responses"
+        ));
+        assert!(audio_provider_kind_supports_binary_audio("openai"));
+        assert!(audio_provider_kind_supports_binary_audio("gemini"));
     }
 }
