@@ -1,12 +1,12 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import React, { memo, useEffect, useState } from "react";
+import React, { memo } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import remarkGfm from "remark-gfm";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
-import { ToolCallItem } from "@/components/ui/ToolCall";
+import { Trace, groupIntoTraceClusters } from "@/components/ui/Trace";
 import {
   DEFAULT_DARK_CODE_HIGHLIGHT_PRESET,
   DEFAULT_LIGHT_CODE_HIGHLIGHT_PRESET,
@@ -14,18 +14,14 @@ import {
 } from "@/config/codeHighlightThemes";
 import { useOptionalTranslation } from "@/hooks/i18n";
 
-
-import { ChevronRightIcon } from "../icons";
 import { EratoEmailSuggestion } from "./EratoEmailSuggestion";
 import { ImageContentDisplay } from "./ImageContentDisplay";
 
 import type {
   ContentPart,
   FileUploadItem,
-  ToolUse,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
-import type { UiToolCall } from "@/utils/adapters/toolCallAdapter";
 import type { Components } from "react-markdown";
 
 interface MessageContentProps {
@@ -215,26 +211,9 @@ const rewriteFootnoteValue = (
 const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "text" ||
   part.content_type === "reasoning" ||
+  part.content_type === "tool_use" ||
   part.content_type === "image" ||
   part.content_type === "image_file_pointer";
-
-// Used to decide whether a ReasoningSection should auto-collapse: when later
-// non-reasoning content (text, images, OR tool calls) appears below it.
-const isNonReasoningRenderableContentPart = (part: ContentPart): boolean =>
-  (isRenderableContentPart(part) || part.content_type === "tool_use") &&
-  part.content_type !== "reasoning";
-
-const toolUsePartToUiToolCall = (
-  part: ToolUse & { content_type: "tool_use" },
-): UiToolCall => ({
-  id: part.tool_call_id,
-  name: part.tool_name,
-  status: part.status,
-  input: part.input,
-  output: part.output,
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/prefer-nullish-coalescing
-  progressMessage: part.progress_message || undefined,
-});
 
 const contentPartToImage = (
   part: ContentPart,
@@ -259,54 +238,6 @@ const contentPartToImage = (
 
   return null;
 };
-
-interface ReasoningSectionProps {
-  text: string;
-  isStreamingReasoning: boolean;
-  hasLaterNonReasoningContent: boolean;
-  renderMarkdown: (text: string) => React.ReactNode;
-}
-
-const ReasoningSection = memo(function ReasoningSection({
-  text,
-  isStreamingReasoning,
-  hasLaterNonReasoningContent,
-  renderMarkdown,
-}: ReasoningSectionProps) {
-  const [isExpanded, setIsExpanded] = useState(isStreamingReasoning);
-
-  useEffect(() => {
-    if (isStreamingReasoning) {
-      setIsExpanded(true);
-    } else if (hasLaterNonReasoningContent) {
-      setIsExpanded(false);
-    }
-  }, [hasLaterNonReasoningContent, isStreamingReasoning]);
-
-  return (
-    <section className="my-3 border-l-2 border-theme-border pl-3">
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 py-1 text-left text-sm font-medium text-theme-fg-secondary hover:text-theme-fg-primary"
-        aria-expanded={isExpanded}
-        onClick={() => setIsExpanded((prev) => !prev)}
-      >
-        <ChevronRightIcon
-          className={clsx(
-            "size-3 shrink-0 text-theme-fg-muted transition-transform",
-            isExpanded ? "rotate-90" : "rotate-0",
-          )}
-        />
-        <span>{t`Reasoning`}</span>
-      </button>
-      {isExpanded && (
-        <div className="mt-1 text-sm text-theme-fg-secondary">
-          {renderMarkdown(text)}
-        </div>
-      )}
-    </section>
-  );
-});
 
 export const MessageContent = memo(function MessageContent({
   content,
@@ -652,6 +583,11 @@ export const MessageContent = memo(function MessageContent({
     return -1;
   }, [content]);
 
+  const clusters = React.useMemo(
+    () => groupIntoTraceClusters(content),
+    [content],
+  );
+
   // If showing raw, just show text-like content without rendering markdown.
   if (showRaw) {
     const rawText = content
@@ -678,7 +614,28 @@ export const MessageContent = memo(function MessageContent({
         preserveSoftLineBreaks && "whitespace-pre-wrap",
       )}
     >
-      {content.map((part, index) => {
+      {clusters.map((cluster) => {
+        if (cluster.kind === "trace") {
+          // The trace block is the "current writer" while no later renderable
+          // (text/image) content exists below it.
+          const lastTracePartIndex =
+            cluster.startIndex + cluster.parts.length - 1;
+          const hasLaterContent = content
+            .slice(lastTracePartIndex + 1)
+            .some(isRenderableContentPart);
+
+          return (
+            <Trace
+              key={`trace-${cluster.startIndex}`}
+              parts={cluster.parts}
+              isStreaming={!!isStreaming}
+              hasLaterContent={hasLaterContent}
+              renderMarkdown={renderMarkdown}
+            />
+          );
+        }
+
+        const { part, index } = cluster;
         const isLastRenderablePart = index === lastRenderableIndex;
 
         if (part.content_type === "text") {
@@ -691,34 +648,6 @@ export const MessageContent = memo(function MessageContent({
             <React.Fragment key={`text-${index}`}>
               {renderMarkdown(displayText)}
             </React.Fragment>
-          );
-        }
-
-        if (part.content_type === "reasoning") {
-          const displayText =
-            isStreaming && isLastRenderablePart && !part.text.endsWith("\n")
-              ? part.text + "▊"
-              : part.text;
-          const hasLaterNonReasoningContent = content
-            .slice(index + 1)
-            .some(isNonReasoningRenderableContentPart);
-
-          return (
-            <ReasoningSection
-              key={`reasoning-${index}`}
-              text={displayText}
-              isStreamingReasoning={isStreaming && isLastRenderablePart}
-              hasLaterNonReasoningContent={hasLaterNonReasoningContent}
-              renderMarkdown={renderMarkdown}
-            />
-          );
-        }
-
-        if (part.content_type === "tool_use") {
-          return (
-            <div key={`tool-${part.tool_call_id}`} className="my-3">
-              <ToolCallItem toolCall={toolUsePartToUiToolCall(part)} />
-            </div>
           );
         }
 

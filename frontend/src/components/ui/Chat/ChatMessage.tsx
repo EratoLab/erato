@@ -214,7 +214,7 @@ export const ChatMessage = memo(function ChatMessage({
             </div>
           )}
 
-          {message.loading && (
+          {message.loading && message.content.length === 0 && (
             <div className="mt-2">
               <LoadingIndicator
                 state={message.loading.state}
