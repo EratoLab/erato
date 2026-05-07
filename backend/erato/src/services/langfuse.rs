@@ -1,9 +1,45 @@
 use crate::config::LangfuseConfig;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use chrono::{DateTime, Utc};
 use eyre::{Result, eyre};
+use opentelemetry::trace::{
+    SpanContext, SpanId, SpanKind, Status, TraceFlags, TraceId, TraceState,
+};
+use opentelemetry::{Array, InstrumentationScope, KeyValue, StringValue, Value};
+use opentelemetry_otlp::{Protocol, WithExportConfig, WithHttpConfig};
+use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::trace::{SpanData, SpanEvents, SpanExporter, SpanLinks};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
+use sha2::{Digest, Sha256};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::time::{Duration, SystemTime};
+
+const LANGFUSE_OTEL_ENDPOINT_PATH: &str = "/api/public/otel/v1/traces";
+const LANGFUSE_TRACE_NAME: &str = "langfuse.trace.name";
+const LANGFUSE_USER_ID: &str = "langfuse.user.id";
+const LANGFUSE_SESSION_ID: &str = "langfuse.session.id";
+const LANGFUSE_RELEASE: &str = "langfuse.release";
+const LANGFUSE_ENVIRONMENT: &str = "langfuse.environment";
+const LANGFUSE_TRACE_INPUT: &str = "langfuse.trace.input";
+const LANGFUSE_TRACE_OUTPUT: &str = "langfuse.trace.output";
+const LANGFUSE_TRACE_TAGS: &str = "langfuse.trace.tags";
+const LANGFUSE_TRACE_PUBLIC: &str = "langfuse.trace.public";
+const LANGFUSE_TRACE_METADATA_PREFIX: &str = "langfuse.trace.metadata";
+const LANGFUSE_OBSERVATION_TYPE: &str = "langfuse.observation.type";
+const LANGFUSE_OBSERVATION_LEVEL: &str = "langfuse.observation.level";
+const LANGFUSE_OBSERVATION_STATUS_MESSAGE: &str = "langfuse.observation.status_message";
+const LANGFUSE_OBSERVATION_INPUT: &str = "langfuse.observation.input";
+const LANGFUSE_OBSERVATION_OUTPUT: &str = "langfuse.observation.output";
+const LANGFUSE_OBSERVATION_MODEL: &str = "langfuse.observation.model.name";
+const LANGFUSE_OBSERVATION_MODEL_PARAMETERS: &str = "langfuse.observation.model.parameters";
+const LANGFUSE_OBSERVATION_USAGE_DETAILS: &str = "langfuse.observation.usage_details";
+const LANGFUSE_OBSERVATION_COST_DETAILS: &str = "langfuse.observation.cost_details";
+const LANGFUSE_OBSERVATION_COMPLETION_START_TIME: &str =
+    "langfuse.observation.completion_start_time";
+const LANGFUSE_OBSERVATION_METADATA_PREFIX: &str = "langfuse.observation.metadata";
+const LANGFUSE_VERSION: &str = "langfuse.version";
 
 /// Langfuse client for sending tracing data
 #[derive(Debug, Clone)]
@@ -14,6 +50,7 @@ pub struct LangfuseClient {
     secret_key: String,
     enabled: bool,
     environment: Option<String>,
+    use_otel: bool,
 }
 
 impl LangfuseClient {
@@ -43,6 +80,7 @@ impl LangfuseClient {
                 secret_key: String::new(),
                 enabled: false,
                 environment: None,
+                use_otel: false,
             });
         }
 
@@ -80,6 +118,7 @@ impl LangfuseClient {
             secret_key,
             enabled: true,
             environment,
+            use_otel: config.use_otel,
         })
     }
 
@@ -95,6 +134,10 @@ impl LangfuseClient {
             name = ?request.name,
             "Creating Langfuse trace"
         );
+
+        if self.use_otel {
+            return self.send_otel_trace(request).await;
+        }
 
         let timestamp_iso = system_time_to_iso_string(SystemTime::now());
 
@@ -147,6 +190,24 @@ impl LangfuseClient {
             "Updating Langfuse trace with output"
         );
 
+        if self.use_otel {
+            return self
+                .send_otel_trace(CreateTraceRequest {
+                    id: trace_id,
+                    name: None,
+                    user_id: None,
+                    session_id: None,
+                    release: None,
+                    environment,
+                    input: None,
+                    output: Some(output),
+                    metadata: None,
+                    tags: None,
+                    public: None,
+                })
+                .await;
+        }
+
         let timestamp_iso = system_time_to_iso_string(SystemTime::now());
 
         let ingestion_event = IngestionEvent {
@@ -197,6 +258,24 @@ impl LangfuseClient {
             trace_id = %trace_id,
             "Updating Langfuse trace with metadata"
         );
+
+        if self.use_otel {
+            return self
+                .send_otel_trace(CreateTraceRequest {
+                    id: trace_id,
+                    name: None,
+                    user_id: None,
+                    session_id: None,
+                    release: None,
+                    environment,
+                    input: None,
+                    output: None,
+                    metadata: Some(metadata),
+                    tags: None,
+                    public: None,
+                })
+                .await;
+        }
 
         let timestamp_iso = system_time_to_iso_string(SystemTime::now());
 
@@ -249,6 +328,24 @@ impl LangfuseClient {
             tags = ?tags,
             "Updating Langfuse trace with tags"
         );
+
+        if self.use_otel {
+            return self
+                .send_otel_trace(CreateTraceRequest {
+                    id: trace_id,
+                    name: None,
+                    user_id: None,
+                    session_id: None,
+                    release: None,
+                    environment,
+                    input: None,
+                    output: None,
+                    metadata: None,
+                    tags: Some(tags),
+                    public: None,
+                })
+                .await;
+        }
 
         let timestamp_iso = system_time_to_iso_string(SystemTime::now());
 
@@ -305,6 +402,10 @@ impl LangfuseClient {
             observation_type = observation_type,
             "Starting Langfuse observation finish request"
         );
+
+        if self.use_otel {
+            return self.send_otel_observation(request, observation_type).await;
+        }
 
         // Convert timestamp to ISO 8601 string as expected by Langfuse
         let timestamp_iso = system_time_to_iso_string(SystemTime::now());
@@ -369,6 +470,15 @@ impl LangfuseClient {
             observation_id = %generation_request.observation_id,
             "Creating Langfuse trace with generation in single batch"
         );
+
+        if self.use_otel {
+            return self
+                .send_otel_spans(vec![
+                    otel_trace_span(trace_request),
+                    otel_observation_span(generation_request, "GENERATION"),
+                ])
+                .await;
+        }
 
         let timestamp_iso = system_time_to_iso_string(SystemTime::now());
 
@@ -728,12 +838,380 @@ impl LangfuseClient {
 
         Ok(())
     }
+
+    async fn send_otel_trace(&self, request: CreateTraceRequest) -> Result<()> {
+        self.send_otel_spans(vec![otel_trace_span(request)]).await
+    }
+
+    async fn send_otel_observation(
+        &self,
+        request: FinishGenerationRequest,
+        observation_type: &str,
+    ) -> Result<()> {
+        self.send_otel_spans(vec![otel_observation_span(request, observation_type)])
+            .await
+    }
+
+    async fn send_otel_spans(&self, spans: Vec<SpanData>) -> Result<()> {
+        let endpoint = format!("{}{}", self.base_url, LANGFUSE_OTEL_ENDPOINT_PATH);
+        let auth = BASE64_STANDARD.encode(format!("{}:{}", self.public_key, self.secret_key));
+        let mut headers = HashMap::new();
+        headers.insert("Authorization".to_string(), format!("Basic {auth}"));
+        headers.insert("x-langfuse-ingestion-version".to_string(), "4".to_string());
+
+        tracing::debug!(
+            endpoint = %endpoint,
+            span_count = spans.len(),
+            "Sending Langfuse OTLP spans"
+        );
+
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let mut exporter = opentelemetry_otlp::SpanExporter::builder()
+                .with_http()
+                .with_endpoint(endpoint)
+                .with_protocol(Protocol::HttpJson)
+                .with_headers(headers)
+                .build()
+                .map_err(|e| eyre!("Failed to build Langfuse OTLP exporter: {}", e))?;
+
+            let resource = Resource::builder()
+                .with_service_name("erato")
+                .with_attribute(KeyValue::new("telemetry.sdk.language", "rust"))
+                .build();
+            exporter.set_resource(&resource);
+
+            futures::executor::block_on(exporter.export(spans))
+                .map_err(|e| eyre!("Failed to export Langfuse OTLP spans: {}", e))?;
+
+            exporter
+                .shutdown_with_timeout(Duration::from_secs(5))
+                .map_err(|e| eyre!("Failed to shut down Langfuse OTLP exporter: {}", e))?;
+
+            Ok(())
+        })
+        .await
+        .map_err(|e| eyre!("Langfuse OTLP export task failed: {}", e))??;
+
+        Ok(())
+    }
 }
 
 /// Convert SystemTime to ISO 8601 string format expected by Langfuse
 fn system_time_to_iso_string(time: SystemTime) -> String {
     let datetime: DateTime<Utc> = time.into();
     datetime.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+fn otel_trace_span(request: CreateTraceRequest) -> SpanData {
+    let now = SystemTime::now();
+    let trace_id = trace_id_from_langfuse_id(&request.id);
+    let span_id = root_span_id(&request.id);
+    let span_name = request
+        .name
+        .clone()
+        .unwrap_or_else(|| "Langfuse Trace".to_string());
+    let mut attributes = Vec::new();
+
+    attributes.push(KeyValue::new("langfuse.trace.id", request.id.clone()));
+    push_string_attr(&mut attributes, LANGFUSE_TRACE_NAME, request.name);
+    push_string_attr(&mut attributes, LANGFUSE_USER_ID, request.user_id);
+    push_string_attr(&mut attributes, LANGFUSE_SESSION_ID, request.session_id);
+    push_string_attr(&mut attributes, LANGFUSE_RELEASE, request.release);
+    push_string_attr(&mut attributes, LANGFUSE_ENVIRONMENT, request.environment);
+    push_json_string_attr(&mut attributes, LANGFUSE_TRACE_INPUT, request.input);
+    push_json_string_attr(&mut attributes, LANGFUSE_TRACE_OUTPUT, request.output);
+    push_metadata_attrs(
+        &mut attributes,
+        LANGFUSE_TRACE_METADATA_PREFIX,
+        request.metadata,
+    );
+    if let Some(tags) = request.tags {
+        attributes.push(string_array_attr(LANGFUSE_TRACE_TAGS, tags));
+    }
+    if let Some(public) = request.public {
+        attributes.push(KeyValue::new(LANGFUSE_TRACE_PUBLIC, public));
+    }
+
+    span_data(
+        trace_id,
+        span_id,
+        SpanId::INVALID,
+        span_name,
+        now,
+        now,
+        attributes,
+    )
+}
+
+fn otel_observation_span(request: FinishGenerationRequest, observation_type: &str) -> SpanData {
+    let now = SystemTime::now();
+    let start_time = parse_otel_time(request.start_time.as_deref()).unwrap_or(now);
+    let end_time = parse_otel_time(request.end_time.as_deref()).unwrap_or(now);
+    let trace_id = trace_id_from_langfuse_id(&request.trace_id);
+    let span_id = observation_span_id(&request.observation_id);
+    let parent_span_id = request
+        .parent_observation_id
+        .as_deref()
+        .map(observation_span_id)
+        .unwrap_or_else(|| root_span_id(&request.trace_id));
+    let span_name = request.name.clone().unwrap_or_else(|| {
+        format!(
+            "Langfuse {}",
+            observation_type
+                .chars()
+                .flat_map(char::to_lowercase)
+                .collect::<String>()
+        )
+    });
+    let mut attributes = vec![
+        KeyValue::new("langfuse.trace.id", request.trace_id.clone()),
+        KeyValue::new("langfuse.observation.id", request.observation_id.clone()),
+        KeyValue::new(
+            LANGFUSE_OBSERVATION_TYPE,
+            observation_type.to_ascii_lowercase(),
+        ),
+        KeyValue::new(
+            opentelemetry_semantic_conventions::trace::GEN_AI_OPERATION_NAME,
+            "chat",
+        ),
+        KeyValue::new(
+            opentelemetry_semantic_conventions::trace::GEN_AI_SYSTEM,
+            "_OTHER",
+        ),
+    ];
+
+    push_string_attr(&mut attributes, LANGFUSE_ENVIRONMENT, request.environment);
+    push_string_attr(&mut attributes, LANGFUSE_OBSERVATION_LEVEL, request.level);
+    push_string_attr(
+        &mut attributes,
+        LANGFUSE_OBSERVATION_STATUS_MESSAGE,
+        request.status_message,
+    );
+    push_json_string_attr(
+        &mut attributes,
+        LANGFUSE_OBSERVATION_INPUT,
+        request.input.clone(),
+    );
+    push_json_string_attr(
+        &mut attributes,
+        LANGFUSE_OBSERVATION_OUTPUT,
+        request.output.clone(),
+    );
+    push_json_string_attr(
+        &mut attributes,
+        opentelemetry_semantic_conventions::attribute::GEN_AI_PROMPT,
+        request.input,
+    );
+    push_json_string_attr(
+        &mut attributes,
+        opentelemetry_semantic_conventions::attribute::GEN_AI_COMPLETION,
+        request.output,
+    );
+
+    if let Some(model) = request.model {
+        attributes.push(KeyValue::new(LANGFUSE_OBSERVATION_MODEL, model.clone()));
+        attributes.push(KeyValue::new(
+            opentelemetry_semantic_conventions::trace::GEN_AI_REQUEST_MODEL,
+            model.clone(),
+        ));
+        attributes.push(KeyValue::new(
+            opentelemetry_semantic_conventions::trace::GEN_AI_RESPONSE_MODEL,
+            model,
+        ));
+    }
+    push_json_string_attr(
+        &mut attributes,
+        LANGFUSE_OBSERVATION_MODEL_PARAMETERS,
+        request.model_parameters,
+    );
+    if let Some(completion_start_time) = request.completion_start_time {
+        attributes.push(KeyValue::new(
+            LANGFUSE_OBSERVATION_COMPLETION_START_TIME,
+            completion_start_time,
+        ));
+    }
+    if let Some(usage) = request.usage {
+        push_usage_attrs(&mut attributes, usage);
+    }
+    push_metadata_attrs(
+        &mut attributes,
+        LANGFUSE_OBSERVATION_METADATA_PREFIX,
+        request.metadata,
+    );
+    push_string_attr(&mut attributes, LANGFUSE_VERSION, request.version);
+
+    span_data(
+        trace_id,
+        span_id,
+        parent_span_id,
+        span_name,
+        start_time,
+        end_time,
+        attributes,
+    )
+}
+
+fn span_data(
+    trace_id: TraceId,
+    span_id: SpanId,
+    parent_span_id: SpanId,
+    name: String,
+    start_time: SystemTime,
+    end_time: SystemTime,
+    attributes: Vec<KeyValue>,
+) -> SpanData {
+    SpanData {
+        span_context: SpanContext::new(
+            trace_id,
+            span_id,
+            TraceFlags::SAMPLED,
+            false,
+            TraceState::default(),
+        ),
+        parent_span_id,
+        parent_span_is_remote: false,
+        span_kind: SpanKind::Internal,
+        name: Cow::Owned(name),
+        start_time,
+        end_time,
+        attributes,
+        dropped_attributes_count: 0,
+        events: SpanEvents::default(),
+        links: SpanLinks::default(),
+        status: Status::Unset,
+        instrumentation_scope: InstrumentationScope::builder("erato.langfuse").build(),
+    }
+}
+
+fn push_usage_attrs(attributes: &mut Vec<KeyValue>, usage: Usage) {
+    if let Some(input) = usage.input {
+        attributes.push(KeyValue::new(
+            opentelemetry_semantic_conventions::trace::GEN_AI_USAGE_INPUT_TOKENS,
+            input as i64,
+        ));
+    }
+    if let Some(output) = usage.output {
+        attributes.push(KeyValue::new(
+            opentelemetry_semantic_conventions::trace::GEN_AI_USAGE_OUTPUT_TOKENS,
+            output as i64,
+        ));
+    }
+
+    let usage_json = serde_json::json!({
+        "input": usage.input,
+        "output": usage.output,
+        "total": usage.total,
+        "unit": usage.unit,
+    });
+    attributes.push(KeyValue::new(
+        LANGFUSE_OBSERVATION_USAGE_DETAILS,
+        usage_json.to_string(),
+    ));
+
+    let cost_json = serde_json::json!({
+        "input": usage.input_cost,
+        "output": usage.output_cost,
+        "total": usage.total_cost,
+    });
+    attributes.push(KeyValue::new(
+        LANGFUSE_OBSERVATION_COST_DETAILS,
+        cost_json.to_string(),
+    ));
+}
+
+fn push_metadata_attrs(
+    attributes: &mut Vec<KeyValue>,
+    prefix: &'static str,
+    metadata: Option<serde_json::Value>,
+) {
+    let Some(serde_json::Value::Object(metadata)) = metadata else {
+        if let Some(metadata) = metadata {
+            attributes.push(KeyValue::new(prefix, metadata.to_string()));
+        }
+        return;
+    };
+
+    for (key, value) in metadata {
+        let attr_key = format!("{prefix}.{key}");
+        attributes.push(KeyValue::new(attr_key, otel_json_value(value)));
+    }
+}
+
+fn push_string_attr(attributes: &mut Vec<KeyValue>, key: &'static str, value: Option<String>) {
+    if let Some(value) = value {
+        attributes.push(KeyValue::new(key, value));
+    }
+}
+
+fn push_json_string_attr(
+    attributes: &mut Vec<KeyValue>,
+    key: &'static str,
+    value: Option<serde_json::Value>,
+) {
+    if let Some(value) = value {
+        attributes.push(KeyValue::new(key, value.to_string()));
+    }
+}
+
+fn otel_json_value(value: serde_json::Value) -> Value {
+    match value {
+        serde_json::Value::Bool(value) => value.into(),
+        serde_json::Value::Number(value) => value.as_f64().unwrap_or_default().into(),
+        serde_json::Value::String(value) => value.into(),
+        other => other.to_string().into(),
+    }
+}
+
+fn string_array_attr(key: &'static str, values: Vec<String>) -> KeyValue {
+    KeyValue::new(
+        key,
+        Value::Array(Array::String(
+            values.into_iter().map(StringValue::from).collect(),
+        )),
+    )
+}
+
+fn parse_otel_time(value: Option<&str>) -> Option<SystemTime> {
+    value
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .map(|datetime| datetime.with_timezone(&Utc).into())
+}
+
+fn trace_id_from_langfuse_id(id: &str) -> TraceId {
+    let hex = id
+        .strip_prefix("trace_")
+        .or_else(|| id.strip_prefix("trace-"))
+        .unwrap_or(id);
+    TraceId::from_hex(hex)
+        .ok()
+        .filter(|id| *id != TraceId::INVALID)
+        .unwrap_or_else(|| TraceId::from_bytes(first_hash_bytes::<16>(id)))
+}
+
+fn root_span_id(trace_id: &str) -> SpanId {
+    stable_span_id(&format!("{trace_id}:root"))
+}
+
+fn observation_span_id(observation_id: &str) -> SpanId {
+    stable_span_id(observation_id)
+}
+
+fn stable_span_id(id: &str) -> SpanId {
+    let hex = id
+        .strip_prefix("obs_")
+        .or_else(|| id.strip_prefix("obs-"))
+        .unwrap_or(id);
+    SpanId::from_hex(hex)
+        .ok()
+        .filter(|id| *id != SpanId::INVALID)
+        .unwrap_or_else(|| SpanId::from_bytes(first_hash_bytes::<8>(id)))
+}
+
+fn first_hash_bytes<const N: usize>(value: &str) -> [u8; N] {
+    let hash = Sha256::digest(value.as_bytes());
+    let mut bytes = [0u8; N];
+    bytes.copy_from_slice(&hash[..N]);
+    bytes
 }
 
 /// Request for creating a trace
@@ -1226,6 +1704,156 @@ impl TracingLangfuseClient {
 mod tests {
     use super::*;
     use crate::config::LangfuseConfig;
+    use axum::body::Bytes;
+    use axum::extract::State;
+    use axum::http::{HeaderMap, Uri};
+    use axum::{Router, routing::post};
+    use serde_json::json;
+    use tokio::sync::mpsc;
+
+    #[derive(Debug)]
+    struct RecordedRequest {
+        path: String,
+        headers: HeaderMap,
+        body: Bytes,
+    }
+
+    async fn record_request(
+        State(sender): State<mpsc::Sender<RecordedRequest>>,
+        uri: Uri,
+        headers: HeaderMap,
+        body: Bytes,
+    ) -> &'static str {
+        sender
+            .send(RecordedRequest {
+                path: uri.path().to_string(),
+                headers,
+                body,
+            })
+            .await
+            .unwrap();
+        "{}"
+    }
+
+    async fn mock_langfuse_server() -> (String, mpsc::Receiver<RecordedRequest>) {
+        let (sender, receiver) = mpsc::channel(8);
+        let app = Router::new()
+            .route("/api/public/ingestion", post(record_request))
+            .route("/api/public/otel/v1/traces", post(record_request))
+            .with_state(sender);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        (format!("http://{addr}"), receiver)
+    }
+
+    fn enabled_config(base_url: String, use_otel: bool) -> LangfuseConfig {
+        LangfuseConfig {
+            enabled: true,
+            base_url: Some(base_url),
+            public_key: Some("pk-lf-test".to_string()),
+            secret_key: Some("sk-lf-test".into()),
+            use_otel,
+            ..Default::default()
+        }
+    }
+
+    fn test_trace_request() -> CreateTraceRequest {
+        CreateTraceRequest {
+            id: "trace_58406520a006649127e371903a2de979".to_string(),
+            name: Some("Test trace".to_string()),
+            user_id: Some("user-1".to_string()),
+            session_id: Some("session-1".to_string()),
+            release: Some("release-1".to_string()),
+            environment: Some("test".to_string()),
+            input: Some(json!({"prompt": "hello"})),
+            output: Some(json!({"answer": "world"})),
+            metadata: Some(json!({"assistant_id": "assistant-1", "attempt": 2})),
+            tags: Some(vec!["model-gpt-4".to_string(), "chat".to_string()]),
+            public: Some(false),
+        }
+    }
+
+    fn test_generation_request(observation_type: &str) -> FinishGenerationRequest {
+        FinishGenerationRequest {
+            observation_id: "obs_78406520a006649127e371903a2de979".to_string(),
+            trace_id: "trace_58406520a006649127e371903a2de979".to_string(),
+            name: Some(format!("{observation_type} name")),
+            start_time: Some("2026-05-07T10:00:00.000Z".to_string()),
+            end_time: Some("2026-05-07T10:00:01.000Z".to_string()),
+            completion_start_time: Some("2026-05-07T10:00:00.500Z".to_string()),
+            model: Some("gpt-4.1".to_string()),
+            model_parameters: Some(json!({"temperature": 0.2})),
+            input: Some(json!([{"role": "user", "content": "hello"}])),
+            output: Some(json!({"content": "world"})),
+            usage: Some(Usage {
+                input: Some(10),
+                output: Some(20),
+                total: Some(30),
+                unit: Some("TOKENS".to_string()),
+                input_cost: Some(0.1),
+                output_cost: Some(0.2),
+                total_cost: Some(0.3),
+            }),
+            metadata: Some(json!({"assistant_id": "assistant-1"})),
+            level: Some("DEFAULT".to_string()),
+            status_message: None,
+            parent_observation_id: None,
+            version: Some("v1".to_string()),
+            environment: Some("test".to_string()),
+        }
+    }
+
+    fn test_score_request() -> CreateScoreRequest {
+        CreateScoreRequest {
+            id: "score-1".to_string(),
+            trace_id: "trace_58406520a006649127e371903a2de979".to_string(),
+            name: "user_feedback".to_string(),
+            value: 1.0,
+            comment: Some("good".to_string()),
+            data_type: "NUMERIC".to_string(),
+            environment: Some("test".to_string()),
+        }
+    }
+
+    async fn recv_json(
+        receiver: &mut mpsc::Receiver<RecordedRequest>,
+    ) -> (RecordedRequest, serde_json::Value) {
+        let request = receiver.recv().await.unwrap();
+        let body = serde_json::from_slice(&request.body).unwrap();
+        (request, body)
+    }
+
+    fn assert_basic_auth(headers: &HeaderMap) {
+        assert_eq!(
+            headers.get("authorization").unwrap(),
+            "Basic cGstbGYtdGVzdDpzay1sZi10ZXN0"
+        );
+    }
+
+    fn otel_attr<'a>(body: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
+        match body {
+            serde_json::Value::Object(map) => {
+                if map.get("key").and_then(|key| key.as_str()) == Some(key) {
+                    return map.get("value");
+                }
+                map.values().find_map(|value| otel_attr(value, key))
+            }
+            serde_json::Value::Array(values) => {
+                values.iter().find_map(|value| otel_attr(value, key))
+            }
+            _ => None,
+        }
+    }
+
+    fn otel_string_attr(body: &serde_json::Value, key: &str) -> Option<String> {
+        otel_attr(body, key)
+            .and_then(|value| value.get("stringValue"))
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string)
+    }
 
     #[test]
     fn test_langfuse_client_disabled() {
@@ -1268,5 +1896,241 @@ mod tests {
         assert_eq!(client.public_key, "pk-lf-test");
         assert_eq!(client.secret_key, "sk-lf-test");
         assert_eq!(client.environment, Some("production".to_string()));
+    }
+
+    #[tokio::test]
+    async fn sends_trace_to_legacy_ingestion_endpoint() {
+        let (base_url, mut receiver) = mock_langfuse_server().await;
+        let client = LangfuseClient::from_config(&enabled_config(base_url, false), None).unwrap();
+
+        client.create_trace(test_trace_request()).await.unwrap();
+
+        let (request, body) = recv_json(&mut receiver).await;
+        assert_eq!(request.path, "/api/public/ingestion");
+        assert_basic_auth(&request.headers);
+        assert_eq!(body["batch"][0]["type"], "trace-create");
+        assert_eq!(
+            body["batch"][0]["body"]["id"],
+            "trace_58406520a006649127e371903a2de979"
+        );
+        assert_eq!(body["batch"][0]["body"]["name"], "Test trace");
+        assert_eq!(
+            body["batch"][0]["body"]["metadata"]["assistant_id"],
+            "assistant-1"
+        );
+        assert_eq!(body["batch"][0]["body"]["tags"][0], "model-gpt-4");
+    }
+
+    #[tokio::test]
+    async fn sends_trace_to_otel_endpoint_when_enabled() {
+        let (base_url, mut receiver) = mock_langfuse_server().await;
+        let client = LangfuseClient::from_config(&enabled_config(base_url, true), None).unwrap();
+
+        client.create_trace(test_trace_request()).await.unwrap();
+
+        let (request, body) = recv_json(&mut receiver).await;
+        assert_eq!(request.path, "/api/public/otel/v1/traces");
+        assert_basic_auth(&request.headers);
+        assert_eq!(
+            request.headers.get("x-langfuse-ingestion-version").unwrap(),
+            "4"
+        );
+        assert_eq!(
+            otel_string_attr(&body, "langfuse.trace.id").unwrap(),
+            "trace_58406520a006649127e371903a2de979"
+        );
+        assert_eq!(
+            otel_string_attr(&body, LANGFUSE_TRACE_NAME).unwrap(),
+            "Test trace"
+        );
+        assert_eq!(
+            otel_string_attr(
+                &body,
+                &(LANGFUSE_TRACE_METADATA_PREFIX.to_owned() + ".assistant_id")
+            )
+            .unwrap(),
+            "assistant-1"
+        );
+    }
+
+    #[tokio::test]
+    async fn sends_trace_updates_to_both_transports() {
+        for use_otel in [false, true] {
+            let (base_url, mut receiver) = mock_langfuse_server().await;
+            let client =
+                LangfuseClient::from_config(&enabled_config(base_url, use_otel), None).unwrap();
+
+            client
+                .update_trace_output(
+                    "trace_58406520a006649127e371903a2de979".to_string(),
+                    json!({"content": "done"}),
+                    Some("test".to_string()),
+                )
+                .await
+                .unwrap();
+            client
+                .update_trace_metadata(
+                    "trace_58406520a006649127e371903a2de979".to_string(),
+                    json!({"assistant_id": "assistant-1"}),
+                    Some("test".to_string()),
+                )
+                .await
+                .unwrap();
+            client
+                .update_trace_tags(
+                    "trace_58406520a006649127e371903a2de979".to_string(),
+                    vec!["model-gpt-4".to_string()],
+                    Some("test".to_string()),
+                )
+                .await
+                .unwrap();
+
+            let (_, output_body) = recv_json(&mut receiver).await;
+            let (_, metadata_body) = recv_json(&mut receiver).await;
+            let (_, tags_body) = recv_json(&mut receiver).await;
+            if use_otel {
+                assert_eq!(
+                    otel_string_attr(&output_body, LANGFUSE_TRACE_OUTPUT).unwrap(),
+                    r#"{"content":"done"}"#
+                );
+                assert_eq!(
+                    otel_string_attr(
+                        &metadata_body,
+                        &(LANGFUSE_TRACE_METADATA_PREFIX.to_owned() + ".assistant_id")
+                    )
+                    .unwrap(),
+                    "assistant-1"
+                );
+                assert!(otel_attr(&tags_body, LANGFUSE_TRACE_TAGS).is_some());
+            } else {
+                assert_eq!(output_body["batch"][0]["type"], "trace-create");
+                assert_eq!(output_body["batch"][0]["body"]["output"]["content"], "done");
+                assert_eq!(
+                    metadata_body["batch"][0]["body"]["metadata"]["assistant_id"],
+                    "assistant-1"
+                );
+                assert_eq!(tags_body["batch"][0]["body"]["tags"][0], "model-gpt-4");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn sends_generation_to_legacy_ingestion_endpoint() {
+        let (base_url, mut receiver) = mock_langfuse_server().await;
+        let client = LangfuseClient::from_config(&enabled_config(base_url, false), None).unwrap();
+
+        client
+            .finish_generation(test_generation_request("generation"))
+            .await
+            .unwrap();
+
+        let (request, body) = recv_json(&mut receiver).await;
+        assert_eq!(request.path, "/api/public/ingestion");
+        assert_eq!(body["batch"][0]["type"], "generation-create");
+        assert_eq!(body["batch"][0]["body"]["type"], "GENERATION");
+        assert_eq!(body["batch"][0]["body"]["model"], "gpt-4.1");
+        assert_eq!(body["batch"][0]["body"]["usage"]["input"], 10);
+    }
+
+    #[tokio::test]
+    async fn sends_generation_to_otel_endpoint_when_enabled() {
+        let (base_url, mut receiver) = mock_langfuse_server().await;
+        let client = LangfuseClient::from_config(&enabled_config(base_url, true), None).unwrap();
+
+        client
+            .finish_generation(test_generation_request("generation"))
+            .await
+            .unwrap();
+
+        let (request, body) = recv_json(&mut receiver).await;
+        assert_eq!(request.path, "/api/public/otel/v1/traces");
+        assert_eq!(
+            otel_string_attr(&body, LANGFUSE_OBSERVATION_TYPE).unwrap(),
+            "generation"
+        );
+        assert_eq!(
+            otel_string_attr(&body, LANGFUSE_OBSERVATION_MODEL).unwrap(),
+            "gpt-4.1"
+        );
+        assert_eq!(
+            otel_attr(
+                &body,
+                opentelemetry_semantic_conventions::trace::GEN_AI_USAGE_INPUT_TOKENS
+            )
+            .unwrap()["intValue"],
+            "10"
+        );
+    }
+
+    #[tokio::test]
+    async fn sends_span_observation_to_both_transports() {
+        for use_otel in [false, true] {
+            let (base_url, mut receiver) = mock_langfuse_server().await;
+            let client =
+                LangfuseClient::from_config(&enabled_config(base_url, use_otel), None).unwrap();
+
+            client
+                .finish_observation(test_generation_request("span"), "SPAN")
+                .await
+                .unwrap();
+
+            let (request, body) = recv_json(&mut receiver).await;
+            if use_otel {
+                assert_eq!(request.path, "/api/public/otel/v1/traces");
+                assert_eq!(
+                    otel_string_attr(&body, LANGFUSE_OBSERVATION_TYPE).unwrap(),
+                    "span"
+                );
+            } else {
+                assert_eq!(request.path, "/api/public/ingestion");
+                assert_eq!(body["batch"][0]["type"], "span-create");
+                assert_eq!(body["batch"][0]["body"]["type"], "SPAN");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn sends_trace_with_generation_to_both_transports() {
+        for use_otel in [false, true] {
+            let (base_url, mut receiver) = mock_langfuse_server().await;
+            let client =
+                LangfuseClient::from_config(&enabled_config(base_url, use_otel), None).unwrap();
+
+            client
+                .create_trace_with_generation(
+                    test_trace_request(),
+                    test_generation_request("generation"),
+                )
+                .await
+                .unwrap();
+
+            let (request, body) = recv_json(&mut receiver).await;
+            if use_otel {
+                assert_eq!(request.path, "/api/public/otel/v1/traces");
+                let spans = body["resourceSpans"][0]["scopeSpans"][0]["spans"]
+                    .as_array()
+                    .unwrap();
+                assert_eq!(spans.len(), 2);
+            } else {
+                assert_eq!(request.path, "/api/public/ingestion");
+                assert_eq!(body["batch"].as_array().unwrap().len(), 2);
+                assert_eq!(body["batch"][0]["type"], "trace-create");
+                assert_eq!(body["batch"][1]["type"], "generation-create");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn sends_score_to_legacy_ingestion_endpoint() {
+        let (base_url, mut receiver) = mock_langfuse_server().await;
+        let client = LangfuseClient::from_config(&enabled_config(base_url, false), None).unwrap();
+
+        client.create_score(test_score_request()).await.unwrap();
+
+        let (request, body) = recv_json(&mut receiver).await;
+        assert_eq!(request.path, "/api/public/ingestion");
+        assert_eq!(body["batch"][0]["type"], "score-create");
+        assert_eq!(body["batch"][0]["body"]["name"], "user_feedback");
+        assert_eq!(body["batch"][0]["body"]["value"], 1.0);
     }
 }

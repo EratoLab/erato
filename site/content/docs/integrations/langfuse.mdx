@@ -58,11 +58,30 @@ secret_key = "sk-lf-..."
 tracing_enabled = true  # optional, defaults to false
 summary_tracing_enabled = true  # optional, defaults to true
 enable_feedback = true  # optional, defaults to false
+use_otel = false  # optional, defaults to false
 ```
 
 ### Configuration Options
 
 For detailed configuration options and examples, see the [Configuration Reference](../configuration#integrationslangfuse) documentation.
+
+### OpenTelemetry Transport
+
+By default, Erato sends Langfuse tracing data to the legacy Langfuse ingestion endpoint. To send trace and observation data via Langfuse's OpenTelemetry endpoint instead, enable `use_otel`:
+
+```toml filename="erato.toml"
+[integrations.langfuse]
+enabled = true
+base_url = "https://cloud.langfuse.com"
+public_key = "pk-lf-..."
+secret_key = "sk-lf-..."
+tracing_enabled = true
+use_otel = true
+```
+
+When `use_otel = true`, Erato derives the OTLP trace endpoint from `base_url` and sends tracing data to `${base_url}/api/public/otel/v1/traces` using OTLP over HTTP. The same Langfuse public and secret keys are used for authentication.
+
+This flag affects trace and observation transport only. User feedback forwarding still uses Langfuse score ingestion and remains controlled by `enable_feedback`.
 
 ### System Prompt Management
 

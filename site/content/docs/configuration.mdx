@@ -1365,6 +1365,16 @@ Whether to forward user feedback (thumbs up/down with optional comments) to Lang
 
 **Note:** This requires `frontend.enable_message_feedback` to be enabled for users to submit feedback through the UI.
 
+##### `integrations.langfuse.use_otel`
+
+Whether to send Langfuse tracing data via Langfuse's OpenTelemetry ingestion endpoint instead of the legacy ingestion endpoint. When enabled, Erato sends trace and observation data to `${base_url}/api/public/otel/v1/traces` using OTLP over HTTP.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Note:** User feedback forwarding still uses Langfuse score ingestion and is controlled separately by `integrations.langfuse.enable_feedback`.
+
 See the [Langfuse Integration](./integrations/langfuse) documentation for detailed usage instructions and feature descriptions.
 
 #### `integrations.sentry`
