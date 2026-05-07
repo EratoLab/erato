@@ -36,7 +36,7 @@ import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 
-import { ArrowUpIcon, StopIcon, VoiceIcon } from "../icons";
+import { ArrowUpIcon, LoadingIcon, StopIcon, VoiceIcon } from "../icons";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { FacetSelector } from "./FacetSelector";
 import { ModelSelector } from "./ModelSelector";
@@ -56,6 +56,7 @@ import type { ClipboardEvent as ReactClipboardEvent, Ref } from "react";
 
 const logger = createLogger("UI", "ChatInput");
 const AUDIO_TRANSCRIPTION_STATUS_POLL_INTERVAL_MS = 1000;
+const DICTATION_WAVEFORM_MAX_BAR_HEIGHT_PX = 14;
 
 type AudioTranscriptionAttachment = {
   fileId: string;
@@ -499,6 +500,7 @@ export const ChatInput = ({
   const {
     isDictating,
     isDictationStarting,
+    isDictationCompleting,
     dictationError,
     setDictationError,
     dictationBars,
@@ -1488,7 +1490,13 @@ export const ChatInput = ({
                     isDictating && "group relative overflow-hidden",
                   )}
                   icon={
-                    isDictating ? undefined : (
+                    isDictating ? undefined : isDictationStarting ||
+                      isDictationCompleting ? (
+                      <LoadingIcon
+                        className="size-4 animate-spin text-[var(--theme-fg-primary)]"
+                        data-testid="chat-input-dictation-loading-icon"
+                      />
+                    ) : (
                       <VoiceIcon className="text-[var(--theme-fg-primary)]" />
                     )
                   }
@@ -1500,18 +1508,25 @@ export const ChatInput = ({
                     isUploading ||
                     isFileButtonProcessing ||
                     isDictationStarting ||
+                    isDictationCompleting ||
                     isAnyTokenLimitExceeded
                   }
                   data-testid="chat-input-record-audio"
                   aria-label={
-                    isDictating ? t`Stop dictation` : t`Start dictation`
+                    isDictating
+                      ? t`Stop dictation`
+                      : isDictationStarting
+                        ? t`Starting dictation`
+                        : isDictationCompleting
+                          ? t`Finishing dictation`
+                          : t`Start dictation`
                   }
                 >
                   {isDictating ? (
                     <>
                       <span
                         aria-label={t`Dictating audio`}
-                        className="flex items-center gap-0.5 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0"
+                        className="flex h-4 items-center gap-0.5 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0"
                         data-testid="chat-input-dictation-waveform"
                       >
                         {dictationBars.map((height, barIndex) => (
@@ -1519,7 +1534,10 @@ export const ChatInput = ({
                             key={barIndex}
                             className="w-1 rounded-full bg-current transition-[height] duration-75"
                             style={{
-                              height: `${Math.max(height, 2) * 2}px`,
+                              height: `${Math.min(
+                                Math.max(height, 2) * 2,
+                                DICTATION_WAVEFORM_MAX_BAR_HEIGHT_PX,
+                              )}px`,
                             }}
                           />
                         ))}

@@ -268,6 +268,7 @@ export function useAudioDictationRecorder({
 }: UseAudioDictationRecorderOptions) {
   const [isDictating, setIsDictating] = useState(false);
   const [isDictationStarting, setIsDictationStarting] = useState(false);
+  const [isDictationCompleting, setIsDictationCompleting] = useState(false);
   const [dictationError, setDictationError] = useState<string | null>(null);
   const [dictationBars, setDictationBars] = useState<number[]>(
     Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
@@ -588,6 +589,7 @@ export function useAudioDictationRecorder({
       mediaRecorder.onstop = () => {
         clearRecordingDurationTimer();
         setIsDictating(false);
+        setIsDictationCompleting(true);
         stopMediaRecordingStream();
 
         void (async () => {
@@ -624,6 +626,7 @@ export function useAudioDictationRecorder({
           } finally {
             liveSessionRef.current = null;
             session?.socket.close();
+            setIsDictationCompleting(false);
           }
         })();
       };
@@ -635,6 +638,7 @@ export function useAudioDictationRecorder({
         stopMediaRecordingStream();
         setIsDictating(false);
         setIsDictationStarting(false);
+        setIsDictationCompleting(false);
         setDictationError(
           error instanceof Error
             ? error.message
@@ -662,6 +666,7 @@ export function useAudioDictationRecorder({
       stopMediaRecordingStream();
       setIsDictating(false);
       setIsDictationStarting(false);
+      setIsDictationCompleting(false);
       setDictationError(
         error instanceof Error
           ? error.message
@@ -703,6 +708,7 @@ export function useAudioDictationRecorder({
   return {
     isDictating,
     isDictationStarting,
+    isDictationCompleting,
     dictationError,
     setDictationError,
     dictationBars,

@@ -155,6 +155,9 @@ vi.mock("../Feedback/ChatWarnings/BudgetWarning", () => ({
 
 vi.mock("../icons", () => ({
   ArrowUpIcon: () => <span>send</span>,
+  LoadingIcon: (props: HTMLAttributes<HTMLSpanElement>) => (
+    <span {...props}>loading</span>
+  ),
   StopIcon: () => <span>stop</span>,
   VoiceIcon: () => <span>record</span>,
 }));
@@ -224,6 +227,7 @@ describe("ChatInput", () => {
     mockUseAudioDictationRecorder.mockReturnValue({
       isDictating: false,
       isDictationStarting: false,
+      isDictationCompleting: false,
       dictationError: null,
       setDictationError: vi.fn(),
       dictationBars: [2, 2, 2, 2, 2],
@@ -973,6 +977,7 @@ describe("ChatInput", () => {
     mockUseAudioDictationRecorder.mockReturnValue({
       isDictating: true,
       isDictationStarting: false,
+      isDictationCompleting: false,
       dictationError: null,
       setDictationError: vi.fn(),
       dictationBars: [2, 5, 8, 5, 2],
@@ -1003,12 +1008,49 @@ describe("ChatInput", () => {
       "duration-75",
     );
     expect(waveform.children[2]).not.toHaveClass("dictation-wave-bar");
-    expect(waveform.children[2]).toHaveStyle({ height: "16px" });
+    expect(waveform.children[2]).toHaveStyle({ height: "14px" });
     expect(stopIcon).toHaveClass(
       "group-hover:opacity-100",
       "group-focus-visible:opacity-100",
     );
     expect(stopIcon).toHaveTextContent("stop");
+  });
+
+  it("shows a loading indicator while dictation is finishing", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    mockUseAudioDictationFeature.mockReturnValue({ enabled: true });
+    mockUseAudioDictationRecorder.mockReturnValue({
+      isDictating: false,
+      isDictationStarting: false,
+      isDictationCompleting: true,
+      dictationError: null,
+      setDictationError: vi.fn(),
+      dictationBars: [2, 2, 2, 2, 2],
+      toggleDictation: vi.fn(),
+    });
+
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={vi.fn()} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const button = screen.getByTestId("chat-input-record-audio");
+
+    expect(button).toHaveAccessibleName("Finishing dictation");
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByTestId("chat-input-dictation-loading-icon"),
+    ).toHaveTextContent("loading");
   });
 
   it("does not show the record button when audio transcription is disabled", async () => {
