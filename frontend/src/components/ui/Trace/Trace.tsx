@@ -4,7 +4,9 @@ import { TraceClusterHeader } from "./TraceClusterHeader";
 import { TraceCollapse } from "./TraceCollapse";
 import { TraceConnector } from "./TraceConnector";
 import { TraceDoneMarker } from "./TraceDoneMarker";
+import { TraceThinkingPlaceholder } from "./TraceThinkingPlaceholder";
 import { parseReasoningSegments } from "./hooks/useReasoningSegments";
+import { useThinkingGap } from "./hooks/useThinkingGap";
 import { stepStatus } from "./hooks/useTraceState";
 import { ReasoningStep } from "./steps/ReasoningStep";
 import { ToolUseStep } from "./steps/ToolUseStep";
@@ -60,6 +62,14 @@ export const Trace = ({
   hasError = false,
 }: TraceProps) => {
   const logicalSteps = flattenToLogicalSteps(parts);
+  // Hooks must run on every render path. The gap detector is internally
+  // gated on streaming/hasLaterContent, so it returns false when irrelevant.
+  const showThinkingPlaceholder = useThinkingGap(
+    parts,
+    isStreaming,
+    hasLaterContent,
+  );
+
   if (logicalSteps.length === 0) return null;
 
   // Mid-stream the timeline is rendered directly. Once text starts (the
@@ -75,6 +85,7 @@ export const Trace = ({
         hasLaterContent={hasLaterContent}
         renderMarkdown={renderMarkdown}
         showDoneMarker={!isTraceActive}
+        showThinkingPlaceholder={showThinkingPlaceholder}
       />
     );
   }
@@ -121,7 +132,8 @@ const ColdLoadTrace = ({
           isTraceActive={false}
           hasLaterContent={hasLaterContent}
           renderMarkdown={renderMarkdown}
-          showDoneMarker={false}
+          showDoneMarker
+          showThinkingPlaceholder={false}
         />
       </TraceCollapse>
     </div>
@@ -133,8 +145,13 @@ interface TraceTimelineProps {
   isTraceActive: boolean;
   hasLaterContent: boolean;
   renderMarkdown: (text: string) => ReactNode;
-  /** Whether to render the Done marker at the bottom (streaming only today). */
+  /** Whether to render the Done marker at the bottom. */
   showDoneMarker: boolean;
+  /**
+   * Whether to render the transient "Thinking…" placeholder between the last
+   * step and the Done marker. Driven by `useThinkingGap` upstream.
+   */
+  showThinkingPlaceholder: boolean;
 }
 
 const TraceTimeline = ({
@@ -143,39 +160,53 @@ const TraceTimeline = ({
   hasLaterContent,
   renderMarkdown,
   showDoneMarker,
-}: TraceTimelineProps) => (
-  <div className="min-w-0 py-1.5">
-    <TraceConnector hasLine={false} />
-    {logicalSteps.map((step, index) => {
-      const isLastStep = index === logicalSteps.length - 1;
-      const isLastNodeInTimeline = isLastStep && !showDoneMarker;
-      const status = stepStatus(step, isLastStep, isTraceActive);
-      const isCollapsed = !isLastStep || hasLaterContent;
+  showThinkingPlaceholder,
+}: TraceTimelineProps) => {
+  const placeholderIsLastNode = !showDoneMarker;
 
-      const stepNode = renderStep({
-        step,
-        status,
-        isStreaming: isTraceActive,
-        isCollapsed,
-        isLastStep: isLastNodeInTimeline,
-        renderMarkdown,
-      });
+  return (
+    <div className="min-w-0 py-1.5">
+      <TraceConnector hasLine={false} />
+      {logicalSteps.map((step, index) => {
+        const isLastStep = index === logicalSteps.length - 1;
+        // The rail line continues through whatever follows: the placeholder,
+        // the Done marker, or both.
+        const isLastNodeInTimeline =
+          isLastStep && !showDoneMarker && !showThinkingPlaceholder;
+        const status = stepStatus(step, isLastStep, isTraceActive);
+        const isCollapsed = !isLastStep || hasLaterContent;
 
-      return (
-        <div key={step.key}>
-          {stepNode}
-          <TraceConnector hasLine={!isLastNodeInTimeline} />
-        </div>
-      );
-    })}
-    {showDoneMarker && (
-      <>
-        <TraceDoneMarker />
-        <TraceConnector hasLine={false} />
-      </>
-    )}
-  </div>
-);
+        const stepNode = renderStep({
+          step,
+          status,
+          isStreaming: isTraceActive,
+          isCollapsed,
+          isLastStep: isLastNodeInTimeline,
+          renderMarkdown,
+        });
+
+        return (
+          <div key={step.key}>
+            {stepNode}
+            <TraceConnector hasLine={!isLastNodeInTimeline} />
+          </div>
+        );
+      })}
+      {showThinkingPlaceholder && (
+        <>
+          <TraceThinkingPlaceholder isLastNode={placeholderIsLastNode} />
+          <TraceConnector hasLine={!placeholderIsLastNode} />
+        </>
+      )}
+      {showDoneMarker && (
+        <>
+          <TraceDoneMarker />
+          <TraceConnector hasLine={false} />
+        </>
+      )}
+    </div>
+  );
+};
 
 /**
  * Expand a contiguous run of trace-eligible parts into a flat list of logical

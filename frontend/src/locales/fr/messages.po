@@ -2550,6 +2550,10 @@ msgstr "Les fichiers suivants ne peuvent pas être traités et n'ont pas été t
 msgid "Thinking"
 msgstr "Réflexion"
 
+#: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
+msgid "Thinking…"
+msgstr ""
+
 #: src/components/ui/Feedback/ChatWarnings/TokenUsageWarning.tsx
 msgid "This message exceeds the token limit of {maxTokensFormatted}. Please reduce the message length or remove attached files."
 msgstr "Ce message dépasse la limite de tokens de {maxTokensFormatted}. Veuillez réduire la longueur du message ou supprimer les fichiers joints."
