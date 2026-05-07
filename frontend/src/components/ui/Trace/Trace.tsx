@@ -1,9 +1,10 @@
 import { TraceConnector } from "./TraceConnector";
 import { TraceDoneMarker } from "./TraceDoneMarker";
+import { parseReasoningSegments } from "./hooks/useReasoningSegments";
 import { stepStatus } from "./hooks/useTraceState";
 import { ReasoningStep } from "./steps/ReasoningStep";
 import { ToolUseStep } from "./steps/ToolUseStep";
-import { isTraceablePart, type TraceablePart } from "./types";
+import { isTraceablePart, type LogicalStep, type TraceablePart } from "./types";
 
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
@@ -17,8 +18,8 @@ interface TraceProps {
    */
   isStreaming: boolean;
   /**
-   * When true, render the deltas with a streaming caret in the running step.
-   * Set to false for cold-loaded historical messages.
+   * True once non-trace content (text, images) has begun after this cluster.
+   * The trace stops being the active writer at that moment.
    */
   hasLaterContent: boolean;
   /** Markdown renderer reused from the parent (handles erato-file: links etc). */
@@ -27,12 +28,11 @@ interface TraceProps {
 
 /**
  * Vertical timeline of reasoning + tool-call steps. Renders the rail-with-line
- * pattern from Anthropic's "Steps" UI: a fixed 20px icon rail plus a fluid
- * body, with an unbroken connector line between adjacent steps.
+ * pattern from the "Steps" UI: a fixed 20px icon rail plus a fluid body, with
+ * an unbroken connector line between adjacent steps.
  *
- * Discriminates per `content_type` and dispatches to the matching step
- * component. Adding a new traceable variant is a compile error here until the
- * `default` branch is updated — see `TraceablePart` in `./types`.
+ * Reasoning parts may expand into multiple `**Header**`-bounded segments —
+ * each rendered as its own step. Tool calls are always 1:1.
  */
 export const Trace = ({
   parts,
@@ -40,7 +40,8 @@ export const Trace = ({
   hasLaterContent,
   renderMarkdown,
 }: TraceProps) => {
-  if (parts.length === 0) return null;
+  const logicalSteps = flattenToLogicalSteps(parts);
+  if (logicalSteps.length === 0) return null;
 
   // The trace cluster is the "active writer" only while the parent is still
   // streaming AND no later content (text/images) has begun. Once text starts,
@@ -51,18 +52,17 @@ export const Trace = ({
   return (
     <div className="min-w-0 py-1.5">
       <TraceConnector hasLine={false} />
-      {parts.map((part, index) => {
-        const isLastTracePart = index === parts.length - 1;
+      {logicalSteps.map((step, index) => {
+        const isLastStep = index === logicalSteps.length - 1;
         // The rail line continues to the Done marker when one is rendered.
-        const isLastNodeInTimeline = isLastTracePart && !showDoneMarker;
-        const status = stepStatus(part, isLastTracePart, isTraceActive);
+        const isLastNodeInTimeline = isLastStep && !showDoneMarker;
+        const status = stepStatus(step, isLastStep, isTraceActive);
         // Earlier steps collapse once a later step (or non-trace content)
         // begins. The active writer stays open.
-        const isCollapsed = !isLastTracePart || hasLaterContent;
+        const isCollapsed = !isLastStep || hasLaterContent;
 
         const stepNode = renderStep({
-          part,
-          index,
+          step,
           status,
           isStreaming: isTraceActive,
           isCollapsed,
@@ -71,7 +71,7 @@ export const Trace = ({
         });
 
         return (
-          <div key={`step-${index}`}>
+          <div key={step.key}>
             {stepNode}
             <TraceConnector hasLine={!isLastNodeInTimeline} />
           </div>
@@ -87,9 +87,47 @@ export const Trace = ({
   );
 };
 
+/**
+ * Expand a contiguous run of trace-eligible parts into a flat list of logical
+ * steps. Reasoning parts split on `**Header**\n\n` boundaries via
+ * `parseReasoningSegments`; tool_use parts pass through 1:1.
+ */
+export const flattenToLogicalSteps = (
+  parts: TraceablePart[],
+): LogicalStep[] => {
+  const out: LogicalStep[] = [];
+  parts.forEach((part, partIndex) => {
+    switch (part.content_type) {
+      case "reasoning": {
+        const segments = parseReasoningSegments(part.text);
+        segments.forEach((segment, segmentIndex) => {
+          out.push({
+            kind: "reasoning",
+            key: `r-${partIndex}-${segmentIndex}`,
+            segment,
+          });
+        });
+        return;
+      }
+      case "tool_use":
+        out.push({
+          // eslint-disable-next-line lingui/no-unlocalized-strings
+          kind: "tool_use",
+          key: `t-${part.tool_call_id}`,
+          part,
+        });
+        return;
+      default: {
+        const exhaustive: never = part;
+        void exhaustive;
+      }
+    }
+  });
+  return out;
+};
+
 interface RenderStepArgs {
-  part: TraceablePart;
-  index: number;
+  step: LogicalStep;
   status: ReturnType<typeof stepStatus>;
   isStreaming: boolean;
   isCollapsed: boolean;
@@ -98,13 +136,11 @@ interface RenderStepArgs {
 }
 
 const renderStep = (args: RenderStepArgs): ReactNode => {
-  const { part } = args;
-  switch (part.content_type) {
+  switch (args.step.kind) {
     case "reasoning":
       return (
         <ReasoningStep
-          part={part}
-          index={args.index}
+          segment={args.step.segment}
           status={args.status}
           isStreaming={args.isStreaming}
           isCollapsed={args.isCollapsed}
@@ -115,17 +151,15 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
     case "tool_use":
       return (
         <ToolUseStep
-          part={part}
-          index={args.index}
+          part={args.step.part}
           status={args.status}
           isStreaming={args.isStreaming}
           isCollapsed={args.isCollapsed}
           isLastStep={args.isLastStep}
-          renderMarkdown={args.renderMarkdown}
         />
       );
     default: {
-      const exhaustive: never = part;
+      const exhaustive: never = args.step;
       void exhaustive;
       return null;
     }

@@ -11,7 +11,6 @@ import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
-  isLastStep: boolean;
 }
 
 // Pills are only shown for states that need extra emphasis beyond the rail
@@ -33,7 +32,6 @@ const hasPill = (status: string): status is StatusWithPill =>
 
 export const ToolUseStep = ({
   part,
-  index,
   status,
   isStreaming,
   isCollapsed,
@@ -63,7 +61,6 @@ export const ToolUseStep = ({
       data-tool-status={part.status}
     >
       <TraceStep
-        key={`tool-${part.tool_call_id}-${index}`}
         railIcon={railIconFor(part.content_type, status)}
         hasTrailingRailLine={!isLastStep}
         title={part.tool_name}
