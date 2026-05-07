@@ -52,22 +52,33 @@ export const ToolUseStep = ({
   ) : null;
 
   return (
-    <TraceStep
-      key={`tool-${part.tool_call_id}-${index}`}
-      railIcon={railIconFor(part.content_type, status)}
-      hasTrailingRailLine={!isLastStep}
-      title={part.tool_name}
-      titleSlot={titleSlot}
-      defaultOpen={false}
-      autoCollapse={isCollapsed}
-      isActive={isRunning}
+    // The `data-testid`/`data-tool-name`/`data-tool-status` attributes on the
+    // wrapper expose a stable, mode-agnostic test handle. Tests can target a
+    // tool call by name regardless of whether the trace is currently expanded
+    // (streaming) or collapsed behind the cold-load summary pill — DOM-based
+    // locators don't filter by visibility, only presence.
+    <div
+      data-testid="tool-call-item"
+      data-tool-name={part.tool_name}
+      data-tool-status={part.status}
     >
-      <div className="space-y-3 py-2">
-        {part.input != null && <ToolCallInput input={part.input} />}
-        {part.output != null && (
-          <ToolCallOutput output={part.output} isError={status === "error"} />
-        )}
-      </div>
-    </TraceStep>
+      <TraceStep
+        key={`tool-${part.tool_call_id}-${index}`}
+        railIcon={railIconFor(part.content_type, status)}
+        hasTrailingRailLine={!isLastStep}
+        title={part.tool_name}
+        titleSlot={titleSlot}
+        defaultOpen={false}
+        autoCollapse={isCollapsed}
+        isActive={isRunning}
+      >
+        <div className="space-y-3 py-2">
+          {part.input != null && <ToolCallInput input={part.input} />}
+          {part.output != null && (
+            <ToolCallOutput output={part.output} isError={status === "error"} />
+          )}
+        </div>
+      </TraceStep>
+    </div>
   );
 };

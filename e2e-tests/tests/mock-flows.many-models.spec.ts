@@ -562,13 +562,13 @@ test(
     const latestAssistantMessage = page.getByTestId("message-assistant").last();
     await expect(latestAssistantMessage).toBeVisible();
 
-    const toolCallsToggle = latestAssistantMessage.getByRole("button", {
-      name: /Tool calls \(/i,
-    });
-    await expect(toolCallsToggle).toBeVisible({ timeout: 30000 });
-    await toolCallsToggle.click();
-
-    await expect(latestAssistantMessage).toContainText("read_file");
+    // Tool calls render inline as <ToolCallItem> cards tagged with
+    // data-tool-name. The card is in the DOM regardless of whether the trace
+    // is currently expanded or collapsed behind the cold-load pill.
+    const toolCallCard = latestAssistantMessage.locator(
+      `[data-testid="tool-call-item"][data-tool-name="read_file"]`,
+    );
+    await expect(toolCallCard).toHaveCount(1, { timeout: 30000 });
 
     await chatIsReadyToChat(page, {
       expectAssistantResponse: true,
