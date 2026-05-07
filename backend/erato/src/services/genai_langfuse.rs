@@ -401,6 +401,7 @@ pub struct TracedGenerationBuilder {
     start_time: Option<SystemTime>,
     end_time: Option<SystemTime>,
     completion_start_time: Option<SystemTime>,
+    parent_observation_id: Option<String>,
 }
 
 impl TracedGenerationBuilder {
@@ -412,6 +413,7 @@ impl TracedGenerationBuilder {
             start_time: None,
             end_time: None,
             completion_start_time: None,
+            parent_observation_id: None,
         }
     }
 
@@ -437,6 +439,11 @@ impl TracedGenerationBuilder {
 
     pub fn with_completion_start_time(mut self, completion_start_time: SystemTime) -> Self {
         self.completion_start_time = Some(completion_start_time);
+        self
+    }
+
+    pub fn with_parent_observation_id(mut self, parent_observation_id: Option<String>) -> Self {
+        self.parent_observation_id = parent_observation_id;
         self
     }
 
@@ -489,11 +496,64 @@ impl TracedGenerationBuilder {
                 metadata,
                 None, // level
                 None, // status_message
-                None, // parent_observation_id
+                self.parent_observation_id,
                 None, // version
             )
             .await
     }
+}
+
+/// Create a span observation for a turn that executes external tool calls.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_tool_call_span_from_chat(
+    tracing_client: &TracingLangfuseClient,
+    span_observation_id: String,
+    chat_request: &ChatRequest,
+    name: Option<String>,
+    start_time: Option<SystemTime>,
+    end_time: Option<SystemTime>,
+    completion_start_time: Option<SystemTime>,
+    assistant_id: Option<Uuid>,
+    tool_names: &[String],
+    platform: Option<&str>,
+    parent_observation_id: Option<String>,
+) -> Result<()> {
+    // Convert input to normalized OpenAI format
+    let input_parts = into_openai_request_parts(chat_request)?;
+    let input_json = json!({
+        "messages": input_parts.messages,
+        "tools": input_parts.tools
+    });
+
+    // Create metadata with assistant_id and tool calls
+    let metadata =
+        create_metadata_with_assistant_and_tools(assistant_id, tool_names, false, platform);
+
+    // Convert timestamps to ISO 8601 strings
+    let start_time_str = start_time.map(system_time_to_iso_string);
+    let end_time_str = end_time.map(system_time_to_iso_string);
+    let completion_start_time_str = completion_start_time.map(system_time_to_iso_string);
+
+    tracing_client
+        .create_observation(
+            span_observation_id,
+            "SPAN".to_string(),
+            name,
+            start_time_str,
+            end_time_str,
+            completion_start_time_str,
+            None, // model
+            None, // model_parameters
+            Some(input_json),
+            None, // output
+            None, // usage
+            metadata,
+            None, // level
+            None, // status_message
+            parent_observation_id,
+            None, // version
+        )
+        .await
 }
 
 /// Create a trace in Langfuse using TracingLangfuseClient with a chat request
@@ -544,6 +604,7 @@ pub async fn create_trace_with_generation_from_chat(
     assistant_id: Option<Uuid>,
     tool_names: &[String],
     platform: Option<&str>,
+    parent_observation_id: Option<String>,
 ) -> Result<()> {
     // Generate a name for the trace from the first user message
     let trace_name = generate_name_from_chat_request(chat_request);
@@ -589,8 +650,8 @@ pub async fn create_trace_with_generation_from_chat(
             metadata, // generation_metadata
             None,     // level
             None,     // status_message
-            None,     // parent_observation_id
-            None,     // version
+            parent_observation_id,
+            None, // version
         )
         .await
 }
