@@ -12,7 +12,7 @@
  * - Right-aligned user bubbles with primary-color background
  * - Full-width assistant messages with avatar and neutral background
  * - Asymmetric rounded corners on user bubbles for a chat-tail effect
- * - Reuses MessageContent, Controls, LoadingIndicator, ToolCallDisplay
+ * - Reuses MessageContent, Controls, LoadingIndicator
  * - Full streaming, error, tool-call, and file-attachment support
  *
  * To use this:
@@ -39,11 +39,10 @@ import { FilePreviewButton } from "@/components/ui/FileUpload/FilePreviewButton"
 import { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 import { ImageLightbox } from "@/components/ui/Message/ImageLightbox";
 import { MessageContent } from "@/components/ui/Message/MessageContent";
-import { ToolCallDisplay } from "@/components/ui/ToolCall";
-import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
 import { useGetFile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
+import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
 import { isImageFile } from "@/utils/file/fileTypeUtils";
 
 import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
@@ -69,14 +68,9 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
   // Get user display name
   const userDisplayName = isUser ? (userProfile?.name ?? "You") : "Assistant";
 
-  // Streaming state for tool calls
-  const { streaming } = useMessagingStore();
-  const hasToolCalls = Object.keys(streaming.toolCalls).length > 0;
-  const isStreamingMessage =
-    streaming.isStreaming && streaming.currentMessageId === message.id;
-
-  const hasCompletedToolCalls =
-    message.toolCalls && message.toolCalls.length > 0;
+  // Tool calls render inline within MessageContent now — no extra plumbing
+  // is needed in the bubble.
+  const hasCompletedToolCalls = messageHasToolCalls(message.content);
 
   // Feedback feature config
   const messageFeedbackConfig = useMessageFeedbackFeature();
@@ -265,24 +259,11 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
           </div>
         )}
 
-        {message.toolCalls && message.toolCalls.length > 0 && (
-          <ToolCallDisplay
-            toolCalls={message.toolCalls}
-            defaultExpanded={false}
-            allowToggle={true}
-          />
-        )}
-
-        {message.loading && (
+        {message.loading && message.content.length === 0 && (
           <div className="mt-2">
             <LoadingIndicator
               state={message.loading.state}
               context={message.loading.context}
-              toolCalls={
-                isStreamingMessage && hasToolCalls
-                  ? streaming.toolCalls
-                  : undefined
-              }
             />
           </div>
         )}
@@ -299,7 +280,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
               isUserMessage={false}
               showRawMarkdown={showRawMarkdown}
               onToggleRawMarkdown={handleToggleRawMarkdown}
-              hasToolCalls={!!hasCompletedToolCalls}
+              hasToolCalls={hasCompletedToolCalls}
               showFeedbackButtons={messageFeedbackConfig.enabled}
               showFeedbackComments={messageFeedbackConfig.commentsEnabled}
               initialFeedback={message.feedback}

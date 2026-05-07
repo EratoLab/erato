@@ -1960,6 +1960,10 @@ msgstr "El dictado se detuvo automáticamente tras la duración máxima configur
 msgid "Dismiss"
 msgstr "Descartar"
 
+#: src/components/ui/Trace/TraceDoneMarker.tsx
+msgid "Done"
+msgstr ""
+
 #: src/components/ui/Modal/FilePreviewModal.tsx
 msgid "Download File"
 msgstr "Descargar archivo"
@@ -2042,10 +2046,11 @@ msgid "facets.<facet-id>.displayName"
 msgstr "facets.<facet-id>.displayName"
 
 #: src/components/ui/ToolCall/ToolCallDisplay.tsx
-msgid "failed"
-msgstr "falló"
+#~ msgid "failed"
+#~ msgstr "falló"
 
 #: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "Failed"
 msgstr ""
 
@@ -2284,8 +2289,8 @@ msgstr "Vista previa:"
 #~ msgstr ""
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "Reasoning"
-msgstr "Razonamiento"
+#~ msgid "Reasoning"
+#~ msgstr "Razonamiento"
 
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 #~ msgid "Recent"
@@ -2356,6 +2361,10 @@ msgstr "Reintentar transcripción"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Retrying..."
 msgstr "Reintentando..."
+
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "Running"
+msgstr ""
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "sample rate: {0} Hz"
@@ -2496,8 +2505,8 @@ msgid "Success"
 msgstr "Éxito"
 
 #: src/components/ui/ToolCall/ToolCallDisplay.tsx
-msgid "successful"
-msgstr "exitoso"
+#~ msgid "successful"
+#~ msgstr "exitoso"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Supported Locales:"
@@ -2525,6 +2534,7 @@ msgid "The following files cannot be processed and were not uploaded: {filenames
 msgstr "Los siguientes archivos no pueden ser procesados y no se subieron: {filenames}"
 
 #: src/components/ui/Feedback/LoadingIndicator.tsx
+#: src/components/ui/Trace/steps/ReasoningStep.tsx
 msgid "Thinking"
 msgstr "Pensando"
 
@@ -2549,28 +2559,28 @@ msgid "Tool Call Display"
 msgstr "Visualización de llamadas de herramientas"
 
 #: src/components/ui/ToolCall/ToolCallDisplay.tsx
-msgid "Tool calls"
-msgstr "Llamadas de herramientas"
+#~ msgid "Tool calls"
+#~ msgstr "Llamadas de herramientas"
 
 #: src/components/ui/ToolCall/ToolCallDisplay.tsx
-msgid "Tool Calls"
-msgstr "Llamadas de herramientas"
+#~ msgid "Tool Calls"
+#~ msgstr "Llamadas de herramientas"
 
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Tool calls show how the assistant used external tools to generate responses."
 msgstr "Las llamadas de herramientas muestran cómo el asistente usó herramientas externas para generar respuestas."
 
 #: src/components/ui/Feedback/LoadingIndicator.tsx
-msgid "Tool usage:"
-msgstr "Uso de herramientas:"
+#~ msgid "Tool usage:"
+#~ msgstr "Uso de herramientas:"
 
 #: src/components/ui/Chat/FacetSelector.tsx
 msgid "Tools"
 msgstr ""
 
 #: src/components/ui/ToolCall/ToolCallDisplay.tsx
-msgid "total"
-msgstr "total"
+#~ msgid "total"
+#~ msgstr "total"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Transcribing"

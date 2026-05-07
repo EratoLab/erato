@@ -1,3 +1,4 @@
+import { insertProposedToolUse } from "./toolUsePartHelpers";
 import { useMessagingStore } from "../store/messagingStore";
 
 import type { MessageSubmitStreamingResponseToolCallProposed } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -5,12 +6,11 @@ import type { MessageSubmitStreamingResponseToolCallProposed } from "@/lib/gener
 /**
  * Handles the 'tool_call_proposed' event from the streaming API response.
  *
- * This event is sent when the LLM proposes a tool call to be part of the assistant message.
- * The handler updates the streaming state to track the proposed tool call for UI display.
- *
- * @param responseData - The tool call proposed data received from the streaming API
- *                       Contains the tool call ID, name, and input parameters
- * @returns void
+ * Inserts a `tool_use` ContentPart into the streaming content array at the
+ * event's `content_index`, so the tool call renders inline at the position
+ * where the model emitted it. The wire-level proposed event carries no
+ * status, so the part is seeded with `in_progress`; the next
+ * `tool_call_update` will refine it.
  */
 export const handleToolCallProposed = (
   responseData: MessageSubmitStreamingResponseToolCallProposed & {
@@ -24,7 +24,6 @@ export const handleToolCallProposed = (
     );
   }
 
-  // Validate required fields
   if (
     !responseData.message_id ||
     !responseData.tool_call_id ||
@@ -37,49 +36,30 @@ export const handleToolCallProposed = (
     return;
   }
 
-  // Update the streaming state with the proposed tool call
   useMessagingStore.setState(
     (state) => {
       const resolvedStreamKey = streamKey ?? state.activeStreamKey;
       const currentStreaming =
         state.streamingByKey[resolvedStreamKey] ?? state.streaming;
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          `[DEBUG_STORE] handleToolCallProposed: Adding tool call ${responseData.tool_call_id} (${responseData.tool_name}) to streaming state`,
-        );
-      }
+      const updatedContent = insertProposedToolUse(
+        currentStreaming.content,
+        responseData,
+      );
+
+      const nextStreaming = {
+        ...currentStreaming,
+        content: updatedContent,
+      };
 
       return {
         ...state,
         streamingByKey: {
           ...state.streamingByKey,
-          [resolvedStreamKey]: {
-            ...currentStreaming,
-            toolCalls: {
-              ...currentStreaming.toolCalls,
-              [responseData.tool_call_id]: {
-                id: responseData.tool_call_id,
-                name: responseData.tool_name,
-                status: "proposed",
-                input: responseData.input,
-              },
-            },
-          },
+          [resolvedStreamKey]: nextStreaming,
         },
         streaming:
           state.activeStreamKey === resolvedStreamKey
-            ? {
-                ...currentStreaming,
-                toolCalls: {
-                  ...currentStreaming.toolCalls,
-                  [responseData.tool_call_id]: {
-                    id: responseData.tool_call_id,
-                    name: responseData.tool_name,
-                    status: "proposed",
-                    input: responseData.input,
-                  },
-                },
-              }
+            ? nextStreaming
             : state.streaming,
       };
     },

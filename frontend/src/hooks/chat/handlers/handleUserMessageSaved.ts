@@ -221,7 +221,6 @@ export function handleUserMessageSaved(
           createdAt: assistantTimestamp, // Ensure assistant renders after confirmed user
           isStreaming: false, // Not streaming yet, just a placeholder
           isFinalizing: false,
-          toolCalls: {},
         };
         return {
           ...prevState,

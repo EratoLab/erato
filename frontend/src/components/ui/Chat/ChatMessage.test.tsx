@@ -14,7 +14,7 @@ const messageContentMock = vi.hoisted(() => vi.fn());
 vi.mock("@/hooks/chat/store/messagingStore", () => ({
   useMessagingStore: () => ({
     streaming: {
-      toolCalls: {},
+      content: [],
       isStreaming: false,
       currentMessageId: null,
     },

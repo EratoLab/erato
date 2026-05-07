@@ -5,100 +5,11 @@ import { LoadingIndicator } from "./LoadingIndicator";
 
 vi.mock("@/components/ui/icons", () => ({
   ToolsIcon: () => <svg aria-hidden="true" />,
-  SettingsIcon: () => <svg aria-hidden="true" />,
-  CheckCircleIcon: () => <svg aria-hidden="true" />,
-  ErrorIcon: () => <svg aria-hidden="true" />,
   TimerIcon: () => <svg aria-hidden="true" />,
   BrainIcon: () => <svg aria-hidden="true" />,
 }));
 
 describe("LoadingIndicator", () => {
-  it("maps tool-call statuses to semantic status tokens", () => {
-    render(
-      <LoadingIndicator
-        state="tool-calling"
-        toolCalls={{
-          proposed: {
-            id: "call-proposed",
-            name: "Draft tool",
-            status: "proposed",
-          },
-          progress: {
-            id: "call-progress",
-            name: "Running tool",
-            status: "in_progress",
-          },
-          success: {
-            id: "call-success",
-            name: "Completed tool",
-            status: "success",
-          },
-          error: {
-            id: "call-error",
-            name: "Failed tool",
-            status: "error",
-          },
-        }}
-      />,
-    );
-
-    expect(screen.getByText("Draft tool").closest("div")?.className).toContain(
-      "text-theme-fg-secondary",
-    );
-    expect(
-      screen.getByText("Running tool").closest("div")?.className,
-    ).toContain("text-theme-info-fg");
-    expect(
-      screen.getByText("Completed tool").closest("div")?.className,
-    ).toContain("text-theme-success-fg");
-    expect(screen.getByText("Failed tool").closest("div")?.className).toContain(
-      "text-theme-error-fg",
-    );
-  });
-
-  it("only pulses tool-call rows for active statuses", () => {
-    render(
-      <LoadingIndicator
-        state="tool-calling"
-        toolCalls={{
-          proposed: {
-            id: "call-proposed",
-            name: "Draft tool",
-            status: "proposed",
-          },
-          progress: {
-            id: "call-progress",
-            name: "Running tool",
-            status: "in_progress",
-          },
-          success: {
-            id: "call-success",
-            name: "Completed tool",
-            status: "success",
-          },
-          error: {
-            id: "call-error",
-            name: "Failed tool",
-            status: "error",
-          },
-        }}
-      />,
-    );
-
-    expect(screen.getByText("Draft tool").closest("div")?.className).toContain(
-      "animate-pulse",
-    );
-    expect(
-      screen.getByText("Running tool").closest("div")?.className,
-    ).toContain("animate-pulse");
-    expect(
-      screen.getByText("Completed tool").closest("div")?.className,
-    ).not.toContain("animate-pulse");
-    expect(
-      screen.getByText("Failed tool").closest("div")?.className,
-    ).not.toContain("animate-pulse");
-  });
-
   it("keeps the default loading indicator layout and copy intact", () => {
     const { container } = render(
       <LoadingIndicator state="reasoning" context="Gathering context" />,

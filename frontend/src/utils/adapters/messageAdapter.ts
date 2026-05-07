@@ -1,8 +1,3 @@
-import {
-  extractToolCallsFromContent,
-  type UiToolCall,
-} from "./toolCallAdapter";
-
 import type {
   ChatMessage as ApiChatMessage,
   FileUploadItem,
@@ -25,7 +20,6 @@ export interface UiChatMessage extends Message {
     state: "typing" | "thinking" | "done" | "error";
     context?: string;
   };
-  toolCalls?: UiToolCall[];
   /** Existing feedback for this message, if any */
   feedback?: MessageFeedback;
   /** The action facet ID supplied with this user message, if any */
@@ -44,7 +38,6 @@ export interface UiChatMessage extends Message {
 export function mapApiMessageToUiMessage(
   apiMessage: ApiChatMessage,
 ): UiChatMessage {
-  const toolCalls = extractToolCallsFromContent(apiMessage.content);
   const error = (apiMessage as ApiChatMessage & { error?: unknown }).error;
 
   return {
@@ -68,7 +61,6 @@ export function mapApiMessageToUiMessage(
         ? apiMessage.previous_message_id
         : undefined,
     status: "complete",
-    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     feedback: apiMessage.feedback ?? undefined,
     error: isMessageError(error) ? error : undefined,
     mcp_servers_unavailable: apiMessage.mcp_servers_unavailable ?? undefined,

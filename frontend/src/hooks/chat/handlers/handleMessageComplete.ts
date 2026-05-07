@@ -77,7 +77,6 @@ export const handleMessageComplete = (
       isFinalizing: true, // Signal that we're in the finalization phase
       content: finalContent,
       currentMessageId: realMessageId || null, // Update to real ID
-      toolCalls: {}, // Clear tool calls when message is completed
     },
     streamKey,
   );

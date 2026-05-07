@@ -29,13 +29,16 @@ const runMcpAuthFlow = async (
   const latestAssistantMessage = page.getByTestId("message-assistant").last();
   await expect(latestAssistantMessage).toBeVisible();
 
-  const toolCallsToggle = latestAssistantMessage.getByRole("button", {
-    name: /Tool calls \(/i,
-  });
-  await expect(toolCallsToggle).toBeVisible({ timeout: 15000 });
-  await toolCallsToggle.click();
-
-  await expect(latestAssistantMessage).toContainText(expectedToolName);
+  // Tool calls render inline in the trace timeline as <ToolCallItem> cards
+  // tagged with data-tool-name. The card exists in the DOM whether the trace
+  // is currently expanded (during streaming) or collapsed behind the cold-
+  // load "Thought for X" pill — toHaveCount checks DOM presence regardless of
+  // visibility. Targeting the data attribute (not textContent) avoids false
+  // positives from prose mentioning the tool name.
+  const toolCallCard = latestAssistantMessage.locator(
+    `[data-testid="tool-call-item"][data-tool-name="${expectedToolName}"]`,
+  );
+  await expect(toolCallCard).toHaveCount(1, { timeout: 15000 });
   await chatIsReadyToChat(page, {
     expectAssistantResponse: true,
     loadingTimeoutMs: 15000,

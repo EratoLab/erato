@@ -1313,7 +1313,6 @@ export function useChatMessaging(
             content: [],
             createdAt: now,
             isFinalizing: false,
-            toolCalls: {},
           },
           streamKey,
         );

@@ -1,18 +1,14 @@
+import { applyToolUseUpdate } from "./toolUsePartHelpers";
 import { useMessagingStore } from "../store/messagingStore";
 
-import type { ToolCall } from "../store/messagingStore";
 import type { MessageSubmitStreamingResponseToolCallUpdate } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
  * Handles the 'tool_call_update' event from the streaming API response.
  *
- * This event is sent to update the status of a tool call execution by the backend.
- * The handler updates the existing tool call in the streaming state with new status,
- * output, and progress information.
- *
- * @param responseData - The tool call update data received from the streaming API
- *                       Contains the updated status, output, and progress information
- * @returns void
+ * Looks up the existing `tool_use` ContentPart by `tool_call_id` and merges
+ * the new status / output / progress_message into it in place. If no part
+ * exists yet (out-of-order events), inserts one at `content_index`.
  */
 export const handleToolCallUpdate = (
   responseData: MessageSubmitStreamingResponseToolCallUpdate & {
@@ -26,7 +22,6 @@ export const handleToolCallUpdate = (
     );
   }
 
-  // Validate required fields
   if (!responseData.message_id || !responseData.tool_call_id) {
     console.warn(
       "[DEBUG_STREAMING] handleToolCallUpdate: Missing required fields in tool call update event:",
@@ -35,56 +30,30 @@ export const handleToolCallUpdate = (
     return;
   }
 
-  // Update the streaming state with the tool call update
   useMessagingStore.setState(
     (state) => {
       const resolvedStreamKey = streamKey ?? state.activeStreamKey;
       const currentStreaming =
         state.streamingByKey[resolvedStreamKey] ?? state.streaming;
-      const existingToolCall =
-        currentStreaming.toolCalls[responseData.tool_call_id];
+      const updatedContent = applyToolUseUpdate(
+        currentStreaming.content,
+        responseData,
+      );
 
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          `[DEBUG_STORE] handleToolCallUpdate: Updating tool call ${responseData.tool_call_id} (${responseData.tool_name}) status: ${responseData.status}`,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          existingToolCall
-            ? "Existing tool call found"
-            : "Creating new tool call entry",
-        );
-      }
-
-      // Update the tool call with the latest data
-      const updatedToolCall: ToolCall = {
-        id: responseData.tool_call_id,
-        name: responseData.tool_name,
-        status: responseData.status,
-        input: responseData.input ?? null,
-        output: responseData.output ?? null,
-        progressMessage: responseData.progress_message,
+      const nextStreaming = {
+        ...currentStreaming,
+        content: updatedContent,
       };
 
       return {
         ...state,
         streamingByKey: {
           ...state.streamingByKey,
-          [resolvedStreamKey]: {
-            ...currentStreaming,
-            toolCalls: {
-              ...currentStreaming.toolCalls,
-              [responseData.tool_call_id]: updatedToolCall,
-            },
-          },
+          [resolvedStreamKey]: nextStreaming,
         },
         streaming:
           state.activeStreamKey === resolvedStreamKey
-            ? {
-                ...currentStreaming,
-                toolCalls: {
-                  ...currentStreaming.toolCalls,
-                  [responseData.tool_call_id]: updatedToolCall,
-                },
-              }
+            ? nextStreaming
             : state.streaming,
       };
     },
