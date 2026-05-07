@@ -56,7 +56,12 @@ export const ToolCallItem: React.FC<ToolCallItemProps> = ({
   const config = statusConfig[toolCall.status];
 
   return (
-    <div className={clsx("p-3", className)}>
+    <div
+      className={clsx("p-3", className)}
+      data-testid="tool-call-item"
+      data-tool-name={toolCall.name}
+      data-tool-status={toolCall.status}
+    >
       {/* Tool Call Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
